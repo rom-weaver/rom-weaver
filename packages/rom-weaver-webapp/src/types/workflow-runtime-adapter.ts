@@ -465,13 +465,6 @@ type WorkflowRuntimeIngest = {
      * unavailable", never as a failed ROM or a genuine no-match.
      */
     identifyUnavailable?: string;
-    /**
-     * Set when platform routing named a platform whose (Hasheous) database is
-     * neither cached nor permitted to download. Callers report the structured
-     * `database_required` condition - with the manager as the action - instead
-     * of a plain "no match".
-     */
-    identifyDatabaseRequired?: { hint: string; platform: string };
     result: ParsedIngestResult;
     outputs: PublicOutput[];
     patchOutputs: PublicOutput[];

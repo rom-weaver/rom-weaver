@@ -59,7 +59,7 @@ const IDENTIFY_CONDITION_LABEL: Readonly<Record<IdentifyCondition, string>> = {
 
 /** Reader-facing source names for the machine source ids the packs carry. */
 const identifySourceLabel = (source: string): string =>
-  source === "opengood" ? "OpenGood" : source === "hasheous" ? "Hasheous" : source;
+  source === "opengood" ? "OpenGood" : source === "redump" ? "Redump" : source;
 
 /** "3 of 4 required components matched" - the denominator must stay visible. */
 const identifyComponentEvidenceLabel = (matched: number, total: number): string =>

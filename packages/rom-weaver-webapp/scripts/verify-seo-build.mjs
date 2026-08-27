@@ -355,16 +355,9 @@ assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
 // has been fetched. See docs/development/identify-data.md.
 assertIncludes(precacheManifest, '"assets/identify-index.json"', "identify index precache entry");
 const routesJson = read("_routes.json");
+assertIncludes(routesJson, `"/assets/identify-*"`, "identify pack Brotli route");
 for (const system of identifyDataIndex.systems) {
   assertExcludes(precacheManifest, `assets/identify-${system.file}`, `${system.file} precache entry`);
-  // Hasheous packs never get a _routes.json entry: a normal build excludes
-  // them entirely, and a ROM_WEAVER_IDENTIFY_INCLUDE_HASHEOUS test build keeps
-  // them off the Cloudflare include budget (100 entries).
-  if (system.source === "hasheous") {
-    assertExcludes(routesJson, `"/assets/identify-${system.file}"`, `${system.file} Brotli route`);
-  } else {
-    assertIncludes(routesJson, `"/assets/identify-${system.file}"`, `${system.file} Brotli route`);
-  }
 }
 for (const slug of [...DOC_ROUTES.map((route) => route.slug), "apply", "create", "identify", "tools", "trim"]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);

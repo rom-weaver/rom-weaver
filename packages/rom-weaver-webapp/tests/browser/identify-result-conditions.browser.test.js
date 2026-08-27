@@ -6,14 +6,11 @@ import "../../src/webapp/design-system/deferred.css";
 
 /* Drives the EXTENDED identify result states through the real DOM: the quality
    badge, the source/pack-format evidence, platform candidates, component
-   evidence, and the actionable database_required condition (distinct from a
+   evidence, and the database_required condition (distinct from a
    plain "no match"). The identify pipeline itself is mocked. */
 const { identifyRom } = vi.hoisted(() => ({ identifyRom: vi.fn() }));
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({ identifyRom }));
 
-const { createIdentifyDatabaseManager } = await import("../../src/lib/identify/identify-database-manager.ts");
-const { setSharedIdentifyDatabaseManagerForTests } =
-  await import("../../src/webapp/components/identify-database-manager.tsx");
 const { IdentifyForm } = await import("../../src/webapp/components/identify-form.tsx");
 
 let root;
@@ -29,10 +26,6 @@ const waitForText = async (text) => {
 };
 
 const mountIdentifyForm = async () => {
-  // Keep the embedded manager off the network: its catalog loader is a stub.
-  setSharedIdentifyDatabaseManagerForTests(
-    createIdentifyDatabaseManager({ loadCatalogIndex: async () => ({ systems: [] }) }),
-  );
   host = document.createElement("div");
   host.className = "rw-app";
   document.body.append(host);
@@ -60,10 +53,9 @@ afterEach(() => {
   host?.remove();
   root = undefined;
   host = undefined;
-  setSharedIdentifyDatabaseManagerForTests(undefined);
 });
 
-test("database_required renders as an actionable state with the manager action", async () => {
+test("database_required renders as a distinct state", async () => {
   await mountIdentifyForm();
   await runIdentify({
     candidates: [
@@ -85,8 +77,7 @@ test("database_required renders as an actionable state with the manager action",
   });
   await waitForText("Database required");
   await waitForText("needs the Sony PlayStation database");
-  const openManager = host.querySelector('button[aria-label="Open the identification database manager"]');
-  expect(openManager).toBeTruthy();
+  expect(host.textContent.includes("Open the database manager")).toBe(false);
   // The plain no-match copy must NOT show for the structured condition.
   expect(host.textContent.includes("No exact title match found")).toBe(false);
 });
@@ -98,7 +89,7 @@ test("quality, source, platform candidates, and component evidence render on a m
       {
         checksums: { crc32: "abcd1234" },
         checksumVariants: [],
-        database: { packFormat: "RWFP2", source: "hasheous" },
+        database: { packFormat: "RWFP2", source: "redump" },
         evidence: { layoutMatched: true, requiredComponentsMatched: 3, requiredComponentsTotal: 4 },
         matches: [
           {
@@ -122,7 +113,7 @@ test("quality, source, platform candidates, and component evidence render on a m
   // The identify drawer carries the extended evidence.
   const summary = [...host.querySelectorAll("summary, button")].find((el) => /Identify/u.test(el.textContent || ""));
   summary?.click();
-  await waitForText("Hasheous");
+  await waitForText("Redump");
   await waitForText("RWFP2");
   await waitForText("3 of 4 required components matched");
   await waitForText("system_area_magic");

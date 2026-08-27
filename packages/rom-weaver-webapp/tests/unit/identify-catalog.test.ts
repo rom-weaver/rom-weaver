@@ -16,7 +16,7 @@ const CATALOG = {
       packFormat: "RWFP2",
       packSha256: "f".repeat(64),
       packSlug: "sony-playstation",
-      source: "hasheous",
+      source: "redump",
     },
     {
       aliases: ["sega mega drive genesis", "genesis", "mega drive"],
@@ -41,7 +41,7 @@ describe("parseIdentifyCatalog", () => {
   it("parses a v1 catalog", () => {
     const catalog = parseIdentifyCatalog(CATALOG);
     expect(catalog?.platforms).toHaveLength(2);
-    expect(catalog?.platforms[0]?.source).toBe("hasheous");
+    expect(catalog?.platforms[0]?.source).toBe("redump");
   });
 
   it("rejects an unknown format and malformed platform entries", () => {
@@ -53,17 +53,17 @@ describe("parseIdentifyCatalog", () => {
     expect(catalog?.platforms).toHaveLength(1);
   });
 
-  it("fails closed on a hasheous entry without a verifiable packSha256", () => {
-    const hasheous = { ...CATALOG.platforms[0] };
+  it("fails closed on a Redump entry without a verifiable packSha256", () => {
+    const redump = { ...CATALOG.platforms[0] };
     const catalog = parseIdentifyCatalog({
       format: "rom-weaver-identify-catalog-v1",
       platforms: [
-        { ...hasheous, packSha256: "" },
-        { ...hasheous, packSlug: "other", packSha256: "not-hex" },
+        { ...redump, packSha256: "" },
+        { ...redump, packSlug: "other", packSha256: "not-hex" },
         CATALOG.platforms[1],
       ],
     });
-    // Only the opengood entry survives; unverifiable hasheous packs must never download.
+    // Only the OpenGood entry survives. The app must not fetch unverifiable Redump packs.
     expect(catalog?.platforms.map((platform) => platform.packSlug)).toEqual(["sega-mega-drive-genesis"]);
   });
 });

@@ -165,7 +165,6 @@ const prepareIngestIdentify = async ({
   signal?: AbortSignal;
   sourcePath: string;
 }): Promise<{
-  databaseRequired?: { hint: string; platform: string };
   entryNames: string[];
   packs: BrowserIdentifyPack[];
   unavailable?: string;
@@ -206,14 +205,7 @@ const prepareIngestIdentify = async ({
             : `Loading identification data for ${platforms.length} systems…`,
       });
     });
-    if (selection.databaseRequired) {
-      emitTraceLog(trace, "ROM identify database required for routed platform", {
-        fileName,
-        platform: selection.databaseRequired.platform,
-      });
-    }
     return {
-      ...(selection.databaseRequired ? { databaseRequired: selection.databaseRequired } : {}),
       entryNames,
       packs: selection.packs,
     };
@@ -356,9 +348,6 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       );
       return {
         ...(identifyPacks.unavailable ? { identifyUnavailable: identifyPacks.unavailable } : {}),
-        ...("databaseRequired" in identifyPacks && identifyPacks.databaseRequired
-          ? { identifyDatabaseRequired: identifyPacks.databaseRequired }
-          : {}),
         outputs,
         patchOutputs,
         result,

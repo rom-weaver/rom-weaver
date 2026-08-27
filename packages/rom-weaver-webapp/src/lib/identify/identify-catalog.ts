@@ -1,10 +1,10 @@
 /**
  * Parses `catalog.json` (format `rom-weaver-identify-catalog-v1`) and routes a
  * detected platform name through its aliases to the pack that owns it. The
- * catalog is the authority on which source (OpenGood or Hasheous) serves each
+ * catalog is the authority on which source (OpenGood or Redump) serves each
  * platform; sources never mix inside one platform pack.
  */
-type IdentifyCatalogSource = "hasheous" | "opengood";
+type IdentifyCatalogSource = "opengood" | "redump";
 
 type IdentifyCatalogPlatform = {
   aliases: string[];
@@ -19,7 +19,6 @@ type IdentifyCatalogPlatform = {
 type IdentifyCatalog = {
   format: string;
   generated?: {
-    hasheousDump?: { fileName?: string; sha256?: string; sizeBytes?: number };
     opengoodRevision?: string;
   };
   platforms: IdentifyCatalogPlatform[];
@@ -27,15 +26,14 @@ type IdentifyCatalog = {
 
 const IDENTIFY_CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
-/** Mirrors `normalizeAlias` in scripts/build-hasheous-identify-index.mjs. */
+/** Mirrors the platform alias normalizer used by the identify data scripts. */
 const normalizePlatformAlias = (value: string): string =>
   value
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, " ")
     .trim();
 
-const isCatalogSource = (value: unknown): value is IdentifyCatalogSource =>
-  value === "opengood" || value === "hasheous";
+const isCatalogSource = (value: unknown): value is IdentifyCatalogSource => value === "opengood" || value === "redump";
 
 const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
@@ -46,9 +44,8 @@ const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefin
   // The slug becomes a fetch path (`<origin>/<slug>.pack`) and a store key, so
   // it MUST NOT carry separators or dots. Mirrors the Rust catalog parser.
   if (!/^[a-z0-9-]+$/u.test(packSlug)) return undefined;
-  // Fail closed: a hasheous pack is fetched from a configurable origin, so an
-  // entry without a verifiable sha256 MUST be rejected, never downloaded.
-  if (record.source === "hasheous" && !/^[0-9a-f]{64}$/u.test(String(record.packSha256 ?? ""))) {
+  // Catalog-only Redump packs MUST include a checksum before the app fetches them.
+  if (record.source === "redump" && !/^[0-9a-f]{64}$/u.test(String(record.packSha256 ?? ""))) {
     return undefined;
   }
   return {
@@ -109,4 +106,4 @@ const findCatalogPlatformBySlug = (
 ): IdentifyCatalogPlatform | undefined => catalog?.platforms.find((entry) => entry.packSlug === slug);
 
 export { findCatalogPlatformBySlug, normalizePlatformAlias, parseIdentifyCatalog, resolveCatalogPlatform };
-export type { IdentifyCatalog, IdentifyCatalogSource };
+export type { IdentifyCatalog };

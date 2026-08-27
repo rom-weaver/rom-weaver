@@ -45,7 +45,7 @@ type ParsedIdentifyEvidence = {
 type ParsedIdentifyDatabaseInfo = {
   canonicalizationProfile?: string;
   packFormat?: string;
-  /** `opengood` or `hasheous`. */
+  /** `opengood` or `redump`. */
   source?: string;
 };
 

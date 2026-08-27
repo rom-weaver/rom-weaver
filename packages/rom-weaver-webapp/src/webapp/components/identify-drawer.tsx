@@ -85,7 +85,7 @@ const IdentifyDrawer = ({
         {condition ? (
           <p className="pdesc identify-drawer-condition">
             <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
-            {hint || "See the identification database manager on the Identify page."}
+            {hint || "The identification data does not support this input."}
           </p>
         ) : null}
         <div className="ck-group identify-drawer-group">
