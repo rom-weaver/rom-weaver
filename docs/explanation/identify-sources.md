@@ -36,11 +36,13 @@ The tags describe the historical dump. They do not replace the title or change s
 
 Libretro Database uses CC-BY-SA-4.0. OpenGood uses CC0-1.0. The generated identify artifacts remain separate from the application license.
 
-Each RWFP2 manifest records each source name, URL, commit, license, and generation date. Each match also keeps the provenance that contributed its lookup record.
+Each RWFP3 manifest records each source name, URL, commit, license, and generation date. Each match also keeps the provenance that contributed its lookup record.
 
 ## Local operation
 
-Release packages install the complete pack set. The webapp precaches every pack during service-worker installation.
+Release packages include the default pack groups. Optional groups ship as separate application assets.
+
+The webapp precaches the default groups. A user can install a complete optional group from Settings.
 
 Identification reads only installed application assets. A missing local pack makes identification unavailable. It does not start a network lookup.
 

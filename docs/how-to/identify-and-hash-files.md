@@ -8,7 +8,8 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 ## Table of contents
 
 - [Identify a ROM title](#identify-a-rom-title)
-- [Install all identify data](#install-all-identify-data)
+- [Install the default identify data](#install-the-default-identify-data)
+- [Install an optional group](#install-an-optional-group)
 - [Force a system](#force-a-system)
 - [Inspect a file](#inspect-a-file)
 - [Hash a file](#hash-a-file)
@@ -26,7 +27,7 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 rom-weaver identify --input game.nes
 ```
 
-The command checks the packaged OpenGood title data. It also checks common header, trim, and byte-order variants.
+The command checks the packaged Libretro data and OpenGood fallback data. It also checks common header, trim, and byte-order variants.
 
 Point it at an archive to identify the ROM inside:
 
@@ -42,11 +43,11 @@ Use a locally built pack instead of the built-in data:
 rom-weaver identify --input game.iso --database playstation.pack
 ```
 
-Repeat `--database` to search more packs. `--database` accepts RWFP1 and RWFP2 packs.
+Repeat `--database` to search more packs. `--database` accepts RWFP1, RWFP2, and RWFP3 packs.
 
-## Install all identify data
+## Install the default identify data
 
-Release packages include the full local database. After a Cargo or binary-only install, install the same versioned archive:
+Release packages include the default local database. After a Cargo or binary-only install, install the same versioned archive:
 
 ```bash
 rom-weaver identify database install-all
@@ -59,6 +60,18 @@ rom-weaver identify --input game.bin
 ```
 
 Check what is installed with `rom-weaver identify database list`. A result with `"condition": "database_required"` means the detected platform's pack is not installed. Its `hint` names the install command.
+
+## Install an optional group
+
+Choose `optional-arcade`, `optional-engines`, `optional-mobile`, or `optional-extended`.
+
+Install one group:
+
+```bash
+rom-weaver identify database install-group optional-extended
+```
+
+Use `--from ARCHIVE` to import a downloaded group archive without network access.
 
 ## Force a system
 

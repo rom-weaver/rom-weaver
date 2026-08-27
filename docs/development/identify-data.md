@@ -1,13 +1,13 @@
 # ROM identify data
 
-ROMWeaver builds deterministic RWFP2 packs from pinned Libretro and OpenGood data. Native packages use Zstandard assets. The webapp uses Brotli assets.
+ROMWeaver builds deterministic RWFP3 packs from pinned Libretro and OpenGood data. Native packages use Zstandard assets. The webapp uses Brotli assets.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Build-time data](#build-time-data)
 - [Source policy](#source-policy)
-- [RWFP2 records](#rwfp2-records)
+- [RWFP3 records](#rwfp3-records)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Determinism and provenance](#determinism-and-provenance)
@@ -41,25 +41,31 @@ The deduplication key contains the hash algorithm, normalized hash, file size, a
 
 OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
-## RWFP2 records
+## RWFP3 records
 
-Every built-in pack uses RWFP2. RWFP1 remains readable for existing user packs.
+Every built-in pack uses RWFP3. RWFP1 and RWFP2 remain readable for existing user packs.
 
-`games.json` stores the selected metadata, components, hash scopes, provenance, legacy status, and dump tags. `route.bin` maps CRC32 and size to component references. `refs.bin` maps those references to games. `manifest.json` stores the source and generation metadata.
+RWFP3 stores strings, hashes, components, games, owners, routes, and sets in binary tables. Components and routes refer to one shared hash record. Provenance exists once per pack and each game refers to a provenance set.
+
+`manifest.json` stores the source, license, commit, URL, and generation metadata.
 
 ## Browser installation
 
-The web build emits each pack as a Brotli static asset. The service worker precaches every logical pack URL during installation.
+The web build emits each pack as a Brotli static asset. The service worker precaches only the default groups during installation.
 
-Identify requests use the precache only. A cache miss returns a local error. It does not fetch a pack in response to ROM data.
+The Settings page can install a complete optional group. The service worker checks every pack before it marks the group as installed.
+
+Identify requests use the local caches only. A cache miss returns a local error. It does not fetch a pack in response to ROM data.
 
 ## Native installation
 
-`scripts/build-identify-release-data.mjs` writes each pack as Zstandard and creates `rom-weaver-identify-data.tar.zst`.
+`scripts/build-identify-release-data.mjs` writes each pack as Zstandard. It creates one default archive and one archive for each optional group.
 
 Release archives, npm platform packages, Homebrew, Scoop, and container images install the same static tree under `share/rom-weaver/identify/v1`. The CLI decompresses only the packs it reads.
 
-The default `bundled-identify-data` feature enables this packaged-data lookup. Builds without it ignore packaged packs.
+The default `bundled-identify-data` feature enables the packaged default data. Builds without it ignore packaged packs.
+
+`identify database install-group` downloads or imports one optional group. It merges the group into the local database. It does not remove other installed groups.
 
 ## Determinism and provenance
 

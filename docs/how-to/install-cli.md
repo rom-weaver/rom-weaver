@@ -80,7 +80,7 @@ Fetches the released binary instead of compiling from source, which `cargo insta
 cargo binstall rom-weaver-cli
 ```
 
-`cargo-binstall` installs only the executable. Install the complete offline identify database after it finishes:
+`cargo-binstall` installs only the executable. Install the default offline identify database after it finishes:
 
 ```bash
 rom-weaver identify database install-all
@@ -94,7 +94,7 @@ Manages the CLI per project in `mise.toml` and verifies the release's GitHub art
 mise use 'github:rom-weaver/rom-weaver[minimum_release_age=0s]'
 ```
 
-The generic GitHub backend installs only one release asset. Install the complete offline identify database after it finishes:
+The generic GitHub backend installs only one release asset. Install the default offline identify database after it finishes:
 
 ```bash
 rom-weaver identify database install-all
@@ -111,7 +111,7 @@ cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --version
 ```
 
-Install the complete offline identify database:
+Install the default offline identify database:
 
 ```bash
 rom-weaver identify database install-all
