@@ -20,9 +20,9 @@
 Identify data comes from exactly two places, and every system belongs to exactly one of them:
 
 - [OpenGood](https://github.com/SnowflakePowered/opengood) covers 17 cartridge systems. It is CC0, so its packs ship inside the tool and work offline with no setup.
-- [Hasheous](https://github.com/gaseous-project/hasheous) covers everything else. Its platforms are discovered from the dump you supply, not from a fixed list, so a new platform in a newer dump just works.
+- [Redump](http://redump.org/) covers 56 optical-media systems. Its public DAT files become set-aware packs that the browser can download and cache.
 
-The sources never mix inside one system. An OpenGood system that returns no match stays unmatched; it never falls through to Hasheous. This keeps every system's answers traceable to one dataset with one licence, and it keeps a "no match" meaningful: it means the dataset does not know the file, not that two datasets disagreed.
+The sources never mix inside one system. An OpenGood system that returns no match stays unmatched; it never falls through to Redump. This keeps each answer traceable to one dataset. A "no match" means that the selected dataset does not know the file.
 
 ## What a result means
 
@@ -55,16 +55,16 @@ Many CDs share byte-identical audio tracks: silence, standard pre-gaps, licensed
 
 ## Licensing
 
-The two sources have different legal shapes, and the tool's behavior follows them:
+Both sources allow redistribution:
 
 - OpenGood data is CC0-1.0. It can be bundled, redistributed, and shipped in releases, so it is.
-- Hasheous aggregates DAT data whose redistribution rights are unstated. This is a property of the imported data, not of Hasheous itself - the Hasheous software is AGPL, which is a separate question. Because the data's rights are unstated, rom-weaver never ships, commits, or redistributes Hasheous-derived packs. You build them locally from a dump you obtained, and they stay on your machine.
+- Redump states that its contributed metadata is public information. rom-weaver distributes derived packs and records their exact DAT source.
 
 Every built pack records where it came from: its source, the upstream revision, and the SHA-256 of the dump it was built from. [ROM identify data](../development/identify-data.md) documents the build details.
 
 ## Nothing leaves your machine
 
-Native identify performs no network access, ever - installing a pack reads a local dump file, and lookups read local packs. In the browser the same rule holds in the [local-first](local-first.md) shape: your files never leave the device, packs are fetched only with your consent and verified against their published SHA-256 before use, and only checksums - never ROM bytes - could ever be sent anywhere, and only if you explicitly ask for it.
+Native identify downloads a Redump DAT only when you run a database install or update command. Identification reads local packs and sends no ROM data. The browser downloads packs from rom-weaver's own site and verifies each SHA-256 value. Your files stay on the device.
 
 ## Related
 

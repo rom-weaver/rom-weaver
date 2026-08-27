@@ -120,7 +120,7 @@ Not every command takes all four. `extract` has no `--no-extract`, since unpacki
 
 `identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
 
-Native builds include CC0 OpenGood data for 17 cartridge systems. Other systems come from locally installed Hasheous packs. [Where identify data comes from](../explanation/identify-sources.md) explains the split.
+Native builds include OpenGood data for 17 cartridge systems and Redump data for 56 optical systems. Builds without the default `bundled-identify-data` feature include no packs. [Where identify data comes from](../explanation/identify-sources.md) explains the split.
 
 Native identify performs no network access.
 
@@ -146,11 +146,11 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 | `status` | List the installed pack files: slug, format, size, and sha256. |
 | `path` | Print the identify database directory. |
 | `remove <SYSTEM>` | Remove one system's installed pack. |
-| `import-hasheous <ZIP>` | Build packs for every non-OpenGood platform in a local Hasheous `MetadataMap.zip` dump, and merge `catalog.json`. |
-| `install <SYSTEM> --from <ZIP>` | Install one system's pack (or `--all`) from a local dump. |
-| `update [SYSTEM] --from <ZIP>` | Rebuild installed packs from a local dump; omit `SYSTEM` to update all. |
+| `import-redump <ZIP>` | Build a pack from a local Redump DAT ZIP. |
+| `install <SYSTEM> [--from <ZIP>]` | Install one Redump system pack. Without `--from`, download the DAT from Redump. |
+| `update [SYSTEM] [--from <ZIP>]` | Update one or all installed Redump packs. Without `--from`, download current DAT files. |
 
-`<SYSTEM>` is a canonical platform name or alias. `install` and `update` without `--from` fail: network download is not enabled, so the dump must be a local file. Platforms that OpenGood covers stay built-in; an import skips them.
+`<SYSTEM>` is a canonical platform name or alias. Platforms that OpenGood covers stay built in and do not install from Redump.
 
 ### Identify result
 

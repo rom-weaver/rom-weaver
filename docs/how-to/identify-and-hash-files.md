@@ -46,16 +46,16 @@ Repeat `--database` to search more packs. `--database` accepts RWFP1 and RWFP2 p
 
 ## Identify a disc or other non-cartridge system
 
-The built-in data covers 17 cartridge systems. Other systems need an installed pack, built from a local [Hasheous](https://github.com/gaseous-project/hasheous) `MetadataMap.zip` dump. Import every platform in the dump at once:
+The built-in data covers 17 cartridge systems. Install a Redump pack for an optical system:
 
 ```bash
-rom-weaver identify database import-hasheous MetadataMap.zip
+rom-weaver identify database install "Sony PlayStation"
 ```
 
-Or install one system:
+Import a downloaded Redump DAT ZIP instead:
 
 ```bash
-rom-weaver identify database install "Sony PlayStation" --from MetadataMap.zip
+rom-weaver identify database import-redump redump-playstation.zip
 ```
 
 Then identify as usual; the command finds the installed pack on its own:
@@ -64,7 +64,7 @@ Then identify as usual; the command finds the installed pack on its own:
 rom-weaver identify --input game.bin
 ```
 
-Check what is installed with `rom-weaver identify database list`. A result with `"condition": "database_required"` means the detected platform's pack is not installed; its `hint` names the install command. Keep imported packs local - see [Where identify data comes from](../explanation/identify-sources.md#licensing).
+Check what is installed with `rom-weaver identify database list`. A result with `"condition": "database_required"` means the detected platform's pack is not installed. Its `hint` names the install command.
 
 ## Force a system
 

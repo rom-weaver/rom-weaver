@@ -1,6 +1,6 @@
 # ROM identify data
 
-The `identify` and `ingest` commands use compact title packs: RWFP1 for the shipped OpenGood data, RWFP2 for set-aware Hasheous data. The native CLI embeds the shipped packs.
+The `identify` and `ingest` commands use compact title packs. RWFP1 stores OpenGood data. RWFP2 stores set-aware Redump data. The native CLI embeds all packs by default.
 
 The browser downloads only the packs a given input could match, and caches each one after its first use. The packs are self-hosted Brotli assets.
 
@@ -18,16 +18,16 @@ Ingest resolves ROM assets from their computed checksum variants. It also resolv
 - [Shared tracks](#shared-tracks)
 - [Determinism](#determinism)
 - [Provenance](#provenance)
-- [Local Hasheous data](#local-hasheous-data)
+- [Redump data](#redump-data)
 - [Pack integrity](#pack-integrity)
 
 <!-- END doctoc -->
 
 ## Build-time data
 
-The repository does not commit identify packs. Build tasks fetch data from [OpenGood](https://github.com/SnowflakePowered/opengood) and create the packs locally.
+The repository does not commit identify packs. Build tasks fetch data from [OpenGood](https://github.com/SnowflakePowered/opengood) and [Redump](http://redump.org/) to create the packs.
 
-OpenGood publishes its data under CC0-1.0. The source revision is pinned in `scripts/build-hasheous-identify-index.mjs`.
+OpenGood publishes its data under CC0-1.0. The source revision is pinned in `scripts/build-identify-index.mjs`.
 
 The current source is the upstream repository because `rom-weaver/open-good` does not exist. The source URL and revision are kept together so a maintained fork can replace it later.
 
@@ -70,16 +70,16 @@ Each pack URL carries its own `sha256` query, so a rebuilt pack is a new cache k
 
 ## Source policy
 
-`scripts/build-hasheous-identify-index.mjs` builds from exactly two sources, one per platform:
+`scripts/build-identify-index.mjs` builds from exactly two sources, one per platform:
 
 - `OPENGOOD_PLATFORMS` names the 17 cartridge platforms OpenGood covers exclusively. These build RWFP1 packs and ship with the tool.
-- Every other platform comes from a [Hasheous](https://github.com/gaseous-project/hasheous) `MetadataMap.zip` dump and builds an RWFP2 pack. Hasheous platforms are discovered dynamically from the dump's top-level directories - no static allowlist gates them. `KNOWN_PLATFORM_PROFILES` and `CURATED_ALIASES` only add media-profile and alias hints for known names; an unknown platform still builds, with the default `nointro-single-image-v1` profile.
+- `REDUMP_PLATFORMS` names the 56 systems with public Redump DAT files. These systems build grouped RWFP2 packs and ship as browser assets.
 
-The sources never mix inside one platform, and an OpenGood platform in the dump is excluded from Hasheous discovery. The reasoning lives in [Where identify data comes from](../explanation/identify-sources.md).
+The sources never mix inside one platform. The reasoning lives in [Where identify data comes from](../explanation/identify-sources.md).
 
 ## Catalog
 
-The builder writes `catalog.json` (format `rom-weaver-identify-catalog-v1`) next to the packs. Each platform entry records the canonical name, aliases, source, media profiles, pack slug, pack format, pack SHA-256, and canonicalization version. `generated` records the pinned OpenGood revision and the dump's file name, SHA-256, and size.
+The builder writes `catalog.json` (format `rom-weaver-identify-catalog-v1`) next to the packs. Each platform entry records the canonical name, aliases, source, media profiles, pack slug, pack format, pack SHA-256, and canonicalization version. `generated` records the OpenGood revision and each Redump DAT source.
 
 Aliases match case-insensitively after normalizing: lowercase, collapse non-alphanumerics to one space, trim. A platform's own normalized name beats another platform's curated alias; a duplicate alias or pack slug across two platforms is a build error.
 
@@ -97,18 +97,17 @@ The same inputs produce byte-identical packs. Games sort by (platform, name), co
 
 ## Provenance
 
-Every output records where it came from. `catalog.json` pins the OpenGood revision and the dump's SHA-256; each RWFP2 `manifest.json` carries the same provenance for its own platform; `index.json` records each pack's size and SHA-256. The CLI's `identify database import-hasheous` writes the same shape into the user's database directory and merges its `catalog.json` with the entries of platforms the import did not touch.
+Every output records where it came from. `catalog.json` pins the OpenGood revision and each Redump DAT ZIP checksum. Each RWFP2 manifest carries its platform's provenance. `index.json` records each pack's size and SHA-256. The CLI's `identify database import-redump` command writes the same shape into the user's database directory.
 
-## Local Hasheous data
+## Redump data
 
-The Hasheous dump's aggregated DAT data does not state redistribution rights. Do not commit Hasheous-derived packs; keep them local. ([Where identify data comes from](../explanation/identify-sources.md#licensing) explains the distinction from the Hasheous software's own AGPL licence.)
+Redump provides one Logiqx DAT ZIP per system. The builder keeps each game and its disc components together in RWFP2.
 
-Users install packs with `rom-weaver identify database import-hasheous <MetadataMap.zip>`; the recipes are in [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md). For development, build packs directly:
+Build one Redump pack directly:
 
 ```bash
-script=scripts/build-hasheous-identify-index.mjs
-dump=/path/to/MetadataMap.zip
-node "$script" --dump "$dump" --only "Sony PlayStation" --out target/identify
+script=scripts/build-identify-index.mjs
+node "$script" --only "Sony PlayStation" --out target/identify
 ```
 
 Pass the generated pack to the CLI:
@@ -118,14 +117,13 @@ database=target/identify/sony-playstation.pack
 rom-weaver identify --input game.bin --database "$database"
 ```
 
-To test the browser's hosted-download path end to end, build the full set into the CLI data dir and set `ROM_WEAVER_IDENTIFY_INCLUDE_HASHEOUS=1` for the webapp build:
+Build every distributable browser pack:
 
 ```bash
-node scripts/build-hasheous-identify-index.mjs --out crates/rom-weaver-cli/data/identify/v1
-ROM_WEAVER_IDENTIFY_INCLUDE_HASHEOUS=1 npm --prefix packages/rom-weaver-webapp run build
+node scripts/ensure-identify-data.mjs --redump-all --force
 ```
 
-The variable is for local test builds only; no CI or deploy workflow sets it. The Hasheous packs stay out of `_routes.json` either way, and `scripts/ensure-identify-data.mjs` keeps a data dir with valid locally built Hasheous packs instead of rebuilding it. Reset the dir to the shipped set with `node scripts/ensure-identify-data.mjs --force`.
+The `bundled-identify-data` Cargo feature includes all OpenGood and Redump packs in native builds. It is enabled by default. The WASM build disables default features and requests packs from the webapp when it needs them.
 
 ## Pack integrity
 

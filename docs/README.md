@@ -85,7 +85,7 @@ Background that makes the rest make sense.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
-- [Where identify data comes from](explanation/identify-sources.md): the OpenGood/Hasheous split, what each result quality proves, and why some packs stay local.
+- [Where identify data comes from](explanation/identify-sources.md): the OpenGood and Redump split and what each result quality proves.
 - [Release provenance](explanation/release-provenance.md): what download verification proves and why the checks are shaped the way they are.
 - [Comparison with similar tools](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
 
@@ -100,7 +100,7 @@ Background that makes the rest make sense.
 - [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes, validation, and contribution licensing.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
-- [ROM identify data](development/identify-data.md): rebuild the shipped OpenGood data or create local Hasheous packs.
+- [ROM identify data](development/identify-data.md): rebuild the OpenGood and Redump packs.
 - [References](development/references.md): format specifications and upstream reference implementations.
 
 …and more in the repository: commit conventions, CI, performance, browser concurrency, mobile Safari verification, vendored code, screenshots, the release guide, the CLA, the code of conduct, and the security policy all live under [`docs/development/`](https://github.com/rom-weaver/rom-weaver/tree/main/docs/development).
