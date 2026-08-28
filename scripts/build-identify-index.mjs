@@ -872,21 +872,24 @@ export function extractGoodToolsDumpTags(name) {
   return [...String(name).matchAll(/\[([^\]]+)\]/gu)].map((match) => match[1]);
 }
 
-function hashScopeFor(_rom) {
-  return "full_file";
-}
-
 function componentFromRom(rom, ordinal, source = "libretro") {
+  // Redump lists CD/GD-ROM games as per-track files (.bin/.raw) but DVD-era
+  // games (GameCube, Wii, PS2, Xbox, PSP) as one whole .iso. The runtime hashes
+  // a track file with track_file scope and a lone .iso as one full_file
+  // payload, and the matcher rejects on scope, so the pack MUST mirror that
+  // split per rom - a platform-wide scope breaks one medium or the other.
+  const romName = String(rom.name ?? "").trim();
+  const isTrackFile = source === "redump" && !/\.iso$/iu.test(romName);
   const component = {
-    hashScope: source === "redump" ? "track_file" : hashScopeFor(rom),
+    hashScope: isTrackFile ? "track_file" : "full_file",
     ordinal,
     size: /^\d+$/u.test(String(rom.size ?? "")) ? Number.parseInt(rom.size, 10) : 0,
   };
-  if (source === "redump") {
+  if (isTrackFile) {
     component.role = "data_track";
     component.track = ordinal + 1;
   }
-  const filename = String(rom.name ?? "").trim();
+  const filename = romName;
   if (filename) component.filename = filename;
   for (const [field, length] of Object.entries({ crc32: 8, md5: 32, sha1: 40 })) {
     const hash = normalizeHex(rom[field === "crc32" ? "crc" : field], length);
@@ -916,11 +919,7 @@ function innerLibretroSource(sourcePath) {
 export function parseLibretroGames(text, platform, sourcePath) {
   const parsed = parseClrMameProDat(text);
   const innerSource = innerLibretroSource(sourcePath);
-  // Redump track fingerprints only fit CD platforms. A profiled decoded-ISO
-  // platform (GameCube, Wii) hashes the whole file, so its components MUST
-  // stay full_file or the runtime scope gate rejects every match.
-  const componentSource =
-    innerSource === "redump" && KNOWN_PLATFORM_PROFILES[platform] ? "libretro" : innerSource;
+  const componentSource = innerSource;
   const provenance = sourceProvenance(
     innerSource,
     `${LIBRETRO_REPOSITORY}/blob/${LIBRETRO_REVISION}/${sourcePath.split("/").map(encodeURIComponent).join("/")}`,
