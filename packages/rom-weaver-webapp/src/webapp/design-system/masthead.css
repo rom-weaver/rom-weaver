@@ -618,6 +618,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   outline: none;
 }
 .rw-app .more-menu > button,
+.rw-app .more-menu > a,
 .rw-app .more-accent > button {
   display: flex;
   gap: var(--sp-s);
@@ -647,15 +648,38 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 }
 @media (hover: hover) {
   .rw-app .more-menu > button:hover,
+  .rw-app .more-menu > a:hover,
   .rw-app .more-accent > button:hover {
     color: var(--ink);
     background: var(--well);
   }
 }
 .rw-app .more-menu > button:active,
+.rw-app .more-menu > a:active,
 .rw-app .more-accent > button:active {
   color: var(--ink);
   background: var(--plate-2);
+}
+/* Support wears the footer donate color; the icon inherits it (see footer.css). */
+.rw-app .more-menu > .more-support,
+.rw-app .more-menu > .more-support svg {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .more-menu > .more-support:hover,
+  .rw-app .more-menu > .more-support:hover svg {
+    color: var(--thread-text);
+  }
+  .rw-app .more-menu > .more-support:hover svg {
+    fill: currentcolor;
+  }
+}
+.rw-app .more-menu > .more-support:active,
+.rw-app .more-menu > .more-support:active svg {
+  color: var(--thread-text);
+}
+.rw-app .more-menu > .more-support:active svg {
+  fill: currentcolor;
 }
 .rw-app .more-accent-tray {
   display: flex;
