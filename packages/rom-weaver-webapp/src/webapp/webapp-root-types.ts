@@ -37,7 +37,7 @@ type WebappRootProps = {
     creatorSession: CreatorSessionState;
     currentView: WebappView;
     patcherSession: PatcherSessionState;
-    toolsSession: { active: boolean };
+    ppfUndoSession: { active: boolean };
     trimSession: TrimSessionState;
     settingsDialogOpen: boolean;
     settings: {
@@ -88,7 +88,7 @@ type WebappRootProps = {
     onTrimSourceChange: (file: unknown) => void;
     onTrimOutputFormatChange: (format: string) => void;
     onTrimSettingsChange: (settings: unknown) => void;
-    onToolsSessionChange: (active: boolean) => void;
+    onPpfUndoSessionChange: (active: boolean) => void;
   };
 };
 

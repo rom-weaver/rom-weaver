@@ -9,7 +9,7 @@ const IDENTIFY_STATUS_LABEL: Readonly<Record<IdentifyStatus, string>> = {
   ambiguous: "Possible matches found",
   matched: "ROM identified",
   unavailable: "Identification unavailable",
-  unknown: "No title match",
+  unknown: "No checksum match",
 };
 
 /**
@@ -27,7 +27,7 @@ const IDENTIFY_STATUS_MARK: Readonly<Record<IdentifyStatus, IdentifyStatusMark>>
   ambiguous: { glyph: "?", label: "Possible match", tone: "warn" },
   matched: { glyph: "✓", label: "Identified", tone: "ok" },
   unavailable: { glyph: "!", label: "Identification unavailable", tone: "warn" },
-  unknown: { glyph: "–", label: "No title match" },
+  unknown: { glyph: "–", label: "No checksum match", tone: "bad" },
 };
 
 /**

@@ -77,24 +77,6 @@
     min-height: max(300px, calc(100svh - var(--hero-chrome)));
   }
 
-  /* the tools sub-picker becomes a full-width segmented control */
-  .rw-app .tools-subnav {
-    padding: var(--sp-s) var(--sp-m);
-  }
-  /* taller tab, tighter padding, same 1px seam - reset rides `0x01`, so it has
-     to skip the rail's phone height (workbench.css `.workflow-panel-head`) */
-  .rw-app .panel.workflow:has(.tools-subnav) {
-    --tools-rail-h: calc(44px + 2 * var(--sp-s) + 1px);
-  }
-  .rw-app .tools-subnav-rail {
-    width: 100%;
-  }
-  .rw-app .tools-subnav-tab {
-    flex: 1 1 0;
-    justify-content: center;
-    min-height: 44px;
-  }
-
   .rw-app .info-btn::after {
     inset: auto;
     top: 50%;

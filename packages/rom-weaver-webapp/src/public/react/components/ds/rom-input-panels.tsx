@@ -35,6 +35,8 @@ type RomInputInfoPanelProps = {
 type RomInputPanelsProps = {
   info?: RomInputInfoPanelProps;
   identification?: ParsedIdentifyLookupResult;
+  /** Open the Identify drawer on arrival (the identify page's product view). */
+  identifyDefaultOpen?: boolean;
   /**
    * Per-track checksums for a multi-track disc. When present, the disc's tracks
    * are listed under one "Tracks" section instead of the single `info` panel.
@@ -50,6 +52,7 @@ type RomInputPanelsProps = {
 const RomInputPanels = ({
   info = {},
   identification,
+  identifyDefaultOpen,
   tracks,
   cue,
   gdi,
@@ -67,7 +70,7 @@ const RomInputPanels = ({
   return (
     <>
       {showCue ? <DiscSheetsPanel cueText={cue?.cueText} gdiText={gdi?.gdiText} /> : null}
-      {identification ? <IdentifyDrawer identification={identification} /> : null}
+      {identification ? <IdentifyDrawer defaultOpen={identifyDefaultOpen} identification={identification} /> : null}
       {renderInfo()}
     </>
   );

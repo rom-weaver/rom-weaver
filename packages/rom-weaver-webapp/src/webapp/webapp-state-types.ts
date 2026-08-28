@@ -1,4 +1,4 @@
-type WorkflowView = "patcher" | "creator" | "identify" | "trim" | "tools" | "test";
+type WorkflowView = "patcher" | "creator" | "identify" | "trim" | "ppf-undo" | "test";
 type WebappView = WorkflowView | "docs";
 
 type ValidationState = {
@@ -32,7 +32,7 @@ type TrimSessionState = {
   sourceFilePresent: boolean;
 };
 
-type ToolsSessionState = {
+type PpfUndoSessionState = {
   active: boolean;
 };
 
@@ -62,13 +62,13 @@ const createEmptyTrimSessionState = (): TrimSessionState => ({
   sourceFilePresent: false,
 });
 
-const createEmptyToolsSessionState = (): ToolsSessionState => ({ active: false });
+const createEmptyPpfUndoSessionState = (): PpfUndoSessionState => ({ active: false });
 
 export type {
   CreatorSessionState,
   PatcherSessionState,
   StartupState,
-  ToolsSessionState,
+  PpfUndoSessionState,
   TrimSessionState,
   ValidationState,
   WebappView,
@@ -77,7 +77,7 @@ export type {
 export {
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
-  createEmptyToolsSessionState,
+  createEmptyPpfUndoSessionState,
   createEmptyTrimSessionState,
   createEmptyValidationState,
 };

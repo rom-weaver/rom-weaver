@@ -13,7 +13,7 @@ describe("settingsDraftHasChanges (numeric-aware equality)", () => {
     expect(shouldConfirmDiscardSettings(webappState)).toBe(true);
   });
 
-  it("flags staged tools inputs", () => {
-    expect(shouldWarnBeforeUnload({ toolsActive: true })).toBe(true);
+  it("flags an active PPF undo session", () => {
+    expect(shouldWarnBeforeUnload({ ppfUndoActive: true })).toBe(true);
   });
 });

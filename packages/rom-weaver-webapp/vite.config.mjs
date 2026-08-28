@@ -405,7 +405,7 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim and Tools tabs are still beta - they navigate in production but must
+// The Trim and PPF undo tabs are still beta - they navigate in production but must
 // not be indexed, and they inherit the Weave page's markup, so strip the shared
 // index directive to noindex and point their canonical at themselves (rather
 // than leaking a /apply canonical that would fold them into the patcher page).
@@ -593,7 +593,15 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ["identify", identifyHtml],
         ["test", testHtml],
         ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
-        ["tools", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "tools"), routePreloadLinks.get("tools"))],
+        [
+          "ppf-undo",
+          withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
+        ],
+        // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
+        [
+          "tools",
+          withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
+        ],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
@@ -900,7 +908,7 @@ const WORKFLOW_ROUTE_MODULES = {
   identify: "src/webapp/components/identify-form.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
   test: "src/public/react/emulator-test-view.tsx",
-  tools: "src/webapp/components/tools-form.tsx",
+  "ppf-undo": "src/webapp/components/ppf-undo-form.tsx",
   trim: "src/public/react/trim-form.tsx",
 };
 

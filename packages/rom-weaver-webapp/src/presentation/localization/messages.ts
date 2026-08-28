@@ -48,7 +48,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Identify, Trim, and Tools)",
+    message: "Enable beta tools (Identify, Trim, and PPF undo)",
   }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
@@ -183,6 +183,21 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Strip padding and junk blocks from ROM dumps,",
   }),
   "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "and shrink them for storage —" }),
+  "ui.identify.hashHint": msg({
+    id: "ui.identify.hashHint",
+    message: "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex.",
+  }),
+  "ui.identify.hashInvalid": msg({
+    id: "ui.identify.hashInvalid",
+    message: "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters.",
+  }),
+  "ui.identify.hashInvalidChars": msg({
+    id: "ui.identify.hashInvalidChars",
+    message: "Checksums use only the hex characters 0-9 and a-f.",
+  }),
+  "ui.identify.hashLabel": msg({ id: "ui.identify.hashLabel", message: "Identify by checksum" }),
+  "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search by checksum" }),
+  "ui.identify.hashSearching": msg({ id: "ui.identify.hashSearching", message: "Searching…" }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
   "ui.log.filter": msg({ id: "ui.log.filter", message: "Filter" }),
   "ui.log.filterLabel": msg({ id: "ui.log.filterLabel", message: "Filter log" }),
@@ -228,6 +243,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
   "ui.step.apply": msg({ id: "ui.step.apply", message: "Apply" }),
+  "ui.step.identify": msg({ id: "ui.step.identify", message: "Identify" }),
   "ui.step.modified": msg({ id: "ui.step.modified", message: "Modified" }),
   "ui.step.original": msg({ id: "ui.step.original", message: "Original" }),
   "ui.step.output": msg({ id: "ui.step.output", message: "Output" }),

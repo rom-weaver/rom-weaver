@@ -626,6 +626,17 @@ pub struct IdentifyCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "hash",
+            value_name = "HEX",
+            help = "Identify by a checksum instead of a file; accepts crc32/md5/sha1 hex"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub hash: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             short = 'd',
             long = "database",
             value_name = "PACK",

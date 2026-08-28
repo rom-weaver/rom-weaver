@@ -822,8 +822,8 @@ html.vt-flat [style*="view-transition-name"] {
 .rw-app #trim-builder-row-unified-drop {
   view-transition-name: vt-drop-trim;
 }
-.rw-app .drop:has(#tools-input-picker) {
-  view-transition-name: vt-drop-tools;
+.rw-app .drop:has(#ppf-undo-input-picker) {
+  view-transition-name: vt-drop-ppf-undo;
 }
 .rw-app .unified-drop-step:has(#rom-weaver-row-unified-drop) > .step-head {
   view-transition-name: vt-input-head-apply;
@@ -834,8 +834,8 @@ html.vt-flat [style*="view-transition-name"] {
 .rw-app .unified-drop-step:has(#trim-builder-row-unified-drop) > .step-head {
   view-transition-name: vt-input-head-trim;
 }
-.rw-app .unified-drop-step:has(#tools-input-picker) > .step-head {
-  view-transition-name: vt-input-head-tools;
+.rw-app .unified-drop-step:has(#ppf-undo-input-picker) > .step-head {
+  view-transition-name: vt-input-head-ppf-undo;
 }
 html.vt-theme .unified-drop-step .drop,
 html.vt-theme .unified-drop-step .step-head {
@@ -844,46 +844,46 @@ html.vt-theme .unified-drop-step .step-head {
 /* Flatten mode switches into one root crossfade. */
 html.vt-mode .unified-drop-step .drop,
 html.vt-mode .unified-drop-step .step-head,
-html.vt-mode .drop:has(#tools-input-picker) {
+html.vt-mode .drop:has(#ppf-undo-input-picker) {
   view-transition-name: none !important;
 }
 /* Keep drop morphs faster than the ambient crossfade. */
 ::view-transition-group(vt-drop-apply),
 ::view-transition-group(vt-drop-create),
 ::view-transition-group(vt-drop-trim),
-::view-transition-group(vt-drop-tools) {
+::view-transition-group(vt-drop-ppf-undo) {
   animation-duration: 0.2s;
   animation-timing-function: cubic-bezier(0.3, 0.8, 0.2, 1);
 }
 ::view-transition-old(vt-drop-apply),
 ::view-transition-old(vt-drop-create),
 ::view-transition-old(vt-drop-trim),
-::view-transition-old(vt-drop-tools) {
+::view-transition-old(vt-drop-ppf-undo) {
   animation: vt-drop-out 0.1s ease both;
 }
 ::view-transition-new(vt-drop-apply),
 ::view-transition-new(vt-drop-create),
 ::view-transition-new(vt-drop-trim),
-::view-transition-new(vt-drop-tools) {
+::view-transition-new(vt-drop-ppf-undo) {
   animation: vt-drop-in 0.12s ease 0.07s both;
 }
 ::view-transition-group(vt-input-head-apply),
 ::view-transition-group(vt-input-head-create),
 ::view-transition-group(vt-input-head-trim),
-::view-transition-group(vt-input-head-tools) {
+::view-transition-group(vt-input-head-ppf-undo) {
   animation-duration: 0.2s;
   animation-timing-function: cubic-bezier(0.3, 0.8, 0.2, 1);
 }
 ::view-transition-old(vt-input-head-apply),
 ::view-transition-old(vt-input-head-create),
 ::view-transition-old(vt-input-head-trim),
-::view-transition-old(vt-input-head-tools) {
+::view-transition-old(vt-input-head-ppf-undo) {
   animation: vt-input-head-out 0.2s linear both;
 }
 ::view-transition-new(vt-input-head-apply),
 ::view-transition-new(vt-input-head-create),
 ::view-transition-new(vt-input-head-trim),
-::view-transition-new(vt-input-head-tools) {
+::view-transition-new(vt-input-head-ppf-undo) {
   animation: vt-input-head-in 0.06s ease 0.14s both;
 }
 @keyframes vt-drop-out {

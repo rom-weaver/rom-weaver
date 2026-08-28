@@ -120,6 +120,17 @@ type ParsedIdentifyResult = {
   unavailableReason?: string;
 };
 
+type IdentifyHashAlgorithm = "crc32" | "md5" | "sha1";
+
+const identifyHashAlgorithm = (value: string): IdentifyHashAlgorithm | undefined => {
+  const hash = value.trim().toLowerCase();
+  if (!/^[0-9a-f]+$/u.test(hash)) return undefined;
+  if (hash.length === 8) return "crc32";
+  if (hash.length === 32) return "md5";
+  if (hash.length === 40) return "sha1";
+  return undefined;
+};
+
 const isIdentifyLookupStatus = (value: unknown): value is IdentifyLookupStatus =>
   value === "matched" || value === "ambiguous" || value === "unknown";
 
@@ -140,7 +151,13 @@ const aggregateIdentifyStatus = (statuses: readonly IdentifyStatus[]): IdentifyS
   return statuses.includes("matched") ? "matched" : "unknown";
 };
 
-export { aggregateIdentifyStatus, isIdentifyCondition, isIdentifyLookupStatus, isIdentifyQuality };
+export {
+  aggregateIdentifyStatus,
+  identifyHashAlgorithm,
+  isIdentifyCondition,
+  isIdentifyLookupStatus,
+  isIdentifyQuality,
+};
 export type {
   IdentifyCondition,
   IdentifyQuality,

@@ -25,18 +25,48 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test?guid
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
-The Test page recognizes local ROMs for Atari 7800 and Lynx; Nintendo NES, Famicom Disk System, Game Boy, Game Boy Advance, Nintendo 64, Nintendo DS, and Super Nintendo; and Sega Game Gear, Master System, and Mega Drive or Genesis.
+The Test page supports these platforms:
 
-Apply can also send a detected Sega Saturn or Sony PlayStation result to Test.
+- Atari 7800
+- Atari Lynx
+- Nintendo Entertainment System
+- Nintendo Famicom Disk System
+- Nintendo Game Boy
+- Nintendo Game Boy Color
+- Nintendo Game Boy Advance
+- Nintendo 64
+- Nintendo DS
+- Super Nintendo Entertainment System
+- Sega Game Gear
+- Sega Master System
+- Sega Mega Drive or Genesis
+- Sega Saturn
+- Sony PlayStation
+- Sony PSP
+
+rom-weaver does not bundle EmulatorJS cores for these platforms:
+
+- Nintendo GameCube
+- Nintendo Wii
+- Nintendo 3DS
+- Sega CD
+- Sega Dreamcast
+- Sony PlayStation 2
+- NEC PC Engine
+- NEC PC Engine CD
+- SNK Neo Geo Pocket
 
 ## Test an Apply result
 
 1. Apply the patch on the [Apply page](https://rom-weaver.com/apply).
-2. Select **Open in the Test tab** after Apply finishes.
-3. Play far enough to exercise the patched content.
-4. Return to Apply and download the result if you have not downloaded it.
+2. Check **Post Apply Test** under **Options**. If it warns that the platform cannot be tested, use another emulator or the target hardware.
+3. Select **Open in the Test tab** after Apply finishes.
+4. Play far enough to exercise the patched content.
+5. Return to Apply and download the result if you have not downloaded it.
 
-The **After applying** option can open Test automatically. Choose whether Apply also downloads the result. The **Show the test button after applying** setting controls the separate Test button.
+The **Post Apply Test** option can open Test automatically or hide the Test button. Apply skips automatic testing for unsupported platforms. Its disabled Test button names the unsupported platform.
+
+Use **Post Apply Download** to choose whether Apply downloads the result automatically.
 
 An emulator test does not prove that every part of a patch works. Keep the clean original and test important paths on the target hardware when possible.
 

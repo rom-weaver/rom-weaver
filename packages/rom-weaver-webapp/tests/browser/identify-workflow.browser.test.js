@@ -10,8 +10,8 @@ import "../../src/webapp/design-system/deferred.css";
 /* The wasm ingest is exercised end to end in tests/wasm/rom-identify.test.mjs
    against synthetic packs. This file drives the four RESULT STATES through the
    real DOM and the real stylesheets, which is where the reporting bugs were. */
-const { identifyRom } = vi.hoisted(() => ({ identifyRom: vi.fn() }));
-vi.mock("../../src/platform/browser/browser-api.ts", () => ({ identifyRom }));
+const { identifyHash, identifyRom } = vi.hoisted(() => ({ identifyHash: vi.fn(), identifyRom: vi.fn() }));
+vi.mock("../../src/platform/browser/browser-api.ts", () => ({ identifyHash, identifyRom }));
 
 const { IdentifyForm } = await import("../../src/webapp/components/identify-form.tsx");
 
@@ -67,8 +67,8 @@ const selectRom = async (fileName = "game.gba") => {
   await waitForText(fileName);
 };
 
+// Staging a ROM starts identification on its own; this only waits it out.
 const runIdentify = async () => {
-  buttonMatching(/^Identify ROM$/).click();
   await settle();
 };
 
@@ -84,6 +84,7 @@ const openDrawers = async () => {
 beforeEach(async () => {
   await page.viewport(1280, 900);
   document.body.innerHTML = "";
+  identifyHash.mockReset();
   identifyRom.mockReset();
 });
 
@@ -101,9 +102,8 @@ test("a matched ROM shows its title, its evidence, and a colour-free identified 
   await mountIdentifyForm();
   await selectRom();
   await runIdentify();
-  await waitFor(() => host.querySelector(".identify-result-title"));
+  await waitForText("Metroid Fusion (USA)");
 
-  expect(host.querySelector(".identify-result-title").textContent).toBe("Metroid Fusion (USA)");
   // The state reads without colour: a glyph plus a word, both in the DOM.
   expect(host.querySelector(".identify-state").textContent).toContain("Identified");
   expect(host.querySelector(".identify-state").textContent).toContain("✓");
@@ -120,7 +120,7 @@ test("a matched ROM shows its title, its evidence, and a colour-free identified 
   expect(host.textContent).toContain("abcd1234");
 });
 
-test("an unknown ROM says no title matched, never that identification failed", async () => {
+test("an unknown ROM reports no checksum match, never that identification failed", async () => {
   identifyRom.mockResolvedValue({
     candidates: [candidate("homebrew.gba", "unknown")],
     input: "homebrew.gba",
@@ -129,12 +129,14 @@ test("an unknown ROM says no title matched, never that identification failed", a
   await mountIdentifyForm();
   await selectRom("homebrew.gba");
   await runIdentify();
-  await waitForText("No exact title match found.");
+  await waitForText("No matching checksum found in the identification data.");
 
   expect(host.textContent).toContain("may be modified, an unlisted revision");
   expect(host.textContent).not.toContain("Identification data could not be loaded");
   expect(host.textContent).not.toContain("Identification unavailable");
-  expect(host.querySelector(".identify-state").textContent).toContain("No title match");
+  // The verdict reads as an error notice above the ROM card.
+  expect(host.querySelector(".notice.error")).not.toBeNull();
+  expect(host.querySelector(".identify-state").textContent).toContain("No checksum match");
   // Checksums open on their own: they are all a no-match result can still offer.
   expect(host.textContent).toContain("abcd1234");
 });
@@ -199,13 +201,13 @@ test("a multi-ROM archive reports every member instead of one arbitrary winner",
   await mountIdentifyForm();
   await selectRom("collection.zip");
   await runIdentify();
-  await waitForText("Archive: collection.zip");
+  await waitForText("Games/GBA/Metroid Fusion (USA).gba");
 
-  expect(host.textContent).toContain("3 ROMs found in this archive.");
-  // Nested member paths stay visible so the reader knows which member was identified.
-  expect(host.textContent).toContain("Games/GBA/Metroid Fusion (USA).gba");
+  // Every member is identified on the staged ROM card; the archive itself is
+  // not listed as its own row.
+  expect(host.textContent).not.toContain("Archive:");
   expect(host.textContent).toContain("Games/GBA/homebrew.gba");
-  expect(host.querySelectorAll(".identify-state")).toHaveLength(3);
+  expect(host.querySelectorAll(".identify-member")).toHaveLength(3);
 });
 
 test("a late result from a replaced file cannot repopulate the form", async () => {
@@ -219,7 +221,7 @@ test("a late result from a replaced file cannot repopulate the form", async () =
   await mountIdentifyForm();
   await selectRom("first.gba");
   await runIdentify();
-  await waitFor(() => buttonMatching(/Identifying/));
+  await waitForText("Identifying first.gba");
 
   // Replace the file mid-run, then let the stale operation finish.
   await selectRom("second.gba");
@@ -232,7 +234,7 @@ test("a late result from a replaced file cannot repopulate the form", async () =
   await settle();
 
   expect(host.textContent).not.toContain("Stale Game (USA)");
-  expect(buttonMatching(/^Identify ROM$/)).toBeTruthy();
+  expect(host.textContent).toContain("second.gba");
 });
 
 for (const [width, height] of [
@@ -257,16 +259,83 @@ for (const [width, height] of [
 
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
-    // The title wraps rather than losing the region and revision at its end.
-    const title = host.querySelector(".identify-result-title");
-    expect(title.getBoundingClientRect().height).toBeGreaterThan(30);
-    expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth + 1);
     // The deep member path stays inside the card too.
     for (const value of host.querySelectorAll(".identify-member")) {
       expect(value.scrollWidth).toBeLessThanOrEqual(value.clientWidth + 1);
     }
-    const runButton = buttonMatching(/^Identify ROM$/);
-    expect(runButton.getBoundingClientRect().height).toBeGreaterThanOrEqual(36);
-    expect(runButton.disabled).toBe(false);
   });
 }
+
+const setHashInput = (value) => {
+  const input = host.querySelector(".identify-hash-input");
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
+  descriptor?.set?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+};
+
+test("an empty form shows the ghost steps next to the checksum search", async () => {
+  await mountIdentifyForm();
+  expect(host.querySelector(".ghost-steps")).not.toBeNull();
+  expect(host.querySelector(".identify-hash-input")).not.toBeNull();
+  expect(host.textContent).toContain("Identify by checksum");
+});
+
+test("a pasted checksum identifies without a file", async () => {
+  const hash = "3610A686";
+  identifyHash.mockResolvedValue({
+    candidates: [candidate(hash.toLowerCase(), "matched", [gbaMatch("Metroid Fusion (USA)")])],
+    input: hash.toLowerCase(),
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  setHashInput(hash);
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("Metroid Fusion (USA)");
+
+  expect(identifyHash).toHaveBeenCalledWith("3610a686", expect.anything());
+  expect(host.querySelector(".identify-state").textContent).toContain("Identified");
+  // The file steps stay out of the way: no ROM card and no ghost steps remain.
+  expect(host.querySelector(".ghost-steps")).toBeNull();
+});
+
+test("an invalid checksum shows the inline error and never runs", async () => {
+  await mountIdentifyForm();
+  setHashInput("not-a-hash");
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("hex characters");
+
+  expect(identifyHash).not.toHaveBeenCalled();
+  expect(host.querySelector(".identify-hash-error")).not.toBeNull();
+  // The ghost steps stay: nothing ran, so nothing is staged.
+  expect(host.querySelector(".ghost-steps")).not.toBeNull();
+});
+
+test("a wrong-length checksum names the accepted lengths", async () => {
+  await mountIdentifyForm();
+  setHashInput("abc123");
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("40 (SHA-1)");
+
+  expect(identifyHash).not.toHaveBeenCalled();
+  expect(host.querySelector(".identify-hash-error")).not.toBeNull();
+});
+
+test("staging a file clears the checksum result", async () => {
+  identifyHash.mockResolvedValue({
+    candidates: [candidate("3610a686", "matched", [gbaMatch("Metroid Fusion (USA)")])],
+    input: "3610a686",
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  setHashInput("3610a686");
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("Metroid Fusion (USA)");
+
+  await selectRom("other.gba");
+  expect(host.textContent).not.toContain("Metroid Fusion (USA)");
+  // The checksum search stays on the page; the staged file only overrides its input.
+  const hashInput = host.querySelector(".identify-hash-input");
+  expect(hashInput).not.toBeNull();
+  expect(hashInput.value).toBe("");
+  expect(host.textContent).toContain("other.gba");
+});

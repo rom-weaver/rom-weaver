@@ -4,7 +4,7 @@
 // `bigint`, but `JSON.parse` yields plain `number`s; this module coerces to a `number`-based,
 // camelCase shape the webapp consumes directly (and drops `null`/absent optionals). It is the single
 // boundary between the Rust contract and the input/patch state the apply workflow builds.
-import type { ChecksumMap } from "../../types/checksum.ts";
+import type { ChecksumMap, ChecksumVariant } from "../../types/checksum.ts";
 import { isIdentifyCondition, isIdentifyLookupStatus, isIdentifyQuality } from "../../types/identify.ts";
 import type {
   ParsedIdentifyEvidence,
@@ -16,6 +16,7 @@ import type {
 import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } from "../../types/ingest.ts";
 import type {
   IdentifyLookupResult,
+  IdentifyResult,
   IdentifyTitleMatch,
   IngestResult,
   IngestRomAsset,
@@ -284,5 +285,28 @@ export const parseIngestResult = (details: unknown): ParsedIngestResult | undefi
     kind,
     patches,
     sourceFileName: toStringValue(ingest.source_file_name) || "",
+  };
+};
+
+export type ParsedIdentifyCommandResult = {
+  checksumVariants: ChecksumVariant[];
+  checksums: ChecksumMap;
+  input: string;
+  matches: ParsedIdentifyTitleMatch[];
+  status: "matched" | "ambiguous" | "unknown";
+};
+
+export const parseIdentifyCommandResult = (details: unknown): ParsedIdentifyCommandResult | undefined => {
+  const identify = asRecord(asRecord(details)?.identify) as WireRecord<IdentifyResult> | undefined;
+  if (!(identify && isIdentifyLookupStatus(identify.status))) return undefined;
+  const matches = Array.isArray(identify.matches)
+    ? identify.matches.map(parseIdentifyMatch).filter((match): match is ParsedIdentifyTitleMatch => match !== undefined)
+    : [];
+  return {
+    checksumVariants: parseChecksumVariants(identify) ?? [],
+    checksums: toChecksumMap(identify.checksums),
+    input: toStringValue(identify.input) || "",
+    matches,
+    status: identify.status,
   };
 };

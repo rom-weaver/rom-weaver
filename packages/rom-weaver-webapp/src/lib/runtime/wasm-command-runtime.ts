@@ -38,7 +38,8 @@ import {
   normalizeCompressionLevelProfile,
 } from "./compression-codec-args.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
-import { parseIngestResult } from "./ingest-result.ts";
+import { parseIdentifyCommandResult, parseIngestResult } from "./ingest-result.ts";
+import type { ParsedIdentifyCommandResult } from "./ingest-result.ts";
 import {
   getPatchApplyOutputFileName,
   getPatchValidationRequirements,
@@ -1177,6 +1178,55 @@ const invokeRomWeaverIngestWorker = async (
   return { ...parsed, timing: getRunResultTiming(result) };
 };
 
+// Identify by a bare checksum via the `identify` command's --hash path. No ROM source is staged;
+// the staged database packs are the only file inputs.
+const invokeRomWeaverIdentifyHashWorker = async (
+  input: {
+    databasePaths?: string[];
+    hash: string;
+    knownInputPaths?: string[];
+    logLevel?: LogLevel | string;
+    signal?: AbortSignal;
+  },
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<ParsedIdentifyCommandResult & { timing: ReturnType<typeof getRunResultTiming> }> => {
+  const hash = String(input.hash || "")
+    .trim()
+    .toLowerCase();
+  if (!hash) throw new Error("Identify hash is required");
+  const database = toTrimmedList(input.databasePaths);
+  const command = createRomWeaverCommand("identify", {
+    hash,
+    ...(database.length ? { database } : {}),
+  });
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson identify dispatch", {
+    command,
+    databaseCount: database.length,
+    hash,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      onEvent: relaySimpleProgress(onProgress),
+      onLog,
+      signal: input.signal,
+    }),
+  );
+  if (!(result.ok && result.exitCode === 0)) {
+    await throwRomWeaverFailureWithBrowserOutputContext(result, "Identify failed", `identify \`${hash}\``);
+  }
+  const terminal = getLastEvent(result);
+  const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
+  const parsed = parseIdentifyCommandResult(details);
+  if (!parsed) {
+    throw withRomWeaverFailureKind(new Error("Identify result was missing or malformed"), result);
+  }
+  return { ...parsed, timing: getRunResultTiming(result) };
+};
+
 // Parse a rom-weaver-bundle.json bundle (plain, compressed, or bundled in an archive) via the `bundle parse`
 // command. Bundled ROM/patch members are extracted into `extractDirPath`; the parsed result's
 // `extracted` source refs point at those leaves.
@@ -1393,6 +1443,7 @@ export {
   invokeRomWeaverExtractWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
+  invokeRomWeaverIdentifyHashWorker,
   invokeRomWeaverIngestWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,

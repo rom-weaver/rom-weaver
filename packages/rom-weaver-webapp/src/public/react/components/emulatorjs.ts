@@ -12,6 +12,7 @@ const PLATFORM_CORES: Readonly<Record<string, string>> = {
   "Sega Mega Drive _ Genesis": "segaMD",
   "Sega Saturn": "segaSaturn",
   "Sony PlayStation": "psx",
+  "Sony Playstation Portable": "psp",
 };
 
 const EXTENSION_CORES: Readonly<Record<string, string>> = {
@@ -47,6 +48,7 @@ const CORE_ASPECT_RATIOS: Readonly<Record<string, string>> = {
   gba: "3 / 2",
   lynx: "80 / 51",
   nds: "2 / 3",
+  psp: "30 / 17",
   segaGG: "10 / 9",
 };
 
@@ -56,8 +58,8 @@ const getEmulatorJsAspectRatio = (core?: string): string =>
   (core ? CORE_ASPECT_RATIOS[core] : undefined) ?? DEFAULT_ASPECT_RATIO;
 
 const getEmulatorJsCore = (platform?: string, fileName?: string): string | undefined => {
-  const platformCore = platform ? PLATFORM_CORES[platform.trim()] : undefined;
-  if (platformCore) return platformCore;
+  const normalizedPlatform = platform?.trim();
+  if (normalizedPlatform) return PLATFORM_CORES[normalizedPlatform];
   const match = fileName
     ?.trim()
     .toLowerCase()

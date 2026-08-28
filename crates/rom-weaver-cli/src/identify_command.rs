@@ -559,6 +559,31 @@ impl CliApp {
                 thread_execution,
             )
         };
+        if args.input.is_some() == args.hash.is_some() {
+            return self.finish(
+                "identify",
+                identify_failed("provide exactly one of --input or --hash".to_string(), None),
+            );
+        }
+        if let Some(hash) = args.hash.take() {
+            let databases = match IdentifyDatabaseSet::load(&args.database) {
+                Ok(Some(databases)) => databases,
+                Ok(None) => {
+                    return self.finish(
+                        "identify",
+                        identify_failed(
+                            "the browser identify command requires a staged --database pack"
+                                .to_string(),
+                            None,
+                        ),
+                    );
+                }
+                Err(error) => {
+                    return self.finish("identify", identify_failed(error.to_string(), None));
+                }
+            };
+            return self.run_identify_hash(&hash, &databases);
+        }
         let Some(mut input) = args.input.take() else {
             return self.finish(
                 "identify",
@@ -600,6 +625,7 @@ impl CliApp {
         );
         let IdentifyCommand {
             input: _,
+            hash: _,
             database,
             system,
             offline: _,
@@ -884,6 +910,80 @@ impl CliApp {
             label,
             Some(100.0),
             checksum_report.thread_execution,
+        );
+        report.details = Some(json!({ "identify": result }));
+        self.finish("identify", report)
+    }
+
+    fn run_identify_hash(&self, hash: &str, databases: &IdentifyDatabaseSet) -> AppRunOutcome {
+        let hash = hash.trim().to_ascii_lowercase();
+        let algorithm = match hash.len() {
+            _ if !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) => None,
+            8 => Some("crc32"),
+            32 => Some("md5"),
+            40 => Some("sha1"),
+            _ => None,
+        };
+        let Some(algorithm) = algorithm else {
+            return self.finish(
+                "identify",
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("identify".to_string()),
+                    "identify",
+                    "--hash must be hex: 8 chars for crc32, 32 for md5, or 40 for sha1",
+                    None,
+                ),
+            );
+        };
+        let checksum_variants = vec![json!({
+            "id": "manual",
+            "label": "Manual",
+            "checksums": { algorithm: hash },
+        })];
+        let lookup = match databases.resolve_variants(&checksum_variants) {
+            Ok(lookup) => lookup,
+            Err(error) => {
+                return self.finish(
+                    "identify",
+                    OperationReport::failed(
+                        OperationFamily::Command,
+                        Some("identify".to_string()),
+                        "identify",
+                        error.to_string(),
+                        None,
+                    ),
+                );
+            }
+        };
+        let label = match lookup.status {
+            IdentifyStatus::Matched => format!("identified {}", lookup.matches[0].name),
+            IdentifyStatus::Ambiguous => format!("found {} possible titles", lookup.matches.len()),
+            IdentifyStatus::Unknown => "no title matched the supplied database".to_string(),
+        };
+        let result = IdentifyResult {
+            status: lookup.status,
+            input: hash.clone(),
+            detected_platform: None,
+            checksums: BTreeMap::from([(algorithm.to_string(), hash)]),
+            checksum_variants,
+            matches: lookup.matches,
+            quality: None,
+            platform_candidates: Vec::new(),
+            media: None,
+            components: Vec::new(),
+            database: None,
+            evidence: None,
+            condition: None,
+            hint: None,
+        };
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("identify".to_string()),
+            "identify",
+            label,
+            Some(100.0),
+            None,
         );
         report.details = Some(json!({ "identify": result }));
         self.finish("identify", report)
