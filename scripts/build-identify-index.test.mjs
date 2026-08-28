@@ -142,6 +142,19 @@ test("Redump metadata uses track fingerprints and a track media profile", () => 
   assert.equal(mediaProfileFor("Sony - PlayStation", "libretro"), "redump-cd-track-v1");
 });
 
+test("Redump metadata for a decoded-ISO platform keeps full-file fingerprints", () => {
+  const dat = `clrmamepro ( name "Nintendo - GameCube" )
+game ( name "Disc" rom ( name "Disc.iso" size 16 crc AABBCCDD ) )`;
+  const parsed = parseLibretroGames(
+    dat,
+    "Nintendo - GameCube",
+    "metadat/redump/Nintendo - GameCube.dat",
+  );
+  assert.equal(parsed.games[0].components[0].hashScope, "full_file");
+  assert.equal(parsed.games[0].components[0].role, undefined);
+  assert.equal(parsed.games[0].components[0].track, undefined);
+});
+
 test("merge dedupes identical scoped hashes and retains legacy GoodTools data", () => {
   const primary = parseLibretroGames(
     LIBRETRO_DAT,

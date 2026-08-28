@@ -916,8 +916,11 @@ function innerLibretroSource(sourcePath) {
 export function parseLibretroGames(text, platform, sourcePath) {
   const parsed = parseClrMameProDat(text);
   const innerSource = innerLibretroSource(sourcePath);
+  // Redump track fingerprints only fit CD platforms. A profiled decoded-ISO
+  // platform (GameCube, Wii) hashes the whole file, so its components MUST
+  // stay full_file or the runtime scope gate rejects every match.
   const componentSource =
-    innerSource === "redump" && !KNOWN_PLATFORM_PROFILES[platform] ? "redump" : innerSource;
+    innerSource === "redump" && KNOWN_PLATFORM_PROFILES[platform] ? "libretro" : innerSource;
   const provenance = sourceProvenance(
     innerSource,
     `${LIBRETRO_REPOSITORY}/blob/${LIBRETRO_REVISION}/${sourcePath.split("/").map(encodeURIComponent).join("/")}`,
