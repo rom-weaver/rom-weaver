@@ -62,6 +62,13 @@ describe("selectIdentifySlugs", () => {
     ]);
   });
 
+  it("routes a probe-detected disc platform to its pack", async () => {
+    const { selectIdentifySlugs } = await import("../../src/platform/browser/identify-packs.ts");
+    // The metadata-only probe of an RVZ/GCZ now reports the decoded platform,
+    // so an opaque disc container still stages the right pack.
+    expect(selectIdentifySlugs({ fileName: "disc.rvz", platform: "Nintendo GameCube" })).toEqual(["nintendo-gamecube"]);
+  });
+
   it("infers the platform from an archive's members", async () => {
     const { selectIdentifySlugs } = await import("../../src/platform/browser/identify-packs.ts");
     expect(selectIdentifySlugs({ entryNames: ["Games/Metroid Fusion (USA).gba"], fileName: "collection.zip" })).toEqual(

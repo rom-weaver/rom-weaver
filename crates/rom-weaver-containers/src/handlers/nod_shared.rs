@@ -287,7 +287,7 @@ impl NodHandlerCore {
             format!("opening {} metadata", self.format_name()),
             Some(&execution),
         );
-        let disc = open_disc(&request.source)?;
+        let mut disc = open_disc(&request.source)?;
         let meta = self.validate_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());
@@ -297,11 +297,30 @@ impl NodHandlerCore {
             compression = %compression_label,
             "nod disc probe"
         );
+        // Detect the console from a bounded DECODED prefix, so a metadata-only
+        // probe of a compressed disc still reports its platform. Hosts use it
+        // to pick which identify database to load before hashing.
+        let identity = {
+            use std::io::Read;
+            let take = disc_size.min(rom_weaver_checksum::DETECT_PREFIX_BYTES as u64);
+            let mut prefix = Vec::new();
+            match (&mut disc).take(take).read_to_end(&mut prefix) {
+                Ok(_) => rom_weaver_checksum::detect_rom_identity(&prefix, disc_size, Some(".iso")),
+                Err(error) => {
+                    trace!(
+                        format = self.format_name(),
+                        %error,
+                        "nod disc probe: decoded prefix read failed; skipping identity"
+                    );
+                    rom_weaver_checksum::RomIdentity::default()
+                }
+            }
+        };
         let block_label = meta
             .block_size
             .map(|size| format!("{size} bytes"))
             .unwrap_or_else(|| "unknown".to_string());
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.format_name().to_string()),
             "probe",
@@ -316,7 +335,13 @@ impl NodHandlerCore {
             ),
             Some(100.0),
             Some(execution),
-        ))
+        );
+        if !identity.is_empty() {
+            let mut details = serde_json::Map::new();
+            identity.write_into(&mut details);
+            report.details = Some(serde_json::Value::Object(details));
+        }
+        Ok(report)
     }
 
     pub(crate) fn probe_details(

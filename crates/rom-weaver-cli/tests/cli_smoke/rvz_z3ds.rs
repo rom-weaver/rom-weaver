@@ -67,6 +67,10 @@ fn rvz_probe_reports_succeeded() {
             .to_ascii_lowercase()
             .contains("compression")
     );
+    // The metadata-only probe decodes a bounded prefix, so hosts learn the
+    // platform before extraction and can stage the right identify pack.
+    assert_eq!(json["details"]["platform"], "Nintendo GameCube");
+    assert_eq!(json["details"]["disc_format"], "DVD");
 }
 
 #[test]
