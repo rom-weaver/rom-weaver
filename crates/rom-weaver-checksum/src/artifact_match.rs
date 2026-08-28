@@ -154,25 +154,50 @@ fn unknown_outcome() -> ArtifactMatchOutcome {
 /// crc32) coincidence; at least one shared hash must agree.
 fn component_matches(artifact: &FingerprintComponent, pack: &PackComponent) -> bool {
     if artifact.hash_scope != pack.hash_scope {
+        trace!(
+            artifact_scope = %artifact.hash_scope,
+            pack_scope = %pack.hash_scope,
+            pack_component = %pack_component_name(pack),
+            "component rejected: hash scope mismatch"
+        );
         return false;
     }
     // A pack size of 0 means the size is unknown upstream and cannot gate.
     if pack.size != 0 && artifact.size != pack.size {
+        trace!(
+            artifact_size = artifact.size,
+            pack_size = pack.size,
+            pack_component = %pack_component_name(pack),
+            "component rejected: size mismatch"
+        );
         return false;
     }
     let mut agreements = 0usize;
-    for (ours, theirs) in [
-        (&artifact.crc32, &pack.crc32),
-        (&artifact.md5, &pack.md5),
-        (&artifact.sha1, &pack.sha1),
-        (&artifact.sha256, &pack.sha256),
+    for (name, ours, theirs) in [
+        ("crc32", &artifact.crc32, &pack.crc32),
+        ("md5", &artifact.md5, &pack.md5),
+        ("sha1", &artifact.sha1, &pack.sha1),
+        ("sha256", &artifact.sha256, &pack.sha256),
     ] {
         if let (Some(ours), Some(theirs)) = (ours, theirs) {
             if !ours.eq_ignore_ascii_case(theirs) {
+                trace!(
+                    algorithm = name,
+                    artifact_hash = %ours,
+                    pack_hash = %theirs,
+                    pack_component = %pack_component_name(pack),
+                    "component rejected: hash disagreement"
+                );
                 return false;
             }
             agreements += 1;
         }
+    }
+    if agreements == 0 {
+        trace!(
+            pack_component = %pack_component_name(pack),
+            "component rejected: the artifact and the pack share no hash algorithm"
+        );
     }
     agreements > 0
 }
@@ -234,7 +259,12 @@ fn verify_candidate(
         }
     }
     if !discriminating_matched {
-        trace!(game = %game.name, "candidate dropped: only non-discriminating components matched");
+        trace!(
+            game = %game.name,
+            required_matched,
+            required_total,
+            "candidate dropped: no discriminating required component matched"
+        );
         return None;
     }
 
@@ -282,26 +312,42 @@ pub fn match_artifact<P: ArtifactPackReader + ?Sized>(
     fingerprint: &ArtifactFingerprint,
 ) -> Result<ArtifactMatchOutcome> {
     let mut candidates: BTreeSet<u32> = BTreeSet::new();
+    let mut queried: Vec<String> = Vec::new();
     for component in &fingerprint.components {
         let Some(crc32) = component.crc32.as_deref() else {
+            trace!(
+                component = %fingerprint_component_name(component),
+                size = component.size,
+                "component not routed: it has no crc32"
+            );
             continue;
         };
         if component.size == 0 {
+            trace!(
+                component = %fingerprint_component_name(component),
+                crc32,
+                "component not routed: its size is 0"
+            );
             continue;
         }
-        for (game_index, component_index) in pack.route(crc32, component.size)? {
-            trace!(
-                crc32,
-                size = component.size,
-                game_index,
-                component_index,
-                "routed artifact component"
-            );
+        queried.push(format!("{crc32}/{}", component.size));
+        let routed = pack.route(crc32, component.size)?;
+        trace!(
+            crc32,
+            size = component.size,
+            routed = routed.len(),
+            "routed artifact component"
+        );
+        for (game_index, component_index) in routed {
+            trace!(crc32, game_index, component_index, "route hit");
             candidates.insert(game_index);
         }
     }
     if candidates.is_empty() {
-        trace!("no routed candidates; artifact is unknown to this pack");
+        trace!(
+            queried = queried.join(","),
+            "no routed candidates; artifact is unknown to this pack"
+        );
         return Ok(unknown_outcome());
     }
 

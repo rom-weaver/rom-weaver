@@ -529,6 +529,7 @@ fn profile_needs_tracks(profile: &str) -> bool {
 }
 
 fn match_single_blob<P: ArtifactPackReader + ?Sized>(
+    database_name: &str,
     pack: &P,
     raw_size: Option<u64>,
     raw_checksums: &BTreeMap<String, String>,
@@ -542,7 +543,17 @@ fn match_single_blob<P: ArtifactPackReader + ?Sized>(
         raw_checksums.get("md5").map(String::as_str),
         raw_checksums.get("sha1").map(String::as_str),
     );
-    match_artifact(pack, &fingerprint).map(Some)
+    let outcome = match_artifact(pack, &fingerprint)?;
+    trace!(
+        database = database_name,
+        size,
+        crc32 = ?raw_checksums.get("crc32"),
+        status = ?outcome.status,
+        quality = ?outcome.quality,
+        matches = outcome.matches.len(),
+        "artifact pack lookup"
+    );
+    Ok(Some(outcome))
 }
 
 impl CliApp {
@@ -742,8 +753,14 @@ impl CliApp {
             None => detected_platform_candidates(detected_platform.as_deref(), is_disc),
         };
         trace!(
-            candidates = platform_candidates.len(),
+            candidates = ?platform_candidates
+                .iter()
+                .map(|candidate| candidate.platform.as_str())
+                .collect::<Vec<_>>(),
+            detected_platform = ?detected_platform,
+            is_disc,
             raw_size = ?raw_size,
+            crc32 = ?checksums.get("crc32"),
             "identify platform candidates"
         );
 
@@ -782,6 +799,14 @@ impl CliApp {
             }
         }
 
+        trace!(
+            selected = ?selected
+                .iter()
+                .map(|selected| selected.pack.name.as_str())
+                .collect::<Vec<_>>(),
+            missing = ?missing_platforms,
+            "identify pack selection"
+        );
         let resolved =
             Self::resolve_against_selected(&selected, &checksum_variants, raw_size, &checksums);
         let resolved = match resolved {
@@ -1117,7 +1142,9 @@ impl CliApp {
                     }
                 }
                 IdentifyPackFile::V2(pack) => {
-                    let Some(outcome) = match_single_blob(pack, raw_size, raw_checksums)? else {
+                    let Some(outcome) =
+                        match_single_blob(&selected_pack.pack.name, pack, raw_size, raw_checksums)?
+                    else {
                         trace!(
                             database = %selected_pack.pack.name,
                             "skipping RWFP2 pack: the raw payload size is unknown"
@@ -1131,7 +1158,9 @@ impl CliApp {
                     );
                 }
                 IdentifyPackFile::V3(pack) => {
-                    let Some(outcome) = match_single_blob(pack, raw_size, raw_checksums)? else {
+                    let Some(outcome) =
+                        match_single_blob(&selected_pack.pack.name, pack, raw_size, raw_checksums)?
+                    else {
                         trace!(
                             database = %selected_pack.pack.name,
                             "skipping RWFP3 pack: the raw payload size is unknown"
@@ -1145,7 +1174,9 @@ impl CliApp {
                     );
                 }
                 IdentifyPackFile::V4(pack) => {
-                    let Some(outcome) = match_single_blob(pack, raw_size, raw_checksums)? else {
+                    let Some(outcome) =
+                        match_single_blob(&selected_pack.pack.name, pack, raw_size, raw_checksums)?
+                    else {
                         trace!(
                             database = %selected_pack.pack.name,
                             "skipping RWFP4 pack: the raw payload size is unknown"
