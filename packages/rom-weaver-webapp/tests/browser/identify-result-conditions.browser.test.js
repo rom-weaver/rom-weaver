@@ -34,14 +34,14 @@ const mountIdentifyForm = async () => {
   await waitFor(() => host.querySelector("#identify-input-picker"));
 };
 
+// Staging a ROM starts identification on its own - there is no run button.
 const runIdentify = async (result) => {
   identifyRom.mockResolvedValue(result);
   const file = new File([new Uint8Array([1, 2, 3])], "game.bin");
   const input = host.querySelector("#identify-input-picker");
   Object.defineProperty(input, "files", { configurable: true, value: [file] });
   input.dispatchEvent(new Event("change", { bubbles: true }));
-  await waitFor(() => [...host.querySelectorAll("button")].some((button) => /Identify ROM/u.test(button.textContent)));
-  [...host.querySelectorAll("button")].find((button) => /Identify ROM/u.test(button.textContent)).click();
+  await waitForText("game.bin");
 };
 
 beforeEach(() => {

@@ -186,7 +186,16 @@ const CandidateResult = ({
       <p className="pdesc identify-unknown-lead">No matching checksum for this ROM in the identification data.</p>
     ) : null}
     <RomInputPanels
-      identification={{ matches: candidate.matches, status: candidate.status }}
+      identification={{
+        matches: candidate.matches,
+        status: candidate.status,
+        ...(candidate.condition ? { condition: candidate.condition } : {}),
+        ...(candidate.hint ? { hint: candidate.hint } : {}),
+        ...(candidate.quality ? { quality: candidate.quality } : {}),
+        ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
+        ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
+        ...(candidate.database ? { database: candidate.database } : {}),
+      }}
       identifyDefaultOpen
       info={{
         checksums: candidate.checksums,
