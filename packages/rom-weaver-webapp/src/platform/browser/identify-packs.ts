@@ -136,6 +136,11 @@ const SIBLING_SLUGS: Record<string, string[]> = {
   "sega-game-gear": ["sega-master-system-mark-iii"],
   "sega-master-system-mark-iii": ["sega-game-gear"],
   "sega-mega-drive-genesis": ["sega-32x"],
+  // A PlayStation-family disc whose SYSTEM.CNF lies beyond the probe's bounded
+  // prefix is split from its sibling only by framing and size, and PS2 shipped
+  // CD titles too - keep both packs in play.
+  "sony-playstation": ["sony-playstation-2"],
+  "sony-playstation-2": ["sony-playstation"],
 };
 
 /** Mirrors the platform slug builder used by the identify data scripts. */
