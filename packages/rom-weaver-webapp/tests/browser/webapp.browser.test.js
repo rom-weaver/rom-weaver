@@ -572,10 +572,15 @@ test("mobile More carries app utilities plus the external links, and the footer 
   expect(menuStatus).not.toBeNull();
   expect(getComputedStyle(menuStatus).color).toBe(getComputedStyle(mastheadStatus).color);
   expect(getComputedStyle(menuStatus.querySelector("svg")).color).toBe(getComputedStyle(mastheadStatus).color);
-  const neutralItem = document.querySelector('.more-menu [role="menuitem"]:not(.more-status)');
+  const neutralItem = document.querySelector('.more-menu [role="menuitem"]:not(.more-status, .more-support)');
   const neutralColor = getComputedStyle(neutralItem).color;
   for (const item of document.querySelectorAll('.more-menu [role="menuitem"]')) {
     if (item.classList.contains("more-status")) continue;
+    if (item.classList.contains("more-support")) {
+      expect(getComputedStyle(item).color).not.toBe(neutralColor);
+      expect(getComputedStyle(item.querySelector("svg")).color).toBe(getComputedStyle(item).color);
+      continue;
+    }
     expect(getComputedStyle(item).color).toBe(neutralColor);
     expect(getComputedStyle(item.querySelector("svg")).color).toBe(neutralColor);
   }

@@ -634,6 +634,7 @@ const UtilityMenu = ({
       ) : null}
       {donateHref ? (
         <a
+          className="more-support"
           href={donateHref}
           onClick={(event) => {
             onClose();
