@@ -1,5 +1,5 @@
 //! Reader for the per-system identify packs produced by
-//! `scripts/build-hasheous-identify-index.mjs`.
+//! the identify pack builders.
 //!
 //! It parses one decompressed RWFP1 pack. Each pack has crc32, md5, and sha1
 //! maps plus name and platform tables. Native and WASM commands use this same
@@ -331,10 +331,20 @@ impl SystemPack {
 }
 
 fn read_members(bytes: &[u8]) -> Result<HashMap<String, &[u8]>> {
-    if bytes.len() < PACK_MAGIC.len() + 4 || &bytes[..PACK_MAGIC.len()] != PACK_MAGIC {
-        return Err(invalid_pack("pack magic does not match RWFP1"));
+    read_members_with_magic(bytes, PACK_MAGIC, "RWFP1")
+}
+
+/// Parse the shared outer container (magic + directory + member payloads).
+/// RWFP1 and RWFP2 share this byte layout and differ only in the magic.
+pub(crate) fn read_members_with_magic<'a>(
+    bytes: &'a [u8],
+    magic: &[u8],
+    label: &str,
+) -> Result<HashMap<String, &'a [u8]>> {
+    if bytes.len() < magic.len() + 4 || &bytes[..magic.len()] != magic {
+        return Err(invalid_pack(format!("pack magic does not match {label}")));
     }
-    let mut cursor = PACK_MAGIC.len();
+    let mut cursor = magic.len();
     let count = read_u32(bytes, cursor)? as usize;
     cursor += 4;
     if count > (bytes.len() - cursor) / 10 {
@@ -379,7 +389,10 @@ fn read_members(bytes: &[u8]) -> Result<HashMap<String, &[u8]>> {
     Ok(members)
 }
 
-fn required_member<'a>(members: &'a HashMap<String, &'a [u8]>, name: &str) -> Result<&'a [u8]> {
+pub(crate) fn required_member<'a>(
+    members: &'a HashMap<String, &'a [u8]>,
+    name: &str,
+) -> Result<&'a [u8]> {
     members
         .get(name)
         .copied()
@@ -409,7 +422,7 @@ fn parse_json_strings(member: &[u8], name: &str) -> Result<Vec<String>> {
         .map_err(|error| invalid_pack(format!("{name} is invalid JSON: {error}")))
 }
 
-fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
+pub(crate) fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
     if !hex.len().is_multiple_of(2) {
         return Err(RomWeaverError::Validation(format!(
             "identify checksum must have an even number of hexadecimal characters: {hex}"
@@ -426,7 +439,7 @@ fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
         .collect()
 }
 
-fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
+pub(crate) fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
     let end = offset
         .checked_add(2)
         .ok_or_else(|| invalid_pack("u16 read offset overflow"))?;
@@ -436,7 +449,7 @@ fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
     Ok(u16::from_le_bytes([slice[0], slice[1]]))
 }
 
-fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
+pub(crate) fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
     let end = offset
         .checked_add(4)
         .ok_or_else(|| invalid_pack("u32 read offset overflow"))?;
@@ -446,7 +459,7 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
     Ok(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
 }
 
-fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
+pub(crate) fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
     let end = offset
         .checked_add(8)
         .ok_or_else(|| invalid_pack("u64 read offset overflow"))?;
@@ -458,11 +471,56 @@ fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
     Ok(u64::from_le_bytes(array))
 }
 
-fn invalid_pack(message: impl Into<String>) -> RomWeaverError {
+/// A parsed identify pack of either supported generation, chosen by magic.
+#[derive(Debug)]
+pub enum IdentifyPackFile {
+    V1(SystemPack),
+    V2(crate::identify_pack_v2::ArtifactPack),
+    V3(crate::identify_pack_v3::ArtifactPack),
+    V4(crate::identify_pack_v4::ArtifactPack),
+}
+
+impl IdentifyPackFile {
+    /// Parse a decompressed pack blob, dispatching on the 8-byte magic.
+    pub fn parse(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() >= PACK_MAGIC.len() && &bytes[..PACK_MAGIC.len()] == PACK_MAGIC {
+            return Ok(Self::V1(SystemPack::parse(bytes)?));
+        }
+        if bytes.len() >= crate::identify_pack_v2::PACK_V2_MAGIC.len()
+            && &bytes[..crate::identify_pack_v2::PACK_V2_MAGIC.len()]
+                == crate::identify_pack_v2::PACK_V2_MAGIC
+        {
+            return Ok(Self::V2(crate::identify_pack_v2::ArtifactPack::parse(
+                bytes,
+            )?));
+        }
+        if bytes.len() >= crate::identify_pack_v3::PACK_V3_MAGIC.len()
+            && &bytes[..crate::identify_pack_v3::PACK_V3_MAGIC.len()]
+                == crate::identify_pack_v3::PACK_V3_MAGIC
+        {
+            return Ok(Self::V3(crate::identify_pack_v3::ArtifactPack::parse(
+                bytes,
+            )?));
+        }
+        if bytes.len() >= crate::identify_pack_v4::PACK_V4_MAGIC.len()
+            && &bytes[..crate::identify_pack_v4::PACK_V4_MAGIC.len()]
+                == crate::identify_pack_v4::PACK_V4_MAGIC
+        {
+            return Ok(Self::V4(crate::identify_pack_v4::ArtifactPack::parse(
+                bytes,
+            )?));
+        }
+        Err(invalid_pack(
+            "pack magic is not a supported version (expected RWFP1, RWFP2, RWFP3, or RWFP4)",
+        ))
+    }
+}
+
+pub(crate) fn invalid_pack(message: impl Into<String>) -> RomWeaverError {
     RomWeaverError::Validation(format!("invalid ROM identify pack: {}", message.into()))
 }
 
-fn table_offset(start: usize, index: usize, width: usize) -> Result<usize> {
+pub(crate) fn table_offset(start: usize, index: usize, width: usize) -> Result<usize> {
     index
         .checked_mul(width)
         .and_then(|offset| start.checked_add(offset))

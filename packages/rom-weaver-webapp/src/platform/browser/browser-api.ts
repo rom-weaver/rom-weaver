@@ -81,14 +81,24 @@ const identifyRom = async (
     identifyAllRomEntries: true,
   });
   try {
-    const candidates: ParsedIdentifyCandidate[] = result.assets.map((asset) => ({
-      checksumVariants: asset.checksumVariants || [],
-      checksums: asset.checksums || {},
-      ...(asset.platform ? { detectedPlatform: asset.platform } : {}),
-      matches: identifyUnavailable ? [] : asset.identification?.matches || [],
-      path: asset.memberPath || asset.fileName || fileName,
-      status: identifyUnavailable ? "unavailable" : asset.identification?.status || "unknown",
-    }));
+    const candidates: ParsedIdentifyCandidate[] = result.assets.map((asset) => {
+      const identification = identifyUnavailable ? undefined : asset.identification;
+      return {
+        checksumVariants: asset.checksumVariants || [],
+        checksums: asset.checksums || {},
+        ...(asset.platform ? { detectedPlatform: asset.platform } : {}),
+        matches: identification?.matches || [],
+        path: asset.memberPath || asset.fileName || fileName,
+        status: identifyUnavailable ? "unavailable" : identification?.status || "unknown",
+        ...(identification?.quality ? { quality: identification.quality } : {}),
+        ...(identification?.platformCandidates ? { platformCandidates: identification.platformCandidates } : {}),
+        ...(identification?.evidence ? { evidence: identification.evidence } : {}),
+        ...(identification?.database ? { database: identification.database } : {}),
+        ...(identification?.condition
+          ? { condition: identification.condition, ...(identification.hint ? { hint: identification.hint } : {}) }
+          : {}),
+      };
+    });
     // An archive that yielded extracted leaves names itself so the UI can show
     // "Archive: x.zip / ROM: Games/y.gba" rather than implying the zip matched.
     const archiveName = result.assets.some((asset) => !asset.copiedInPlace) ? fileName : undefined;

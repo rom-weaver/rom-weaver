@@ -3,8 +3,12 @@ import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import {
   formatIdentifySource,
+  IDENTIFY_CONDITION_LABEL,
+  IDENTIFY_QUALITY_LABEL,
   IDENTIFY_STATUS_MARK,
+  identifyComponentEvidenceLabel,
   identifyMatchCountLabel,
+  identifySourceLabel,
 } from "../../presentation/identify-status.ts";
 import { ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
@@ -43,14 +47,32 @@ const IdentifyDrawer = ({
   /** Archive-relative member path, when the identified ROM came out of a container. */
   memberPath?: string;
 }) => {
-  const { matches, status } = identification;
-  if (!matches.length) return null;
+  const { condition, database, evidence, hint, matches, platformCandidates, quality, status } = identification;
+  // A structured condition (database required / unsupported media profile) is
+  // worth a drawer even with zero matches; a plain empty lookup is not.
+  if (!(matches.length || condition)) return null;
+  const sourceParts = [database?.source ? identifySourceLabel(database.source) : "", database?.packFormat || ""].filter(
+    Boolean,
+  );
+  const componentEvidence =
+    evidence &&
+    typeof evidence.requiredComponentsMatched === "number" &&
+    typeof evidence.requiredComponentsTotal === "number"
+      ? identifyComponentEvidenceLabel(evidence.requiredComponentsMatched, evidence.requiredComponentsTotal)
+      : "";
   const canonicalNames = unique(matches.map((match) => formatIdentifyTitle(match.name)));
   const aliases = collectAliases(matches, canonicalNames);
   const platforms = unique(matches.map((match) => match.platform));
   const algorithms = unique(matches.map((match) => match.algorithm.toUpperCase()));
   const variants = unique(matches.map((match) => match.variant));
   const databases = unique(matches.map((match) => formatIdentifySource(match.database)));
+  const provenance = unique(
+    matches.flatMap(
+      (match) => match.provenance?.map((item) => identifySourceLabel(item.sourceName || item.source)) ?? [],
+    ),
+  );
+  const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? []));
+  const legacyVariant = matches.some((match) => match.legacyVariant);
   const mark = IDENTIFY_STATUS_MARK[status];
 
   return (
@@ -60,7 +82,9 @@ const IdentifyDrawer = ({
       label="Identify"
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={
-        status === "matched" ? (
+        condition ? (
+          <DrawerReadout muted>{IDENTIFY_CONDITION_LABEL[condition]}</DrawerReadout>
+        ) : status === "matched" ? (
           <DrawerReadout>{mark.label}</DrawerReadout>
         ) : (
           <DrawerReadout muted>{identifyMatchCountLabel(matches.length)}</DrawerReadout>
@@ -68,6 +92,12 @@ const IdentifyDrawer = ({
       }
     >
       <div className="identify-drawer-body">
+        {condition ? (
+          <p className="pdesc identify-drawer-condition">
+            <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
+            {hint || "The identification data does not support this input."}
+          </p>
+        ) : null}
         <div className="ck-group identify-drawer-group">
           <div className="ck-group-head">Names</div>
           <div className="ckrows identify-drawer-aliases">
@@ -96,10 +126,31 @@ const IdentifyDrawer = ({
         <div className="ck-group identify-drawer-group">
           <div className="ck-group-head">Evidence</div>
           <div className="ckrows identify-drawer-evidence">
+            {quality ? <EvidenceRow label="Quality" values={[IDENTIFY_QUALITY_LABEL[quality]]} /> : null}
+            {sourceParts.length ? <EvidenceRow label="Database" values={[sourceParts.join(" · ")]} /> : null}
+            {platformCandidates?.length ? (
+              <EvidenceRow
+                label="Platform candidates"
+                values={platformCandidates.map((candidate) =>
+                  [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" — "),
+                )}
+              />
+            ) : null}
+            {componentEvidence ? (
+              <EvidenceRow
+                label="Components"
+                values={[componentEvidence, ...(evidence?.layoutMatched === false ? ["layout differs"] : [])]}
+              />
+            ) : null}
+            {evidence?.missing?.length ? <EvidenceRow label="Missing" values={evidence.missing} /> : null}
+            {evidence?.unexpected?.length ? <EvidenceRow label="Unexpected" values={evidence.unexpected} /> : null}
             <EvidenceRow label="Matched by" values={algorithms} />
             <EvidenceRow label="Variant" values={variants} />
             <EvidenceRow label="Platform" values={platforms.map(abbreviatePlatform)} />
             <EvidenceRow label="Source" values={databases} />
+            {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
+            {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
+            {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
             {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}
             {status === "ambiguous" ? (
               <EvidenceRow label="Candidates" values={[identifyMatchCountLabel(matches.length)]} />

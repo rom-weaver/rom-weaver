@@ -1,0 +1,8 @@
+{
+  "Id": 100,
+  "ObjectType": "Platform",
+  "SignatureDataObjects": [
+    { "SignatureId": "743", "Platform": "PlayStation" }
+  ],
+  "Metadata": []
+}

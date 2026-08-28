@@ -2,6 +2,8 @@ import { RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
+  IDENTIFY_CONDITION_LABEL,
+  IDENTIFY_QUALITY_MARK,
   IDENTIFY_STATUS_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyMatchCountLabel,
@@ -54,6 +56,39 @@ const CandidateStatusChip = ({ status }: { status: ParsedIdentifyCandidate["stat
   );
 };
 
+/** Match-quality chip; renders only for the set-aware (RWFP2) results that carry one. */
+const CandidateQualityChip = ({ quality }: { quality: NonNullable<ParsedIdentifyCandidate["quality"]> }) => {
+  const mark = IDENTIFY_QUALITY_MARK[quality];
+  return (
+    <span className="rb mono identify-state identify-quality">
+      <span aria-hidden="true" className="identify-state-glyph">
+        {mark.glyph}
+      </span>
+      <span>{mark.label}</span>
+    </span>
+  );
+};
+
+/**
+ * A structured non-match condition is an actionable state, not a plain "no
+ * match": name the cause and show the hint.
+ */
+const CandidateConditionNotice = ({
+  condition,
+  hint,
+}: {
+  condition: NonNullable<ParsedIdentifyCandidate["condition"]>;
+  hint?: string;
+}) => (
+  <Notice level="warn">
+    <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
+    {hint ||
+      (condition === "database_required"
+        ? "The identification database for this platform is not downloaded."
+        : "This media layout has no supported identification profile yet.")}
+  </Notice>
+);
+
 const CandidateCard = ({
   candidate,
   showMemberPath,
@@ -69,7 +104,12 @@ const CandidateCard = ({
       description={
         showMemberPath ? <span className="pdesc mono identify-member">ROM: {candidate.path}</span> : undefined
       }
-      meta={<CandidateStatusChip status={candidate.status} />}
+      meta={
+        <>
+          {candidate.quality ? <CandidateQualityChip quality={candidate.quality} /> : null}
+          <CandidateStatusChip status={candidate.status} />
+        </>
+      }
       name={<span className="identify-result-title">{heading}</span>}
       state={mark.tone}
     >
@@ -91,7 +131,8 @@ const CandidateCard = ({
           ))}
         </ul>
       ) : null}
-      {candidate.status === "unknown" ? (
+      {candidate.condition ? <CandidateConditionNotice condition={candidate.condition} hint={candidate.hint} /> : null}
+      {candidate.status === "unknown" && !candidate.condition ? (
         <p className="pdesc identify-unknown-lead">
           No matching checksum found in the identification data. The ROM may be modified, an unlisted revision, or from
           a system that is not in the local data.
@@ -99,7 +140,16 @@ const CandidateCard = ({
       ) : null}
       <IdentifyDrawer
         defaultOpen
-        identification={{ matches: candidate.matches, status: candidate.status }}
+        identification={{
+          matches: candidate.matches,
+          status: candidate.status,
+          ...(candidate.condition ? { condition: candidate.condition } : {}),
+          ...(candidate.hint ? { hint: candidate.hint } : {}),
+          ...(candidate.quality ? { quality: candidate.quality } : {}),
+          ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
+          ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
+          ...(candidate.database ? { database: candidate.database } : {}),
+        }}
         memberPath={showMemberPath ? candidate.path : undefined}
       />
       {/* The evidence is the page's product, so both drawers open on arrival. */}
@@ -136,7 +186,16 @@ const CandidateResult = ({
       <p className="pdesc identify-unknown-lead">No matching checksum for this ROM in the identification data.</p>
     ) : null}
     <RomInputPanels
-      identification={{ matches: candidate.matches, status: candidate.status }}
+      identification={{
+        matches: candidate.matches,
+        status: candidate.status,
+        ...(candidate.condition ? { condition: candidate.condition } : {}),
+        ...(candidate.hint ? { hint: candidate.hint } : {}),
+        ...(candidate.quality ? { quality: candidate.quality } : {}),
+        ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
+        ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
+        ...(candidate.database ? { database: candidate.database } : {}),
+      }}
       identifyDefaultOpen
       info={{
         checksums: candidate.checksums,

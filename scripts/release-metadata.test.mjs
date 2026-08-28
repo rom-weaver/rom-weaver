@@ -64,7 +64,8 @@ test("published npm package manifests include release discovery keywords", () =>
     "package.json",
     "packages/rom-weaver-alias/package.json",
     ...Object.keys(rootPackage.optionalDependencies).map(
-      (name) => `packages/rom-weaver-cli-platforms/${name.replace("@rom-weaver/", "")}/package.json`,
+      (name) =>
+        `packages/rom-weaver-cli-platforms/${name.replace("@rom-weaver/", "")}/package.json`,
     ),
   ];
 
@@ -73,6 +74,19 @@ test("published npm package manifests include release discovery keywords", () =>
     for (const keyword of requiredReleaseKeywords) {
       assert.ok(pkg.keywords?.includes(keyword), `${pkg.name} is missing npm keyword ${keyword}`);
     }
+  }
+});
+
+test("platform npm packages include the external identify data", () => {
+  const rootPackage = readJson("package.json");
+
+  for (const name of Object.keys(rootPackage.optionalDependencies)) {
+    const packagePath = `packages/rom-weaver-cli-platforms/${name.replace("@rom-weaver/", "")}/package.json`;
+    const platformPackage = readJson(packagePath);
+    assert.ok(
+      platformPackage.files.includes("share/rom-weaver/identify/v1/**"),
+      `${name} does not include the identify data`,
+    );
   }
 });
 

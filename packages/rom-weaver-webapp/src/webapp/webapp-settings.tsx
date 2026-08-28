@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
 import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
@@ -425,6 +425,54 @@ const SettingsGroup = ({
   );
 };
 
+type OptionalIdentifyGroup = { id: string; label: string; systems: string[] };
+
+const IdentifyPackSettings = () => {
+  const [groups, setGroups] = useState<OptionalIdentifyGroup[]>([]);
+  const [status, setStatus] = useState<Record<string, "idle" | "installing" | "installed" | "failed">>({});
+  useEffect(() => {
+    void import("../platform/browser/identify-packs.ts")
+      .then(({ listOptionalIdentifyPackGroups }) => listOptionalIdentifyPackGroups())
+      .then(setGroups)
+      .catch(() => setGroups([]));
+  }, []);
+  if (!groups.length) return null;
+  const install = async (group: OptionalIdentifyGroup) => {
+    setStatus((current) => ({ ...current, [group.id]: "installing" }));
+    try {
+      const { installIdentifyPackGroup } = await import("../platform/browser/identify-packs.ts");
+      await installIdentifyPackGroup(group.id);
+      setStatus((current) => ({ ...current, [group.id]: "installed" }));
+    } catch {
+      setStatus((current) => ({ ...current, [group.id]: "failed" }));
+    }
+  };
+  return (
+    <div className="setgroup">
+      <div className="gtitle">Optional ROM databases</div>
+      {groups.map((group) => {
+        const state = status[group.id] ?? "idle";
+        return (
+          <div className="setrow" key={group.id}>
+            <span className="slabel">{group.label}</span>
+            <span className="sctl">
+              <button
+                className="btn"
+                disabled={state === "installing" || state === "installed"}
+                onClick={() => void install(group)}
+                type="button"
+              >
+                {state === "installing" ? "Installing…" : state === "installed" ? "Installed" : "Install"}
+              </button>
+              {state === "failed" ? <span className="validation bad">Install failed</span> : null}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
   const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
   const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
@@ -439,6 +487,7 @@ function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: Se
           <SettingsGroup key={section.title} section={section} {...shared} />
         ))}
       </div>
+      <IdentifyPackSettings />
       {validation.messages.length ? (
         <div aria-live="polite" className="validation bad" id="settings-validation-message" role="alert">
           {validation.messages.join(" ")}

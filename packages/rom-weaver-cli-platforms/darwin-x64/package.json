@@ -2,29 +2,23 @@
   "name": "@rom-weaver/darwin-x64",
   "version": "0.13.0",
   "description": "macOS x64 binary for rom-weaver",
+  "keywords": [
+    "chd",
+    "patch",
+    "rom",
+    "rvz",
+    "z3ds"
+  ],
+  "license": "AGPL-3.0-or-later",
   "author": "Brandon Casey",
   "repository": {
     "type": "git",
     "url": "https://github.com/rom-weaver/rom-weaver.git",
     "directory": "packages/rom-weaver-cli-platforms/darwin-x64"
   },
-  "license": "AGPL-3.0-or-later",
   "funding": [
     "https://github.com/sponsors/brandonocasey",
     "https://ko-fi.com/brandonocasey"
-  ],
-  "keywords": [
-    "rvz",
-    "chd",
-    "z3ds",
-    "rom",
-    "patch"
-  ],
-  "os": [
-    "darwin"
-  ],
-  "cpu": [
-    "x64"
   ],
   "bin": {
     "rom-weaver": "bin/rom-weaver"
@@ -32,8 +26,15 @@
   "files": [
     "bin/rom-weaver",
     "LICENSE",
+    "share/rom-weaver/identify/v1/**",
     "CLI_NOTICE",
     "third_party/licenses/**"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
   ],
   "publishConfig": {
     "access": "public",

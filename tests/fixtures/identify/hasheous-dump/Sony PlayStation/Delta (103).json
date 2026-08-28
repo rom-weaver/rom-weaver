@@ -1,0 +1,17 @@
+{
+  "Id": 103,
+  "ObjectType": "Game",
+  "Name": "Delta",
+  "SignatureDataObjects": [],
+  "Metadata": [],
+  "Attributes": [
+    {
+      "attributeType": "EmbeddedList",
+      "attributeName": "ROMs",
+      "attributeRelationType": "ROM",
+      "Value": [
+        { "Id": "8", "Name": "Delta (Europe).bin", "Size": 300, "Crc": "eeeeeeee", "Md5": "e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2", "Sha1": "", "Sha256": "", "SignatureSource": "Redump", "Attributes": {}, "Country": { "EU": "Europe" }, "Language": {} }
+      ]
+    }
+  ]
+}

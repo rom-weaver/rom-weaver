@@ -32,6 +32,50 @@ permissions:
   id-token: write
 
 jobs:
+  identify-data:
+    name: Package identify data
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install data build tools
+        run: sudo apt-get update && sudo apt-get install --yes zstd
+      - name: Build identify data archive
+        run: |
+          node scripts/ensure-identify-data.mjs
+          node scripts/build-identify-release-data.mjs
+      - name: Upload identify data artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: identify-release-data
+          path: |
+            target/identify-release/share
+            target/rom-weaver-identify-data*.tar.zst
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+      - name: Upload identify data release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release upload "v${{ inputs.version }}"
+          target/rom-weaver-identify-data*.tar.zst
+          --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Attest identify data archive
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: target/rom-weaver-identify-data*.tar.zst
+
   # The three matrices below all fan out over the same target list, and CI
   # builds it too. It lives in .github/cli-platforms.json; a matrix can only be
   # fed by an upstream job's output, so it is resolved once here.
@@ -53,7 +97,7 @@ jobs:
 
   platform-build:
     name: Build ${{ matrix.package }}
-    needs: plan
+    needs: [plan, identify-data]
     permissions:
       contents: read
     strategy:
@@ -65,6 +109,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || format('v{0}', inputs.version) }}
+
+      - name: Download identify data
+        uses: actions/download-artifact@v8
+        with:
+          name: identify-release-data
+          path: target
 
       # Same action CI builds with, against the same per-platform cargo cache,
       # so a release restores what CI already built rather than compiling a

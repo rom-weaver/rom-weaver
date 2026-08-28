@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN"
+  "http://www.logiqx.com/Dats/datafile.dtd">
+<datafile>
+  <header><name>Redump fixture</name></header>
+  <game name="Alpha &amp; Omega">
+    <rom name="Alpha (USA) (Track 1).bin" size="1000" crc="aaaaaaaa" md5="0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a" sha1="0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"/>
+    <rom name="Alpha (USA) (Track 2).bin" size="400" crc="bbbbbbbb" md5="0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" sha1="0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"/>
+    <rom name="Shared Audio.bin" size="500" crc="cccccccc" md5="0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c" sha1="0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"/>
+    <rom name="Metadata.chd" size="0" sha1="1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c"/>
+    <rom name="Alpha tiny.bin" size="60" crc="cccccccc" md5="1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d" sha1="1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d"/>
+  </game>
+  <game name="Beta">
+    <rom name="Beta Track 1.bin" size="800" crc="dddddddd" md5="0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d" sha1="0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d"/>
+    <rom name="Shared Audio.bin" size="500" crc="cccccccc" md5="0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c" sha1="0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c"/>
+    <rom name="Collision.bin" size="300" crc="eeeeeeee" md5="0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e" sha1="0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e"/>
+  </game>
+  <game name="Delta">
+    <rom name="Different Collision.bin" size="300" crc="eeeeeeee" md5="1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e" sha1="1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"/>
+  </game>
+</datafile>

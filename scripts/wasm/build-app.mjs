@@ -72,7 +72,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   mkdirSync(outDir, { recursive: true });
 
   process.stdout.write(`building ${target} -> ${artifact}\n`);
-  run("cargo", ["build", "-p", "rom-weaver-cli", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target]);
+  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target]);
 
   if (mode === "prod") {
     if (!existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");

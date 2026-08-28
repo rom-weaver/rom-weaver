@@ -7,6 +7,7 @@ import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
+import { resolveIdentifyPackGroups } from "../../scripts/identify-pack-groups.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
@@ -24,8 +25,31 @@ const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
 const identifyDataSources = Object.fromEntries(
-  fs.readdirSync(identifyDataDir).map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
+  fs
+    .readdirSync(identifyDataDir)
+    .filter((name) => !name.endsWith(".pack"))
+    .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
+const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
+const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
+const identifyPackPrecacheEntries = identifyPackGroups.defaultSystems.map((system) => ({
+  revision: system.sha256,
+  url: `assets/identify-${system.file}?sha256=${system.sha256}`,
+}));
+const identifyOptionalPackGroups = identifyPackGroups.groups
+  .filter((group) => !group.default)
+  .map((group) => ({
+    id: group.id,
+    label: group.label,
+    packs: group.systems.map((slug) => {
+      const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
+      if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
+      return {
+        sha256: system.sha256,
+        url: `assets/identify-${system.file}?sha256=${system.sha256}`,
+      };
+    }),
+  }));
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -631,7 +655,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
@@ -662,9 +686,12 @@ const writeBrotliSidecars = () => {
     closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       const assetsDir = path.join(distDir, "assets");
-      const wasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
+      const allWasmNames = fs.readdirSync(assetsDir).filter((name) => name.endsWith(".wasm"));
+      const wasmNames = allWasmNames.filter((name) => name.startsWith("rom-weaver-app-"));
       if (wasmNames.length !== 1) {
-        throw new Error(`expected exactly one .wasm asset in ${assetsDir}, found: ${wasmNames.join(", ") || "none"}`);
+        throw new Error(
+          `expected exactly one rom-weaver app WASM asset in ${assetsDir}, found: ${wasmNames.join(", ") || "none"}`,
+        );
       }
       const sourceWasm = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
       const sourceSidecar = `${sourceWasm}.br`;
@@ -685,10 +712,13 @@ const writeBrotliSidecars = () => {
       };
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       assertSidecarTypeIsKnown(sidecarUrls[0]);
+      if (fs.readdirSync(assetsDir).some((name) => name.startsWith("identify-") && name.endsWith(".pack.br"))) {
+        sidecarUrls.push("/assets/identify-*");
+      }
       for (const name of fs.readdirSync(assetsDir)) {
         // The identify index is mutable so a deployment can advertise a new
         // pack set without an immutable sidecar masking the update.
-        if (name === "identify-index.json") continue;
+        if (name === "identify-index.json" || name === "identify-catalog.json") continue;
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
@@ -704,7 +734,8 @@ const writeBrotliSidecars = () => {
           continue;
         }
         assertSidecarTypeIsKnown(`/assets/${name}`);
-        sidecarUrls.push(`/assets/${name}`);
+        const route = name.startsWith("identify-") && name.endsWith(".pack") ? "/assets/identify-*" : `/assets/${name}`;
+        if (!sidecarUrls.includes(route)) sidecarUrls.push(route);
       }
       if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
         throw new Error(`${sidecarUrls.length} sidecar routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
@@ -1161,6 +1192,7 @@ export default defineConfig(({ command, mode }) => {
       __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __EMULATORJS_VERSION__: JSON.stringify(emulatorJsLock.version),
+      __IDENTIFY_OPTIONAL_PACK_GROUPS__: JSON.stringify(identifyOptionalPackGroups),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
       __VERSION_BRANCH__: JSON.stringify(versionBranch),
       __VERSION_IS_TAGGED__: JSON.stringify(versionIsTagged),
@@ -1203,12 +1235,10 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "cache-service-worker.ts",
         injectManifest: {
-          // Identify packs stay OUT of the precache: 6.7 MB raw (~1.6 MB brotli)
-          // for the full set would land on every install and every update, and a
-          // session usually needs one system. The service worker runtime-caches
-          // them on first use instead, so offline identification still works once
-          // a pack has been fetched. Only `identify-index.json` is precached.
-          globIgnores: ["**/*.map", "assets/identify-*.pack"],
+          // Logical default-pack URLs resolve to Brotli sidecars at install time.
+          // Optional groups enter a separate local cache only after an explicit install.
+          additionalManifestEntries: identifyPackPrecacheEntries,
+          globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
             // offline, a route the user has not visited yet has nothing in the runtime

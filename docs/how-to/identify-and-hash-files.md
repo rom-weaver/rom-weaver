@@ -8,6 +8,9 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 ## Table of contents
 
 - [Identify a ROM title](#identify-a-rom-title)
+- [Install the default identify data](#install-the-default-identify-data)
+- [Install an optional group](#install-an-optional-group)
+- [Force a system](#force-a-system)
 - [Inspect a file](#inspect-a-file)
 - [Hash a file](#hash-a-file)
 - [Hash the ROM inside an archive](#hash-the-rom-inside-an-archive)
@@ -24,7 +27,7 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 rom-weaver identify --input game.nes
 ```
 
-The command checks the built-in OpenGood title data. It also checks common header, trim, and byte-order variants.
+The command checks the packaged Libretro data and OpenGood fallback data. It also checks common header, trim, and byte-order variants.
 
 Point it at an archive to identify the ROM inside:
 
@@ -34,13 +37,53 @@ rom-weaver identify --input games.zip
 
 Use `--select` when the archive holds more than one candidate.
 
-Use a locally built RWFP1 pack instead of the built-in data:
+Use a locally built pack instead of the built-in data:
 
 ```bash
 rom-weaver identify --input game.iso --database playstation.pack
 ```
 
-Repeat `--database` to search more packs.
+Repeat `--database` to search more packs. `--database` accepts RWFP1, RWFP2, and RWFP3 packs.
+
+## Install the default identify data
+
+Release packages include the default local database. After a Cargo or binary-only install, install the same versioned archive:
+
+```bash
+rom-weaver identify database install-all
+```
+
+Then identify as usual; the command finds the installed pack on its own:
+
+```bash
+rom-weaver identify --input game.bin
+```
+
+Check what is installed with `rom-weaver identify database list`. A result with `"condition": "database_required"` means the detected platform's pack is not installed. Its `hint` names the install command.
+
+## Install an optional group
+
+Choose `optional-arcade`, `optional-computers`, `optional-engines`, `optional-fantasy`, `optional-mobile`, or `optional-extended`.
+
+The `optional-computers` group contains computer systems and DOS. The `optional-fantasy` group contains MicroW8, PICO-8, TIC-80, and WASM-4. LowRes NX stays installed by default.
+
+Install one group:
+
+```bash
+rom-weaver identify database install-group optional-computers
+```
+
+Use `--from ARCHIVE` to import a downloaded group archive without network access.
+
+## Force a system
+
+Search one system's pack only, by canonical name or alias:
+
+```bash
+rom-weaver identify --input dump.bin --system psx
+```
+
+Use it when detection picks the wrong platform, or when a headerless dump detects nothing. `rom-weaver identify database list` prints the accepted names.
 
 ## Inspect a file
 

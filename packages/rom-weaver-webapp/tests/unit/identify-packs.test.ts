@@ -7,9 +7,11 @@ const system = (slug: string, platform: string) => ({
   file: `${slug}.pack`,
   platform,
   rawBytes: 3,
+  brotliBytes: 3,
+  brotliFile: `${slug}.pack.br`,
   sha256: SHA256_ABC,
   slug,
-  source: "opengood",
+  source: "libretro",
 });
 
 const INDEX_SYSTEMS = [
@@ -46,6 +48,9 @@ describe("selectIdentifySlugs", () => {
   it("maps a ROM extension to its own pack", async () => {
     const { selectIdentifySlugs } = await import("../../src/platform/browser/identify-packs.ts");
     expect(selectIdentifySlugs({ fileName: "game.gba" })).toEqual(["nintendo-game-boy-advance"]);
+    expect(selectIdentifySlugs({ fileName: "game.nes" })).toEqual(["nintendo-nintendo-entertainment-system"]);
+    expect(selectIdentifySlugs({ fileName: "game.z64" })).toEqual(["nintendo-nintendo-64"]);
+    expect(selectIdentifySlugs({ fileName: "game.sms" })).toEqual(["sega-master-system-mark-iii", "sega-game-gear"]);
   });
 
   it("widens a header-detected platform to its indistinguishable siblings", async () => {
@@ -79,8 +84,12 @@ describe("loadIdentifyPacks", () => {
 
     // 32X shares its cartridge shape with Mega Drive, so both packs load - and only those two.
     expect(packs.map((pack) => pack.slug).sort()).toEqual(["sega-32x", "sega-mega-drive-genesis"]);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    const packUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
+    // index.json + catalog.json + the two selected packs (catalog routing added
+    // the catalog fetch; the pack selection is unchanged).
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const packCall = fetchMock.mock.calls.find((call) => String(call[0]).includes(".pack"));
+    const packUrl = new URL(String(packCall?.[0]));
+    expect(packUrl.pathname).toContain(".pack");
     expect(packUrl.searchParams.get("sha256")).toBe(SHA256_ABC);
   });
 
@@ -124,5 +133,39 @@ describe("loadIdentifyPacks", () => {
     resetIdentifyPackCache();
     stubFetch();
     expect(await loadIdentifyPacks({ fileName: "game.gba" })).toHaveLength(1);
+  });
+});
+
+describe("optional identify pack groups", () => {
+  it("asks the service worker to install the complete optional computer group", async () => {
+    stubFetch({
+      index: {
+        format: "rom-weaver-identify-system-pack-v1",
+        groups: [
+          {
+            default: false,
+            id: "optional-computers",
+            label: "Computers and DOS",
+            systems: ["microsoft-ms-dos"],
+          },
+        ],
+        systems: [...INDEX_SYSTEMS, system("microsoft-ms-dos", "Microsoft MS-DOS")],
+      },
+    });
+    const postMessage = vi.fn((message: unknown, ports: MessagePort[]) => {
+      ports[0].postMessage({ action: "identify-pack-group-installed" });
+    });
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: { controller: { postMessage } },
+    });
+    const { installIdentifyPackGroup, listOptionalIdentifyPackGroups } =
+      await import("../../src/platform/browser/identify-packs.ts");
+    expect((await listOptionalIdentifyPackGroups()).map(({ id }) => id)).toEqual(["optional-computers"]);
+    await installIdentifyPackGroup("optional-computers");
+    expect(postMessage).toHaveBeenCalledWith(
+      { action: "install-identify-pack-group", groupId: "optional-computers" },
+      expect.any(Array),
+    );
   });
 });

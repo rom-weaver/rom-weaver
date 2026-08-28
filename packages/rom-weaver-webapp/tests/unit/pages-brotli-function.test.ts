@@ -94,6 +94,12 @@ describe("pages brotli sidecar function", () => {
     expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
   });
 
+  it("falls through when the client rejects br with a zero quality", async () => {
+    const { context, fetchLog } = makeContext({ acceptEncoding: "gzip, br;q=0" });
+    expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
+    expect(fetchLog).toEqual([]);
+  });
+
   it("falls through when the sidecar is missing (SPA fallback response), which also covers a missing asset", async () => {
     const { context } = makeContext({ sidecarResponse: spaFallback() });
     expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);

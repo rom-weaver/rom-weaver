@@ -14,17 +14,70 @@ type IdentifyLookupStatus = "matched" | "ambiguous" | "unknown";
  */
 type IdentifyStatus = IdentifyLookupStatus | "unavailable";
 
+/** Match quality of a set-aware (RWFP2) match. */
+type IdentifyQuality = "exact" | "metadata_only" | "partial";
+
+/**
+ * Structured non-match conditions. The status stays matched/ambiguous/unknown
+ * for compatibility; the condition names WHY the lookup could not answer:
+ * `database_required` (the routed platform's pack is not available locally)
+ * or `unsupported_media_profile`.
+ */
+type IdentifyCondition = "database_required" | "unsupported_media_profile";
+
+type ParsedIdentifyPlatformCandidate = {
+  confidence: string;
+  /** Human-readable evidence label (e.g. `header_magic`, `disc_serial: SLUS-…`). */
+  evidence: string;
+  platform: string;
+};
+
+type ParsedIdentifyEvidence = {
+  layoutMatched?: boolean;
+  /** Required components the artifact was missing, by label. */
+  missing?: string[];
+  requiredComponentsMatched?: number;
+  requiredComponentsTotal?: number;
+  /** Artifact components no database slot claimed, by label. */
+  unexpected?: string[];
+};
+
+type ParsedIdentifyDatabaseInfo = {
+  canonicalizationProfile?: string;
+  packFormat?: string;
+  /** `opengood` or `redump`. */
+  source?: string;
+};
+
 type ParsedIdentifyTitleMatch = {
   algorithm: string;
   database: string;
   name: string;
   platform: string;
   variant: string;
+  provenance?: ParsedIdentifyProvenance[];
+  legacyVariant?: boolean;
+  dumpTags?: string[];
+};
+
+type ParsedIdentifyProvenance = {
+  license?: string;
+  source: string;
+  sourceCommit?: string;
+  sourceName?: string;
+  sourceUrl?: string;
 };
 
 /** Compact title lookup attached to an ingest asset or patch descriptor. */
 type ParsedIdentifyLookupResult = {
+  condition?: IdentifyCondition;
+  database?: ParsedIdentifyDatabaseInfo;
+  evidence?: ParsedIdentifyEvidence;
+  /** Actionable text that accompanies a `condition`. */
+  hint?: string;
   matches: ParsedIdentifyTitleMatch[];
+  platformCandidates?: ParsedIdentifyPlatformCandidate[];
+  quality?: IdentifyQuality;
   status: IdentifyStatus;
   /** Technical cause behind an `unavailable` status; shown in details, not as the headline. */
   unavailableReason?: string;
@@ -41,10 +94,16 @@ type ParsedIdentifyResolution = ParsedIdentifyLookupResult;
 type ParsedIdentifyCandidate = {
   checksumVariants: ChecksumVariant[];
   checksums: ChecksumMap;
+  condition?: IdentifyCondition;
+  database?: ParsedIdentifyDatabaseInfo;
   detectedPlatform?: string;
+  evidence?: ParsedIdentifyEvidence;
+  hint?: string;
   matches: ParsedIdentifyTitleMatch[];
   /** Member path inside the archive, or the input file name for a bare ROM. */
   path: string;
+  platformCandidates?: ParsedIdentifyPlatformCandidate[];
+  quality?: IdentifyQuality;
   status: IdentifyStatus;
 };
 
@@ -52,6 +111,9 @@ type ParsedIdentifyResult = {
   /** Set only when the input was an archive the ROM candidates came out of. */
   archiveName?: string;
   candidates: ParsedIdentifyCandidate[];
+  /** Aggregate condition: set when the whole run hit a structured non-match cause. */
+  condition?: IdentifyCondition;
+  hint?: string;
   input: string;
   /** Aggregate over `candidates`; `unavailable` whenever the packs never loaded. */
   status: IdentifyStatus;
@@ -60,11 +122,6 @@ type ParsedIdentifyResult = {
 
 type IdentifyHashAlgorithm = "crc32" | "md5" | "sha1";
 
-/**
- * Algorithm for a manually entered checksum, decided by hex length exactly as
- * the CLI's `identify --hash` does (8 = crc32, 32 = md5, 40 = sha1). Returns
- * `undefined` for anything that is not one of those three hex shapes.
- */
 const identifyHashAlgorithm = (value: string): IdentifyHashAlgorithm | undefined => {
   const hash = value.trim().toLowerCase();
   if (!/^[0-9a-f]+$/u.test(hash)) return undefined;
@@ -77,6 +134,12 @@ const identifyHashAlgorithm = (value: string): IdentifyHashAlgorithm | undefined
 const isIdentifyLookupStatus = (value: unknown): value is IdentifyLookupStatus =>
   value === "matched" || value === "ambiguous" || value === "unknown";
 
+const isIdentifyQuality = (value: unknown): value is IdentifyQuality =>
+  value === "exact" || value === "partial" || value === "metadata_only";
+
+const isIdentifyCondition = (value: unknown): value is IdentifyCondition =>
+  value === "database_required" || value === "unsupported_media_profile";
+
 /**
  * Fold per-candidate statuses into the one the workflow reports. An unloadable
  * database wins outright, then an ambiguous candidate, then any match.
@@ -88,11 +151,22 @@ const aggregateIdentifyStatus = (statuses: readonly IdentifyStatus[]): IdentifyS
   return statuses.includes("matched") ? "matched" : "unknown";
 };
 
-export { aggregateIdentifyStatus, identifyHashAlgorithm, isIdentifyLookupStatus };
+export {
+  aggregateIdentifyStatus,
+  identifyHashAlgorithm,
+  isIdentifyCondition,
+  isIdentifyLookupStatus,
+  isIdentifyQuality,
+};
 export type {
+  IdentifyCondition,
+  IdentifyQuality,
   IdentifyStatus,
   ParsedIdentifyCandidate,
+  ParsedIdentifyEvidence,
   ParsedIdentifyLookupResult,
+  ParsedIdentifyPlatformCandidate,
+  ParsedIdentifyProvenance,
   ParsedIdentifyResolution,
   ParsedIdentifyResult,
   ParsedIdentifyTitleMatch,

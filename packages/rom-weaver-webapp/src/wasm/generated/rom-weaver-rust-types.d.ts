@@ -322,13 +322,70 @@ export type ChecksumCommand = { input: string, algo?: Array<string>, select?: Ar
 
 export type IdentifyStatus = "matched" | "ambiguous" | "unknown";
 
-export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, };
+export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, provenance?: Array<IdentifyProvenance>, legacy_variant?: boolean, dump_tags?: Array<string>, };
+
+export type IdentifyProvenance = { source: string, source_name?: string, source_url?: string, source_commit?: string, license?: string, };
 
 export type IdentifyLookupResult = { status: IdentifyStatus, matches: Array<IdentifyTitleMatch>, };
 
-export type IdentifyResult = { status: IdentifyStatus, input: string, detected_platform?: string | null, checksums: { [key in string]: string }, checksum_variants: Array<JsonValue>, matches: Array<IdentifyTitleMatch>, };
+export type MediaKind = "blob" | "cartridge" | "card" | "floppy" | "tape" | "optical_disc" | "multi_disc_set" | "arcade_set" | "package" | "multi_file_set";
 
-export type IdentifyCommand = { input?: string, hash?: string, database?: Array<string>, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+export type ComponentRole = "primary_payload" | "data_track" | "audio_track" | "partition" | "content_file" | "arcade_rom" | "disk_side" | "child_disc";
+
+export type DetectionConfidence = "certain" | "strong" | "weak";
+
+export type DetectionEvidence = { "kind": "header_magic" } | { "kind": "system_area_magic" } | { "kind": "iso9660_entry", "value": string } | { "kind": "executable_name", "value": string } | { "kind": "disc_serial", "value": string } | { "kind": "container_metadata" } | { "kind": "extension_hint" } | { "kind": "database_router" } | { "kind": "user_override" };
+
+export type PlatformCandidate = {
+/**
+ * Canonical identify platform name.
+ */
+platform: string, confidence: DetectionConfidence, evidence: DetectionEvidence, };
+
+export type IdentifyMedia = { kind: MediaKind, container?: string, sessions?: number, };
+
+export type IdentifyComponent = { role: ComponentRole, ordinal: number, size: bigint, crc32?: string, md5?: string, sha1?: string, };
+
+export type IdentifyDatabaseInfo = { source?: string, upstream_sources?: Array<string>, revision?: string, pack_format: string, canonicalization_profile?: string, };
+
+export type IdentifyEvidence = { required_components_matched: number, required_components_total: number, layout_matched: boolean,
+/**
+ * Names of required pack components the input does not supply. Sorted.
+ */
+missing_components?: Array<string>,
+/**
+ * Names of input components the matched game does not explain. Sorted.
+ */
+unexpected_components?: Array<string>, };
+
+export type IdentifyResult = { status: IdentifyStatus, input: string, detected_platform?: string | null, checksums: { [key in string]: string }, checksum_variants: Array<JsonValue>, matches: Array<IdentifyTitleMatch>,
+/**
+ * Match quality of a set-aware artifact-pack match.
+ */
+quality?: string, platform_candidates?: Array<PlatformCandidate>, media?: IdentifyMedia, components?: Array<IdentifyComponent>, database?: IdentifyDatabaseInfo, evidence?: IdentifyEvidence,
+/**
+ * `database_required` or `unsupported_media_profile`; status stays
+ * matched/ambiguous/unknown for compatibility.
+ */
+condition?: string, hint?: string, };
+
+export type IdentifyDatabaseDirCommand = { database_dir?: string, };
+
+export type IdentifyDatabaseSystemCommand = { system: string, database_dir?: string, };
+
+export type IdentifyDatabaseImportCommand = { input: string, database_dir?: string, };
+
+export type IdentifyDatabaseGroupCommand = { group: string, from?: string, database_dir?: string, };
+
+export type IdentifyDatabaseInstallCommand = { system?: string, all?: boolean, from?: string, database_dir?: string, };
+
+export type IdentifyDatabaseUpdateCommand = { system?: string, from?: string, database_dir?: string, };
+
+export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "import-redump", "args": IdentifyDatabaseImportCommand } | { "type": "install-all", "args": IdentifyDatabaseDirCommand } | { "type": "install-group", "args": IdentifyDatabaseGroupCommand } | { "type": "install", "args": IdentifyDatabaseInstallCommand } | { "type": "update", "args": IdentifyDatabaseUpdateCommand };
+
+export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
+
+export type IdentifyCommand = { input?: string, hash?: string, database?: Array<string>, system?: string, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
 
 export type IngestCommand = { input: string, output: string, database?: Array<string>, select?: Array<string>,
 /**

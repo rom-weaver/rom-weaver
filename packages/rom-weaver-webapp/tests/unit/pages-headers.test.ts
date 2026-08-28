@@ -43,7 +43,7 @@ describe("pages _headers matching", () => {
 
   it("revalidates the identify index and keeps content-addressed packs immutable", () => {
     expect(matchPagesHeaders(rules, "/assets/identify-index.json")["Cache-Control"]).toBe("no-cache");
-    expect(matchPagesHeaders(rules, "/assets/identify-sega-32x.pack")["Cache-Control"]).toBe(
+    expect(matchPagesHeaders(rules, "/assets/identify-sega-32x.pack.br")["Cache-Control"]).toBe(
       "public, max-age=31536000, immutable",
     );
   });

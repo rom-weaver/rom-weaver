@@ -15,14 +15,23 @@
 # so the unused half costs nothing - and the `prebuilt/` directory only has to
 # exist for the build that asks for it.
 ARG BINARY=source
+ARG IDENTIFY_DATA=source
 
-FROM node:24-bookworm AS identify-data
+FROM node:24-bookworm AS identify-data-source
 WORKDIR /src
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends curl \
+    && apt-get install --yes --no-install-recommends curl unzip zstd \
     && rm -rf /var/lib/apt/lists/*
 COPY scripts /src/scripts
-RUN node scripts/ensure-identify-data.mjs
+RUN node scripts/ensure-identify-data.mjs \
+    && node scripts/build-identify-release-data.mjs \
+    && cp -a target/identify-release/share /share
+
+FROM scratch AS identify-data-prebuilt
+COPY target/identify-release/share /share
+
+# hadolint ignore=DL3006
+FROM identify-data-${IDENTIFY_DATA} AS identify-data
 
 FROM rust:1.97.1-bookworm AS builder
 ARG TARGETARCH
@@ -33,8 +42,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
-COPY --from=identify-data /src/crates/rom-weaver-cli/data/identify/v1 /src/crates/rom-weaver-cli/data/identify/v1
-ENV ROM_WEAVER_IDENTIFY_DATA_READY=1
 
 # The vendored LZMA SDK's x86-64 decode loop is MASM assembly, and no Debian
 # package assembles it. Building JWasm here is what makes the amd64 image's 7z
@@ -103,6 +110,7 @@ FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
 # executable bit, so the prebuilt half arrives 0644. Setting it here rather than
 # in a later `RUN chmod` keeps the 5 MB binary out of a second layer.
 COPY --from=binary --chmod=0755 /rom-weaver /usr/local/bin/rom-weaver
+COPY --from=identify-data /share /usr/local/share
 COPY --from=workdir /rootfs /
 
 WORKDIR /work

@@ -592,6 +592,39 @@ jobs:
         # dependencies from crates.io, which may still contain the pre-change graph.
         run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
+  identify-release-data:
+    name: Package identify data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: changes
+    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install data build tools
+        run: sudo apt-get update && sudo apt-get install --yes zstd
+
+      - name: Build identify data archive
+        run: |
+          node scripts/ensure-identify-data.mjs
+          node scripts/build-identify-release-data.mjs
+
+      - name: Upload identify data
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-identify-release-data
+          path: |
+            target/identify-release/share
+            target/rom-weaver-identify-data*.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+
   # Build the native targets the release publishes before a change reaches
   # release day. The target list and the build itself are shared with the
   # release fan-out (.github/cli-platforms.json,
@@ -608,7 +641,7 @@ jobs:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
-    needs: changes
+    needs: [changes, identify-release-data]
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_INCREMENTAL: "0"
@@ -620,6 +653,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Download identify data
+        uses: actions/download-artifact@v8
+        with:
+          name: ci-identify-release-data
+          path: target
 
       - uses: ./.github/actions/build-cli-platform
         with:

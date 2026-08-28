@@ -145,8 +145,8 @@ type IngestRunInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["ingest
  * Stage 2 is a decompression-free probe, run when the name says nothing
  * (`.zip`, `.bin`, `.rom`) or when the caller wants every ROM member. The probe
  * returns the container's member list and the ROM header's platform, and both
- * narrow the pack set the same way. Loading all 6.7 MB stays the last resort,
- * because skipping a pack a ROM could match would report a wrong "no match".
+ * narrow the pack set the same way. The OpenGood fallback stays the last
+ * resort after these cheap signals fail.
  */
 const prepareIngestIdentify = async ({
   fileName,
@@ -164,12 +164,16 @@ const prepareIngestIdentify = async ({
   selectAllRomEntries?: boolean;
   signal?: AbortSignal;
   sourcePath: string;
-}): Promise<{ entryNames: string[]; packs: BrowserIdentifyPack[]; unavailable?: string }> => {
+}): Promise<{
+  entryNames: string[];
+  packs: BrowserIdentifyPack[];
+  unavailable?: string;
+}> => {
   const trace = { logLevel, namespace: "runtime:browser-workflow", onLog };
   let entryNames: string[] = [];
   try {
-    const { loadIdentifyPacks, selectIdentifySlugs } = await import("./identify-packs.ts");
-    let hints: Parameters<typeof loadIdentifyPacks>[0] = { fileName };
+    const { loadIdentifyPackSelection, selectIdentifySlugs } = await import("./identify-packs.ts");
+    let hints: Parameters<typeof loadIdentifyPackSelection>[0] = { fileName };
     if (selectAllRomEntries || !selectIdentifySlugs(hints).length) {
       onProgress?.({ message: "Inspecting the input…" });
       try {
@@ -193,7 +197,7 @@ const prepareIngestIdentify = async ({
       fileName,
       slugs: selectIdentifySlugs(hints),
     });
-    const packs = await loadIdentifyPacks(hints, (platforms) => {
+    const selection = await loadIdentifyPackSelection(hints, (platforms) => {
       onProgress?.({
         message:
           platforms.length === 1
@@ -201,7 +205,10 @@ const prepareIngestIdentify = async ({
             : `Loading identification data for ${platforms.length} systems…`,
       });
     });
-    return { entryNames, packs };
+    return {
+      entryNames,
+      packs: selection.packs,
+    };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     emitTraceLog(trace, "ROM identify data unavailable; continuing without title lookup", { error: reason, fileName });

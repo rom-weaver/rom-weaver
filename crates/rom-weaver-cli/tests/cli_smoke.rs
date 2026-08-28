@@ -13,6 +13,9 @@ mod checksum;
 #[path = "cli_smoke/identify.rs"]
 mod identify;
 
+#[path = "cli_smoke/identify_database.rs"]
+mod identify_database;
+
 #[path = "cli_smoke/ingest.rs"]
 mod ingest;
 

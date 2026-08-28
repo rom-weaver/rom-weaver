@@ -660,6 +660,11 @@ jobs:
           printf '%s  rom-weaver-cli-assets.tar.gz\n' \
             "$(sha256sum rom-weaver-cli-assets.tar.gz | cut -d ' ' -f 1)" > \
             checksums/rom-weaver-cli-assets.tar.gz.sha256
+          curl --fail --location --retry 5 --retry-delay 2 --output rom-weaver-identify-data.tar.zst \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/rom-weaver-identify-data.tar.zst"
+          printf '%s  rom-weaver-identify-data.tar.zst\n' \
+            "$(sha256sum rom-weaver-identify-data.tar.zst | cut -d ' ' -f 1)" > \
+            checksums/rom-weaver-identify-data.tar.zst.sha256
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v7
@@ -717,6 +722,11 @@ jobs:
             printf '%s  %s\n' "$(sha256sum "$asset" | cut -d ' ' -f 1)" "$asset" > \
               "checksums/$asset.sha256"
           done
+          curl --fail --location --retry 5 --retry-delay 2 --output rom-weaver-identify-data.tar.zst \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/rom-weaver-identify-data.tar.zst"
+          printf '%s  rom-weaver-identify-data.tar.zst\n' \
+            "$(sha256sum rom-weaver-identify-data.tar.zst | cut -d ' ' -f 1)" > \
+            checksums/rom-weaver-identify-data.tar.zst.sha256
 
       - name: Checkout Scoop bucket
         uses: actions/checkout@v7

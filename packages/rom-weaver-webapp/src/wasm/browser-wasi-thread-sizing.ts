@@ -3,7 +3,8 @@ import { readRomWeaverRequestedThreadCount } from "./rom-weaver-command.ts";
 import { resolveBrowserDefaultThreads } from "./workers/browser-thread-budget.ts";
 
 export const DEFAULT_BROWSER_THREAD_COUNT = 4;
-export const MAX_BROWSER_THREAD_POOL_SIZE = 64;
+export const MAX_BROWSER_THREAD_POOL_SIZE = 20;
+const MAX_BROWSER_REQUESTED_THREAD_COUNT = 64;
 const BROWSER_THREAD_POOL_HEADROOM = 4;
 
 export function resolveBrowserThreadPoolSizeFromRequest(request: RomWeaverRunRequest | undefined): number {
@@ -34,6 +35,6 @@ export function browserThreadRequestOptions(defaultThreads: number = resolveBrow
   return {
     autoThreads: resolveBrowserDefaultThreads(),
     defaultThreads,
-    maxThreads: MAX_BROWSER_THREAD_POOL_SIZE,
+    maxThreads: MAX_BROWSER_REQUESTED_THREAD_COUNT,
   };
 }

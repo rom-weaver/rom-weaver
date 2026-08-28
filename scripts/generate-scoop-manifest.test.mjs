@@ -19,6 +19,10 @@ test("generates a manifest from the release checksum", () => {
       const asset = `rom-weaver-${platform}.tar.gz`;
       writeFileSync(join(checksums, `${asset}.sha256`), `${digit.repeat(64)}  ${asset}\n`);
     }
+    writeFileSync(
+      join(checksums, "rom-weaver-identify-data.tar.zst.sha256"),
+      `${"d".repeat(64)}  rom-weaver-identify-data.tar.zst\n`,
+    );
 
     const output = join(directory, "bucket", "rom-weaver.json");
     execFileSync(process.execPath, [
@@ -32,13 +36,16 @@ test("generates a manifest from the release checksum", () => {
     assert.equal(manifest.bin, "rom-weaver.exe");
     for (const [architecture, platform, digit] of platforms) {
       const asset = `rom-weaver-${platform}.tar.gz`;
-      assert.equal(manifest.architecture[architecture].hash, digit.repeat(64));
+      assert.deepEqual(manifest.architecture[architecture].hash, [
+        digit.repeat(64),
+        "d".repeat(64),
+      ]);
       // Scoop extracts the archive; the stable `rom-weaver.exe` inside it is
       // what `bin` points at, so the URL carries no rename fragment.
-      assert.equal(
-        manifest.architecture[architecture].url,
+      assert.deepEqual(manifest.architecture[architecture].url, [
         `https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/${asset}`,
-      );
+        "https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/rom-weaver-identify-data.tar.zst",
+      ]);
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });

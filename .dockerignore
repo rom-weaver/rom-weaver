@@ -1,7 +1,9 @@
 .git
 .codegraph
 .worktrees
-target
+target/*
+!target/identify-release
+!target/identify-release/**
 **/node_modules
 **/dist
 **/.vitest-attachments
