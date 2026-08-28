@@ -553,7 +553,7 @@ const createPwaServiceWorkerClient = ({
         if (reload) reloadPage("reloading page to apply service worker update", "swupdate");
       },
       onNeedRefresh: () => {
-        logServiceWorkerClient("service worker update ready");
+        logServiceWorkerClient("service worker update ready; showing update prompt");
         // Keep every update behind the visible banner. The reload button still confirms before it can
         // discard staged work, while idle pages also get a clear choice instead of a silent reload.
         markUpdateReady();
