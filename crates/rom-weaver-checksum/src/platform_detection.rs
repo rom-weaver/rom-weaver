@@ -116,6 +116,18 @@ pub trait DiscSectorSource {
 }
 
 /// Detect the console of a disc image from its on-disc signatures, or `None`.
+/// True when the ISO 9660 PVD names the PlayStation family in its system
+/// identifier - "PLAYSTATION" on both PS1 and PS2 discs. A routing fallback for
+/// when SYSTEM.CNF (whose BOOT/BOOT2 line separates the two) lies beyond a
+/// bounded prefix; the caller splits PS1 from PS2 by framing and size.
+pub fn pvd_names_playstation(source: &dyn DiscSectorSource) -> bool {
+    matches!(
+        source.read_sectors(PVD_LBA, 1),
+        Ok(pvd) if pvd.len() >= 19 && pvd[0] == 1 && &pvd[1..6] == b"CD001"
+            && pvd[8..].starts_with(b"PLAYSTATION")
+    )
+}
+
 pub fn detect_disc_platform(source: &dyn DiscSectorSource) -> Option<&'static str> {
     if let Ok(sector0) = source.read_sectors(0, 1)
         && let Some(platform) = detect_from_sector0(&sector0)
