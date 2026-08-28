@@ -947,6 +947,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         typeLabel: romTypeTag,
       },
       displayName: !staging && identification?.status === "matched" ? identification.name : undefined,
+      identified: !staging && identification?.status === "matched",
       meta: renderRomCardMeta({
         identificationStatus: romInput.info.identificationStatus,
         percent,

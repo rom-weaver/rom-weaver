@@ -182,6 +182,17 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+/* Green Identify mark beside a name the lookup database matched. */
+.rw-app .nmline .nm-identified {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--verified);
+}
+.rw-app .nmline .nm-identified svg {
+  width: 16px;
+  height: 16px;
+}
 .rw-app .nm .nm-folder {
   font-weight: 500;
   color: var(--ink-3);

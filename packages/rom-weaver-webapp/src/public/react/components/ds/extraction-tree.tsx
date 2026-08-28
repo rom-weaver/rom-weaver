@@ -1,4 +1,4 @@
-import { Archive } from "lucide-react";
+import { Archive, ScanSearch } from "lucide-react";
 import type { CSSProperties } from "react";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { createTiming, formatTiming } from "../../../../storage/shared/timing.ts";
@@ -50,6 +50,7 @@ type ExtractPanelProps = {
 
 type ExtractNameProps = Pick<ExtractPanelProps, "fileName" | "folderPath"> & {
   displayName?: string;
+  identified?: boolean;
 };
 
 /** Card display name: basename without the extension (the format badge carries the type). */
@@ -197,11 +198,14 @@ const formatRatio = (first: ExtractionLevel, last: ExtractionLevel) => {
 };
 
 /** The card name line. */
-const ExtractName = ({ displayName, fileName, folderPath }: ExtractNameProps) => (
+const ExtractName = ({ displayName, fileName, folderPath, identified }: ExtractNameProps) => (
   <div className="nmline" data-file-name={fileName}>
     {/* Assistive technology gets the identified title and full filename; the visible face
         drops the extension because the format badge carries it. */}
-    <span className="sr-only">{displayName?.trim() ? `${displayName.trim()} — ${fileName}` : fileName}</span>
+    <span className="sr-only">
+      {displayName?.trim() ? `${displayName.trim()} — ${fileName}` : fileName}
+      {identified ? " — Identified" : ""}
+    </span>
     <span
       aria-hidden="true"
       className="nm"
@@ -210,6 +214,11 @@ const ExtractName = ({ displayName, fileName, folderPath }: ExtractNameProps) =>
       {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
       {displayName?.trim() || getDisplayName(fileName)}
     </span>
+    {identified ? (
+      <span aria-hidden="true" className="nm-identified" title="Identified">
+        <ScanSearch />
+      </span>
+    ) : null}
   </div>
 );
 
