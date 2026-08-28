@@ -69,6 +69,13 @@ describe("selectIdentifySlugs", () => {
     expect(selectIdentifySlugs({ fileName: "disc.rvz", platform: "Nintendo GameCube" })).toEqual(["nintendo-gamecube"]);
   });
 
+  it("maps every 3DS payload and compressed z3ds extension to the 3DS pack", async () => {
+    const { selectIdentifySlugs } = await import("../../src/platform/browser/identify-packs.ts");
+    for (const extension of ["3ds", "3dsx", "cci", "cia", "cxi", "z3ds", "z3dsx", "zcci", "zcia", "zcxi"]) {
+      expect(selectIdentifySlugs({ fileName: `game.${extension}` })).toEqual(["nintendo-nintendo-3ds"]);
+    }
+  });
+
   it("infers the platform from an archive's members", async () => {
     const { selectIdentifySlugs } = await import("../../src/platform/browser/identify-packs.ts");
     expect(selectIdentifySlugs({ entryNames: ["Games/Metroid Fusion (USA).gba"], fileName: "collection.zip" })).toEqual(
