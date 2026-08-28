@@ -1295,8 +1295,10 @@ impl CliApp {
         if let Some(identify_database) = identify_database {
             for asset in &mut assets {
                 if !asset.checksum_variants.is_empty() {
-                    asset.identification =
-                        Some(identify_database.resolve_variants(&asset.checksum_variants)?);
+                    let raw_size = (asset.size_bytes > 0).then_some(asset.size_bytes);
+                    asset.identification = Some(
+                        identify_database.resolve_variants(&asset.checksum_variants, raw_size)?,
+                    );
                 }
             }
         }

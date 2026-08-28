@@ -284,7 +284,14 @@ impl IdentifyDatabaseSet {
         Ok(Self { packs })
     }
 
-    pub(super) fn resolve_variants(&self, variants: &[Value]) -> Result<IdentifyLookupResult> {
+    /// `raw_size` is the size of the raw payload behind the `raw` checksum
+    /// variant. Artifact packs (RWFP2+) route by (crc32, size) and are only
+    /// searched when it is known.
+    pub(super) fn resolve_variants(
+        &self,
+        variants: &[Value],
+        raw_size: Option<u64>,
+    ) -> Result<IdentifyLookupResult> {
         let mut output = Vec::new();
         let mut seen = BTreeSet::new();
         for variant in variants {
@@ -301,7 +308,76 @@ impl IdentifyDatabaseSet {
                 &mut output,
             )?;
         }
+        let raw_checksums = variants
+            .iter()
+            .find(|variant| variant.get("id").and_then(Value::as_str) == Some("raw"))
+            .or_else(|| variants.first())
+            .map(|variant| checksum_map(variant.get("checksums")))
+            .unwrap_or_default();
+        self.resolve_artifact_packs(raw_size, &raw_checksums, &mut seen, &mut output)?;
         Ok(identify_lookup_result(output))
+    }
+
+    /// Search the artifact packs with a single-blob fingerprint built from the
+    /// raw payload's size and checksums.
+    fn resolve_artifact_packs(
+        &self,
+        raw_size: Option<u64>,
+        raw_checksums: &BTreeMap<String, String>,
+        seen: &mut BTreeSet<(String, String)>,
+        output: &mut Vec<IdentifyTitleMatch>,
+    ) -> Result<()> {
+        for (database_name, pack) in &self.packs {
+            let outcome = match pack {
+                IdentifyPackFile::V1(_) => continue,
+                IdentifyPackFile::V2(pack) => {
+                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
+                }
+                IdentifyPackFile::V3(pack) => {
+                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
+                }
+                IdentifyPackFile::V4(pack) => {
+                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
+                }
+            };
+            let Some(outcome) = outcome else {
+                trace!(
+                    database = database_name,
+                    "skipping artifact pack: the raw payload size is unknown"
+                );
+                continue;
+            };
+            if outcome.status == ArtifactMatchStatus::Unknown {
+                continue;
+            }
+            for game_match in outcome.matches {
+                let key = (game_match.name.clone(), game_match.platform.clone());
+                if !seen.insert(key) {
+                    continue;
+                }
+                output.push(IdentifyTitleMatch {
+                    name: game_match.name,
+                    platform: game_match.platform,
+                    algorithm: "components".to_string(),
+                    variant: "raw".to_string(),
+                    database: database_name.clone(),
+                    provenance: game_match
+                        .provenance
+                        .into_iter()
+                        .map(|item| IdentifyProvenance {
+                            source: item.source,
+                            source_name: item.source_name,
+                            source_url: item.source_url,
+                            source_commit: item.source_commit,
+                            license: item.license,
+                        })
+                        .collect(),
+                    legacy_variant: game_match.legacy_variant,
+                    dump_tags: game_match.dump_tags,
+                });
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn resolve_source(
@@ -966,7 +1042,7 @@ impl CliApp {
             "label": "Manual",
             "checksums": { algorithm: hash },
         })];
-        let lookup = match databases.resolve_variants(&checksum_variants) {
+        let lookup = match databases.resolve_variants(&checksum_variants, None) {
             Ok(lookup) => lookup,
             Err(error) => {
                 return self.finish(

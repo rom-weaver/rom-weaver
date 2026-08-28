@@ -362,6 +362,50 @@ fn identify_matches_a_v2_pack_passed_via_database() {
 }
 
 #[test]
+fn ingest_matches_an_artifact_pack_using_the_payload_size() {
+    let temp = setup_temp_dir();
+    let payload = b"artifact pack ingest payload".to_vec();
+    fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
+    let crc = format!("{:08x}", crc32_of(&payload));
+    let pack = pack_v2(
+        "Test Platform",
+        "nointro-single-image-v1",
+        &[(
+            "Artifact Ingest Game",
+            vec![component_json(
+                0,
+                payload.len() as u64,
+                Some(&crc),
+                true,
+                true,
+            )],
+        )],
+    );
+    fs::write(temp.child("artifact.pack").path(), pack).expect("pack fixture");
+
+    let json = run_single_json_event(
+        &[
+            "ingest",
+            "--input",
+            temp.child("game.bin").path().to_str().expect("ROM path"),
+            "--output",
+            temp.child("ingest-out").path().to_str().expect("out path"),
+            "--database",
+            temp.child("artifact.pack").path().to_str().expect("pack"),
+            "--json",
+        ],
+        0,
+    );
+    let identification = &json["details"]["ingest"]["assets"][0]["identification"];
+
+    assert_eq!(identification["status"], "matched");
+    assert_eq!(identification["matches"][0]["name"], "Artifact Ingest Game");
+    assert_eq!(identification["matches"][0]["algorithm"], "components");
+    assert_eq!(identification["matches"][0]["variant"], "raw");
+    assert_eq!(identification["matches"][0]["database"], "artifact.pack");
+}
+
+#[test]
 #[cfg(not(feature = "bundled-identify-data"))]
 fn identify_reports_database_required_for_an_uninstalled_platform() {
     let temp = setup_temp_dir();
