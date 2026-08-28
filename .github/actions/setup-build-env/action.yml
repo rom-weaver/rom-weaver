@@ -239,6 +239,9 @@ runs:
     # Browser binaries were the one download in this action that nothing
     # cached: every webapp, coverage, and nightly run re-fetched them. The
     # browser list is part of the key because the nightly matrix adds WebKit.
+    # restore-keys is safe here: on a partial hit `playwright install` below
+    # still runs, skips the browsers already present, and fetches only the
+    # changed ones.
     - name: Restore Playwright browser cache
       if: inputs.playwright == 'true'
       id: playwright-cache
@@ -246,6 +249,8 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ steps.versions.outputs.playwright }}-${{ steps.versions.outputs.browsers }}
+        restore-keys: |
+          playwright-${{ runner.os }}-
 
     # The binaries restore from the cache; the apt-level libraries they link
     # against live outside it, so a hit still has to run `install-deps`.
