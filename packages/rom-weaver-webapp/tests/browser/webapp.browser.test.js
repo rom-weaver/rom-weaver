@@ -531,7 +531,7 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   await page.viewport(1280, 900);
 });
 
-test("mobile More keeps app utilities and the footer keeps external actions", async () => {
+test("mobile More carries app utilities plus the external links, and the footer keeps them too", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
@@ -557,8 +557,13 @@ test("mobile More keeps app utilities and the footer keeps external actions", as
   for (const label of ["Status", "Theme", "Accent"]) {
     await expect.element(page.getByRole("menuitem", { name: label })).toBeInTheDocument();
   }
-  for (const label of ["View source on GitHub", "Support"]) {
-    await expect.element(page.getByRole("menuitem", { name: label })).not.toBeInTheDocument();
+  for (const [label, href] of [
+    ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
+    ["Support", "https://ko-fi.com/brandonocasey"],
+  ]) {
+    const item = page.getByRole("menuitem", { name: label });
+    await expect.element(item).toBeInTheDocument();
+    expect(item.element().getAttribute("href")).toBe(href);
   }
   expect(document.querySelector('.more-menu [role="menuitem"][data-sw] svg')?.outerHTML).toBe(
     document.querySelector(".masthead-status svg")?.outerHTML,

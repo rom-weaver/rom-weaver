@@ -446,6 +446,9 @@ const AccentMenuItem = ({ localizer, onChange }: { localizer: Localizer; onChang
 type UtilityMenuProps = {
   /** True only when the trigger was activated by keyboard. */
   autoFocusFirst?: boolean;
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  donateHref?: string;
+  githubHref?: string;
   localizer: Localizer;
   menuClassName?: string;
   mobile?: boolean;
@@ -464,6 +467,9 @@ type UtilityMenuProps = {
 
 const UtilityMenu = ({
   autoFocusFirst = false,
+  confirmExternalNavigation,
+  donateHref,
+  githubHref,
   localizer,
   menuId,
   mobile = false,
@@ -611,6 +617,36 @@ const UtilityMenu = ({
           {tab.label}
         </button>
       ))}
+      {githubHref ? (
+        <a
+          href={githubHref}
+          onClick={(event) => {
+            onClose();
+            guardFooterExternalClick(event, githubHref, confirmExternalNavigation);
+          }}
+          rel="noreferrer"
+          role="menuitem"
+          target="_blank"
+        >
+          <Github aria-hidden="true" />
+          {localizer.message("ui.tools.github")}
+        </a>
+      ) : null}
+      {donateHref ? (
+        <a
+          href={donateHref}
+          onClick={(event) => {
+            onClose();
+            guardFooterExternalClick(event, donateHref, confirmExternalNavigation);
+          }}
+          rel="noreferrer"
+          role="menuitem"
+          target="_blank"
+        >
+          <Heart aria-hidden="true" />
+          {localizer.message("ui.footer.donate")}
+        </a>
+      ) : null}
     </div>
   );
 };
@@ -885,6 +921,7 @@ const Masthead = ({
   tabsControlPanels = true,
   serviceWorkerStatus,
   confirmExternalNavigation,
+  donateHref,
   githubHref,
   settingsOpen,
   threads,
@@ -914,6 +951,7 @@ const Masthead = ({
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  donateHref?: string;
   githubHref?: string;
   settingsOpen?: boolean;
   threads?: number;
@@ -1063,6 +1101,9 @@ const Masthead = ({
               autoFocusFirst={utilityViaKeyboard}
               buttonClassName="mode-more"
               className="desktop-more"
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
               localizer={localizer}
               menuId="more-menu"
               moreLabel={moreLabel}
@@ -1128,6 +1169,9 @@ const Masthead = ({
           {utilityOpen && utilityPlacement === "mobile" ? (
             <UtilityMenu
               autoFocusFirst={utilityViaKeyboard}
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
               localizer={localizer}
               menuClassName="shared-more-menu"
               menuId="more-menu"
@@ -1161,6 +1205,9 @@ const Masthead = ({
           <MoreMenu
             buttonClassName="dock-action"
             className="mobile-more"
+            confirmExternalNavigation={confirmExternalNavigation}
+            donateHref={donateHref}
+            githubHref={githubHref}
             localizer={localizer}
             menuId="more-menu"
             moreLabel={moreLabel}

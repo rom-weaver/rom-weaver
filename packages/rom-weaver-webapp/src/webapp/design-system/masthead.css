@@ -651,6 +651,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   outline: none;
 }
 .rw-app .more-menu > button,
+.rw-app .more-menu > a,
 .rw-app .more-accent > button {
   display: flex;
   gap: var(--sp-s);
@@ -680,12 +681,14 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 }
 @media (hover: hover) {
   .rw-app .more-menu > button:hover,
+  .rw-app .more-menu > a:hover,
   .rw-app .more-accent > button:hover {
     color: var(--ink);
     background: var(--well);
   }
 }
 .rw-app .more-menu > button:active,
+.rw-app .more-menu > a:active,
 .rw-app .more-accent > button:active {
   color: var(--ink);
   background: var(--plate-2);
