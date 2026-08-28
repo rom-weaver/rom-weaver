@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import zlib from "node:zlib";
 import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig } from "vite";
@@ -251,6 +252,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
   else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
   else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
+  else if (requestPath.endsWith(".pack")) res.setHeader("Content-Type", "application/octet-stream");
   else if (requestPath.endsWith("NOTICE")) {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
   }
@@ -262,7 +264,11 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
     const requestPath = req.url ? req.url.split("?")[0] : "";
     const generatedSampleAsset = getGeneratedSampleAsset(requestPath);
     const sourcePath = rootStaticAssetSources[requestPath] ?? generatedLicenseAssetSources[requestPath];
-    if (!(generatedSampleAsset || sourcePath)) {
+    // The identify packs exist only as `.br` sidecars (the deployed Pages assets
+    // function decodes them); dev and preview have no function, so decode here
+    // to answer the same `/assets/identify-*.pack` URLs the app fetches.
+    const sidecarSourcePath = sourcePath ? undefined : rootStaticAssetSources[`${requestPath}.br`];
+    if (!(generatedSampleAsset || sourcePath || sidecarSourcePath)) {
       next();
       return;
     }
@@ -280,15 +286,23 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
       res.end(createRootManifestSource(channel, channelLabel));
       return;
     }
-    fs.readFile(sourcePath, (err, source) => {
+    fs.readFile(sourcePath ?? sidecarSourcePath, (err, source) => {
       if (err) {
         next(err);
         return;
       }
-      res.statusCode = 200;
-      setRootStaticAssetContentType(requestPath, res);
-      res.setHeader("Cache-Control", "no-cache");
-      res.end(source);
+      const finish = (decodeError, body) => {
+        if (decodeError) {
+          next(decodeError);
+          return;
+        }
+        res.statusCode = 200;
+        setRootStaticAssetContentType(requestPath, res);
+        res.setHeader("Cache-Control", "no-cache");
+        res.end(body);
+      };
+      if (sidecarSourcePath) zlib.brotliDecompress(source, finish);
+      else finish(null, source);
     });
   });
 };

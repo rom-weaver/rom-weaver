@@ -650,17 +650,43 @@ const readPreviewFile = (filePath, fallbackPath, allowFallback, callback) => {
         callback(null, resolvedPath, data);
         return;
       }
-      if (!allowFallback) {
-        callback(readError);
-        return;
-      }
-      fs.readFile(fallbackPath, (fallbackError, fallbackData) => {
-        if (fallbackError) {
+      readPreviewSidecarFile(resolvedPath, (sidecarData) => {
+        if (sidecarData) {
+          callback(null, resolvedPath, sidecarData);
+          return;
+        }
+        if (!allowFallback) {
           callback(readError);
           return;
         }
-        callback(null, fallbackPath, fallbackData);
+        fs.readFile(fallbackPath, (fallbackError, fallbackData) => {
+          if (fallbackError) {
+            callback(readError);
+            return;
+          }
+          callback(null, fallbackPath, fallbackData);
+        });
       });
+    });
+  });
+};
+
+// On the deployed site the Pages assets function serves any asset whose only
+// build artifact is a `.br` sidecar (the identify packs). Mirror that here so
+// a preview session answers the same URLs; yields null when no sidecar exists
+// or it does not decode. The decode runs once - the asset cache keeps the result.
+const readPreviewSidecarFile = (resolvedPath, callback) => {
+  if (resolvedPath.endsWith(".br")) {
+    callback(null);
+    return;
+  }
+  fs.readFile(`${resolvedPath}.br`, (readError, brotliData) => {
+    if (readError) {
+      callback(null);
+      return;
+    }
+    zlib.brotliDecompress(brotliData, (decodeError, data) => {
+      callback(decodeError ? null : data);
     });
   });
 };
