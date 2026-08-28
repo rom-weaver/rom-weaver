@@ -59,6 +59,10 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             chd_details.insert("raw_sha1".to_string(), json!(raw_sha1));
         }
         details.insert("chd".to_string(), Value::Object(chd_details));
+        // Same platform detection as the nod/z3ds probes, so hosts can stage
+        // the right identify database before hashing an opaque CHD.
+        self.probe_rom_identity(&request.source, header, media_kind)
+            .write_into(&mut details);
         report.details = Some(Value::Object(details));
         Ok(report)
     }

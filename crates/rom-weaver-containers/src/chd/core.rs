@@ -595,6 +595,84 @@ impl ChdContainerHandler {
         }
     }
 
+    /// Decode a bounded prefix of the image's user data and detect the console it
+    /// holds, so a metadata-only probe of a CHD reports its platform. Hosts use it
+    /// to pick which identify database to load before hashing. CD/GD frames carry
+    /// 96 subcode bytes after each 2352-byte sector; those are stripped so the
+    /// prefix parses as a plain raw-sector image. Any decode failure yields an
+    /// empty identity rather than failing the probe.
+    pub(super) fn probe_rom_identity(
+        &self,
+        source: &Path,
+        header: ChdHeader,
+        media_kind: ChdMediaKind,
+    ) -> rom_weaver_checksum::RomIdentity {
+        let frame_bytes = match media_kind {
+            ChdMediaKind::CdRom | ChdMediaKind::GdRom => Some(Self::CD_FRAME_BYTES as usize),
+            ChdMediaKind::Raw | ChdMediaKind::HardDisk | ChdMediaKind::Dvd => None,
+            ChdMediaKind::Av => return rom_weaver_checksum::RomIdentity::default(),
+        };
+        // With subcode interleaved, the raw prefix must be proportionally larger
+        // than the user-data prefix the detector needs.
+        let needed_raw = match frame_bytes {
+            Some(frame) => {
+                (rom_weaver_checksum::DETECT_PREFIX_BYTES / Self::CD_SECTOR_DATA_BYTES + 1) * frame
+            }
+            None => rom_weaver_checksum::DETECT_PREFIX_BYTES,
+        } as u64;
+        let take = needed_raw.min(header.logical_bytes);
+        let decoded = (|| -> std::result::Result<Vec<u8>, String> {
+            let mut chd = ChdReadSession::open_rust_chd(source, None)?;
+            let hunk_bytes = header.hunk_bytes as usize;
+            if hunk_bytes == 0 {
+                return Err("chd header reports zero hunk bytes".to_string());
+            }
+            let hunk_count = take
+                .div_ceil(hunk_bytes as u64)
+                .min(header.hunk_count as u64) as u32;
+            let mut prefix = Vec::with_capacity(hunk_count as usize * hunk_bytes);
+            let mut compressed_buffer = Vec::new();
+            let mut hunk_buffer = vec![0_u8; hunk_bytes];
+            for hunk_index in 0..hunk_count {
+                let mut hunk = chd.hunk(hunk_index).map_err(|error| {
+                    format!(
+                        "failed to decode hunk {hunk_index} of `{}`: {error}",
+                        source.display()
+                    )
+                })?;
+                hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
+                    .map_err(|error| {
+                        format!(
+                            "failed to read hunk {hunk_index} of `{}`: {error}",
+                            source.display()
+                        )
+                    })?;
+                prefix.extend_from_slice(&hunk_buffer);
+            }
+            prefix.truncate(take as usize);
+            Ok(prefix)
+        })();
+        let prefix = match decoded {
+            Ok(prefix) => prefix,
+            Err(error) => {
+                trace!(%error, "chd probe: decoded prefix read failed; skipping identity");
+                return rom_weaver_checksum::RomIdentity::default();
+            }
+        };
+        let (user_data, user_total_len, extension) = match frame_bytes {
+            Some(frame) => {
+                let mut user = Vec::with_capacity(prefix.len());
+                for chunk in prefix.chunks(frame) {
+                    user.extend_from_slice(&chunk[..chunk.len().min(Self::CD_SECTOR_DATA_BYTES)]);
+                }
+                let frames = header.logical_bytes / frame as u64;
+                (user, frames * Self::CD_SECTOR_DATA_BYTES as u64, ".bin")
+            }
+            None => (prefix, header.logical_bytes, ".iso"),
+        };
+        rom_weaver_checksum::detect_rom_identity(&user_data, user_total_len, Some(extension))
+    }
+
     pub(super) fn header_sha1_hex(&self, header: ChdHeader) -> Option<String> {
         self.sha1_hex_from_optional(header.sha1)
     }
