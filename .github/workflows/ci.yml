@@ -972,6 +972,8 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
+          identify-data-cache: "true"
+          emulatorjs-cache: "true"
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8

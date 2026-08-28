@@ -49,6 +49,8 @@ runs:
         tools: ${{ inputs.generate-attribution == 'true' && 'node rust' || 'node' }}
         cargo-cache: "false"
         webapp-deps: "true"
+        identify-data-cache: "true"
+        emulatorjs-cache: "true"
 
     - name: Generate webapp attribution
       if: inputs.generate-attribution == 'true'
