@@ -370,6 +370,9 @@ fn z3ds_compress_probe_and_extract_round_trip() {
             .expect("label")
             .contains("underlying_magic")
     );
+    // The container magic alone pins the platform, so hosts can stage the 3DS
+    // identify pack before hashing.
+    assert_eq!(probe_json["details"]["platform"], "Nintendo 3DS");
 
     let out_dir = temp.child("extract");
     let extract_output = command_stdout(

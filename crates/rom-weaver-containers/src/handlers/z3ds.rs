@@ -771,7 +771,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             )
         };
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(Z3DS.name.to_string()),
             "probe",
@@ -784,7 +784,18 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             ),
             Some(100.0),
             Some(execution),
-        ))
+        );
+        // Every z3ds payload is a Nintendo 3DS image, so the container magic alone
+        // pins the platform with no payload decode. Hosts use it to pick which
+        // identify database to load before hashing.
+        let mut details = serde_json::Map::new();
+        rom_weaver_checksum::RomIdentity {
+            platform: Some(rom_weaver_checksum::platform_detection::platform::N3DS),
+            disc_format: None,
+        }
+        .write_into(&mut details);
+        report.details = Some(serde_json::Value::Object(details));
+        Ok(report)
     }
 
     fn list_entries(
