@@ -1263,13 +1263,24 @@ impl CliApp {
         identify_database: &IdentifyDatabaseSet,
         assets: &mut [IngestRomAsset],
     ) -> Result<()> {
-        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        // The group id is the sheet's file name, and one archive can hold two
+        // discs whose sheets share a name (`d1/game.cue`, `d2/game.cue`), so
+        // the key MUST also carry the asset's directory or the discs merge
+        // into one fingerprint.
+        let mut groups: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
         for (index, asset) in assets.iter().enumerate() {
             if let Some(group_id) = &asset.disc_group_id {
-                groups.entry(group_id.clone()).or_default().push(index);
+                let directory = Path::new(&asset.path)
+                    .parent()
+                    .map(|parent| parent.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                groups
+                    .entry((directory, group_id.clone()))
+                    .or_default()
+                    .push(index);
             }
         }
-        for (group_id, indexes) in groups {
+        for ((directory, group_id), indexes) in groups {
             let mut components: Vec<FingerprintComponent> = indexes
                 .iter()
                 .filter_map(|&index| {
@@ -1300,6 +1311,7 @@ impl CliApp {
             let lookup = identify_database.resolve_fingerprint(&fingerprint, "disc-tracks")?;
             trace!(
                 group = group_id,
+                directory = directory,
                 tracks = fingerprint.components.len(),
                 status = ?lookup.status,
                 matches = lookup.matches.len(),

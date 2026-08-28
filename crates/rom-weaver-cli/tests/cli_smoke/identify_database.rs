@@ -274,6 +274,50 @@ fn playstation_database(temp: &TempDir, payload: &[u8], with_pack: bool) -> Path
     dir
 }
 
+/// A headered dump matches an artifact pack keyed on the headerless bytes:
+/// the remove-header checksum variant queries the pack with the stripped
+/// size, and the reported variant names the transform that matched.
+#[test]
+fn identify_matches_headered_rom_against_artifact_pack_via_remove_header() {
+    let temp = setup_temp_dir();
+    let payload: Vec<u8> = (0..64u32).map(|index| (index % 251) as u8).collect();
+    let rom = temp.child("headered.nes");
+    fs::write(rom.path(), with_nes_header(&payload)).expect("ROM fixture");
+    let crc = format!("{:08x}", crc32_of(&payload));
+    let pack = pack_v2(
+        "Nintendo Entertainment System",
+        "libretro-clrmamepro-v1",
+        &[(
+            "Headerless Quest (USA)",
+            vec![component_json(
+                0,
+                payload.len() as u64,
+                Some(&crc),
+                true,
+                true,
+            )],
+        )],
+    );
+    fs::write(temp.child("nes.pack").path(), pack).expect("pack fixture");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--input",
+            rom.path().to_str().expect("ROM path"),
+            "--database",
+            temp.child("nes.pack").path().to_str().expect("pack path"),
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let identify = &json["details"]["identify"];
+    assert_eq!(identify["status"], "matched");
+    assert_eq!(identify["matches"][0]["name"], "Headerless Quest (USA)");
+    assert_eq!(identify["matches"][0]["variant"], "remove-header");
+}
+
 #[test]
 fn identify_system_alias_routes_to_an_installed_v2_pack() {
     let temp = setup_temp_dir();

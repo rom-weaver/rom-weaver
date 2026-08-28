@@ -1042,9 +1042,9 @@ impl CliApp {
                 };
                 condition = Some("unsupported_media_profile".to_string());
                 hint = Some(format!(
-                    "this system's pack expects media profile {profile} (per-track hashes), but \
-                     the input was hashed as one payload; extract the disc's track files and \
-                     identify the data track"
+                    "this system's pack ({profile}) stores CD dumps as per-track hashes, but \
+                     the input was hashed as one payload; for a CD image, extract the disc's \
+                     track files and identify the data track"
                 ));
             }
         }
@@ -1334,10 +1334,11 @@ impl CliApp {
                         );
                         continue;
                     }
-                    for (_variant, outcome) in outcomes {
+                    for (variant, outcome) in outcomes {
                         merged.merge_artifact_outcome(
                             &selected_pack.pack,
                             selected_pack.entry.as_ref(),
+                            &variant,
                             outcome,
                         );
                     }
@@ -1357,10 +1358,11 @@ impl CliApp {
                         );
                         continue;
                     }
-                    for (_variant, outcome) in outcomes {
+                    for (variant, outcome) in outcomes {
                         merged.merge_artifact_outcome(
                             &selected_pack.pack,
                             selected_pack.entry.as_ref(),
+                            &variant,
                             outcome,
                         );
                     }
@@ -1380,10 +1382,11 @@ impl CliApp {
                         );
                         continue;
                     }
-                    for (_variant, outcome) in outcomes {
+                    for (variant, outcome) in outcomes {
                         merged.merge_artifact_outcome(
                             &selected_pack.pack,
                             selected_pack.entry.as_ref(),
+                            &variant,
                             outcome,
                         );
                     }
@@ -1428,6 +1431,7 @@ impl MergedMatches {
         &mut self,
         pack: &LoadedPack,
         entry: Option<&IdentifyPlatformCatalogEntry>,
+        variant: &str,
         outcome: ArtifactMatchOutcome,
     ) {
         if outcome.status == ArtifactMatchStatus::Unknown {
@@ -1489,7 +1493,7 @@ impl MergedMatches {
                 name: game_match.name,
                 platform: game_match.platform,
                 algorithm: "components".to_string(),
-                variant: "raw".to_string(),
+                variant: variant.to_string(),
                 database: pack.name.clone(),
                 provenance: game_match
                     .provenance

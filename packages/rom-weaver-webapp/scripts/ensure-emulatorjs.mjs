@@ -57,14 +57,22 @@ const removeUnlistedFiles = (directory, lockedPaths, relativeDirectory = "") => 
 // The CDN intermittently answers 5xx (a 520 broke a CI deploy); a short
 // backoff rides those out. A hash mismatch is not transient and fails at once.
 const FETCH_ATTEMPTS = 4;
+const RETRYABLE_STATUSES = new Set([408, 425, 429]);
 const fetchOnce = async (url, expectedHash) => {
-  const response = await fetch(url).catch((error) => {
+  let response;
+  let body;
+  try {
+    response = await fetch(url);
+    if (response.ok) body = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    // Covers the headers phase and a stream dropped mid-body.
     return { transientError: new Error(`${url} failed: ${error.message}`) };
-  });
-  if (response.transientError) return response;
-  if (response.status >= 500) return { transientError: new Error(`${url} returned HTTP ${response.status}`) };
-  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
-  const body = Buffer.from(await response.arrayBuffer());
+  }
+  if (!response.ok) {
+    const failure = new Error(`${url} returned HTTP ${response.status}`);
+    if (response.status >= 500 || RETRYABLE_STATUSES.has(response.status)) return { transientError: failure };
+    throw failure;
+  }
   const actualHash = sha256(body);
   if (actualHash !== expectedHash) throw new Error(`${url} hash mismatch: expected ${expectedHash}, got ${actualHash}`);
   return { body };

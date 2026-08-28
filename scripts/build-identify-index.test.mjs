@@ -155,6 +155,24 @@ game ( name "Disc" rom ( name "Disc.iso" size 16 crc AABBCCDD ) )`;
   assert.equal(parsed.games[0].components[0].track, undefined);
 });
 
+test("Redump metadata scopes a mixed CD/DVD platform per rom extension", () => {
+  const dat = `clrmamepro ( name "Sony - PlayStation 2" )
+game ( name "DVD Game" rom ( name "DVD Game.iso" size 16 crc AABBCCDD ) )
+game ( name "CD Game" rom ( name "CD Game.bin" size 16 crc DDCCBBAA ) )`;
+  const parsed = parseLibretroGames(
+    dat,
+    "Sony - PlayStation 2",
+    "metadat/redump/Sony - PlayStation 2.dat",
+  );
+  const dvd = parsed.games.find((game) => game.name === "DVD Game").components[0];
+  const cd = parsed.games.find((game) => game.name === "CD Game").components[0];
+  assert.equal(dvd.hashScope, "full_file");
+  assert.equal(dvd.role, undefined);
+  assert.equal(cd.hashScope, "track_file");
+  assert.equal(cd.role, "data_track");
+  assert.equal(cd.track, 1);
+});
+
 test("merge dedupes identical scoped hashes and retains legacy GoodTools data", () => {
   const primary = parseLibretroGames(
     LIBRETRO_DAT,
