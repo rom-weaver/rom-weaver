@@ -100,7 +100,7 @@ fn component_json(
 
 /// Build an RWFP2 pack for one platform. Every discriminating component with a
 /// crc32 and a size is routed.
-fn pack_v2(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u8> {
+pub(crate) fn pack_v2(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u8> {
     let mut refs: Vec<(u32, u16)> = Vec::new();
     let mut route: Vec<RouteEntry> = Vec::new();
     for (game_index, (_, components)) in games.iter().enumerate() {

@@ -1,4 +1,7 @@
-use super::identify_command::IdentifyDatabaseSet;
+use rom_weaver_checksum::artifact_match::{ArtifactFingerprint, FingerprintComponent};
+use rom_weaver_core::ComponentRole;
+
+use super::identify_command::{IdentifyDatabaseSet, IdentifyStatus};
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::*;
 
@@ -1251,6 +1254,74 @@ impl CliApp {
         });
     }
 
+    /// Identify multi-track discs as a whole. Per-track packs (Redump CD/GD-ROM)
+    /// store one hash per track file, so the single-blob lookup above can never
+    /// match them. Build one fingerprint per disc group from the checksums the
+    /// extract already streamed - no bytes are re-read - and give every asset in
+    /// the group the group's identification when its own lookup found nothing.
+    fn resolve_disc_group_identifications(
+        identify_database: &IdentifyDatabaseSet,
+        assets: &mut [IngestRomAsset],
+    ) -> Result<()> {
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (index, asset) in assets.iter().enumerate() {
+            if let Some(group_id) = &asset.disc_group_id {
+                groups.entry(group_id.clone()).or_default().push(index);
+            }
+        }
+        for (group_id, indexes) in groups {
+            let mut components: Vec<FingerprintComponent> = indexes
+                .iter()
+                .filter_map(|&index| {
+                    let asset = &assets[index];
+                    if asset.checksums.is_empty() || asset.size_bytes == 0 {
+                        return None;
+                    }
+                    Some(FingerprintComponent {
+                        // The matcher compares scope, size, and hashes; role and
+                        // ordinal are informational.
+                        role: ComponentRole::DataTrack,
+                        ordinal: asset.track_number.unwrap_or(0),
+                        hash_scope: "track_file".to_string(),
+                        size: asset.size_bytes,
+                        crc32: asset.checksums.get("crc32").cloned(),
+                        md5: asset.checksums.get("md5").cloned(),
+                        sha1: asset.checksums.get("sha1").cloned(),
+                        sha256: asset.checksums.get("sha256").cloned(),
+                        filename: Some(asset.file_name.clone()),
+                    })
+                })
+                .collect();
+            if components.is_empty() {
+                continue;
+            }
+            components.sort_by_key(|component| component.ordinal);
+            let fingerprint = ArtifactFingerprint { components };
+            let lookup = identify_database.resolve_fingerprint(&fingerprint, "disc-tracks")?;
+            trace!(
+                group = group_id,
+                tracks = fingerprint.components.len(),
+                status = ?lookup.status,
+                matches = lookup.matches.len(),
+                "disc group identify lookup"
+            );
+            if lookup.status == IdentifyStatus::Unknown {
+                continue;
+            }
+            for &index in &indexes {
+                let asset = &mut assets[index];
+                let unresolved = asset
+                    .identification
+                    .as_ref()
+                    .is_none_or(|current| current.matches.is_empty());
+                if unresolved {
+                    asset.identification = Some(lookup.clone());
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn ingest_success_report(
         &self,
         source: &Path,
@@ -1301,6 +1372,7 @@ impl CliApp {
                     );
                 }
             }
+            Self::resolve_disc_group_identifications(identify_database, &mut assets)?;
         }
         let mut patches = outcome.patches;
         if let Some(identify_database) = identify_database {

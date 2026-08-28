@@ -37,6 +37,88 @@ fn ingest_terminal(args: &[&str]) -> Value {
     run_single_json_event(args, 0)
 }
 
+/// Ingest a two-track CD CHD against a per-track (Redump-shaped) pack: the
+/// single-blob lookup cannot match track_file components, so the disc-group
+/// fingerprint built from the streamed track checksums must. A first ingest
+/// without a database supplies the split tracks' checksums for the pack.
+#[test]
+fn ingest_identifies_a_chd_disc_from_per_track_pack_components() {
+    let temp = setup_temp_dir();
+    let chd_path = create_two_track_cd_chd(&temp);
+    let probe_out = temp.child("ingest-probe-out");
+    let probe = ingest_terminal(&[
+        "ingest",
+        "--input",
+        chd_path.to_str().expect("chd path"),
+        "--output",
+        probe_out.path().to_str().expect("output path"),
+        "--json",
+    ]);
+    let track_components: Vec<Value> = probe["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets")
+        .iter()
+        .filter(|asset| asset["file_name"].as_str().unwrap_or("").ends_with(".bin"))
+        .enumerate()
+        .map(|(index, asset)| {
+            serde_json::json!({
+                "role": "data_track",
+                "ordinal": index,
+                "hashScope": "track_file",
+                "track": index + 1,
+                "size": asset["size_bytes"],
+                "crc32": asset["checksums"]["crc32"],
+                "required": true,
+                "discriminating": index == 0,
+            })
+        })
+        .collect();
+    assert_eq!(
+        track_components.len(),
+        2,
+        "expected two split tracks: {probe:?}"
+    );
+    let pack_bytes = super::identify_database::pack_v2(
+        "Sony - PlayStation",
+        "redump-cd-track-v1",
+        &[("Two Track Quest (USA)", track_components)],
+    );
+    let pack = temp.child("psx.pack");
+    fs::write(pack.path(), pack_bytes).expect("pack fixture");
+    let out_dir = temp.child("ingest-chd-out");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        chd_path.to_str().expect("chd path"),
+        "--output",
+        out_dir.path().to_str().expect("output path"),
+        "--database",
+        pack.path().to_str().expect("pack path"),
+        "--json",
+    ]);
+    let assets = terminal["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets");
+    let tracks: Vec<&Value> = assets
+        .iter()
+        .filter(|asset| asset["file_name"].as_str().unwrap_or("").ends_with(".bin"))
+        .collect();
+    assert_eq!(tracks.len(), 2, "expected two track assets: {assets:?}");
+    for track in tracks {
+        let identification = &track["identification"];
+        assert_eq!(
+            identification["status"], "matched",
+            "track should carry the disc-group match: {identification:?}"
+        );
+        assert_eq!(
+            identification["matches"][0]["name"],
+            "Two Track Quest (USA)"
+        );
+        assert_eq!(identification["matches"][0]["variant"], "disc-tracks");
+    }
+}
+
 fn create_ingest_patch(
     temp: &TempDir,
     format: &str,
