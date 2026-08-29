@@ -296,6 +296,12 @@
   color: inherit;
   animation: sw-spin 1.1s linear infinite;
 }
+/* A determinate percent ring reports progress by arc length; only the
+   indeterminate loader spins. */
+.rw-app .sub-status[data-sw="installing"] svg.sw-progress-ring,
+.rw-app .more-status[data-sw="installing"] svg.sw-progress-ring {
+  animation: none;
+}
 .rw-app .more-status[data-sw="disabled"] svg {
   color: inherit;
 }

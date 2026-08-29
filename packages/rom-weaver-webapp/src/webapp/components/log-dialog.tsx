@@ -30,7 +30,9 @@ import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
+  describeWarmupUnit,
   installingRuntimeLabel,
+  offlineWarmupPercent,
   prefersReducedMotion,
   readPwaState,
   resolveRuntimeState,
@@ -242,11 +244,28 @@ const StatusRows = ({
   const rows: Array<[string, React.ReactNode]> = [
     [
       localizer.message("ui.status.offline"),
-      <span className="sw-chip" data-sw={runtimeState} key="sw" role="status">
-        <RuntimeGlyph state={runtimeState} />
-        {runtimeState === "installing"
-          ? installingRuntimeLabel(localizer, offlineProgress ?? null)
-          : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+      <span className="sw-status-cell" key="sw">
+        <span className="sw-chip" data-sw={runtimeState} role="status">
+          <RuntimeGlyph
+            percent={runtimeState === "installing" ? offlineWarmupPercent(offlineProgress ?? null) : null}
+            state={runtimeState}
+          />
+          {runtimeState === "installing"
+            ? installingRuntimeLabel(localizer, offlineProgress ?? null)
+            : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+        </span>
+        {runtimeState === "installing" &&
+        offlineProgress &&
+        !offlineProgress.ready &&
+        offlineProgress.totalBytes > 0 ? (
+          <span className="sw-progress-detail">
+            {`${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`}
+            {(() => {
+              const detail = describeWarmupUnit(localizer, offlineProgress.unit);
+              return detail ? ` — ${detail}` : "";
+            })()}
+          </span>
+        ) : null}
       </span>,
     ],
     [

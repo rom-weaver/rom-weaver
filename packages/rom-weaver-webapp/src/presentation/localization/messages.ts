@@ -270,6 +270,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingProgress",
     message: "Installing offline copy — {percent}%",
   }),
+  "ui.runtime.detailEmulatorFile": msg({
+    id: "ui.runtime.detailEmulatorFile",
+    message: "EmulatorJS: {name}",
+  }),
+  "ui.runtime.detailIdentifyGroup": msg({
+    id: "ui.runtime.detailIdentifyGroup",
+    message: "ROM database: {name}",
+  }),
   "ui.runtime.ready": msg({ id: "ui.runtime.ready", message: "Offline ready" }),
   "ui.runtime.readyDesc": msg({
     id: "ui.runtime.readyDesc",

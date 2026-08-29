@@ -300,6 +300,11 @@ msgstr "DVD-Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailEmulatorFile"
+msgstr "EmulatorJS: {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
 msgstr "Beta-Tools aktivieren (Identifizieren, Trimmen und PPF rückgängig machen)"
 
@@ -667,6 +672,11 @@ msgstr "Eine gepatchte ROM auf den Original-Dump zurücksetzen,"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.rom"
 msgstr "ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailIdentifyGroup"
+msgstr "ROM-Datenbank: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

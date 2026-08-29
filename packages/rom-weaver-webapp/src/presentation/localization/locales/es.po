@@ -300,6 +300,11 @@ msgstr "Códecs DVD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailEmulatorFile"
+msgstr "EmulatorJS: {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
 msgstr "Activar herramientas beta (Identificar, Recortar y Deshacer PPF)"
 
@@ -667,6 +672,11 @@ msgstr "Revierte una ROM parcheada a su volcado original,"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.rom"
 msgstr "ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailIdentifyGroup"
+msgstr "Base de datos ROM: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

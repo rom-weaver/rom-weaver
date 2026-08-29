@@ -462,6 +462,7 @@ type UtilityMenuProps = {
   moreTabs?: readonly WorkflowTab[];
   onOpenWorkflowTab?: (id: string) => void;
   runtimeState: RuntimeState;
+  runtimePercent?: number | null;
   toolsEnabled?: boolean;
 };
 
@@ -483,6 +484,7 @@ const UtilityMenu = ({
   moreTabs,
   onOpenWorkflowTab,
   runtimeState,
+  runtimePercent = null,
   toolsEnabled,
   menuClassName,
   open,
@@ -587,7 +589,7 @@ const UtilityMenu = ({
         role="menuitem"
         type="button"
       >
-        <RuntimeGlyph state={runtimeState} />
+        <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
         {localizer.message("ui.log.tabStatus")}
       </button>
       <button onClick={() => select(onOpenStorage ?? onOpenLog)} role="menuitem" type="button">
@@ -775,7 +777,35 @@ const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: Me
 };
 
 /** Byte progress of the background offline warm-up, when the page knows it. */
-type OfflineWarmupDisplayProgress = { cachedBytes: number; ready: boolean; totalBytes: number };
+type OfflineWarmupDisplayProgress = {
+  cachedBytes: number;
+  ready: boolean;
+  totalBytes: number;
+  /** Warm-up unit last processed, e.g. "emulatorjs:loader.js" or "identify-group:<id>". */
+  unit?: string | null;
+};
+
+/** Whole percent for an incomplete warm-up with known byte totals; null otherwise. */
+const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null =>
+  progress && !progress.ready && progress.totalBytes > 0
+    ? Math.min(99, Math.floor((progress.cachedBytes / progress.totalBytes) * 100))
+    : null;
+
+/** Human wording for a warm-up unit label, for the status detail line. */
+const describeWarmupUnit = (
+  localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
+  unit: string | null | undefined,
+): string | null => {
+  if (typeof unit !== "string" || !unit) return null;
+  const separator = unit.indexOf(":");
+  if (separator < 0) return null;
+  const kind = unit.slice(0, separator);
+  const name = unit.slice(separator + 1);
+  if (!name) return null;
+  if (kind === "emulatorjs") return localizer.message("ui.runtime.detailEmulatorFile", { name });
+  if (kind === "identify-group") return localizer.message("ui.runtime.detailIdentifyGroup", { name });
+  return null;
+};
 
 /**
  * An update outranks everything: it is the only state that asks for an action.
@@ -799,10 +829,8 @@ const installingRuntimeLabel = (
   localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
   offlineProgress: OfflineWarmupDisplayProgress | null,
 ) => {
-  if (!offlineProgress || offlineProgress.ready || offlineProgress.totalBytes <= 0) {
-    return localizer.message("ui.runtime.installing");
-  }
-  const percent = Math.min(99, Math.floor((offlineProgress.cachedBytes / offlineProgress.totalBytes) * 100));
+  const percent = offlineWarmupPercent(offlineProgress);
+  if (percent === null) return localizer.message("ui.runtime.installing");
   return localizer.message("ui.runtime.installingProgress", { percent });
 };
 
@@ -814,8 +842,41 @@ const RUNTIME_ICONS = {
   update: CloudDownload,
 } satisfies Record<RuntimeState, typeof CloudCheck>;
 
-/** Uses the shared Lucide set for every service-worker state. */
-const RuntimeGlyph = ({ state }: { state: RuntimeState }) => {
+const PROGRESS_RING_RADIUS = 9;
+const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_RADIUS;
+
+/** Determinate ring on the Lucide 24-box: the arc fills clockwise from 12 o'clock. */
+const ProgressRingGlyph = ({ percent }: { percent: number }) => {
+  const filled = (Math.min(100, Math.max(0, percent)) / 100) * PROGRESS_RING_CIRCUMFERENCE;
+  return (
+    <svg
+      aria-hidden="true"
+      className="sw-progress-ring"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.4}
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" opacity="0.25" r={PROGRESS_RING_RADIUS} />
+      <circle
+        cx="12"
+        cy="12"
+        r={PROGRESS_RING_RADIUS}
+        strokeDasharray={`${filled} ${PROGRESS_RING_CIRCUMFERENCE - filled}`}
+        strokeDashoffset={PROGRESS_RING_CIRCUMFERENCE / 4}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
+
+/**
+ * Uses the shared Lucide set for every service-worker state. An installing
+ * state with a known percent gets a determinate progress ring instead of the
+ * indeterminate spinner.
+ */
+const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?: number | null }) => {
+  if (state === "installing" && typeof percent === "number") return <ProgressRingGlyph percent={percent} />;
   const Icon = RUNTIME_ICONS[state];
   return <Icon aria-hidden="true" strokeWidth={2.4} />;
 };
@@ -1017,6 +1078,9 @@ const Masthead = ({
     runtimeState === "installing"
       ? installingRuntimeLabel(localizer, offlineProgress)
       : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const runtimePercent = runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null;
+  const runtimeDetail = runtimeState === "installing" ? describeWarmupUnit(localizer, offlineProgress?.unit) : null;
+  const runtimeTitle = runtimeDetail ? `${runtimeLabel} — ${runtimeDetail}` : runtimeLabel;
   const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
   const toggleUtility = (placement: "desktop" | "mobile", viaKeyboard: boolean) => {
     setUtilityPlacement(placement);
@@ -1158,6 +1222,7 @@ const Masthead = ({
               open={utilityOpen && utilityPlacement === "desktop"}
               renderMenu={utilityOpen && utilityPlacement === "desktop"}
               runtimeState={runtimeState}
+              runtimePercent={runtimePercent}
               toolsEnabled={betaToolsEnabled}
               triggerRef={desktopMoreRef}
             />
@@ -1166,13 +1231,14 @@ const Masthead = ({
         <div className="masthead-tools" ref={toolsRef}>
           <button
             aria-haspopup="dialog"
-            aria-label={runtimeLabel}
+            aria-label={runtimeTitle}
             className="tool masthead-status sub-status"
             data-sw={runtimeState}
             onClick={onOpenStatus}
+            title={runtimeTitle}
             type="button"
           >
-            <RuntimeGlyph state={runtimeState} />
+            <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
             <span className="sr-only sub-status-text">{runtimeLabel}</span>
           </button>
           <span className="mobile-utility-theme">
@@ -1226,6 +1292,7 @@ const Masthead = ({
               onOpenWorkflowTab={onSelectTab}
               open
               runtimeState={runtimeState}
+              runtimePercent={runtimePercent}
               toolsEnabled={betaToolsEnabled}
               triggerRef={activeMoreRef}
             />
@@ -1262,6 +1329,7 @@ const Masthead = ({
             open={utilityOpen && utilityPlacement === "mobile"}
             renderMenu={false}
             runtimeState={runtimeState}
+            runtimePercent={runtimePercent}
             toolsEnabled={betaToolsEnabled}
             triggerRef={mobileMoreRef}
           />
@@ -1372,8 +1440,10 @@ const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: (
 
 export type { OfflineWarmupDisplayProgress, RuntimeState };
 export {
+  describeWarmupUnit,
   installingRuntimeLabel,
   Masthead,
+  offlineWarmupPercent,
   SiteFooter,
   prefersReducedMotion,
   readPwaState,

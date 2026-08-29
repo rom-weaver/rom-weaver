@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { installingRuntimeLabel, resolveRuntimeState } from "../../src/webapp/components/shell.tsx";
+import {
+  describeWarmupUnit,
+  installingRuntimeLabel,
+  offlineWarmupPercent,
+  resolveRuntimeState,
+} from "../../src/webapp/components/shell.tsx";
 
 const localizer = {
   message: (id: string, values?: Record<string, unknown>) => (values ? `${id}:${JSON.stringify(values)}` : id),
@@ -36,5 +41,25 @@ describe("runtime state with offline warm-up gating", () => {
     expect(installingRuntimeLabel(localizer, { cachedBytes: 0, ready: false, totalBytes: 0 })).toBe(
       "ui.runtime.installing",
     );
+  });
+
+  it("computes a whole percent only for an incomplete warm-up with known totals", () => {
+    expect(offlineWarmupPercent({ cachedBytes: 25, ready: false, totalBytes: 100 })).toBe(25);
+    expect(offlineWarmupPercent({ cachedBytes: 100, ready: false, totalBytes: 100 })).toBe(99);
+    expect(offlineWarmupPercent({ cachedBytes: 100, ready: true, totalBytes: 100 })).toBeNull();
+    expect(offlineWarmupPercent({ cachedBytes: 0, ready: false, totalBytes: 0 })).toBeNull();
+    expect(offlineWarmupPercent(null)).toBeNull();
+  });
+
+  it("describes warm-up units for the status detail line", () => {
+    expect(describeWarmupUnit(localizer, "emulatorjs:cores/ppsspp.wasm")).toBe(
+      'ui.runtime.detailEmulatorFile:{"name":"cores/ppsspp.wasm"}',
+    );
+    expect(describeWarmupUnit(localizer, "identify-group:optional-computers")).toBe(
+      'ui.runtime.detailIdentifyGroup:{"name":"optional-computers"}',
+    );
+    expect(describeWarmupUnit(localizer, "unknown:thing")).toBeNull();
+    expect(describeWarmupUnit(localizer, "")).toBeNull();
+    expect(describeWarmupUnit(localizer, null)).toBeNull();
   });
 });
