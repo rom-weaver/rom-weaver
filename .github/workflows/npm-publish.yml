@@ -48,8 +48,6 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - name: Install data build tools
-        run: sudo apt-get update && sudo apt-get install --yes zstd
       - name: Prepare ROM identify data
         uses: ./.github/actions/identify-data
       - name: Build identify data archive
@@ -60,7 +58,7 @@ jobs:
           name: identify-release-data
           path: |
             target/identify-release/share
-            target/rom-weaver-identify-data*.tar.zst
+            target/rom-weaver-identify-data*.tar.br
           if-no-files-found: error
           overwrite: true
           retention-days: 7
@@ -69,12 +67,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release upload "v${{ inputs.version }}"
-          target/rom-weaver-identify-data*.tar.zst
+          target/rom-weaver-identify-data*.tar.br
           --repo "$GITHUB_REPOSITORY" --clobber
       - name: Attest identify data archive
         uses: ./.github/actions/attest-retry
         with:
-          subject-path: target/rom-weaver-identify-data*.tar.zst
+          subject-path: target/rom-weaver-identify-data*.tar.br
 
   # The three matrices below all fan out over the same target list, and CI
   # builds it too. It lives in .github/cli-platforms.json; a matrix can only be

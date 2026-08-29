@@ -55,12 +55,12 @@ const fixture = ({ grouped = false } = {}) => {
 test("builds deterministic Brotli packs and a stable release archive", () => {
   const { input, root } = fixture();
   const first = buildIdentifyReleaseData({
-    archive: join(root, "first.tar.zst"),
+    archive: join(root, "first.tar.br"),
     input,
     out: join(root, "first"),
   });
   const second = buildIdentifyReleaseData({
-    archive: join(root, "second.tar.zst"),
+    archive: join(root, "second.tar.br"),
     input,
     out: join(root, "second"),
   });
@@ -81,7 +81,7 @@ test("builds deterministic Brotli packs and a stable release archive", () => {
 
 test("creates a missing release archive directory", () => {
   const { input, root } = fixture();
-  const archive = join(root, "target", "rom-weaver-identify-data.tar.zst");
+  const archive = join(root, "target", "rom-weaver-identify-data.tar.br");
   const result = buildIdentifyReleaseData({
     archive,
     input,
@@ -94,7 +94,7 @@ test("creates a missing release archive directory", () => {
 test("separates default packs from complete optional group archives", () => {
   const { input, root } = fixture({ grouped: true });
   const result = buildIdentifyReleaseData({
-    archive: join(root, "rom-weaver-identify-data.tar.zst"),
+    archive: join(root, "rom-weaver-identify-data.tar.br"),
     input,
     out: join(root, "release"),
   });
@@ -125,7 +125,7 @@ test("rejects a raw pack that does not match its index integrity fields", () => 
   assert.throws(
     () =>
       buildIdentifyReleaseData({
-        archive: join(root, "data.tar.zst"),
+        archive: join(root, "data.tar.br"),
         input,
         out: join(root, "out"),
       }),
@@ -139,7 +139,7 @@ test("rejects a Brotli sidecar that does not match its raw pack", () => {
   assert.throws(
     () =>
       buildIdentifyReleaseData({
-        archive: join(root, "data.tar.zst"),
+        archive: join(root, "data.tar.br"),
         input,
         out: join(root, "out"),
       }),

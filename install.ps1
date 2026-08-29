@@ -24,7 +24,7 @@ $platformArchitecture = switch ($architecture) {
 $asset = "rom-weaver-win32-$platformArchitecture-msvc.tar.gz"
 $legacyAsset = "rom-weaver-win32-$platformArchitecture-msvc.exe"
 $docsAsset = 'rom-weaver-cli-assets.zip'
-$identifyAsset = 'rom-weaver-identify-data.tar.zst'
+$identifyAsset = 'rom-weaver-identify-data.tar.br'
 $releaseUrl = if ($version -eq 'latest') {
   "https://github.com/$repo/releases/latest/download"
 } else {
@@ -186,7 +186,13 @@ try {
       }
     }
     if ($installIdentify) {
-      & tar --extract --file $identifyPath --directory $installDir
+      if (-not (Get-Command brotli -ErrorAction SilentlyContinue)) {
+        throw "brotli is required to extract $identifyAsset"
+      }
+      $identifyTar = Join-Path $tempDir 'rom-weaver-identify-data.tar'
+      & brotli --decompress --force --output $identifyTar $identifyPath
+      if ($LASTEXITCODE -ne 0) { throw "failed to decompress $identifyAsset" }
+      & tar --extract --file $identifyTar --directory $installDir
       if ($LASTEXITCODE -ne 0) { throw "tar cannot extract $identifyAsset" }
       Write-Host "Installed ROM identify data to $(Join-Path $installDir 'share/rom-weaver/identify/v1')"
     }

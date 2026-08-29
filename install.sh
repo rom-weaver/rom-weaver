@@ -31,7 +31,7 @@ esac
 asset="rom-weaver-$platform.tar.gz"
 legacy_asset="rom-weaver-$platform"
 docs_asset="rom-weaver-cli-assets.tar.gz"
-identify_asset="rom-weaver-identify-data.tar.zst"
+identify_asset="rom-weaver-identify-data.tar.br"
 if [ "$version" = "latest" ]; then
   release_url="https://github.com/$repo/releases/latest/download"
 else
@@ -197,10 +197,18 @@ if curl --fail --location --proto '=https' --tlsv1.2 \
       echo "rom-weaver: could not check build provenance for $identify_asset; continuing unverified" >&2
     fi
   fi
-  if [ "$identify_verified" = 1 ] && tar --extract --file "$tmp_dir/$identify_asset" --directory "$install_dir"; then
-    echo "Installed ROM identify data to $install_dir/share/rom-weaver/identify/v1"
-  elif [ "$identify_verified" = 1 ]; then
-    echo "rom-weaver: tar cannot extract Zstandard archives; installed the binary only" >&2
+  if [ "$identify_verified" = 1 ]; then
+    if ! command -v brotli >/dev/null 2>&1; then
+      echo "rom-weaver: Brotli decoder unavailable; installed the binary only" >&2
+    elif brotli --decompress --force \
+      --output "$tmp_dir/rom-weaver-identify-data.tar" \
+      "$tmp_dir/$identify_asset" &&
+      tar --extract --file "$tmp_dir/rom-weaver-identify-data.tar" \
+        --directory "$install_dir"; then
+      echo "Installed ROM identify data to $install_dir/share/rom-weaver/identify/v1"
+    else
+      echo "rom-weaver: failed to extract Brotli identify data; installed the binary only" >&2
+    fi
   fi
 else
   echo "rom-weaver: ROM identify data unavailable; installed the binary only" >&2
