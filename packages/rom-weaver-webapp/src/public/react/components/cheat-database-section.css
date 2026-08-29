@@ -1,60 +1,113 @@
 @layer style, foundation, drawers, controls, readouts, docs, overrides;
 
 @layer controls {
-  .rw-app .cheat-database-section {
-    display: grid;
-    gap: 1rem;
-    min-width: 0;
-    overflow-wrap: anywhere;
+  /* Float the cheat card actions so long descriptions wrap beneath them - the
+     same treatment the patch stack gets, restated because those rules are
+     scoped to #rom-weaver-list-patch-stack. */
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-top {
+    display: flow-root;
   }
 
-  .rw-app .cheat-database-section > header {
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-actions {
+    float: right;
     display: flex;
-    gap: 0.75rem;
-    align-items: flex-start;
+    margin: 0 0 var(--sp-xs) var(--sp-m);
   }
 
-  .rw-app .cheat-database-section h2,
-  .rw-app .cheat-database-section p {
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-btns {
+    display: flex;
+    gap: var(--sp-s);
+    align-items: center;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-name {
+    display: block;
+    min-width: 0;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-name > .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    margin-block-start: var(--sp-xs);
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .phandle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--ctrl-h);
+    height: var(--ctrl-h);
+    min-height: 0;
+    padding: 2px;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack .nm {
+    font-weight: 700;
+  }
+
+  /* The .rb chip chrome is scoped to step headers and drawer readouts; the
+     cheat card's meta line needs the same badge. */
+  .rw-app #rom-weaver-list-cheat-stack .card-meta .rb,
+  .rw-app .cheat-pick-badges .rb {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    font-size: var(--badge-fs);
+    font-stretch: 86%;
+    color: var(--weft);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    background: var(--well);
+    border: 1px solid var(--seam-soft);
+    border-radius: 6px;
+  }
+
+  .rw-app .cheat-add {
+    width: 100%;
+  }
+
+  .rw-app .cheat-add svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .rw-app .cheat-add-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: var(--sp-s) 0 0;
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+
+  .rw-app .cheat-output-summary p {
     margin: 0;
   }
 
-  .rw-app .cheat-database-icon {
-    display: inline-flex;
-    flex: 0 0 2.75rem;
-    align-items: center;
-    justify-content: center;
-    height: 2.75rem;
+  /* Add-cheats dialog */
+  .rw-app .cheat-dlg .dlg-frame {
+    width: min(44rem, 96vw);
+    max-height: 90vh;
   }
 
-  .rw-app .cheat-database-icon svg,
-  .rw-app .cheat-search svg,
-  .rw-app .local-cheat-file svg,
-  .rw-app .manual-cheat-toggle svg {
-    width: 1.15rem;
-    height: 1.15rem;
-  }
-
-  .rw-app .cheat-match,
-  .rw-app .cheat-notices,
-  .rw-app .manual-cheat-result {
-    display: grid;
-    gap: 0.25rem;
-    min-width: 0;
-    padding: 0.8rem;
-    border: 1px solid var(--line, currentColor);
-  }
-
-  .rw-app .cheat-tools {
+  .rw-app .cheat-dlg .dlg-body {
     display: grid;
     gap: 0.75rem;
     min-width: 0;
+    overflow-y: auto;
   }
 
   .rw-app .cheat-search {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
+  }
+
+  .rw-app .cheat-search svg,
+  .rw-app .local-cheat-file svg,
+  .rw-app .manual-cheat-toggle svg {
+    width: 1.15rem;
+    height: 1.15rem;
   }
 
   .rw-app .cheat-search svg {
@@ -70,156 +123,117 @@
     padding-inline-start: 2.5rem;
   }
 
-  .rw-app .cheat-tools fieldset {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    min-width: 0;
-    padding: 0;
-    margin: 0;
-    border: 0;
-  }
-
-  .rw-app .cheat-tools fieldset label {
-    position: relative;
-    min-height: 2.75rem;
-    cursor: pointer;
-  }
-
-  .rw-app .cheat-tools fieldset input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-  }
-
-  .rw-app .cheat-tools fieldset span {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    padding: 0.55rem 0.75rem;
-    border: 1px solid var(--line, currentColor);
-  }
-
-  .rw-app .cheat-tools fieldset input:checked + span {
-    border-color: var(--accent, currentColor);
-    box-shadow: inset 0 0 0 1px var(--accent, currentColor);
-  }
-
-  .rw-app .cheat-tools fieldset input:focus-visible + span {
-    outline: 2px solid var(--accent, currentColor);
-    outline-offset: 2px;
-  }
-
-  .rw-app .cheat-list {
+  .rw-app .cheat-pick-list {
     display: grid;
-    gap: 0.5rem;
     min-width: 0;
     padding: 0;
     margin: 0;
     list-style: none;
+    border: 1px solid var(--seam, currentColor);
+    border-radius: var(--r-m, 6px);
   }
 
-  .rw-app .cheat-row {
+  .rw-app .cheat-pick {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
     min-width: 0;
-    border: 1px solid var(--line, currentColor);
+    padding: 0.6rem 0.75rem;
   }
 
-  .rw-app .cheat-choice {
-    display: flex;
-    gap: 0.7rem;
-    align-items: flex-start;
-    min-width: 0;
-    min-height: 3.5rem;
-    padding: 0.75rem;
-    cursor: pointer;
+  .rw-app .cheat-pick + .cheat-pick {
+    border-block-start: 1px solid var(--seam-soft, currentColor);
   }
 
-  .rw-app .cheat-choice > input {
-    flex: 0 0 auto;
-    width: 1.25rem;
-    height: 1.25rem;
-    margin-block-start: 0.1rem;
-  }
-
-  .rw-app .cheat-choice:has(input:disabled) {
-    cursor: not-allowed;
-    opacity: 0.68;
-  }
-
-  .rw-app .cheat-summary {
+  .rw-app .cheat-pick-text {
     display: grid;
-    gap: 0.35rem;
+    gap: 0.3rem;
     min-width: 0;
   }
 
-  .rw-app .cheat-description {
+  .rw-app .cheat-pick-name {
     font-weight: 650;
+    overflow-wrap: anywhere;
   }
 
-  .rw-app .cheat-delivery {
+  .rw-app .cheat-pick-badges {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
     align-items: center;
   }
 
-  .rw-app .cheat-badge {
-    padding: 0.15rem 0.45rem;
-    font-size: 0.78rem;
-    border: 1px solid currentColor;
-    border-radius: 999px;
-  }
-
-  .rw-app .cheat-detail-toggle,
-  .rw-app .manual-cheat-toggle {
+  .rw-app .cheat-pick-btn {
     display: inline-flex;
     gap: 0.35rem;
     align-items: center;
     justify-content: center;
-    min-height: 2.75rem;
+    min-width: 5.5rem;
+    min-height: 2.5rem;
+    padding-inline: 0.7rem;
+    border: 1px solid var(--seam-strong, currentColor);
+    border-radius: 6px;
   }
 
-  .rw-app .cheat-detail-toggle {
-    align-self: stretch;
-    padding: 0.6rem;
-    border: 0;
-    border-inline-start: 1px solid var(--line, currentColor);
+  .rw-app .cheat-pick-btn svg {
+    width: 0.95rem;
+    height: 0.95rem;
   }
 
-  .rw-app .cheat-detail-toggle svg {
-    width: 1rem;
-    height: 1rem;
-    transition: transform 150ms ease;
+  .rw-app .cheat-pick-btn.is-added {
+    color: var(--verified, currentColor);
+    border-color: color-mix(in oklab, var(--verified, currentColor) 55%, var(--seam-strong, currentColor));
   }
 
-  .rw-app .cheat-detail-toggle[aria-expanded="true"] svg {
-    transform: rotate(180deg);
-  }
-
-  .rw-app .cheat-details {
-    display: grid;
-    grid-column: 1 / -1;
-    gap: 0.6rem;
-    min-width: 0;
-    padding: 0.75rem;
+  .rw-app .cheat-pick-empty {
     margin: 0;
-    border-block-start: 1px solid var(--line, currentColor);
+    color: var(--ink-3);
   }
 
-  .rw-app .cheat-details > div {
+  .rw-app .cheat-pick-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+
+  .rw-app .cheat-pager {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .rw-app .cheat-pager button {
+    min-height: 2.4rem;
+    padding-inline: 0.7rem;
+    border: 1px solid var(--seam-strong, currentColor);
+    border-radius: 6px;
+  }
+
+  .rw-app .cheat-pager button:disabled {
+    opacity: 0.5;
+  }
+
+  .rw-app .cheat-notices,
+  .rw-app .manual-cheat-result {
     display: grid;
-    grid-template-columns: minmax(7rem, 0.3fr) minmax(0, 1fr);
-    gap: 0.15rem;
-  }
-
-  .rw-app .cheat-details dt {
-    font-weight: 650;
-  }
-
-  .rw-app .cheat-details dd {
+    gap: 0.25rem;
     min-width: 0;
+    padding: 0.8rem;
+    border: 1px solid var(--seam, currentColor);
+  }
+
+  .rw-app .cheat-notices {
+    font-size: 0.88rem;
+  }
+
+  .rw-app .cheat-notices p,
+  .rw-app .local-cheat-file p,
+  .rw-app .manual-cheat-result p {
     margin: 0;
   }
 
@@ -237,7 +251,7 @@
   .rw-app .local-cheat-file {
     gap: 0.4rem;
     padding: 0.75rem;
-    border: 1px solid var(--line, currentColor);
+    border: 1px solid var(--seam, currentColor);
   }
 
   .rw-app .local-cheat-file label > span {
@@ -263,10 +277,18 @@
     min-height: 2.75rem;
   }
 
+  .rw-app .manual-cheat-toggle {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+  }
+
   .rw-app .manual-cheat form {
     gap: 0.75rem;
     padding: 0.75rem;
-    border: 1px solid var(--line, currentColor);
+    border: 1px solid var(--seam, currentColor);
   }
 
   .rw-app .manual-cheat-options {
@@ -275,37 +297,25 @@
     gap: 0.75rem;
   }
 
-  .rw-app .cheat-notices {
-    font-size: 0.88rem;
-  }
-
-  .rw-app .cheat-tools fieldset span:active,
-  .rw-app .cheat-detail-toggle:active,
+  .rw-app .cheat-pick-btn:active,
+  .rw-app .cheat-pager button:not(:disabled):active,
   .rw-app .manual-cheat-toggle:active {
     filter: brightness(0.9);
   }
 
   @media (hover: hover) {
-    .rw-app .cheat-tools fieldset span:hover,
-    .rw-app .cheat-detail-toggle:hover,
+    .rw-app .cheat-pick-btn:hover,
+    .rw-app .cheat-pager button:not(:disabled):hover,
     .rw-app .manual-cheat-toggle:hover {
       filter: brightness(1.08);
     }
   }
 
   @media (max-width: 40rem) {
-    .rw-app .cheat-row {
+    .rw-app .cheat-pick {
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .rw-app .cheat-detail-toggle {
-      justify-content: flex-start;
-      padding-inline: 0.75rem;
-      border-block-start: 1px solid var(--line, currentColor);
-      border-inline-start: 0;
-    }
-
-    .rw-app .cheat-details > div,
     .rw-app .manual-cheat-options {
       grid-template-columns: minmax(0, 1fr);
     }

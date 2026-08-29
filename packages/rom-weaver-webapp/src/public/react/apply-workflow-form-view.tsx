@@ -2095,7 +2095,8 @@ function ApplyWorkflowFormView({
           steps={[
             { num: "0x02", title: localizer.message("ui.step.rom") },
             { num: "0x03", title: localizer.message("ui.step.patches") },
-            { num: "0x04", title: localizer.message("ui.step.apply") },
+            { num: "0x04", title: "Cheats" },
+            { num: "0x05", title: localizer.message("ui.step.apply") },
           ]}
         />
       ) : (
@@ -2162,8 +2163,6 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          {cheats}
-
           <ApplyPatchListStep
             bundleMeta={bundleMeta}
             bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
@@ -2190,6 +2189,8 @@ function ApplyWorkflowFormView({
             }
             woven={wovenSteps}
           />
+
+          {cheats}
 
           <WorkflowOutputStep
             action={renderOutputAction}
@@ -2235,7 +2236,7 @@ function ApplyWorkflowFormView({
                 state={uiState.outputNotice}
               />
             }
-            num="0x04"
+            num="0x05"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
             secondary={bundleSecondaryJob}
