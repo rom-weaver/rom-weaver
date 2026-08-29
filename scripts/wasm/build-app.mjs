@@ -39,12 +39,34 @@ const existsExecutable = (file) => {
   return spawnSync(file, ["--version"], { stdio: "ignore" }).status === 0;
 };
 
-export function productionFingerprint({ builtArtifact, buildScript, quality, wasmOptVersion, stripVersion, brotliVersion }) {
+// `--zero-filled-memory` asserts the imported memory arrives zeroed, so
+// wasm-opt MAY drop data segments that only write zeros. The module imports
+// its memory, so the guarantee comes from the host, not the wasm spec: the
+// browser runtime creates a fresh WebAssembly.Memory per run
+// (createSharedThreadMemory in browser-opfs-runner.ts). Reusing a memory
+// across runs would break this flag's assumption.
+export const WASM_OPT_ARGS = [
+  "-O4",
+  "--strip-debug",
+  "--strip-dwarf",
+  "--zero-filled-memory",
+  "--enable-bulk-memory",
+  "--enable-bulk-memory-opt",
+  "--enable-mutable-globals",
+  "--enable-nontrapping-float-to-int",
+  "--enable-sign-ext",
+  "--enable-reference-types",
+  "--enable-simd",
+  "--enable-threads",
+];
+
+export function productionFingerprint({ builtArtifact, buildScript, quality, wasmOptVersion, wasmOptArgs, stripVersion, brotliVersion }) {
   return createWasmProdFingerprint({
     artifactPath: builtArtifact,
     buildScriptPath: buildScript,
     brotliQuality: quality,
     wasmOptVersion,
+    wasmOptArgs,
     stripVersion,
     brotliVersion,
   });
@@ -84,6 +106,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
       buildScript: fileURLToPath(import.meta.url),
       quality,
       wasmOptVersion: toolVersion("wasm-opt", ["--version"]),
+      wasmOptArgs: WASM_OPT_ARGS,
       stripVersion: toolVersion(env.WASI_STRIP, ["--version"]),
       brotliVersion: `node-zlib libbrotli ${process.versions.brotli}`,
     });
@@ -93,7 +116,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
     } else {
       rmSync(fingerprintFile, { force: true });
       cpSync(builtArtifact, artifact);
-      run("wasm-opt", ["-O4", "--strip-debug", "--strip-dwarf", "--enable-bulk-memory", "--enable-bulk-memory-opt", "--enable-mutable-globals", "--enable-nontrapping-float-to-int", "--enable-sign-ext", "--enable-reference-types", "--enable-simd", "--enable-threads", "-o", `${artifact}.opt`, artifact]);
+      run("wasm-opt", [...WASM_OPT_ARGS, "-o", `${artifact}.opt`, artifact]);
       cpSync(`${artifact}.opt`, artifact);
       rmSync(`${artifact}.opt`, { force: true });
       run(env.WASI_STRIP, [artifact]);
