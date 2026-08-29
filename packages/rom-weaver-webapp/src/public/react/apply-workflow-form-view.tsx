@@ -944,7 +944,6 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         fileSize: romBytes,
         parentCompressions: romInput.archivePathEntries,
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
-        typeLabel: romTypeTag,
       },
       displayName: !staging && identification?.status === "matched" ? identification.name : undefined,
       identified: !staging && identification?.status === "matched",
@@ -961,6 +960,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
       },
       panels: {
         ...(identificationLookup ? { identification: identificationLookup } : {}),
+        ...(romTypeTag ? { platformTag: romTypeTag } : {}),
         info: {
           bytes: romBytes,
           checksums: staging
@@ -1139,6 +1139,9 @@ const renderDiscGroup = (
   });
   const staging = trackRows.some((row) => !!row.progress);
   const overallPercent = getDiscOverallPercent(staging, totalBytes, trackRows, tracks);
+  // Any row of the group carries the disc-group identification the ingest
+  // resolved (tracks and sheet share it), so the disc card gets one drawer.
+  const discIdentification = groupRows.find((row) => row.info.identification)?.info.identification;
   return {
     card: {
       extract: {
@@ -1146,7 +1149,6 @@ const renderDiscGroup = (
         fileEntries,
         fileSize: totalFileBytes || totalBytes || undefined,
         parentCompressions: groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries,
-        typeLabel: discRomTypeTag,
       },
       meta: renderRomCardMeta({
         identificationStatus: undefined,
@@ -1157,6 +1159,8 @@ const renderDiscGroup = (
       }),
       onRemove: removeDisc,
       panels: {
+        ...(discIdentification ? { identification: discIdentification } : {}),
+        ...(discRomTypeTag ? { platformTag: discRomTypeTag } : {}),
         info: { timing: CHECKSUM_TIMING_LABEL(trackRows[0]?.info.checksumTiming) },
         tracks,
         ...(cueText ? { cue: { cueText } } : {}),

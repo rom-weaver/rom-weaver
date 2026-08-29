@@ -41,16 +41,21 @@ const IdentifyDrawer = ({
   defaultOpen,
   identification,
   memberPath,
+  platformTag,
 }: {
   defaultOpen?: boolean;
-  identification: ParsedIdentifyLookupResult;
+  identification?: ParsedIdentifyLookupResult;
   /** Archive-relative member path, when the identified ROM came out of a container. */
   memberPath?: string;
+  /** Detected system tag (e.g. "PSX · CD") shown on the drawer whether or not a title matched. */
+  platformTag?: string;
 }) => {
-  const { condition, database, evidence, hint, matches, platformCandidates, quality, status } = identification;
-  // A structured condition (database required / unsupported media profile) is
-  // worth a drawer even with zero matches; a plain empty lookup is not.
-  if (!(matches.length || condition)) return null;
+  const matches = identification?.matches ?? [];
+  const { condition, database, evidence, hint, platformCandidates, quality, status } = identification ?? {};
+  // The system tag alone is worth a drawer; without it, a structured condition
+  // (database required / unsupported media profile) or matches are, while a
+  // plain empty lookup is not.
+  if (!(matches.length || condition || platformTag)) return null;
   const sourceParts = [database?.source ? identifySourceLabel(database.source) : "", database?.packFormat || ""].filter(
     Boolean,
   );
@@ -73,7 +78,9 @@ const IdentifyDrawer = ({
   );
   const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? []));
   const legacyVariant = matches.some((match) => match.legacyVariant);
-  const mark = IDENTIFY_STATUS_MARK[status];
+  const mark = status ? IDENTIFY_STATUS_MARK[status] : undefined;
+  // The matched title's own platform outranks the probe's tag.
+  const systemTag = platforms.length ? platforms.map(abbreviatePlatform).join(" · ") : platformTag?.trim();
 
   return (
     <Drawer
@@ -82,13 +89,18 @@ const IdentifyDrawer = ({
       label="Identify"
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={
-        condition ? (
-          <DrawerReadout muted>{IDENTIFY_CONDITION_LABEL[condition]}</DrawerReadout>
-        ) : status === "matched" ? (
-          <DrawerReadout>{mark.label}</DrawerReadout>
-        ) : (
-          <DrawerReadout muted>{identifyMatchCountLabel(matches.length)}</DrawerReadout>
-        )
+        <>
+          {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
+          {condition ? (
+            <DrawerReadout muted>{IDENTIFY_CONDITION_LABEL[condition]}</DrawerReadout>
+          ) : status === "matched" && mark ? (
+            <DrawerReadout>{mark.label}</DrawerReadout>
+          ) : status === "ambiguous" ? (
+            <DrawerReadout muted>{identifyMatchCountLabel(matches.length)}</DrawerReadout>
+          ) : status ? (
+            <DrawerReadout muted>Unidentified</DrawerReadout>
+          ) : null}
+        </>
       }
     >
       <div className="identify-drawer-body">
@@ -98,65 +110,74 @@ const IdentifyDrawer = ({
             {hint || "The identification data does not support this input."}
           </p>
         ) : null}
-        <div className="ck-group identify-drawer-group">
-          <div className="ck-group-head">Names</div>
-          <div className="ckrows identify-drawer-aliases">
-            {canonicalNames.map((name) => (
-              <ChecksumRow
-                ariaLabel={`Copy standard name ${name}`}
-                className="identify-alias-row ck-half"
-                copyValue={name}
-                key={name}
-                label="Standard"
-                value={name}
-              />
-            ))}
-            {aliases.map((name) => (
-              <ChecksumRow
-                ariaLabel={`Copy alias name ${name}`}
-                className="identify-alias-row ck-half"
-                copyValue={name}
-                key={name}
-                label="Alias"
-                value={name}
-              />
-            ))}
+        {canonicalNames.length || aliases.length ? (
+          <div className="ck-group identify-drawer-group">
+            <div className="ck-group-head">Names</div>
+            <div className="ckrows identify-drawer-aliases">
+              {canonicalNames.map((name) => (
+                <ChecksumRow
+                  ariaLabel={`Copy standard name ${name}`}
+                  className="identify-alias-row ck-half"
+                  copyValue={name}
+                  key={name}
+                  label="Standard"
+                  value={name}
+                />
+              ))}
+              {aliases.map((name) => (
+                <ChecksumRow
+                  ariaLabel={`Copy alias name ${name}`}
+                  className="identify-alias-row ck-half"
+                  copyValue={name}
+                  key={name}
+                  label="Alias"
+                  value={name}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-        <div className="ck-group identify-drawer-group">
-          <div className="ck-group-head">Evidence</div>
-          <div className="ckrows identify-drawer-evidence">
-            {quality ? <EvidenceRow label="Quality" values={[IDENTIFY_QUALITY_LABEL[quality]]} /> : null}
-            {sourceParts.length ? <EvidenceRow label="Database" values={[sourceParts.join(" · ")]} /> : null}
-            {platformCandidates?.length ? (
-              <EvidenceRow
-                label="Platform candidates"
-                values={platformCandidates.map((candidate) =>
-                  [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" — "),
-                )}
-              />
-            ) : null}
-            {componentEvidence ? (
-              <EvidenceRow
-                label="Components"
-                values={[componentEvidence, ...(evidence?.layoutMatched === false ? ["layout differs"] : [])]}
-              />
-            ) : null}
-            {evidence?.missing?.length ? <EvidenceRow label="Missing" values={evidence.missing} /> : null}
-            {evidence?.unexpected?.length ? <EvidenceRow label="Unexpected" values={evidence.unexpected} /> : null}
-            <EvidenceRow label="Matched by" values={algorithms} />
-            <EvidenceRow label="Variant" values={variants} />
-            <EvidenceRow label="Platform" values={platforms.map(abbreviatePlatform)} />
-            <EvidenceRow label="Source" values={databases} />
-            {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
-            {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
-            {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
-            {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}
-            {status === "ambiguous" ? (
-              <EvidenceRow label="Candidates" values={[identifyMatchCountLabel(matches.length)]} />
-            ) : null}
+        ) : null}
+        {!identification && systemTag ? (
+          <div className="ckrows">
+            <EvidenceRow label="System" values={[systemTag]} />
           </div>
-        </div>
+        ) : null}
+        {identification ? (
+          <div className="ck-group identify-drawer-group">
+            <div className="ck-group-head">Evidence</div>
+            <div className="ckrows identify-drawer-evidence">
+              {quality ? <EvidenceRow label="Quality" values={[IDENTIFY_QUALITY_LABEL[quality]]} /> : null}
+              {sourceParts.length ? <EvidenceRow label="Database" values={[sourceParts.join(" · ")]} /> : null}
+              {platformCandidates?.length ? (
+                <EvidenceRow
+                  label="Platform candidates"
+                  values={platformCandidates.map((candidate) =>
+                    [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" — "),
+                  )}
+                />
+              ) : null}
+              {componentEvidence ? (
+                <EvidenceRow
+                  label="Components"
+                  values={[componentEvidence, ...(evidence?.layoutMatched === false ? ["layout differs"] : [])]}
+                />
+              ) : null}
+              {evidence?.missing?.length ? <EvidenceRow label="Missing" values={evidence.missing} /> : null}
+              {evidence?.unexpected?.length ? <EvidenceRow label="Unexpected" values={evidence.unexpected} /> : null}
+              <EvidenceRow label="Matched by" values={algorithms} />
+              <EvidenceRow label="Variant" values={variants} />
+              <EvidenceRow label="Platform" values={platforms.map(abbreviatePlatform)} />
+              <EvidenceRow label="Source" values={databases} />
+              {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
+              {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
+              {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
+              {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}
+              {status === "ambiguous" ? (
+                <EvidenceRow label="Candidates" values={[identifyMatchCountLabel(matches.length)]} />
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     </Drawer>
   );
