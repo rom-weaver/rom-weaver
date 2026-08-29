@@ -453,6 +453,10 @@ jobs:
       - name: Build production WASM
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
+        env:
+          # A silent stable fallback would let a larger stable module be
+          # cached or shipped where the nightly one is expected.
+          ROM_WEAVER_WASM_REQUIRE_NIGHTLY: "1"
 
       - name: Generate webapp attribution
         run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp

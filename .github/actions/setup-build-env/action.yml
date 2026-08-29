@@ -111,10 +111,12 @@ runs:
       run: |
         toolchain=$(sed -n 's/^env\.ROM_WEAVER_WASM_NIGHTLY = "\(.*\)"$/\1/p' .config/mise.toml)
         if [ -z "$toolchain" ]; then
-          echo "::error::no ROM_WEAVER_WASM_NIGHTLY pin found in .config/mise.toml"
-          exit 1
+          echo "::warning::no ROM_WEAVER_WASM_NIGHTLY pin found in .config/mise.toml; the production WASM build falls back to stable"
+          exit 0
         fi
-        if ! rustup toolchain install "$toolchain" --profile minimal \
+        # `mise exec` so the install lands in the rustup home the pinned
+        # toolchain resolution uses, matching the component steps above.
+        if ! mise exec -- rustup toolchain install "$toolchain" --profile minimal \
           --component rust-src --target wasm32-wasip1-threads; then
           echo "::warning::could not install $toolchain; the production WASM build falls back to stable"
         fi

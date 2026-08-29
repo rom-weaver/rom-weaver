@@ -26,3 +26,11 @@ test("a missing nightly warns and falls back instead of failing", () => {
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /falling back to the stable production build/);
 });
+
+test("ROM_WEAVER_WASM_REQUIRE_NIGHTLY turns every fallback into an error", () => {
+  const { warn } = collect();
+  const required = { ROM_WEAVER_WASM_REQUIRE_NIGHTLY: "1" };
+  assert.throws(() => resolveNightlyToolchain({ ...required }, warn), /ROM_WEAVER_WASM_NIGHTLY is unset/);
+  assert.throws(() => resolveNightlyToolchain({ ...required, ROM_WEAVER_WASM_NIGHTLY: "nightly-0000-00-00" }, warn), /forbids the stable fallback/);
+  assert.throws(() => resolveNightlyToolchain({ ...required, ROM_WEAVER_WASM_NIGHTLY: "nightly-2026-08-25", ROM_WEAVER_WASM_STABLE: "1" }, warn), /conflicts/);
+});

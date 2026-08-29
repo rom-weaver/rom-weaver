@@ -68,16 +68,25 @@ export const NIGHTLY_CARGO_ARGS = ["-Zbuild-std=std,panic_abort"];
 // Returns the toolchain name to build with, or null to build with the default
 // stable toolchain. A nightly that is missing, or is missing a piece the build
 // needs, MUST warn and fall back rather than fail: CI hosts without them still
-// have to produce a module.
+// have to produce a module. ROM_WEAVER_WASM_REQUIRE_NIGHTLY=1 turns every
+// fallback into an error - CI and release jobs set it so a stable module can
+// never be cached, uploaded, or shipped where a nightly one is expected.
 export function resolveNightlyToolchain(env = process.env, warn = (message) => process.stderr.write(message), target = "wasm32-wasip1-threads") {
+  const required = env.ROM_WEAVER_WASM_REQUIRE_NIGHTLY === "1";
   if (env.ROM_WEAVER_WASM_STABLE === "1") {
+    if (required) throw new Error("ROM_WEAVER_WASM_STABLE=1 conflicts with ROM_WEAVER_WASM_REQUIRE_NIGHTLY=1");
     warn("ROM_WEAVER_WASM_STABLE=1; building the production module with the stable toolchain\n");
     return null;
   }
   const toolchain = env.ROM_WEAVER_WASM_NIGHTLY;
-  if (!toolchain) return null;
+  if (!toolchain) {
+    if (required) throw new Error("ROM_WEAVER_WASM_REQUIRE_NIGHTLY=1 but ROM_WEAVER_WASM_NIGHTLY is unset");
+    return null;
+  }
   const fallback = (reason) => {
-    warn(`${reason}; falling back to the stable production build (install it with \`rustup toolchain install ${toolchain} --component rust-src --target ${target}\`)\n`);
+    const remedy = `install it with \`rustup toolchain install ${toolchain} --component rust-src --target ${target}\``;
+    if (required) throw new Error(`${reason}; ROM_WEAVER_WASM_REQUIRE_NIGHTLY=1 forbids the stable fallback (${remedy})`);
+    warn(`${reason}; falling back to the stable production build (${remedy})\n`);
     return null;
   };
   const sysroot = spawnSync("rustup", ["run", toolchain, "rustc", "--print", "sysroot"], { encoding: "utf8" });

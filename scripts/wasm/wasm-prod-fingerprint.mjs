@@ -10,7 +10,7 @@ export function createWasmProdFingerprint({
   brotliQuality,
   brotliVersion,
   buildScriptPath,
-  rustToolchain,
+  rustToolchain = "",
   stripVersion,
   wasmOptVersion,
 }) {
