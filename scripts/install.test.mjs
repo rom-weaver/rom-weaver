@@ -433,16 +433,16 @@ test("needs no jq and no base64 decoder", () => {
   });
 });
 
-test("installs the binary when no Brotli decoder is available", () => {
+test("installs the binary when Brotli decompression fails", () => {
   const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-no-brotli-"));
   try {
     const bin = setUpDarwinInstall(directory);
-    rmSync(join(bin, "brotli"));
+    writeExecutable(join(bin, "brotli"), "#!/bin/sh\nexit 1\n");
 
     const output = runInstall(directory, bin, { ROM_WEAVER_SKIP_ATTESTATION: "1" });
 
     assert.equal(readFileSync(join(directory, "install", "rom-weaver"), "utf8"), "binary\n");
-    assert.match(output, /Brotli decoder unavailable/);
+    assert.match(output, /failed to extract Brotli identify data/);
     assert.ok(!existsSync(join(directory, "install", "share")));
   } finally {
     rmSync(directory, { recursive: true, force: true });
