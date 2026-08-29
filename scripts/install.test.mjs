@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { brotliCompressSync } from "node:zlib";
 import {
   chmodSync,
   existsSync,
@@ -47,10 +48,28 @@ const createIdentifyArchive = (directory) => {
   mkdirSync(data, { recursive: true });
   writeFileSync(join(data, "index.json"), "{}\n");
   const tarPath = join(directory, "identify-data.tar");
-  const archive = join(directory, "identify-data.tar.zst");
+  const archive = join(directory, "identify-data.tar.br");
   execFileSync("tar", ["-cf", tarPath, "-C", source, "share"]);
-  execFileSync("zstd", ["-q", "-f", tarPath, "-o", archive]);
+  writeFileSync(archive, brotliCompressSync(readFileSync(tarPath)));
   return archive;
+};
+
+const createBrotliStub = (bin) => {
+  writeExecutable(
+    join(bin, "brotli"),
+    `#!/bin/sh
+output=
+input=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) output=$2; shift 2 ;;
+    --decompress|--force) shift ;;
+    *) input=$1; shift ;;
+  esac
+done
+exec "${process.execPath}" -e 'const fs=require("node:fs");const zlib=require("node:zlib");const [output,input]=process.argv.slice(1);fs.writeFileSync(output,zlib.brotliDecompressSync(fs.readFileSync(input)));' "$output" "$input"
+`,
+  );
 };
 
 const DIGEST = "b".repeat(64);
@@ -86,7 +105,7 @@ JSON
     fi
     printf '%s' "\${ATTESTATION_STATUS:-200}"
     ;;
-  *identify-data.tar.zst) cp "$IDENTIFY_DATA_ARCHIVE" "$output" ;;
+  *identify-data.tar.br) cp "$IDENTIFY_DATA_ARCHIVE" "$output" ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
   *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output"; printf '200' ;;
   *) echo binary > "$output" ;;
@@ -119,6 +138,7 @@ const setUpDarwinInstall = (directory, options = {}) => {
   );
   writeExecutable(join(bin, "curl"), curlStub(attestation));
   writeExecutable(join(bin, "sha256sum"), SHA256SUM_STUB);
+  createBrotliStub(bin);
   createDocsArchive(directory);
   createBinaryArchive(directory);
   createIdentifyArchive(directory);
@@ -141,7 +161,7 @@ const runInstall = (directory, bin, environment = {}) => {
       ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
       CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
       BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
-      IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.zst"),
+      IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.br"),
       ...rest,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -192,7 +212,7 @@ test("installs the binary for the host platform", () => {
       // `predicate_type` is asserted here because dropping it silently weakens
       // the check: GitHub's automatic release attestation would answer instead.
       `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
-      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-identify-data.tar.zst",
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-identify-data.tar.br",
       `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-cli-assets.tar.gz",
     ]);
@@ -212,6 +232,7 @@ test("selects Linux musl assets by architecture", () => {
       const bin = join(directory, "bin");
       const curlLog = join(directory, "curl.log");
       mkdirSync(bin);
+      createBrotliStub(bin);
       createDocsArchive(directory);
       createBinaryArchive(directory);
       createIdentifyArchive(directory);
@@ -239,7 +260,7 @@ echo "$url" >> "$CURL_LOG"
 case "$url" in
   *.sha256) echo "${"a".repeat(64)}  rom-weaver-${platform}" > "$output" ;;
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
-  *identify-data.tar.zst) cp "$IDENTIFY_DATA_ARCHIVE" "$output" ;;
+  *identify-data.tar.br) cp "$IDENTIFY_DATA_ARCHIVE" "$output" ;;
   *.tar.gz) cp "$BINARY_ASSET_ARCHIVE" "$output"; printf '200' ;;
   *) echo binary > "$output" ;;
 esac
@@ -256,7 +277,7 @@ esac
           ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
           CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
           BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
-          IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.zst"),
+          IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.br"),
           // This test is about asset selection; the provenance branches have
           // their own coverage and would only add noise to its output.
           ROM_WEAVER_SKIP_ATTESTATION: "1",
@@ -412,6 +433,22 @@ test("needs no jq and no base64 decoder", () => {
   });
 });
 
+test("installs the binary when no Brotli decoder is available", () => {
+  const directory = mkdtempSync(join(tmpdir(), "rom-weaver-install-no-brotli-"));
+  try {
+    const bin = setUpDarwinInstall(directory);
+    rmSync(join(bin, "brotli"));
+
+    const output = runInstall(directory, bin, { ROM_WEAVER_SKIP_ATTESTATION: "1" });
+
+    assert.equal(readFileSync(join(directory, "install", "rom-weaver"), "utf8"), "binary\n");
+    assert.match(output, /Brotli decoder unavailable/);
+    assert.ok(!existsSync(join(directory, "install", "share")));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 // Releases up to v0.10.2 shipped a loose executable instead of a tar.gz. The
 // installer must fall back to that name so a pinned old version stays
 // installable.
@@ -433,7 +470,7 @@ done
 echo "$url" >> "$CURL_LOG"
 case "$url" in
   *cli-assets.tar.gz) cp "$CLI_ASSET_ARCHIVE" "$output" ;;
-  *identify-data.tar.zst) exit 22 ;;
+  *identify-data.tar.br) exit 22 ;;
   *.tar.gz) printf '404' ;;
   *) echo binary > "$output" ;;
 esac

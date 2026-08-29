@@ -248,9 +248,7 @@ fn check_pack_size(size: u64, kind: &str) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn extract_archive<R: std::io::Read>(reader: R, destination: &Path) -> Result<()> {
-    let decoder = zstd::stream::read::Decoder::new(reader).map_err(|error| {
-        RomWeaverError::Validation(format!("invalid identify data archive: {error}"))
-    })?;
+    let decoder = brotli::Decompressor::new(reader, 4096);
     let mut archive = tar::Archive::new(decoder);
     let mut extracted_bytes = 0_u64;
     for item in archive.entries().map_err(|error| {
@@ -754,7 +752,7 @@ pub(super) fn install_group(
     } else {
         let version = env!("CARGO_PKG_VERSION");
         let url = format!(
-            "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data-{group}.tar.zst"
+            "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data-{group}.tar.br"
         );
         tracing::debug!(
             url,
@@ -790,7 +788,7 @@ pub(super) fn install_all(database_dir: &Path) -> Result<usize> {
     const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
     let version = env!("CARGO_PKG_VERSION");
     let url = format!(
-        "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data.tar.zst"
+        "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data.tar.br"
     );
     tracing::debug!(url, version, "downloading full identify data archive");
     let mut response = ureq::get(&url).call().map_err(|error| {
@@ -970,7 +968,7 @@ mod tests {
             }
             builder.finish().expect("tar archive");
         }
-        zstd::bulk::compress(&tar_bytes, 1).expect("compressed archive")
+        brotli_compress(&tar_bytes)
     }
 
     fn builder_style_archive(include_pack: bool) -> Vec<u8> {
@@ -1060,7 +1058,7 @@ mod tests {
     #[test]
     fn corrupt_archive_is_rejected_before_install() {
         let temp = assert_fs::TempDir::new().expect("temporary directory");
-        let error = extract_archive(b"not a zstd archive".as_slice(), temp.path())
+        let error = extract_archive(b"not a Brotli archive".as_slice(), temp.path())
             .expect_err("corrupt archive rejected");
         assert!(error.to_string().contains("invalid identify data archive"));
     }
@@ -1192,7 +1190,7 @@ mod tests {
     #[test]
     fn optional_group_install_rejects_an_oversized_local_archive() {
         let temp = assert_fs::TempDir::new().expect("temporary directory");
-        let archive = temp.path().join("oversized.tar.zst");
+        let archive = temp.path().join("oversized.tar.br");
         fs::File::create(&archive)
             .expect("archive fixture")
             .set_len(512 * 1024 * 1024 + 1)

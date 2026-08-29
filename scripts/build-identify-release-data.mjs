@@ -16,11 +16,12 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { brotliDecompressSync } from "node:zlib";
 import { resolveIdentifyPackGroups } from "./identify-pack-groups.mjs";
+import { brotliCompressFile } from "./wasm/brotli-compress.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultInput = join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
 const defaultOut = join(repoRoot, "target", "identify-release");
-const defaultArchive = join(repoRoot, "target", "rom-weaver-identify-data.tar.zst");
+const defaultArchive = join(repoRoot, "target", "rom-weaver-identify-data.tar.br");
 const dataRelativeDir = join("share", "rom-weaver", "identify", "v1");
 
 const parseArgs = (argv) => {
@@ -114,7 +115,7 @@ export const buildIdentifyReleaseData = (options) => {
   rmSync(out, { force: true, recursive: true });
   mkdirSync(archiveDir, { recursive: true });
   for (const name of readdirSync(archiveDir)) {
-    if (/^rom-weaver-identify-data-.+\.tar\.zst$/u.test(name)) {
+    if (/^rom-weaver-identify-data-.+\.tar\.br$/u.test(name)) {
       rmSync(join(archiveDir, name), { force: true });
     }
   }
@@ -163,17 +164,7 @@ export const buildIdentifyReleaseData = (options) => {
       treeRoot,
       "share",
     ]);
-    run("zstd", [
-      "--compress",
-      "--ultra",
-      "-22",
-      "--threads=1",
-      "--force",
-      "--quiet",
-      temporaryTar,
-      "-o",
-      archivePath,
-    ]);
+    brotliCompressFile({ inputPath: temporaryTar, outputPath: archivePath, quality: 11 });
     rmSync(temporaryTar);
     return {
       archive: archivePath,
@@ -197,7 +188,7 @@ export const buildIdentifyReleaseData = (options) => {
     .map((group) =>
       buildArchive(
         group,
-        join(archiveDir, `rom-weaver-identify-data-${group.id}.tar.zst`),
+        join(archiveDir, `rom-weaver-identify-data-${group.id}.tar.br`),
         join(out, `optional-${group.id}`),
       ),
     );

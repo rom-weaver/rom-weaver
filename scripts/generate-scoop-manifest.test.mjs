@@ -20,8 +20,8 @@ test("generates a manifest from the release checksum", () => {
       writeFileSync(join(checksums, `${asset}.sha256`), `${digit.repeat(64)}  ${asset}\n`);
     }
     writeFileSync(
-      join(checksums, "rom-weaver-identify-data.tar.zst.sha256"),
-      `${"d".repeat(64)}  rom-weaver-identify-data.tar.zst\n`,
+      join(checksums, "rom-weaver-identify-data.tar.br.sha256"),
+      `${"d".repeat(64)}  rom-weaver-identify-data.tar.br\n`,
     );
 
     const output = join(directory, "bucket", "rom-weaver.json");
@@ -34,6 +34,16 @@ test("generates a manifest from the release checksum", () => {
     const manifest = JSON.parse(readFileSync(output, "utf8"));
     assert.equal(manifest.version, "1.2.3");
     assert.equal(manifest.bin, "rom-weaver.exe");
+    assert.deepEqual(manifest.depends, ["brotli"]);
+    assert.deepEqual(manifest.installer.script, [
+      '$identifyArchive = Join-Path $dir "rom-weaver-identify-data.tar.br"',
+      '$identifyTar = Join-Path $dir "rom-weaver-identify-data.tar"',
+      "& brotli --decompress --force --output $identifyTar $identifyArchive",
+      'if ($LASTEXITCODE -ne 0) { throw "failed to decompress identify data" }',
+      "& tar --extract --file $identifyTar --directory $dir",
+      'if ($LASTEXITCODE -ne 0) { throw "failed to extract identify data" }',
+      "Remove-Item $identifyArchive, $identifyTar -Force",
+    ]);
     for (const [architecture, platform, digit] of platforms) {
       const asset = `rom-weaver-${platform}.tar.gz`;
       assert.deepEqual(manifest.architecture[architecture].hash, [
@@ -44,7 +54,7 @@ test("generates a manifest from the release checksum", () => {
       // what `bin` points at, so the URL carries no rename fragment.
       assert.deepEqual(manifest.architecture[architecture].url, [
         `https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/${asset}`,
-        "https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/rom-weaver-identify-data.tar.zst",
+        "https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/rom-weaver-identify-data.tar.br",
       ]);
     }
   } finally {
