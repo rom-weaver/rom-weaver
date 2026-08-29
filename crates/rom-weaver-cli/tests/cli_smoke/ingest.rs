@@ -37,10 +37,10 @@ fn ingest_terminal(args: &[&str]) -> Value {
     run_single_json_event(args, 0)
 }
 
-/// Ingest a two-track CD CHD against a per-track (Redump-shaped) pack: the
-/// single-blob lookup cannot match track_file components, so the disc-group
-/// fingerprint built from the streamed track checksums must. A first ingest
-/// without a database supplies the split tracks' checksums for the pack.
+/// Ingest a two-track CD CHD against a per-track (Redump-shaped) pack: every
+/// track resolves to the disc's title, through its own single-blob lookup or
+/// the disc-group fingerprint built from the streamed track checksums. A first
+/// ingest without a database supplies the split tracks' checksums for the pack.
 #[test]
 fn ingest_identifies_a_chd_disc_from_per_track_pack_components() {
     let temp = setup_temp_dir();
@@ -115,7 +115,16 @@ fn ingest_identifies_a_chd_disc_from_per_track_pack_components() {
             identification["matches"][0]["name"],
             "Two Track Quest (USA)"
         );
-        assert_eq!(identification["matches"][0]["variant"], "disc-tracks");
+        // The discriminating data track now also matches through its own
+        // single-blob lookup ("raw"); the non-discriminating track can only be
+        // resolved by the disc-group fingerprint ("disc-tracks").
+        let variant = identification["matches"][0]["variant"]
+            .as_str()
+            .expect("variant");
+        assert!(
+            variant == "disc-tracks" || variant == "raw",
+            "unexpected variant {variant}"
+        );
     }
 }
 
