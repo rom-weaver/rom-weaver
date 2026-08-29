@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
@@ -84,7 +85,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   const outDir = resolve(env.ROM_WEAVER_WASM_OUT_DIR || join(root, "packages/rom-weaver-webapp/src/wasm"));
   const packageDir = join(root, "packages/rom-weaver-webapp/src/wasm");
   const artifact = join(outDir, "rom-weaver-app.wasm");
-  const builtArtifact = join(root, "target", target, "wasm-release", "examples", "rom-weaver-app.wasm");
+  const builtArtifact = join(cargoTargetDir(root, env), target, "wasm-release", "examples", "rom-weaver-app.wasm");
   const fingerprintFile = `${artifact}.prod.sha256`;
   const sourceFingerprintFile = `${artifact}.source.sha256`;
   const sourceFingerprint = createWasmSourceFingerprint(root);

@@ -18,7 +18,10 @@
 # Deliberately not pinned here:
 #   - WASI SDK: its clang shadows the host and breaks libarchive-sys bindgen on
 #     macOS. scripts/wasm/detect-wasi-sdk.sh locates it without changing PATH.
-#   - sccache: install via OS package (brew install sccache / apt install sccache).
+#   - ccache and sccache: install via OS package (brew install ccache sccache /
+#     apt install ccache sccache). [env] resolves both with `command -v`, which
+#     runs before mise puts its own shims on PATH, so a mise-managed install
+#     would be invisible there.
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "24.18.0"
 # rustfmt and clippy are not in the toolchain mise installs by default, and the
@@ -65,8 +68,10 @@ WASI_STRIP = "{{ env.WASI_SDK_PATH }}/bin/llvm-strip"
 
 # cc-rs toolchain wiring for C/C++ dependencies (liblzma, libarchive, ...).
 # Single-threaded target.
-CC_wasm32_wasip1 = "{{ env.WASI_CLANG }} --sysroot={{ env.WASI_SYSROOT }}"
-CXX_wasm32_wasip1 = "{{ env.WASI_CLANGXX }} --sysroot={{ env.WASI_SYSROOT }}"
+# The `ccache ` prefix resolves to empty when ccache is absent, mirroring the
+# CC/CMAKE_C_COMPILER_LAUNCHER policy below.
+CC_wasm32_wasip1 = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANG }} --sysroot={{ env.WASI_SYSROOT }}"
+CXX_wasm32_wasip1 = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANGXX }} --sysroot={{ env.WASI_SYSROOT }}"
 AR_wasm32_wasip1 = "{{ env.WASI_AR }}"
 RANLIB_wasm32_wasip1 = "{{ env.WASI_RANLIB }}"
 CFLAGS_wasm32_wasip1 = "-msimd128"
@@ -90,25 +95,76 @@ RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "0"
 SCCACHE_CACHE_SIZE = "35G"
 
-# cc-rs falls back to RUSTC_WRAPPER above, so every cc-built C dep already goes
-# through sccache. libarchive does not: it is built by cmake::Config
-# (crates/rom-weaver-containers/libarchive/build.rs), and cmake-rs forwards no
-# wrapper, so its ~130 translation units were the one part of the build sccache
-# never saw. CMake initializes the cache variable from this environment variable
-# (since 3.4), so no build.rs change is needed.
+# cc-rs falls back to RUSTC_WRAPPER above, so without CC below every cc-built C
+# dep would go through sccache - and miss across target directories for the same
+# reason as cmake (absolute OUT_DIR paths in every compile line). Routing cc-rs
+# through ccache instead replays 1627/1630 of those ~1600 compiles into a fresh
+# target directory; the 3 recurring misses are structural (openssl-sys passes
+# target-dir paths as -D macro *values* on the command line, and the staged
+# lzma-sdk portable decoder is generated inside OUT_DIR, so its own source path
+# differs per target directory) and no ccache setting can collapse them.
 #
-# Worth having, but only for a clean rebuild into the *same* target directory
-# (measured: 1m55s -> 1m35s). It does nothing across worktrees. cmake-rs puts
-# both the build tree and the patched libarchive sources under OUT_DIR, so every
-# -I in the compile line carries the absolute target path; sccache hashes the
-# command line and has no ccache-style base_dir rewriting, so a different target
-# directory misses on all ~360 C compiles by construction.
+# Empty when ccache is absent: cc-rs treats an empty or whitespace CC as unset
+# (env_tool in cc-rs), so hosts without ccache keep today's behavior, including
+# the sccache fallback via RUSTC_WRAPPER. In CI the C-compiling jobs opt into
+# ccache through `.github/actions/setup-build-env`, which installs it before
+# any mise step so this resolves; every other job leaves it empty. The wasm targets
+# are unaffected either way: their CC_wasm32_* variables above take precedence.
+#
+# A bare CC also wins for every other cross target (cc-rs checks CC_<target>
+# first, then CC), so with ccache installed a non-wasm cross build in this repo
+# gets `cc` instead of cc-rs's derived cross compiler - export CC_<target>
+# for that target if you ever need one. It also replaces cc-rs's platform
+# defaults, which are not `cc` everywhere (MSVC autodetect, gcc on illumos).
+# CI's release platform builds bypass mise entirely and are unaffected.
+CC = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache cc || true') | trim }}"
+CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || true') | trim }}"
+
+# libarchive does not go through cc-rs: it is built by cmake::Config
+# (crates/rom-weaver-containers/libarchive/build.rs), and cmake-rs forwards no
+# wrapper, so its C translation units are the one part of the build sccache
+# never sees. CMake initializes the cache variable from this environment
+# variable (since 3.4), so no build.rs change is needed.
+#
+# ccache first, sccache only as a fallback. cmake-rs puts both the build tree
+# and the patched libarchive sources under OUT_DIR, so every -I and every source
+# path in the compile line carries the absolute target path. sccache hashes that
+# command line verbatim and misses on all ~360 C compiles whenever the target
+# directory changes. ccache's base_dir rewrites absolute paths under it - in the
+# command line and in the recorded include paths - to paths relative to the
+# compiler's working directory, which is itself under OUT_DIR, so the hash comes
+# out identical from any target directory or worktree.
+#
+# Two things base_dir does not cover, measured on a clean containers build
+# replayed into a second target directory:
+#   - CCACHE_NOHASHDIR is required. The dev profile compiles with -g, so ccache
+#     hashes the working directory to keep debug info correct; that directory is
+#     the per-target OUT_DIR. Without it the replay hits 225/313; with it,
+#     313/313. The cost is that debug info in these libarchive objects points at
+#     the OUT_DIR of whichever build populated the cache - already a throwaway
+#     path, since the staged source tree is deleted with the target directory.
+#   - CCACHE_SLOPPINESS is not required. build.rs stages the sources with
+#     fs::copy, giving every header a fresh mtime, but cmake's configure step
+#     runs long enough that no header is still "too new" by the time the
+#     compiles start. The replay above reaches 100% with default strictness, so
+#     include_file_ctime/include_file_mtime stay off.
+#
+# base_dir is the main checkout, not config_root, so a target directory in a
+# sibling worktree under .worktrees/ still falls inside it. A worktree created
+# outside the main checkout silently loses the path rewriting and drops back to
+# per-directory miss rates. When git cannot resolve the checkout (no .git, an
+# exported tarball), the value MUST be empty, never a relative path: ccache
+# hard-fails every compile on a non-absolute CCACHE_BASEDIR, while empty just
+# disables rewriting.
 #
 # Resolved dynamically like RUSTC_WRAPPER: empty is a no-op for CMake, which
-# keeps hosts without sccache - and CI, which deliberately installs none - on
-# the plain compiler. The launcher bakes into CMakeCache.txt at configure time,
-# so an existing OUT_DIR keeps building unwrapped until it is cleaned.
-CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v sccache || true') | trim }}"
+# keeps hosts without either cache - and every CI job that does not opt into
+# `ccache: "true"` in .github/actions/setup-build-env - on the plain compiler.
+# The launcher bakes into CMakeCache.txt at configure
+# time, so an existing OUT_DIR keeps building unwrapped until it is cleaned.
+CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v ccache || command -v sccache || true') | trim }}"
+CCACHE_BASEDIR = "{{ exec(command='d=$(git -C \\'' ~ config_root ~ '\\' rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && dirname \"$d\" || true') | trim }}"
+CCACHE_NOHASHDIR = "1"
 
 # --- Tasks ----------------------------------------------------------------
 

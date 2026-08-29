@@ -8,6 +8,7 @@ import { cpSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import process from "node:process";
 
+import { cargoTargetDir } from "../cargo-target-dir.mjs";
 import { runMain } from "../run-main.mjs";
 
 const TARGET = "wasm32-wasip1-threads";
@@ -18,6 +19,6 @@ runMain(() => {
   mkdirSync(outDir, { recursive: true });
   execFileSync("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", TARGET], { stdio: "inherit" });
   const artifact = join(outDir, "rom-weaver-app.wasm");
-  cpSync(join(root, "target", TARGET, "wasm-release", "examples", "rom-weaver-app.wasm"), artifact);
+  cpSync(join(cargoTargetDir(root), TARGET, "wasm-release", "examples", "rom-weaver-app.wasm"), artifact);
   process.stdout.write(`twiggy-ready artifact: ${artifact}\nrun: twiggy top -n 80 ${artifact}\n`);
 });

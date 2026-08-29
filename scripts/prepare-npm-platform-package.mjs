@@ -3,9 +3,11 @@ import { chmodSync, copyFileSync, cpSync, mkdirSync, readFileSync, rmSync } from
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { cargoTargetDir } from "./cargo-target-dir.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const binaryName = process.platform === "win32" ? "rom-weaver.exe" : "rom-weaver";
-const [platform, binaryPath = resolve(repoRoot, "target/release", binaryName)] =
+const [platform, binaryPath = resolve(cargoTargetDir(repoRoot), "release", binaryName)] =
   process.argv.slice(2);
 
 if (!platform)
