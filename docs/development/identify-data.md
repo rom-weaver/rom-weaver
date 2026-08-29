@@ -1,6 +1,6 @@
 # ROM identify data
 
-ROMWeaver builds deterministic RWFP4 packs from pinned Libretro and OpenGood data. Native packages use Zstandard assets. The webapp uses Brotli assets.
+ROMWeaver builds deterministic RWFP4 packs from pinned Libretro and OpenGood data. Native packages and the webapp use the same Brotli assets.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -61,7 +61,7 @@ Identify requests use the local caches only. A cache miss returns a local error.
 
 ## Native installation
 
-`scripts/build-identify-release-data.mjs` writes each pack as Zstandard. It creates one default archive and one archive for each optional group.
+`scripts/build-identify-release-data.mjs` copies each verified Brotli pack into the native release tree. It wraps that tree in a Zstandard archive and creates one default archive plus one archive for each optional group.
 
 Release archives, npm platform packages, Homebrew, Scoop, and container images install the same static tree under `share/rom-weaver/identify/v1`. The CLI decompresses only the packs it reads.
 

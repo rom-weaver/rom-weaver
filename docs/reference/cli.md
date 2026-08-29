@@ -120,7 +120,7 @@ Not every command takes all four. `extract` has no `--no-extract`, since unpacki
 
 `identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
 
-Native release packages include default Libretro packs plus OpenGood legacy fallbacks. Optional groups use separate Zstandard archives. The default `bundled-identify-data` feature enables packaged lookup.
+Native release packages include default Libretro packs plus OpenGood legacy fallbacks. Each pack uses Brotli, and optional groups use separate Zstandard-compressed archives. The default `bundled-identify-data` feature enables packaged lookup.
 
 Native identify performs no network access.
 
