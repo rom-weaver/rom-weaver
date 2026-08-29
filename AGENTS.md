@@ -200,13 +200,17 @@ instructions do **not** apply here.
 
 Fresh worktrees need `scripts/setup-worktree.mjs` (real `npm ci` installs +
 wasm artifact copy - symlink-mirrored node_modules silently stall vitest's
-browser mode). Sharing one `target/` between checkouts or between native and
-wasm builds is safe: cargo gives every build script a per-target, per-profile
-OUT_DIR, so the cmake builds never collide (the old libarchive breakage died
-with the submodule setup). A fresh target dir is cheap anyway - ccache replays
-the C compiles across target dirs and worktrees. Never put `/` or `+` in a
-worktree name (vitest
-browser mode hangs on `+` in test paths).
+browser mode). One checkout can share a `target/` between native and wasm
+builds: cargo keys every build script's OUT_DIR by target triple and profile,
+so the cmake builds never collide (the old libarchive submodule-era breakage
+is gone). Sharing one target dir between *checkouts* is not safe: same crate,
+same triple, same profile means the same OUT_DIR and the same compiled build
+script, and cargo's mtime-based freshness can silently reuse the other
+checkout's staged libarchive tree; `cargo clean -p rom-weaver-containers`
+is the recovery. A fresh target dir per worktree is cheap when ccache is
+installed - it replays the C compiles across target dirs and worktrees under
+the main checkout. Never put `/` or `+` in a worktree name (vitest browser
+mode hangs on `+` in test paths).
 
 ## Tests
 
