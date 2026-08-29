@@ -68,8 +68,10 @@ WASI_STRIP = "{{ env.WASI_SDK_PATH }}/bin/llvm-strip"
 
 # cc-rs toolchain wiring for C/C++ dependencies (liblzma, libarchive, ...).
 # Single-threaded target.
-CC_wasm32_wasip1 = "{{ env.WASI_CLANG }} --sysroot={{ env.WASI_SYSROOT }}"
-CXX_wasm32_wasip1 = "{{ env.WASI_CLANGXX }} --sysroot={{ env.WASI_SYSROOT }}"
+# The `ccache ` prefix resolves to empty when ccache is absent, mirroring the
+# CC/CMAKE_C_COMPILER_LAUNCHER policy below.
+CC_wasm32_wasip1 = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANG }} --sysroot={{ env.WASI_SYSROOT }}"
+CXX_wasm32_wasip1 = "{{ exec(command='command -v ccache >/dev/null 2>&1 && printf \"ccache \" || true') }}{{ env.WASI_CLANGXX }} --sysroot={{ env.WASI_SYSROOT }}"
 AR_wasm32_wasip1 = "{{ env.WASI_AR }}"
 RANLIB_wasm32_wasip1 = "{{ env.WASI_RANLIB }}"
 CFLAGS_wasm32_wasip1 = "-msimd128"
@@ -108,6 +110,13 @@ SCCACHE_CACHE_SIZE = "35G"
 # ccache through `.github/actions/setup-build-env`, which installs it before
 # any mise step so this resolves; every other job leaves it empty. The wasm targets
 # are unaffected either way: their CC_wasm32_* variables above take precedence.
+#
+# A bare CC also wins for every other cross target (cc-rs checks CC_<target>
+# first, then CC), so with ccache installed a non-wasm cross build in this repo
+# gets `cc` instead of cc-rs's derived cross compiler - export CC_<target>
+# for that target if you ever need one. It also replaces cc-rs's platform
+# defaults, which are not `cc` everywhere (MSVC autodetect, gcc on illumos).
+# CI's release platform builds bypass mise entirely and are unaffected.
 CC = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache cc || true') | trim }}"
 CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || true') | trim }}"
 
