@@ -8,6 +8,16 @@ const u16 = (value) => new Uint8Array([value & 0xff, (value >>> 8) & 0xff]);
 const u32 = (value) =>
   new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff]);
 const u64 = (value) => new Uint8Array([...u32(value), 0, 0, 0, 0]);
+const uvar = (value) => {
+  const bytes = [];
+  do {
+    let byte = value & 0x7f;
+    value >>>= 7;
+    if (value) byte |= 0x80;
+    bytes.push(byte);
+  } while (value);
+  return new Uint8Array(bytes);
+};
 
 const concat = (...parts) => {
   const size = parts.reduce((total, part) => total + part.byteLength, 0);
@@ -20,48 +30,89 @@ const concat = (...parts) => {
   return output;
 };
 
-const hashMember = (algorithm, hash) =>
-  concat(
-    encoder.encode("RWH1"),
-    new Uint8Array([algorithm, 0, hash.length, 0]),
-    u32(1),
-    u32(0),
-    u32(0),
-    hash,
-    u32(0),
-    u32(0),
-  );
+const variableTable = (magic, count, ...records) =>
+  concat(encoder.encode(magic), new Uint8Array([1]), uvar(count), ...records);
 
 const identifyPack = () => {
+  const strings = variableTable(
+    "RWS4",
+    4,
+    uvar(27),
+    encoder.encode("Hello World (WASM Test) [!]"),
+    uvar(11),
+    encoder.encode("Test System"),
+    uvar(9),
+    encoder.encode("full_file"),
+    uvar(8),
+    encoder.encode("game.bin"),
+  );
+  const hashes = variableTable(
+    "RWH4",
+    1,
+    u32(0),
+    u32(7),
+    uvar(5),
+    new Uint8Array([0, 1]),
+    new Uint8Array([0x36, 0x10, 0xa6, 0x86]),
+  );
+  const components = variableTable("RWC4", 1, uvar(0), uvar(3), uvar(0), uvar(0), uvar(0), new Uint8Array([0, 3]));
+  const games = variableTable(
+    "RWG4",
+    1,
+    uvar(0),
+    uvar(1),
+    uvar(0),
+    uvar(0),
+    uvar(0),
+    uvar(0),
+    uvar(0),
+    uvar(1),
+    uvar(0),
+    uvar(0),
+    uvar(0),
+    new Uint8Array([0, 7, 0]),
+  );
   const members = [
-    ["crc32.bin", hashMember(0, new Uint8Array([0x36, 0x10, 0xa6, 0x86]))],
+    ["strings.bin", strings],
+    ["hashes.bin", hashes],
+    ["components.bin", components],
+    ["games.bin", games],
+    ["owners.bin", concat(encoder.encode("RWO4"), new Uint8Array([1]), uvar(1), uvar(1), uvar(0), uvar(1), uvar(0))],
+    ["routes.bin", concat(encoder.encode("RWR4"), new Uint8Array([1]), uvar(1), uvar(0))],
     [
-      "md5.bin",
-      hashMember(
-        1,
-        new Uint8Array([
-          0x5d, 0x41, 0x40, 0x2a, 0xbc, 0x4b, 0x2a, 0x76, 0xb9, 0x71, 0x9d, 0x91, 0x10, 0x17, 0xc5, 0x92,
-        ]),
+      "sets.bin",
+      concat(
+        encoder.encode("RWX4"),
+        new Uint8Array([1]),
+        uvar(1),
+        uvar(0),
+        uvar(1),
+        uvar(0),
+        uvar(0),
+        uvar(0),
+        uvar(0),
+        uvar(0),
       ),
     ],
     [
-      "sha1.bin",
-      hashMember(
-        2,
-        new Uint8Array([
-          0xaa, 0xf4, 0xc6, 0x1d, 0xdc, 0xc5, 0xe8, 0xa2, 0xda, 0xbe, 0xde, 0x0f, 0x3b, 0x48, 0x2c, 0xd9, 0xae, 0xa9,
-          0x43, 0x4d,
-        ]),
+      "manifest.json",
+      encoder.encode(
+        JSON.stringify({
+          format: "rom-weaver-identify-system-pack-v4",
+          platform: "Test System",
+          source: "libretro",
+          canonicalizationProfile: "libretro-clrmamepro-v1",
+          canonicalizationVersion: 1,
+          provenance: [],
+          counts: { games: 1, components: 1, hashes: 1, routedKeys: 1, sharedComponents: 0 },
+        }),
       ),
     ],
-    ["name-platforms.bin", concat(encoder.encode("RWHP"), u16(1), u16(6), u32(0), u16(0))],
-    ["names.json", encoder.encode('["Hello World (WASM Test) [!]"]')],
-    ["platforms.json", encoder.encode('["Test System"]')],
   ];
   const directory = members.map(([name, bytes]) =>
     concat(u16(name.length), u64(bytes.byteLength), encoder.encode(name)),
   );
-  return concat(encoder.encode("RWFP1\0\0\0"), u32(members.length), ...directory, ...members.map(([, bytes]) => bytes));
+  return concat(encoder.encode("RWFP4\0\0\0"), u32(members.length), ...directory, ...members.map(([, bytes]) => bytes));
 };
 
 describe("ROM identify WASM command", () => {
@@ -82,7 +133,7 @@ describe("ROM identify WASM command", () => {
         expect(terminal.details.identify.status).toBe("matched");
         expect(terminal.details.identify.matches).toEqual([
           expect.objectContaining({
-            algorithm: "crc32",
+            algorithm: "components",
             name: "Hello World (WASM Test) [!]",
             platform: "Test System",
             variant: "raw",
@@ -91,6 +142,37 @@ describe("ROM identify WASM command", () => {
       },
       {
         prefix: "rom-weaver-identify-",
+        sourceContents: "hello",
+      },
+    );
+  });
+
+  it("matches a checksum without a source file", async () => {
+    await withTempFixture(
+      async ({ dir, opfsHandle, worker }) => {
+        const databasePath = joinGuestPath(dir, "test.pack");
+        await writeGuestFile(opfsHandle, databasePath, identifyPack());
+
+        const result = await worker.runJson(
+          createRomWeaverCommand("identify", {
+            database: [databasePath],
+            hash: "3610a686",
+          }),
+        );
+        const terminal = assertRunJsonSucceeded(result, { command: "identify" });
+
+        expect(terminal.details.identify.status).toBe("matched");
+        expect(terminal.details.identify.matches).toEqual([
+          expect.objectContaining({
+            algorithm: "crc32",
+            name: "Hello World (WASM Test) [!]",
+            platform: "Test System",
+            variant: "manual",
+          }),
+        ]);
+      },
+      {
+        prefix: "rom-weaver-identify-hash-",
         sourceContents: "hello",
       },
     );
@@ -114,7 +196,7 @@ describe("ROM identify WASM command", () => {
         expect(terminal.details.ingest.assets[0].identification).toEqual({
           matches: [
             expect.objectContaining({
-              algorithm: "crc32",
+              algorithm: "components",
               name: "Hello World (WASM Test) [!]",
               variant: "raw",
             }),

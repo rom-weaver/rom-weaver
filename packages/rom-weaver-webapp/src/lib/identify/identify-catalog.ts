@@ -9,7 +9,7 @@ type IdentifyCatalogPlatform = {
   aliases: string[];
   canonicalPlatform: string;
   mediaProfiles: string[];
-  packFormat: string;
+  packFormat: "RWFP4";
   packSha256: string;
   packSlug: string;
   source: IdentifyCatalogSource;
@@ -25,6 +25,7 @@ type IdentifyCatalog = {
 };
 
 const IDENTIFY_CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
+const IDENTIFY_PACK_FORMAT = "RWFP4";
 
 /** Mirrors the platform alias normalizer used by the identify data scripts. */
 const normalizePlatformAlias = (value: string): string =>
@@ -41,7 +42,12 @@ const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefin
   const record = value as Record<string, unknown>;
   const canonicalPlatform = typeof record.canonicalPlatform === "string" ? record.canonicalPlatform : "";
   const packSlug = typeof record.packSlug === "string" ? record.packSlug : "";
-  if (!(canonicalPlatform && packSlug && isCatalogSource(record.source))) return undefined;
+  if (
+    !(canonicalPlatform && packSlug && isCatalogSource(record.source)) ||
+    record.packFormat !== IDENTIFY_PACK_FORMAT
+  ) {
+    return undefined;
+  }
   // The slug becomes a fetch path (`<origin>/<slug>.pack`) and a store key, so
   // it MUST NOT carry separators or dots. Mirrors the Rust catalog parser.
   if (!/^[a-z0-9-]+$/u.test(packSlug)) return undefined;
@@ -55,7 +61,7 @@ const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefin
     mediaProfiles: Array.isArray(record.mediaProfiles)
       ? record.mediaProfiles.filter((profile) => typeof profile === "string")
       : [],
-    packFormat: typeof record.packFormat === "string" ? record.packFormat : "RWFP1",
+    packFormat: IDENTIFY_PACK_FORMAT,
     packSha256: typeof record.packSha256 === "string" ? record.packSha256 : "",
     packSlug,
     source: record.source,

@@ -13,8 +13,8 @@ const fixture = ({ grouped = false } = {}) => {
   const input = join(root, "input");
   mkdirSync(input);
   const packs = [
-    ["zeta", Buffer.from("RWFP1 zeta fixture")],
-    ["alpha", Buffer.from("RWFP2 alpha fixture")],
+    ["zeta", Buffer.from("RWFP4 zeta fixture")],
+    ["alpha", Buffer.from("RWFP4 alpha fixture")],
   ];
   const systems = packs.map(([slug, bytes]) => {
     const file = `${slug}.pack`;

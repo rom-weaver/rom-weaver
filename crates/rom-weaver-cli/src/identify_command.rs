@@ -8,7 +8,8 @@ use rom_weaver_checksum::artifact_match::{
 use rom_weaver_checksum::identify_catalog::{
     IdentifyCatalog, IdentifyPlatformCatalogEntry, IdentifySource,
 };
-use rom_weaver_checksum::identify_pack::{IdentifyPackFile, IdentifyQuery, SystemPack};
+use rom_weaver_checksum::identify_pack::IdentifyPackFile;
+use rom_weaver_checksum::identify_pack_v4::{PackGame, UpstreamSource};
 use rom_weaver_checksum::platform_detection::platform as platform_names;
 use rom_weaver_core::{
     ComponentRole, DetectionConfidence, DetectionEvidence, MediaKind, PlatformCandidate,
@@ -184,53 +185,21 @@ pub struct IdentifyResult {
     pub hint: Option<String>,
 }
 
-/// Resolve one checksum query against a V1 pack, appending unseen titles.
-fn resolve_query_in_pack(
-    database_name: &str,
-    pack: &SystemPack,
-    query: &IdentifyQuery<'_>,
-    variant: &str,
-    seen: &mut BTreeSet<(String, String)>,
-    output: &mut Vec<IdentifyTitleMatch>,
-) -> Result<()> {
-    let lookup = pack.resolve(query)?;
-    trace!(
-        database = database_name,
-        algorithm = lookup.algorithm.unwrap_or("none"),
-        variant,
-        match_count = lookup.matches.len(),
-        "resolved ROM identify lookup"
-    );
-    let Some(algorithm) = lookup.algorithm else {
-        return Ok(());
-    };
-    for title in lookup.matches {
-        let key = (title.name.clone(), title.platform.clone());
-        if !seen.insert(key) {
-            continue;
-        }
-        output.push(IdentifyTitleMatch {
-            name: title.name,
-            platform: title.platform,
-            algorithm: algorithm.to_string(),
-            variant: variant.to_string(),
-            database: database_name.to_string(),
-            provenance: Vec::new(),
-            legacy_variant: false,
-            dump_tags: Vec::new(),
-        });
-    }
-    Ok(())
-}
-
-/// Parsed identify packs shared by one command invocation (ingest and patch
-/// hints). Packs are parsed once, then reused for every ROM asset and patch
-/// descriptor produced by that invocation.
 pub(super) struct IdentifyDatabaseSet {
     packs: Vec<(String, IdentifyPackFile)>,
 }
 
 impl IdentifyDatabaseSet {
+    fn parse_pack(bytes: &[u8]) -> Result<IdentifyPackFile> {
+        let pack = IdentifyPackFile::parse(bytes)?;
+        if !matches!(pack, IdentifyPackFile::V4(_)) {
+            return Err(RomWeaverError::Validation(
+                "invalid ROM identify pack: expected RWFP4".to_string(),
+            ));
+        }
+        Ok(pack)
+    }
+
     pub(super) fn load(databases: &[PathBuf]) -> Result<Option<Self>> {
         if databases.is_empty() {
             #[cfg(target_arch = "wasm32")]
@@ -248,7 +217,7 @@ impl IdentifyDatabaseSet {
                     database.display()
                 ))
             })?;
-            let pack = IdentifyPackFile::parse(&bytes).map_err(|error| {
+            let pack = Self::parse_pack(&bytes).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "invalid ROM identify pack `{}`: {error}",
                     database.display()
@@ -279,13 +248,13 @@ impl IdentifyDatabaseSet {
                 "loading packaged ROM identify pack"
             );
             let bytes = super::identify_builtin::decompress(&path)?;
-            packs.push((database_name, IdentifyPackFile::parse(&bytes)?));
+            packs.push((database_name, Self::parse_pack(&bytes)?));
         }
         Ok(Self { packs })
     }
 
     /// `raw_size` is the size of the raw payload behind the `raw` checksum
-    /// variant. Artifact packs (RWFP2+) route by (crc32, size) and are only
+    /// variant. RWFP4 packs route by (crc32, size) and are only
     /// searched when it is known.
     pub(super) fn resolve_variants(
         &self,
@@ -294,20 +263,6 @@ impl IdentifyDatabaseSet {
     ) -> Result<IdentifyLookupResult> {
         let mut output = Vec::new();
         let mut seen = BTreeSet::new();
-        for variant in variants {
-            let variant_id = variant.get("id").and_then(Value::as_str).unwrap_or("raw");
-            let values = checksum_map(variant.get("checksums"));
-            self.resolve_query(
-                &IdentifyQuery {
-                    crc32: values.get("crc32").map(String::as_str),
-                    md5: values.get("md5").map(String::as_str),
-                    sha1: values.get("sha1").map(String::as_str),
-                },
-                variant_id,
-                &mut seen,
-                &mut output,
-            )?;
-        }
         for variant in variants {
             let variant_id = variant.get("id").and_then(Value::as_str).unwrap_or("raw");
             let Some(variant_size) = variant_payload_size(variant, raw_size) else {
@@ -336,18 +291,8 @@ impl IdentifyDatabaseSet {
         output: &mut Vec<IdentifyTitleMatch>,
     ) -> Result<()> {
         for (database_name, pack) in &self.packs {
-            let outcome = match pack {
-                IdentifyPackFile::V1(_) => continue,
-                IdentifyPackFile::V2(pack) => {
-                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
-                }
-                IdentifyPackFile::V3(pack) => {
-                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
-                }
-                IdentifyPackFile::V4(pack) => {
-                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
-                }
-            };
+            let IdentifyPackFile::V4(pack) = pack;
+            let outcome = match_single_blob(database_name, pack, raw_size, raw_checksums)?;
             let Some(outcome) = outcome else {
                 trace!(
                     database = database_name,
@@ -372,15 +317,72 @@ impl IdentifyDatabaseSet {
         let mut output = Vec::new();
         let mut seen = BTreeSet::new();
         for (database_name, pack) in &self.packs {
-            let outcome = match pack {
-                IdentifyPackFile::V1(_) => continue,
-                IdentifyPackFile::V2(pack) => match_fingerprint(database_name, pack, fingerprint)?,
-                IdentifyPackFile::V3(pack) => match_fingerprint(database_name, pack, fingerprint)?,
-                IdentifyPackFile::V4(pack) => match_fingerprint(database_name, pack, fingerprint)?,
-            };
+            let IdentifyPackFile::V4(pack) = pack;
+            let outcome = match_fingerprint(database_name, pack, fingerprint)?;
             push_artifact_matches(database_name, variant, outcome, &mut seen, &mut output);
         }
         Ok(identify_lookup_result(output))
+    }
+
+    fn resolve_checksums(
+        &self,
+        checksums: &BTreeMap<String, String>,
+        variant: &str,
+        seen: &mut BTreeSet<(String, String)>,
+        output: &mut Vec<IdentifyTitleMatch>,
+    ) {
+        if checksums.is_empty() {
+            return;
+        }
+        for (database_name, pack) in &self.packs {
+            let IdentifyPackFile::V4(pack) = pack;
+            for game in pack.games() {
+                let matched = game.components.iter().any(|component| {
+                    checksums.iter().all(|(algorithm, expected)| {
+                        let actual = match algorithm.as_str() {
+                            "crc32" => component.crc32.as_ref(),
+                            "md5" => component.md5.as_ref(),
+                            "sha1" => component.sha1.as_ref(),
+                            _ => None,
+                        };
+                        actual == Some(expected)
+                    })
+                });
+                let key = (game.name.clone(), game.platform.clone());
+                if !(matched && seen.insert(key)) {
+                    continue;
+                }
+                output.push(IdentifyTitleMatch {
+                    name: game.name.clone(),
+                    platform: game.platform.clone(),
+                    algorithm: checksums.keys().cloned().collect::<Vec<_>>().join("+"),
+                    variant: variant.to_string(),
+                    database: database_name.clone(),
+                    provenance: game
+                        .provenance
+                        .iter()
+                        .cloned()
+                        .map(|item| IdentifyProvenance {
+                            source: item.source,
+                            source_name: item.source_name,
+                            source_url: item.source_url,
+                            source_commit: item.source_commit,
+                            license: item.license,
+                        })
+                        .collect(),
+                    legacy_variant: game.legacy_variant,
+                    dump_tags: game.dump_tags.clone(),
+                });
+            }
+        }
+    }
+
+    pub(super) fn resolve_hash(&self, algorithm: &str, hash: &str) -> IdentifyLookupResult {
+        let checksums = BTreeMap::from([(algorithm.to_string(), hash.to_string())]);
+        let mut output = Vec::new();
+        let mut seen = BTreeSet::new();
+        self.resolve_checksums(&checksums, "manual", &mut seen, &mut output);
+        identify_lookup_result(output)
     }
 
     pub(super) fn resolve_source(
@@ -404,62 +406,18 @@ impl IdentifyDatabaseSet {
         }
         let mut output = Vec::new();
         let mut seen = BTreeSet::new();
-        if !embedded.is_empty() {
-            for (index, checksums) in embedded.iter().enumerate() {
-                let variant = if index == 0 {
-                    "source".to_string()
-                } else {
-                    format!("source-{}", index + 1)
-                };
-                self.resolve_query(
-                    &IdentifyQuery {
-                        crc32: checksums.get("crc32").map(String::as_str),
-                        md5: checksums.get("md5").map(String::as_str),
-                        sha1: checksums.get("sha1").map(String::as_str),
-                    },
-                    &variant,
-                    &mut seen,
-                    &mut output,
-                )?;
-            }
-        } else {
-            self.resolve_query(
-                &IdentifyQuery {
-                    crc32: filename_checksums.get("crc32").map(String::as_str),
-                    md5: filename_checksums.get("md5").map(String::as_str),
-                    sha1: filename_checksums.get("sha1").map(String::as_str),
-                },
-                "filename",
-                &mut seen,
-                &mut output,
-            )?;
+        for (index, checksums) in embedded.iter().enumerate() {
+            let variant = if index == 0 {
+                "source".to_string()
+            } else {
+                format!("source-{}", index + 1)
+            };
+            self.resolve_checksums(checksums, &variant, &mut seen, &mut output);
+        }
+        if embedded.is_empty() {
+            self.resolve_checksums(filename_checksums, "filename", &mut seen, &mut output);
         }
         Ok(Some(identify_lookup_result(output)))
-    }
-
-    fn resolve_query(
-        &self,
-        query: &IdentifyQuery<'_>,
-        variant: &str,
-        seen: &mut BTreeSet<(String, String)>,
-        output: &mut Vec<IdentifyTitleMatch>,
-    ) -> Result<()> {
-        for (database_name, pack) in &self.packs {
-            match pack {
-                IdentifyPackFile::V1(pack) => {
-                    resolve_query_in_pack(database_name, pack, query, variant, seen, output)?;
-                }
-                IdentifyPackFile::V2(_) | IdentifyPackFile::V3(_) | IdentifyPackFile::V4(_) => {
-                    // Artifact packs route by (crc32, size); this hash-only
-                    // query has no size, so they cannot answer it.
-                    trace!(
-                        database = database_name,
-                        variant, "skipping artifact pack for a size-less checksum query"
-                    );
-                }
-            }
-        }
-        Ok(())
     }
 }
 
@@ -537,47 +495,21 @@ fn quality_label(quality: ArtifactMatchQuality) -> &'static str {
 
 fn database_info_for(
     pack: &LoadedPack,
-    entry: Option<&IdentifyPlatformCatalogEntry>,
+    _entry: Option<&IdentifyPlatformCatalogEntry>,
 ) -> IdentifyDatabaseInfo {
-    match &pack.file {
-        IdentifyPackFile::V2(artifact) => IdentifyDatabaseInfo {
-            source: Some(source_label(artifact.source()).to_string()),
-            upstream_sources: Vec::new(),
-            revision: None,
-            pack_format: "RWFP2".to_string(),
-            canonicalization_profile: Some(artifact.canonicalization_profile().to_string()),
-        },
-        IdentifyPackFile::V3(artifact) => IdentifyDatabaseInfo {
-            source: Some(source_label(artifact.source()).to_string()),
-            upstream_sources: Vec::new(),
-            revision: None,
-            pack_format: "RWFP3".to_string(),
-            canonicalization_profile: Some(artifact.canonicalization_profile().to_string()),
-        },
-        IdentifyPackFile::V4(artifact) => IdentifyDatabaseInfo {
-            source: Some(source_label(artifact.source()).to_string()),
-            upstream_sources: Vec::new(),
-            revision: None,
-            pack_format: "RWFP4".to_string(),
-            canonicalization_profile: Some(artifact.canonicalization_profile().to_string()),
-        },
-        IdentifyPackFile::V1(_) => IdentifyDatabaseInfo {
-            source: entry.map(|entry| source_label(entry.source).to_string()),
-            upstream_sources: Vec::new(),
-            revision: None,
-            pack_format: "RWFP1".to_string(),
-            canonicalization_profile: entry.and_then(|entry| entry.media_profiles.first().cloned()),
-        },
+    let IdentifyPackFile::V4(artifact) = &pack.file;
+    IdentifyDatabaseInfo {
+        source: Some(source_label(artifact.source()).to_string()),
+        upstream_sources: Vec::new(),
+        revision: None,
+        pack_format: "RWFP4".to_string(),
+        canonicalization_profile: Some(artifact.canonicalization_profile().to_string()),
     }
 }
 
-/// The upstream dump sources of the matched games in one V2 pack, deduped and
+/// The upstream dump sources of the matched games in one RWFP4 pack, deduped and
 /// sorted; "unknown" is omitted. Empty when no matched game states one.
-fn matched_upstream_sources(
-    games: &[rom_weaver_checksum::identify_pack_v2::PackGame],
-    matched: &[(String, String)],
-) -> Vec<String> {
-    use rom_weaver_checksum::identify_pack_v2::UpstreamSource;
+fn matched_upstream_sources(games: &[PackGame], matched: &[(String, String)]) -> Vec<String> {
     let mut sources: BTreeSet<&'static str> = BTreeSet::new();
     for game in games {
         if !matched
@@ -1019,27 +951,12 @@ impl CliApp {
                      database install-all` or pass `--database-dir` with an existing user database"
                 ));
             } else if let Some(selected) = selected.iter().find(|selected| {
-                let profile = match &selected.pack.file {
-                    IdentifyPackFile::V2(pack) => Some(pack.canonicalization_profile().to_string()),
-                    IdentifyPackFile::V3(pack) => Some(pack.canonicalization_profile().to_string()),
-                    IdentifyPackFile::V4(pack) => Some(pack.canonicalization_profile().to_string()),
-                    IdentifyPackFile::V1(_) => selected
-                        .entry
-                        .as_ref()
-                        .and_then(|entry| entry.media_profiles.first().cloned()),
-                };
+                let IdentifyPackFile::V4(pack) = &selected.pack.file;
+                let profile = Some(pack.canonicalization_profile().to_string());
                 profile.as_deref().is_some_and(profile_needs_tracks)
             }) {
-                let profile = match &selected.pack.file {
-                    IdentifyPackFile::V2(pack) => pack.canonicalization_profile().to_string(),
-                    IdentifyPackFile::V3(pack) => pack.canonicalization_profile().to_string(),
-                    IdentifyPackFile::V4(pack) => pack.canonicalization_profile().to_string(),
-                    IdentifyPackFile::V1(_) => selected
-                        .entry
-                        .as_ref()
-                        .and_then(|entry| entry.media_profiles.first().cloned())
-                        .unwrap_or_default(),
-                };
+                let IdentifyPackFile::V4(pack) = &selected.pack.file;
+                let profile = pack.canonicalization_profile().to_string();
                 condition = Some("unsupported_media_profile".to_string());
                 hint = Some(format!(
                     "this system's pack ({profile}) stores CD dumps as per-track hashes, but \
@@ -1144,21 +1061,7 @@ impl CliApp {
             "label": "Manual",
             "checksums": { algorithm: hash },
         })];
-        let lookup = match databases.resolve_variants(&checksum_variants, None) {
-            Ok(lookup) => lookup,
-            Err(error) => {
-                return self.finish(
-                    "identify",
-                    OperationReport::failed(
-                        OperationFamily::Command,
-                        Some("identify".to_string()),
-                        "identify",
-                        error.to_string(),
-                        None,
-                    ),
-                );
-            }
-        };
+        let lookup = databases.resolve_hash(algorithm, &hash);
         let label = match lookup.status {
             IdentifyStatus::Matched => format!("identified {}", lookup.matches[0].name),
             IdentifyStatus::Ambiguous => format!("found {} possible titles", lookup.matches.len()),
@@ -1204,7 +1107,7 @@ impl CliApp {
                     database.display()
                 ))
             })?;
-            let file = IdentifyPackFile::parse(&bytes).map_err(|error| {
+            let file = IdentifyDatabaseSet::parse_pack(&bytes).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "invalid ROM identify pack `{}`: {error}",
                     database.display()
@@ -1282,8 +1185,8 @@ impl CliApp {
         Ok((selected, missing))
     }
 
-    /// Run the V1 variant lookups and the V2 single-blob fingerprint match
-    /// over the selected packs, merging into one ordered match list.
+    /// Run the RWFP4 single-blob fingerprint match over the selected packs,
+    /// merging into one ordered match list.
     fn resolve_against_selected(
         selected: &[SelectedPack],
         checksum_variants: &[Value],
@@ -1293,104 +1196,28 @@ impl CliApp {
         let mut merged = MergedMatches::default();
 
         for selected_pack in selected {
-            match &selected_pack.pack.file {
-                IdentifyPackFile::V1(pack) => {
-                    let before = merged.matches.len();
-                    for variant in checksum_variants {
-                        let variant_id = variant.get("id").and_then(Value::as_str).unwrap_or("raw");
-                        let values = checksum_map(variant.get("checksums"));
-                        resolve_query_in_pack(
-                            &selected_pack.pack.name,
-                            pack,
-                            &IdentifyQuery {
-                                crc32: values.get("crc32").map(String::as_str),
-                                md5: values.get("md5").map(String::as_str),
-                                sha1: values.get("sha1").map(String::as_str),
-                            },
-                            variant_id,
-                            &mut merged.seen,
-                            &mut merged.matches,
-                        )?;
-                    }
-                    if merged.matches.len() > before && merged.database.is_none() {
-                        merged.database = Some(database_info_for(
-                            &selected_pack.pack,
-                            selected_pack.entry.as_ref(),
-                        ));
-                    }
-                }
-                IdentifyPackFile::V2(pack) => {
-                    let outcomes = match_variant_blobs(
-                        &selected_pack.pack.name,
-                        pack,
-                        checksum_variants,
-                        raw_size,
-                        raw_checksums,
-                    )?;
-                    if outcomes.is_empty() {
-                        trace!(
-                            database = %selected_pack.pack.name,
-                            "skipping RWFP2 pack: the raw payload size is unknown"
-                        );
-                        continue;
-                    }
-                    for (variant, outcome) in outcomes {
-                        merged.merge_artifact_outcome(
-                            &selected_pack.pack,
-                            selected_pack.entry.as_ref(),
-                            &variant,
-                            outcome,
-                        );
-                    }
-                }
-                IdentifyPackFile::V3(pack) => {
-                    let outcomes = match_variant_blobs(
-                        &selected_pack.pack.name,
-                        pack,
-                        checksum_variants,
-                        raw_size,
-                        raw_checksums,
-                    )?;
-                    if outcomes.is_empty() {
-                        trace!(
-                            database = %selected_pack.pack.name,
-                            "skipping RWFP3 pack: the raw payload size is unknown"
-                        );
-                        continue;
-                    }
-                    for (variant, outcome) in outcomes {
-                        merged.merge_artifact_outcome(
-                            &selected_pack.pack,
-                            selected_pack.entry.as_ref(),
-                            &variant,
-                            outcome,
-                        );
-                    }
-                }
-                IdentifyPackFile::V4(pack) => {
-                    let outcomes = match_variant_blobs(
-                        &selected_pack.pack.name,
-                        pack,
-                        checksum_variants,
-                        raw_size,
-                        raw_checksums,
-                    )?;
-                    if outcomes.is_empty() {
-                        trace!(
-                            database = %selected_pack.pack.name,
-                            "skipping RWFP4 pack: the raw payload size is unknown"
-                        );
-                        continue;
-                    }
-                    for (variant, outcome) in outcomes {
-                        merged.merge_artifact_outcome(
-                            &selected_pack.pack,
-                            selected_pack.entry.as_ref(),
-                            &variant,
-                            outcome,
-                        );
-                    }
-                }
+            let IdentifyPackFile::V4(pack) = &selected_pack.pack.file;
+            let outcomes = match_variant_blobs(
+                &selected_pack.pack.name,
+                pack,
+                checksum_variants,
+                raw_size,
+                raw_checksums,
+            )?;
+            if outcomes.is_empty() {
+                trace!(
+                    database = %selected_pack.pack.name,
+                    "skipping RWFP4 pack: the raw payload size is unknown"
+                );
+                continue;
+            }
+            for (variant, outcome) in outcomes {
+                merged.merge_artifact_outcome(
+                    &selected_pack.pack,
+                    selected_pack.entry.as_ref(),
+                    &variant,
+                    outcome,
+                );
             }
         }
         let MergedMatches {
@@ -1416,7 +1243,7 @@ impl CliApp {
     }
 }
 
-/// Match accumulator shared by the V1 and V2 lookup paths of one identify run.
+/// Match accumulator for one RWFP4 identify run.
 #[derive(Default)]
 struct MergedMatches {
     seen: BTreeSet<(String, String)>,
@@ -1512,18 +1339,8 @@ impl MergedMatches {
         }
         if self.database.is_none() && !added.is_empty() {
             let mut info = database_info_for(pack, entry);
-            info.upstream_sources = match &pack.file {
-                IdentifyPackFile::V2(artifact) => {
-                    matched_upstream_sources(artifact.games(), &added)
-                }
-                IdentifyPackFile::V3(artifact) => {
-                    matched_upstream_sources(artifact.games(), &added)
-                }
-                IdentifyPackFile::V4(artifact) => {
-                    matched_upstream_sources(artifact.games(), &added)
-                }
-                IdentifyPackFile::V1(_) => Vec::new(),
-            };
+            let IdentifyPackFile::V4(artifact) = &pack.file;
+            info.upstream_sources = matched_upstream_sources(artifact.games(), &added);
             self.database = Some(info);
         }
     }

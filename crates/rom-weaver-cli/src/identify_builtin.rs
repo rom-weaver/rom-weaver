@@ -890,7 +890,7 @@ mod tests {
                 "source": "redump",
                 "mediaProfiles": ["redump-cd-track-v1"],
                 "packSlug": slug,
-                "packFormat": "RWFP2",
+                "packFormat": "RWFP4",
                 "canonicalizationVersion": 1
             }]
         }))
@@ -965,7 +965,7 @@ mod tests {
 
     #[test]
     fn packaged_pack_decompression_reads_one_zstd_frame() {
-        let expected = b"RWFP2\0\0\0pack data";
+        let expected = b"RWFP4\0\0\0pack data";
         let compressed = zstd::bulk::compress(expected, 1).expect("compressed fixture");
         assert_eq!(
             decompress_bytes(&compressed, "fixture", expected.len()).expect("decompressed fixture"),
@@ -978,7 +978,7 @@ mod tests {
         let temp = assert_fs::TempDir::new().expect("temporary directory");
         let packs = temp.path().join("packs");
         fs::create_dir_all(&packs).expect("packs directory");
-        let raw = b"RWFP2\0\0\0pack data";
+        let raw = b"RWFP4\0\0\0pack data";
         let compressed = zstd::bulk::compress(raw, 1).expect("compressed fixture");
         let pack = packs.join("test.pack.zst");
         fs::write(&pack, &compressed).expect("pack fixture");
@@ -1079,7 +1079,7 @@ mod tests {
                     "source": "libretro",
                     "mediaProfiles": ["libretro-clrmamepro-v1"],
                     "packSlug": "base",
-                    "packFormat": "RWFP2",
+                    "packFormat": "RWFP4",
                     "canonicalizationVersion": 1,
                 }],
             }))

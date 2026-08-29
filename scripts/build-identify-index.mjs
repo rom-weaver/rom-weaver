@@ -15,21 +15,10 @@ const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-identify-dats");
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
-const PACK_MAGIC = Buffer.from("RWFP1\0\0\0", "binary");
-const PACK_MAGIC_V2 = Buffer.from("RWFP2\0\0\0", "binary");
-const PACK_MAGIC_V3 = Buffer.from("RWFP3\0\0\0", "binary");
-const PACK_MAGIC_V4 = Buffer.from("RWFP4\0\0\0", "binary");
-const HASH_MAGIC = Buffer.from("RWH1", "binary");
-const PAIR_MAGIC = Buffer.from("RWHP", "binary");
-const ROUTE_MAGIC = Buffer.from("RWR2", "binary");
-const REFS_MAGIC = Buffer.from("RWX2", "binary");
-const CONFLICT_VALUE_FLAG = 0x80000000;
-const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v2";
+const PACK_MAGIC = Buffer.from("RWFP4\0\0\0", "binary");
 const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
+export const PACK_FORMAT = "rom-weaver-identify-system-pack-v4";
 export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
-export const INDEX_FORMAT_V2 = "rom-weaver-identify-system-pack-v2";
-export const INDEX_FORMAT_V3 = "rom-weaver-identify-system-pack-v3";
-export const INDEX_FORMAT_V4 = "rom-weaver-identify-system-pack-v4";
 export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
 // OpenGood publishes GoodTools cartridge sets as CC0 Logiqx XML DATs. It adds
@@ -473,12 +462,6 @@ export function normalizeAlias(value) {
     .trim();
 }
 
-const ALGORITHMS = Object.freeze({
-  crc32: { code: 0, hashBytes: 4 },
-  md5: { code: 1, hashBytes: 16 },
-  sha1: { code: 2, hashBytes: 20 },
-});
-
 const usage = () => `Build per-system RWFP4 ROM-identify packs from pinned Libretro DATs.
 Mapped OpenGood records add legacy variants. index.json and catalog.json are
 written next to the packs.
@@ -725,30 +708,6 @@ function normalizeHex(value, expectedLength) {
   return /^[0-9a-f]+$/u.test(normalized) ? normalized : "";
 }
 
-function base64Utf8(value) {
-  return Buffer.from(value, "utf8").toString("base64");
-}
-
-// Normalize one ROM's hashes and append a row to the shared rows stream.
-// Shared by the Redump (JSON) and OpenGood (XML) producers so both emit the
-// identical `crc\tmd5\tsha1\tplatformB64\tnameB64` line format.
-async function writeRow(state, rawCrc, rawMd5, rawSha1, platform, name) {
-  state.romRows += 1;
-  const crc32 = normalizeHex(rawCrc, 8);
-  const md5 = normalizeHex(rawMd5, 32);
-  const sha1 = normalizeHex(rawSha1, 40);
-  if (!crc32 && !md5 && !sha1) {
-    state.rowsMissingAllHashes += 1;
-    return;
-  }
-  if (
-    !state.stream.write(`${crc32}\t${md5}\t${sha1}\t${base64Utf8(platform)}\t${base64Utf8(name)}\n`)
-  ) {
-    await once(state.stream, "drain");
-  }
-  state.rowsWithAnyHash += 1;
-}
-
 const XML_ENTITIES = Object.freeze({ amp: "&", apos: "'", gt: ">", lt: "<", quot: '"' });
 
 function xmlUnescape(value) {
@@ -773,44 +732,6 @@ function parseAttributes(tag) {
     match = matcher.exec(tag);
   }
   return attributes;
-}
-
-// Parse a Logiqx XML DAT (OpenGood / clrmamepro export). The <game name="...">
-// attribute is the exact dump name we want to surface (e.g.
-// `Legend of Zelda, The (U) (PRG0) [!]`); each nested <rom> carries the
-// crc/md5/sha1. One normalized row is emitted per <rom>.
-async function parseOpenGoodDat(text, platform, state) {
-  const gameChunks = text.split(/<game\b/u);
-  for (let index = 1; index < gameChunks.length; index += 1) {
-    if (state.stopParsing) return;
-    state.jsonObjects += 1;
-    if (state.maxObjects && state.jsonObjects > state.maxObjects) {
-      state.stopParsing = true;
-      return;
-    }
-    const chunk = gameChunks[index];
-    const headerEnd = chunk.indexOf(">");
-    if (headerEnd < 0) continue;
-    const nameMatch = chunk.slice(0, headerEnd).match(/\bname="([^"]*)"/u);
-    if (!nameMatch) continue;
-    const gameName = xmlUnescape(nameMatch[1]).trim();
-    if (!gameName) continue;
-
-    const romMatcher = /<rom\b([^>]*?)\/?>/gu;
-    let romMatch = romMatcher.exec(chunk);
-    while (romMatch) {
-      const rom = parseAttributes(romMatch[1]);
-      await writeRow(state, rom.crc, rom.md5, rom.sha1, platform, gameName);
-      romMatch = romMatcher.exec(chunk);
-    }
-
-    if (state.jsonObjects % 25000 === 0) {
-      console.error(
-        `[identify] parsed ${state.jsonObjects.toLocaleString("en-US")} game object(s), ` +
-          `${state.rowsWithAnyHash.toLocaleString("en-US")} hash row(s)`,
-      );
-    }
-  }
 }
 
 function unescapeClrMamePro(value) {
@@ -1135,24 +1056,6 @@ async function datFingerprint(datPath) {
   };
 }
 
-async function openGoodFingerprint(platform, ctx) {
-  const fingerprint = [];
-  for (const datFile of OPENGOOD_PLATFORMS[platform]) {
-    const info = await stat(ctx.openGoodPaths.get(datFile));
-    fingerprint.push({ datFile, mtimeMs: Math.trunc(info.mtimeMs), sizeBytes: info.size });
-  }
-  return fingerprint;
-}
-
-function platformRowPaths(cacheDir, slug) {
-  const dir = path.join(cacheDir, "identify-rows");
-  return {
-    dir,
-    manifestPath: path.join(dir, `${slug}.manifest.json`),
-    rowsPath: path.join(dir, `${slug}.tsv`),
-  };
-}
-
 function platformGamePaths(cacheDir, slug) {
   const dir = path.join(cacheDir, "identify-games");
   return {
@@ -1170,21 +1073,6 @@ async function readJsonFile(filePath) {
   }
 }
 
-function rowsCacheValid(manifest, fingerprint, source, maxObjects) {
-  if (!manifest || manifest.format !== ROW_CACHE_FORMAT) return false;
-  if (manifest.source !== source) return false;
-  if (manifest.maxObjects !== (maxObjects ?? null)) return false;
-  return JSON.stringify(manifest.fingerprint) === JSON.stringify(fingerprint);
-}
-
-async function produceOpenGoodRows(platform, state, ctx) {
-  for (const datFile of OPENGOOD_PLATFORMS[platform]) {
-    if (state.stopParsing) break;
-    const text = await readFile(ctx.openGoodPaths.get(datFile), "utf8");
-    await parseOpenGoodDat(text, platform, state);
-  }
-}
-
 async function produceRedumpGames(platform, state, ctx) {
   const text = await runCommandText("unzip", ["-p", ctx.redumpPaths.get(platform)]);
   const gameChunks = text.split(/<game\b/u);
@@ -1199,70 +1087,6 @@ async function produceRedumpGames(platform, state, ctx) {
       await once(state.stream, "drain");
     }
   }
-}
-
-// Build (or reuse a cached) normalized rows.tsv for a single OpenGood platform.
-// Each platform is cached independently so re-runs only rebuild what changed.
-export async function buildPlatformRows(platform, ctx) {
-  const source = "opengood";
-  const slug = slugifyPlatform(platform);
-  const paths = platformRowPaths(ctx.cacheDir, slug);
-  const fingerprint = await openGoodFingerprint(platform, ctx);
-
-  const rowsStat = await fileStat(paths.rowsPath);
-  const manifest = await readJsonFile(paths.manifestPath);
-  if (
-    rowsStat?.isFile() &&
-    !ctx.forceRowCache &&
-    rowsCacheValid(manifest, fingerprint, source, ctx.maxObjects)
-  ) {
-    console.error(`[identify] ${platform}: using cached rows (${formatBytes(rowsStat.size)})`);
-    return { ...paths, manifest, slug, source };
-  }
-
-  await mkdir(paths.dir, { recursive: true });
-  const tempRowsPath = `${paths.rowsPath}.part`;
-  const stream = createWriteStream(tempRowsPath);
-  const state = {
-    jsonObjects: 0,
-    maxObjects: ctx.maxObjects,
-    romRows: 0,
-    rowsMissingAllHashes: 0,
-    rowsWithAnyHash: 0,
-    stopParsing: false,
-    stream,
-  };
-
-  console.error(`[identify] ${platform}: extracting rows from ${source}`);
-  await produceOpenGoodRows(platform, state, ctx);
-
-  await new Promise((resolve, reject) => {
-    stream.on("error", reject);
-    stream.end(resolve);
-  });
-  await rename(tempRowsPath, paths.rowsPath);
-
-  const nextManifest = {
-    format: ROW_CACHE_FORMAT,
-    generatedAt: ctx.generatedAt,
-    platform,
-    source,
-    fingerprint,
-    maxObjects: ctx.maxObjects ?? null,
-    stats: {
-      gameObjects: state.jsonObjects,
-      romRows: state.romRows,
-      rowsMissingAllHashes: state.rowsMissingAllHashes,
-      rowsWithAnyHash: state.rowsWithAnyHash,
-    },
-  };
-  await writeFile(paths.manifestPath, `${JSON.stringify(nextManifest, null, 2)}\n`);
-  const written = await stat(paths.rowsPath);
-  console.error(
-    `[identify] ${platform}: wrote rows (${formatBytes(written.size)}, ` +
-      `${state.rowsWithAnyHash.toLocaleString("en-US")} hash row(s))`,
-  );
-  return { ...paths, manifest: nextManifest, slug, source };
 }
 
 // Build (or reuse a cached) grouped games.jsonl for a single Redump platform:
@@ -1329,314 +1153,15 @@ export async function buildPlatformGames(platform, ctx) {
   return { ...paths, manifest: nextManifest, slug, source: "redump" };
 }
 
-class IdTable {
-  constructor(seedValues = []) {
-    this.ids = new Map();
-    this.values = [];
-    for (const value of seedValues) this.getId(value);
-  }
-
-  getId(value) {
-    const existing = this.ids.get(value);
-    if (existing !== undefined) return existing;
-    const id = this.values.length;
-    this.ids.set(value, id);
-    this.values.push(value);
-    return id;
-  }
-}
-
-class PairTable {
-  constructor() {
-    this.ids = new Map();
-    this.values = [];
-  }
-
-  getId(nameId, platformId) {
-    const key = `${nameId}:${platformId}`;
-    const existing = this.ids.get(key);
-    if (existing !== undefined) return existing;
-    const id = this.values.length;
-    this.ids.set(key, id);
-    this.values.push({ nameId, platformId });
-    return id;
-  }
-}
-
-function decodeRow(line) {
-  const [crc32, md5, sha1, platformBase64, nameBase64] = line.split("\t");
-  if (nameBase64 === undefined) return undefined;
-  return {
-    crc32,
-    md5,
-    name: Buffer.from(nameBase64, "base64").toString("utf8"),
-    platform: Buffer.from(platformBase64, "base64").toString("utf8"),
-    sha1,
-  };
-}
-
-async function* readRows(rowsPath) {
-  const lines = readline.createInterface({
-    crlfDelay: Number.POSITIVE_INFINITY,
-    input: createReadStream(rowsPath),
-  });
-  for await (const line of lines) {
-    if (!line) continue;
-    const row = decodeRow(line);
-    if (row) yield row;
-  }
-}
-
-function addHashValue(map, hash, pairId) {
-  if (!hash) return;
-  const existing = map.get(hash);
-  if (existing === undefined) {
-    map.set(hash, pairId);
-    return;
-  }
-  if (existing === pairId) return;
-  if (Array.isArray(existing)) {
-    if (!existing.includes(pairId)) existing.push(pairId);
-    return;
-  }
-  map.set(hash, [existing, pairId]);
-}
-
-function ambiguousHashes(map) {
-  const ambiguous = new Set();
-  for (const [hash, value] of map) {
-    if (Array.isArray(value) && value.length > 1) ambiguous.add(hash);
-  }
-  return ambiguous;
-}
-
-function mapCounts(map) {
-  let conflictEntries = 0;
-  let conflictValues = 0;
-  for (const value of map.values()) {
-    if (Array.isArray(value)) {
-      conflictEntries += 1;
-      conflictValues += value.length;
-    }
-  }
-  return {
-    conflictEntries,
-    conflictValues,
-    keys: map.size,
-  };
-}
-
-async function countRows(rowsPath) {
-  let rows = 0;
-  let crcOnlyRows = 0;
-  let md5OnlyRows = 0;
-  let sha1OnlyRows = 0;
-  for await (const row of readRows(rowsPath)) {
-    rows += 1;
-    if (row.crc32 && !row.md5 && !row.sha1) crcOnlyRows += 1;
-    if (!row.crc32 && row.md5 && !row.sha1) md5OnlyRows += 1;
-    if (!row.crc32 && !row.md5 && row.sha1) sha1OnlyRows += 1;
-  }
-  return { crcOnlyRows, md5OnlyRows, rows, sha1OnlyRows };
-}
-
-// Find ROMs that are byte-identical across MORE THAN ONE game within a system:
-// rows sharing the same (crc, md5, sha1) but mapping to ≥2 distinct game names.
-// These are overwhelmingly shared CD audio tracks (silence/standard pre-gaps),
-// which can never identify a single game and which otherwise force large md5/
-// sha1 fallback maps. md5 must be present to prove byte-identity. Returns the
-// set of `crc|md5|sha1` triples to drop.
-async function collectSharedTriples(rowsPath) {
-  const firstPair = new Map();
-  const shared = new Set();
-  for await (const row of readRows(rowsPath)) {
-    if (!row.md5) continue;
-    const triple = `${row.crc32}|${row.md5}|${row.sha1}`;
-    if (shared.has(triple)) continue;
-    const pairKey = `${row.name}\0${row.platform}`;
-    const existing = firstPair.get(triple);
-    if (existing === undefined) {
-      firstPair.set(triple, pairKey);
-    } else if (existing !== pairKey) {
-      shared.add(triple);
-      firstPair.delete(triple);
-    }
-  }
-  return shared;
-}
-
-function isSharedRow(row, sharedTriples) {
-  return Boolean(row.md5) && sharedTriples.has(`${row.crc32}|${row.md5}|${row.sha1}`);
-}
-
-async function buildIndexParts(rowsPath, selectedPlatforms, dropShared = true) {
-  const names = new IdTable();
-  const platforms = new IdTable(selectedPlatforms);
-  const pairs = new PairTable();
-  const crc32 = new Map();
-  const sharedTriples = dropShared ? await collectSharedTriples(rowsPath) : new Set();
-
-  let rows = 0;
-  let droppedSharedRows = 0;
-  for await (const row of readRows(rowsPath)) {
-    rows += 1;
-    if (isSharedRow(row, sharedTriples)) {
-      droppedSharedRows += 1;
-      continue;
-    }
-    const nameId = names.getId(row.name);
-    const platformId = platforms.getId(row.platform);
-    const pairId = pairs.getId(nameId, platformId);
-    addHashValue(crc32, row.crc32, pairId);
-  }
-
-  const crcAmbiguous = ambiguousHashes(crc32);
-  const md5 = new Map();
-  let md5RowsAddedForMissingCrc = 0;
-  let md5RowsAddedForAmbiguousCrc = 0;
-  for await (const row of readRows(rowsPath)) {
-    if (isSharedRow(row, sharedTriples)) continue;
-    if (!row.md5) continue;
-    if (row.crc32 && !crcAmbiguous.has(row.crc32)) continue;
-    const nameId = names.getId(row.name);
-    const platformId = platforms.getId(row.platform);
-    const pairId = pairs.getId(nameId, platformId);
-    addHashValue(md5, row.md5, pairId);
-    if (row.crc32) md5RowsAddedForAmbiguousCrc += 1;
-    else md5RowsAddedForMissingCrc += 1;
-  }
-
-  const md5Ambiguous = ambiguousHashes(md5);
-  const sha1 = new Map();
-  let sha1RowsAddedForMissingCrcMd5 = 0;
-  let sha1RowsAddedForAmbiguousCrcWithoutMd5 = 0;
-  let sha1RowsAddedForAmbiguousMd5 = 0;
-  for await (const row of readRows(rowsPath)) {
-    if (isSharedRow(row, sharedTriples)) continue;
-    if (!row.sha1) continue;
-    const crcAmbiguousForRow = row.crc32 && crcAmbiguous.has(row.crc32);
-    const md5FallbackForRow = row.md5 && (!row.crc32 || crcAmbiguousForRow);
-    const shouldAdd =
-      (!row.crc32 && !row.md5) ||
-      (crcAmbiguousForRow && !row.md5) ||
-      (md5FallbackForRow && md5Ambiguous.has(row.md5));
-    if (!shouldAdd) continue;
-
-    const nameId = names.getId(row.name);
-    const platformId = platforms.getId(row.platform);
-    const pairId = pairs.getId(nameId, platformId);
-    addHashValue(sha1, row.sha1, pairId);
-    if (!row.crc32 && !row.md5) sha1RowsAddedForMissingCrcMd5 += 1;
-    else if (crcAmbiguousForRow && !row.md5) sha1RowsAddedForAmbiguousCrcWithoutMd5 += 1;
-    else sha1RowsAddedForAmbiguousMd5 += 1;
-  }
-
-  return {
-    fallbackStats: {
-      crcAmbiguousKeys: crcAmbiguous.size,
-      droppedSharedRows,
-      droppedSharedTriples: sharedTriples.size,
-      md5RowsAddedForAmbiguousCrc,
-      md5RowsAddedForMissingCrc,
-      sha1RowsAddedForAmbiguousCrcWithoutMd5,
-      sha1RowsAddedForAmbiguousMd5,
-      sha1RowsAddedForMissingCrcMd5,
-    },
-    maps: { crc32, md5, sha1 },
-    names: names.values,
-    pairs: pairs.values,
-    platforms: platforms.values,
-    rowCounts: await countRows(rowsPath),
-    rows,
-  };
-}
-
-function writeHashMap(algorithm, values) {
-  const info = ALGORITHMS[algorithm];
-  const keys = [...values.keys()].sort();
-  const encodedValues = new Map();
-  const conflictOffsets = [0];
-  const conflictValues = [];
-
-  for (const key of keys) {
-    const value = values.get(key);
-    if (Array.isArray(value)) {
-      const uniqueIds = [...new Set(value)].sort((a, b) => a - b);
-      const conflictIndex = conflictOffsets.length - 1;
-      if (conflictIndex >= CONFLICT_VALUE_FLAG)
-        throw new Error(`Too many conflicts in ${algorithm}`);
-      encodedValues.set(key, CONFLICT_VALUE_FLAG + conflictIndex);
-      conflictValues.push(...uniqueIds);
-      conflictOffsets.push(conflictValues.length);
-    } else {
-      if (value >= CONFLICT_VALUE_FLAG)
-        throw new Error(`Pair id exceeds binary format limit in ${algorithm}`);
-      encodedValues.set(key, value);
-    }
-  }
-
-  const recordWidth = info.hashBytes + 4;
-  const headerBytes = 20;
-  const buffer = Buffer.allocUnsafe(
-    headerBytes +
-      keys.length * recordWidth +
-      conflictOffsets.length * 4 +
-      conflictValues.length * 4,
+function writePack(entries) {
+  const directoryBytes = entries.reduce(
+    (sum, entry) => sum + 2 + 8 + Buffer.byteLength(entry.name, "utf8"),
+    0,
   );
-  HASH_MAGIC.copy(buffer, 0);
-  buffer.writeUInt8(info.code, 4);
-  buffer.writeUInt8(0, 5);
-  buffer.writeUInt8(info.hashBytes, 6);
-  buffer.writeUInt8(0, 7);
-  buffer.writeUInt32LE(keys.length, 8);
-  buffer.writeUInt32LE(conflictOffsets.length - 1, 12);
-  buffer.writeUInt32LE(conflictValues.length, 16);
-
-  let cursor = headerBytes;
-  for (const key of keys) {
-    Buffer.from(key, "hex").copy(buffer, cursor);
-    cursor += info.hashBytes;
-    buffer.writeUInt32LE(encodedValues.get(key), cursor);
-    cursor += 4;
-  }
-  for (const offset of conflictOffsets) {
-    buffer.writeUInt32LE(offset, cursor);
-    cursor += 4;
-  }
-  for (const pairId of conflictValues) {
-    buffer.writeUInt32LE(pairId, cursor);
-    cursor += 4;
-  }
-  return buffer;
-}
-
-function writeNamePlatformPairs(pairs) {
-  if (pairs.some((pair) => pair.platformId > 0xffff)) {
-    throw new Error("Too many platforms for u16 name-platform pair table");
-  }
-  const buffer = Buffer.allocUnsafe(8 + pairs.length * 6);
-  PAIR_MAGIC.copy(buffer, 0);
-  buffer.writeUInt16LE(1, 4);
-  buffer.writeUInt16LE(6, 6);
-  let cursor = 8;
-  for (const pair of pairs) {
-    buffer.writeUInt32LE(pair.nameId, cursor);
-    cursor += 4;
-    buffer.writeUInt16LE(pair.platformId, cursor);
-    cursor += 2;
-  }
-  return buffer;
-}
-
-function writePack(entries, magic = PACK_MAGIC) {
-  const headerBytes =
-    magic.length +
-    4 +
-    entries.reduce((sum, entry) => sum + 2 + 8 + Buffer.byteLength(entry.name, "utf8"), 0);
   const payloadBytes = entries.reduce((sum, entry) => sum + entry.bytes.length, 0);
-  const buffer = Buffer.allocUnsafe(headerBytes + payloadBytes);
-  magic.copy(buffer, 0);
-  let cursor = magic.length;
+  const buffer = Buffer.allocUnsafe(8 + 4 + directoryBytes + payloadBytes);
+  PACK_MAGIC.copy(buffer, 0);
+  let cursor = 8;
   buffer.writeUInt32LE(entries.length, cursor);
   cursor += 4;
   for (const entry of entries) {
@@ -1682,95 +1207,6 @@ function resolveSelection(options) {
   }
   if (missing.length) console.error(`[identify] skipping ${missing.length} unknown platform(s)`);
   return selected.filter((platform) => configured.has(platform)).sort();
-}
-
-// Assemble one RWFP1 pack for a single platform from its built index parts.
-// Format is identical to the original single global pack, just scoped to one
-// platform so a reader can lazy-load only the system it needs.
-function buildSystemPack(platform, source, parts) {
-  const crc32 = writeHashMap("crc32", parts.maps.crc32);
-  const md5 = writeHashMap("md5", parts.maps.md5);
-  const sha1 = writeHashMap("sha1", parts.maps.sha1);
-  const namePlatforms = writeNamePlatformPairs(parts.pairs);
-  const names = Buffer.from(JSON.stringify(parts.names), "utf8");
-  const platforms = Buffer.from(JSON.stringify(parts.platforms), "utf8");
-
-  const manifest = {
-    format: INDEX_FORMAT,
-    platform,
-    source,
-    hashStrategy: "crc-primary-md5-sha1-fallback-per-system",
-    counts: {
-      crcKeys: parts.maps.crc32.size,
-      md5FallbackKeys: parts.maps.md5.size,
-      namePlatformPairs: parts.pairs.length,
-      names: parts.names.length,
-      platforms: parts.platforms.length,
-      sha1FallbackKeys: parts.maps.sha1.size,
-    },
-    fallbackStats: {
-      ...parts.fallbackStats,
-      crcConflictValues: mapCounts(parts.maps.crc32).conflictValues,
-      md5ConflictValues: mapCounts(parts.maps.md5).conflictValues,
-      sha1ConflictValues: mapCounts(parts.maps.sha1).conflictValues,
-    },
-    rowCounts: parts.rowCounts,
-    sizes: {
-      crc32: { rawBytes: crc32.length, ...mapCounts(parts.maps.crc32) },
-      md5: { rawBytes: md5.length, ...mapCounts(parts.maps.md5) },
-      namePlatforms: { rawBytes: namePlatforms.length },
-      names: { rawBytes: names.length },
-      platforms: { rawBytes: platforms.length },
-      sha1: { rawBytes: sha1.length, ...mapCounts(parts.maps.sha1) },
-    },
-  };
-  return writePack([
-    { name: "crc32.bin", bytes: crc32 },
-    { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
-    { name: "md5.bin", bytes: md5 },
-    { name: "name-platforms.bin", bytes: namePlatforms },
-    { name: "names.json", bytes: names },
-    { name: "platforms.json", bytes: platforms },
-    { name: "sha1.bin", bytes: sha1 },
-  ]);
-}
-
-export async function writeSystemPack(platform, rows, options) {
-  console.error(`[identify] ${platform}: building per-system pack`);
-  const parts = await buildIndexParts(rows.rowsPath, [platform], !options.keepShared);
-  const pack = buildSystemPack(platform, rows.source, parts);
-  const fileName = `${rows.slug}.pack`;
-  const outPath = path.join(options.outPath, fileName);
-  await writeFile(outPath, pack);
-
-  const system = {
-    platform,
-    slug: rows.slug,
-    source: rows.source,
-    file: fileName,
-    rawBytes: pack.length,
-    sha256: crypto.createHash("sha256").update(pack).digest("hex"),
-    entries: {
-      crcKeys: parts.maps.crc32.size,
-      md5FallbackKeys: parts.maps.md5.size,
-      sha1FallbackKeys: parts.maps.sha1.size,
-      names: parts.names.length,
-    },
-    droppedSharedRows: parts.fallbackStats.droppedSharedRows,
-    rowCounts: parts.rowCounts,
-  };
-  if (options.brotli) {
-    const compressed = await brotliCompress(pack, options.brotliQuality);
-    await writeFile(`${outPath}.br`, compressed);
-    system.brotliFile = `${fileName}.br`;
-    system.brotliBytes = compressed.length;
-  }
-  console.error(
-    `[identify] ${platform}: wrote ${fileName} (${formatBytes(pack.length)}` +
-      `${system.brotliBytes ? `, br ${formatBytes(system.brotliBytes)}` : ""}` +
-      `${system.droppedSharedRows ? `, dropped ${system.droppedSharedRows.toLocaleString("en-US")} shared` : ""})`,
-  );
-  return system;
 }
 
 async function* readGames(gamesPath) {
@@ -1820,7 +1256,7 @@ export async function loadSortedGames(gamesPath) {
   }
   if (skippedOverCaps > 0) {
     console.error(
-      `[identify] skipped ${skippedOverCaps} game record(s) that exceed the RWFP2 reader caps`,
+      `[identify] skipped ${skippedOverCaps} game record(s) that exceed the RWFP4 reader caps`,
     );
   }
   // Codepoint comparison, never localeCompare: ICU collation varies by
@@ -1836,9 +1272,25 @@ export async function loadSortedGames(gamesPath) {
   return games;
 }
 
-// Mark components byte-identical across MORE THAN ONE game (same size plus the
-// same md5 or the same sha1) as non-discriminating. They stay in games.json but
-// are excluded from route.bin: a shared CD audio track can never pick one game.
+export function mediaProfileFor(platform, source) {
+  if (source === "libretro" && KNOWN_PLATFORM_PROFILES[platform]) {
+    return KNOWN_PLATFORM_PROFILES[platform];
+  }
+  if (
+    source === "libretro" &&
+    LIBRETRO_PLATFORM_PATHS[platform]?.some((sourcePath) =>
+      sourcePath.startsWith("metadat/redump/"),
+    )
+  ) {
+    return platform === "Sega - Dreamcast" ? "redump-gdrom-track-v1" : "redump-cd-track-v1";
+  }
+  if (source === "libretro") return DEFAULT_MEDIA_PROFILE;
+  if (source === "opengood") return "opengood-cartridge-v1";
+  return KNOWN_PLATFORM_PROFILES[platform] ?? DEFAULT_MEDIA_PROFILE;
+}
+
+// Shared components cannot identify one game, but the pack keeps them as
+// metadata for the selected title.
 function markSharedComponents(games) {
   const owners = new Map();
   const keysOf = (component) => {
@@ -1864,185 +1316,6 @@ function markSharedComponents(games) {
     }
   }
   return sharedComponents;
-}
-
-// Serialize games.json with a fixed key order and optional keys omitted, so
-// identical input always produces identical bytes.
-function gamesJsonBytes(games) {
-  const serialized = games.map((game) => {
-    const out = {
-      name: game.name,
-      platform: game.platform,
-      source: game.source,
-      upstreamSource: game.upstreamSource || "unknown",
-    };
-    if (game.provenance?.length) out.provenance = game.provenance;
-    if (game.legacyVariant) out.legacyVariant = true;
-    if (game.dumpTags?.length) out.dumpTags = game.dumpTags;
-    if (game.description !== undefined) out.description = game.description;
-    if (game.metadata !== undefined) out.metadata = game.metadata;
-    if (game.gameId !== undefined) out.gameId = game.gameId;
-    if (game.region !== undefined) out.region = game.region;
-    if (game.language !== undefined) out.language = game.language;
-    out.components = game.components.map((component) => {
-      const entry = { role: component.role ?? "primary_payload", ordinal: component.ordinal };
-      if (component.hashScope !== undefined) entry.hashScope = component.hashScope;
-      if (component.filename !== undefined) entry.filename = component.filename;
-      entry.size = component.size;
-      if (component.crc32 !== undefined) entry.crc32 = component.crc32;
-      if (component.md5 !== undefined) entry.md5 = component.md5;
-      if (component.sha1 !== undefined) entry.sha1 = component.sha1;
-      if (component.sha256 !== undefined) entry.sha256 = component.sha256;
-      entry.required = true;
-      entry.discriminating = component.discriminating;
-      if (component.track !== undefined) entry.track = component.track;
-      return entry;
-    });
-    return out;
-  });
-  return Buffer.from(JSON.stringify(serialized), "utf8");
-}
-
-// Build route.bin (RWR2) and refs.bin (RWX2). Only discriminating components
-// with a crc32 and size > 0 get routed; a ref id is the index of the
-// (game_index, component_index) record in refs.bin.
-function buildRouteAndRefs(games) {
-  const refs = [];
-  const byKey = new Map();
-  games.forEach((game, gameIndex) => {
-    if (gameIndex > 0xffffffff) throw new Error("Too many games for u32 game index");
-    game.components.forEach((component, componentIndex) => {
-      if (componentIndex > 0xffff) throw new Error("Too many components for u16 component index");
-      if (!component.discriminating || !component.crc32 || !(component.size > 0)) return;
-      const refId = refs.length;
-      refs.push({ gameIndex, componentIndex });
-      const key = `${component.crc32}|${component.size}`;
-      const existing = byKey.get(key);
-      if (existing === undefined) byKey.set(key, [refId]);
-      else existing.push(refId);
-    });
-  });
-
-  const keys = [...byKey.keys()].sort((a, b) => {
-    const [crcA, sizeA] = a.split("|");
-    const [crcB, sizeB] = b.split("|");
-    return crcA < crcB ? -1 : crcA > crcB ? 1 : Number(sizeA) - Number(sizeB);
-  });
-
-  const conflictOffsets = [0];
-  const conflictValues = [];
-  const values = [];
-  for (const key of keys) {
-    const refIds = byKey.get(key);
-    if (refIds.length === 1) {
-      if (refIds[0] >= CONFLICT_VALUE_FLAG) throw new Error("Ref id exceeds RWR2 format limit");
-      values.push(refIds[0]);
-    } else {
-      const conflictIndex = conflictOffsets.length - 1;
-      if (conflictIndex >= CONFLICT_VALUE_FLAG) throw new Error("Too many conflicts in route.bin");
-      values.push(CONFLICT_VALUE_FLAG + conflictIndex);
-      conflictValues.push(...refIds);
-      conflictOffsets.push(conflictValues.length);
-    }
-  }
-
-  const headerBytes = 20;
-  const recordWidth = 16;
-  const route = Buffer.allocUnsafe(
-    headerBytes +
-      keys.length * recordWidth +
-      conflictOffsets.length * 4 +
-      conflictValues.length * 4,
-  );
-  ROUTE_MAGIC.copy(route, 0);
-  route.writeUInt16LE(1, 4);
-  route.writeUInt16LE(0, 6);
-  route.writeUInt32LE(keys.length, 8);
-  route.writeUInt32LE(conflictOffsets.length - 1, 12);
-  route.writeUInt32LE(conflictValues.length, 16);
-  let cursor = headerBytes;
-  keys.forEach((key, index) => {
-    const [crc, size] = key.split("|");
-    Buffer.from(crc, "hex").copy(route, cursor);
-    cursor += 4;
-    route.writeBigUInt64LE(BigInt(size), cursor);
-    cursor += 8;
-    route.writeUInt32LE(values[index], cursor);
-    cursor += 4;
-  });
-  for (const offset of conflictOffsets) {
-    route.writeUInt32LE(offset, cursor);
-    cursor += 4;
-  }
-  for (const refId of conflictValues) {
-    route.writeUInt32LE(refId, cursor);
-    cursor += 4;
-  }
-
-  const refsBuffer = Buffer.allocUnsafe(8 + refs.length * 6);
-  REFS_MAGIC.copy(refsBuffer, 0);
-  refsBuffer.writeUInt16LE(1, 4);
-  refsBuffer.writeUInt16LE(6, 6);
-  cursor = 8;
-  for (const ref of refs) {
-    refsBuffer.writeUInt32LE(ref.gameIndex, cursor);
-    cursor += 4;
-    refsBuffer.writeUInt16LE(ref.componentIndex, cursor);
-    cursor += 2;
-  }
-  return { refsBuffer, refsCount: refs.length, route, routedKeys: keys.length };
-}
-
-export function mediaProfileFor(platform, source) {
-  if (source === "libretro" && KNOWN_PLATFORM_PROFILES[platform]) {
-    return KNOWN_PLATFORM_PROFILES[platform];
-  }
-  if (
-    source === "libretro" &&
-    LIBRETRO_PLATFORM_PATHS[platform]?.some((sourcePath) =>
-      sourcePath.startsWith("metadat/redump/"),
-    )
-  ) {
-    return platform === "Sega - Dreamcast" ? "redump-gdrom-track-v1" : "redump-cd-track-v1";
-  }
-  if (source === "libretro") return DEFAULT_MEDIA_PROFILE;
-  if (source === "opengood") return "opengood-cartridge-v1";
-  return KNOWN_PLATFORM_PROFILES[platform] ?? DEFAULT_MEDIA_PROFILE;
-}
-
-// Assemble one RWFP2 pack for a Libretro platform. Same outer container layout
-// as RWFP1 with magic RWFP2, members in this exact directory order.
-export function buildSystemPackV2(platform, games, provenance, source = "libretro") {
-  const sharedComponents = markSharedComponents(games);
-  const gamesBytes = gamesJsonBytes(games);
-  const { refsBuffer, refsCount, route, routedKeys } = buildRouteAndRefs(games);
-  const componentCount = games.reduce((sum, game) => sum + game.components.length, 0);
-  const manifest = {
-    format: INDEX_FORMAT_V2,
-    platform,
-    source,
-    generationDate: IDENTIFY_GENERATION_DATE,
-    canonicalizationProfile: mediaProfileFor(platform, source),
-    canonicalizationVersion: 1,
-    provenance,
-    counts: {
-      games: games.length,
-      components: componentCount,
-      routedKeys,
-      refs: refsCount,
-      sharedComponents,
-    },
-  };
-  const pack = writePack(
-    [
-      { name: "games.json", bytes: gamesBytes },
-      { name: "route.bin", bytes: route },
-      { name: "refs.bin", bytes: refsBuffer },
-      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
-    ],
-    PACK_MAGIC_V2,
-  );
-  return { componentCount, pack, routedKeys, sharedComponents };
 }
 
 const ABSENT_U32 = 0xffffffff;
@@ -2118,7 +1391,7 @@ function internOrderedSets(sets) {
   return { flattened, mapped, offsets, sets: unique };
 }
 
-function buildRwfp3Tables(games) {
+function buildPackTables(games) {
   const provenance = [];
   const provenanceIds = new Map();
   const provenanceSets = games.map((game) =>
@@ -2154,7 +1427,7 @@ function buildRwfp3Tables(games) {
   const stringId = (value) => {
     if (value === undefined) return ABSENT_U32;
     const id = strings.ids.get(String(value));
-    if (id === undefined) throw new Error(`RWFP3 string was not interned: ${String(value)}`);
+    if (id === undefined) throw new Error(`RWFP4 string was not interned: ${String(value)}`);
     return id;
   };
 
@@ -2349,7 +1622,7 @@ function encodeUvarint(value) {
 
 const encodeOptionalId = (value) => encodeUvarint(value === ABSENT_U32 ? 0 : value + 1);
 
-function readRwfp3Strings(bytes) {
+function readPackStrings(bytes) {
   const count = bytes.readUInt32LE(8);
   const dataStart = 16 + (count + 1) * 4;
   return Array.from({ length: count }, (_, index) => {
@@ -2364,19 +1637,19 @@ function variableTable(magic, count, records) {
 }
 
 function buildRwfp4Tables(games) {
-  const v3 = buildRwfp3Tables(games);
-  const members = new Map(v3.members.map((member) => [member.name, member.bytes]));
-  const strings = readRwfp3Strings(members.get("strings.bin"));
+  const fixedTables = buildPackTables(games);
+  const members = new Map(fixedTables.members.map((member) => [member.name, member.bytes]));
+  const strings = readPackStrings(members.get("strings.bin"));
   const stringRecords = strings.flatMap((value) => [encodeUvarint(value.length), value]);
   const stringsBytes = variableTable("RWS4", strings.length, stringRecords);
 
-  const hashesV3 = members.get("hashes.bin");
-  const hashCount = hashesV3.readUInt32LE(8);
+  const fixedHashes = members.get("hashes.bin");
+  const hashCount = fixedHashes.readUInt32LE(8);
   const hashRows = [];
   const hashOffsets = Buffer.alloc((hashCount + 1) * 4);
   let hashCursor = 0;
   for (let index = 0; index < hashCount; index += 1) {
-    const row = hashesV3.subarray(12 + index * 92, 12 + (index + 1) * 92);
+    const row = fixedHashes.subarray(12 + index * 92, 12 + (index + 1) * 92);
     const scopeId = row.readUInt32LE(8);
     const scope = strings[scopeId]?.toString("utf8");
     const scopeBytes =
@@ -2408,11 +1681,11 @@ function buildRwfp4Tables(games) {
   hashOffsets.writeUInt32LE(hashCursor, hashCount * 4);
   const hashesBytes = variableTable("RWH4", hashCount, [hashOffsets, ...hashRows]);
 
-  const componentsV3 = members.get("components.bin");
-  const componentCount = componentsV3.readUInt32LE(8);
+  const fixedComponents = members.get("components.bin");
+  const componentCount = fixedComponents.readUInt32LE(8);
   const componentRows = [];
   for (let index = 0; index < componentCount; index += 1) {
-    const row = componentsV3.subarray(12 + index * 28, 12 + (index + 1) * 28);
+    const row = fixedComponents.subarray(12 + index * 28, 12 + (index + 1) * 28);
     componentRows.push(
       Buffer.concat([
         encodeUvarint(row.readUInt32LE(0)),
@@ -2426,11 +1699,11 @@ function buildRwfp4Tables(games) {
   }
   const componentsBytes = variableTable("RWC4", componentCount, componentRows);
 
-  const gamesV3 = members.get("games.bin");
-  const gameCount = gamesV3.readUInt32LE(8);
+  const fixedGames = members.get("games.bin");
+  const gameCount = fixedGames.readUInt32LE(8);
   const gameRows = [];
   for (let index = 0; index < gameCount; index += 1) {
-    const row = gamesV3.subarray(12 + index * 52, 12 + (index + 1) * 52);
+    const row = fixedGames.subarray(12 + index * 52, 12 + (index + 1) * 52);
     gameRows.push(
       Buffer.concat([
         encodeUvarint(row.readUInt32LE(0)),
@@ -2455,7 +1728,7 @@ function buildRwfp4Tables(games) {
     return Buffer.concat([Buffer.from(magic, "ascii"), Buffer.from([1]), ...records]);
   };
   return {
-    ...v3,
+    ...fixedTables,
     hashCount,
     members: [
       { name: "strings.bin", bytes: stringsBytes },
@@ -2469,45 +1742,11 @@ function buildRwfp4Tables(games) {
   };
 }
 
-export function buildSystemPackV3(platform, games, source = "libretro") {
-  const sharedComponents = markSharedComponents(games);
-  const tables = buildRwfp3Tables(games);
-  const manifest = {
-    format: INDEX_FORMAT_V3,
-    platform,
-    source,
-    generationDate: IDENTIFY_GENERATION_DATE,
-    canonicalizationProfile: mediaProfileFor(platform, source),
-    canonicalizationVersion: 1,
-    provenance: tables.provenance,
-    counts: {
-      games: games.length,
-      components: tables.componentCount,
-      hashes: tables.members[1].bytes.readUInt32LE(8),
-      routedKeys: tables.routedKeys,
-      sharedComponents,
-    },
-  };
-  const pack = writePack(
-    [
-      ...tables.members,
-      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
-    ],
-    PACK_MAGIC_V3,
-  );
-  return {
-    componentCount: tables.componentCount,
-    pack,
-    routedKeys: tables.routedKeys,
-    sharedComponents,
-  };
-}
-
 export function buildSystemPackV4(platform, games, source = "libretro") {
   const sharedComponents = markSharedComponents(games);
   const tables = buildRwfp4Tables(games);
   const manifest = {
-    format: INDEX_FORMAT_V4,
+    format: PACK_FORMAT,
     platform,
     source,
     generationDate: IDENTIFY_GENERATION_DATE,
@@ -2522,13 +1761,10 @@ export function buildSystemPackV4(platform, games, source = "libretro") {
       sharedComponents,
     },
   };
-  const pack = writePack(
-    [
-      ...tables.members,
-      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
-    ],
-    PACK_MAGIC_V4,
-  );
+  const pack = writePack([
+    ...tables.members,
+    { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
+  ]);
   return {
     componentCount: tables.componentCount,
     pack,
@@ -2697,7 +1933,7 @@ export function buildCatalogPlatforms(systems) {
       source: system.source,
       mediaProfiles: [mediaProfileFor(system.platform, system.source)],
       packSlug: system.slug,
-      packFormat: system.packFormat ?? "RWFP1",
+      packFormat: "RWFP4",
       canonicalizationVersion: 1,
     };
     if (system.sha256) entry.packSha256 = system.sha256;

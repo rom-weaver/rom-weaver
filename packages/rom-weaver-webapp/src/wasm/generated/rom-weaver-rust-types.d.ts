@@ -380,15 +380,9 @@ export type IdentifyDatabaseDirCommand = { database_dir?: string, };
 
 export type IdentifyDatabaseSystemCommand = { system: string, database_dir?: string, };
 
-export type IdentifyDatabaseImportCommand = { input: string, database_dir?: string, };
-
 export type IdentifyDatabaseGroupCommand = { group: string, from?: string, database_dir?: string, };
 
-export type IdentifyDatabaseInstallCommand = { system?: string, all?: boolean, from?: string, database_dir?: string, };
-
-export type IdentifyDatabaseUpdateCommand = { system?: string, from?: string, database_dir?: string, };
-
-export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "import-redump", "args": IdentifyDatabaseImportCommand } | { "type": "install-all", "args": IdentifyDatabaseDirCommand } | { "type": "install-group", "args": IdentifyDatabaseGroupCommand } | { "type": "install", "args": IdentifyDatabaseInstallCommand } | { "type": "update", "args": IdentifyDatabaseUpdateCommand };
+export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabaseDirCommand } | { "type": "status", "args": IdentifyDatabaseDirCommand } | { "type": "path", "args": IdentifyDatabaseDirCommand } | { "type": "remove", "args": IdentifyDatabaseSystemCommand } | { "type": "install-all", "args": IdentifyDatabaseDirCommand } | { "type": "install-group", "args": IdentifyDatabaseGroupCommand };
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 

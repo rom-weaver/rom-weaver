@@ -197,7 +197,7 @@ test("family variants resolve to their shared pack", () => {
       platform: "Nintendo - Nintendo 64",
       slug: "nintendo-nintendo-64",
       source: "libretro",
-      packFormat: "RWFP3",
+      packFormat: "RWFP4",
     },
   ]);
   assert.ok(entry.aliases.includes("nintendo nintendo 64dd"));
@@ -228,7 +228,6 @@ test("the builder emits deterministic mixed and fallback-only RWFP4 packs", asyn
     cacheDir,
     "--out",
     outDir,
-    "--no-brotli",
     "--only",
     `${NES},Tandy - Color Computer`,
   ]);
@@ -264,7 +263,6 @@ test("the builder emits deterministic mixed and fallback-only RWFP4 packs", asyn
     cacheDir,
     "--out",
     outDir2,
-    "--no-brotli",
     "--only",
     `${NES},Tandy - Color Computer`,
   ]);
