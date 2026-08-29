@@ -20,48 +20,39 @@ const concat = (...parts) => {
   return output;
 };
 
-const hashMember = (algorithm, hash) =>
-  concat(
-    encoder.encode("RWH1"),
-    new Uint8Array([algorithm, 0, hash.length, 0]),
-    u32(1),
-    u32(0),
-    u32(0),
-    hash,
-    u32(0),
-    u32(0),
-  );
-
 const identifyPack = () => {
+  const hashes = concat(
+    encoder.encode("RWH5"),
+    new Uint8Array([1, 1, 5, 0, 7, 0x36, 0x10, 0xa6, 0x86]),
+    new Uint8Array([
+      0x5d, 0x41, 0x40, 0x2a, 0xbc, 0x4b, 0x2a, 0x76, 0xb9, 0x71, 0x9d, 0x91, 0x10, 0x17, 0xc5, 0x92, 0xaa, 0xf4, 0xc6,
+      0x1d, 0xdc, 0xc5, 0xe8, 0xa2, 0xda, 0xbe, 0xde, 0x0f, 0x3b, 0x48, 0x2c, 0xd9, 0xae, 0xa9, 0x43, 0x4d,
+    ]),
+  );
+  const name = encoder.encode("Hello World (WASM Test) [!]");
+  const scope = encoder.encode("full_file");
   const members = [
-    ["crc32.bin", hashMember(0, new Uint8Array([0x36, 0x10, 0xa6, 0x86]))],
     [
-      "md5.bin",
-      hashMember(
-        1,
-        new Uint8Array([
-          0x5d, 0x41, 0x40, 0x2a, 0xbc, 0x4b, 0x2a, 0x76, 0xb9, 0x71, 0x9d, 0x91, 0x10, 0x17, 0xc5, 0x92,
-        ]),
+      "strings.bin",
+      concat(encoder.encode("RWS5"), new Uint8Array([1, 2, name.length]), name, new Uint8Array([scope.length]), scope),
+    ],
+    ["hashes.bin", hashes],
+    ["components.bin", concat(encoder.encode("RWC5"), new Uint8Array([1, 1, 0, 0, 0, 3]))],
+    ["games.bin", concat(encoder.encode("RWG5"), new Uint8Array([1, 1, 0, 0, 1, 0, 0]))],
+    ["owners.bin", concat(encoder.encode("RWO5"), new Uint8Array([1, 1, 1, 0]))],
+    ["routes.bin", concat(encoder.encode("RWR5"), new Uint8Array([1, 1, 0]))],
+    ["sets.bin", concat(encoder.encode("RWX5"), new Uint8Array([1, 1, 0, 1, 0]))],
+    [
+      "manifest.json",
+      encoder.encode(
+        '{"format":"rom-weaver-identify-system-pack-v5","platform":"Test System","source":"libretro","canonicalizationProfile":"full_file","canonicalizationVersion":1,"provenance":[]}',
       ),
     ],
-    [
-      "sha1.bin",
-      hashMember(
-        2,
-        new Uint8Array([
-          0xaa, 0xf4, 0xc6, 0x1d, 0xdc, 0xc5, 0xe8, 0xa2, 0xda, 0xbe, 0xde, 0x0f, 0x3b, 0x48, 0x2c, 0xd9, 0xae, 0xa9,
-          0x43, 0x4d,
-        ]),
-      ),
-    ],
-    ["name-platforms.bin", concat(encoder.encode("RWHP"), u16(1), u16(6), u32(0), u16(0))],
-    ["names.json", encoder.encode('["Hello World (WASM Test) [!]"]')],
-    ["platforms.json", encoder.encode('["Test System"]')],
   ];
   const directory = members.map(([name, bytes]) =>
     concat(u16(name.length), u64(bytes.byteLength), encoder.encode(name)),
   );
-  return concat(encoder.encode("RWFP1\0\0\0"), u32(members.length), ...directory, ...members.map(([, bytes]) => bytes));
+  return concat(encoder.encode("RWFP5\0\0\0"), u32(members.length), ...directory, ...members.map(([, bytes]) => bytes));
 };
 
 describe("ROM identify WASM command", () => {
@@ -82,7 +73,7 @@ describe("ROM identify WASM command", () => {
         expect(terminal.details.identify.status).toBe("matched");
         expect(terminal.details.identify.matches).toEqual([
           expect.objectContaining({
-            algorithm: "crc32",
+            algorithm: "components",
             name: "Hello World (WASM Test) [!]",
             platform: "Test System",
             variant: "raw",
@@ -114,7 +105,7 @@ describe("ROM identify WASM command", () => {
         expect(terminal.details.ingest.assets[0].identification).toEqual({
           matches: [
             expect.objectContaining({
-              algorithm: "crc32",
+              algorithm: "components",
               name: "Hello World (WASM Test) [!]",
               variant: "raw",
             }),

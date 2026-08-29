@@ -1,126 +1,151 @@
 use super::shared::*;
 
-const PACK_MAGIC: &[u8] = b"RWFP1\0\0\0";
+use rom_weaver_checksum::identify_catalog::IdentifySource;
+use rom_weaver_checksum::identify_pack_types::{
+    PackComponent, PackComponentRole, PackGame, UpstreamSource,
+};
 
-fn hash_member(algorithm: u8, hash: &[u8]) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"RWH1");
-    bytes.extend_from_slice(&[algorithm, 0, hash.len() as u8, 0]);
-    bytes.extend_from_slice(&1u32.to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(hash);
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes
+fn rwfp5_pack(entries: &[([u8; 4], &str)]) -> Vec<u8> {
+    rwfp5_pack_with_size(entries, 5)
 }
 
-/// A hash table with no keys. Every pack must carry all three tables, so a
-/// crc32-only fixture still needs valid empty md5/sha1 members.
-fn empty_hash_member(algorithm: u8, hash_bytes: u8) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"RWH1");
-    bytes.extend_from_slice(&[algorithm, 0, hash_bytes, 0]);
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes
-}
-
-/// A CRC32 table holding one record per entry, sorted the way the reader's
-/// binary search expects.
-fn crc32_hash_member(entries: &[([u8; 4], &str)]) -> Vec<u8> {
-    let mut sorted: Vec<(usize, [u8; 4])> = entries
+fn rwfp5_pack_with_size(entries: &[([u8; 4], &str)], size: u64) -> Vec<u8> {
+    let games = entries
         .iter()
-        .enumerate()
-        .map(|(index, (crc32, _))| (index, *crc32))
+        .map(|(crc, name)| PackGame {
+            name: (*name).to_string(),
+            platform: "Test System".to_string(),
+            source: IdentifySource::Libretro,
+            upstream_source: UpstreamSource::Libretro,
+            provenance: Vec::new(),
+            legacy_variant: false,
+            dump_tags: Vec::new(),
+            game_id: None,
+            region: None,
+            language: None,
+            disc_number: None,
+            revision: None,
+            parent: None,
+            components: vec![PackComponent {
+                role: PackComponentRole::PrimaryPayload,
+                ordinal: 0,
+                hash_scope: "full_file".to_string(),
+                filename: None,
+                size,
+                crc32: Some(crc.iter().map(|byte| format!("{byte:02x}")).collect()),
+                md5: None,
+                sha1: None,
+                sha256: None,
+                required: true,
+                discriminating: true,
+                track: None,
+                session: None,
+            }],
+        })
         .collect();
-    sorted.sort_by_key(|(_, crc32)| *crc32);
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"RWH1");
-    bytes.extend_from_slice(&[0, 0, 4, 0]);
-    bytes.extend_from_slice(&(entries.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    for (pair_id, crc32) in &sorted {
-        bytes.extend_from_slice(crc32);
-        bytes.extend_from_slice(&(*pair_id as u32).to_le_bytes());
-    }
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes
+    rom_weaver_checksum::identify_pack_v5::encode(
+        "Test System",
+        IdentifySource::Libretro,
+        "full_file",
+        &serde_json::json!([]),
+        games,
+    )
+    .expect("RWFP5 pack")
+}
+
+pub(crate) fn identify_pack_with_crc_size(crc32: [u8; 4], size: u64, name: &str) -> Vec<u8> {
+    rwfp5_pack_with_size(&[(crc32, name)], size)
+}
+
+pub(crate) fn identify_pack_with_sized_entries(entries: &[([u8; 4], u64, &str)]) -> Vec<u8> {
+    let games = entries
+        .iter()
+        .map(|(crc32, size, name)| PackGame {
+            name: (*name).to_string(),
+            platform: "Test System".to_string(),
+            source: IdentifySource::Libretro,
+            upstream_source: UpstreamSource::Libretro,
+            provenance: Vec::new(),
+            legacy_variant: false,
+            dump_tags: Vec::new(),
+            game_id: None,
+            region: None,
+            language: None,
+            disc_number: None,
+            revision: None,
+            parent: None,
+            components: vec![PackComponent {
+                role: PackComponentRole::PrimaryPayload,
+                ordinal: 0,
+                hash_scope: "full_file".to_string(),
+                filename: None,
+                size: *size,
+                crc32: Some(crc32.iter().map(|byte| format!("{byte:02x}")).collect()),
+                md5: None,
+                sha1: None,
+                sha256: None,
+                required: true,
+                discriminating: true,
+                track: None,
+                session: None,
+            }],
+        })
+        .collect();
+    rom_weaver_checksum::identify_pack_v5::encode(
+        "Test System",
+        IdentifySource::Libretro,
+        "full_file",
+        &serde_json::json!([]),
+        games,
+    )
+    .expect("RWFP5 pack")
 }
 
 /// A pack naming several ROMs by CRC32, for the archive tests where each member
 /// needs its own verdict.
 pub(crate) fn identify_pack_with_entries(entries: &[([u8; 4], &str)]) -> Vec<u8> {
-    let mut pairs = Vec::new();
-    pairs.extend_from_slice(b"RWHP");
-    pairs.extend_from_slice(&1u16.to_le_bytes());
-    pairs.extend_from_slice(&6u16.to_le_bytes());
-    for index in 0..entries.len() {
-        pairs.extend_from_slice(&(index as u32).to_le_bytes());
-        pairs.extend_from_slice(&0u16.to_le_bytes());
-    }
-    let names = entries.iter().map(|(_, name)| *name).collect::<Vec<_>>();
-    let members = [
-        ("crc32.bin", crc32_hash_member(entries)),
-        ("md5.bin", empty_hash_member(1, 16)),
-        ("sha1.bin", empty_hash_member(2, 20)),
-        ("name-platforms.bin", pairs),
-        ("names.json", serde_json::to_vec(&names).expect("names")),
-        (
-            "platforms.json",
-            serde_json::to_vec(&["Test System"]).expect("platforms"),
-        ),
-    ];
-
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(PACK_MAGIC);
-    bytes.extend_from_slice(&(members.len() as u32).to_le_bytes());
-    for (name, member) in &members {
-        bytes.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        bytes.extend_from_slice(&(member.len() as u64).to_le_bytes());
-        bytes.extend_from_slice(name.as_bytes());
-    }
-    for (_, member) in members {
-        bytes.extend_from_slice(&member);
-    }
-    bytes
+    rwfp5_pack(entries)
 }
 
 fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
-    let mut pairs = Vec::new();
-    pairs.extend_from_slice(b"RWHP");
-    pairs.extend_from_slice(&1u16.to_le_bytes());
-    pairs.extend_from_slice(&6u16.to_le_bytes());
-    pairs.extend_from_slice(&0u32.to_le_bytes());
-    pairs.extend_from_slice(&0u16.to_le_bytes());
-
-    let members = [
-        ("crc32.bin", hash_member(0, &crc32)),
-        ("md5.bin", hash_member(1, &md5)),
-        ("sha1.bin", hash_member(2, &sha1)),
-        ("name-platforms.bin", pairs),
-        ("names.json", serde_json::to_vec(&[name]).expect("names")),
-        (
-            "platforms.json",
-            serde_json::to_vec(&["Test System"]).expect("platforms"),
-        ),
-    ];
-
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(PACK_MAGIC);
-    bytes.extend_from_slice(&(members.len() as u32).to_le_bytes());
-    for (name, member) in &members {
-        bytes.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        bytes.extend_from_slice(&(member.len() as u64).to_le_bytes());
-        bytes.extend_from_slice(name.as_bytes());
-    }
-    for (_, member) in members {
-        bytes.extend_from_slice(&member);
-    }
-    bytes
+    let game = PackGame {
+        name: name.to_string(),
+        platform: "Test System".to_string(),
+        source: IdentifySource::Libretro,
+        upstream_source: UpstreamSource::Libretro,
+        provenance: Vec::new(),
+        legacy_variant: false,
+        dump_tags: Vec::new(),
+        game_id: None,
+        region: None,
+        language: None,
+        disc_number: None,
+        revision: None,
+        parent: None,
+        components: vec![PackComponent {
+            role: PackComponentRole::PrimaryPayload,
+            ordinal: 0,
+            hash_scope: "full_file".to_string(),
+            filename: None,
+            size: 5,
+            crc32: Some(crc32.iter().map(|byte| format!("{byte:02x}")).collect()),
+            md5: Some(md5.iter().map(|byte| format!("{byte:02x}")).collect()),
+            sha1: Some(sha1.iter().map(|byte| format!("{byte:02x}")).collect()),
+            sha256: None,
+            required: true,
+            discriminating: true,
+            track: None,
+            session: None,
+        }],
+    };
+    rom_weaver_checksum::identify_pack_v5::encode(
+        "Test System",
+        IdentifySource::Libretro,
+        "full_file",
+        &serde_json::json!([]),
+        vec![game],
+    )
+    .expect("RWFP5 pack")
 }
 
 pub(crate) fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
@@ -179,7 +204,7 @@ fn identify_matches_an_external_pack() {
     assert_eq!(identify["status"], "matched");
     assert_eq!(identify["matches"][0]["name"], "Hello World (Test) [!]");
     assert_eq!(identify["matches"][0]["platform"], "Test System");
-    assert_eq!(identify["matches"][0]["algorithm"], "crc32");
+    assert_eq!(identify["matches"][0]["algorithm"], "components");
     assert_eq!(identify["matches"][0]["variant"], "raw");
 }
 
@@ -261,7 +286,7 @@ fn identify_matches_a_manual_hash() {
     assert_eq!(identify["input"], "3610a686");
     assert_eq!(identify["checksums"]["crc32"], "3610a686");
     assert_eq!(identify["matches"][0]["name"], "Hello World (Test) [!]");
-    assert_eq!(identify["matches"][0]["algorithm"], "crc32");
+    assert_eq!(identify["matches"][0]["algorithm"], "components");
     assert_eq!(identify["matches"][0]["variant"], "manual");
 }
 
@@ -343,7 +368,10 @@ fn identify_matches_a_headerless_variant_inside_gzip() {
     encoder.finish().expect("finish gzip fixture");
     fs::write(
         temp.child("test.pack").path(),
-        identify_pack_with_crc(crc32, "Compressed Header Test [!]"),
+        rwfp5_pack_with_size(
+            &[(crc32, "Compressed Header Test [!]")],
+            payload.len() as u64,
+        ),
     )
     .expect("identify pack");
 

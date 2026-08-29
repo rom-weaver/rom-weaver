@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import zlib from "node:zlib";
 
 const BROTLI_LGWIN = 24;
+const BROTLI_VERSION = process.versions.brotli;
 
 // Quality 11 on the ~7 MB wasm costs ~15s, and every webapp build stages
 // sidecars now - not just deploys - so an untouched asset would pay that on
@@ -53,7 +54,11 @@ const pruneCache = (now) => {
 const cacheEntryPath = (source, quality) =>
   path.join(
     CACHE_ROOT,
-    `${crypto.createHash("sha256").update(source).digest("hex")}-q${quality}-w${BROTLI_LGWIN}.br`,
+    `${crypto
+      .createHash("sha256")
+      .update(source)
+      .update(`\0q${quality}\0lgwin${BROTLI_LGWIN}\0size${source.byteLength}\0brotli${BROTLI_VERSION}`)
+      .digest("hex")}-q${quality}-lgwin${BROTLI_LGWIN}-size${source.byteLength}-brotli${BROTLI_VERSION}.br`,
   );
 
 // Verified by decompressing rather than trusted on the strength of its name: a
@@ -99,16 +104,21 @@ export function brotliCompressFile({ inputPath, outputPath, quality }) {
     }
   }
 
-  const compressed = zlib.brotliCompressSync(source, {
+  const compressed = brotliCompressBuffer(source, { quality: normalizedQuality });
+  fs.writeFileSync(outputPath, compressed);
+  if (entryPath) writeCachedBrotli(entryPath, compressed);
+  return { cached: false, compressedSize: compressed.byteLength, sourceSize: source.byteLength };
+}
+
+export function brotliCompressBuffer(source, { quality }) {
+  const normalizedQuality = Number(quality);
+  return zlib.brotliCompressSync(source, {
     params: {
       [zlib.constants.BROTLI_PARAM_LGWIN]: BROTLI_LGWIN,
       [zlib.constants.BROTLI_PARAM_QUALITY]: normalizedQuality,
       [zlib.constants.BROTLI_PARAM_SIZE_HINT]: source.byteLength,
     },
   });
-  fs.writeFileSync(outputPath, compressed);
-  if (entryPath) writeCachedBrotli(entryPath, compressed);
-  return { cached: false, compressedSize: compressed.byteLength, sourceSize: source.byteLength };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

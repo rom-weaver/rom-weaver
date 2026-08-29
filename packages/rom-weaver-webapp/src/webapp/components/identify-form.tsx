@@ -56,7 +56,7 @@ const CandidateStatusChip = ({ status }: { status: ParsedIdentifyCandidate["stat
   );
 };
 
-/** Match-quality chip; renders only for the set-aware (RWFP2) results that carry one. */
+/** Match-quality chip; renders only for set-aware results that carry one. */
 const CandidateQualityChip = ({ quality }: { quality: NonNullable<ParsedIdentifyCandidate["quality"]> }) => {
   const mark = IDENTIFY_QUALITY_MARK[quality];
   return (

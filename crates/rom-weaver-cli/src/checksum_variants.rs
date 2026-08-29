@@ -122,7 +122,7 @@ impl CliApp {
         let mut details = json!({
             "checksums": primary_checksums,
             "checksum_variants": rows_json,
-            // The raw payload size in bytes; identify needs it to route RWFP2
+            // The raw payload size in bytes; identify needs it to route RWFP5
             // (crc32, size) keys.
             "size": file_len,
         });

@@ -1,13 +1,13 @@
 # ROM identify data
 
-ROMWeaver builds deterministic RWFP4 packs from pinned Libretro and OpenGood data. Native packages and the webapp use the same Brotli assets.
+ROMWeaver builds deterministic RWFP5 packs from pinned Libretro and OpenGood data. Native packages and the webapp use the same Brotli assets.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Build-time data](#build-time-data)
 - [Source policy](#source-policy)
-- [RWFP4 records](#rwfp4-records)
+- [RWFP5 records](#rwfp5-records)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Determinism and provenance](#determinism-and-provenance)
@@ -41,11 +41,13 @@ The deduplication key contains the hash algorithm, normalized hash, file size, a
 
 OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
-## RWFP4 records
+## RWFP5 records
 
-Every built-in pack uses RWFP4. RWFP1, RWFP2, and RWFP3 remain readable for imported user packs.
+Every built-in and imported pack uses RWFP5. The reader accepts only RWFP5.
 
-RWFP4 stores strings, hashes, components, games, owners, routes, and sets in binary tables. Components and routes refer to one shared hash record. Provenance exists once per pack and each game refers to a provenance set.
+RWFP5 stores strings, hashes, components, games, owners, routes, and sets in variable-width binary tables. Hash sizes and sorted owner IDs use deltas. Count-prefixed lists replace cumulative offsets. Components and routes refer to one shared hash record.
+
+The pack manifest owns the platform and source. Game records do not repeat them. Component ordinals are their positions in each game and are reconstructed during decoding.
 
 `manifest.json` stores the source, license, commit, URL, and generation metadata.
 
@@ -80,5 +82,3 @@ Each manifest records the source name, URL, commit, license, input path, and gen
 The browser and native CLI check each pack size and SHA-256 before use. The reader also checks every member, table length, offset, hash width, and reference.
 
 An invalid or absent pack reports identification as unavailable. It does not become a false no-match result.
-
-Imported RWFP1, RWFP2, and RWFP3 packs remain readable.

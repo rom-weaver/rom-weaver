@@ -55,7 +55,7 @@ const parseCatalogPlatform = (value: unknown): IdentifyCatalogPlatform | undefin
     mediaProfiles: Array.isArray(record.mediaProfiles)
       ? record.mediaProfiles.filter((profile) => typeof profile === "string")
       : [],
-    packFormat: typeof record.packFormat === "string" ? record.packFormat : "RWFP1",
+    packFormat: typeof record.packFormat === "string" ? record.packFormat : "RWFP5",
     packSha256: typeof record.packSha256 === "string" ? record.packSha256 : "",
     packSlug,
     source: record.source,

@@ -91,7 +91,7 @@ test("quality, source, platform candidates, and component evidence render on a m
       {
         checksums: { crc32: "abcd1234" },
         checksumVariants: [],
-        database: { packFormat: "RWFP2", source: "redump" },
+        database: { packFormat: "RWFP5", source: "redump" },
         evidence: { layoutMatched: true, requiredComponentsMatched: 3, requiredComponentsTotal: 4 },
         matches: [
           {
@@ -116,7 +116,7 @@ test("quality, source, platform candidates, and component evidence render on a m
   const summary = [...host.querySelectorAll("summary, button")].find((el) => /Identify/u.test(el.textContent || ""));
   summary?.click();
   await waitForText("Redump");
-  await waitForText("RWFP2");
+  await waitForText("RWFP5");
   await waitForText("3 of 4 required components matched");
   await waitForText("system_area_magic");
 });

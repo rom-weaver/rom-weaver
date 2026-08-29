@@ -1,81 +1,14 @@
 use super::shared::*;
 
-const PACK_V2_MAGIC: &[u8] = b"RWFP2\0\0\0";
-const CONFLICT_VALUE_FLAG: u32 = 0x8000_0000;
-
-/// One route entry: ((crc32 bytes, size), ref ids).
-type RouteEntry = (([u8; 4], u64), Vec<u32>);
+use rom_weaver_checksum::identify_catalog::IdentifySource;
+use rom_weaver_checksum::identify_pack_types::{
+    PackComponent, PackComponentRole, PackGame, UpstreamSource,
+};
 
 fn crc32_of(bytes: &[u8]) -> u32 {
     let mut crc = flate2::Crc::new();
     crc.update(bytes);
     crc.sum()
-}
-
-// ---------------------------------------------------------------------------
-// RWFP2 fixture builders (mirror the byte layout the reader expects)
-// ---------------------------------------------------------------------------
-
-fn build_pack_container(members: &[(&str, Vec<u8>)]) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(PACK_V2_MAGIC);
-    out.extend_from_slice(&(members.len() as u32).to_le_bytes());
-    for (name, bytes) in members {
-        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        out.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
-        out.extend_from_slice(name.as_bytes());
-    }
-    for (_, bytes) in members {
-        out.extend_from_slice(bytes);
-    }
-    out
-}
-
-fn build_refs(refs: &[(u32, u16)]) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(b"RWX2");
-    out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&6u16.to_le_bytes());
-    for (game, component) in refs {
-        out.extend_from_slice(&game.to_le_bytes());
-        out.extend_from_slice(&component.to_le_bytes());
-    }
-    out
-}
-
-fn build_route(mut entries: Vec<RouteEntry>) -> Vec<u8> {
-    entries.sort_by_key(|entry| entry.0);
-    let mut conflict_offsets = vec![0u32];
-    let mut conflict_values: Vec<u32> = Vec::new();
-    let mut records = Vec::new();
-    for ((crc, size), ids) in &entries {
-        records.extend_from_slice(crc);
-        records.extend_from_slice(&size.to_le_bytes());
-        let value = if ids.len() == 1 {
-            ids[0]
-        } else {
-            let index = (conflict_offsets.len() - 1) as u32;
-            conflict_values.extend_from_slice(ids);
-            conflict_offsets.push(conflict_values.len() as u32);
-            CONFLICT_VALUE_FLAG + index
-        };
-        records.extend_from_slice(&value.to_le_bytes());
-    }
-    let mut out = Vec::new();
-    out.extend_from_slice(b"RWR2");
-    out.extend_from_slice(&1u16.to_le_bytes());
-    out.extend_from_slice(&0u16.to_le_bytes());
-    out.extend_from_slice(&(entries.len() as u32).to_le_bytes());
-    out.extend_from_slice(&((conflict_offsets.len() - 1) as u32).to_le_bytes());
-    out.extend_from_slice(&(conflict_values.len() as u32).to_le_bytes());
-    out.extend_from_slice(&records);
-    for offset in conflict_offsets {
-        out.extend_from_slice(&offset.to_le_bytes());
-    }
-    for value in conflict_values {
-        out.extend_from_slice(&value.to_le_bytes());
-    }
-    out
 }
 
 fn component_json(
@@ -98,62 +31,73 @@ fn component_json(
     value
 }
 
-/// Build an RWFP2 pack for one platform. Every discriminating component with a
+/// Build an RWFP5 pack for one platform. Every discriminating component with a
 /// crc32 and a size is routed.
-pub(crate) fn pack_v2(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u8> {
-    let mut refs: Vec<(u32, u16)> = Vec::new();
-    let mut route: Vec<RouteEntry> = Vec::new();
-    for (game_index, (_, components)) in games.iter().enumerate() {
-        for (component_index, component) in components.iter().enumerate() {
-            let discriminating = component["discriminating"].as_bool().unwrap();
-            let size = component["size"].as_u64().unwrap();
-            let crc32 = component["crc32"].as_str();
-            if !discriminating || size == 0 {
-                continue;
-            }
-            let Some(crc32) = crc32 else { continue };
-            let mut crc_bytes = [0u8; 4];
-            for (index, byte) in crc_bytes.iter_mut().enumerate() {
-                *byte = u8::from_str_radix(&crc32[index * 2..index * 2 + 2], 16).unwrap();
-            }
-            let ref_id = refs.len() as u32;
-            refs.push((game_index as u32, component_index as u16));
-            match route.iter_mut().find(|(key, _)| *key == (crc_bytes, size)) {
-                Some((_, ids)) => ids.push(ref_id),
-                None => route.push(((crc_bytes, size), vec![ref_id])),
-            }
-        }
-    }
-    let games_json = serde_json::to_vec(
-        &games
-            .iter()
-            .map(|(name, components)| {
-                serde_json::json!({
-                    "name": name,
-                    "platform": platform,
-                    "source": "redump",
-                    "upstreamSource": "redump",
-                    "components": components,
+pub(crate) fn pack_v5(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u8> {
+    let v5_games = games
+        .iter()
+        .map(|(name, components)| PackGame {
+            name: (*name).to_string(),
+            platform: platform.to_string(),
+            source: IdentifySource::Redump,
+            upstream_source: UpstreamSource::Redump,
+            provenance: Vec::new(),
+            legacy_variant: false,
+            dump_tags: Vec::new(),
+            game_id: None,
+            region: None,
+            language: None,
+            disc_number: None,
+            revision: None,
+            parent: None,
+            components: components
+                .iter()
+                .enumerate()
+                .map(|(ordinal, component)| PackComponent {
+                    role: component
+                        .get("role")
+                        .cloned()
+                        .map(serde_json::from_value)
+                        .transpose()
+                        .expect("component role")
+                        .unwrap_or(PackComponentRole::PrimaryPayload),
+                    ordinal: ordinal as u32,
+                    hash_scope: component
+                        .get("hashScope")
+                        .and_then(Value::as_str)
+                        .unwrap_or("full_file")
+                        .to_string(),
+                    filename: component
+                        .get("filename")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    size: component["size"].as_u64().unwrap_or(0),
+                    crc32: component["crc32"].as_str().map(str::to_owned),
+                    md5: None,
+                    sha1: None,
+                    sha256: None,
+                    required: component["required"].as_bool().unwrap_or(true),
+                    discriminating: component["discriminating"].as_bool().unwrap_or(false),
+                    track: component
+                        .get("track")
+                        .and_then(Value::as_u64)
+                        .map(|x| x as u32),
+                    session: component
+                        .get("session")
+                        .and_then(Value::as_u64)
+                        .map(|x| x as u32),
                 })
-            })
-            .collect::<Vec<_>>(),
+                .collect(),
+        })
+        .collect();
+    rom_weaver_checksum::identify_pack_v5::encode(
+        platform,
+        IdentifySource::Redump,
+        profile,
+        &serde_json::json!([]),
+        v5_games,
     )
-    .unwrap();
-    let manifest = serde_json::to_vec(&serde_json::json!({
-        "format": "rom-weaver-identify-system-pack-v2",
-        "platform": platform,
-        "source": "redump",
-        "canonicalizationProfile": profile,
-        "canonicalizationVersion": 1,
-        "counts": { "games": games.len(), "components": 0, "routedKeys": route.len() },
-    }))
-    .unwrap();
-    build_pack_container(&[
-        ("games.json", games_json),
-        ("route.bin", build_route(route)),
-        ("refs.bin", build_refs(&refs)),
-        ("manifest.json", manifest),
-    ])
+    .expect("RWFP5 pack")
 }
 
 fn catalog_json(platforms: &[(&str, &[&str], &str, &str)]) -> Vec<u8> {
@@ -166,7 +110,7 @@ fn catalog_json(platforms: &[(&str, &[&str], &str, &str)]) -> Vec<u8> {
                 "source": "redump",
                 "mediaProfiles": [profile],
                 "packSlug": slug,
-                "packFormat": "RWFP2",
+                "packFormat": "RWFP5",
                 "canonicalizationVersion": 1,
             })
         })
@@ -255,7 +199,7 @@ fn playstation_database(temp: &TempDir, payload: &[u8], with_pack: bool) -> Path
     .expect("catalog fixture");
     if with_pack {
         let crc = format!("{:08x}", crc32_of(payload));
-        let pack = pack_v2(
+        let pack = pack_v5(
             "Sony PlayStation",
             "nointro-single-image-v1",
             &[(
@@ -284,7 +228,7 @@ fn identify_matches_headered_rom_against_artifact_pack_via_remove_header() {
     let rom = temp.child("headered.nes");
     fs::write(rom.path(), with_nes_header(&payload)).expect("ROM fixture");
     let crc = format!("{:08x}", crc32_of(&payload));
-    let pack = pack_v2(
+    let pack = pack_v5(
         "Nintendo Entertainment System",
         "libretro-clrmamepro-v1",
         &[(
@@ -319,7 +263,7 @@ fn identify_matches_headered_rom_against_artifact_pack_via_remove_header() {
 }
 
 #[test]
-fn identify_system_alias_routes_to_an_installed_v2_pack() {
+fn identify_system_alias_routes_to_an_installed_rwfp5_pack() {
     let temp = setup_temp_dir();
     let payload = b"playstation payload".to_vec();
     fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
@@ -346,7 +290,7 @@ fn identify_system_alias_routes_to_an_installed_v2_pack() {
     assert_eq!(identify["matches"][0]["name"], "Ridge Racer (USA)");
     assert_eq!(identify["matches"][0]["platform"], "Sony PlayStation");
     assert_eq!(identify["quality"], "exact");
-    assert_eq!(identify["database"]["pack_format"], "RWFP2");
+    assert_eq!(identify["database"]["pack_format"], "RWFP5");
     assert_eq!(
         identify["database"]["canonicalization_profile"],
         "nointro-single-image-v1"
@@ -363,12 +307,12 @@ fn identify_system_alias_routes_to_an_installed_v2_pack() {
 }
 
 #[test]
-fn identify_matches_a_v2_pack_passed_via_database() {
+fn identify_matches_an_rwfp5_pack_passed_via_database() {
     let temp = setup_temp_dir();
     let payload = b"v2 explicit pack payload".to_vec();
     fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
     let crc = format!("{:08x}", crc32_of(&payload));
-    let pack = pack_v2(
+    let pack = pack_v5(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -411,7 +355,7 @@ fn ingest_matches_an_artifact_pack_using_the_payload_size() {
     let payload = b"artifact pack ingest payload".to_vec();
     fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
     let crc = format!("{:08x}", crc32_of(&payload));
-    let pack = pack_v2(
+    let pack = pack_v5(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -552,7 +496,7 @@ fn missing_required_track_is_a_partial_match() {
     let track1 = b"data track payload".to_vec();
     fs::write(temp.child("track1.bin").path(), &track1).expect("track fixture");
     let crc1 = format!("{:08x}", crc32_of(&track1));
-    let pack = pack_v2(
+    let pack = pack_v5(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -604,7 +548,7 @@ fn shared_only_component_stays_unknown() {
     let crc = format!("{:08x}", crc32_of(&shared));
     // The shared component is non-discriminating, so it is not routed and can
     // never pick a game on its own.
-    let pack = pack_v2(
+    let pack = pack_v5(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -638,7 +582,7 @@ fn shared_only_component_stays_unknown() {
 fn corrupt_pack_fails_the_command_instead_of_reporting_unknown() {
     let temp = setup_temp_dir();
     fs::write(temp.child("game.bin").path(), b"payload").expect("ROM fixture");
-    fs::write(temp.child("broken.pack").path(), b"RWFP2\0\0\0garbage").expect("pack fixture");
+    fs::write(temp.child("broken.pack").path(), b"RWFP5\0\0\0garbage").expect("pack fixture");
 
     let output = command_stdout(
         &[
@@ -682,7 +626,7 @@ fn database_list_status_path_remove_round_trip() {
         .find(|entry| entry["platform"] == "Sony PlayStation")
         .expect("PlayStation entry");
     assert_eq!(playstation["installed"], true);
-    assert_eq!(playstation["pack_format"], "RWFP2");
+    assert_eq!(playstation["pack_format"], "RWFP5");
     // The builtin OpenGood catalog entries are listed too.
     assert!(
         platforms
@@ -704,7 +648,7 @@ fn database_list_status_path_remove_round_trip() {
     let packs = status["details"]["packs"].as_array().expect("packs");
     assert_eq!(packs.len(), 1);
     assert_eq!(packs[0]["slug"], "sony-playstation");
-    assert_eq!(packs[0]["format"], "RWFP2");
+    assert_eq!(packs[0]["format"], "RWFP5");
     assert_eq!(packs[0]["sha256"].as_str().expect("sha256").len(), 64);
 
     let path = parse_single_json_line(&command_stdout(
@@ -922,7 +866,7 @@ fn import_redump_builds_packs_and_identify_uses_them() {
     assert_eq!(identify["status"], "matched");
     assert_eq!(identify["matches"][0]["name"], "Imported Game (USA)");
     assert_eq!(identify["database"]["source"], "redump");
-    assert_eq!(identify["database"]["pack_format"], "RWFP2");
+    assert_eq!(identify["database"]["pack_format"], "RWFP5");
     // The imported game's SignatureSource is Redump.
     assert_eq!(
         identify["database"]["upstream_sources"],

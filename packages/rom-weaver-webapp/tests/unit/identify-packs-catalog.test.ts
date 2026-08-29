@@ -5,7 +5,7 @@ import { sha256Hex } from "../../src/lib/identify/sha256-hex.ts";
 const PACK_BODY = "libretro-pack";
 const OPENGOOD_SHA = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 const INDEX = {
-  format: "rom-weaver-identify-system-pack-v1",
+  format: "rom-weaver-identify-system-pack-v5",
   systems: [
     {
       file: "nintendo-game-boy.pack",
@@ -26,7 +26,7 @@ const catalogWith = (packSha: string) => ({
       aliases: ["psx", "sony playstation"],
       canonicalPlatform: "Sony PlayStation",
       mediaProfiles: ["optical-single-image-v1"],
-      packFormat: "RWFP2",
+      packFormat: "RWFP5",
       packSha256: packSha,
       packSlug: "sony-playstation",
       source: "libretro",

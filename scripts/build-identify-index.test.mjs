@@ -13,6 +13,7 @@ import {
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
   buildCatalogPlatforms,
+  buildSystemPackV5,
   extractGoodToolsDumpTags,
   main,
   mediaProfileFor,
@@ -69,7 +70,7 @@ function writeCachedDat(cacheDir, source, revision, datFile, bytes) {
 }
 
 function parsePack(bytes) {
-  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP4\0\0\0");
+  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP5\0\0\0");
   const count = bytes.readUInt32LE(8);
   let cursor = 12;
   const directory = [];
@@ -197,13 +198,13 @@ test("family variants resolve to their shared pack", () => {
       platform: "Nintendo - Nintendo 64",
       slug: "nintendo-nintendo-64",
       source: "libretro",
-      packFormat: "RWFP3",
+      packFormat: "RWFP5",
     },
   ]);
   assert.ok(entry.aliases.includes("nintendo nintendo 64dd"));
 });
 
-test("the builder emits deterministic mixed and fallback-only RWFP4 packs", async () => {
+test("the builder emits deterministic mixed and fallback-only RWFP5 packs", async () => {
   const work = tempDir("mixed");
   const cacheDir = join(work, "cache");
   const outDir = join(work, "out");
@@ -236,8 +237,20 @@ test("the builder emits deterministic mixed and fallback-only RWFP4 packs", asyn
   const nes = parsePack(readFileSync(join(outDir, "nintendo-nintendo-entertainment-system.pack")));
   const manifest = JSON.parse(nes.get("manifest.json").toString("utf8"));
   assert.equal(manifest.source, "libretro");
-  assert.equal(manifest.format, "rom-weaver-identify-system-pack-v4");
+  assert.equal(manifest.format, "rom-weaver-identify-system-pack-v5");
   assert.equal(manifest.generationDate, IDENTIFY_GENERATION_DATE);
+  for (const name of [
+    "strings.bin",
+    "hashes.bin",
+    "components.bin",
+    "games.bin",
+    "owners.bin",
+    "routes.bin",
+    "sets.bin",
+  ]) {
+    assert.equal(nes.get(name).readUInt8(4), 1, name);
+    assert.equal(nes.get(name).subarray(0, 4).toString("ascii"), `${name === "strings.bin" ? "RWS" : name === "hashes.bin" ? "RWH" : name === "components.bin" ? "RWC" : name === "games.bin" ? "RWG" : name === "owners.bin" ? "RWO" : name === "routes.bin" ? "RWR" : "RWX"}5`, name);
+  }
 
   const tandy = parsePack(readFileSync(join(outDir, "tandy-color-computer.pack")));
   const tandyManifest = JSON.parse(tandy.get("manifest.json").toString("utf8"));
@@ -276,4 +289,21 @@ test("the builder emits deterministic mixed and fallback-only RWFP4 packs", asyn
   ]) {
     assert.deepEqual(readFileSync(join(outDir, file)), readFileSync(join(outDir2, file)), file);
   }
+});
+
+test("RWFP5 rejects games outside the scoped pack", () => {
+  const game = {
+    name: "Title",
+    platform: NES,
+    source: "libretro",
+    components: [],
+  };
+  assert.throws(
+    () => buildSystemPackV5("Other", [game]),
+    /game platform does not match pack/u,
+  );
+  assert.throws(
+    () => buildSystemPackV5(NES, [{ ...game, source: "opengood" }]),
+    /game source does not match pack/u,
+  );
 });

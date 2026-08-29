@@ -11,8 +11,8 @@ use rom_weaver_checksum::identify_catalog::{IdentifyCatalog, IdentifyPlatformCat
 use rom_weaver_checksum::identify_catalog::{IdentifySource, normalize_platform_name};
 use rom_weaver_checksum::identify_pack::IdentifyPackFile;
 #[cfg(not(target_arch = "wasm32"))]
-use rom_weaver_checksum::identify_pack_v2::{
-    ArtifactPack, PackComponent, PackComponentRole, PackGame, UpstreamSource,
+use rom_weaver_checksum::identify_pack_types::{
+    PackComponent, PackComponentRole, PackGame, UpstreamSource,
 };
 
 use super::*;
@@ -20,10 +20,6 @@ use super::*;
 #[cfg(not(target_arch = "wasm32"))]
 const CATALOG_FORMAT: &str = "rom-weaver-identify-catalog-v1";
 #[cfg(not(target_arch = "wasm32"))]
-const MANIFEST_FORMAT_V2: &str = "rom-weaver-identify-system-pack-v2";
-/// Route values >= this flag are conflict-table indices (same scheme as RWFP1).
-#[cfg(not(target_arch = "wasm32"))]
-const CONFLICT_VALUE_FLAG: u32 = 0x8000_0000;
 /// One XML entry in a Redump DAT ZIP: (archive index, entry name, size).
 #[cfg(not(target_arch = "wasm32"))]
 type DumpEntry = (usize, String, u64);
@@ -365,109 +361,6 @@ impl IdentifyPackProvider {
     }
 }
 
-// ---------------------------------------------------------------------------
-// RWFP2 pack writing (mirror of the builder script's byte layout)
-// ---------------------------------------------------------------------------
-
-#[cfg(not(target_arch = "wasm32"))]
-fn write_pack_container(magic: &[u8], members: &[(&str, Vec<u8>)]) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(magic);
-    out.extend_from_slice(&(members.len() as u32).to_le_bytes());
-    for (name, bytes) in members {
-        out.extend_from_slice(&(name.len() as u16).to_le_bytes());
-        out.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
-        out.extend_from_slice(name.as_bytes());
-    }
-    for (_, bytes) in members {
-        out.extend_from_slice(bytes);
-    }
-    out
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn crc_hex_to_bytes(hex: &str) -> Option<[u8; 4]> {
-    if hex.len() != 8 {
-        return None;
-    }
-    let mut out = [0u8; 4];
-    for (index, byte) in out.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16).ok()?;
-    }
-    Some(out)
-}
-
-/// Build `route.bin` (RWR2) and `refs.bin` (RWX2) for a sorted game list.
-/// Only discriminating components with a crc32 and size > 0 get routed.
-#[cfg(not(target_arch = "wasm32"))]
-fn build_route_and_refs(games: &[PackGame]) -> Result<(Vec<u8>, Vec<u8>, usize, usize)> {
-    let mut refs: Vec<(u32, u16)> = Vec::new();
-    let mut by_key: std::collections::BTreeMap<([u8; 4], u64), Vec<u32>> = Default::default();
-    for (game_index, game) in games.iter().enumerate() {
-        for (component_index, component) in game.components.iter().enumerate() {
-            if component_index > u16::MAX as usize {
-                return Err(RomWeaverError::Validation(format!(
-                    "game `{}` has too many components for the RWX2 format",
-                    game.name
-                )));
-            }
-            if !component.discriminating || component.size == 0 {
-                continue;
-            }
-            let Some(crc32) = component.crc32.as_deref().and_then(crc_hex_to_bytes) else {
-                continue;
-            };
-            let ref_id = refs.len() as u32;
-            refs.push((game_index as u32, component_index as u16));
-            by_key
-                .entry((crc32, component.size))
-                .or_default()
-                .push(ref_id);
-        }
-    }
-
-    let mut conflict_offsets = vec![0u32];
-    let mut conflict_values: Vec<u32> = Vec::new();
-    let mut records = Vec::new();
-    for ((crc, size), ids) in &by_key {
-        records.extend_from_slice(crc);
-        records.extend_from_slice(&size.to_le_bytes());
-        let value = if ids.len() == 1 {
-            ids[0]
-        } else {
-            let index = (conflict_offsets.len() - 1) as u32;
-            conflict_values.extend_from_slice(ids);
-            conflict_offsets.push(conflict_values.len() as u32);
-            CONFLICT_VALUE_FLAG + index
-        };
-        records.extend_from_slice(&value.to_le_bytes());
-    }
-    let mut route = Vec::new();
-    route.extend_from_slice(b"RWR2");
-    route.extend_from_slice(&1u16.to_le_bytes());
-    route.extend_from_slice(&0u16.to_le_bytes());
-    route.extend_from_slice(&(by_key.len() as u32).to_le_bytes());
-    route.extend_from_slice(&((conflict_offsets.len() - 1) as u32).to_le_bytes());
-    route.extend_from_slice(&(conflict_values.len() as u32).to_le_bytes());
-    route.extend_from_slice(&records);
-    for offset in &conflict_offsets {
-        route.extend_from_slice(&offset.to_le_bytes());
-    }
-    for value in &conflict_values {
-        route.extend_from_slice(&value.to_le_bytes());
-    }
-
-    let mut refs_bytes = Vec::new();
-    refs_bytes.extend_from_slice(b"RWX2");
-    refs_bytes.extend_from_slice(&1u16.to_le_bytes());
-    refs_bytes.extend_from_slice(&6u16.to_le_bytes());
-    for (game, component) in &refs {
-        refs_bytes.extend_from_slice(&game.to_le_bytes());
-        refs_bytes.extend_from_slice(&component.to_le_bytes());
-    }
-    Ok((route, refs_bytes, by_key.len(), refs.len()))
-}
-
 /// Mark components byte-identical across more than one game (same size plus
 /// the same md5 or the same sha1) as non-discriminating.
 #[cfg(not(target_arch = "wasm32"))]
@@ -651,7 +544,7 @@ fn download_redump_dat(platform: &str, database_dir: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// The RWFP2 reader rejects a whole pack when any record exceeds its caps, so
+/// The RWFP5 reader rejects a whole pack when any record exceeds its caps, so
 /// the writer MUST drop an oversized record instead of emitting an unreadable pack.
 #[cfg(not(target_arch = "wasm32"))]
 fn game_within_pack_caps(game: &PackGame) -> bool {
@@ -708,60 +601,41 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .expect("sha256 value present")
 }
 
-/// Build one platform's RWFP2 pack bytes from its (unsorted) game records.
+/// Build one platform's RWFP5 pack bytes from its unsorted game records.
 #[cfg(not(target_arch = "wasm32"))]
-fn build_pack_v2(
+fn build_pack_v5(
     platform: &str,
     mut games: Vec<PackGame>,
     provenance: &Value,
 ) -> Result<(Vec<u8>, usize, usize, usize, usize)> {
-    // Deterministic order: (platform, name, gameId, input order); Rust's
-    // stable sort keeps the input order for full ties.
-    games.sort_by(|a, b| {
-        (&a.platform, &a.name, a.game_id.as_deref().unwrap_or("")).cmp(&(
-            &b.platform,
-            &b.name,
-            b.game_id.as_deref().unwrap_or(""),
-        ))
-    });
     let shared_components = mark_shared_components(&mut games);
     let component_count: usize = games.iter().map(|game| game.components.len()).sum();
-    let games_bytes = serde_json::to_vec(&games).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to serialize games.json: {error}"))
-    })?;
-    let (route, refs, routed_keys, _refs_count) = build_route_and_refs(&games)?;
-    let manifest = serde_json::to_vec(&json!({
-        "format": MANIFEST_FORMAT_V2,
-        "platform": platform,
-        "source": "redump",
-        "canonicalizationProfile": media_profile_for(platform),
-        "canonicalizationVersion": 1,
-        "provenance": provenance,
-        "counts": {
-            "games": games.len(),
-            "components": component_count,
-            "routedKeys": routed_keys,
-        },
-    }))
-    .map_err(|error| {
-        RomWeaverError::Validation(format!("failed to serialize manifest.json: {error}"))
-    })?;
+    let routed_keys = games
+        .iter()
+        .flat_map(|game| &game.components)
+        .filter(|component| {
+            component.discriminating && component.size > 0 && component.crc32.is_some()
+        })
+        .map(|component| {
+            (
+                component.size,
+                component.hash_scope.clone(),
+                component.crc32.clone(),
+                component.md5.clone(),
+                component.sha1.clone(),
+                component.sha256.clone(),
+            )
+        })
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
     let game_count = games.len();
-    let pack = write_pack_container(
-        b"RWFP2\0\0\0",
-        &[
-            ("games.json", games_bytes),
-            ("route.bin", route),
-            ("refs.bin", refs),
-            ("manifest.json", manifest),
-        ],
-    );
-    // Self-check: a pack this build cannot read back is a bug, not data.
-    ArtifactPack::parse(&pack).map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "internal error: built pack for `{platform}` does not parse: {error}"
-        ))
-    })?;
+    let pack = rom_weaver_checksum::identify_pack_v5::encode(
+        platform,
+        IdentifySource::Redump,
+        media_profile_for(platform),
+        provenance,
+        games,
+    )?;
     Ok((
         pack,
         game_count,
@@ -771,7 +645,7 @@ fn build_pack_v2(
     ))
 }
 
-/// Import each Redump XML DAT in a ZIP as one RWFP2 system pack.
+/// Import each Redump XML DAT in a ZIP as one RWFP5 system pack.
 #[cfg(not(target_arch = "wasm32"))]
 fn import_redump_dat(
     dump: &Path,
@@ -855,7 +729,7 @@ fn import_redump_dat(
             continue;
         }
         let (pack, game_count, component_count, routed_keys, shared_components) =
-            build_pack_v2(&platform, games, &provenance)?;
+            build_pack_v5(&platform, games, &provenance)?;
         let slug = slugify_platform(&platform);
         let file = format!("{slug}.pack");
         let path = database_dir.join(&file);
@@ -922,7 +796,7 @@ fn write_merged_catalog(
             source: IdentifySource::Redump,
             media_profiles: vec![media_profile_for(&system.platform).to_string()],
             pack_slug: system.slug.clone(),
-            pack_format: "RWFP2".to_string(),
+            pack_format: "RWFP5".to_string(),
             pack_sha256: Some(system.sha256.clone()),
             canonicalization_version: 1,
         });
@@ -1043,10 +917,7 @@ impl CliApp {
                             ))
                         })?;
                         let format = match IdentifyPackFile::parse(&bytes) {
-                            Ok(IdentifyPackFile::V1(_)) => "RWFP1",
-                            Ok(IdentifyPackFile::V2(_)) => "RWFP2",
-                            Ok(IdentifyPackFile::V3(_)) => "RWFP3",
-                            Ok(IdentifyPackFile::V4(_)) => "RWFP4",
+                            Ok(IdentifyPackFile::V5(_)) => "RWFP5",
                             Err(_) => "invalid",
                         };
                         packs.push(json!({

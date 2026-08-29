@@ -78,7 +78,7 @@ fn ingest_identifies_a_chd_disc_from_per_track_pack_components() {
         2,
         "expected two split tracks: {probe:?}"
     );
-    let pack_bytes = super::identify_database::pack_v2(
+    let pack_bytes = super::identify_database::pack_v5(
         "Sony - PlayStation",
         "redump-cd-track-v1",
         &[("Two Track Quest (USA)", track_components)],
@@ -181,7 +181,7 @@ fn ingest_identifies_a_bare_cue_with_sibling_tracks() {
         2,
         "expected two bare tracks: {probe:?}"
     );
-    let pack_bytes = super::identify_database::pack_v2(
+    let pack_bytes = super::identify_database::pack_v5(
         "Sony - PlayStation",
         "redump-cd-track-v1",
         &[("Raw Quest (USA)", track_components)],
@@ -251,7 +251,7 @@ fn ingest_identifies_a_merged_bin_chd_disc_from_per_track_pack_components() {
         })
         .collect();
     assert_eq!(track_components.len(), 2, "expected two split tracks");
-    let pack_bytes = super::identify_database::pack_v2(
+    let pack_bytes = super::identify_database::pack_v5(
         "Sony - PlayStation",
         "redump-cd-track-v1",
         &[("Two Track Quest (USA)", track_components)],
@@ -353,7 +353,11 @@ fn ingest_identifies_asset_from_existing_checksum_variants() {
     let pack = temp.child("test.pack");
     fs::write(
         pack.path(),
-        super::identify::identify_pack_with_crc(crc32, "Ingest Identify Test [!]"),
+        super::identify::identify_pack_with_crc_size(
+            crc32,
+            b"ingest identify fixture".len() as u64,
+            "Ingest Identify Test [!]",
+        ),
     )
     .expect("identify pack");
     let out_dir = temp.child("ingest-identify-out");
@@ -379,18 +383,22 @@ fn ingest_identifies_asset_from_existing_checksum_variants() {
 
 /// Build a tar.gz holding several NES ROMs at nested member paths and return
 /// their CRC32 bytes in the same order.
-fn nested_rom_archive(temp: &TempDir, payloads: &[(&str, &[u8])]) -> (PathBuf, Vec<[u8; 4]>) {
+fn nested_rom_archive(
+    temp: &TempDir,
+    payloads: &[(&str, &[u8])],
+) -> (PathBuf, Vec<([u8; 4], u64)>) {
     let mut sources = Vec::new();
-    let mut crc32s = Vec::new();
+    let mut fingerprints = Vec::new();
     for (member_path, payload) in payloads {
         let file_name = member_path.rsplit('/').next().expect("member file name");
         let rom = temp.child(file_name);
         fs::write(rom.path(), with_nes_header(payload)).expect("ROM fixture");
-        crc32s.push(
+        fingerprints.push((
             u32::from_str_radix(&checksum_value(rom.path(), "crc32"), 16)
                 .expect("CRC32")
                 .to_be_bytes(),
-        );
+            fs::metadata(rom.path()).expect("ROM metadata").len(),
+        ));
         sources.push((rom.path().to_path_buf(), (*member_path).to_string()));
     }
     let archive = temp.child("collection.tar.gz");
@@ -399,7 +407,7 @@ fn nested_rom_archive(temp: &TempDir, payloads: &[(&str, &[u8])]) -> (PathBuf, V
         .map(|(path, name)| (path.as_path(), name.as_str()))
         .collect::<Vec<_>>();
     write_tar_gz_fixture(&entries, archive.path());
-    (archive.path().to_path_buf(), crc32s)
+    (archive.path().to_path_buf(), fingerprints)
 }
 
 fn archive_identification_by_file_name(
@@ -436,11 +444,16 @@ fn archive_identification_by_file_name(
 #[test]
 fn ingest_identifies_a_single_rom_archive_member() {
     let temp = setup_temp_dir();
-    let (archive, crc32s) = nested_rom_archive(&temp, &[("Games/GBA/solo.nes", b"solo payload")]);
+    let (archive, fingerprints) =
+        nested_rom_archive(&temp, &[("Games/GBA/solo.nes", b"solo payload")]);
     let pack = temp.child("test.pack");
     fs::write(
         pack.path(),
-        super::identify::identify_pack_with_entries(&[(crc32s[0], "Solo Game (USA)")]),
+        super::identify::identify_pack_with_sized_entries(&[(
+            fingerprints[0].0,
+            fingerprints[0].1,
+            "Solo Game (USA)",
+        )]),
     )
     .expect("identify pack");
 
@@ -455,7 +468,7 @@ fn ingest_identifies_a_single_rom_archive_member() {
 #[test]
 fn ingest_identifies_every_rom_in_a_multi_rom_archive() {
     let temp = setup_temp_dir();
-    let (archive, crc32s) = nested_rom_archive(
+    let (archive, fingerprints) = nested_rom_archive(
         &temp,
         &[
             ("Games/NES/first.nes", b"first payload"),
@@ -465,9 +478,9 @@ fn ingest_identifies_every_rom_in_a_multi_rom_archive() {
     let pack = temp.child("test.pack");
     fs::write(
         pack.path(),
-        super::identify::identify_pack_with_entries(&[
-            (crc32s[0], "First Game (USA)"),
-            (crc32s[1], "Second Game (Europe)"),
+        super::identify::identify_pack_with_sized_entries(&[
+            (fingerprints[0].0, fingerprints[0].1, "First Game (USA)"),
+            (fingerprints[1].0, fingerprints[1].1, "Second Game (Europe)"),
         ]),
     )
     .expect("identify pack");
@@ -491,7 +504,7 @@ fn ingest_identifies_every_rom_in_a_multi_rom_archive() {
 #[test]
 fn ingest_identifies_only_the_matching_archive_member() {
     let temp = setup_temp_dir();
-    let (archive, crc32s) = nested_rom_archive(
+    let (archive, fingerprints) = nested_rom_archive(
         &temp,
         &[
             ("Games/NES/known.nes", b"known payload"),
@@ -501,7 +514,11 @@ fn ingest_identifies_only_the_matching_archive_member() {
     let pack = temp.child("test.pack");
     fs::write(
         pack.path(),
-        super::identify::identify_pack_with_entries(&[(crc32s[0], "Known Game (USA)")]),
+        super::identify::identify_pack_with_sized_entries(&[(
+            fingerprints[0].0,
+            fingerprints[0].1,
+            "Known Game (USA)",
+        )]),
     )
     .expect("identify pack");
 
@@ -549,7 +566,7 @@ fn ingest_rejects_an_invalid_identify_pack() {
     let rom = temp.child("game.bin");
     fs::write(rom.path(), b"ingest identify fixture").expect("ROM fixture");
     let pack = temp.child("broken.pack");
-    fs::write(pack.path(), b"not an RWFP1 pack").expect("invalid identify pack");
+    fs::write(pack.path(), b"not an RWFP5 pack").expect("invalid identify pack");
 
     let output = command_stdout(
         &[
