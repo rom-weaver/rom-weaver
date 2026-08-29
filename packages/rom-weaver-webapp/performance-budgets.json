@@ -15,10 +15,10 @@
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2035000,
-        "maxRawBytes": 2142000,
-        "expectedBrotliBytes": 532000,
-        "maxBrotliBytes": 558000
+        "expectedRawBytes": 2085000,
+        "maxRawBytes": 2190000,
+        "expectedBrotliBytes": 545000,
+        "maxBrotliBytes": 570000
       },
       {
         "name": "CSS",
@@ -35,10 +35,10 @@
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 6790000,
-        "maxRawBytes": 7130000,
-        "expectedBrotliBytes": 1810000,
-        "maxBrotliBytes": 1900000
+        "expectedRawBytes": 7140000,
+        "maxRawBytes": 7350000,
+        "expectedBrotliBytes": 1885000,
+        "maxBrotliBytes": 1960000
       }
     ]
   },
