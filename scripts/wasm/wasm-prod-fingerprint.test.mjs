@@ -19,6 +19,7 @@ test("production fingerprint covers the raw artifact and post-processing inputs"
       brotliVersion: "brotli 1",
       buildScriptPath,
       stripVersion: "strip 1",
+      wasmOptArgs: ["-O4", "--strip-debug"],
       wasmOptVersion: "wasm-opt 1",
     };
     const initial = createWasmProdFingerprint(options);
@@ -31,6 +32,8 @@ test("production fingerprint covers the raw artifact and post-processing inputs"
     assert.notEqual(createWasmProdFingerprint(options), initial);
     fs.writeFileSync(buildScriptPath, "wasm-opt -O4");
     assert.notEqual(createWasmProdFingerprint({ ...options, wasmOptVersion: "wasm-opt 2" }), initial);
+    assert.notEqual(createWasmProdFingerprint({ ...options, wasmOptArgs: [...options.wasmOptArgs, "--strip-producers"] }), initial);
+    assert.notEqual(createWasmProdFingerprint({ ...options, wasmOptArgs: ["-O4--strip", "-debug"] }), initial);
   } finally {
     fs.rmSync(dir, { force: true, recursive: true });
   }

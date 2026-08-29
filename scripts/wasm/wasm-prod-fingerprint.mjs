@@ -11,6 +11,7 @@ export function createWasmProdFingerprint({
   brotliVersion,
   buildScriptPath,
   stripVersion,
+  wasmOptArgs = [],
   wasmOptVersion,
 }) {
   const hash = createHash("sha256");
@@ -28,15 +29,19 @@ export function createWasmProdFingerprint({
   add("brotli-version", brotliVersion);
   add("strip-version", stripVersion);
   add("wasm-opt-version", wasmOptVersion);
+  // The build-script hash above already covers a flag list defined in
+  // build-app.mjs; this explicit input keeps invalidation correct if the
+  // flags ever become env- or argv-driven.
+  add("wasm-opt-args", JSON.stringify(wasmOptArgs));
   return hash.digest("hex");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [artifactPath, buildScriptPath, brotliQuality, wasmOptVersion, stripVersion, brotliVersion] =
+  const [artifactPath, buildScriptPath, brotliQuality, wasmOptVersion, stripVersion, brotliVersion, ...wasmOptArgs] =
     process.argv.slice(2);
   if (!brotliVersion) {
     process.stderr.write(
-      "usage: wasm-prod-fingerprint.mjs <artifact> <build-script> <brotli-quality> <wasm-opt-version> <strip-version> <brotli-version>\n",
+      "usage: wasm-prod-fingerprint.mjs <artifact> <build-script> <brotli-quality> <wasm-opt-version> <strip-version> <brotli-version> [wasm-opt-arg...]\n",
     );
     process.exit(2);
   }
@@ -47,6 +52,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       brotliVersion,
       buildScriptPath,
       stripVersion,
+      wasmOptArgs,
       wasmOptVersion,
     })}\n`,
   );
