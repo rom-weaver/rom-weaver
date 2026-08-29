@@ -581,12 +581,111 @@ impl CliApp {
         })
     }
 
+    /// Ingest a bare `.cue`/`.gdi` sheet with its referenced track files sitting
+    /// beside it: the sheet plus each existing referenced file become one disc
+    /// group, checksummed in place, so the disc-group identify lookup can
+    /// fingerprint the raw dump exactly like an extracted one. Returns `None`
+    /// when the sheet parses but references no existing files.
+    fn ingest_bare_disc_sheet(
+        &self,
+        source: &Path,
+        algorithms: &[String],
+        context: &OperationContext,
+    ) -> Result<Option<IngestOutcome>> {
+        let Some(kind) = rom_weaver_core::detect_disc_sheet(source) else {
+            return Ok(None);
+        };
+        let Ok(refs) = rom_weaver_core::enumerate_disc_sheet_refs(source) else {
+            return Ok(None);
+        };
+        let sheet_dir = source.parent().unwrap_or_else(|| Path::new("."));
+        let sheet_text = fs::read_to_string(source).unwrap_or_default();
+        let group_id = source
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut assets = Vec::new();
+        for (order, reference) in refs.referenced_files.iter().enumerate() {
+            let track_path = sheet_dir.join(reference);
+            if !track_path.is_file() {
+                continue;
+            }
+            let canonical = fs::canonicalize(&track_path).unwrap_or(track_path);
+            let identity = rom_weaver_checksum::detect_rom_identity_for_path(&canonical);
+            let asset = IngestRomAsset {
+                path: Self::normalize_emitted_path_string(&canonical.to_string_lossy()),
+                file_name: canonical
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                size_bytes: fs::metadata(&canonical)?.len(),
+                kind: Self::infer_emitted_file_kind(&canonical).map(str::to_string),
+                checksums: BTreeMap::new(),
+                checksum_variants: Vec::new(),
+                identification: None,
+                platform: identity.platform.map(str::to_string),
+                disc_format: identity
+                    .disc_format
+                    .map(|medium| medium.label().to_string()),
+                recommended_format: None,
+                disc_group_id: Some(group_id.clone()),
+                track_number: Some(order as u32 + 1),
+                track_checksums: Vec::new(),
+                cue_text: None,
+                gdi_text: None,
+                extract_time_ms: None,
+                copied_in_place: true,
+                checksum_ms: None,
+            };
+            assets.push(self.fill_asset_checksums(asset, &canonical, algorithms, context)?);
+        }
+        if assets.is_empty() {
+            return Ok(None);
+        }
+        let canonical_sheet = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
+        // The sheet itself is a text sidecar, never hashed - matching the extract
+        // paths, which skip sheets in their post-extract checksum pass.
+        let sheet_asset = IngestRomAsset {
+            path: Self::normalize_emitted_path_string(&canonical_sheet.to_string_lossy()),
+            file_name: group_id.clone(),
+            size_bytes: fs::metadata(source)?.len(),
+            kind: Self::infer_emitted_file_kind(&canonical_sheet).map(str::to_string),
+            checksums: BTreeMap::new(),
+            checksum_variants: Vec::new(),
+            identification: None,
+            platform: None,
+            disc_format: None,
+            recommended_format: None,
+            disc_group_id: Some(group_id),
+            track_number: None,
+            track_checksums: Vec::new(),
+            cue_text: matches!(kind, rom_weaver_core::DiscSheetKind::Cue)
+                .then(|| sheet_text.clone()),
+            gdi_text: matches!(kind, rom_weaver_core::DiscSheetKind::Gdi)
+                .then(|| sheet_text.clone()),
+            extract_time_ms: None,
+            copied_in_place: true,
+            checksum_ms: None,
+        };
+        let mut all_assets = vec![sheet_asset];
+        all_assets.append(&mut assets);
+        Ok(Some(IngestOutcome {
+            kind: IngestKind::Rom,
+            is_rom: true,
+            assets: all_assets,
+            patches: Vec::new(),
+        }))
+    }
+
     fn ingest_bare_source(
         &self,
         source: &Path,
         algorithms: &[String],
         context: &OperationContext,
     ) -> Result<IngestOutcome> {
+        if let Some(outcome) = self.ingest_bare_disc_sheet(source, algorithms, context)? {
+            return Ok(outcome);
+        }
         if is_patch_filter_candidate_name(&source.to_string_lossy()) {
             let descriptor = self.build_patch_descriptor(source, None, context)?;
             return Ok(IngestOutcome {

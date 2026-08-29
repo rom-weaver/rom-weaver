@@ -119,6 +119,93 @@ fn ingest_identifies_a_chd_disc_from_per_track_pack_components() {
     }
 }
 
+/// A bare `.cue` with its track files beside it (no container at all): ingest
+/// groups the sheet with each referenced file, checksums them in place, and the
+/// disc-group fingerprint matches the per-track pack entries.
+#[test]
+fn ingest_identifies_a_bare_cue_with_sibling_tracks() {
+    let temp = setup_temp_dir();
+    let track1 = (0..2352_usize * 4)
+        .map(|index| (index % 173) as u8)
+        .collect::<Vec<_>>();
+    let track2 = (0..2352_usize * 3)
+        .map(|index| (index % 91) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("Raw Quest (USA) (Track 1).bin").path(), &track1).expect("track fixture");
+    fs::write(temp.child("Raw Quest (USA) (Track 2).bin").path(), &track2).expect("track fixture");
+    temp.child("Raw Quest (USA).cue")
+        .write_str(
+            "FILE \"Raw Quest (USA) (Track 1).bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"Raw Quest (USA) (Track 2).bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n",
+        )
+        .expect("cue fixture");
+    let cue_path = temp.child("Raw Quest (USA).cue");
+    let out_dir = temp.child("bare-cue-out");
+    let probe = ingest_terminal(&[
+        "ingest",
+        "--input",
+        cue_path.path().to_str().expect("cue path"),
+        "--output",
+        out_dir.path().to_str().expect("output path"),
+        "--json",
+    ]);
+    let track_components: Vec<Value> = probe["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets")
+        .iter()
+        .filter(|asset| asset["file_name"].as_str().unwrap_or("").ends_with(".bin"))
+        .enumerate()
+        .map(|(index, asset)| {
+            serde_json::json!({
+                "role": "data_track",
+                "ordinal": index,
+                "hashScope": "track_file",
+                "track": index + 1,
+                "size": asset["size_bytes"],
+                "crc32": asset["checksums"]["crc32"],
+                "required": true,
+                "discriminating": index == 0,
+            })
+        })
+        .collect();
+    assert_eq!(
+        track_components.len(),
+        2,
+        "expected two bare tracks: {probe:?}"
+    );
+    let pack_bytes = super::identify_database::pack_v2(
+        "Sony - PlayStation",
+        "redump-cd-track-v1",
+        &[("Raw Quest (USA)", track_components)],
+    );
+    let pack = temp.child("psx.pack");
+    fs::write(pack.path(), pack_bytes).expect("pack fixture");
+
+    let terminal = ingest_terminal(&[
+        "ingest",
+        "--input",
+        cue_path.path().to_str().expect("cue path"),
+        "--output",
+        out_dir.path().to_str().expect("output path"),
+        "--database",
+        pack.path().to_str().expect("pack path"),
+        "--json",
+    ]);
+    let assets = terminal["details"]["ingest"]["assets"]
+        .as_array()
+        .expect("assets");
+    assert_eq!(assets.len(), 3, "sheet plus two tracks: {assets:?}");
+    for asset in assets {
+        assert_eq!(
+            asset["identification"]["status"], "matched",
+            "every group member should carry the disc-group match: {asset:?}"
+        );
+        assert_eq!(
+            asset["identification"]["matches"][0]["name"],
+            "Raw Quest (USA)"
+        );
+    }
+}
+
 /// Same disc and pack as the split test above, but extracted as one merged bin
 /// (`--split-bin false`): no per-track files exist, so the disc-group
 /// fingerprint must come from the merged bin's streamed `track_checksums` rows.
