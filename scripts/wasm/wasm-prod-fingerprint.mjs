@@ -10,6 +10,7 @@ export function createWasmProdFingerprint({
   brotliQuality,
   brotliVersion,
   buildScriptPath,
+  rustToolchain,
   stripVersion,
   wasmOptVersion,
 }) {
@@ -22,6 +23,9 @@ export function createWasmProdFingerprint({
   };
 
   add("artifact", fs.readFileSync(artifactPath));
+  // The compiler identity and its size flags, so a stable fallback module is
+  // never reused as if it were the smaller nightly one.
+  add("rust-toolchain", rustToolchain);
   add("build-script", fs.readFileSync(buildScriptPath));
   add("fingerprint-script", fs.readFileSync(fileURLToPath(import.meta.url)));
   add("brotli-quality", brotliQuality);
@@ -32,11 +36,11 @@ export function createWasmProdFingerprint({
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const [artifactPath, buildScriptPath, brotliQuality, wasmOptVersion, stripVersion, brotliVersion] =
+  const [artifactPath, buildScriptPath, brotliQuality, wasmOptVersion, stripVersion, brotliVersion, rustToolchain] =
     process.argv.slice(2);
-  if (!brotliVersion) {
+  if (!rustToolchain) {
     process.stderr.write(
-      "usage: wasm-prod-fingerprint.mjs <artifact> <build-script> <brotli-quality> <wasm-opt-version> <strip-version> <brotli-version>\n",
+      "usage: wasm-prod-fingerprint.mjs <artifact> <build-script> <brotli-quality> <wasm-opt-version> <strip-version> <brotli-version> <rust-toolchain>\n",
     );
     process.exit(2);
   }
@@ -46,6 +50,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       brotliQuality,
       brotliVersion,
       buildScriptPath,
+      rustToolchain,
       stripVersion,
       wasmOptVersion,
     })}\n`,

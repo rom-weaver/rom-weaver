@@ -267,6 +267,7 @@ jobs:
           tools: node rust binaryen
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-targets: wasm32-wasip1-threads
+          wasm-nightly: "true"
           wasi-sdk: "true"
           cache-save: "false"
 
@@ -537,6 +538,7 @@ jobs:
           tools: node rust binaryen
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-targets: wasm32-wasip1-threads
+          wasm-nightly: "true"
           wasi-sdk: "true"
           cache-save: "false"
 

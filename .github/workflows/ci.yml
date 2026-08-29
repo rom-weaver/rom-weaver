@@ -443,6 +443,7 @@ jobs:
           apt-packages: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'cmake ninja-build pkg-config clang libclang-dev' }}
           cargo-cache: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
           rust-targets: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'wasm32-wasip1-threads' }}
+          wasm-nightly: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
           wasi-sdk: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
           webapp-deps: "true"
 

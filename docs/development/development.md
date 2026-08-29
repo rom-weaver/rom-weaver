@@ -70,6 +70,20 @@ mise run build-wasm        # fast development build
 mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli
 ```
 
+`build-wasm-prod` compiles the module with the pinned nightly toolchain named by `ROM_WEAVER_WASM_NIGHTLY` in `.config/mise.toml`, which unlocks `-Zlocation-detail=none`, `-Zfmt-debug=none`, and a `-Zbuild-std` rebuild of `std` under `-Cpanic=immediate-abort`. Install it once:
+
+```bash
+rustup toolchain install nightly-2026-08-25 --component rust-src --target wasm32-wasip1-threads
+```
+
+When that toolchain, its `rust-src` component, or its `wasm32-wasip1-threads` standard library is missing, the build prints a warning and produces a larger stable module instead of failing. Set `ROM_WEAVER_WASM_STABLE=1` to choose that stable build by hand:
+
+```bash
+ROM_WEAVER_WASM_STABLE=1 mise run build-wasm-prod
+```
+
+`build-wasm` always uses the stable toolchain: panic locations and messages in trace output are the primary way browser WASM issues are debugged, and the nightly flags remove them.
+
 Then start the HTTPS development server:
 
 ```bash

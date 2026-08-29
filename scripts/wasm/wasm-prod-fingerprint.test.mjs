@@ -18,6 +18,7 @@ test("production fingerprint covers the raw artifact and post-processing inputs"
       brotliQuality: "11",
       brotliVersion: "brotli 1",
       buildScriptPath,
+      rustToolchain: "rustc 1.0.0 stable",
       stripVersion: "strip 1",
       wasmOptVersion: "wasm-opt 1",
     };
@@ -31,6 +32,7 @@ test("production fingerprint covers the raw artifact and post-processing inputs"
     assert.notEqual(createWasmProdFingerprint(options), initial);
     fs.writeFileSync(buildScriptPath, "wasm-opt -O4");
     assert.notEqual(createWasmProdFingerprint({ ...options, wasmOptVersion: "wasm-opt 2" }), initial);
+    assert.notEqual(createWasmProdFingerprint({ ...options, rustToolchain: "rustc 1.0.0 nightly" }), initial);
   } finally {
     fs.rmSync(dir, { force: true, recursive: true });
   }

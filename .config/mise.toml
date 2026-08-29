@@ -138,6 +138,18 @@ depends = ["identify-data"]
 # Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
 # Same flags as build-wasm; the prod-only wasm-opt + brotli tail lives in
 # scripts/wasm/build-app.mjs, selected by the `prod` argument.
+#
+# Pinned nightly for the unstable size flags (-Zlocation-detail=none,
+# -Zfmt-debug=none, -Zbuild-std under -Cpanic=immediate-abort). Production only:
+# the dev build keeps panic locations and messages for trace debugging. It is
+# pinned by date rather than `nightly` so two hosts build the same module, and
+# it is not in [tools] because mise's rust backend installs one channel and the
+# repository builds everything else with the stable pin above. Install it with
+# `rustup toolchain install <name> --component rust-src --target
+# wasm32-wasip1-threads`. When any of those is missing the build warns and
+# falls back to stable, so CI never hard-fails on a missing nightly;
+# ROM_WEAVER_WASM_STABLE=1 forces that fallback by hand.
+env.ROM_WEAVER_WASM_NIGHTLY = "nightly-2026-08-25"
 env.CFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
 env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
 env.CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"

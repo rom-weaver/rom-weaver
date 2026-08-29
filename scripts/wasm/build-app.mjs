@@ -39,7 +39,7 @@ const existsExecutable = (file) => {
   return spawnSync(file, ["--version"], { stdio: "ignore" }).status === 0;
 };
 
-export function productionFingerprint({ builtArtifact, buildScript, quality, wasmOptVersion, stripVersion, brotliVersion }) {
+export function productionFingerprint({ builtArtifact, buildScript, quality, wasmOptVersion, stripVersion, brotliVersion, rustToolchain }) {
   return createWasmProdFingerprint({
     artifactPath: builtArtifact,
     buildScriptPath: buildScript,
@@ -47,7 +47,52 @@ export function productionFingerprint({ builtArtifact, buildScript, quality, was
     wasmOptVersion,
     stripVersion,
     brotliVersion,
+    rustToolchain,
   });
+}
+
+// Unstable size flags for the production module only. -Zlocation-detail=none
+// and -Zfmt-debug=none drop the panic-location strings and the derived Debug
+// formatting code; -Cpanic=immediate-abort turns every panic into a bare
+// `unreachable`, which needs std rebuilt from source, hence -Zbuild-std. The
+// development build stays on stable and keeps all of it, because panic
+// locations and messages in trace output are the primary way browser wasm
+// issues are debugged.
+//
+// immediate-abort is a panic strategy rather than a build-std feature as of
+// rustc 1.100.0-nightly; the old -Zbuild-std-features=panic_immediate_abort now
+// fails core with a compile_error!.
+export const NIGHTLY_RUSTFLAGS = ["-Zlocation-detail=none", "-Zfmt-debug=none", "-Zunstable-options", "-Cpanic=immediate-abort"];
+export const NIGHTLY_CARGO_ARGS = ["-Zbuild-std=std,panic_abort"];
+
+// Returns the toolchain name to build with, or null to build with the default
+// stable toolchain. A nightly that is missing, or is missing a piece the build
+// needs, MUST warn and fall back rather than fail: CI hosts without them still
+// have to produce a module.
+export function resolveNightlyToolchain(env = process.env, warn = (message) => process.stderr.write(message), target = "wasm32-wasip1-threads") {
+  if (env.ROM_WEAVER_WASM_STABLE === "1") {
+    warn("ROM_WEAVER_WASM_STABLE=1; building the production module with the stable toolchain\n");
+    return null;
+  }
+  const toolchain = env.ROM_WEAVER_WASM_NIGHTLY;
+  if (!toolchain) return null;
+  const fallback = (reason) => {
+    warn(`${reason}; falling back to the stable production build (install it with \`rustup toolchain install ${toolchain} --component rust-src --target ${target}\`)\n`);
+    return null;
+  };
+  const sysroot = spawnSync("rustup", ["run", toolchain, "rustc", "--print", "sysroot"], { encoding: "utf8" });
+  if (sysroot.error || sysroot.status !== 0) return fallback(`nightly toolchain ${toolchain} is unavailable`);
+  const root = sysroot.stdout.trim();
+  if (!existsSync(join(root, "lib/rustlib/src/rust/library/std/Cargo.toml"))) {
+    return fallback(`nightly toolchain ${toolchain} has no rust-src component`);
+  }
+  // -Zbuild-std rebuilds the Rust half of std but not the WASI libc beside it,
+  // so without the target's own rust-std component the link fails on a missing
+  // crt1-command.o. Checking it here turns that into a fallback.
+  if (!existsSync(join(root, `lib/rustlib/${target}/lib/self-contained/crt1-command.o`))) {
+    return fallback(`nightly toolchain ${toolchain} has no ${target} standard library`);
+  }
+  return toolchain;
 }
 
 export function shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fingerprintFile, wantedFingerprint, wantBrotli, force }) {
@@ -71,8 +116,18 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   if (!existsSync(env.WASI_SYSROOT || "")) throw new Error(`missing WASI sysroot: ${env.WASI_SYSROOT}`);
   mkdirSync(outDir, { recursive: true });
 
-  process.stdout.write(`building ${target} -> ${artifact}\n`);
-  run("cargo", ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target]);
+  const nightly = mode === "prod" ? resolveNightlyToolchain(env, undefined, target) : null;
+  const cargoArgs = ["build", "-p", "rom-weaver-cli", "--no-default-features", "--features", "wasm-app", "--example", "rom-weaver-app", "--profile", "wasm-release", "--target", target];
+  if (nightly) {
+    // Cargo joins rustflags arrays across configuration sources, so --config
+    // appends these to the target list in .cargo/config.toml instead of
+    // replacing it the way a RUSTFLAGS environment override would.
+    cargoArgs.push(...NIGHTLY_CARGO_ARGS, "--config", `target.${target}.rustflags=${JSON.stringify(NIGHTLY_RUSTFLAGS)}`);
+  }
+
+  process.stdout.write(`building ${target} -> ${artifact} (${nightly || "stable"})\n`);
+  if (nightly) run("rustup", ["run", nightly, "cargo", ...cargoArgs]);
+  else run("cargo", cargoArgs);
 
   if (mode === "prod") {
     if (!existsExecutable("wasm-opt")) throw new Error("missing command: wasm-opt (install via mise or brew install binaryen)");
@@ -86,6 +141,7 @@ export function main(argv = process.argv.slice(2), env = process.env) {
       wasmOptVersion: toolVersion("wasm-opt", ["--version"]),
       stripVersion: toolVersion(env.WASI_STRIP, ["--version"]),
       brotliVersion: `node-zlib libbrotli ${process.versions.brotli}`,
+      rustToolchain: nightly ? `${toolVersion("rustup", ["run", nightly, "rustc", "-vV"])}\n${[...NIGHTLY_CARGO_ARGS, ...NIGHTLY_RUSTFLAGS].join(" ")}` : toolVersion("rustc", ["-vV"]),
     });
     const brotliArtifactOk = wantBrotli === 1 ? existsSync(`${artifact}.br`) : false;
     if (shouldReuseProductionArtifact({ artifact, brotliArtifactOk, fingerprintFile, wantedFingerprint: fingerprint, wantBrotli: Boolean(wantBrotli), force: env.ROM_WEAVER_WASM_FORCE === "1" })) {

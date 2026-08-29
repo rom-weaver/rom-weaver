@@ -23,6 +23,13 @@ inputs:
   rust-targets:
     description: Space-separated rustup targets to add to the mise-pinned toolchain.
     default: ""
+  wasm-nightly:
+    description: >-
+      Install the nightly toolchain pinned by ROM_WEAVER_WASM_NIGHTLY in
+      .config/mise.toml, with rust-src. `mise run build-wasm-prod` needs it for
+      the unstable size flags; without it that build warns and produces a
+      larger stable module, so this is an optimization, not a requirement.
+    default: "false"
   cargo-cache:
     description: Restore/save the cargo build cache. Set to false for jobs that never compile Rust.
     default: "true"
@@ -92,6 +99,25 @@ runs:
       if: inputs.rust-targets != ''
       shell: bash
       run: mise exec -- rustup target add ${{ inputs.rust-targets }}
+
+    # A second toolchain beside the mise pin, reached only through
+    # `rustup run <name>` in scripts/wasm/build-app.mjs. The pin is read out of
+    # .config/mise.toml so the version lives in one place. Best-effort: a
+    # nightly that has been garbage-collected upstream must not fail a job that
+    # can still build a stable module.
+    - name: Install pinned WASM nightly toolchain
+      if: inputs.wasm-nightly == 'true'
+      shell: bash
+      run: |
+        toolchain=$(sed -n 's/^env\.ROM_WEAVER_WASM_NIGHTLY = "\(.*\)"$/\1/p' .config/mise.toml)
+        if [ -z "$toolchain" ]; then
+          echo "::error::no ROM_WEAVER_WASM_NIGHTLY pin found in .config/mise.toml"
+          exit 1
+        fi
+        if ! rustup toolchain install "$toolchain" --profile minimal \
+          --component rust-src --target wasm32-wasip1-threads; then
+          echo "::warning::could not install $toolchain; the production WASM build falls back to stable"
+        fi
 
     # sccache is deliberately absent: .config/mise.toml resolves RUSTC_WRAPPER to
     # whatever is on PATH and leaves it empty otherwise, and nothing here
