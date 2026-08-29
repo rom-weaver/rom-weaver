@@ -1068,9 +1068,11 @@ mod tests {
                 filename: Some("example.bin".to_string()),
                 size: 4,
                 crc32: Some("aabbccdd".to_string()),
-                md5: None,
-                sha1: None,
-                sha256: None,
+                md5: Some("d41d8cd98f00b204e9800998ecf8427e".to_string()),
+                sha1: Some("da39a3ee5e6b4b0d3255bfef95601890afd80709".to_string()),
+                sha256: Some(
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string(),
+                ),
                 required: true,
                 discriminating: true,
                 track: None,
@@ -1109,7 +1111,12 @@ mod tests {
         .expect("pack encodes again");
         assert_eq!(first, second);
         let pack = ArtifactPack::parse(&first).expect("pack parses");
-        assert_eq!(pack.games()[0].components[0].ordinal, 0);
+        let component = &pack.games()[0].components[0];
+        assert_eq!(component.ordinal, 0);
+        assert_eq!(component.crc32, input_game.components[0].crc32);
+        assert_eq!(component.md5, input_game.components[0].md5);
+        assert_eq!(component.sha1, input_game.components[0].sha1);
+        assert_eq!(component.sha256, input_game.components[0].sha256);
         assert_eq!(pack.games()[0].provenance, input_game.provenance);
         assert_eq!(pack.games()[0].dump_tags, input_game.dump_tags);
         assert_eq!(pack.route("aabbccdd", 4).unwrap(), vec![(0, 0)]);
