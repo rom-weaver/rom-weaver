@@ -2,9 +2,19 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { brotliDecompressSync } from "node:zlib";
 import { resolveIdentifyPackGroups } from "./identify-pack-groups.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -62,13 +72,30 @@ export const buildIdentifyReleaseData = (options) => {
         throw new Error(`unsafe identify system path: ${system.file}`);
       }
       const inputPack = join(input, system.file);
-      const zstdFile = `${system.slug}.pack.zst`;
+      const inputBrotli = `${inputPack}.br`;
+      const brotliFile = `${system.slug}.pack.br`;
       if (statSync(inputPack).size !== system.rawBytes || sha256File(inputPack) !== system.sha256) {
         throw new Error(`${system.file} does not match index.json`);
       }
+      if (!existsSync(inputBrotli)) {
+        throw new Error(
+          `${inputBrotli} is missing; rebuild the identify data with Brotli sidecars`,
+        );
+      }
+      const rawPack = readFileSync(inputPack);
+      const compressedPack = readFileSync(inputBrotli);
+      let decompressedPack;
+      try {
+        decompressedPack = brotliDecompressSync(compressedPack);
+      } catch (error) {
+        throw new Error(`${inputBrotli} is not valid Brotli: ${error.message}`);
+      }
+      if (!decompressedPack.equals(rawPack)) {
+        throw new Error(`${inputBrotli} does not match ${system.file}`);
+      }
       return {
         ...system,
-        zstdFile: `packs/${zstdFile}`,
+        brotliFile: `packs/${brotliFile}`,
       };
     });
   const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
@@ -100,21 +127,14 @@ export const buildIdentifyReleaseData = (options) => {
       .filter((system) => slugs.has(system.slug))
       .map((system) => {
         const inputPack = join(input, system.file);
-        const outputPack = join(dataDir, system.zstdFile);
-        run("zstd", [
-          "--compress",
-          "-22",
-          "--threads=1",
-          "--force",
-          "--quiet",
-          inputPack,
-          "-o",
-          outputPack,
-        ]);
+        const inputBrotli = `${inputPack}.br`;
+        const outputPack = join(dataDir, system.brotliFile);
+        copyFileSync(inputBrotli, outputPack);
+        const compressedBytes = statSync(outputPack).size;
         return {
           ...system,
-          zstdBytes: statSync(outputPack).size,
-          zstdSha256: sha256File(outputPack),
+          brotliBytes: compressedBytes,
+          brotliSha256: sha256File(outputPack),
         };
       });
     const archiveGroups = group.default ? groups : [group];
@@ -145,6 +165,7 @@ export const buildIdentifyReleaseData = (options) => {
     ]);
     run("zstd", [
       "--compress",
+      "--ultra",
       "-22",
       "--threads=1",
       "--force",

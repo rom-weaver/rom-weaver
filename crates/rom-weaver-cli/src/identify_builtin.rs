@@ -1,6 +1,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::fs;
 #[cfg(not(target_arch = "wasm32"))]
+use std::io::Read;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -48,7 +50,7 @@ fn data_dirs() -> Vec<PathBuf> {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "bundled-identify-data"))]
 pub(super) fn pack_path(database_dir: &Path, slug: &str) -> Option<PathBuf> {
-    let file = format!("{slug}.pack.zst");
+    let file = format!("{slug}.pack.br");
     let user = database_dir
         .join(USER_FULL_DATA_DIR)
         .join("packs")
@@ -89,7 +91,7 @@ pub(super) fn pack_slugs(database_dir: &Path) -> Result<Vec<String>> {
                 ))
             })?;
             let name = entry.file_name().to_string_lossy().into_owned();
-            if let Some(slug) = name.strip_suffix(".pack.zst")
+            if let Some(slug) = name.strip_suffix(".pack.br")
                 && !slugs.iter().any(|existing| existing == slug)
             {
                 slugs.push(slug.to_string());
@@ -117,10 +119,16 @@ pub(super) fn decompress(path: &Path) -> Result<Vec<u8>> {
     })?;
     let entry = pack_index_entry(path)?;
     check_pack_size(entry.raw_bytes, "decompressed")?;
-    if sha256(&bytes) != entry.zstd_sha256 {
+    if compressed_size != entry.brotli_bytes {
+        return Err(RomWeaverError::Validation(format!(
+            "pack `{}` has an invalid compressed size",
+            entry.brotli_file
+        )));
+    }
+    if sha256(&bytes) != entry.brotli_sha256 {
         return Err(RomWeaverError::Validation(format!(
             "pack `{}` has an invalid compressed sha256",
-            entry.zstd_file
+            entry.brotli_file
         )));
     }
     let decompressed = decompress_bytes(
@@ -152,8 +160,9 @@ struct PackIndexEntry {
     file: String,
     raw_bytes: u64,
     sha256: String,
-    zstd_file: String,
-    zstd_sha256: String,
+    brotli_file: String,
+    brotli_bytes: u64,
+    brotli_sha256: String,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -207,7 +216,7 @@ fn pack_index_entry(path: &Path) -> Result<PackIndexEntry> {
     index
         .systems
         .into_iter()
-        .find(|entry| entry.zstd_file == relative)
+        .find(|entry| entry.brotli_file == relative)
         .ok_or_else(|| {
             RomWeaverError::Validation(format!(
                 "pack `{relative}` is missing from `{}`",
@@ -288,7 +297,7 @@ fn extract_archive<R: std::io::Read>(reader: R, destination: &Path) -> Result<()
     let index: PackIndex = serde_json::from_slice(&fs::read(destination.join("index.json"))?)
         .map_err(|error| RomWeaverError::Validation(format!("invalid identify index: {error}")))?;
     for entry in &index.systems {
-        let relative = Path::new(&entry.zstd_file);
+        let relative = Path::new(&entry.brotli_file);
         if relative.parent() != Some(Path::new("packs"))
             || relative
                 .components()
@@ -296,14 +305,14 @@ fn extract_archive<R: std::io::Read>(reader: R, destination: &Path) -> Result<()
         {
             return Err(RomWeaverError::Validation(format!(
                 "invalid identify index pack path `{}`",
-                entry.zstd_file
+                entry.brotli_file
             )));
         }
         let path = destination.join(relative);
         if !path.is_file() {
             return Err(RomWeaverError::Validation(format!(
                 "identify data archive is missing `{}`",
-                entry.zstd_file
+                entry.brotli_file
             )));
         }
         decompress(&path)?;
@@ -355,7 +364,7 @@ fn archive_relative_path(path: &Path) -> Result<PathBuf> {
         || (relative.parent() == Some(Path::new("packs"))
             && relative
                 .file_name()
-                .is_some_and(|name| name.to_string_lossy().ends_with(".pack.zst")));
+                .is_some_and(|name| name.to_string_lossy().ends_with(".pack.br")));
     if !allowed
         || relative
             .components()
@@ -529,7 +538,7 @@ fn group_archive_entries(stage: &Path, group: &str) -> Result<Vec<PackIndexEntry
     }
     for entry in &index.systems {
         validate_group_id(&entry.slug)?;
-        if entry.zstd_file != format!("packs/{}.pack.zst", entry.slug) {
+        if entry.brotli_file != format!("packs/{}.pack.br", entry.slug) {
             return Err(RomWeaverError::Validation(format!(
                 "identify pack `{}` has an invalid archive path",
                 entry.slug
@@ -575,7 +584,7 @@ fn group_archive_entries(stage: &Path, group: &str) -> Result<Vec<PackIndexEntry
     let expected_packs: std::collections::BTreeSet<_> = index
         .systems
         .iter()
-        .map(|entry| format!("{}.pack.zst", entry.slug))
+        .map(|entry| format!("{}.pack.br", entry.slug))
         .collect();
     if archive_packs != expected_packs {
         return Err(RomWeaverError::Validation(format!(
@@ -636,7 +645,7 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
     let packs = entries
         .iter()
         .map(|entry| {
-            decompress(&stage.join(&entry.zstd_file)).map(|bytes| (entry.slug.as_str(), bytes))
+            decompress(&stage.join(&entry.brotli_file)).map(|bytes| (entry.slug.as_str(), bytes))
         })
         .collect::<Result<Vec<_>>>()?;
     let install = parent.join(format!(
@@ -839,11 +848,27 @@ pub(super) fn install_all(database_dir: &Path) -> Result<usize> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn decompress_bytes(bytes: &[u8], label: &str, capacity: usize) -> Result<Vec<u8>> {
-    zstd::bulk::decompress(bytes, capacity).map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "failed to decompress packaged identify pack `{label}`: {error}"
-        ))
-    })
+    let decoder = brotli::Decompressor::new(bytes, 4096);
+    let mut decompressed = Vec::with_capacity(capacity);
+    decoder
+        .take(
+            u64::try_from(capacity)
+                .unwrap_or(u64::MAX)
+                .saturating_add(1),
+        )
+        .read_to_end(&mut decompressed)
+        .map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to decompress packaged identify pack `{label}`: {error}"
+            ))
+        })?;
+    if decompressed.len() != capacity {
+        return Err(RomWeaverError::Validation(format!(
+            "failed to decompress packaged identify pack `{label}`: expected {capacity} bytes, got {}",
+            decompressed.len()
+        )));
+    }
+    Ok(decompressed)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -864,7 +889,7 @@ mod tests {
         platform: &str,
     ) -> Vec<u8> {
         let raw = b"pack bytes";
-        let compressed = zstd::bulk::compress(raw, 1).expect("compressed pack");
+        let compressed = brotli_compress(raw);
         let index = serde_json::to_vec(&serde_json::json!({
             "groups": [{
                 "id": group,
@@ -877,8 +902,9 @@ mod tests {
                 "file": format!("{slug}.pack"),
                 "rawBytes": raw.len(),
                 "sha256": sha256(raw),
-                "zstdFile": format!("packs/{slug}.pack.zst"),
-                "zstdSha256": sha256(&compressed),
+                "brotliFile": format!("packs/{slug}.pack.br"),
+                "brotliBytes": compressed.len(),
+                "brotliSha256": sha256(&compressed),
             }]
         }))
         .expect("index JSON");
@@ -937,7 +963,7 @@ mod tests {
                 builder
                     .append_data(
                         &mut header,
-                        format!("share/rom-weaver/identify/v1/packs/{slug}.pack.zst"),
+                        format!("share/rom-weaver/identify/v1/packs/{slug}.pack.br"),
                         compressed.as_slice(),
                     )
                     .expect("pack entry");
@@ -949,6 +975,15 @@ mod tests {
 
     fn builder_style_archive(include_pack: bool) -> Vec<u8> {
         builder_style_archive_for_group(include_pack, "optional", "test", "Test System")
+    }
+
+    fn brotli_compress(raw: &[u8]) -> Vec<u8> {
+        let mut compressed = Vec::new();
+        {
+            let mut encoder = brotli::CompressorWriter::new(&mut compressed, 4096, 5, 22);
+            std::io::Write::write_all(&mut encoder, raw).expect("compressed pack");
+        }
+        compressed
     }
 
     #[test]
@@ -964,9 +999,9 @@ mod tests {
     }
 
     #[test]
-    fn packaged_pack_decompression_reads_one_zstd_frame() {
+    fn packaged_pack_decompression_reads_one_brotli_frame() {
         let expected = b"RWFP4\0\0\0pack data";
-        let compressed = zstd::bulk::compress(expected, 1).expect("compressed fixture");
+        let compressed = brotli_compress(expected);
         assert_eq!(
             decompress_bytes(&compressed, "fixture", expected.len()).expect("decompressed fixture"),
             expected
@@ -979,16 +1014,17 @@ mod tests {
         let packs = temp.path().join("packs");
         fs::create_dir_all(&packs).expect("packs directory");
         let raw = b"RWFP4\0\0\0pack data";
-        let compressed = zstd::bulk::compress(raw, 1).expect("compressed fixture");
-        let pack = packs.join("test.pack.zst");
+        let compressed = brotli_compress(raw);
+        let pack = packs.join("test.pack.br");
         fs::write(&pack, &compressed).expect("pack fixture");
         let index = serde_json::json!({
             "systems": [{
                 "file": "test.pack",
                 "rawBytes": raw.len(),
                 "sha256": sha256(raw),
-                "zstdFile": "packs/test.pack.zst",
-                "zstdSha256": sha256(&compressed),
+                "brotliFile": "packs/test.pack.br",
+                "brotliBytes": compressed.len(),
+                "brotliSha256": sha256(&compressed),
             }]
         });
         fs::write(
@@ -999,7 +1035,7 @@ mod tests {
         assert_eq!(decompress(&pack).expect("verified pack"), raw);
 
         let mut corrupt = index;
-        corrupt["systems"][0]["zstdSha256"] = serde_json::json!("00");
+        corrupt["systems"][0]["brotliSha256"] = serde_json::json!("00");
         fs::write(
             temp.path().join("index.json"),
             serde_json::to_vec(&corrupt).expect("corrupt index JSON"),
@@ -1034,7 +1070,7 @@ mod tests {
         let temp = assert_fs::TempDir::new().expect("temporary directory");
         let archive = builder_style_archive(true);
         extract_archive(archive.as_slice(), temp.path()).expect("archive extraction");
-        assert!(temp.path().join("packs/test.pack.zst").is_file());
+        assert!(temp.path().join("packs/test.pack.br").is_file());
     }
 
     #[test]
@@ -1171,9 +1207,9 @@ mod tests {
     }
 
     #[test]
-    fn zstd_decompression_rejects_output_above_the_capacity() {
+    fn brotli_decompression_rejects_output_above_the_capacity() {
         let raw = vec![0_u8; 1024];
-        let compressed = zstd::bulk::compress(&raw, 1).expect("compressed fixture");
+        let compressed = brotli_compress(&raw);
         assert!(decompress_bytes(&compressed, "fixture", raw.len() - 1).is_err());
     }
 }
