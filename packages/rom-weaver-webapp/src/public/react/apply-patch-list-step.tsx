@@ -116,7 +116,7 @@ const toFaultDetail = (message: string): string => {
 };
 
 /** Failed dry-run verdict: an inset fault well with the verdict, the detail,
- * and what to do next (naming the 0x04 override toggle when it is offered). */
+ * and what to do next (naming the 0x05 override toggle when it is offered). */
 const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => (
   <div className="pverdict pfault">
     <div className="pfault-title">
@@ -126,7 +126,7 @@ const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overr
     <p className="pfault-detail">{toFaultDetail(message)}</p>
     <p className="pfault-hint">
       {overrideAvailable
-        ? "Pick the ROM this patch was made for, or use “Apply anyway despite patch & ROM check mismatch” in 0x04."
+        ? "Pick the ROM this patch was made for, or use “Apply anyway despite patch & ROM check mismatch” in 0x05."
         : "Pick the ROM this patch was made for."}
     </p>
   </div>
@@ -1495,7 +1495,7 @@ const ApplyPatchListStep = ({
   onBundleMetaBulkChange?: (updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   notice?: ReactNode;
-  /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
+  /** The 0x05 "Apply anyway…" override toggle is on offer - fault hints name it. */
   overrideAvailable?: boolean;
   /** ROM id → its computed checks, for verifying user-entered input checks against
    * the real ROM (the chain-input patch's target). */
