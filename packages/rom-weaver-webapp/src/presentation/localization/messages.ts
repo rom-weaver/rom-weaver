@@ -266,6 +266,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingDesc",
     message: "Caching the app so it can run offline…",
   }),
+  "ui.runtime.installingProgress": msg({
+    id: "ui.runtime.installingProgress",
+    message: "Installing offline copy — {percent}%",
+  }),
   "ui.runtime.ready": msg({ id: "ui.runtime.ready", message: "Offline ready" }),
   "ui.runtime.readyDesc": msg({
     id: "ui.runtime.readyDesc",

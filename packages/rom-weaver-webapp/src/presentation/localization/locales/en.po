@@ -210,6 +210,11 @@ msgstr "Checksum validation failed."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Checksums use only the hex characters 0-9 and a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Close"
 
@@ -305,11 +310,6 @@ msgstr "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashInvalidChars"
-msgstr "Checksums use only the hex characters 0-9 and a-f."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Environment"
 
@@ -355,6 +355,11 @@ msgstr "Identify"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Identify by checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "Include ROM in bundle"
 
@@ -367,6 +372,11 @@ msgstr "Installed app (PWA)"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Installing offline copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingProgress"
+msgstr "Installing offline copy — {percent}%"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -517,11 +527,6 @@ msgstr "Only include a ROM if you have the right to distribute it. Sharing copyr
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Identify by checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

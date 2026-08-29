@@ -735,7 +735,17 @@ const readResolvedServiceWorkerStatus = (): ServiceWorkerStatus | null => {
   const enabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
   const serviceWorker = navigator.serviceWorker;
   if (!(enabled && serviceWorker)) return "off";
-  if (serviceWorker.controller) return typeof MessageChannel === "function" ? "active" : "ready";
+  // A controller alone is not "ready" any more: the offline copy also needs the
+  // background warm-up (EmulatorJS + identify packs). The warm-up client
+  // persists completion under this key; the resolver in `index.html` reads the
+  // same key and MUST stay in step.
+  let warmupReady = false;
+  try {
+    warmupReady = localStorage.getItem("rom-weaver-offline-ready") === "true";
+  } catch {
+    warmupReady = false;
+  }
+  if (serviceWorker.controller && warmupReady) return typeof MessageChannel === "function" ? "active" : "ready";
   return null;
 };
 
@@ -764,13 +774,36 @@ const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: Me
   update: { description: "ui.runtime.updateDesc", label: "ui.runtime.update" },
 };
 
-/** An update outranks everything: it is the only state that asks for an action. */
-const resolveRuntimeState = (status: ServiceWorkerStatus | null | undefined, updateReady: boolean): RuntimeState => {
+/** Byte progress of the background offline warm-up, when the page knows it. */
+type OfflineWarmupDisplayProgress = { cachedBytes: number; ready: boolean; totalBytes: number };
+
+/**
+ * An update outranks everything: it is the only state that asks for an action.
+ * A working cache without a finished warm-up (EmulatorJS + all identify packs)
+ * is still "installing" - the offline copy is not complete yet.
+ */
+const resolveRuntimeState = (
+  status: ServiceWorkerStatus | null | undefined,
+  updateReady: boolean,
+  offlineProgress: OfflineWarmupDisplayProgress | null = null,
+): RuntimeState => {
   if (updateReady) return "update";
   if (status === "off") return "disabled";
+  if ((status === "active" || status === "ready") && !offlineProgress?.ready) return "installing";
   if (status === "active") return "active";
   if (status === "ready") return "ready";
   return "installing";
+};
+
+const installingRuntimeLabel = (
+  localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
+  offlineProgress: OfflineWarmupDisplayProgress | null,
+) => {
+  if (!offlineProgress || offlineProgress.ready || offlineProgress.totalBytes <= 0) {
+    return localizer.message("ui.runtime.installing");
+  }
+  const percent = Math.min(99, Math.floor((offlineProgress.cachedBytes / offlineProgress.totalBytes) * 100));
+  return localizer.message("ui.runtime.installingProgress", { percent });
 };
 
 const RUNTIME_ICONS = {
@@ -921,6 +954,7 @@ const Masthead = ({
   onPreloadSettings,
   tabsControlPanels = true,
   serviceWorkerStatus,
+  offlineProgress = null,
   confirmExternalNavigation,
   donateHref,
   githubHref,
@@ -951,6 +985,7 @@ const Masthead = ({
   onPreloadSettings?: () => void;
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
+  offlineProgress?: OfflineWarmupDisplayProgress | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
@@ -977,8 +1012,11 @@ const Masthead = ({
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
-  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady);
-  const runtimeLabel = localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, offlineProgress);
+  const runtimeLabel =
+    runtimeState === "installing"
+      ? installingRuntimeLabel(localizer, offlineProgress)
+      : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
   const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
   const toggleUtility = (placement: "desktop" | "mobile", viaKeyboard: boolean) => {
     setUtilityPlacement(placement);
@@ -1332,8 +1370,9 @@ const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: (
   </button>
 );
 
-export type { RuntimeState };
+export type { OfflineWarmupDisplayProgress, RuntimeState };
 export {
+  installingRuntimeLabel,
   Masthead,
   SiteFooter,
   prefersReducedMotion,

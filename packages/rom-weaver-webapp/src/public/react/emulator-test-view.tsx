@@ -7,6 +7,7 @@ import {
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
 import { configureEmulatorSaveStorage, ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
+import { bumpOfflineWarmupPriority } from "../../webapp/pwa/offline-warmup-client.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { addEntry, disposeEntry, prepareEntry, useEmulatorSession } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
@@ -128,6 +129,10 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
 
   useEffect(() => {
     ensureEmulatorSaveBridge();
+    // The test view is about to pull EmulatorJS assets; move them to the front
+    // of the offline warm-up so its low-priority queue works for, not against,
+    // this session.
+    bumpOfflineWarmupPriority({ kind: "emulatorjs" });
   }, []);
 
   useLayoutEffect(() => {

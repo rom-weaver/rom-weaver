@@ -30,6 +30,7 @@ import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
+  installingRuntimeLabel,
   prefersReducedMotion,
   readPwaState,
   resolveRuntimeState,
@@ -37,7 +38,7 @@ import {
   RUNTIME_STATES,
   RuntimeGlyph,
 } from "./shell.tsx";
-import type { RuntimeState } from "./shell.tsx";
+import type { OfflineWarmupDisplayProgress, RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
@@ -227,7 +228,15 @@ const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
  * card above them - the badge is its value, the same way the commit hash is the
  * commit row's.
  */
-const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtimeState: RuntimeState }) => {
+const StatusRows = ({
+  localizer,
+  offlineProgress,
+  runtimeState,
+}: {
+  localizer: Localizer;
+  offlineProgress?: OfflineWarmupDisplayProgress | null;
+  runtimeState: RuntimeState;
+}) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
   const rows: Array<[string, React.ReactNode]> = [
@@ -235,7 +244,9 @@ const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtime
       localizer.message("ui.status.offline"),
       <span className="sw-chip" data-sw={runtimeState} key="sw" role="status">
         <RuntimeGlyph state={runtimeState} />
-        {localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+        {runtimeState === "installing"
+          ? installingRuntimeLabel(localizer, offlineProgress ?? null)
+          : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
       </span>,
     ],
     [
@@ -799,6 +810,7 @@ const LogDialog = ({
   onSaveSettings,
   onTabChange,
   serviceWorkerStatus,
+  offlineProgress = null,
   settingsFocusHint,
   settingsPanel,
   updateReady = false,
@@ -813,6 +825,7 @@ const LogDialog = ({
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
+  offlineProgress?: OfflineWarmupDisplayProgress | null;
   settingsFocusHint?: SettingsFocusHint | null;
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
@@ -840,7 +853,7 @@ const LogDialog = ({
     [onTabChange],
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
-  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady);
+  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
@@ -977,7 +990,7 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows localizer={localizer} runtimeState={runtimeState} />
+            <StatusRows localizer={localizer} offlineProgress={offlineProgress} runtimeState={runtimeState} />
             <OfflineLegend current={runtimeState} localizer={localizer} />
             <AboutLink localizer={localizer} />
           </div>

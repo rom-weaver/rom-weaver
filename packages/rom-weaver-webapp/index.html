@@ -229,9 +229,19 @@
 
         // A controller means this page came out of the cache; without
         // MessageChannel the client cannot ask it anything, which is the same
-        // "cached, not answering" the app calls ready.
+        // "cached, not answering" the app calls ready. The offline copy also
+        // needs the background warm-up (EmulatorJS + identify packs); the
+        // warm-up client persists completion under "rom-weaver-offline-ready"
+        // and `readResolvedServiceWorkerStatus` in shell.tsx reads the same
+        // key - keep the two resolvers in step.
+        let warmupReady = false;
+        try {
+          warmupReady = localStorage.getItem("rom-weaver-offline-ready") === "true";
+        } catch {
+          warmupReady = false;
+        }
         if (!(serviceWorkerEnabled && navigator.serviceWorker)) setRuntimeStatus("disabled");
-        else if (navigator.serviceWorker.controller)
+        else if (navigator.serviceWorker.controller && warmupReady)
           setRuntimeStatus(typeof MessageChannel === "function" ? "active" : "ready");
         else setRuntimeStatus("installing");
       };

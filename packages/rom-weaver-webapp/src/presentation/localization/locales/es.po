@@ -210,6 +210,11 @@ msgstr "La validación de la suma de comprobación falló."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Las sumas de verificación solo usan los caracteres hexadecimales 0-9 y a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Cerrar"
 
@@ -305,11 +310,6 @@ msgstr "Introduce 8 (CRC32), 32 (MD5) o 40 (SHA-1) caracteres hexadecimales."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashInvalidChars"
-msgstr "Las sumas de verificación solo usan los caracteres hexadecimales 0-9 y a-f."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Entorno"
 
@@ -355,6 +355,11 @@ msgstr "Identificar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Identifica por suma de verificación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "Incluir la ROM en el bundle"
 
@@ -367,6 +372,11 @@ msgstr "Aplicación instalada (PWA)"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Instalando la copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingProgress"
+msgstr "Instalando la copia sin conexión — {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -517,11 +527,6 @@ msgstr "Incluye una ROM solo si tienes derecho a distribuirla. Compartir ROMs co
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "opcional"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Identifica por suma de verificación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

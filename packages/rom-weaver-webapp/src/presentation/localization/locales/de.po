@@ -210,6 +210,11 @@ msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Prüfsummen enthalten nur die Hex-Zeichen 0-9 und a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Schließen"
 
@@ -305,11 +310,6 @@ msgstr "Geben Sie 8 (CRC32), 32 (MD5) oder 40 (SHA-1) Hex-Zeichen ein."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashInvalidChars"
-msgstr "Prüfsummen enthalten nur die Hex-Zeichen 0-9 und a-f."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Umgebung"
 
@@ -355,6 +355,11 @@ msgstr "Identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Per Prüfsumme identifizieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "ROM in Bundle einschließen"
 
@@ -367,6 +372,11 @@ msgstr "Installierte App (PWA)"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Offline-Kopie wird installiert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingProgress"
+msgstr "Offline-Kopie wird installiert — {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -517,11 +527,6 @@ msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen ur
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Per Prüfsumme identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

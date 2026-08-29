@@ -47,6 +47,7 @@ const identifyOptionalPackGroups = identifyPackGroups.groups
       if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
       return {
         sha256: system.sha256,
+        sizeBytes: system.rawBytes || 0,
         url: `assets/identify-${system.file}?sha256=${system.sha256}`,
       };
     }),
