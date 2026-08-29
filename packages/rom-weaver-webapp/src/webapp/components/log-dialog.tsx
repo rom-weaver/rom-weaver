@@ -17,6 +17,7 @@ import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { DropdownSelect } from "../../public/react/components/ds/dropdown-select.tsx";
+import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { listBrowserOpfs } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
@@ -26,7 +27,9 @@ import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogE
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
 import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
+import { queryOfflineCachedFiles } from "../pwa/offline-warmup-client.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
+import type { OfflineCachedFile } from "../offline-warmup.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
@@ -363,6 +366,48 @@ const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localize
         </div>
       ))}
     </dl>
+  </section>
+);
+
+const cachedFileLabel = (url: string) => {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}`;
+};
+
+const OfflineCachedFiles = ({
+  error,
+  files,
+  loading,
+  localizer,
+}: {
+  error: string | null;
+  files: OfflineCachedFile[];
+  loading: boolean;
+  localizer: Localizer;
+}) => (
+  <section className="sw-cached-files">
+    <h3 className="sr-only">{localizer.message("ui.status.cachedFiles")}</h3>
+    <Drawer
+      className="sw-cache-drawer"
+      label={localizer.message("ui.status.cachedFiles")}
+      readouts={<DrawerReadout muted>{loading ? "…" : files.length}</DrawerReadout>}
+    >
+      {loading ? <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesLoading")}</p> : null}
+      {!loading && error ? <p className="sw-cache-note sw-cache-error">{error}</p> : null}
+      {!(loading || error) && files.length === 0 ? (
+        <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesEmpty")}</p>
+      ) : null}
+      {!(loading || error) && files.length > 0 ? (
+        <ul className="sw-cache-list">
+          {files.map((file) => (
+            <li data-cache={file.cache} key={`${file.cache}:${file.url}`}>
+              <span title={file.cache}>{file.cache}</span>
+              <code title={file.url}>{cachedFileLabel(file.url)}</code>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Drawer>
   </section>
 );
 
@@ -890,6 +935,9 @@ const LogDialog = ({
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
+  const [cachedFiles, setCachedFiles] = useState<OfflineCachedFile[]>([]);
+  const [cachedFilesLoading, setCachedFilesLoading] = useState(false);
+  const [cachedFilesError, setCachedFilesError] = useState<string | null>(null);
   // Previous session's entries (promoted from localStorage at boot); the "previous" view shows a run that
   // OOM-reloaded the tab. Stable for the session, so read once.
   const previousEntries = useMemo(() => getLastSessionEntries(), []);
@@ -911,6 +959,25 @@ const LogDialog = ({
     if (!(open && showingOpfs)) return;
     void refreshOpfs();
   }, [open, refreshOpfs, showingOpfs]);
+  useEffect(() => {
+    if (!(open && tab === "status")) return;
+    let active = true;
+    setCachedFilesLoading(true);
+    setCachedFilesError(null);
+    void queryOfflineCachedFiles()
+      .then((files) => {
+        if (active) setCachedFiles(files);
+      })
+      .catch((error) => {
+        if (active) setCachedFilesError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (active) setCachedFilesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, tab]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
@@ -1024,6 +1091,12 @@ const LogDialog = ({
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <StatusRows localizer={localizer} offlineProgress={offlineProgress} runtimeState={runtimeState} />
+            <OfflineCachedFiles
+              error={cachedFilesError}
+              files={cachedFiles}
+              loading={cachedFilesLoading}
+              localizer={localizer}
+            />
             <OfflineLegend current={runtimeState} localizer={localizer} />
             <AboutLink localizer={localizer} />
           </div>

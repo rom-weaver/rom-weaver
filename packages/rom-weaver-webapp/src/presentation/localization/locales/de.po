@@ -35,6 +35,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.romDatabase"
+#~ msgstr "ROM-Datenbank"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
@@ -177,6 +182,11 @@ msgstr "Browser-Tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
 msgstr "per Prüfsumme, direkt in diesem Browser —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFiles"
+msgstr "Zwischengespeicherte Offline-Dateien"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -430,6 +440,11 @@ msgstr "Hell"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesLoading"
+msgstr "Zwischengespeicherte Dateien werden geladen…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.loading"
 msgstr "Geteilte Sitzung wird geladen…"
 
@@ -497,6 +512,11 @@ msgstr "Keine Datei nötig - fügen Sie eine CRC32-, MD5- oder SHA-1-Prüfsumme 
 #: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Keine Zeile passt zu „{q}“"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesEmpty"
+msgstr "Keine Offline-Dateien sind zwischengespeichert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -35,6 +35,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.romDatabase"
+#~ msgstr "ROM database"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -177,6 +182,11 @@ msgstr "Browser tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
 msgstr "with a database that stays local —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFiles"
+msgstr "Cached offline files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -430,6 +440,11 @@ msgstr "Light"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesLoading"
+msgstr "Loading cached files…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.loading"
 msgstr "Loading shared session…"
 
@@ -497,6 +512,11 @@ msgstr "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "No lines match “{q}”"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesEmpty"
+msgstr "No offline files are cached."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

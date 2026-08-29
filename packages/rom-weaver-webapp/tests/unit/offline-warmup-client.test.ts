@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bumpOfflineWarmupPriority,
   pauseOfflineWarmup,
+  queryOfflineCachedFiles,
   resumeOfflineWarmup,
   scheduleOfflineWarmup,
 } from "../../src/webapp/pwa/offline-warmup-client.ts";
@@ -57,12 +58,35 @@ const progressReply = (overrides: Reply = {}): Reply => ({
 let cancel: (() => void) | undefined;
 
 afterEach(async () => {
+  vi.useRealTimers();
   cancel?.();
   cancel = undefined;
   await flush();
 });
 
 describe("offline warm-up client", () => {
+  it("queries the service worker for cached files", async () => {
+    const files = [{ cache: "emulatorjs-4.2.3", url: "https://example.test/emulatorjs/data/loader.js" }];
+    const { controller, messages } = createFakeController([{ action: "offline-cached-files", files }]);
+    const { serviceWorker } = createServiceWorker(controller);
+
+    await expect(queryOfflineCachedFiles({ serviceWorker })).resolves.toEqual(files);
+    expect(messages).toEqual([{ action: "get-offline-cached-files" }]);
+  });
+
+  it("stops waiting quickly when an older service worker ignores the inventory query", async () => {
+    vi.useFakeTimers();
+    const controller = { postMessage: vi.fn() } as unknown as ServiceWorker;
+    const { serviceWorker } = createServiceWorker(controller);
+
+    const result = expect(queryOfflineCachedFiles({ serviceWorker })).rejects.toThrow(
+      "offline warm-up get-offline-cached-files timed out",
+    );
+    await vi.advanceTimersByTimeAsync(2000);
+    await result;
+    vi.useRealTimers();
+  });
+
   it("pumps sequentially after the start delay and stops on ready", async () => {
     const { controller, messages } = createFakeController([
       progressReply(),

@@ -7,11 +7,12 @@
  * identify run, the emulator test view) still download what they name.
  */
 import { createLogger } from "../../lib/logging.ts";
-import type { OfflineReadyState, WarmupBumpTarget, WarmupProgress } from "../offline-warmup.ts";
+import type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress } from "../offline-warmup.ts";
 
 const WARMUP_START_DELAY_MS = 5000;
 const IDLE_DELAY_MS = 250;
 const PUMP_TIMEOUT_MS = 120_000;
+const CACHE_INVENTORY_TIMEOUT_MS = 2000;
 const MAX_FAILURE_DELAY_MS = 30_000;
 const logger = createLogger("offline-warmup");
 
@@ -72,6 +73,7 @@ const postPump = (
   controller: ServiceWorker,
   action: string,
   onInterim?: (data: Record<string, unknown>) => void,
+  timeoutMs = PUMP_TIMEOUT_MS,
 ): Promise<Record<string, unknown>> =>
   new Promise((resolve, reject) => {
     const channel = new MessageChannel();
@@ -82,7 +84,7 @@ const postPump = (
       timeout = setTimeout(() => {
         channel.port1.onmessage = null;
         reject(new Error(`offline warm-up ${action} timed out`));
-      }, PUMP_TIMEOUT_MS);
+      }, timeoutMs);
     };
     armTimeout();
     channel.port1.onmessage = (event) => {
@@ -330,10 +332,22 @@ const queryOfflineReadyState = async (nav?: NavigatorLike): Promise<OfflineReady
   }
 };
 
+/** One-shot inventory of files held by the background offline caches. */
+const queryOfflineCachedFiles = async (nav?: NavigatorLike): Promise<OfflineCachedFile[]> => {
+  const controller = (nav ?? getGlobalNavigator())?.serviceWorker?.controller;
+  if (!controller || typeof MessageChannel !== "function") return [];
+  const reply = await postPump(controller, "get-offline-cached-files", undefined, CACHE_INVENTORY_TIMEOUT_MS);
+  if (reply.action !== "offline-cached-files" || !Array.isArray(reply.files)) {
+    throw new Error("offline cached-file query returned an invalid response");
+  }
+  return reply.files as OfflineCachedFile[];
+};
+
 export {
   bumpOfflineWarmupPriority,
   pauseOfflineWarmup,
   persistOfflineReady,
+  queryOfflineCachedFiles,
   queryOfflineReadyState,
   readPersistedOfflineReady,
   resumeOfflineWarmup,

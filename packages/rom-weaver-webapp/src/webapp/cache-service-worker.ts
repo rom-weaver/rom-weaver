@@ -431,6 +431,15 @@ self.addEventListener("message", (event) => {
     return;
   }
 
+  if (event.data.action === "get-offline-cached-files") {
+    const query = offlineWarmup
+      .getCachedFiles()
+      .then((files) => ({ action: "offline-cached-files", files }))
+      .catch((error) => ({ action: "offline-cached-files-failed", error: formatError(error) }));
+    event.waitUntil(query.then(replyTo));
+    return;
+  }
+
   if (event.data.action === "install-identify-pack-group") {
     const groupId = typeof event.data.groupId === "string" ? event.data.groupId : "";
     const install = offlineWarmup

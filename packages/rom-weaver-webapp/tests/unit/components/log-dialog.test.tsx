@@ -5,6 +5,7 @@ import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-co
 import { listBrowserOpfs } from "../../../src/storage/browser/browser-opfs-cleanup.ts";
 import { getActiveBrowserVirtualFiles } from "../../../src/workers/protocol/browser-virtual-files.ts";
 import { LogDialog } from "../../../src/webapp/components/log-dialog.tsx";
+import { queryOfflineCachedFiles } from "../../../src/webapp/pwa/offline-warmup-client.ts";
 
 vi.mock("../../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
   listBrowserOpfs: vi.fn(),
@@ -14,13 +15,40 @@ vi.mock("../../../src/workers/protocol/browser-virtual-files.ts", () => ({
   getActiveBrowserVirtualFiles: vi.fn(() => []),
 }));
 
+vi.mock("../../../src/webapp/pwa/offline-warmup-client.ts", () => ({
+  queryOfflineCachedFiles: vi.fn(() => Promise.resolve([])),
+}));
+
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
 afterEach(() => {
   cleanup();
   vi.mocked(getActiveBrowserVirtualFiles).mockReturnValue([]);
+  vi.mocked(queryOfflineCachedFiles).mockResolvedValue([]);
 });
 
 describe("LogDialog", () => {
+  it("lists every cached offline file on Status", async () => {
+    vi.mocked(queryOfflineCachedFiles).mockResolvedValue([
+      { cache: "emulatorjs-4.2.3", url: "https://example.test/emulatorjs/data/loader.js" },
+      { cache: "identify-optional", url: "https://example.test/assets/identify-consoles.pack?sha256=abc" },
+    ]);
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll(".sw-cache-list li")).toHaveLength(2));
+    const drawer = container.querySelector<HTMLButtonElement>(".sw-cache-drawer > .cks-head");
+    expect(drawer?.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(drawer as HTMLButtonElement);
+    expect(drawer?.getAttribute("aria-expanded")).toBe("true");
+    expect(Array.from(container.querySelectorAll(".sw-cache-list li"), (row) => row.textContent)).toEqual([
+      "emulatorjs-4.2.3/emulatorjs/data/loader.js",
+      "identify-optional/assets/identify-consoles.pack?sha256=abc",
+    ]);
+  });
+
   it("wears the weft sub-rail as its header, opening on the tab it was asked for", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>

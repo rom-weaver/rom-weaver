@@ -13,6 +13,9 @@ const sha256Hex = async (text: string) => {
 
 class FakeCache {
   entries = new Map<string, Response>();
+  async keys() {
+    return [...this.entries.keys()].map((url) => new Request(url));
+  }
   async match(request: RequestInfo | URL) {
     const url = typeof request === "string" ? request : request instanceof URL ? request.href : request.url;
     const hit = this.entries.get(url);
@@ -26,6 +29,9 @@ class FakeCache {
 
 class FakeCacheStorage {
   caches = new Map<string, FakeCache>();
+  async keys() {
+    return [...this.caches.keys()];
+  }
   async open(name: string) {
     let cache = this.caches.get(name);
     if (!cache) {
@@ -130,6 +136,19 @@ describe("offline warm-up (service worker side)", () => {
     const state = await second.getReadyState();
     expect(state.ready).toBe(true);
     expect(state.pendingUnits).toBe(0);
+  });
+
+  it("lists cached files without internal completion markers", async () => {
+    const warmup = await createWarmup();
+    await warmup.runNextUnit();
+    await warmup.runNextUnit();
+    const runtimeCache = await cacheStorage.open("rom-weaver-runtime");
+    await runtimeCache.put("https://example.test/__rom-weaver-coep-mode__", new Response("credentialless"));
+
+    expect(await warmup.getCachedFiles()).toEqual([
+      { cache: EMULATORJS_CACHE, url: "https://example.test/emulatorjs/data/cores/core.wasm" },
+      { cache: EMULATORJS_CACHE, url: "https://example.test/emulatorjs/data/loader.js" },
+    ]);
   });
 
   it("treats a new emulatorjs version as not ready", async () => {

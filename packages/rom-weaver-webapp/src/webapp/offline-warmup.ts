@@ -31,6 +31,11 @@ type OfflineReadyState = {
   totalFiles: number;
 };
 
+type OfflineCachedFile = {
+  cache: string;
+  url: string;
+};
+
 /** Human-facing description of the unit a progress event is about. */
 type WarmupDetail = { kind: "emulatorjs" | "identify-group"; name: string } | null;
 
@@ -65,6 +70,7 @@ type OfflineWarmupOptions = {
 
 type OfflineWarmup = {
   bumpPriority: (target: WarmupBumpTarget) => void;
+  getCachedFiles: () => Promise<OfflineCachedFile[]>;
   getReadyState: () => Promise<OfflineReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: true; label: string; packs: number }>;
   /** onInterim streams byte-level progress while the unit downloads. */
@@ -323,6 +329,22 @@ const createOfflineWarmup = ({
     return { cachedBytes, cachedFiles, pendingUnits, ready, totalBytes, totalFiles };
   };
 
+  const getCachedFiles = async (): Promise<OfflineCachedFile[]> => {
+    const cacheNames = await caches.keys();
+    const files = await Promise.all(
+      cacheNames.map(async (cacheName) => {
+        const requests = await caches.open(cacheName).then((cache) => cache.keys());
+        return requests
+          .filter((request) => {
+            const path = new URL(request.url).pathname;
+            return !path.startsWith("/__rom-weaver-");
+          })
+          .map((request) => ({ cache: cacheName, url: request.url }));
+      }),
+    );
+    return files.flat().sort((left, right) => left.url.localeCompare(right.url));
+  };
+
   const installGroupWith = async (fetcher: WarmupFetcher, groupId: string, onBytes?: (delta: number) => void) => {
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
@@ -505,8 +527,8 @@ const createOfflineWarmup = ({
     return response;
   };
 
-  return { bumpPriority, getReadyState, installIdentifyGroup, runNextUnit, serveOptionalIdentifyPack };
+  return { bumpPriority, getCachedFiles, getReadyState, installIdentifyGroup, runNextUnit, serveOptionalIdentifyPack };
 };
 
 export { createOfflineWarmup };
-export type { OfflineReadyState, WarmupBumpTarget, WarmupProgress };
+export type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress };
