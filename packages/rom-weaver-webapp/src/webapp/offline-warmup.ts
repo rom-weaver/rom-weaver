@@ -37,10 +37,15 @@ type EmulatorJsManifest = {
   files: Array<{ path: string; sizeBytes: number }>;
 };
 
+type WarmupFetcher = (request: Request | string, init?: RequestInit) => Promise<Response>;
+
 type OfflineWarmupOptions = {
   emulatorJsCacheName: string;
   emulatorJsVersion: string;
-  fetchForWarmup: (request: Request | string, init?: RequestInit) => Promise<Response>;
+  /** Low-priority fetch for background warm-up units. */
+  fetchForWarmup: WarmupFetcher;
+  /** Normal-priority fetch for downloads a user is actively waiting on. Defaults to fetchForWarmup. */
+  fetchForInteractive?: WarmupFetcher;
   identifyOptionalCacheName: string;
   identifyOptionalGroups: IdentifyOptionalPackGroup[];
   log: (message: string, details?: Record<string, unknown>) => void;
@@ -69,23 +74,46 @@ const sha256HexOf = async (bytes: ArrayBuffer) => {
 };
 
 /** Fetch one pack, verify its SHA-256, and return the request/response pair ready to cache. */
-const fetchVerifiedPack = async (
-  pack: IdentifyOptionalPack,
-  scope: string,
-  fetchForWarmup: OfflineWarmupOptions["fetchForWarmup"],
-) => {
+const fetchVerifiedPack = async (pack: IdentifyOptionalPack, scope: string, fetcher: WarmupFetcher) => {
   const request = new Request(new URL(pack.url, scope));
-  const response = await fetchForWarmup(request);
+  const response = await fetcher(request);
   if (!response.ok) throw new Error(`ROM identify pack download failed with HTTP ${response.status}`);
   const actualSha256 = await sha256HexOf(await response.clone().arrayBuffer());
   if (actualSha256 !== pack.sha256) throw new Error(`ROM identify pack checksum failed: ${pack.url}`);
   return { request, response };
 };
 
+/** Relative path with no empty, ".", or ".." segments and no backslashes or leading slash. */
+const isSafeAssetPath = (value: unknown): value is string => {
+  if (typeof value !== "string" || !value || value.startsWith("/") || value.includes("\\")) return false;
+  return value.split("/").every((segment) => segment && segment !== "." && segment !== "..");
+};
+
+/** Validate the fetched manifest so a malformed entry cannot poison URLs or byte totals. */
+const parseEmulatorJsManifest = (value: unknown): EmulatorJsManifest => {
+  const record = value as { files?: unknown; version?: unknown } | null;
+  if (!record || typeof record.version !== "string" || !Array.isArray(record.files)) {
+    throw new Error("EmulatorJS manifest is invalid");
+  }
+  const paths = new Set<string>();
+  const isValidSize = (size: unknown): size is number =>
+    typeof size === "number" && Number.isSafeInteger(size) && size >= 0;
+  const files = record.files.map((entry) => {
+    const file = (entry ?? {}) as { path?: unknown; sizeBytes?: unknown };
+    if (!(isSafeAssetPath(file.path) && isValidSize(file.sizeBytes)) || paths.has(file.path)) {
+      throw new Error("EmulatorJS manifest contains an invalid file");
+    }
+    paths.add(file.path);
+    return { path: file.path, sizeBytes: file.sizeBytes };
+  });
+  return { files, version: record.version };
+};
+
 const createOfflineWarmup = ({
   emulatorJsCacheName,
   emulatorJsVersion,
   fetchForWarmup,
+  fetchForInteractive = fetchForWarmup,
   identifyOptionalCacheName,
   identifyOptionalGroups,
   log,
@@ -107,11 +135,7 @@ const createOfflineWarmup = ({
       manifestPromise = (async () => {
         const response = await fetchForWarmup(emulatorJsManifestUrl);
         if (!response.ok) throw new Error(`EmulatorJS manifest request failed with HTTP ${response.status}`);
-        const manifest = (await response.json()) as EmulatorJsManifest;
-        if (typeof manifest?.version !== "string" || !Array.isArray(manifest.files)) {
-          throw new Error("EmulatorJS manifest is invalid");
-        }
-        return manifest;
+        return parseEmulatorJsManifest(await response.json());
       })().catch((error) => {
         manifestPromise = null;
         throw error;
@@ -212,7 +236,7 @@ const createOfflineWarmup = ({
     return { cachedBytes, pendingUnits, ready, totalBytes };
   };
 
-  const installIdentifyGroup = async (groupId: string) => {
+  const installGroupWith = async (fetcher: WarmupFetcher, groupId: string) => {
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
@@ -220,13 +244,16 @@ const createOfflineWarmup = ({
     // units and MUST NOT open one connection per pack.
     for (const pack of group.packs) {
       if (await cache.match(new URL(pack.url, scope).href)) continue;
-      const { request, response } = await fetchVerifiedPack(pack, scope, fetchForWarmup);
+      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher);
       await cache.put(request, response);
     }
     await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
     if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === group.id));
     return { id: group.id, installed: true as const, label: group.label, packs: group.packs.length };
   };
+
+  // A user clicked Install in settings, so this one downloads at normal priority.
+  const installIdentifyGroup = (groupId: string) => installGroupWith(fetchForInteractive, groupId);
 
   const downloadEmulatorJsFile = async (unit: Extract<WarmupUnit, { kind: "emulatorjs-file" }>) => {
     const cache = await caches.open(emulatorJsCacheName);
@@ -258,31 +285,53 @@ const createOfflineWarmup = ({
   const unitLabel = (unit: WarmupUnit) =>
     unit.kind === "emulatorjs-file" ? `emulatorjs:${unit.path}` : `identify-group:${unit.group.id}`;
 
-  const runNextUnit = async (): Promise<WarmupProgress> => {
+  // Serializes pumps: two clients (two open tabs, or a page retrying after its
+  // pump timeout) MUST NOT process the queue concurrently, or both would take
+  // the same head unit and the second removal would discard an unprocessed one.
+  let pumpChain: Promise<unknown> = Promise.resolve();
+
+  const processNextUnit = async (): Promise<WarmupUnit | undefined> => {
     const units = await getQueue();
     const unit = units[0];
     if (unit) {
       if (unit.kind === "emulatorjs-file") {
         await downloadEmulatorJsFile(unit);
-        units.shift();
+        // Remove by identity from the live queue: a bump may have replaced the
+        // array (or reordered it) while the download ran.
+        if (queue) queue = queue.filter((candidate) => candidate !== unit);
         await finishEmulatorJsIfComplete();
       } else {
-        await installIdentifyGroup(unit.group.id);
+        await installGroupWith(fetchForWarmup, unit.group.id);
       }
     } else {
       // Empty queue can still mean a missing emulatorjs marker (files were
       // filled by the runtime route before the queue was built).
       await finishEmulatorJsIfComplete();
     }
-    const state = await getReadyState();
-    return { ...state, unit: unit ? unitLabel(unit) : null };
+    return unit;
+  };
+
+  const runNextUnit = (): Promise<WarmupProgress> => {
+    const run = pumpChain.then(processNextUnit, processNextUnit);
+    pumpChain = run.catch(() => undefined);
+    return run.then(async (unit) => {
+      const state = await getReadyState();
+      return { ...state, unit: unit ? unitLabel(unit) : null };
+    });
   };
 
   const bumpPriority = (target: WarmupBumpTarget) => {
     if (!queue) {
       // Queue not built yet: build it, then reorder. Fire-and-forget is fine -
       // the follow-up pump awaits getQueue() before reading it.
-      void getQueue().then(() => bumpPriority(target));
+      getQueue()
+        .then(() => bumpPriority(target))
+        .catch((error) => {
+          log("warm-up bump dropped; queue build failed", {
+            error: error instanceof Error ? error.message : String(error),
+            target: target.kind,
+          });
+        });
       return;
     }
     const matches = (unit: WarmupUnit) =>
@@ -306,8 +355,9 @@ const createOfflineWarmup = ({
     if (!pack) return Response.error();
     // On-demand single-pack fetch: an identify run must never fail because the
     // group install has not happened yet. The group marker stays absent until
-    // a full install, so settings semantics are unchanged.
-    const { request: packRequest, response } = await fetchVerifiedPack(pack, scope, fetchForWarmup);
+    // a full install, so settings semantics are unchanged. The user is waiting
+    // on this response, so it fetches at normal priority.
+    const { request: packRequest, response } = await fetchVerifiedPack(pack, scope, fetchForInteractive);
     await cache.put(packRequest, response.clone());
     return response;
   };

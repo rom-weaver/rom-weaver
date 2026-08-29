@@ -151,7 +151,10 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   const waitForResume = (): Promise<void> =>
     new Promise((resolve) => {
       if (pauseCount === 0 || signal.aborted) return resolve();
-      const done = () => resolve();
+      const done = () => {
+        signal.removeEventListener("abort", done);
+        resolve();
+      };
       resumeWaiters.push(done);
       signal.addEventListener("abort", done, { once: true });
     });
@@ -220,12 +223,17 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
       pendingBumps.push(target);
       return;
     }
-    activeBumps.push(target);
     try {
       controller.postMessage({ action: "offline-warmup-bump", target });
     } catch (error) {
       logger.warn("offline warm-up bump failed", { error: formatError(error) });
     }
+    // On data saver, an emulatorjs bump only reorders the queue: pumping it
+    // would download every core, while the emulator page itself fetches
+    // exactly the files it needs through the runtime route. Identify-group
+    // bumps are bounded, so they still pump.
+    if (saveData && !started && target.kind === "emulatorjs") return;
+    activeBumps.push(target);
     void runLoop();
   };
 
@@ -251,6 +259,12 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     if (started || activeBumps.length) void runLoop();
   };
   if (typeof addEventListener === "function") addEventListener("online", onOnline);
+  // The loop exits when the controller disappears (a worker update in flight);
+  // restart it when a new worker takes control.
+  const onControllerChange = () => {
+    if (started || activeBumps.length) void runLoop();
+  };
+  serviceWorker.addEventListener?.("controllerchange", onControllerChange);
 
   if (serviceWorker.controller) startAfterDelay();
   else serviceWorker.addEventListener?.("controllerchange", startAfterDelay);
@@ -260,6 +274,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     if (activeController?.bump === bump) activeController = null;
     if (typeof removeEventListener === "function") removeEventListener("online", onOnline);
     serviceWorker.removeEventListener?.("controllerchange", startAfterDelay);
+    serviceWorker.removeEventListener?.("controllerchange", onControllerChange);
   };
 };
 

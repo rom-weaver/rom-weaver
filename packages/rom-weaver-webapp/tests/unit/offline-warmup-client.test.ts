@@ -115,10 +115,10 @@ describe("offline warm-up client", () => {
     expect(messages.length).toBeGreaterThan(0);
   });
 
-  it("posts a bump message and pumps immediately, even on data saver", async () => {
+  it("posts an identify-group bump and pumps immediately, even on data saver", async () => {
     const { controller, messages } = createFakeController([
-      progressReply({ unit: "emulatorjs:loader.js" }),
-      progressReply({ ready: true, unit: "emulatorjs:cores/core.wasm" }),
+      progressReply({ unit: "identify-group:optional-computers" }),
+      progressReply({ ready: true, unit: "emulatorjs:loader.js" }),
     ]);
     const { serviceWorker } = createServiceWorker(controller);
 
@@ -131,10 +131,31 @@ describe("offline warm-up client", () => {
     // Data saver: no automatic pumping.
     expect(messages).toHaveLength(0);
 
+    bumpOfflineWarmupPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
+    await flush();
+    expect(messages[0]).toMatchObject({
+      action: "offline-warmup-bump",
+      target: { groupIds: ["optional-computers"], kind: "identify-groups" },
+    });
+    expect(messages.filter((message) => message.action === "offline-warmup-pump").length).toBeGreaterThan(0);
+  });
+
+  it("only reorders on an emulatorjs bump under data saver - no pumping", async () => {
+    const { controller, messages } = createFakeController([]);
+    const { serviceWorker } = createServiceWorker(controller);
+
+    cancel = scheduleOfflineWarmup({
+      delayMs: 0,
+      idleDelayMs: 0,
+      navigator: { connection: { saveData: true }, serviceWorker },
+    });
+    await flush();
+
     bumpOfflineWarmupPriority({ kind: "emulatorjs" });
     await flush();
-    expect(messages[0]).toMatchObject({ action: "offline-warmup-bump", target: { kind: "emulatorjs" } });
-    expect(messages.filter((message) => message.action === "offline-warmup-pump").length).toBeGreaterThan(0);
+    // The bump message reorders the worker's queue for the emulator page's own
+    // fetches, but the ~30 MB core set is not pulled on a metered connection.
+    expect(messages).toEqual([{ action: "offline-warmup-bump", target: { kind: "emulatorjs" } }]);
   });
 
   it("stops pumping after cancel", async () => {

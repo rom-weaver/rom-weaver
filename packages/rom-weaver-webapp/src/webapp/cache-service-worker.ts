@@ -292,6 +292,9 @@ const offlineWarmup = createOfflineWarmup({
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsVersion: __EMULATORJS_VERSION__,
   fetchForWarmup,
+  // On-demand pack serves and settings-triggered installs block a waiting
+  // user, so they fetch without the low-priority hint.
+  fetchForInteractive: (input, init) => fetch(input, init),
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
   identifyOptionalGroups: __IDENTIFY_OPTIONAL_PACK_GROUPS__,
   log: logServiceWorker,

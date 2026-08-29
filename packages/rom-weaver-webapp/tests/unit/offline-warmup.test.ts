@@ -41,6 +41,7 @@ const manifest = {
   files: [
     { path: "loader.js", sizeBytes: 3 },
     { path: "cores/core.wasm", sizeBytes: 5 },
+    { path: "cores/extra.data", sizeBytes: 7 },
   ],
 };
 
@@ -96,9 +97,9 @@ describe("offline warm-up (service worker side)", () => {
     const warmup = await createWarmup();
     const state = await warmup.getReadyState();
     expect(state.ready).toBe(false);
-    expect(state.totalBytes).toBe(3 + 5 + PACK_BODY.length);
+    expect(state.totalBytes).toBe(3 + 5 + 7 + PACK_BODY.length);
     expect(state.cachedBytes).toBe(0);
-    expect(state.pendingUnits).toBe(3);
+    expect(state.pendingUnits).toBe(4);
   });
 
   it("pumps units to completion, writes markers, and flips ready", async () => {
@@ -108,6 +109,8 @@ describe("offline warm-up (service worker side)", () => {
     expect(progress.ready).toBe(false);
     progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("emulatorjs:cores/core.wasm");
+    progress = await warmup.runNextUnit();
+    expect(progress.unit).toBe("emulatorjs:cores/extra.data");
     progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("identify-group:optional-computers");
     expect(progress.ready).toBe(true);
@@ -150,13 +153,49 @@ describe("offline warm-up (service worker side)", () => {
 
   it("bumps identify groups ahead of emulatorjs files", async () => {
     const warmup = await createWarmup();
-    await warmup.getReadyState();
+    // Build the queue: the first pump takes the first emulatorjs file.
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
     warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
-    // The queue builds lazily; the bump defers until it exists.
-    await warmup.runNextUnit();
-    warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
-    const progress = await warmup.runNextUnit();
-    expect(progress.unit).toBe("identify-group:optional-computers");
+    // Without the bump the next unit would be emulatorjs:cores/core.wasm.
+    expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("serializes concurrent pumps so no unit is skipped", async () => {
+    const warmup = await createWarmup();
+    const [first, second] = await Promise.all([warmup.runNextUnit(), warmup.runNextUnit()]);
+    expect(first.unit).toBe("emulatorjs:loader.js");
+    expect(second.unit).toBe("emulatorjs:cores/core.wasm");
+    let progress = await warmup.runNextUnit();
+    progress = await warmup.runNextUnit();
+    expect(progress.ready).toBe(true);
+    expect(progress.cachedBytes).toBe(progress.totalBytes);
+  });
+
+  it("rejects a manifest with missing sizes or unsafe paths", async () => {
+    const badManifests = [
+      { files: [{ path: "loader.js" }], version: EMULATORJS_VERSION },
+      { files: [{ path: "../../evil.js", sizeBytes: 1 }], version: EMULATORJS_VERSION },
+      { files: [{ path: "/abs.js", sizeBytes: 1 }], version: EMULATORJS_VERSION },
+    ];
+    for (const bad of badManifests) {
+      cacheStorage = new FakeCacheStorage();
+      vi.stubGlobal("caches", cacheStorage);
+      const fetcher = vi.fn(async (input: Request | string) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url.endsWith("emulatorjs/manifest.json")) return Response.json(bad);
+        if (url.includes("identify-computers.pack")) return new Response(PACK_BODY);
+        return new Response("missing", { status: 404 });
+      });
+      const warmup = await createWarmup(fetcher);
+      // The invalid manifest is rejected: no NaN totals, no fetch outside
+      // emulatorjs/data/, and readiness stays false.
+      const state = await warmup.getReadyState();
+      expect(state.ready).toBe(false);
+      expect(Number.isNaN(state.totalBytes)).toBe(false);
+      const fetched = fetcher.mock.calls.map(([input]) => (typeof input === "string" ? input : input.url));
+      expect(fetched.some((url) => url.includes("evil"))).toBe(false);
+    }
   });
 
   it("serves an optional pack on demand without a group marker and verifies its checksum", async () => {
