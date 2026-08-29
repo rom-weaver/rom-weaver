@@ -142,8 +142,7 @@ match a file that is stored slightly differently."
         command(
             about = "Identify a ROM title from its checksums",
             long_about = "\
-Identify a ROM title from its checksums and local database packs (RWFP1 or
-RWFP2).
+Identify a ROM title from its checksums and local RWFP4 database packs.
 
 Archives are opened automatically. The command checks the raw ROM and its
 common header and byte-order variants. Repeat --database to search more than
@@ -1436,8 +1435,7 @@ mod command_args;
 pub use command_args::{
     BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
     CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
-    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
-    IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
+    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseSystemCommand,
     IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
     PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
     PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,

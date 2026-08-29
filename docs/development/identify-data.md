@@ -43,7 +43,7 @@ OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the G
 
 ## RWFP4 records
 
-Every built-in pack uses RWFP4. RWFP1, RWFP2, and RWFP3 remain readable for imported user packs.
+RWFP4 is the only supported pack format.
 
 RWFP4 stores strings, hashes, components, games, owners, routes, and sets in binary tables. Components and routes refer to one shared hash record. Provenance exists once per pack and each game refers to a provenance set.
 
@@ -80,5 +80,3 @@ Each manifest records the source name, URL, commit, license, input path, and gen
 The browser and native CLI check each pack size and SHA-256 before use. The reader also checks every member, table length, offset, hash width, and reference.
 
 An invalid or absent pack reports identification as unavailable. It does not become a false no-match result.
-
-Imported RWFP1, RWFP2, and RWFP3 packs remain readable.

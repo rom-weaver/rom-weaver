@@ -31,7 +31,7 @@ const IDENTIFY_STATUS_MARK: Readonly<Record<IdentifyStatus, IdentifyStatusMark>>
 };
 
 /**
- * Match-quality badges for set-aware (RWFP2) results. `metadata_only` is the
+ * Match-quality badges for set-aware results. `metadata_only` is the
  * weakest claim - the database knew the title but could not verify the bytes -
  * so its wording never says "verified".
  */

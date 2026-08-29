@@ -11,32 +11,12 @@ use rom_weaver_core::{ComponentRole, Result};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-use crate::identify_pack_v2::{PackComponent, PackGame, PackProvenance};
+use crate::identify_pack_v4::{PackComponent, PackGame, PackProvenance};
 
 /// The read-only pack operations needed by the artifact matcher.
 pub trait ArtifactPackReader {
     fn game(&self, index: u32) -> Option<&PackGame>;
     fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>>;
-}
-
-impl ArtifactPackReader for crate::identify_pack_v2::ArtifactPack {
-    fn game(&self, index: u32) -> Option<&PackGame> {
-        self.game(index)
-    }
-
-    fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>> {
-        self.route(crc32_hex, size)
-    }
-}
-
-impl ArtifactPackReader for crate::identify_pack_v3::ArtifactPack {
-    fn game(&self, index: u32) -> Option<&PackGame> {
-        self.game(index)
-    }
-
-    fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>> {
-        self.route(crc32_hex, size)
-    }
 }
 
 impl ArtifactPackReader for crate::identify_pack_v4::ArtifactPack {
@@ -409,13 +389,12 @@ pub fn match_artifact<P: ArtifactPackReader + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identify_pack_v2::ArtifactPack;
-    use crate::identify_pack_v2::tests::{
-        build_pack_container, build_refs, build_route, component_json, game_json, manifest_json,
-    };
+    use crate::identify_catalog::IdentifySource;
+    use crate::identify_pack_v4::UpstreamSource;
 
     const SHA1_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const SHA1_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    type TestRoutes = std::collections::BTreeMap<([u8; 4], u64), Vec<(u32, u16)>>;
 
     fn crc_bytes(hex: &str) -> [u8; 4] {
         let mut out = [0u8; 4];
@@ -425,44 +404,87 @@ mod tests {
         out
     }
 
-    /// Build a pack from `(name, components)` games, routing every
-    /// discriminating component with a crc32 and a size.
-    fn pack_from_games(games: Vec<(&str, Vec<serde_json::Value>)>) -> ArtifactPack {
-        let mut refs: Vec<(u32, u16)> = Vec::new();
-        let mut route_map: std::collections::BTreeMap<([u8; 4], u64), Vec<u32>> =
-            Default::default();
-        for (game_index, (_, components)) in games.iter().enumerate() {
-            for (component_index, component) in components.iter().enumerate() {
-                let discriminating = component["discriminating"].as_bool().unwrap();
-                let size = component["size"].as_u64().unwrap();
-                let crc32 = component["crc32"].as_str();
-                if discriminating
-                    && size > 0
-                    && let Some(crc32) = crc32
+    #[derive(Debug)]
+    struct TestPack {
+        games: Vec<PackGame>,
+        routes: TestRoutes,
+    }
+
+    impl ArtifactPackReader for TestPack {
+        fn game(&self, index: u32) -> Option<&PackGame> {
+            self.games.get(index as usize)
+        }
+
+        fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>> {
+            Ok(self
+                .routes
+                .get(&(crc_bytes(crc32_hex), size))
+                .cloned()
+                .unwrap_or_default())
+        }
+    }
+
+    fn component_json(
+        role: &str,
+        ordinal: u32,
+        size: u64,
+        crc32: Option<&str>,
+        sha1: Option<&str>,
+        required: bool,
+        discriminating: bool,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "role": role,
+            "ordinal": ordinal,
+            "hashScope": "full_file",
+            "size": size,
+            "crc32": crc32,
+            "sha1": sha1,
+            "required": required,
+            "discriminating": discriminating,
+        })
+    }
+
+    /// Build only the reader contract that the matcher needs. RWFP4 parser
+    /// coverage remains in the pack-reader module.
+    fn pack_from_games(games: Vec<(&str, Vec<serde_json::Value>)>) -> TestPack {
+        let games: Vec<PackGame> = games
+            .into_iter()
+            .map(|(name, components)| PackGame {
+                name: name.to_string(),
+                platform: "Test Platform".to_string(),
+                source: IdentifySource::OpenGood,
+                upstream_source: UpstreamSource::OpenGood,
+                provenance: Vec::new(),
+                legacy_variant: false,
+                dump_tags: Vec::new(),
+                game_id: None,
+                region: None,
+                language: None,
+                disc_number: None,
+                revision: None,
+                parent: None,
+                components: components
+                    .into_iter()
+                    .map(|value| serde_json::from_value(value).expect("component is valid"))
+                    .collect(),
+            })
+            .collect();
+        let mut routes = std::collections::BTreeMap::new();
+        for (game_index, game) in games.iter().enumerate() {
+            for (component_index, component) in game.components.iter().enumerate() {
+                if component.discriminating
+                    && component.size > 0
+                    && let Some(crc32) = component.crc32.as_deref()
                 {
-                    let ref_id = refs.len() as u32;
-                    refs.push((game_index as u32, component_index as u16));
-                    route_map
-                        .entry((crc_bytes(crc32), size))
-                        .or_default()
-                        .push(ref_id);
+                    routes
+                        .entry((crc_bytes(crc32), component.size))
+                        .or_insert_with(Vec::new)
+                        .push((game_index as u32, component_index as u16));
                 }
             }
         }
-        let games_json = serde_json::to_vec(
-            &games
-                .iter()
-                .map(|(name, components)| game_json(name, "Test Platform", components.clone()))
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-        let bytes = build_pack_container(&[
-            ("games.json", games_json),
-            ("route.bin", build_route(route_map.into_iter().collect())),
-            ("refs.bin", build_refs(&refs)),
-            ("manifest.json", manifest_json("Test Platform")),
-        ]);
-        ArtifactPack::parse(&bytes).expect("test pack parses")
+        TestPack { games, routes }
     }
 
     fn fingerprint(components: Vec<(u64, &str, Option<&str>)>) -> ArtifactFingerprint {

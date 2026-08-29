@@ -126,7 +126,7 @@ Native identify performs no network access.
 
 ### Identify flags
 
-- `--database PACK` searches a local RWFP1, RWFP2, RWFP3, or RWFP4 pack instead of the built-in data and the installed packs. Repeatable.
+- `--database PACK` searches a local RWFP4 pack instead of the built-in data and the installed packs. Repeatable.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
@@ -148,11 +148,6 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 | `remove <SYSTEM>` | Remove one system's installed pack. |
 | `install-all` | Install the default database for this rom-weaver version. |
 | `install-group <GROUP> [--from <ARCHIVE>]` | Download or import one optional pack group. |
-| `import-redump <ZIP>` | Build a pack from a local Redump DAT ZIP. |
-| `install <SYSTEM> [--from <ZIP>]` | Install one Redump system pack. Without `--from`, download the DAT from Redump. |
-| `update [SYSTEM] [--from <ZIP>]` | Update one or all installed Redump packs. Without `--from`, download current DAT files. |
-
-`<SYSTEM>` is a canonical platform name or alias. Platforms that OpenGood covers stay built in and do not install from Redump.
 
 `optional-computers` contains these families:
 
@@ -165,11 +160,11 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 
 The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`. Optional result fields, present when known:
 
-- `quality`: `exact`, `partial`, or `metadata_only`, for an RWFP2, RWFP3, or RWFP4 match.
+- `quality`: `exact`, `partial`, or `metadata_only`.
 - `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the fix. `status` stays `unknown`.
 - `platform_candidates`: detected platforms with `confidence` and `evidence`.
 - `media`, `components`: the input's media kind and hashed components.
-- `database`: the pack that answered - `source`, `pack_format` (`RWFP1`/`RWFP2`/`RWFP3`/`RWFP4`), and `canonicalization_profile`.
+- `database`: the pack that answered - `source`, `pack_format` (`RWFP4`), and `canonicalization_profile`.
 - `matches[].provenance`: every source that contributed the matched hash record.
 - `matches[].legacy_variant`: true for an OpenGood-only record.
 - `matches[].dump_tags`: preserved GoodTools status tags for a legacy variant.

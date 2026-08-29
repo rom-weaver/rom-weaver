@@ -26,7 +26,7 @@ const catalogWith = (packSha: string) => ({
       aliases: ["psx", "sony playstation"],
       canonicalPlatform: "Sony PlayStation",
       mediaProfiles: ["optical-single-image-v1"],
-      packFormat: "RWFP2",
+      packFormat: "RWFP4",
       packSha256: packSha,
       packSlug: "sony-playstation",
       source: "libretro",
