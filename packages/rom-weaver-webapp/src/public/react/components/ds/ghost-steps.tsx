@@ -10,7 +10,7 @@ type GhostStep = {
 const GhostSteps = ({ steps }: { steps: readonly GhostStep[] }) => (
   <div className="ghost-steps">
     {/* input steps join with "+"; the arrow marks the final step they flow
-        into (0x02 ROM + 0x03 Patches → 0x04 Apply) */}
+        into (0x02 ROM + 0x03 Patches + 0x04 Cheats → 0x05 Apply) */}
     <p className="ghost-next">
       <span className="ghost-next-label">Next:</span>
       {steps.map((step, index) => (
