@@ -124,14 +124,19 @@ SCCACHE_CACHE_SIZE = "35G"
 #     include_file_ctime/include_file_mtime stay off.
 #
 # base_dir is the main checkout, not config_root, so a target directory in a
-# sibling worktree under .worktrees/ still falls inside it.
+# sibling worktree under .worktrees/ still falls inside it. A worktree created
+# outside the main checkout silently loses the path rewriting and drops back to
+# per-directory miss rates. When git cannot resolve the checkout (no .git, an
+# exported tarball), the value MUST be empty, never a relative path: ccache
+# hard-fails every compile on a non-absolute CCACHE_BASEDIR, while empty just
+# disables rewriting.
 #
 # Resolved dynamically like RUSTC_WRAPPER: empty is a no-op for CMake, which
 # keeps hosts without either cache - and CI, which deliberately installs none -
 # on the plain compiler. The launcher bakes into CMakeCache.txt at configure
 # time, so an existing OUT_DIR keeps building unwrapped until it is cleaned.
 CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v ccache || command -v sccache || true') | trim }}"
-CCACHE_BASEDIR = "{{ exec(command='dirname \"$(git -C ' ~ config_root ~ ' rev-parse --path-format=absolute --git-common-dir)\"') | trim }}"
+CCACHE_BASEDIR = "{{ exec(command='d=$(git -C \\'' ~ config_root ~ '\\' rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && dirname \"$d\" || true') | trim }}"
 CCACHE_NOHASHDIR = "1"
 
 # --- Tasks ----------------------------------------------------------------
