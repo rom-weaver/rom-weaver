@@ -93,8 +93,23 @@ RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "0"
 SCCACHE_CACHE_SIZE = "35G"
 
-# cc-rs falls back to RUSTC_WRAPPER above, so every cc-built C dep already goes
-# through sccache. libarchive does not: it is built by cmake::Config
+# cc-rs falls back to RUSTC_WRAPPER above, so without CC below every cc-built C
+# dep would go through sccache - and miss across target directories for the same
+# reason as cmake (absolute OUT_DIR paths in every compile line). Routing cc-rs
+# through ccache instead replays 1627/1630 of those ~1600 compiles into a fresh
+# target directory; the 3 recurring misses are structural (openssl-sys passes
+# target-dir paths as -D macro *values* on the command line, and the staged
+# lzma-sdk portable decoder is generated inside OUT_DIR, so its own source path
+# differs per target directory) and no ccache setting can collapse them.
+#
+# Empty when ccache is absent: cc-rs treats an empty or whitespace CC as unset
+# (env_tool in cc-rs), so hosts without ccache - CI included - keep today's
+# behavior, including the sccache fallback via RUSTC_WRAPPER. The wasm targets
+# are unaffected either way: their CC_wasm32_* variables above take precedence.
+CC = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache cc || true') | trim }}"
+CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || true') | trim }}"
+
+# libarchive does not go through cc-rs: it is built by cmake::Config
 # (crates/rom-weaver-containers/libarchive/build.rs), and cmake-rs forwards no
 # wrapper, so its C translation units are the one part of the build sccache
 # never sees. CMake initializes the cache variable from this environment
