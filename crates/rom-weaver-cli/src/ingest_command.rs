@@ -88,6 +88,12 @@ pub struct IngestRomAsset {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub track_number: Option<u32>,
+    /// Per-track checksum rows (`{track_number, size_bytes, checksums}`) streamed
+    /// during a merged single-bin disc extract. They let the disc-group lookup
+    /// fingerprint each track even though only one merged file exists. Empty for
+    /// split extracts and non-disc assets.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub track_checksums: Vec<Value>,
     /// Full `.cue` text for a cue-sheet asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -621,6 +627,7 @@ impl CliApp {
             recommended_format: recommended_format.map(str::to_string),
             disc_group_id: None,
             track_number: None,
+            track_checksums: Vec::new(),
             cue_text: None,
             gdi_text: None,
             extract_time_ms: None,
@@ -706,6 +713,11 @@ impl CliApp {
                     .get("track_number")
                     .and_then(Value::as_u64)
                     .map(|value| value as u32),
+                track_checksums: map
+                    .get("track_checksums")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
                 cue_text: map
                     .get("cue_text")
                     .and_then(Value::as_str)
@@ -1259,6 +1271,40 @@ impl CliApp {
     /// match them. Build one fingerprint per disc group from the checksums the
     /// extract already streamed - no bytes are re-read - and give every asset in
     /// the group the group's identification when its own lookup found nothing.
+    /// Expand a merged bin's `track_checksums` rows into per-track fingerprint
+    /// components. A malformed row (no hashes or zero size) is skipped.
+    fn track_checksum_components(asset: &IngestRomAsset) -> Vec<FingerprintComponent> {
+        asset
+            .track_checksums
+            .iter()
+            .filter_map(|row| {
+                let map = row.as_object()?;
+                let size = map.get("size_bytes").and_then(Value::as_u64)?;
+                let checksums = map.get("checksums").and_then(Value::as_object)?;
+                if size == 0 || checksums.is_empty() {
+                    return None;
+                }
+                let hash = |algorithm: &str| {
+                    checksums
+                        .get(algorithm)
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                };
+                Some(FingerprintComponent {
+                    role: ComponentRole::DataTrack,
+                    ordinal: map.get("track_number").and_then(Value::as_u64).unwrap_or(0) as u32,
+                    hash_scope: "track_file".to_string(),
+                    size,
+                    crc32: hash("crc32"),
+                    md5: hash("md5"),
+                    sha1: hash("sha1"),
+                    sha256: hash("sha256"),
+                    filename: None,
+                })
+            })
+            .collect()
+    }
+
     fn resolve_disc_group_identifications(
         identify_database: &IdentifyDatabaseSet,
         assets: &mut [IngestRomAsset],
@@ -1283,12 +1329,18 @@ impl CliApp {
         for ((directory, group_id), indexes) in groups {
             let mut components: Vec<FingerprintComponent> = indexes
                 .iter()
-                .filter_map(|&index| {
+                .flat_map(|&index| {
                     let asset = &assets[index];
-                    if asset.checksums.is_empty() || asset.size_bytes == 0 {
-                        return None;
+                    // A merged single-bin extract carries per-track checksum rows;
+                    // expand them so the fingerprint has one component per track,
+                    // matching what a split extract's separate files produce.
+                    if !asset.track_checksums.is_empty() {
+                        return Self::track_checksum_components(asset);
                     }
-                    Some(FingerprintComponent {
+                    if asset.checksums.is_empty() || asset.size_bytes == 0 {
+                        return Vec::new();
+                    }
+                    vec![FingerprintComponent {
                         // The matcher compares scope, size, and hashes; role and
                         // ordinal are informational.
                         role: ComponentRole::DataTrack,
@@ -1300,7 +1352,7 @@ impl CliApp {
                         sha1: asset.checksums.get("sha1").cloned(),
                         sha256: asset.checksums.get("sha256").cloned(),
                         filename: Some(asset.file_name.clone()),
-                    })
+                    }]
                 })
                 .collect();
             if components.is_empty() {

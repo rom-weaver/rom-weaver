@@ -107,6 +107,17 @@ pub struct ChdHeader {
 struct ExtractedFileChecksum {
     path: PathBuf,
     values: BTreeMap<String, String>,
+    /// Per-track checksums streamed during a merged single-bin CD extract, so a
+    /// multi-track disc can still fingerprint against per-track database
+    /// entries when no per-track files exist. Empty on every other path.
+    track_values: Vec<ExtractedTrackChecksum>,
+}
+
+#[derive(Clone, Debug)]
+struct ExtractedTrackChecksum {
+    number: u32,
+    size_bytes: u64,
+    values: BTreeMap<String, String>,
 }
 
 fn create_extract_checksum(
@@ -123,6 +134,7 @@ fn create_extract_checksum(
 fn build_extract_checksum_emitted_file_detail(
     path: &Path,
     checksums: BTreeMap<String, String>,
+    track_values: Vec<ExtractedTrackChecksum>,
 ) -> Option<Value> {
     if checksums.is_empty() {
         return None;
@@ -130,6 +142,19 @@ fn build_extract_checksum_emitted_file_detail(
     let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let mut entry = build_emitted_file_detail(path)?;
     entry.insert("checksums".to_string(), json!(checksums));
+    if !track_values.is_empty() {
+        let tracks = track_values
+            .into_iter()
+            .map(|track| {
+                json!({
+                    "track_number": track.number,
+                    "size_bytes": track.size_bytes,
+                    "checksums": track.values,
+                })
+            })
+            .collect::<Vec<_>>();
+        entry.insert("track_checksums".to_string(), Value::Array(tracks));
+    }
     // Detect the decoded disc's platform/medium from the extracted track (a bounded prefix read of
     // the just-written output - no re-decode of the CHD) so a CHD's emitted_files carry the same
     // platform tag as other formats. A `.cue` sheet / non-disc track simply yields nothing.
@@ -147,7 +172,13 @@ fn attach_extract_checksum_details(
     let mut details = operation_report_details(&mut report);
     let emitted = checksums
         .into_iter()
-        .filter_map(|entry| build_extract_checksum_emitted_file_detail(&entry.path, entry.values))
+        .filter_map(|entry| {
+            build_extract_checksum_emitted_file_detail(
+                &entry.path,
+                entry.values,
+                entry.track_values,
+            )
+        })
         .collect::<Vec<_>>();
     if !emitted.is_empty() {
         details.insert("emitted_files".to_string(), Value::Array(emitted));
@@ -161,10 +192,20 @@ fn push_finalized_extract_checksum(
     path: PathBuf,
     checksum: Option<StreamingChecksum>,
 ) -> Result<()> {
+    push_finalized_extract_checksum_with_tracks(output_checksums, path, checksum, Vec::new())
+}
+
+fn push_finalized_extract_checksum_with_tracks(
+    output_checksums: &mut Vec<ExtractedFileChecksum>,
+    path: PathBuf,
+    checksum: Option<StreamingChecksum>,
+    track_values: Vec<ExtractedTrackChecksum>,
+) -> Result<()> {
     if let Some(checksum) = checksum {
         output_checksums.push(ExtractedFileChecksum {
             path,
             values: checksum.finalize()?,
+            track_values,
         });
     }
     Ok(())

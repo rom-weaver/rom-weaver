@@ -1225,6 +1225,14 @@ impl ChdContainerHandler {
         } else {
             None
         };
+        // Per-track checksums for a merged multi-track bin, hashed inline from the
+        // same cooked bytes the writer streams, so identify can still fingerprint
+        // the disc against per-track database entries. Frames arrive in disc order,
+        // so exactly one track checksum is live at a time.
+        let hash_tracks =
+            write_single_bin && layout.tracks.len() > 1 && single_bin_checksum.is_some();
+        let mut current_track_checksum: Option<(u32, u64, StreamingChecksum)> = None;
+        let mut finished_track_checksums: Vec<ExtractedTrackChecksum> = Vec::new();
         let cue_writer = &mut *sink.cue_writer;
         if let Some(writer) = cue_writer.as_mut() {
             writer.write_all(format!("FILE \"{single_bin_name}\" BINARY\n").as_bytes())?;
@@ -1290,6 +1298,29 @@ impl ChdContainerHandler {
                         if let Some(checksum) = single_bin_checksum.as_mut() {
                             checksum.update(data.as_ref())?;
                         }
+                        if hash_tracks {
+                            if current_track_checksum
+                                .as_ref()
+                                .is_some_and(|(number, _, _)| *number != track.number)
+                                && let Some((number, size_bytes, checksum)) =
+                                    current_track_checksum.take()
+                            {
+                                finished_track_checksums.push(ExtractedTrackChecksum {
+                                    number,
+                                    size_bytes,
+                                    values: checksum.finalize()?,
+                                });
+                            }
+                            if current_track_checksum.is_none() {
+                                current_track_checksum = create_extract_checksum(context, false)?
+                                    .map(|checksum| (track.number, 0, checksum));
+                            }
+                            if let Some((_, size_bytes, checksum)) = current_track_checksum.as_mut()
+                            {
+                                checksum.update(data.as_ref())?;
+                                *size_bytes += data.len() as u64;
+                            }
+                        }
                     }
                     Ok(())
                 })
@@ -1303,10 +1334,18 @@ impl ChdContainerHandler {
         if let Some(writer) = bin_writer.as_mut() {
             writer.flush()?;
         }
-        push_finalized_extract_checksum(
+        if let Some((number, size_bytes, checksum)) = current_track_checksum.take() {
+            finished_track_checksums.push(ExtractedTrackChecksum {
+                number,
+                size_bytes,
+                values: checksum.finalize()?,
+            });
+        }
+        push_finalized_extract_checksum_with_tracks(
             sink.output_checksums,
             bin_path,
             single_bin_checksum.take(),
+            finished_track_checksums,
         )?;
         Ok(())
     }

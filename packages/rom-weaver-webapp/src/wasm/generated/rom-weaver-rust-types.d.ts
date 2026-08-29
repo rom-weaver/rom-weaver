@@ -140,6 +140,13 @@ disc_group_id?: string | null,
  */
 track_number?: number | null,
 /**
+ * Per-track checksum rows (`{track_number, size_bytes, checksums}`) streamed
+ * during a merged single-bin disc extract. They let the disc-group lookup
+ * fingerprint each track even though only one merged file exists. Empty for
+ * split extracts and non-disc assets.
+ */
+track_checksums?: Array<JsonValue>,
+/**
  * Full `.cue` text for a cue-sheet asset.
  */
 cue_text?: string | null,
