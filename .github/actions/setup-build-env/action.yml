@@ -26,6 +26,18 @@ inputs:
   cargo-cache:
     description: Restore/save the cargo build cache. Set to false for jobs that never compile Rust.
     default: "true"
+  ccache:
+    description: >-
+      Install ccache and cache its object store. Only worth it for jobs that
+      compile the vendored C sources (libarchive, the LZMA SDK); anything else
+      pays the install for nothing.
+    default: "false"
+  ccache-maxsize:
+    description: >-
+      Object-store ceiling handed to ccache. A full native + wasm object set
+      measures 60-120 MB, so the default leaves room for a few toolchain
+      generations without crowding the 10 GiB Actions budget.
+    default: 300M
   cache-save:
     description: Save restored caches. Set to false for workflow_run jobs, which are restore-only.
     default: "true"
@@ -66,6 +78,77 @@ runs:
       run: |
         node scripts/ci/install-system-dependencies.mjs
 
+    # Before every mise step on purpose. `.config/mise.toml` resolves CC, CXX
+    # and CMAKE_C_COMPILER_LAUNCHER with `command -v ccache` and leaves them
+    # empty when it is absent, and the wasm compiler wrappers make the same
+    # check, so ccache has to be on PATH by the time any of them is rendered -
+    # otherwise the job installs a cache nothing routes through.
+    #
+    # CCACHE_DIR is pinned rather than left to the platform default
+    # (~/.cache/ccache on Linux, ~/Library/Caches/ccache on macOS) so the cache
+    # steps below name one path on every runner. CCACHE_BASEDIR and
+    # CCACHE_NOHASHDIR - which are what make these objects replay at all - come
+    # from `.config/mise.toml`; the basedir resolves through
+    # `git rev-parse --git-common-dir` and lands on the workspace checkout.
+    - name: Install ccache
+      if: inputs.ccache == 'true'
+      shell: bash
+      env:
+        APT_PACKAGES: ccache
+        CCACHE_MAXSIZE_INPUT: ${{ inputs.ccache-maxsize }}
+      run: |
+        set -euo pipefail
+        if command -v ccache >/dev/null 2>&1; then
+          echo "ccache already on PATH"
+        elif [ "$RUNNER_OS" = "Linux" ]; then
+          node scripts/ci/install-system-dependencies.mjs
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          brew install ccache
+        else
+          echo "::error::no ccache wiring for $RUNNER_OS"
+          exit 1
+        fi
+        {
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
+          echo "CCACHE_MAXSIZE=$CCACHE_MAXSIZE_INPUT"
+        } >> "$GITHUB_ENV"
+
+    # Same restore-everywhere/save-on-main split as the cargo cache, for the
+    # same budget reason - hence the two steps: `actions/cache` saves in a post
+    # step (after the build), while `actions/cache/save` here would write an
+    # empty store before any compile has run.
+    #
+    # restore-keys is safe on a content-addressed store: a prefix hit serves
+    # objects keyed by preprocessed source and compiler identity, so a stale
+    # generation can only miss, never return a wrong object. That is what keeps
+    # a Cargo.lock or toolchain bump from rebuilding ~2000 C objects everywhere.
+    - name: Cache ccache objects
+      if: inputs.ccache == 'true' && inputs.cache-save == 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+        restore-keys: |
+          ccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Restore ccache objects
+      if: inputs.ccache == 'true' && !(inputs.cache-save == 'true' && github.ref == 'refs/heads/main')
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+        restore-keys: |
+          ccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-
+
+    # After the restore, because the counters travel inside the store: this
+    # makes a `ccache --show-stats` added after a build step report that build
+    # rather than everything the restored cache ever served. It clears
+    # counters only - no cached object is dropped.
+    - name: Zero ccache statistics
+      if: inputs.ccache == 'true'
+      shell: bash
+      run: ccache --zero-stats
+
     # Written to GITHUB_ENV rather than passed to mise-action, so every later
     # `mise run` step in the job sees the same restriction the install did.
     - name: Select mise tools
@@ -97,7 +180,10 @@ runs:
     # whatever is on PATH and leaves it empty otherwise, and nothing here
     # persists ~/.cache/sccache between runs. Installing it would reintroduce
     # the wrapper overhead for a cache that starts empty every time;
-    # Swatinem/rust-cache does the caching that actually survives. The cache is
+    # Swatinem/rust-cache does the caching that actually survives for Rust
+    # units, and the ccache concern above covers the C ones it cannot help -
+    # a Cargo.lock or toolchain bump invalidates this whole cache and takes
+    # every vendored C object with it. The cache is
     # keyed per job, so the wasm job's wasm-release artifacts and the rust
     # job's host-profile artifacts no longer evict each other.
     - name: Cache cargo artifacts

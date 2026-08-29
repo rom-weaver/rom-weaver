@@ -444,6 +444,7 @@ jobs:
           cargo-cache: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
           rust-targets: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'wasm32-wasip1-threads' }}
           wasi-sdk: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
+          ccache: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
           webapp-deps: "true"
 
       # Never set RUSTFLAGS here: Cargo replaces configured target flags instead
@@ -538,6 +539,7 @@ jobs:
           tools: node rust cargo-deny cargo-machete nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
+          ccache: "true"
           webapp-deps: "true"
 
       # This runner is x86-64, so installing the assembler here is what puts the
@@ -787,6 +789,7 @@ jobs:
       - uses: ./.github/actions/setup-build-env
         with:
           tools: rust nextest
+          ccache: "true"
 
       - name: Rust tests
         run: mise run test-rust

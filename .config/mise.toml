@@ -103,8 +103,10 @@ SCCACHE_CACHE_SIZE = "35G"
 # differs per target directory) and no ccache setting can collapse them.
 #
 # Empty when ccache is absent: cc-rs treats an empty or whitespace CC as unset
-# (env_tool in cc-rs), so hosts without ccache - CI included - keep today's
-# behavior, including the sccache fallback via RUSTC_WRAPPER. The wasm targets
+# (env_tool in cc-rs), so hosts without ccache keep today's behavior, including
+# the sccache fallback via RUSTC_WRAPPER. In CI the C-compiling jobs opt into
+# ccache through `.github/actions/setup-build-env`, which installs it before
+# any mise step so this resolves; every other job leaves it empty. The wasm targets
 # are unaffected either way: their CC_wasm32_* variables above take precedence.
 CC = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache cc || true') | trim }}"
 CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || true') | trim }}"
@@ -147,8 +149,9 @@ CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || 
 # disables rewriting.
 #
 # Resolved dynamically like RUSTC_WRAPPER: empty is a no-op for CMake, which
-# keeps hosts without either cache - and CI, which deliberately installs none -
-# on the plain compiler. The launcher bakes into CMakeCache.txt at configure
+# keeps hosts without either cache - and every CI job that does not opt into
+# `ccache: "true"` in .github/actions/setup-build-env - on the plain compiler.
+# The launcher bakes into CMakeCache.txt at configure
 # time, so an existing OUT_DIR keeps building unwrapped until it is cleaned.
 CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v ccache || command -v sccache || true') | trim }}"
 CCACHE_BASEDIR = "{{ exec(command='d=$(git -C \\'' ~ config_root ~ '\\' rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && dirname \"$d\" || true') | trim }}"
