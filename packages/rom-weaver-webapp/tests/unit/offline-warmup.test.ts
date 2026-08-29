@@ -161,6 +161,36 @@ describe("offline warm-up (service worker side)", () => {
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
   });
 
+  it("streams interim byte progress with the in-flight unit's name and size", async () => {
+    const warmup = await createWarmup();
+    const interims: Array<{ cachedBytes: number; detail: unknown; unitLoadedBytes: number | null }> = [];
+    const progress = await warmup.runNextUnit((interim) => {
+      interims.push({
+        cachedBytes: interim.cachedBytes,
+        detail: interim.detail,
+        unitLoadedBytes: interim.unitLoadedBytes,
+      });
+    });
+    // At least the immediate start event fires, naming the unit before bytes land.
+    expect(interims.length).toBeGreaterThan(0);
+    expect(interims[0]).toMatchObject({ detail: { kind: "emulatorjs", name: "loader.js" } });
+    expect(progress.detail).toEqual({ kind: "emulatorjs", name: "loader.js" });
+    expect(progress.unitLoadedBytes).toBeNull();
+    expect(progress.cachedFiles).toBe(1);
+    expect(progress.totalFiles).toBe(4);
+  });
+
+  it("counts a partially cached group's packs without its marker", async () => {
+    const warmup = await createWarmup();
+    const groups = await buildGroups();
+    const packUrl = new URL(groups[0].packs[0].url, SCOPE).href;
+    await warmup.serveOptionalIdentifyPack(new Request(packUrl));
+    const state = await warmup.getReadyState();
+    expect(state.ready).toBe(false);
+    expect(state.cachedFiles).toBe(1);
+    expect(state.cachedBytes).toBe(PACK_BODY.length);
+  });
+
   it("serializes concurrent pumps so no unit is skipped", async () => {
     const warmup = await createWarmup();
     const [first, second] = await Promise.all([warmup.runNextUnit(), warmup.runNextUnit()]);

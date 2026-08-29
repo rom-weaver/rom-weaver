@@ -52,14 +52,19 @@ describe("runtime state with offline warm-up gating", () => {
   });
 
   it("describes warm-up units for the status detail line", () => {
-    expect(describeWarmupUnit(localizer, "emulatorjs:cores/ppsspp.wasm")).toBe(
+    // The structured detail wins and carries a group's display label.
+    expect(
+      describeWarmupUnit(localizer, {
+        detail: { kind: "identify-group", name: "Computers" },
+        unit: "identify-group:optional-computers",
+      }),
+    ).toBe('ui.runtime.detailIdentifyGroup:{"name":"Computers"}');
+    // Without a detail the internal unit label is parsed.
+    expect(describeWarmupUnit(localizer, { unit: "emulatorjs:cores/ppsspp.wasm" })).toBe(
       'ui.runtime.detailEmulatorFile:{"name":"cores/ppsspp.wasm"}',
     );
-    expect(describeWarmupUnit(localizer, "identify-group:optional-computers")).toBe(
-      'ui.runtime.detailIdentifyGroup:{"name":"optional-computers"}',
-    );
-    expect(describeWarmupUnit(localizer, "unknown:thing")).toBeNull();
-    expect(describeWarmupUnit(localizer, "")).toBeNull();
+    expect(describeWarmupUnit(localizer, { unit: "unknown:thing" })).toBeNull();
+    expect(describeWarmupUnit(localizer, { unit: "" })).toBeNull();
     expect(describeWarmupUnit(localizer, null)).toBeNull();
   });
 });

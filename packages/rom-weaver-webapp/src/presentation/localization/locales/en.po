@@ -40,6 +40,11 @@ msgstr "“{patch}” expects “{predecessor}” applied first."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailFiles"
+msgstr "{cached} of {total} files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# patch is off - tick it to include it} other {# patches are off - tick them to include them}}"
 

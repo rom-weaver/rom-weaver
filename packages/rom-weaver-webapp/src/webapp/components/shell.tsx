@@ -779,10 +779,18 @@ const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: Me
 /** Byte progress of the background offline warm-up, when the page knows it. */
 type OfflineWarmupDisplayProgress = {
   cachedBytes: number;
+  /** Files already cached (EmulatorJS files and identify packs counted individually). */
+  cachedFiles?: number;
+  /** Human description of the unit the progress event is about. */
+  detail?: { kind: string; name: string } | null;
   ready: boolean;
   totalBytes: number;
-  /** Warm-up unit last processed, e.g. "emulatorjs:loader.js" or "identify-group:<id>". */
+  totalFiles?: number;
+  /** Warm-up unit label, e.g. "emulatorjs:loader.js" or "identify-group:<id>". */
   unit?: string | null;
+  /** Bytes of the in-flight unit downloaded so far; null/absent outside a download. */
+  unitLoadedBytes?: number | null;
+  unitTotalBytes?: number | null;
 };
 
 /** Whole percent for an incomplete warm-up with known byte totals; null otherwise. */
@@ -791,16 +799,25 @@ const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): nu
     ? Math.min(99, Math.floor((progress.cachedBytes / progress.totalBytes) * 100))
     : null;
 
-/** Human wording for a warm-up unit label, for the status detail line. */
+/**
+ * Human wording for a warm-up unit, for the status detail line. Prefers the
+ * structured detail (which carries a group's display label); falls back to
+ * parsing the internal unit label.
+ */
 const describeWarmupUnit = (
   localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
-  unit: string | null | undefined,
+  progress: Pick<OfflineWarmupDisplayProgress, "detail" | "unit"> | null | undefined,
 ): string | null => {
-  if (typeof unit !== "string" || !unit) return null;
-  const separator = unit.indexOf(":");
-  if (separator < 0) return null;
-  const kind = unit.slice(0, separator);
-  const name = unit.slice(separator + 1);
+  let kind = progress?.detail?.kind;
+  let name = progress?.detail?.name;
+  if (!(kind && name)) {
+    const unit = progress?.unit;
+    if (typeof unit !== "string" || !unit) return null;
+    const separator = unit.indexOf(":");
+    if (separator < 0) return null;
+    kind = unit.slice(0, separator);
+    name = unit.slice(separator + 1);
+  }
   if (!name) return null;
   if (kind === "emulatorjs") return localizer.message("ui.runtime.detailEmulatorFile", { name });
   if (kind === "identify-group") return localizer.message("ui.runtime.detailIdentifyGroup", { name });
@@ -1079,7 +1096,7 @@ const Masthead = ({
       ? installingRuntimeLabel(localizer, offlineProgress)
       : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
   const runtimePercent = runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null;
-  const runtimeDetail = runtimeState === "installing" ? describeWarmupUnit(localizer, offlineProgress?.unit) : null;
+  const runtimeDetail = runtimeState === "installing" ? describeWarmupUnit(localizer, offlineProgress) : null;
   const runtimeTitle = runtimeDetail ? `${runtimeLabel} — ${runtimeDetail}` : runtimeLabel;
   const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
   const toggleUtility = (placement: "desktop" | "mobile", viaKeyboard: boolean) => {

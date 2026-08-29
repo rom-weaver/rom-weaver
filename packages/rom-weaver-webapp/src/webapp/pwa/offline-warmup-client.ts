@@ -68,17 +68,33 @@ const bumpOfflineWarmupPriority = (target: WarmupBumpTarget) => {
   else pendingBumps.push(target);
 };
 
-const postPump = (controller: ServiceWorker, action: string): Promise<Record<string, unknown>> =>
+const postPump = (
+  controller: ServiceWorker,
+  action: string,
+  onInterim?: (data: Record<string, unknown>) => void,
+): Promise<Record<string, unknown>> =>
   new Promise((resolve, reject) => {
     const channel = new MessageChannel();
-    const timeout = setTimeout(() => {
-      channel.port1.onmessage = null;
-      reject(new Error(`offline warm-up ${action} timed out`));
-    }, PUMP_TIMEOUT_MS);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    // Interim events reset the deadline: a large file on a slow connection is
+    // alive as long as bytes keep arriving.
+    const armTimeout = () => {
+      timeout = setTimeout(() => {
+        channel.port1.onmessage = null;
+        reject(new Error(`offline warm-up ${action} timed out`));
+      }, PUMP_TIMEOUT_MS);
+    };
+    armTimeout();
     channel.port1.onmessage = (event) => {
+      const data = event.data || {};
       clearTimeout(timeout);
+      if (data.action === "offline-warmup-interim") {
+        armTimeout();
+        onInterim?.(data);
+        return;
+      }
       channel.port1.onmessage = null;
-      resolve(event.data || {});
+      resolve(data);
     };
     try {
       controller.postMessage({ action }, [channel.port2]);
@@ -176,7 +192,9 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
         if (!controller) return;
         let reply: Record<string, unknown>;
         try {
-          reply = await postPump(controller, "offline-warmup-pump");
+          reply = await postPump(controller, "offline-warmup-pump", (interim) => {
+            options.onProgress?.(interim as unknown as OfflineWarmupProgress);
+          });
         } catch (error) {
           consecutiveFailures += 1;
           const delay = Math.min(MAX_FAILURE_DELAY_MS, 1000 * 2 ** consecutiveFailures);

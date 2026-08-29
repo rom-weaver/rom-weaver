@@ -40,6 +40,11 @@ msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailFiles"
+msgstr "{cached} de {total} archivos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirlo} other {# parches están desactivados - márcalos para incluirlos}}"
 

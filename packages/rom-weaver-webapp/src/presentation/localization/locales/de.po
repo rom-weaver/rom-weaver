@@ -40,6 +40,11 @@ msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird.
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailFiles"
+msgstr "{cached} von {total} Dateien"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# Patch ist aus - ankreuzen zum Einschließen} other {# Patches sind aus - ankreuzen zum Einschließen}}"
 

@@ -258,13 +258,27 @@ const StatusRows = ({
         offlineProgress &&
         !offlineProgress.ready &&
         offlineProgress.totalBytes > 0 ? (
-          <span className="sw-progress-detail">
-            {`${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`}
+          <>
+            <span className="sw-progress-detail">
+              {typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
+                ? `${localizer.message("ui.runtime.detailFiles", {
+                    cached: offlineProgress.cachedFiles,
+                    total: offlineProgress.totalFiles,
+                  })} · `
+                : ""}
+              {`${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`}
+            </span>
             {(() => {
-              const detail = describeWarmupUnit(localizer, offlineProgress.unit);
-              return detail ? ` — ${detail}` : "";
+              const detail = describeWarmupUnit(localizer, offlineProgress);
+              if (!detail) return null;
+              const { unitLoadedBytes, unitTotalBytes } = offlineProgress;
+              const unitBytes =
+                typeof unitLoadedBytes === "number" && typeof unitTotalBytes === "number" && unitTotalBytes > 0
+                  ? ` (${localizer.formatBytes(unitLoadedBytes)} / ${localizer.formatBytes(unitTotalBytes)})`
+                  : "";
+              return <span className="sw-progress-detail">{`${detail}${unitBytes}`}</span>;
             })()}
-          </span>
+          </>
         ) : null}
       </span>,
     ],

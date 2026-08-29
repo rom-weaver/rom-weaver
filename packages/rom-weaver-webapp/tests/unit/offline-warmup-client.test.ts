@@ -158,6 +158,31 @@ describe("offline warm-up client", () => {
     expect(messages).toEqual([{ action: "offline-warmup-bump", target: { kind: "emulatorjs" } }]);
   });
 
+  it("forwards interim progress events without ending the pump", async () => {
+    const onProgress = vi.fn();
+    const messages: Reply[] = [];
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        messages.push(message);
+        const port = transfer?.[0] as MessagePort | undefined;
+        if (!port) return;
+        setTimeout(() => {
+          port.postMessage({ action: "offline-warmup-interim", cachedBytes: 1, ready: false, totalBytes: 4 });
+          port.postMessage({ action: "offline-warmup-interim", cachedBytes: 2, ready: false, totalBytes: 4 });
+          port.postMessage(progressReply({ cachedBytes: 4, ready: true, unit: null }));
+        }, 0);
+      },
+    } as unknown as ServiceWorker;
+    const { serviceWorker } = createServiceWorker(controller);
+
+    cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker }, onProgress });
+    await flush();
+
+    // Two interim events plus the final progress reply, in order.
+    expect(onProgress.mock.calls.map(([progress]) => progress.cachedBytes)).toEqual([1, 2, 4]);
+    expect(messages.filter((message) => message.action === "offline-warmup-pump")).toHaveLength(1);
+  });
+
   it("stops pumping after cancel", async () => {
     const replies = Array.from({ length: 50 }, () => progressReply());
     const { controller, messages } = createFakeController(replies);

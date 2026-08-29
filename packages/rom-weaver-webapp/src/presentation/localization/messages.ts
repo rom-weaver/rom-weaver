@@ -270,6 +270,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingProgress",
     message: "Installing offline copy — {percent}%",
   }),
+  "ui.runtime.detailFiles": msg({
+    id: "ui.runtime.detailFiles",
+    message: "{cached} of {total} files",
+  }),
   "ui.runtime.detailEmulatorFile": msg({
     id: "ui.runtime.detailEmulatorFile",
     message: "EmulatorJS: {name}",

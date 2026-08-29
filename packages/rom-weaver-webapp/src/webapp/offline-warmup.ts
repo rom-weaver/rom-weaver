@@ -23,13 +23,24 @@ type WarmupBumpTarget = { kind: "emulatorjs" } | { kind: "identify-groups"; grou
 
 type OfflineReadyState = {
   cachedBytes: number;
+  /** Files already cached, counting EmulatorJS files and identify packs individually. */
+  cachedFiles: number;
   pendingUnits: number;
   ready: boolean;
   totalBytes: number;
+  totalFiles: number;
 };
 
+/** Human-facing description of the unit a progress event is about. */
+type WarmupDetail = { kind: "emulatorjs" | "identify-group"; name: string } | null;
+
 type WarmupProgress = OfflineReadyState & {
+  detail: WarmupDetail;
   unit: string | null;
+  /** Bytes of the in-flight unit downloaded so far; null outside a download. */
+  unitLoadedBytes: number | null;
+  /** Expected size of the in-flight unit; null outside a download. */
+  unitTotalBytes: number | null;
 };
 
 type EmulatorJsManifest = {
@@ -56,9 +67,14 @@ type OfflineWarmup = {
   bumpPriority: (target: WarmupBumpTarget) => void;
   getReadyState: () => Promise<OfflineReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: true; label: string; packs: number }>;
-  runNextUnit: () => Promise<WarmupProgress>;
+  /** onInterim streams byte-level progress while the unit downloads. */
+  runNextUnit: (onInterim?: (progress: WarmupProgress) => void) => Promise<WarmupProgress>;
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
 };
+
+// Interim progress messages are throttled to this interval so a fast download
+// does not flood the message channel.
+const INTERIM_PROGRESS_MS = 200;
 
 const EMULATORJS_COMPLETE_MARKER_PATH = "/__rom-weaver-emulatorjs-complete__";
 
@@ -73,14 +89,52 @@ const sha256HexOf = async (bytes: ArrayBuffer) => {
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
+/** Read the whole body into memory, reporting per-chunk byte counts as they arrive. */
+const readWithByteProgress = async (response: Response, onBytes?: (delta: number) => void): Promise<ArrayBuffer> => {
+  if (!(response.body && onBytes)) {
+    const buffer = await response.arrayBuffer();
+    onBytes?.(buffer.byteLength);
+    return buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      totalLength += value.byteLength;
+      onBytes(value.byteLength);
+    }
+  }
+  const buffer = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return buffer.buffer;
+};
+
+/** A cacheable copy of a fully read response, keeping its headers and status. */
+const bufferedResponse = (source: Response, buffer: ArrayBuffer) =>
+  new Response(buffer, { headers: source.headers, status: source.status, statusText: source.statusText });
+
 /** Fetch one pack, verify its SHA-256, and return the request/response pair ready to cache. */
-const fetchVerifiedPack = async (pack: IdentifyOptionalPack, scope: string, fetcher: WarmupFetcher) => {
+const fetchVerifiedPack = async (
+  pack: IdentifyOptionalPack,
+  scope: string,
+  fetcher: WarmupFetcher,
+  onBytes?: (delta: number) => void,
+) => {
   const request = new Request(new URL(pack.url, scope));
   const response = await fetcher(request);
   if (!response.ok) throw new Error(`ROM identify pack download failed with HTTP ${response.status}`);
-  const actualSha256 = await sha256HexOf(await response.clone().arrayBuffer());
+  const buffer = await readWithByteProgress(response, onBytes);
+  const actualSha256 = await sha256HexOf(buffer);
   if (actualSha256 !== pack.sha256) throw new Error(`ROM identify pack checksum failed: ${pack.url}`);
-  return { request, response };
+  return { request, response: bufferedResponse(response, buffer) };
 };
 
 /** Relative path with no empty, ".", or ".." segments and no backslashes or leading slash. */
@@ -150,13 +204,30 @@ const createOfflineWarmup = ({
   const isEmulatorJsComplete = async (cache: Cache) =>
     (await (await cache.match(emulatorJsMarkerUrl))?.text()) === emulatorJsVersion;
 
-  /** Sum of sizeBytes for emulatorjs manifest files already in the cache. */
-  const cachedEmulatorJsBytes = async (cache: Cache, manifest: EmulatorJsManifest) => {
+  /** Size and count of the emulatorjs manifest files already in the cache. */
+  const cachedEmulatorJsState = async (cache: Cache, manifest: EmulatorJsManifest) => {
     let bytes = 0;
+    let files = 0;
     for (const file of manifest.files) {
-      if (await cache.match(emulatorJsAssetUrl(file.path))) bytes += file.sizeBytes;
+      if (await cache.match(emulatorJsAssetUrl(file.path))) {
+        bytes += file.sizeBytes;
+        files += 1;
+      }
     }
-    return bytes;
+    return { bytes, files };
+  };
+
+  /** Size and count of a not-yet-installed group's packs already in the cache. */
+  const cachedGroupState = async (cache: Cache, group: IdentifyOptionalPackGroup) => {
+    let bytes = 0;
+    let files = 0;
+    for (const pack of group.packs) {
+      if (await cache.match(new URL(pack.url, scope).href)) {
+        bytes += pack.sizeBytes || 0;
+        files += 1;
+      }
+    }
+    return { bytes, files };
   };
 
   const groupBytes = (group: IdentifyOptionalPackGroup) =>
@@ -204,16 +275,22 @@ const createOfflineWarmup = ({
     const identifyCache = await caches.open(identifyOptionalCacheName);
     let totalBytes = 0;
     let cachedBytes = 0;
+    let totalFiles = 0;
+    let cachedFiles = 0;
     let pendingUnits = 0;
     let emulatorJsReady = await isEmulatorJsComplete(emulatorJsCache);
     try {
       const manifest = await loadEmulatorJsManifest();
       const manifestBytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
       totalBytes += manifestBytes;
-      if (emulatorJsReady) cachedBytes += manifestBytes;
-      else {
-        const cached = await cachedEmulatorJsBytes(emulatorJsCache, manifest);
-        cachedBytes += cached;
+      totalFiles += manifest.files.length;
+      if (emulatorJsReady) {
+        cachedBytes += manifestBytes;
+        cachedFiles += manifest.files.length;
+      } else {
+        const cached = await cachedEmulatorJsState(emulatorJsCache, manifest);
+        cachedBytes += cached.bytes;
+        cachedFiles += cached.files;
         pendingUnits += manifest.files.length;
         // Marker missing but every byte present still counts as pending: the
         // next pump writes the marker and flips ready.
@@ -229,22 +306,37 @@ const createOfflineWarmup = ({
     for (const group of identifyOptionalGroups) {
       const bytes = groupBytes(group);
       totalBytes += bytes;
-      if (await isGroupInstalled(identifyCache, group)) cachedBytes += bytes;
-      else pendingUnits += 1;
+      totalFiles += group.packs.length;
+      if (await isGroupInstalled(identifyCache, group)) {
+        cachedBytes += bytes;
+        cachedFiles += group.packs.length;
+      } else {
+        // Partially cached groups (on-demand pack fetches, an interrupted
+        // install) still credit their cached packs to the counters.
+        const cached = await cachedGroupState(identifyCache, group);
+        cachedBytes += cached.bytes;
+        cachedFiles += cached.files;
+        pendingUnits += 1;
+      }
     }
     const ready = emulatorJsReady && pendingUnits === 0;
-    return { cachedBytes, pendingUnits, ready, totalBytes };
+    return { cachedBytes, cachedFiles, pendingUnits, ready, totalBytes, totalFiles };
   };
 
-  const installGroupWith = async (fetcher: WarmupFetcher, groupId: string) => {
+  const installGroupWith = async (fetcher: WarmupFetcher, groupId: string, onBytes?: (delta: number) => void) => {
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
     // Sequential on purpose: group installs also run as low-priority warm-up
     // units and MUST NOT open one connection per pack.
     for (const pack of group.packs) {
-      if (await cache.match(new URL(pack.url, scope).href)) continue;
-      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher);
+      if (await cache.match(new URL(pack.url, scope).href)) {
+        // Already-cached packs still advance the byte counter, or the bar
+        // would stall through a group resumed after a restart.
+        onBytes?.(pack.sizeBytes || 0);
+        continue;
+      }
+      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes);
       await cache.put(request, response);
     }
     await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
@@ -255,15 +347,20 @@ const createOfflineWarmup = ({
   // A user clicked Install in settings, so this one downloads at normal priority.
   const installIdentifyGroup = (groupId: string) => installGroupWith(fetchForInteractive, groupId);
 
-  const downloadEmulatorJsFile = async (unit: Extract<WarmupUnit, { kind: "emulatorjs-file" }>) => {
+  const downloadEmulatorJsFile = async (
+    unit: Extract<WarmupUnit, { kind: "emulatorjs-file" }>,
+    onBytes?: (delta: number) => void,
+  ) => {
     const cache = await caches.open(emulatorJsCacheName);
     const url = emulatorJsAssetUrl(unit.path);
-    if (!(await cache.match(url))) {
-      const response = await fetchForWarmup(url);
-      if (!response.ok)
-        throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
-      await cache.put(url, response);
+    if (await cache.match(url)) {
+      onBytes?.(unit.sizeBytes);
+      return;
     }
+    const response = await fetchForWarmup(url);
+    if (!response.ok) throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
+    const buffer = await readWithByteProgress(response, onBytes);
+    await cache.put(url, bufferedResponse(response, buffer));
   };
 
   /** Write the completion marker once no emulatorjs file unit remains. */
@@ -285,38 +382,84 @@ const createOfflineWarmup = ({
   const unitLabel = (unit: WarmupUnit) =>
     unit.kind === "emulatorjs-file" ? `emulatorjs:${unit.path}` : `identify-group:${unit.group.id}`;
 
+  const unitDetail = (unit: WarmupUnit): WarmupDetail =>
+    unit.kind === "emulatorjs-file"
+      ? { kind: "emulatorjs", name: unit.path }
+      : { kind: "identify-group", name: unit.group.label };
+
   // Serializes pumps: two clients (two open tabs, or a page retrying after its
   // pump timeout) MUST NOT process the queue concurrently, or both would take
   // the same head unit and the second removal would discard an unprocessed one.
   let pumpChain: Promise<unknown> = Promise.resolve();
 
-  const processNextUnit = async (): Promise<WarmupUnit | undefined> => {
+  const processNextUnit = async (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupUnit | undefined> => {
     const units = await getQueue();
     const unit = units[0];
-    if (unit) {
-      if (unit.kind === "emulatorjs-file") {
-        await downloadEmulatorJsFile(unit);
-        // Remove by identity from the live queue: a bump may have replaced the
-        // array (or reordered it) while the download ran.
-        if (queue) queue = queue.filter((candidate) => candidate !== unit);
-        await finishEmulatorJsIfComplete();
-      } else {
-        await installGroupWith(fetchForWarmup, unit.group.id);
-      }
-    } else {
+    if (!unit) {
       // Empty queue can still mean a missing emulatorjs marker (files were
       // filled by the runtime route before the queue was built).
       await finishEmulatorJsIfComplete();
+      return unit;
+    }
+    // Interim events add the in-flight bytes onto a baseline taken once per
+    // unit, so the counter rises smoothly during the download instead of
+    // jumping once when the whole unit lands.
+    let onBytes: ((delta: number) => void) | undefined;
+    if (onInterim) {
+      const baseline = await getReadyState();
+      const detail = unitDetail(unit);
+      const label = unitLabel(unit);
+      const unitTotalBytes = unit.kind === "emulatorjs-file" ? unit.sizeBytes : groupBytes(unit.group);
+      let loadedBytes = 0;
+      let lastEmit = 0;
+      const emit = () => {
+        onInterim({
+          ...baseline,
+          // Capped: a pack that was cached between the baseline read and the
+          // download reports its bytes twice, once in each half.
+          cachedBytes: Math.min(baseline.cachedBytes + loadedBytes, baseline.totalBytes || Number.MAX_SAFE_INTEGER),
+          detail,
+          ready: false,
+          unit: label,
+          unitLoadedBytes: Math.min(loadedBytes, unitTotalBytes || loadedBytes),
+          unitTotalBytes,
+        });
+      };
+      onBytes = (delta) => {
+        loadedBytes += delta;
+        const now = Date.now();
+        if (now - lastEmit < INTERIM_PROGRESS_MS) return;
+        lastEmit = now;
+        emit();
+      };
+      // One immediate event names the unit that just started downloading.
+      emit();
+    }
+    if (unit.kind === "emulatorjs-file") {
+      await downloadEmulatorJsFile(unit, onBytes);
+      // Remove by identity from the live queue: a bump may have replaced the
+      // array (or reordered it) while the download ran.
+      if (queue) queue = queue.filter((candidate) => candidate !== unit);
+      await finishEmulatorJsIfComplete();
+    } else {
+      await installGroupWith(fetchForWarmup, unit.group.id, onBytes);
     }
     return unit;
   };
 
-  const runNextUnit = (): Promise<WarmupProgress> => {
-    const run = pumpChain.then(processNextUnit, processNextUnit);
+  const runNextUnit = (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupProgress> => {
+    const process = () => processNextUnit(onInterim);
+    const run = pumpChain.then(process, process);
     pumpChain = run.catch(() => undefined);
     return run.then(async (unit) => {
       const state = await getReadyState();
-      return { ...state, unit: unit ? unitLabel(unit) : null };
+      return {
+        ...state,
+        detail: unit ? unitDetail(unit) : null,
+        unit: unit ? unitLabel(unit) : null,
+        unitLoadedBytes: null,
+        unitTotalBytes: null,
+      };
     });
   };
 

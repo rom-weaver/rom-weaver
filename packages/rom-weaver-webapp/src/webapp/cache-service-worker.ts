@@ -400,8 +400,10 @@ self.addEventListener("message", (event) => {
   };
 
   if (event.data.action === "offline-warmup-pump") {
+    // Interim byte-level events stream over the same reply port while the
+    // unit downloads; the final "offline-warmup-progress" message ends the pump.
     const pump = offlineWarmup
-      .runNextUnit()
+      .runNextUnit((interim) => replyTo({ action: "offline-warmup-interim", ...interim }))
       .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
       .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));
     event.waitUntil(pump.then(replyTo));
