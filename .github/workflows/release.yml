@@ -280,6 +280,15 @@ jobs:
         if: steps.release-pr.outputs.found == 'true'
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
+      # The build's ensure-emulatorjs step hash-checks every vendored file
+      # against the lock, so a restored cache skips the CDN fetch.
+      - name: Cache EmulatorJS vendor drop
+        if: steps.release-pr.outputs.found == 'true'
+        uses: actions/cache@v6
+        with:
+          path: packages/rom-weaver-webapp/vendor/emulatorjs/data
+          key: emulatorjs-${{ hashFiles('packages/rom-weaver-webapp/vendor/emulatorjs.lock.json') }}
+
       - name: Build production webapp for docs screenshots
         if: steps.release-pr.outputs.found == 'true'
         env:
@@ -375,7 +384,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
 
       - name: Prepare ROM identify data
-        run: node scripts/ensure-identify-data.mjs
+        uses: ./.github/actions/identify-data
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
@@ -452,7 +461,7 @@ jobs:
           package-manager-cache: false
 
       - name: Prepare ROM identify data
-        run: node scripts/ensure-identify-data.mjs
+        uses: ./.github/actions/identify-data
 
       - name: Dry-run publish workspace crates
         # Package each crate exactly as cargo publish would, without uploading.
@@ -544,6 +553,14 @@ jobs:
       # commit on beta.rom-weaver.com. Keyed off the hyphen, like the rest of
       # the prerelease routing (the GitHub prerelease flag, the npm dist-tag,
       # and the docker series tags). The label follows the channel on its own.
+      # The build's ensure-emulatorjs step hash-checks every vendored file
+      # against the lock, so a restored cache skips the CDN fetch.
+      - name: Cache EmulatorJS vendor drop
+        uses: actions/cache@v6
+        with:
+          path: packages/rom-weaver-webapp/vendor/emulatorjs/data
+          key: emulatorjs-${{ hashFiles('packages/rom-weaver-webapp/vendor/emulatorjs.lock.json') }}
+
       - name: Package static webapp release asset
         env:
           ROM_WEAVER_CHANNEL: ${{ contains(needs.release.outputs.version, '-') && 'beta' || 'prod' }}

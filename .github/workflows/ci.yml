@@ -583,7 +583,7 @@ jobs:
         run: mise run machete
 
       - name: Prepare ROM identify data for package validation
-        run: mise run identify-data
+        uses: ./.github/actions/identify-data
 
       - name: Verify publishable Rust packages
         # Package each crate exactly as cargo publish would, without uploading.
@@ -610,10 +610,11 @@ jobs:
       - name: Install data build tools
         run: sudo apt-get update && sudo apt-get install --yes zstd
 
+      - name: Prepare ROM identify data
+        uses: ./.github/actions/identify-data
+
       - name: Build identify data archive
-        run: |
-          node scripts/ensure-identify-data.mjs
-          node scripts/build-identify-release-data.mjs
+        run: node scripts/build-identify-release-data.mjs
 
       - name: Upload identify data
         uses: actions/upload-artifact@v7
@@ -883,7 +884,7 @@ jobs:
           package-manager-cache: false
 
       - name: Prepare ROM identify data
-        run: node scripts/ensure-identify-data.mjs
+        uses: ./.github/actions/identify-data
 
       # The runner image ships cmake and MSVC + LLVM, which is everything the
       # vendored libarchive build needs - the npm platform publish builds this
@@ -994,6 +995,15 @@ jobs:
 
       - name: Unit tests
         run: npm --prefix packages/rom-weaver-webapp run test:unit
+
+      # The build's ensure-emulatorjs step hash-checks every vendored file
+      # against the lock, so a restored cache skips the CDN fetch - the only
+      # non-GitHub download in the build.
+      - name: Cache EmulatorJS vendor drop
+        uses: actions/cache@v6
+        with:
+          path: packages/rom-weaver-webapp/vendor/emulatorjs/data
+          key: emulatorjs-${{ hashFiles('packages/rom-weaver-webapp/vendor/emulatorjs.lock.json') }}
 
       - name: Build
         run: npm --prefix packages/rom-weaver-webapp run build

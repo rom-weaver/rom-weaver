@@ -122,8 +122,7 @@ runs:
         registry-url: ${{ inputs.registry-url }}
 
     - name: Prepare ROM identify data
-      shell: bash
-      run: node scripts/ensure-identify-data.mjs
+      uses: ./.github/actions/identify-data
 
     - name: Build release CLI
       if: runner.os != 'Windows' && inputs.build != 'cross'

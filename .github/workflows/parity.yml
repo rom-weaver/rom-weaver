@@ -81,11 +81,13 @@ jobs:
           chdman --version || true
           dolphin-tool --version || true
 
+      - name: Prepare ROM identify data
+        if: steps.cli-cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/identify-data
+
       - name: Build rom-weaver CLI
         if: steps.cli-cache.outputs.cache-hit != 'true'
-        run: |
-          node scripts/ensure-identify-data.mjs
-          cargo build --release -p rom-weaver-cli
+        run: cargo build --release -p rom-weaver-cli
 
       - name: Verify rom-weaver CLI
         run: target/release/rom-weaver --version

@@ -1,0 +1,24 @@
+name: Prepare ROM identify data
+description: >-
+  Restore the built identify packs from the Actions cache, then run
+  ensure-identify-data. The cache key hashes the build scripts, which pin the
+  libretro-database and OpenGood revisions and the pack format, so a hit means
+  hasCurrentData() validates the restored dir and the step becomes a no-op;
+  a miss (a revision or format bump) rebuilds from the source archives and
+  saves the new packs. Requires node on PATH (setup-node or mise).
+
+runs:
+  using: composite
+  steps:
+    # The packs are byte-identical on every OS (node builds them and the index
+    # records their sha256), so one cross-OS cache entry serves all runners.
+    - name: Cache identify packs
+      uses: actions/cache@v6
+      with:
+        path: crates/rom-weaver-cli/data/identify
+        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs') }}
+        enableCrossOsArchive: true
+
+    - name: Prepare ROM identify data
+      shell: bash
+      run: node scripts/ensure-identify-data.mjs
