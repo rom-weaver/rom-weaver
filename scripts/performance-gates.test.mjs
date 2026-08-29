@@ -178,8 +178,15 @@ test("brotli output is cached by content and verified before reuse", () => {
       outputPath: path.join(directory, "b.br"),
       quality: 11,
     });
+    const defaultProfile = brotliCompressFile({
+      inputPath: input,
+      outputPath: path.join(directory, "default.br"),
+      parameterProfile: "default",
+      quality: 11,
+    });
     assert.equal(first.cached, false);
     assert.equal(second.cached, true);
+    assert.equal(defaultProfile.cached, false);
     assert.equal(second.compressedSize, first.compressedSize);
     assert.deepEqual(
       fs.readFileSync(path.join(directory, "b.br")),
@@ -192,17 +199,26 @@ test("brotli output is cached by content and verified before reuse", () => {
 
 test("brotli buffer compression is deterministic and round-trips", () => {
   const source = Buffer.from(
-    Array.from({ length: 20_000 }, (_, index) => `${index % 997}|${index % 1009}|payload\n`).join(""),
+    Array.from({ length: 20_000 }, (_, index) => `${index % 997}|${index % 1009}|payload\n`).join(
+      "",
+    ),
   );
   const first = brotliCompressBuffer(source, { quality: 11 });
   const second = brotliCompressBuffer(source, { quality: 11 });
   assert.deepEqual(first, second);
   assert.deepEqual(zlib.brotliDecompressSync(first), source);
+  const defaultProfile = brotliCompressBuffer(source, {
+    parameterProfile: "default",
+    quality: 11,
+  });
+  assert.deepEqual(zlib.brotliDecompressSync(defaultProfile), source);
 });
 
 test("brotli cache identity and output change with compression quality", () => {
   const source = Buffer.from(
-    Array.from({ length: 200_000 }, (_, index) => `${index % 997}|${index % 1009}|payload\n`).join(""),
+    Array.from({ length: 200_000 }, (_, index) => `${index % 997}|${index % 1009}|payload\n`).join(
+      "",
+    ),
   );
   const low = brotliCompressBuffer(source, { quality: 0 });
   const high = brotliCompressBuffer(source, { quality: 11 });

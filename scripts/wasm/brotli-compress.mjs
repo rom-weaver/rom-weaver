@@ -51,14 +51,18 @@ const pruneCache = (now) => {
   }
 };
 
-const cacheEntryPath = (source, quality) =>
+const cacheEntryPath = (source, quality, parameterProfile) =>
   path.join(
     CACHE_ROOT,
     `${crypto
       .createHash("sha256")
       .update(source)
-      .update(`\0q${quality}\0lgwin${BROTLI_LGWIN}\0size${source.byteLength}\0brotli${BROTLI_VERSION}`)
-      .digest("hex")}-q${quality}-lgwin${BROTLI_LGWIN}-size${source.byteLength}-brotli${BROTLI_VERSION}.br`,
+      .update(
+        `\0q${quality}\0profile${parameterProfile}\0size${source.byteLength}\0brotli${BROTLI_VERSION}`,
+      )
+      .digest(
+        "hex",
+      )}-q${quality}-${parameterProfile}-size${source.byteLength}-brotli${BROTLI_VERSION}.br`,
   );
 
 // Verified by decompressing rather than trusted on the strength of its name: a
@@ -90,10 +94,17 @@ const writeCachedBrotli = (entryPath, compressed) => {
   }
 };
 
-export function brotliCompressFile({ inputPath, outputPath, quality }) {
+export function brotliCompressFile({
+  inputPath,
+  outputPath,
+  quality,
+  parameterProfile = "large-window",
+}) {
   const source = fs.readFileSync(inputPath);
   const normalizedQuality = Number(quality);
-  const entryPath = cacheEnabled() ? cacheEntryPath(source, normalizedQuality) : null;
+  const entryPath = cacheEnabled()
+    ? cacheEntryPath(source, normalizedQuality, parameterProfile)
+    : null;
 
   if (entryPath) {
     pruneCache(Date.now());
@@ -104,20 +115,27 @@ export function brotliCompressFile({ inputPath, outputPath, quality }) {
     }
   }
 
-  const compressed = brotliCompressBuffer(source, { quality: normalizedQuality });
+  const compressed = brotliCompressBuffer(source, {
+    parameterProfile,
+    quality: normalizedQuality,
+  });
   fs.writeFileSync(outputPath, compressed);
   if (entryPath) writeCachedBrotli(entryPath, compressed);
   return { cached: false, compressedSize: compressed.byteLength, sourceSize: source.byteLength };
 }
 
-export function brotliCompressBuffer(source, { quality }) {
+export function brotliCompressBuffer(source, { quality, parameterProfile = "large-window" }) {
   const normalizedQuality = Number(quality);
+  if (parameterProfile !== "default" && parameterProfile !== "large-window") {
+    throw new Error(`unknown Brotli parameter profile: ${parameterProfile}`);
+  }
+  const params = { [zlib.constants.BROTLI_PARAM_QUALITY]: normalizedQuality };
+  if (parameterProfile === "large-window") {
+    params[zlib.constants.BROTLI_PARAM_LGWIN] = BROTLI_LGWIN;
+    params[zlib.constants.BROTLI_PARAM_SIZE_HINT] = source.byteLength;
+  }
   return zlib.brotliCompressSync(source, {
-    params: {
-      [zlib.constants.BROTLI_PARAM_LGWIN]: BROTLI_LGWIN,
-      [zlib.constants.BROTLI_PARAM_QUALITY]: normalizedQuality,
-      [zlib.constants.BROTLI_PARAM_SIZE_HINT]: source.byteLength,
-    },
+    params,
   });
 }
 

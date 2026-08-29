@@ -1313,7 +1313,6 @@ export async function buildPlatformGames(platform, ctx) {
   return { ...paths, manifest: nextManifest, slug, source: "redump" };
 }
 
-
 function writePack(entries, magic = PACK_MAGIC_V5) {
   const headerBytes =
     magic.length +
@@ -1904,7 +1903,10 @@ async function writeSystemPackV5(platform, gamesInfo, options) {
     },
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(pack, { quality: options.brotliQuality });
+    const compressed = brotliCompressBuffer(pack, {
+      parameterProfile: "default",
+      quality: options.brotliQuality,
+    });
     await writeFile(`${outPath}.br`, compressed);
     system.brotliFile = `${fileName}.br`;
     system.brotliBytes = compressed.length;
