@@ -7,6 +7,8 @@ import { basename, delimiter, dirname, join } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+import { cargoTargetDir } from "./cargo-target-dir.mjs";
+
 const log = (message) => process.stdout.write(`[parity] ${message}\n`);
 const section = (title) => process.stdout.write(`\n[parity] === ${title} ===\n`);
 const fail = (message) => { throw new Error(message); };
@@ -101,7 +103,7 @@ export function runParity({ root = process.cwd(), env = process.env } = {}) {
   const sevenzip = requireOneOf("SEVENZIP", env.SEVENZIP_BIN ? [env.SEVENZIP_BIN] : SEVENZIP_NAMES, env);
   requireTool("ZIP", zip, env);
   requireTool("UNZIP", unzip, env);
-  const cli = env.ROM_WEAVER_BIN || join(root, "target", profile, "rom-weaver");
+  const cli = env.ROM_WEAVER_BIN || join(cargoTargetDir(root, env), profile, "rom-weaver");
   if (!env.ROM_WEAVER_BIN && !existsSync(cli)) {
     log(`building rom-weaver CLI (${profile} profile)`);
     run("cargo", ["build", "--manifest-path", join(root, "Cargo.toml"), ...(profile === "release" ? ["--release"] : []), "-p", "rom-weaver-cli"]);
