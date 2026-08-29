@@ -153,7 +153,14 @@ fn unknown_outcome() -> ArtifactMatchOutcome {
 /// component's. A disagreeing strong hash (md5/sha1/sha256) rejects a (size,
 /// crc32) coincidence; at least one shared hash must agree.
 fn component_matches(artifact: &FingerprintComponent, pack: &PackComponent) -> bool {
-    if artifact.hash_scope != pack.hash_scope {
+    // A bare file hashed whole IS a track file when its bytes are that track -
+    // size and hashes gate below exactly as they would for a matching scope -
+    // so a `full_file` artifact may satisfy a `track_file` pack component. This
+    // lets a lone dropped track resolve to its disc's title. Every other scope
+    // pairing must agree exactly.
+    let scope_compatible = artifact.hash_scope == pack.hash_scope
+        || (artifact.hash_scope == "full_file" && pack.hash_scope == "track_file");
+    if !scope_compatible {
         trace!(
             artifact_scope = %artifact.hash_scope,
             pack_scope = %pack.hash_scope,
@@ -645,6 +652,24 @@ mod tests {
         .unwrap();
 
         assert_eq!(outcome.status, ArtifactMatchStatus::Unknown);
+    }
+
+    #[test]
+    fn full_file_artifact_matches_a_track_file_pack_component() {
+        // A lone dropped track hashed whole must satisfy the track's own entry -
+        // the bytes are identical, only the scope label differs.
+        let mut component = component_json("data_track", 0, 4, Some("aabbccdd"), None, true, true);
+        component["hashScope"] = serde_json::json!("track_file");
+        let pack = pack_from_games(vec![("Lone Track Quest", vec![component])]);
+
+        let outcome = match_artifact(
+            &pack,
+            &ArtifactFingerprint::from_single_blob(4, Some("aabbccdd"), None, None),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.status, ArtifactMatchStatus::Matched);
+        assert_eq!(outcome.matches[0].name, "Lone Track Quest");
     }
 
     #[test]

@@ -238,6 +238,18 @@ fn detect_disc_identity(prefix: &[u8], total_len: u64) -> Option<RomIdentity> {
         data_offset,
     };
     let console = detect_disc_platform(&source);
+    // SYSTEM.CNF can lie beyond the bounded prefix (its BOOT/BOOT2 line is what
+    // separates PS1 from PS2), but the PVD system identifier still names the
+    // PlayStation family; split the two by CD framing and size.
+    let console = console.or_else(|| {
+        platform_detection::pvd_names_playstation(&source).then_some(
+            if cd_raw || total_len < PS2_DVD_THRESHOLD_BYTES {
+                platform::PS1
+            } else {
+                platform::PS2
+            },
+        )
+    });
     let is_disc = cd_raw || console.is_some() || has_iso9660_pvd(&source);
     if !is_disc {
         return None;
@@ -380,6 +392,25 @@ mod tests {
         assert_eq!(small.disc_format, Some(DiscFormat::Cd));
 
         let large = detect_rom_identity(&image, 2 * 1024 * 1024 * 1024, Some(".iso"));
+        assert_eq!(large.disc_format, Some(DiscFormat::Dvd));
+    }
+
+    #[test]
+    fn falls_back_to_pvd_system_identifier_when_system_cnf_is_beyond_the_prefix() {
+        // A PVD naming PLAYSTATION whose SYSTEM.CNF extent points far past the
+        // bounded prefix (Worms (USA): LBA 55691) - BOOT/BOOT2 is unreadable, so
+        // framing and size split PS1 from PS2.
+        let mut image = logical_image(32);
+        write(&mut image, PVD_LBA * USER_SECTOR_BYTES, &[1]);
+        write(&mut image, PVD_LBA * USER_SECTOR_BYTES + 1, b"CD001");
+        write(&mut image, PVD_LBA * USER_SECTOR_BYTES + 8, b"PLAYSTATION");
+
+        let small = detect_rom_identity(&image, 600 * 1024 * 1024, Some(".bin"));
+        assert_eq!(small.platform, Some(platform::PS1));
+        assert_eq!(small.disc_format, Some(DiscFormat::Cd));
+
+        let large = detect_rom_identity(&image, 2 * 1024 * 1024 * 1024, Some(".iso"));
+        assert_eq!(large.platform, Some(platform::PS2));
         assert_eq!(large.disc_format, Some(DiscFormat::Dvd));
     }
 

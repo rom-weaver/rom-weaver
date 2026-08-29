@@ -250,6 +250,42 @@ impl CliApp {
             return self.finish_probe(report, extracted_archives, cleanup_paths);
         }
 
+        // A bare `.cue`/`.gdi` sheet: list its referenced track files and detect the
+        // console from the first existing one, so hosts can stage identify data for
+        // a raw disc dump exactly as they do for a container's probe.
+        if let Some(mut report) = Self::probe_disc_sheet(&probe_source) {
+            if !self.emit_progress_events {
+                report =
+                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
+            }
+            return self.finish_probe(report, extracted_archives, cleanup_paths);
+        }
+
+        // A bare file no handler claims can still carry a disc signature (a raw
+        // `.bin` track, a plain `.iso`): report the detected identity instead of
+        // failing, so the "no handler" error is reserved for truly opaque bytes.
+        let identity = rom_weaver_checksum::detect_rom_identity_for_path(&probe_source);
+        if !identity.is_empty() {
+            let mut report = OperationReport::succeeded(
+                OperationFamily::Command,
+                Some("rom-identity".to_string()),
+                "probe",
+                format!(
+                    "detected {} data in `{}`",
+                    identity.platform.unwrap_or("disc"),
+                    probe_source.display()
+                ),
+                Some(100.0),
+                context.single_thread_execution(),
+            );
+            Self::attach_rom_identity_details(&mut report, &probe_source);
+            if !self.emit_progress_events {
+                report =
+                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
+            }
+            return self.finish_probe(report, extracted_archives, cleanup_paths);
+        }
+
         let mut report = OperationReport::failed(
             OperationFamily::Command,
             None,
@@ -261,6 +297,46 @@ impl CliApp {
             report = Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
         }
         self.finish_probe(report, extracted_archives, cleanup_paths)
+    }
+
+    /// Probe a bare `.cue`/`.gdi` sheet: the referenced files become container-style
+    /// entries and the first existing referenced file supplies the platform, read
+    /// through the same bounded-prefix detector every other probe surface uses.
+    /// `None` when the source is not a sheet or references no existing files.
+    fn probe_disc_sheet(source: &Path) -> Option<OperationReport> {
+        rom_weaver_core::detect_disc_sheet(source)?;
+        let refs = rom_weaver_core::enumerate_disc_sheet_refs(source).ok()?;
+        let sheet_dir = source.parent().unwrap_or_else(|| Path::new("."));
+        let entries: Vec<rom_weaver_core::ContainerListEntry> = refs
+            .referenced_files
+            .iter()
+            .filter_map(|reference| {
+                let path = sheet_dir.join(reference);
+                path.is_file().then(|| rom_weaver_core::ContainerListEntry {
+                    path: reference.clone(),
+                    size: std::fs::metadata(&path).ok().map(|metadata| metadata.len()),
+                })
+            })
+            .collect();
+        if entries.is_empty() {
+            return None;
+        }
+        let first_track = sheet_dir.join(&entries[0].path);
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("disc-sheet".to_string()),
+            "probe",
+            format!(
+                "disc sheet `{}` references {} track file(s)",
+                source.display(),
+                entries.len()
+            ),
+            Some(100.0),
+            None,
+        );
+        report = Self::attach_container_probe_details(report, Some(entries), None);
+        Self::attach_rom_identity_details(&mut report, &first_track);
+        Some(report)
     }
 
     pub(super) fn finish_probe(

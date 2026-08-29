@@ -77,9 +77,17 @@ const DATA_ROOT = "assets/identify-";
 
 const PLATFORM_BY_EXTENSION: Record<string, string[]> = {
   "32x": ["sega-32x"],
+  // 3DS extensions mirror the z3ds container subtype table
+  // (`crates/rom-weaver-containers/src/handlers/z3ds.rs`): each raw payload
+  // extension plus its compressed `.z*` twin.
+  "3ds": ["nintendo-nintendo-3ds"],
+  "3dsx": ["nintendo-nintendo-3ds"],
   a26: ["atari-2600"],
   a52: ["atari-5200"],
   a78: ["atari-7800"],
+  cci: ["nintendo-nintendo-3ds"],
+  cia: ["nintendo-nintendo-3ds"],
+  cxi: ["nintendo-nintendo-3ds"],
   fig: ["nintendo-super-nintendo-entertainment-system"],
   gb: ["nintendo-game-boy"],
   gba: ["nintendo-game-boy-advance"],
@@ -102,7 +110,12 @@ const PLATFORM_BY_EXTENSION: Record<string, string[]> = {
   unf: ["nintendo-nintendo-entertainment-system"],
   unif: ["nintendo-nintendo-entertainment-system"],
   v64: ["nintendo-nintendo-64"],
+  z3ds: ["nintendo-nintendo-3ds"],
+  z3dsx: ["nintendo-nintendo-3ds"],
   z64: ["nintendo-nintendo-64"],
+  zcci: ["nintendo-nintendo-3ds"],
+  zcia: ["nintendo-nintendo-3ds"],
+  zcxi: ["nintendo-nintendo-3ds"],
 };
 
 const CARTRIDGE_FALLBACK_SLUGS = new Set(Object.values(PLATFORM_BY_EXTENSION).flat());
@@ -123,6 +136,11 @@ const SIBLING_SLUGS: Record<string, string[]> = {
   "sega-game-gear": ["sega-master-system-mark-iii"],
   "sega-master-system-mark-iii": ["sega-game-gear"],
   "sega-mega-drive-genesis": ["sega-32x"],
+  // A PlayStation-family disc whose SYSTEM.CNF lies beyond the probe's bounded
+  // prefix is split from its sibling only by framing and size, and PS2 shipped
+  // CD titles too - keep both packs in play.
+  "sony-playstation": ["sony-playstation-2"],
+  "sony-playstation-2": ["sony-playstation"],
 };
 
 /** Mirrors the platform slug builder used by the identify data scripts. */

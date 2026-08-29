@@ -284,7 +284,14 @@ impl IdentifyDatabaseSet {
         Ok(Self { packs })
     }
 
-    pub(super) fn resolve_variants(&self, variants: &[Value]) -> Result<IdentifyLookupResult> {
+    /// `raw_size` is the size of the raw payload behind the `raw` checksum
+    /// variant. Artifact packs (RWFP2+) route by (crc32, size) and are only
+    /// searched when it is known.
+    pub(super) fn resolve_variants(
+        &self,
+        variants: &[Value],
+        raw_size: Option<u64>,
+    ) -> Result<IdentifyLookupResult> {
         let mut output = Vec::new();
         let mut seen = BTreeSet::new();
         for variant in variants {
@@ -300,6 +307,78 @@ impl IdentifyDatabaseSet {
                 &mut seen,
                 &mut output,
             )?;
+        }
+        for variant in variants {
+            let variant_id = variant.get("id").and_then(Value::as_str).unwrap_or("raw");
+            let Some(variant_size) = variant_payload_size(variant, raw_size) else {
+                continue;
+            };
+            let checksums = checksum_map(variant.get("checksums"));
+            self.resolve_artifact_packs(
+                variant_id,
+                Some(variant_size),
+                &checksums,
+                &mut seen,
+                &mut output,
+            )?;
+        }
+        Ok(identify_lookup_result(output))
+    }
+
+    /// Search the artifact packs with a single-blob fingerprint built from one
+    /// checksum variant's payload size and checksums.
+    fn resolve_artifact_packs(
+        &self,
+        variant: &str,
+        raw_size: Option<u64>,
+        raw_checksums: &BTreeMap<String, String>,
+        seen: &mut BTreeSet<(String, String)>,
+        output: &mut Vec<IdentifyTitleMatch>,
+    ) -> Result<()> {
+        for (database_name, pack) in &self.packs {
+            let outcome = match pack {
+                IdentifyPackFile::V1(_) => continue,
+                IdentifyPackFile::V2(pack) => {
+                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
+                }
+                IdentifyPackFile::V3(pack) => {
+                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
+                }
+                IdentifyPackFile::V4(pack) => {
+                    match_single_blob(database_name, pack, raw_size, raw_checksums)?
+                }
+            };
+            let Some(outcome) = outcome else {
+                trace!(
+                    database = database_name,
+                    "skipping artifact pack: the raw payload size is unknown"
+                );
+                continue;
+            };
+            push_artifact_matches(database_name, variant, outcome, seen, output);
+        }
+        Ok(())
+    }
+
+    /// Search the artifact packs with a multi-component fingerprint (one
+    /// component per disc track). Used by ingest for `.cue`/`.gdi`/CHD track
+    /// sets, whose packs store per-track hashes that a single-blob query can
+    /// never satisfy.
+    pub(super) fn resolve_fingerprint(
+        &self,
+        fingerprint: &ArtifactFingerprint,
+        variant: &str,
+    ) -> Result<IdentifyLookupResult> {
+        let mut output = Vec::new();
+        let mut seen = BTreeSet::new();
+        for (database_name, pack) in &self.packs {
+            let outcome = match pack {
+                IdentifyPackFile::V1(_) => continue,
+                IdentifyPackFile::V2(pack) => match_fingerprint(database_name, pack, fingerprint)?,
+                IdentifyPackFile::V3(pack) => match_fingerprint(database_name, pack, fingerprint)?,
+                IdentifyPackFile::V4(pack) => match_fingerprint(database_name, pack, fingerprint)?,
+            };
+            push_artifact_matches(database_name, variant, outcome, &mut seen, &mut output);
         }
         Ok(identify_lookup_result(output))
     }
@@ -543,17 +622,116 @@ fn match_single_blob<P: ArtifactPackReader + ?Sized>(
         raw_checksums.get("md5").map(String::as_str),
         raw_checksums.get("sha1").map(String::as_str),
     );
-    let outcome = match_artifact(pack, &fingerprint)?;
+    Ok(Some(match_fingerprint(database_name, pack, &fingerprint)?))
+}
+
+/// A checksum variant's payload size: the raw length minus a header strip's
+/// removed bytes (`transforms.removeHeader.strippedBytes`); every other
+/// transform keeps the length.
+fn variant_payload_size(variant: &Value, raw_size: Option<u64>) -> Option<u64> {
+    let stripped = variant
+        .pointer("/transforms/removeHeader/strippedBytes")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    raw_size
+        .and_then(|size| size.checked_sub(stripped))
+        .filter(|size| *size > 0)
+}
+
+/// Query one artifact pack with a single-blob fingerprint per checksum
+/// variant (raw, remove-header, ...), falling back to the raw checksums when
+/// no variant rows exist. Empty when the raw payload size is unknown.
+fn match_variant_blobs<P: ArtifactPackReader + ?Sized>(
+    database_name: &str,
+    pack: &P,
+    checksum_variants: &[Value],
+    raw_size: Option<u64>,
+    raw_checksums: &BTreeMap<String, String>,
+) -> Result<Vec<(String, ArtifactMatchOutcome)>> {
+    if raw_size.filter(|size| *size > 0).is_none() {
+        return Ok(Vec::new());
+    }
+    let mut outcomes = Vec::new();
+    if checksum_variants.is_empty() {
+        if let Some(outcome) = match_single_blob(database_name, pack, raw_size, raw_checksums)? {
+            outcomes.push(("raw".to_string(), outcome));
+        }
+        return Ok(outcomes);
+    }
+    for variant in checksum_variants {
+        let variant_id = variant.get("id").and_then(Value::as_str).unwrap_or("raw");
+        let Some(variant_size) = variant_payload_size(variant, raw_size) else {
+            continue;
+        };
+        let checksums = checksum_map(variant.get("checksums"));
+        let fingerprint = ArtifactFingerprint::from_single_blob(
+            variant_size,
+            checksums.get("crc32").map(String::as_str),
+            checksums.get("md5").map(String::as_str),
+            checksums.get("sha1").map(String::as_str),
+        );
+        outcomes.push((
+            variant_id.to_string(),
+            match_fingerprint(database_name, pack, &fingerprint)?,
+        ));
+    }
+    Ok(outcomes)
+}
+
+fn match_fingerprint<P: ArtifactPackReader + ?Sized>(
+    database_name: &str,
+    pack: &P,
+    fingerprint: &ArtifactFingerprint,
+) -> Result<ArtifactMatchOutcome> {
+    let outcome = match_artifact(pack, fingerprint)?;
     trace!(
         database = database_name,
-        size,
-        crc32 = ?raw_checksums.get("crc32"),
+        components = fingerprint.components.len(),
         status = ?outcome.status,
         quality = ?outcome.quality,
         matches = outcome.matches.len(),
         "artifact pack lookup"
     );
-    Ok(Some(outcome))
+    Ok(outcome)
+}
+
+/// Fold one pack's artifact match outcome into the deduped title-match list.
+fn push_artifact_matches(
+    database_name: &str,
+    variant: &str,
+    outcome: ArtifactMatchOutcome,
+    seen: &mut BTreeSet<(String, String)>,
+    output: &mut Vec<IdentifyTitleMatch>,
+) {
+    if outcome.status == ArtifactMatchStatus::Unknown {
+        return;
+    }
+    for game_match in outcome.matches {
+        let key = (game_match.name.clone(), game_match.platform.clone());
+        if !seen.insert(key) {
+            continue;
+        }
+        output.push(IdentifyTitleMatch {
+            name: game_match.name,
+            platform: game_match.platform,
+            algorithm: "components".to_string(),
+            variant: variant.to_string(),
+            database: database_name.to_string(),
+            provenance: game_match
+                .provenance
+                .into_iter()
+                .map(|item| IdentifyProvenance {
+                    source: item.source,
+                    source_name: item.source_name,
+                    source_url: item.source_url,
+                    source_commit: item.source_commit,
+                    license: item.license,
+                })
+                .collect(),
+            legacy_variant: game_match.legacy_variant,
+            dump_tags: game_match.dump_tags,
+        });
+    }
 }
 
 impl CliApp {
@@ -864,9 +1042,9 @@ impl CliApp {
                 };
                 condition = Some("unsupported_media_profile".to_string());
                 hint = Some(format!(
-                    "this system's pack expects media profile {profile} (per-track hashes), but \
-                     the input was hashed as one payload; extract the disc's track files and \
-                     identify the data track"
+                    "this system's pack ({profile}) stores CD dumps as per-track hashes, but \
+                     the input was hashed as one payload; for a CD image, extract the disc's \
+                     track files and identify the data track"
                 ));
             }
         }
@@ -966,7 +1144,7 @@ impl CliApp {
             "label": "Manual",
             "checksums": { algorithm: hash },
         })];
-        let lookup = match databases.resolve_variants(&checksum_variants) {
+        let lookup = match databases.resolve_variants(&checksum_variants, None) {
             Ok(lookup) => lookup,
             Err(error) => {
                 return self.finish(
@@ -1142,52 +1320,76 @@ impl CliApp {
                     }
                 }
                 IdentifyPackFile::V2(pack) => {
-                    let Some(outcome) =
-                        match_single_blob(&selected_pack.pack.name, pack, raw_size, raw_checksums)?
-                    else {
+                    let outcomes = match_variant_blobs(
+                        &selected_pack.pack.name,
+                        pack,
+                        checksum_variants,
+                        raw_size,
+                        raw_checksums,
+                    )?;
+                    if outcomes.is_empty() {
                         trace!(
                             database = %selected_pack.pack.name,
                             "skipping RWFP2 pack: the raw payload size is unknown"
                         );
                         continue;
-                    };
-                    merged.merge_artifact_outcome(
-                        &selected_pack.pack,
-                        selected_pack.entry.as_ref(),
-                        outcome,
-                    );
+                    }
+                    for (variant, outcome) in outcomes {
+                        merged.merge_artifact_outcome(
+                            &selected_pack.pack,
+                            selected_pack.entry.as_ref(),
+                            &variant,
+                            outcome,
+                        );
+                    }
                 }
                 IdentifyPackFile::V3(pack) => {
-                    let Some(outcome) =
-                        match_single_blob(&selected_pack.pack.name, pack, raw_size, raw_checksums)?
-                    else {
+                    let outcomes = match_variant_blobs(
+                        &selected_pack.pack.name,
+                        pack,
+                        checksum_variants,
+                        raw_size,
+                        raw_checksums,
+                    )?;
+                    if outcomes.is_empty() {
                         trace!(
                             database = %selected_pack.pack.name,
                             "skipping RWFP3 pack: the raw payload size is unknown"
                         );
                         continue;
-                    };
-                    merged.merge_artifact_outcome(
-                        &selected_pack.pack,
-                        selected_pack.entry.as_ref(),
-                        outcome,
-                    );
+                    }
+                    for (variant, outcome) in outcomes {
+                        merged.merge_artifact_outcome(
+                            &selected_pack.pack,
+                            selected_pack.entry.as_ref(),
+                            &variant,
+                            outcome,
+                        );
+                    }
                 }
                 IdentifyPackFile::V4(pack) => {
-                    let Some(outcome) =
-                        match_single_blob(&selected_pack.pack.name, pack, raw_size, raw_checksums)?
-                    else {
+                    let outcomes = match_variant_blobs(
+                        &selected_pack.pack.name,
+                        pack,
+                        checksum_variants,
+                        raw_size,
+                        raw_checksums,
+                    )?;
+                    if outcomes.is_empty() {
                         trace!(
                             database = %selected_pack.pack.name,
                             "skipping RWFP4 pack: the raw payload size is unknown"
                         );
                         continue;
-                    };
-                    merged.merge_artifact_outcome(
-                        &selected_pack.pack,
-                        selected_pack.entry.as_ref(),
-                        outcome,
-                    );
+                    }
+                    for (variant, outcome) in outcomes {
+                        merged.merge_artifact_outcome(
+                            &selected_pack.pack,
+                            selected_pack.entry.as_ref(),
+                            &variant,
+                            outcome,
+                        );
+                    }
                 }
             }
         }
@@ -1229,6 +1431,7 @@ impl MergedMatches {
         &mut self,
         pack: &LoadedPack,
         entry: Option<&IdentifyPlatformCatalogEntry>,
+        variant: &str,
         outcome: ArtifactMatchOutcome,
     ) {
         if outcome.status == ArtifactMatchStatus::Unknown {
@@ -1290,7 +1493,7 @@ impl MergedMatches {
                 name: game_match.name,
                 platform: game_match.platform,
                 algorithm: "components".to_string(),
-                variant: "raw".to_string(),
+                variant: variant.to_string(),
                 database: pack.name.clone(),
                 provenance: game_match
                     .provenance

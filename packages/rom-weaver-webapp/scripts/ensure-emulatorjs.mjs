@@ -54,13 +54,38 @@ const removeUnlistedFiles = (directory, lockedPaths, relativeDirectory = "") => 
   }
 };
 
-const fetchVerified = async (url, expectedHash) => {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
-  const body = Buffer.from(await response.arrayBuffer());
+// The CDN intermittently answers 5xx (a 520 broke a CI deploy); a short
+// backoff rides those out. A hash mismatch is not transient and fails at once.
+const FETCH_ATTEMPTS = 4;
+const RETRYABLE_STATUSES = new Set([408, 425, 429]);
+const fetchOnce = async (url, expectedHash) => {
+  let response;
+  let body;
+  try {
+    response = await fetch(url);
+    if (response.ok) body = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    // Covers the headers phase and a stream dropped mid-body.
+    return { transientError: new Error(`${url} failed: ${error.message}`) };
+  }
+  if (!response.ok) {
+    const failure = new Error(`${url} returned HTTP ${response.status}`);
+    if (response.status >= 500 || RETRYABLE_STATUSES.has(response.status)) return { transientError: failure };
+    throw failure;
+  }
   const actualHash = sha256(body);
   if (actualHash !== expectedHash) throw new Error(`${url} hash mismatch: expected ${expectedHash}, got ${actualHash}`);
-  return body;
+  return { body };
+};
+const fetchVerified = async (url, expectedHash) => {
+  for (let attempt = 1; ; attempt += 1) {
+    const result = await fetchOnce(url, expectedHash);
+    if (result.body) return result.body;
+    if (attempt >= FETCH_ATTEMPTS) throw result.transientError;
+    const delayMs = 1000 * 2 ** (attempt - 1);
+    log("warn", `${result.transientError.message}; retrying in ${delayMs}ms (attempt ${attempt}/${FETCH_ATTEMPTS})`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
 };
 
 const main = async (argv = process.argv.slice(2)) => {

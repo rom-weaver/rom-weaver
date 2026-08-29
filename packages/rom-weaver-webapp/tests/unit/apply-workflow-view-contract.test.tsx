@@ -435,10 +435,11 @@ describe("apply workflow view - staged bench", () => {
     expect(nm?.getAttribute("title")).toBe("game.bin");
     expect(romCard?.querySelector(".extract-d .lab")?.textContent).toBe("Files");
     expect(romCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("game.bin");
-    expect(Array.from(romCard?.querySelectorAll(".extract-d .rb") || []).map((el) => el.textContent)).toEqual([
-      "13 B",
+    expect(Array.from(romCard?.querySelectorAll(".extract-d .rb") || []).map((el) => el.textContent)).toEqual(["13 B"]);
+    // The system tag lives on the Identify drawer, not the Files drawer.
+    expect(Array.from(romCard?.querySelectorAll(".identify-drawer .rb") || []).map((el) => el.textContent)).toContain(
       "NES",
-    ]);
+    );
     // checksum rows use the .ck/.ck-k/.ck-v readout structure
     const checksumLabels = Array.from(romCard?.querySelectorAll(".ck .ck-k") || []).map((el) => el.textContent);
     expect(checksumLabels).toContain("CRC32");
@@ -477,7 +478,10 @@ describe("apply workflow view - staged bench", () => {
     expect(romCard?.classList.contains("ok")).toBe(true);
     expect(romCard?.querySelector(".card-name .nm")?.textContent).toBe("Advance Wars (USA)");
     expect(romCard?.querySelector(".card-meta")).toBeNull();
-    expect(romCard?.querySelector(".card-name .sr-only")?.textContent).toBe("Advance Wars (USA) — game.bin");
+    expect(romCard?.querySelector(".card-name .sr-only")?.textContent).toBe(
+      "Advance Wars (USA) — game.bin — Identified",
+    );
+    expect(romCard?.querySelector(".card-name .nm-identified")).not.toBeNull();
     expect(romCard?.querySelector(".identify-drawer .rb")?.textContent).toBe("Identified");
     expect(romCard?.querySelector('.identify-drawer [aria-label^="Copy standard name "]')?.textContent).toContain(
       "Advance Wars (USA)",
@@ -540,7 +544,9 @@ describe("apply workflow view - staged bench", () => {
 
     expect(romCard?.classList.contains("warn")).toBe(true);
     expect(romCard?.querySelector(".card-meta")?.textContent).toBe("Possible matches found");
-    expect(romCard?.querySelector(".identify-drawer .rb")?.textContent).toBe("2 possible matches");
+    expect(Array.from(romCard?.querySelectorAll(".identify-drawer .rb") || []).map((el) => el.textContent)).toContain(
+      "2 possible matches",
+    );
   });
 
   it("does not show embedded sheet text as a separate file for a lone ROM", () => {

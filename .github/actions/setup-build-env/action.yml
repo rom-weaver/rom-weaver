@@ -44,6 +44,18 @@ inputs:
   webapp-deps:
     description: Run `npm ci` for the webapp package.
     default: "false"
+  identify-data-cache:
+    description: >-
+      Restore (or build and save) the ROM identify packs the webapp build and
+      the Rust tests need, so a job does not re-download the Libretro and
+      OpenGood DAT archives every run.
+    default: "false"
+  emulatorjs-cache:
+    description: >-
+      Restore (or fetch and save) the pinned EmulatorJS core drop the webapp
+      build vendors, so a job does not re-download ~14 MB from the (flaky)
+      EmulatorJS CDN every run.
+    default: "false"
   playwright:
     description: Install Playwright browsers and their system dependencies.
     default: "false"
@@ -274,3 +286,51 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ steps.versions.outputs.playwright }}-${{ steps.versions.outputs.browsers }}
+
+    # The built packs, not the DAT downloads: `ensure-identify-data.mjs` sees a
+    # current tree (revisions + pack list checked against index.json) and skips
+    # both the download and the build outright. The key hashes the builder, so
+    # any change to pack contents misses by construction. A miss primes the
+    # cache here - the scripts use only node builtins, so this needs no npm ci.
+    - name: Restore identify data cache
+      if: inputs.identify-data-cache == 'true'
+      id: identify-data-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: crates/rom-weaver-cli/data/identify/v1
+        key: identify-data-${{ hashFiles('scripts/build-identify-index.mjs', 'scripts/ensure-identify-data.mjs') }}
+
+    - name: Build identify data
+      if: inputs.identify-data-cache == 'true' && steps.identify-data-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: node scripts/ensure-identify-data.mjs
+
+    - name: Save identify data cache
+      if: inputs.identify-data-cache == 'true' && inputs.cache-save == 'true' && steps.identify-data-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: crates/rom-weaver-cli/data/identify/v1
+        key: identify-data-${{ hashFiles('scripts/build-identify-index.mjs', 'scripts/ensure-identify-data.mjs') }}
+
+    # Keyed on the lock file, whose per-file SHA-256 list fully determines the
+    # tree; `ensure-emulatorjs.mjs` re-verifies every restored file against it,
+    # so a hit costs one hash pass and zero downloads.
+    - name: Restore EmulatorJS cache
+      if: inputs.emulatorjs-cache == 'true'
+      id: emulatorjs-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: packages/rom-weaver-webapp/vendor/emulatorjs/data
+        key: emulatorjs-${{ hashFiles('packages/rom-weaver-webapp/vendor/emulatorjs.lock.json') }}
+
+    - name: Fetch EmulatorJS drop
+      if: inputs.emulatorjs-cache == 'true' && steps.emulatorjs-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: node packages/rom-weaver-webapp/scripts/ensure-emulatorjs.mjs
+
+    - name: Save EmulatorJS cache
+      if: inputs.emulatorjs-cache == 'true' && inputs.cache-save == 'true' && steps.emulatorjs-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: packages/rom-weaver-webapp/vendor/emulatorjs/data
+        key: emulatorjs-${{ hashFiles('packages/rom-weaver-webapp/vendor/emulatorjs.lock.json') }}

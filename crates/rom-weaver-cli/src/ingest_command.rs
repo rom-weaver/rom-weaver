@@ -1,4 +1,7 @@
-use super::identify_command::IdentifyDatabaseSet;
+use rom_weaver_checksum::artifact_match::{ArtifactFingerprint, FingerprintComponent};
+use rom_weaver_core::ComponentRole;
+
+use super::identify_command::{IdentifyDatabaseSet, IdentifyStatus};
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::*;
 
@@ -85,6 +88,12 @@ pub struct IngestRomAsset {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub track_number: Option<u32>,
+    /// Per-track checksum rows (`{track_number, size_bytes, checksums}`) streamed
+    /// during a merged single-bin disc extract. They let the disc-group lookup
+    /// fingerprint each track even though only one merged file exists. Empty for
+    /// split extracts and non-disc assets.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub track_checksums: Vec<Value>,
     /// Full `.cue` text for a cue-sheet asset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -572,12 +581,111 @@ impl CliApp {
         })
     }
 
+    /// Ingest a bare `.cue`/`.gdi` sheet with its referenced track files sitting
+    /// beside it: the sheet plus each existing referenced file become one disc
+    /// group, checksummed in place, so the disc-group identify lookup can
+    /// fingerprint the raw dump exactly like an extracted one. Returns `None`
+    /// when the sheet parses but references no existing files.
+    fn ingest_bare_disc_sheet(
+        &self,
+        source: &Path,
+        algorithms: &[String],
+        context: &OperationContext,
+    ) -> Result<Option<IngestOutcome>> {
+        let Some(kind) = rom_weaver_core::detect_disc_sheet(source) else {
+            return Ok(None);
+        };
+        let Ok(refs) = rom_weaver_core::enumerate_disc_sheet_refs(source) else {
+            return Ok(None);
+        };
+        let sheet_dir = source.parent().unwrap_or_else(|| Path::new("."));
+        let sheet_text = fs::read_to_string(source).unwrap_or_default();
+        let group_id = source
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut assets = Vec::new();
+        for (order, reference) in refs.referenced_files.iter().enumerate() {
+            let track_path = sheet_dir.join(reference);
+            if !track_path.is_file() {
+                continue;
+            }
+            let canonical = fs::canonicalize(&track_path).unwrap_or(track_path);
+            let identity = rom_weaver_checksum::detect_rom_identity_for_path(&canonical);
+            let asset = IngestRomAsset {
+                path: Self::normalize_emitted_path_string(&canonical.to_string_lossy()),
+                file_name: canonical
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                size_bytes: fs::metadata(&canonical)?.len(),
+                kind: Self::infer_emitted_file_kind(&canonical).map(str::to_string),
+                checksums: BTreeMap::new(),
+                checksum_variants: Vec::new(),
+                identification: None,
+                platform: identity.platform.map(str::to_string),
+                disc_format: identity
+                    .disc_format
+                    .map(|medium| medium.label().to_string()),
+                recommended_format: None,
+                disc_group_id: Some(group_id.clone()),
+                track_number: Some(order as u32 + 1),
+                track_checksums: Vec::new(),
+                cue_text: None,
+                gdi_text: None,
+                extract_time_ms: None,
+                copied_in_place: true,
+                checksum_ms: None,
+            };
+            assets.push(self.fill_asset_checksums(asset, &canonical, algorithms, context)?);
+        }
+        if assets.is_empty() {
+            return Ok(None);
+        }
+        let canonical_sheet = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
+        // The sheet itself is a text sidecar, never hashed - matching the extract
+        // paths, which skip sheets in their post-extract checksum pass.
+        let sheet_asset = IngestRomAsset {
+            path: Self::normalize_emitted_path_string(&canonical_sheet.to_string_lossy()),
+            file_name: group_id.clone(),
+            size_bytes: fs::metadata(source)?.len(),
+            kind: Self::infer_emitted_file_kind(&canonical_sheet).map(str::to_string),
+            checksums: BTreeMap::new(),
+            checksum_variants: Vec::new(),
+            identification: None,
+            platform: None,
+            disc_format: None,
+            recommended_format: None,
+            disc_group_id: Some(group_id),
+            track_number: None,
+            track_checksums: Vec::new(),
+            cue_text: matches!(kind, rom_weaver_core::DiscSheetKind::Cue)
+                .then(|| sheet_text.clone()),
+            gdi_text: matches!(kind, rom_weaver_core::DiscSheetKind::Gdi)
+                .then(|| sheet_text.clone()),
+            extract_time_ms: None,
+            copied_in_place: true,
+            checksum_ms: None,
+        };
+        let mut all_assets = vec![sheet_asset];
+        all_assets.append(&mut assets);
+        Ok(Some(IngestOutcome {
+            kind: IngestKind::Rom,
+            is_rom: true,
+            assets: all_assets,
+            patches: Vec::new(),
+        }))
+    }
+
     fn ingest_bare_source(
         &self,
         source: &Path,
         algorithms: &[String],
         context: &OperationContext,
     ) -> Result<IngestOutcome> {
+        if let Some(outcome) = self.ingest_bare_disc_sheet(source, algorithms, context)? {
+            return Ok(outcome);
+        }
         if is_patch_filter_candidate_name(&source.to_string_lossy()) {
             let descriptor = self.build_patch_descriptor(source, None, context)?;
             return Ok(IngestOutcome {
@@ -618,6 +726,7 @@ impl CliApp {
             recommended_format: recommended_format.map(str::to_string),
             disc_group_id: None,
             track_number: None,
+            track_checksums: Vec::new(),
             cue_text: None,
             gdi_text: None,
             extract_time_ms: None,
@@ -703,6 +812,11 @@ impl CliApp {
                     .get("track_number")
                     .and_then(Value::as_u64)
                     .map(|value| value as u32),
+                track_checksums: map
+                    .get("track_checksums")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default(),
                 cue_text: map
                     .get("cue_text")
                     .and_then(Value::as_str)
@@ -1251,6 +1365,126 @@ impl CliApp {
         });
     }
 
+    /// Identify multi-track discs as a whole. Per-track packs (Redump CD/GD-ROM)
+    /// store one hash per track file, so the single-blob lookup above can never
+    /// match them. Build one fingerprint per disc group from the checksums the
+    /// extract already streamed - no bytes are re-read - and give every asset in
+    /// the group the group's identification when its own lookup found nothing.
+    /// Expand a merged bin's `track_checksums` rows into per-track fingerprint
+    /// components. A malformed row (no hashes or zero size) is skipped.
+    fn track_checksum_components(asset: &IngestRomAsset) -> Vec<FingerprintComponent> {
+        asset
+            .track_checksums
+            .iter()
+            .filter_map(|row| {
+                let map = row.as_object()?;
+                let size = map.get("size_bytes").and_then(Value::as_u64)?;
+                let checksums = map.get("checksums").and_then(Value::as_object)?;
+                if size == 0 || checksums.is_empty() {
+                    return None;
+                }
+                let hash = |algorithm: &str| {
+                    checksums
+                        .get(algorithm)
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                };
+                Some(FingerprintComponent {
+                    role: ComponentRole::DataTrack,
+                    ordinal: map.get("track_number").and_then(Value::as_u64).unwrap_or(0) as u32,
+                    hash_scope: "track_file".to_string(),
+                    size,
+                    crc32: hash("crc32"),
+                    md5: hash("md5"),
+                    sha1: hash("sha1"),
+                    sha256: hash("sha256"),
+                    filename: None,
+                })
+            })
+            .collect()
+    }
+
+    fn resolve_disc_group_identifications(
+        identify_database: &IdentifyDatabaseSet,
+        assets: &mut [IngestRomAsset],
+    ) -> Result<()> {
+        // The group id is the sheet's file name, and one archive can hold two
+        // discs whose sheets share a name (`d1/game.cue`, `d2/game.cue`), so
+        // the key MUST also carry the asset's directory or the discs merge
+        // into one fingerprint.
+        let mut groups: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
+        for (index, asset) in assets.iter().enumerate() {
+            if let Some(group_id) = &asset.disc_group_id {
+                let directory = Path::new(&asset.path)
+                    .parent()
+                    .map(|parent| parent.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                groups
+                    .entry((directory, group_id.clone()))
+                    .or_default()
+                    .push(index);
+            }
+        }
+        for ((directory, group_id), indexes) in groups {
+            let mut components: Vec<FingerprintComponent> = indexes
+                .iter()
+                .flat_map(|&index| {
+                    let asset = &assets[index];
+                    // A merged single-bin extract carries per-track checksum rows;
+                    // expand them so the fingerprint has one component per track,
+                    // matching what a split extract's separate files produce.
+                    if !asset.track_checksums.is_empty() {
+                        return Self::track_checksum_components(asset);
+                    }
+                    if asset.checksums.is_empty() || asset.size_bytes == 0 {
+                        return Vec::new();
+                    }
+                    vec![FingerprintComponent {
+                        // The matcher compares scope, size, and hashes; role and
+                        // ordinal are informational.
+                        role: ComponentRole::DataTrack,
+                        ordinal: asset.track_number.unwrap_or(0),
+                        hash_scope: "track_file".to_string(),
+                        size: asset.size_bytes,
+                        crc32: asset.checksums.get("crc32").cloned(),
+                        md5: asset.checksums.get("md5").cloned(),
+                        sha1: asset.checksums.get("sha1").cloned(),
+                        sha256: asset.checksums.get("sha256").cloned(),
+                        filename: Some(asset.file_name.clone()),
+                    }]
+                })
+                .collect();
+            if components.is_empty() {
+                continue;
+            }
+            components.sort_by_key(|component| component.ordinal);
+            let fingerprint = ArtifactFingerprint { components };
+            let lookup = identify_database.resolve_fingerprint(&fingerprint, "disc-tracks")?;
+            trace!(
+                group = group_id,
+                directory = directory,
+                tracks = fingerprint.components.len(),
+                status = ?lookup.status,
+                matches = lookup.matches.len(),
+                "disc group identify lookup"
+            );
+            if lookup.status == IdentifyStatus::Unknown {
+                continue;
+            }
+            for &index in &indexes {
+                let asset = &mut assets[index];
+                let unresolved = asset
+                    .identification
+                    .as_ref()
+                    .is_none_or(|current| current.matches.is_empty());
+                if unresolved {
+                    asset.identification = Some(lookup.clone());
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn ingest_success_report(
         &self,
         source: &Path,
@@ -1295,10 +1529,13 @@ impl CliApp {
         if let Some(identify_database) = identify_database {
             for asset in &mut assets {
                 if !asset.checksum_variants.is_empty() {
-                    asset.identification =
-                        Some(identify_database.resolve_variants(&asset.checksum_variants)?);
+                    let raw_size = (asset.size_bytes > 0).then_some(asset.size_bytes);
+                    asset.identification = Some(
+                        identify_database.resolve_variants(&asset.checksum_variants, raw_size)?,
+                    );
                 }
             }
+            Self::resolve_disc_group_identifications(identify_database, &mut assets)?;
         }
         let mut patches = outcome.patches;
         if let Some(identify_database) = identify_database {

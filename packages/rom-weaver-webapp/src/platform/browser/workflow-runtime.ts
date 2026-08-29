@@ -141,19 +141,16 @@ type IngestRunInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["ingest
  * Stage the identify work for one ingest: which ROM members to look at, and
  * which title packs to fetch for them.
  *
- * Stage 1 is the file name: a `.gba` drop needs exactly one pack and no probe.
- * Stage 2 is a decompression-free probe, run when the name says nothing
- * (`.zip`, `.bin`, `.rom`) or when the caller wants every ROM member. The probe
- * returns the container's member list and the ROM header's platform, and both
- * narrow the pack set the same way. The OpenGood fallback stays the last
- * resort after these cheap signals fail.
+ * A decompression-free probe always runs first: it returns the container's
+ * member list and the platform decoded from the actual bytes, which outranks
+ * the file extension for routing. Extension hints still widen the set, and the
+ * OpenGood fallback stays the last resort when every signal fails.
  */
 const prepareIngestIdentify = async ({
   fileName,
   logLevel,
   onLog,
   onProgress,
-  selectAllRomEntries,
   signal,
   sourcePath,
 }: {
@@ -161,7 +158,6 @@ const prepareIngestIdentify = async ({
   logLevel?: IngestRunInput["logLevel"];
   onLog?: IngestRunInput["onLog"];
   onProgress?: IngestRunInput["onProgress"];
-  selectAllRomEntries?: boolean;
   signal?: AbortSignal;
   sourcePath: string;
 }): Promise<{
@@ -174,23 +170,20 @@ const prepareIngestIdentify = async ({
   try {
     const { loadIdentifyPackSelection, selectIdentifySlugs } = await import("./identify-packs.ts");
     let hints: Parameters<typeof loadIdentifyPackSelection>[0] = { fileName };
-    if (selectAllRomEntries || !selectIdentifySlugs(hints).length) {
-      onProgress?.({ message: "Inspecting the input…" });
-      try {
-        const probe = await runRomWeaverProbeWorker(
-          { logLevel, romFilter: true, signal, sourcePath },
-          undefined,
-          onLog,
-        );
-        entryNames = probe.entries.map((entry) => entry.filename || entry.fileName || entry.name || "").filter(Boolean);
-        hints = { entryNames, fileName, ...(probe.platform ? { platform: probe.platform } : {}) };
-      } catch (error) {
-        // A probe failure only costs precision here - the ingest itself still runs.
-        emitTraceLog(trace, "ROM identify probe failed; widening the identify pack selection", {
-          error: error instanceof Error ? error.message : String(error),
-          fileName,
-        });
-      }
+    // Always probe: the platform the probe reports (decoded from the actual
+    // bytes) outranks the file extension for routing, and a mislabeled or
+    // unknown extension must not silently fall back to the cartridge packs.
+    onProgress?.({ message: "Inspecting the input…" });
+    try {
+      const probe = await runRomWeaverProbeWorker({ logLevel, romFilter: true, signal, sourcePath }, undefined, onLog);
+      entryNames = probe.entries.map((entry) => entry.filename || entry.fileName || entry.name || "").filter(Boolean);
+      hints = { entryNames, fileName, ...(probe.platform ? { platform: probe.platform } : {}) };
+    } catch (error) {
+      // A probe failure only costs precision here - the ingest itself still runs.
+      emitTraceLog(trace, "ROM identify probe failed; widening the identify pack selection", {
+        error: error instanceof Error ? error.message : String(error),
+        fileName,
+      });
     }
     emitTraceLog(trace, "loading ROM identify packs", {
       entryCount: entryNames.length,
@@ -248,7 +241,6 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
             logLevel,
             onLog,
             onProgress,
-            selectAllRomEntries: identifyAllRomEntries,
             signal,
             sourcePath: stagedSource.filePath,
           });
