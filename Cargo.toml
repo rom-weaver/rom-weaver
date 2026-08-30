@@ -78,7 +78,7 @@ libz-sys = { version = "1.1.28", default-features = false }
 liblzma-sys = { version = "0.4.6", features = ["static"] }
 md-5 = "0.11.0"
 lru = "0.18"
-polonius-the-crab = "0.5"
+polonius-the-crab = "0.6"
 qbsdiff = "1.4.4"
 rayon = "1.11.0"
 arrayvec = { version = "0.7.2", default-features = false, features = ["std"] }
