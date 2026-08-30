@@ -14,7 +14,7 @@ type IdentifyLookupStatus = "matched" | "ambiguous" | "unknown";
  */
 type IdentifyStatus = IdentifyLookupStatus | "unavailable";
 
-/** Match quality of a set-aware match. */
+/** Match quality of a set-aware identify match. */
 type IdentifyQuality = "exact" | "metadata_only" | "partial";
 
 /**

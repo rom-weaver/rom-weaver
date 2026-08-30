@@ -384,7 +384,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/build-identify-index.mjs', 'scripts/ensure-identify-data.mjs') }}
+        key: identify-data-${{ hashFiles('scripts/build-identify-index.mjs', 'scripts/ensure-identify-data.mjs', 'scripts/wasm/brotli-compress.mjs') }}
 
     - name: Build identify data
       if: inputs.identify-data-cache == 'true' && steps.identify-data-cache.outputs.cache-hit != 'true'
@@ -396,7 +396,7 @@ runs:
       uses: actions/cache/save@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/build-identify-index.mjs', 'scripts/ensure-identify-data.mjs') }}
+        key: identify-data-${{ hashFiles('scripts/build-identify-index.mjs', 'scripts/ensure-identify-data.mjs', 'scripts/wasm/brotli-compress.mjs') }}
 
     # Keyed on the lock file, whose per-file SHA-256 list fully determines the
     # tree; `ensure-emulatorjs.mjs` re-verifies every restored file against it,

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import zlib from "node:zlib";
 
 import {
   evaluateSizeBudget,
@@ -19,7 +20,7 @@ import {
   shouldRetryLighthouse,
 } from "../packages/rom-weaver-webapp/scripts/run-lighthouse.mjs";
 import { summarizeCssCoverage } from "../packages/rom-weaver-webapp/scripts/css-coverage.mjs";
-import { brotliCompressFile } from "./wasm/brotli-compress.mjs";
+import { brotliCompressBuffer, brotliCompressFile } from "./wasm/brotli-compress.mjs";
 
 test("size budgets warn at the expected value and fail at the maximum", () => {
   const budget = {
@@ -177,8 +178,15 @@ test("brotli output is cached by content and verified before reuse", () => {
       outputPath: path.join(directory, "b.br"),
       quality: 11,
     });
+    const defaultProfile = brotliCompressFile({
+      inputPath: input,
+      outputPath: path.join(directory, "default.br"),
+      parameterProfile: "default",
+      quality: 11,
+    });
     assert.equal(first.cached, false);
     assert.equal(second.cached, true);
+    assert.equal(defaultProfile.cached, false);
     assert.equal(second.compressedSize, first.compressedSize);
     assert.deepEqual(
       fs.readFileSync(path.join(directory, "b.br")),
@@ -187,6 +195,36 @@ test("brotli output is cached by content and verified before reuse", () => {
   } finally {
     fs.rmSync(directory, { force: true, recursive: true });
   }
+});
+
+test("brotli buffer compression is deterministic and round-trips", () => {
+  const source = Buffer.from(
+    Array.from({ length: 20_000 }, (_, index) => `${index % 997}|${index % 1009}|payload\n`).join(
+      "",
+    ),
+  );
+  const first = brotliCompressBuffer(source, { quality: 11 });
+  const second = brotliCompressBuffer(source, { quality: 11 });
+  assert.deepEqual(first, second);
+  assert.deepEqual(zlib.brotliDecompressSync(first), source);
+  const defaultProfile = brotliCompressBuffer(source, {
+    parameterProfile: "default",
+    quality: 11,
+  });
+  assert.deepEqual(zlib.brotliDecompressSync(defaultProfile), source);
+});
+
+test("brotli cache identity and output change with compression quality", () => {
+  const source = Buffer.from(
+    Array.from({ length: 200_000 }, (_, index) => `${index % 997}|${index % 1009}|payload\n`).join(
+      "",
+    ),
+  );
+  const low = brotliCompressBuffer(source, { quality: 0 });
+  const high = brotliCompressBuffer(source, { quality: 11 });
+  assert.notDeepEqual(low, high);
+  assert.deepEqual(zlib.brotliDecompressSync(low), source);
+  assert.deepEqual(zlib.brotliDecompressSync(high), source);
 });
 
 test("Lighthouse report index links every detailed HTML run", () => {

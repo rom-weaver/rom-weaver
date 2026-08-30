@@ -640,7 +640,7 @@ pub struct IdentifyCommand {
             short = 'd',
             long = "database",
             value_name = "PACK",
-            help = "RWFP4 identify pack to search instead of the built-in data (repeatable)"
+            help = "RWFP5 identify pack to search instead of the built-in data (repeatable)"
         )
     )]
     #[serde(default)]
@@ -770,7 +770,7 @@ pub struct IngestCommand {
             long = "database",
             value_name = "PACK",
             action = ArgAction::Append,
-            help = "RWFP4 identify pack to use for ROM titles (repeatable; native defaults to built-in data)"
+            help = "RWFP5 identify pack to use for ROM titles (repeatable; native defaults to built-in OpenGood data)"
         )
     )]
     #[serde(default)]
@@ -2997,6 +2997,14 @@ pub enum IdentifyDatabaseCommands {
     Remove(Box<IdentifyDatabaseSystemCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        command(
+            name = "import-redump",
+            about = "Build identify packs from local Redump DAT ZIP files"
+        )
+    )]
+    ImportRedump(Box<IdentifyDatabaseImportCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         command(about = "Install the full identify database for this rom-weaver version")
     )]
     InstallAll(Box<IdentifyDatabaseDirCommand>),
@@ -3005,6 +3013,16 @@ pub enum IdentifyDatabaseCommands {
         command(about = "Download and install one optional identify pack group")
     )]
     InstallGroup(Box<IdentifyDatabaseGroupCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Download and install one Redump system pack (or --all)")
+    )]
+    Install(Box<IdentifyDatabaseInstallCommand>),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Download and update installed Redump system packs")
+    )]
+    Update(Box<IdentifyDatabaseUpdateCommand>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -3049,6 +3067,74 @@ pub struct IdentifyDatabaseSystemCommand {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseImportCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "ZIP", help = "Local Redump DAT ZIP file to import")
+    )]
+    pub input: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseInstallCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "SYSTEM", help = "Canonical platform name or alias")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub system: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            conflicts_with = "system",
+            help = "Install every platform in the dump"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub all: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "from",
+            value_name = "ZIP",
+            help = "Local Redump DAT ZIP file; omit to download from Redump"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub from: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct IdentifyDatabaseGroupCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -3061,6 +3147,44 @@ pub struct IdentifyDatabaseGroupCommand {
             long = "from",
             value_name = "ARCHIVE",
             help = "Local group archive; omit to download the archive for this version"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub from: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Identify database directory. Defaults to the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct IdentifyDatabaseUpdateCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            value_name = "SYSTEM",
+            help = "Canonical platform name or alias; omit to update every installed pack"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub system: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "from",
+            value_name = "ZIP",
+            help = "Local Redump DAT ZIP file; omit to download from Redump"
         )
     )]
     #[serde(default)]

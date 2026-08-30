@@ -8,17 +8,18 @@ import path from "node:path";
 import readline from "node:readline";
 import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import zlib from "node:zlib";
+
+import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-identify-dats");
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
-const PACK_MAGIC = Buffer.from("RWFP4\0\0\0", "binary");
+const PACK_MAGIC_V5 = Buffer.from("RWFP5\0\0\0", "binary");
+const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v2";
 const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
-export const PACK_FORMAT = "rom-weaver-identify-system-pack-v4";
-export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
+export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v5";
 export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
 // OpenGood publishes GoodTools cartridge sets as CC0 Logiqx XML DATs. It adds
@@ -462,7 +463,7 @@ export function normalizeAlias(value) {
     .trim();
 }
 
-const usage = () => `Build per-system RWFP4 ROM-identify packs from pinned Libretro DATs.
+const usage = () => `Build per-system RWFP5 ROM-identify packs from pinned Libretro DATs.
 Mapped OpenGood records add legacy variants. index.json and catalog.json are
 written next to the packs.
 
@@ -708,6 +709,30 @@ function normalizeHex(value, expectedLength) {
   return /^[0-9a-f]+$/u.test(normalized) ? normalized : "";
 }
 
+function base64Utf8(value) {
+  return Buffer.from(value, "utf8").toString("base64");
+}
+
+// Normalize one ROM's hashes and append a row to the shared rows stream.
+// Shared by the Redump (JSON) and OpenGood (XML) producers so both emit the
+// identical `crc\tmd5\tsha1\tplatformB64\tnameB64` line format.
+async function writeRow(state, rawCrc, rawMd5, rawSha1, platform, name) {
+  state.romRows += 1;
+  const crc32 = normalizeHex(rawCrc, 8);
+  const md5 = normalizeHex(rawMd5, 32);
+  const sha1 = normalizeHex(rawSha1, 40);
+  if (!crc32 && !md5 && !sha1) {
+    state.rowsMissingAllHashes += 1;
+    return;
+  }
+  if (
+    !state.stream.write(`${crc32}\t${md5}\t${sha1}\t${base64Utf8(platform)}\t${base64Utf8(name)}\n`)
+  ) {
+    await once(state.stream, "drain");
+  }
+  state.rowsWithAnyHash += 1;
+}
+
 const XML_ENTITIES = Object.freeze({ amp: "&", apos: "'", gt: ">", lt: "<", quot: '"' });
 
 function xmlUnescape(value) {
@@ -732,6 +757,44 @@ function parseAttributes(tag) {
     match = matcher.exec(tag);
   }
   return attributes;
+}
+
+// Parse a Logiqx XML DAT (OpenGood / clrmamepro export). The <game name="...">
+// attribute is the exact dump name we want to surface (e.g.
+// `Legend of Zelda, The (U) (PRG0) [!]`); each nested <rom> carries the
+// crc/md5/sha1. One normalized row is emitted per <rom>.
+async function parseOpenGoodDat(text, platform, state) {
+  const gameChunks = text.split(/<game\b/u);
+  for (let index = 1; index < gameChunks.length; index += 1) {
+    if (state.stopParsing) return;
+    state.jsonObjects += 1;
+    if (state.maxObjects && state.jsonObjects > state.maxObjects) {
+      state.stopParsing = true;
+      return;
+    }
+    const chunk = gameChunks[index];
+    const headerEnd = chunk.indexOf(">");
+    if (headerEnd < 0) continue;
+    const nameMatch = chunk.slice(0, headerEnd).match(/\bname="([^"]*)"/u);
+    if (!nameMatch) continue;
+    const gameName = xmlUnescape(nameMatch[1]).trim();
+    if (!gameName) continue;
+
+    const romMatcher = /<rom\b([^>]*?)\/?>/gu;
+    let romMatch = romMatcher.exec(chunk);
+    while (romMatch) {
+      const rom = parseAttributes(romMatch[1]);
+      await writeRow(state, rom.crc, rom.md5, rom.sha1, platform, gameName);
+      romMatch = romMatcher.exec(chunk);
+    }
+
+    if (state.jsonObjects % 25000 === 0) {
+      console.error(
+        `[identify] parsed ${state.jsonObjects.toLocaleString("en-US")} game object(s), ` +
+          `${state.rowsWithAnyHash.toLocaleString("en-US")} hash row(s)`,
+      );
+    }
+  }
 }
 
 function unescapeClrMamePro(value) {
@@ -1056,6 +1119,24 @@ async function datFingerprint(datPath) {
   };
 }
 
+async function openGoodFingerprint(platform, ctx) {
+  const fingerprint = [];
+  for (const datFile of OPENGOOD_PLATFORMS[platform]) {
+    const info = await stat(ctx.openGoodPaths.get(datFile));
+    fingerprint.push({ datFile, mtimeMs: Math.trunc(info.mtimeMs), sizeBytes: info.size });
+  }
+  return fingerprint;
+}
+
+function platformRowPaths(cacheDir, slug) {
+  const dir = path.join(cacheDir, "identify-rows");
+  return {
+    dir,
+    manifestPath: path.join(dir, `${slug}.manifest.json`),
+    rowsPath: path.join(dir, `${slug}.tsv`),
+  };
+}
+
 function platformGamePaths(cacheDir, slug) {
   const dir = path.join(cacheDir, "identify-games");
   return {
@@ -1073,6 +1154,21 @@ async function readJsonFile(filePath) {
   }
 }
 
+function rowsCacheValid(manifest, fingerprint, source, maxObjects) {
+  if (!manifest || manifest.format !== ROW_CACHE_FORMAT) return false;
+  if (manifest.source !== source) return false;
+  if (manifest.maxObjects !== (maxObjects ?? null)) return false;
+  return JSON.stringify(manifest.fingerprint) === JSON.stringify(fingerprint);
+}
+
+async function produceOpenGoodRows(platform, state, ctx) {
+  for (const datFile of OPENGOOD_PLATFORMS[platform]) {
+    if (state.stopParsing) break;
+    const text = await readFile(ctx.openGoodPaths.get(datFile), "utf8");
+    await parseOpenGoodDat(text, platform, state);
+  }
+}
+
 async function produceRedumpGames(platform, state, ctx) {
   const text = await runCommandText("unzip", ["-p", ctx.redumpPaths.get(platform)]);
   const gameChunks = text.split(/<game\b/u);
@@ -1087,6 +1183,70 @@ async function produceRedumpGames(platform, state, ctx) {
       await once(state.stream, "drain");
     }
   }
+}
+
+// Build (or reuse a cached) normalized rows.tsv for a single OpenGood platform.
+// Each platform is cached independently so re-runs only rebuild what changed.
+export async function buildPlatformRows(platform, ctx) {
+  const source = "opengood";
+  const slug = slugifyPlatform(platform);
+  const paths = platformRowPaths(ctx.cacheDir, slug);
+  const fingerprint = await openGoodFingerprint(platform, ctx);
+
+  const rowsStat = await fileStat(paths.rowsPath);
+  const manifest = await readJsonFile(paths.manifestPath);
+  if (
+    rowsStat?.isFile() &&
+    !ctx.forceRowCache &&
+    rowsCacheValid(manifest, fingerprint, source, ctx.maxObjects)
+  ) {
+    console.error(`[identify] ${platform}: using cached rows (${formatBytes(rowsStat.size)})`);
+    return { ...paths, manifest, slug, source };
+  }
+
+  await mkdir(paths.dir, { recursive: true });
+  const tempRowsPath = `${paths.rowsPath}.part`;
+  const stream = createWriteStream(tempRowsPath);
+  const state = {
+    jsonObjects: 0,
+    maxObjects: ctx.maxObjects,
+    romRows: 0,
+    rowsMissingAllHashes: 0,
+    rowsWithAnyHash: 0,
+    stopParsing: false,
+    stream,
+  };
+
+  console.error(`[identify] ${platform}: extracting rows from ${source}`);
+  await produceOpenGoodRows(platform, state, ctx);
+
+  await new Promise((resolve, reject) => {
+    stream.on("error", reject);
+    stream.end(resolve);
+  });
+  await rename(tempRowsPath, paths.rowsPath);
+
+  const nextManifest = {
+    format: ROW_CACHE_FORMAT,
+    generatedAt: ctx.generatedAt,
+    platform,
+    source,
+    fingerprint,
+    maxObjects: ctx.maxObjects ?? null,
+    stats: {
+      gameObjects: state.jsonObjects,
+      romRows: state.romRows,
+      rowsMissingAllHashes: state.rowsMissingAllHashes,
+      rowsWithAnyHash: state.rowsWithAnyHash,
+    },
+  };
+  await writeFile(paths.manifestPath, `${JSON.stringify(nextManifest, null, 2)}\n`);
+  const written = await stat(paths.rowsPath);
+  console.error(
+    `[identify] ${platform}: wrote rows (${formatBytes(written.size)}, ` +
+      `${state.rowsWithAnyHash.toLocaleString("en-US")} hash row(s))`,
+  );
+  return { ...paths, manifest: nextManifest, slug, source };
 }
 
 // Build (or reuse a cached) grouped games.jsonl for a single Redump platform:
@@ -1153,15 +1313,15 @@ export async function buildPlatformGames(platform, ctx) {
   return { ...paths, manifest: nextManifest, slug, source: "redump" };
 }
 
-function writePack(entries) {
-  const directoryBytes = entries.reduce(
-    (sum, entry) => sum + 2 + 8 + Buffer.byteLength(entry.name, "utf8"),
-    0,
-  );
+function writePack(entries, magic = PACK_MAGIC_V5) {
+  const headerBytes =
+    magic.length +
+    4 +
+    entries.reduce((sum, entry) => sum + 2 + 8 + Buffer.byteLength(entry.name, "utf8"), 0);
   const payloadBytes = entries.reduce((sum, entry) => sum + entry.bytes.length, 0);
-  const buffer = Buffer.allocUnsafe(8 + 4 + directoryBytes + payloadBytes);
-  PACK_MAGIC.copy(buffer, 0);
-  let cursor = 8;
+  const buffer = Buffer.allocUnsafe(headerBytes + payloadBytes);
+  magic.copy(buffer, 0);
+  let cursor = magic.length;
   buffer.writeUInt32LE(entries.length, cursor);
   cursor += 4;
   for (const entry of entries) {
@@ -1178,19 +1338,6 @@ function writePack(entries) {
     cursor += entry.bytes.length;
   }
   return buffer;
-}
-
-async function brotliCompress(buffer, quality) {
-  return new Promise((resolve, reject) => {
-    zlib.brotliCompress(
-      buffer,
-      { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality } },
-      (error, compressed) => {
-        if (error) reject(error);
-        else resolve(compressed);
-      },
-    );
-  });
 }
 
 function resolveSelection(options) {
@@ -1217,6 +1364,23 @@ async function* readGames(gamesPath) {
   for await (const line of lines) {
     if (line) yield JSON.parse(line);
   }
+}
+
+export function mediaProfileFor(platform, source) {
+  if (source === "libretro" && KNOWN_PLATFORM_PROFILES[platform]) {
+    return KNOWN_PLATFORM_PROFILES[platform];
+  }
+  if (
+    source === "libretro" &&
+    LIBRETRO_PLATFORM_PATHS[platform]?.some((sourcePath) =>
+      sourcePath.startsWith("metadat/redump/"),
+    )
+  ) {
+    return platform === "Sega - Dreamcast" ? "redump-gdrom-track-v1" : "redump-cd-track-v1";
+  }
+  if (source === "libretro") return DEFAULT_MEDIA_PROFILE;
+  if (source === "opengood") return "opengood-cartridge-v1";
+  return KNOWN_PLATFORM_PROFILES[platform] ?? DEFAULT_MEDIA_PROFILE;
 }
 
 // Load every game for one platform and sort deterministically. The spec orders
@@ -1256,7 +1420,7 @@ export async function loadSortedGames(gamesPath) {
   }
   if (skippedOverCaps > 0) {
     console.error(
-      `[identify] skipped ${skippedOverCaps} game record(s) that exceed the RWFP4 reader caps`,
+      `[identify] skipped ${skippedOverCaps} game record(s) that exceed the RWFP5 reader caps`,
     );
   }
   // Codepoint comparison, never localeCompare: ICU collation varies by
@@ -1272,25 +1436,9 @@ export async function loadSortedGames(gamesPath) {
   return games;
 }
 
-export function mediaProfileFor(platform, source) {
-  if (source === "libretro" && KNOWN_PLATFORM_PROFILES[platform]) {
-    return KNOWN_PLATFORM_PROFILES[platform];
-  }
-  if (
-    source === "libretro" &&
-    LIBRETRO_PLATFORM_PATHS[platform]?.some((sourcePath) =>
-      sourcePath.startsWith("metadat/redump/"),
-    )
-  ) {
-    return platform === "Sega - Dreamcast" ? "redump-gdrom-track-v1" : "redump-cd-track-v1";
-  }
-  if (source === "libretro") return DEFAULT_MEDIA_PROFILE;
-  if (source === "opengood") return "opengood-cartridge-v1";
-  return KNOWN_PLATFORM_PROFILES[platform] ?? DEFAULT_MEDIA_PROFILE;
-}
-
-// Shared components cannot identify one game, but the pack keeps them as
-// metadata for the selected title.
+// Mark components byte-identical across MORE THAN ONE game (same size plus the
+// same md5 or the same sha1) as non-discriminating. They stay in games.json but
+// are excluded from route.bin: a shared CD audio track can never pick one game.
 function markSharedComponents(games) {
   const owners = new Map();
   const keysOf = (component) => {
@@ -1318,7 +1466,6 @@ function markSharedComponents(games) {
   return sharedComponents;
 }
 
-const ABSENT_U32 = 0xffffffff;
 const ROLE_CODES = Object.freeze({
   primary_payload: 0,
   data_track: 1,
@@ -1329,7 +1476,6 @@ const ROLE_CODES = Object.freeze({
   disk_side: 6,
   child_disc: 7,
 });
-const SOURCE_CODES = Object.freeze({ libretro: 0, opengood: 1, redump: 2 });
 const UPSTREAM_CODES = Object.freeze({
   libretro: 0,
   redump: 1,
@@ -1341,77 +1487,41 @@ const UPSTREAM_CODES = Object.freeze({
   unknown: 7,
 });
 
-const tableHeader = (magic, width, count, extraBytes = 0) => {
-  const buffer = Buffer.alloc(12 + extraBytes);
-  buffer.write(magic, 0, 4, "ascii");
-  buffer.writeUInt16LE(1, 4);
-  buffer.writeUInt16LE(width, 6);
-  buffer.writeUInt32LE(count, 8);
-  return buffer;
-};
-
 function buildStringTable(values) {
   const strings = [...new Set(values.filter((value) => value !== undefined).map(String))].sort(
     (left, right) => Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8")),
   );
   const ids = new Map(strings.map((value, index) => [value, index]));
-  const encoded = strings.map((value) => Buffer.from(value, "utf8"));
-  const byteCount = encoded.reduce((sum, value) => sum + value.length, 0);
-  const header = tableHeader("RWS3", 0, strings.length, 4);
-  header.writeUInt32LE(byteCount, 12);
-  const offsets = Buffer.alloc((strings.length + 1) * 4);
-  let cursor = 0;
-  encoded.forEach((value, index) => {
-    offsets.writeUInt32LE(cursor, index * 4);
-    cursor += value.length;
-  });
-  offsets.writeUInt32LE(cursor, strings.length * 4);
-  return { bytes: Buffer.concat([header, offsets, ...encoded]), ids };
+  return { ids, values: strings };
 }
 
-function internOrderedSets(sets) {
-  const unique = [[]];
-  const ids = new Map([["[]", 0]]);
-  const mapped = sets.map((values) => {
-    const key = JSON.stringify(values);
-    let id = ids.get(key);
-    if (id === undefined) {
-      id = unique.length;
-      ids.set(key, id);
-      unique.push(values);
-    }
-    return id;
-  });
-  const offsets = [0];
-  const flattened = [];
-  for (const values of unique) {
-    flattened.push(...values);
-    offsets.push(flattened.length);
-  }
-  return { flattened, mapped, offsets, sets: unique };
+function encodeUvarint(value) {
+  let remaining = BigInt(value);
+  if (remaining < 0n) throw new Error("RWFP5 variable integer cannot be negative");
+  const bytes = [];
+  do {
+    let byte = Number(remaining & 0x7fn);
+    remaining >>= 7n;
+    if (remaining) byte |= 0x80;
+    bytes.push(byte);
+  } while (remaining);
+  return Buffer.from(bytes);
 }
 
-function buildPackTables(games) {
-  const provenance = [];
-  const provenanceIds = new Map();
-  const provenanceSets = games.map((game) =>
-    (game.provenance ?? []).map((value) => {
-      const key = JSON.stringify(value);
-      let id = provenanceIds.get(key);
-      if (id === undefined) {
-        id = provenance.length;
-        provenanceIds.set(key, id);
-        provenance.push(value);
-      }
-      return id;
-    }),
-  );
+function variableTable(magic, count, records) {
+  return Buffer.concat([
+    Buffer.from(magic, "ascii"),
+    Buffer.from([1]),
+    encodeUvarint(count),
+    ...records,
+  ]);
+}
 
+function buildRwfp5Tables(platform, source, games) {
   const stringValues = [];
   for (const game of games) {
     stringValues.push(
       game.name,
-      game.platform,
       game.gameId,
       game.region,
       game.language,
@@ -1419,22 +1529,22 @@ function buildPackTables(games) {
       game.parent,
       ...(game.dumpTags ?? []),
     );
-    for (const component of game.components) {
+    for (const component of game.components)
       stringValues.push(component.filename, component.hashScope ?? "full_file");
-    }
   }
   const strings = buildStringTable(stringValues);
   const stringId = (value) => {
-    if (value === undefined) return ABSENT_U32;
-    const id = strings.ids.get(String(value));
-    if (id === undefined) throw new Error(`RWFP4 string was not interned: ${String(value)}`);
-    return id;
+    if (value === undefined) return undefined;
+    return strings.ids.get(String(value));
   };
-
   const hashByKey = new Map();
   const hashes = [];
-  const componentHashKeys = [];
+  const componentHashes = [];
   for (const game of games) {
+    if (game.platform !== platform)
+      throw new Error(`RWFP5 game platform does not match pack: ${game.name}`);
+    if (game.source !== source)
+      throw new Error(`RWFP5 game source does not match pack: ${game.name}`);
     for (const component of game.components) {
       const scope = component.hashScope ?? "full_file";
       const key = JSON.stringify([
@@ -1449,304 +1559,220 @@ function buildPackTables(games) {
         hashByKey.set(key, hashes.length);
         hashes.push({ ...component, scope, key });
       }
-      componentHashKeys.push(key);
+      componentHashes.push(key);
     }
   }
-  const compareBuffers = (left, right) => Buffer.compare(left, right);
-  hashes.sort((left, right) => {
-    const size = BigInt(left.size) - BigInt(right.size);
-    if (size !== 0n) return size < 0n ? -1 : 1;
-    const scope = compareBuffers(Buffer.from(left.scope), Buffer.from(right.scope));
-    if (scope) return scope;
-    return compareBuffers(Buffer.from(left.key), Buffer.from(right.key));
+  hashes.sort((a, b) => {
+    const sizeA = BigInt(a.size);
+    const sizeB = BigInt(b.size);
+    if (sizeA !== sizeB) return sizeA < sizeB ? -1 : 1;
+    return (
+      Buffer.compare(Buffer.from(a.scope), Buffer.from(b.scope)) ||
+      Buffer.compare(Buffer.from(a.key), Buffer.from(b.key))
+    );
   });
   hashByKey.clear();
   hashes.forEach((hash, index) => hashByKey.set(hash.key, index));
-
-  const hashesHeader = tableHeader("RWH3", 92, hashes.length);
-  const hashesRecords = Buffer.alloc(hashes.length * 92);
-  hashes.forEach((hash, index) => {
-    let cursor = index * 92;
-    hashesRecords.writeBigUInt64LE(BigInt(hash.size), cursor);
-    cursor += 8;
-    hashesRecords.writeUInt32LE(stringId(hash.scope), cursor);
-    cursor += 4;
-    let mask = 0;
-    if (hash.crc32) mask |= 1;
-    if (hash.md5) mask |= 2;
-    if (hash.sha1) mask |= 4;
-    if (hash.sha256) mask |= 8;
-    hashesRecords.writeUInt8(mask, cursor);
-    cursor += 4;
-    for (const [field, width] of [
-      ["crc32", 4],
-      ["md5", 16],
-      ["sha1", 20],
-      ["sha256", 32],
-    ]) {
-      if (hash[field]) Buffer.from(hash[field], "hex").copy(hashesRecords, cursor);
-      cursor += width;
-    }
-  });
-
-  const provenanceSetTable = internOrderedSets(provenanceSets);
-  const tagValueSets = games.map((game) => (game.dumpTags ?? []).map(stringId));
-  const tagSetTable = internOrderedSets(tagValueSets);
-  const setsHeader = tableHeader("RWSX", 0, provenanceSetTable.sets.length, 12);
-  setsHeader.writeUInt32LE(provenanceSetTable.flattened.length, 12);
-  setsHeader.writeUInt32LE(tagSetTable.sets.length, 16);
-  setsHeader.writeUInt32LE(tagSetTable.flattened.length, 20);
-  const u32s = (values) => {
-    const buffer = Buffer.alloc(values.length * 4);
-    values.forEach((value, index) => buffer.writeUInt32LE(value, index * 4));
-    return buffer;
-  };
-  const setsBytes = Buffer.concat([
-    setsHeader,
-    u32s(provenanceSetTable.offsets),
-    u32s(provenanceSetTable.flattened),
-    u32s(tagSetTable.offsets),
-    u32s(tagSetTable.flattened),
-  ]);
-
-  const components = [];
-  const gameRanges = [];
-  let flatIndex = 0;
-  games.forEach((game) => {
-    const first = components.length;
-    game.components.forEach((component) => {
-      components.push({ component, hashId: hashByKey.get(componentHashKeys[flatIndex]) });
-      flatIndex += 1;
-    });
-    gameRanges.push({ count: components.length - first, first });
-  });
-  const componentsHeader = tableHeader("RWC3", 28, components.length);
-  const componentRecords = Buffer.alloc(components.length * 28);
-  components.forEach(({ component, hashId }, index) => {
-    const cursor = index * 28;
-    componentRecords.writeUInt32LE(hashId, cursor);
-    componentRecords.writeUInt32LE(stringId(component.filename), cursor + 4);
-    componentRecords.writeUInt32LE(component.ordinal, cursor + 8);
-    componentRecords.writeUInt32LE(component.track ?? ABSENT_U32, cursor + 12);
-    componentRecords.writeUInt32LE(component.session ?? ABSENT_U32, cursor + 16);
-    componentRecords.writeUInt8(ROLE_CODES[component.role ?? "primary_payload"], cursor + 20);
-    componentRecords.writeUInt8(
-      (component.required === false ? 0 : 1) | (component.discriminating ? 2 : 0),
-      cursor + 21,
+  const hashRows = [];
+  let priorSize = 0n;
+  for (const hash of hashes) {
+    const size = BigInt(hash.size);
+    const scope =
+      hash.scope === "full_file"
+        ? [0]
+        : hash.scope === "track_file"
+          ? [1]
+          : [255, encodeUvarint(stringId(hash.scope))];
+    const mask =
+      (hash.crc32 ? 1 : 0) | (hash.md5 ? 2 : 0) | (hash.sha1 ? 4 : 0) | (hash.sha256 ? 8 : 0);
+    const values = [];
+    for (const field of ["crc32", "md5", "sha1", "sha256"])
+      if (hash[field]) values.push(Buffer.from(hash[field], "hex"));
+    hashRows.push(
+      Buffer.concat([
+        encodeUvarint(size - priorSize),
+        Buffer.concat(scope.map((v) => (Buffer.isBuffer(v) ? v : Buffer.from([v])))),
+        Buffer.from([mask]),
+        ...values,
+      ]),
     );
-  });
-
-  const gamesHeader = tableHeader("RWG3", 52, games.length);
-  const gameRecords = Buffer.alloc(games.length * 52);
-  games.forEach((game, index) => {
-    const cursor = index * 52;
-    [
-      game.name,
-      game.platform,
-      game.gameId,
-      game.region,
-      game.language,
-      game.revision,
-      game.parent,
-    ].forEach((value, field) => gameRecords.writeUInt32LE(stringId(value), cursor + field * 4));
-    gameRecords.writeUInt32LE(gameRanges[index].first, cursor + 28);
-    gameRecords.writeUInt32LE(gameRanges[index].count, cursor + 32);
-    gameRecords.writeUInt32LE(provenanceSetTable.mapped[index], cursor + 36);
-    gameRecords.writeUInt32LE(tagSetTable.mapped[index], cursor + 40);
-    gameRecords.writeUInt32LE(game.discNumber ?? ABSENT_U32, cursor + 44);
-    gameRecords.writeUInt8(SOURCE_CODES[game.source], cursor + 48);
-    gameRecords.writeUInt8(UPSTREAM_CODES[game.upstreamSource ?? "unknown"], cursor + 49);
-    gameRecords.writeUInt8(game.legacyVariant ? 1 : 0, cursor + 50);
-  });
-
-  const owners = Array.from({ length: hashes.length }, () => []);
-  components.forEach(({ hashId }, componentId) => owners[hashId].push(componentId));
-  const ownerOffsets = [0];
-  const ownerValues = [];
-  for (const values of owners) {
-    ownerValues.push(...values);
-    ownerOffsets.push(ownerValues.length);
+    priorSize = size;
   }
-  const ownersHeader = tableHeader("RWO3", 0, hashes.length, 4);
-  ownersHeader.writeUInt32LE(ownerValues.length, 12);
-  const ownersBytes = Buffer.concat([ownersHeader, u32s(ownerOffsets), u32s(ownerValues)]);
-
+  const components = [];
+  games.forEach((game) =>
+    game.components.forEach((component) =>
+      components.push({ component, hashId: hashByKey.get(componentHashes[components.length]) }),
+    ),
+  );
+  const componentRows = components.map(({ component, hashId }) => {
+    let presence = 0;
+    const values = [encodeUvarint(hashId)];
+    if (component.filename !== undefined) {
+      presence |= 1;
+      values.push(encodeUvarint(stringId(component.filename)));
+    }
+    if (component.track !== undefined) {
+      presence |= 2;
+      values.push(encodeUvarint(component.track));
+    }
+    if (component.session !== undefined) {
+      presence |= 4;
+      values.push(encodeUvarint(component.session));
+    }
+    return Buffer.concat([
+      values[0],
+      Buffer.from([presence]),
+      ...values.slice(1),
+      Buffer.from([
+        ROLE_CODES[component.role ?? "primary_payload"],
+        (component.required === false ? 0 : 1) | (component.discriminating ? 2 : 0),
+      ]),
+    ]);
+  });
+  const provenance = [];
+  const provenanceIds = new Map();
+  const intern = (value, table, ids) => {
+    const key = JSON.stringify(value);
+    let id = ids.get(key);
+    if (id === undefined) {
+      id = table.length;
+      ids.set(key, id);
+      table.push(value);
+    }
+    return id;
+  };
+  const provenanceSets = games.map((game) =>
+    (game.provenance ?? []).map((value) => intern(value, provenance, provenanceIds)),
+  );
+  const tagSets = games.map((game) => (game.dumpTags ?? []).map(stringId));
+  const internSets = (sets) => {
+    const unique = [[]];
+    const ids = new Map([["[]", 0]]);
+    const mapped = sets.map((set) => {
+      const key = JSON.stringify(set);
+      if (!ids.has(key)) ids.set(key, unique.push(set) - 1);
+      return ids.get(key);
+    });
+    return { unique, mapped };
+  };
+  const pSets = internSets(provenanceSets);
+  const tSets = internSets(tagSets);
+  const gameRows = games.map((game, index) => {
+    let presence = 0;
+    const values = [encodeUvarint(stringId(game.name))];
+    const trailing = [];
+    const optional = [
+      ["gameId", 0],
+      ["region", 1],
+      ["language", 2],
+      ["revision", 3],
+      ["parent", 4],
+    ];
+    optional.forEach(([field, bit]) => {
+      if (game[field] !== undefined) {
+        presence |= 1 << bit;
+        values.push(encodeUvarint(stringId(game[field])));
+      }
+    });
+    if (game.discNumber !== undefined) {
+      presence |= 1 << 5;
+      trailing.push(encodeUvarint(game.discNumber));
+    }
+    const upstream = game.upstreamSource ?? "unknown";
+    if (upstream !== "unknown") {
+      presence |= 1 << 6;
+      trailing.push(encodeUvarint(UPSTREAM_CODES[upstream]));
+    }
+    if (game.legacyVariant) presence |= 1 << 7;
+    values.push(
+      encodeUvarint(game.components.length),
+      encodeUvarint(pSets.mapped[index]),
+      encodeUvarint(tSets.mapped[index]),
+      ...trailing,
+    );
+    return Buffer.concat([values[0], Buffer.from([presence]), ...values.slice(1)]);
+  });
+  const ownerRows = hashes.map((_, hashId) => {
+    const owners = [];
+    components.forEach(({ hashId: id }, componentId) => {
+      if (id === hashId) owners.push(componentId);
+    });
+    let prior = 0;
+    return Buffer.concat([
+      encodeUvarint(owners.length),
+      ...owners.map((id) => {
+        const delta = id - prior;
+        prior = id;
+        return encodeUvarint(delta);
+      }),
+    ]);
+  });
   const routeIds = hashes
     .map((hash, id) => ({ hash, id }))
     .filter(
       ({ hash, id }) =>
         hash.crc32 &&
         hash.size > 0 &&
-        owners[id].some((componentId) => components[componentId].component.discriminating),
+        components.some(
+          (component) => component.hashId === id && component.component.discriminating,
+        ),
     )
-    .sort((left, right) => {
-      const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-      return (
-        compare(left.hash.crc32, right.hash.crc32) ||
-        Number(left.hash.size) - Number(right.hash.size) ||
-        compare(left.hash.scope, right.hash.scope) ||
-        left.id - right.id
-      );
-    })
+    .sort((a, b) =>
+      a.hash.crc32 < b.hash.crc32
+        ? -1
+        : a.hash.crc32 > b.hash.crc32
+          ? 1
+          : Number(a.hash.size) - Number(b.hash.size) ||
+            Buffer.compare(Buffer.from(a.hash.scope), Buffer.from(b.hash.scope)) ||
+            a.id - b.id,
+    )
     .map(({ id }) => id);
-  const routesBytes = Buffer.concat([tableHeader("RWR3", 4, routeIds.length), u32s(routeIds)]);
-
+  const setRows = (sets) =>
+    sets.unique.flatMap((set) => [encodeUvarint(set.length), ...set.map(encodeUvarint)]);
   return {
     componentCount: components.length,
-    members: [
-      { name: "strings.bin", bytes: strings.bytes },
-      { name: "hashes.bin", bytes: Buffer.concat([hashesHeader, hashesRecords]) },
-      { name: "components.bin", bytes: Buffer.concat([componentsHeader, componentRecords]) },
-      { name: "games.bin", bytes: Buffer.concat([gamesHeader, gameRecords]) },
-      { name: "owners.bin", bytes: ownersBytes },
-      { name: "routes.bin", bytes: routesBytes },
-      { name: "sets.bin", bytes: setsBytes },
-    ],
+    hashCount: hashes.length,
     provenance,
     routedKeys: routeIds.length,
-  };
-}
-
-function encodeUvarint(value) {
-  let remaining = BigInt(value);
-  if (remaining < 0n) throw new Error("RWFP4 variable integer cannot be negative");
-  const bytes = [];
-  do {
-    let byte = Number(remaining & 0x7fn);
-    remaining >>= 7n;
-    if (remaining) byte |= 0x80;
-    bytes.push(byte);
-  } while (remaining);
-  return Buffer.from(bytes);
-}
-
-const encodeOptionalId = (value) => encodeUvarint(value === ABSENT_U32 ? 0 : value + 1);
-
-function readPackStrings(bytes) {
-  const count = bytes.readUInt32LE(8);
-  const dataStart = 16 + (count + 1) * 4;
-  return Array.from({ length: count }, (_, index) => {
-    const start = bytes.readUInt32LE(16 + index * 4);
-    const end = bytes.readUInt32LE(20 + index * 4);
-    return bytes.subarray(dataStart + start, dataStart + end);
-  });
-}
-
-function variableTable(magic, count, records) {
-  return Buffer.concat([Buffer.from(magic, "ascii"), Buffer.from([1]), encodeUvarint(count), ...records]);
-}
-
-function buildRwfp4Tables(games) {
-  const fixedTables = buildPackTables(games);
-  const members = new Map(fixedTables.members.map((member) => [member.name, member.bytes]));
-  const strings = readPackStrings(members.get("strings.bin"));
-  const stringRecords = strings.flatMap((value) => [encodeUvarint(value.length), value]);
-  const stringsBytes = variableTable("RWS4", strings.length, stringRecords);
-
-  const fixedHashes = members.get("hashes.bin");
-  const hashCount = fixedHashes.readUInt32LE(8);
-  const hashRows = [];
-  const hashOffsets = Buffer.alloc((hashCount + 1) * 4);
-  let hashCursor = 0;
-  for (let index = 0; index < hashCount; index += 1) {
-    const row = fixedHashes.subarray(12 + index * 92, 12 + (index + 1) * 92);
-    const scopeId = row.readUInt32LE(8);
-    const scope = strings[scopeId]?.toString("utf8");
-    const scopeBytes =
-      scope === "full_file"
-        ? Buffer.from([0])
-        : scope === "track_file"
-          ? Buffer.from([1])
-          : Buffer.concat([Buffer.from([255]), encodeUvarint(scopeId)]);
-    const mask = row.readUInt8(12);
-    const values = [];
-    for (const [bit, start, width] of [
-      [1, 16, 4],
-      [2, 20, 16],
-      [4, 36, 20],
-      [8, 56, 32],
-    ]) {
-      if (mask & bit) values.push(row.subarray(start, start + width));
-    }
-    const compact = Buffer.concat([
-      encodeUvarint(row.readBigUInt64LE(0)),
-      scopeBytes,
-      Buffer.from([mask]),
-      ...values,
-    ]);
-    hashOffsets.writeUInt32LE(hashCursor, index * 4);
-    hashRows.push(compact);
-    hashCursor += compact.length;
-  }
-  hashOffsets.writeUInt32LE(hashCursor, hashCount * 4);
-  const hashesBytes = variableTable("RWH4", hashCount, [hashOffsets, ...hashRows]);
-
-  const fixedComponents = members.get("components.bin");
-  const componentCount = fixedComponents.readUInt32LE(8);
-  const componentRows = [];
-  for (let index = 0; index < componentCount; index += 1) {
-    const row = fixedComponents.subarray(12 + index * 28, 12 + (index + 1) * 28);
-    componentRows.push(
-      Buffer.concat([
-        encodeUvarint(row.readUInt32LE(0)),
-        encodeOptionalId(row.readUInt32LE(4)),
-        encodeUvarint(row.readUInt32LE(8)),
-        encodeOptionalId(row.readUInt32LE(12)),
-        encodeOptionalId(row.readUInt32LE(16)),
-        row.subarray(20, 22),
-      ]),
-    );
-  }
-  const componentsBytes = variableTable("RWC4", componentCount, componentRows);
-
-  const fixedGames = members.get("games.bin");
-  const gameCount = fixedGames.readUInt32LE(8);
-  const gameRows = [];
-  for (let index = 0; index < gameCount; index += 1) {
-    const row = fixedGames.subarray(12 + index * 52, 12 + (index + 1) * 52);
-    gameRows.push(
-      Buffer.concat([
-        encodeUvarint(row.readUInt32LE(0)),
-        encodeUvarint(row.readUInt32LE(4)),
-        ...[8, 12, 16, 20, 24].map((offset) => encodeOptionalId(row.readUInt32LE(offset))),
-        encodeUvarint(row.readUInt32LE(32)),
-        encodeUvarint(row.readUInt32LE(36)),
-        encodeUvarint(row.readUInt32LE(40)),
-        encodeOptionalId(row.readUInt32LE(44)),
-        row.subarray(48, 51),
-      ]),
-    );
-  }
-  const gamesBytes = variableTable("RWG4", gameCount, gameRows);
-
-  const convertU32Tail = (name, magic, start = 8) => {
-    const source = members.get(name);
-    const records = [];
-    for (let offset = start; offset < source.length; offset += 4) {
-      records.push(encodeUvarint(source.readUInt32LE(offset)));
-    }
-    return Buffer.concat([Buffer.from(magic, "ascii"), Buffer.from([1]), ...records]);
-  };
-  return {
-    ...fixedTables,
-    hashCount,
     members: [
-      { name: "strings.bin", bytes: stringsBytes },
-      { name: "hashes.bin", bytes: hashesBytes },
-      { name: "components.bin", bytes: componentsBytes },
-      { name: "games.bin", bytes: gamesBytes },
-      { name: "owners.bin", bytes: convertU32Tail("owners.bin", "RWO4") },
-      { name: "routes.bin", bytes: convertU32Tail("routes.bin", "RWR4") },
-      { name: "sets.bin", bytes: convertU32Tail("sets.bin", "RWX4") },
+      {
+        name: "strings.bin",
+        bytes: variableTable(
+          "RWS5",
+          strings.values.length,
+          strings.values.map((value) =>
+            Buffer.concat([encodeUvarint(Buffer.byteLength(value)), Buffer.from(value)]),
+          ),
+        ),
+      },
+      { name: "hashes.bin", bytes: variableTable("RWH5", hashes.length, hashRows) },
+      { name: "components.bin", bytes: variableTable("RWC5", components.length, componentRows) },
+      { name: "games.bin", bytes: variableTable("RWG5", games.length, gameRows) },
+      { name: "owners.bin", bytes: variableTable("RWO5", hashes.length, ownerRows) },
+      {
+        name: "routes.bin",
+        bytes: variableTable("RWR5", routeIds.length, routeIds.map(encodeUvarint)),
+      },
+      {
+        name: "sets.bin",
+        bytes: Buffer.concat([
+          Buffer.from("RWX5", "ascii"),
+          Buffer.from([1]),
+          encodeUvarint(pSets.unique.length),
+          ...setRows(pSets),
+          encodeUvarint(tSets.unique.length),
+          ...setRows(tSets),
+        ]),
+      },
     ],
   };
 }
 
-export function buildSystemPackV4(platform, games, source = "libretro") {
+export function buildSystemPackV5(platform, games, source = "libretro") {
   const sharedComponents = markSharedComponents(games);
-  const tables = buildRwfp4Tables(games);
+  const tables = buildRwfp5Tables(platform, source, games);
   const manifest = {
-    format: PACK_FORMAT,
+    format: INDEX_FORMAT,
     platform,
     source,
     generationDate: IDENTIFY_GENERATION_DATE,
@@ -1761,10 +1787,13 @@ export function buildSystemPackV4(platform, games, source = "libretro") {
       sharedComponents,
     },
   };
-  const pack = writePack([
-    ...tables.members,
-    { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
-  ]);
+  const pack = writePack(
+    [
+      ...tables.members,
+      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
+    ],
+    PACK_MAGIC_V5,
+  );
   return {
     componentCount: tables.componentCount,
     pack,
@@ -1813,7 +1842,12 @@ async function readPlatformGames(platform, options, paths) {
     fallback.push(...parsed.games);
     openGoodHeaders.push({ datFile: fallbackFile, ...parsed.header });
   }
-  const games = sortGames(mergeLegacyFallbackGames(libretro, fallback));
+  const source = sourcePaths.length ? "libretro" : "opengood";
+  const games = sortGames(mergeLegacyFallbackGames(libretro, fallback)).map((game) => ({
+    ...game,
+    platform,
+    source,
+  }));
   return {
     slug: slugifyPlatform(platform),
     games: options.maxObjects === undefined ? games : games.slice(0, options.maxObjects),
@@ -1837,14 +1871,14 @@ async function readPlatformGames(platform, options, paths) {
         url: `${OPENGOOD_REPOSITORY}/blob/${OPENGOOD_REVISION}/dats/${encodeURIComponent(header.datFile)}`,
       })),
     },
-    source: sourcePaths.length ? "libretro" : "opengood",
+    source,
   };
 }
 
-async function writeSystemPackV4(platform, gamesInfo, options) {
-  console.error(`[identify] ${platform}: building RWFP4 pack`);
+async function writeSystemPackV5(platform, gamesInfo, options) {
+  console.error(`[identify] ${platform}: building RWFP5 pack`);
   const games = gamesInfo.games;
-  const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV4(
+  const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV5(
     platform,
     games,
     gamesInfo.source,
@@ -1857,7 +1891,7 @@ async function writeSystemPackV4(platform, gamesInfo, options) {
     platform,
     slug: gamesInfo.slug,
     source: gamesInfo.source,
-    packFormat: "RWFP4",
+    packFormat: "RWFP5",
     file: fileName,
     rawBytes: pack.length,
     sha256: crypto.createHash("sha256").update(pack).digest("hex"),
@@ -1869,7 +1903,10 @@ async function writeSystemPackV4(platform, gamesInfo, options) {
     },
   };
   if (options.brotli) {
-    const compressed = await brotliCompress(pack, options.brotliQuality);
+    const compressed = brotliCompressBuffer(pack, {
+      parameterProfile: "default",
+      quality: options.brotliQuality,
+    });
     await writeFile(`${outPath}.br`, compressed);
     system.brotliFile = `${fileName}.br`;
     system.brotliBytes = compressed.length;
@@ -1933,7 +1970,7 @@ export function buildCatalogPlatforms(systems) {
       source: system.source,
       mediaProfiles: [mediaProfileFor(system.platform, system.source)],
       packSlug: system.slug,
-      packFormat: "RWFP4",
+      packFormat: system.packFormat ?? "RWFP5",
       canonicalizationVersion: 1,
     };
     if (system.sha256) entry.packSha256 = system.sha256;
@@ -1991,7 +2028,7 @@ export async function main(argv = process.argv.slice(2)) {
   const systems = [];
   for (const platform of selected) {
     const games = await readPlatformGames(platform, options, paths);
-    systems.push(await writeSystemPackV4(platform, games, options));
+    systems.push(await writeSystemPackV5(platform, games, options));
   }
 
   // The catalog always lists every configured platform. The pack itself may be
@@ -2010,7 +2047,7 @@ export async function main(argv = process.argv.slice(2)) {
         platform,
         slug,
         source: LIBRETRO_PLATFORM_PATHS[platform] ? "libretro" : "opengood",
-        packFormat: "RWFP4",
+        packFormat: "RWFP5",
       },
     );
   }

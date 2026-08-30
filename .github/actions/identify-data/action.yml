@@ -16,7 +16,7 @@ runs:
       uses: actions/cache@v6
       with:
         path: crates/rom-weaver-cli/data/identify
-        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs') }}
+        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs') }}
         enableCrossOsArchive: true
 
     - name: Prepare ROM identify data

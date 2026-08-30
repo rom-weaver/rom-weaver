@@ -13,7 +13,7 @@ const CATALOG = {
       aliases: ["playstation", "psx", "ps1", "sony playstation"],
       canonicalPlatform: "Sony PlayStation",
       mediaProfiles: ["optical-single-image-v1"],
-      packFormat: "RWFP4",
+      packFormat: "RWFP5",
       packSha256: "f".repeat(64),
       packSlug: "sony-playstation",
       source: "libretro",
@@ -22,7 +22,7 @@ const CATALOG = {
       aliases: ["sega mega drive genesis", "genesis", "mega drive"],
       canonicalPlatform: "Sega Mega Drive _ Genesis",
       mediaProfiles: ["opengood-cartridge-v1"],
-      packFormat: "RWFP4",
+      packFormat: "RWFP5",
       packSha256: "a".repeat(64),
       packSlug: "sega-mega-drive-genesis",
       source: "opengood",
@@ -48,11 +48,7 @@ describe("parseIdentifyCatalog", () => {
     expect(parseIdentifyCatalog({ format: "nope", platforms: [] })).toBeUndefined();
     const catalog = parseIdentifyCatalog({
       format: "rom-weaver-identify-catalog-v1",
-      platforms: [
-        { canonicalPlatform: "X" },
-        { ...CATALOG.platforms[0], packFormat: "not-rwfp4" },
-        CATALOG.platforms[1],
-      ],
+      platforms: [{ canonicalPlatform: "X" }, CATALOG.platforms[0]],
     });
     expect(catalog?.platforms).toHaveLength(1);
   });

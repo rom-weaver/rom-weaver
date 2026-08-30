@@ -164,7 +164,12 @@ export const buildIdentifyReleaseData = (options) => {
       treeRoot,
       "share",
     ]);
-    brotliCompressFile({ inputPath: temporaryTar, outputPath: archivePath, quality: 11 });
+    brotliCompressFile({
+      inputPath: temporaryTar,
+      outputPath: archivePath,
+      parameterProfile: "default",
+      quality: 11,
+    });
     rmSync(temporaryTar);
     return {
       archive: archivePath,
