@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
+import { brotliCompressSync } from "node:zlib";
 import { join } from "node:path";
 import test from "node:test";
 import { buildIdentifyReleaseData } from "./build-identify-release-data.mjs";
@@ -13,12 +14,13 @@ const fixture = ({ grouped = false } = {}) => {
   const input = join(root, "input");
   mkdirSync(input);
   const packs = [
-    ["zeta", Buffer.from("RWFP4 zeta fixture")],
-    ["alpha", Buffer.from("RWFP4 alpha fixture")],
+    ["zeta", Buffer.from("RWFP5 zeta fixture")],
+    ["alpha", Buffer.from("RWFP5 alpha fixture")],
   ];
   const systems = packs.map(([slug, bytes]) => {
     const file = `${slug}.pack`;
     writeFileSync(join(input, file), bytes);
+    writeFileSync(join(input, `${file}.br`), brotliCompressSync(bytes));
     return {
       file,
       platform: slug,
@@ -50,15 +52,15 @@ const fixture = ({ grouped = false } = {}) => {
   return { input, root };
 };
 
-test("builds deterministic Zstandard packs and a stable release archive", () => {
+test("builds deterministic Brotli packs and a stable release archive", () => {
   const { input, root } = fixture();
   const first = buildIdentifyReleaseData({
-    archive: join(root, "first.tar.zst"),
+    archive: join(root, "first.tar.br"),
     input,
     out: join(root, "first"),
   });
   const second = buildIdentifyReleaseData({
-    archive: join(root, "second.tar.zst"),
+    archive: join(root, "second.tar.br"),
     input,
     out: join(root, "second"),
   });
@@ -70,16 +72,16 @@ test("builds deterministic Zstandard packs and a stable release archive", () => 
     ["alpha", "zeta"],
   );
   for (const system of index.systems) {
-    assert.equal(system.zstdFile, `packs/${system.slug}.pack.zst`);
-    const compressed = readFileSync(join(first.dataDir, system.zstdFile));
-    assert.equal(system.zstdBytes, compressed.length);
-    assert.equal(system.zstdSha256, sha256(compressed));
+    assert.equal(system.brotliFile, `packs/${system.slug}.pack.br`);
+    const compressed = readFileSync(join(first.dataDir, system.brotliFile));
+    assert.equal(system.brotliBytes, compressed.length);
+    assert.equal(system.brotliSha256, sha256(compressed));
   }
 });
 
 test("creates a missing release archive directory", () => {
   const { input, root } = fixture();
-  const archive = join(root, "target", "rom-weaver-identify-data.tar.zst");
+  const archive = join(root, "target", "rom-weaver-identify-data.tar.br");
   const result = buildIdentifyReleaseData({
     archive,
     input,
@@ -92,7 +94,7 @@ test("creates a missing release archive directory", () => {
 test("separates default packs from complete optional group archives", () => {
   const { input, root } = fixture({ grouped: true });
   const result = buildIdentifyReleaseData({
-    archive: join(root, "rom-weaver-identify-data.tar.zst"),
+    archive: join(root, "rom-weaver-identify-data.tar.br"),
     input,
     out: join(root, "release"),
   });
@@ -107,8 +109,14 @@ test("separates default packs from complete optional group archives", () => {
   const optionalIndex = JSON.parse(
     readFileSync(join(result.optional[0].dataDir, "index.json"), "utf8"),
   );
-  assert.deepEqual(optionalIndex.systems.map(({ slug }) => slug), ["zeta"]);
-  assert.deepEqual(optionalIndex.groups.map(({ id }) => id), ["optional-computers"]);
+  assert.deepEqual(
+    optionalIndex.systems.map(({ slug }) => slug),
+    ["zeta"],
+  );
+  assert.deepEqual(
+    optionalIndex.groups.map(({ id }) => id),
+    ["optional-computers"],
+  );
 });
 
 test("rejects a raw pack that does not match its index integrity fields", () => {
@@ -117,10 +125,24 @@ test("rejects a raw pack that does not match its index integrity fields", () => 
   assert.throws(
     () =>
       buildIdentifyReleaseData({
-        archive: join(root, "data.tar.zst"),
+        archive: join(root, "data.tar.br"),
         input,
         out: join(root, "out"),
       }),
     /does not match index\.json/u,
+  );
+});
+
+test("rejects a Brotli sidecar that does not match its raw pack", () => {
+  const { input, root } = fixture();
+  writeFileSync(join(input, "alpha.pack.br"), brotliCompressSync(Buffer.from("tampered")));
+  assert.throws(
+    () =>
+      buildIdentifyReleaseData({
+        archive: join(root, "data.tar.br"),
+        input,
+        out: join(root, "out"),
+      }),
+    /does not match alpha\.pack/u,
   );
 });

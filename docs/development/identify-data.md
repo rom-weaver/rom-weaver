@@ -1,13 +1,13 @@
 # ROM identify data
 
-ROMWeaver builds deterministic RWFP4 packs from pinned Libretro and OpenGood data. Native packages use Zstandard assets. The webapp uses Brotli assets.
+ROMWeaver builds deterministic RWFP5 packs from pinned Libretro and OpenGood data. Native packages and the webapp use the same Brotli assets.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Build-time data](#build-time-data)
 - [Source policy](#source-policy)
-- [RWFP4 records](#rwfp4-records)
+- [RWFP5 records](#rwfp5-records)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Determinism and provenance](#determinism-and-provenance)
@@ -41,11 +41,13 @@ The deduplication key contains the hash algorithm, normalized hash, file size, a
 
 OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
-## RWFP4 records
+## RWFP5 records
 
-RWFP4 is the only supported pack format.
+Every built-in and imported pack uses RWFP5. The reader accepts only RWFP5.
 
-RWFP4 stores strings, hashes, components, games, owners, routes, and sets in binary tables. Components and routes refer to one shared hash record. Provenance exists once per pack and each game refers to a provenance set.
+RWFP5 stores strings, hashes, components, games, owners, routes, and sets in variable-width binary tables. Hash sizes and sorted owner IDs use deltas. Count-prefixed lists replace cumulative offsets. Components and routes refer to one shared hash record.
+
+The pack manifest owns the platform and source. Game records do not repeat them. Component ordinals are their positions in each game and are reconstructed during decoding.
 
 `manifest.json` stores the source, license, commit, URL, and generation metadata.
 
@@ -61,7 +63,7 @@ Identify requests use the local caches only. A cache miss returns a local error.
 
 ## Native installation
 
-`scripts/build-identify-release-data.mjs` writes each pack as Zstandard. It creates one default archive and one archive for each optional group.
+`scripts/build-identify-release-data.mjs` copies each verified Brotli pack into the native release tree. It wraps that tree in a Brotli-compressed tar archive and creates one default archive plus one archive for each optional group.
 
 Release archives, npm platform packages, Homebrew, Scoop, and container images install the same static tree under `share/rom-weaver/identify/v1`. The CLI decompresses only the packs it reads.
 

@@ -23,21 +23,22 @@ const checksums = Object.fromEntries(
     return [architecture, { asset, checksum }];
   }),
 );
-const identifyAsset = "rom-weaver-identify-data.tar.zst";
+const identifyAsset = "rom-weaver-identify-data.tar.br";
 const identifyChecksum = readFileSync(
   resolve(checksumDirectory, `${identifyAsset}.sha256`),
   "utf8",
 ).match(/^[a-f0-9]{64}/)?.[0];
 if (!identifyChecksum) throw new Error(`invalid checksum for ${identifyAsset}`);
 
-// Scoop extracts the tar.gz itself (fetching 7-Zip on demand), and the
-// archive already holds a stable `rom-weaver.exe`, so no rename fragment is
-// needed on the URL.
+// Scoop extracts the binary tar.gz itself (fetching 7-Zip on demand). The
+// Brotli data asset is decoded by the installer script because Scoop does not
+// extract raw `.br` files.
 const manifest = {
   version,
   description: "Local-first offline toolkit for ROMs and ROM hack patches",
   homepage: "https://rom-weaver.com",
   license: "AGPL-3.0-or-later",
+  depends: ["brotli"],
   architecture: Object.fromEntries(
     Object.entries(checksums).map(([architecture, { asset, checksum }]) => [
       architecture,
@@ -51,6 +52,17 @@ const manifest = {
     ]),
   ),
   bin: "rom-weaver.exe",
+  installer: {
+    script: [
+      `$identifyArchive = Join-Path $dir "${identifyAsset}"`,
+      '$identifyTar = Join-Path $dir "rom-weaver-identify-data.tar"',
+      "& brotli --decompress --force --output $identifyTar $identifyArchive",
+      'if ($LASTEXITCODE -ne 0) { throw "failed to decompress identify data" }',
+      "& tar --extract --file $identifyTar --directory $dir",
+      'if ($LASTEXITCODE -ne 0) { throw "failed to extract identify data" }',
+      "Remove-Item $identifyArchive, $identifyTar -Force",
+    ],
+  },
 };
 
 mkdirSync(dirname(output), { recursive: true });

@@ -25,10 +25,10 @@ const assetsChecksum = readFileSync(
 ).match(/^[a-f0-9]{64}/)?.[0];
 if (!assetsChecksum) throw new Error("invalid checksum for rom-weaver-cli-assets.tar.gz");
 const identifyChecksum = readFileSync(
-  resolve(checksumDirectory, "rom-weaver-identify-data.tar.zst.sha256"),
+  resolve(checksumDirectory, "rom-weaver-identify-data.tar.br.sha256"),
   "utf8",
 ).match(/^[a-f0-9]{64}/)?.[0];
-if (!identifyChecksum) throw new Error("invalid checksum for rom-weaver-identify-data.tar.zst");
+if (!identifyChecksum) throw new Error("invalid checksum for rom-weaver-identify-data.tar.br");
 
 const releaseUrl = `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}`;
 const source = `class RomWeaver < Formula
@@ -36,6 +36,7 @@ const source = `class RomWeaver < Formula
   homepage "https://rom-weaver.com"
   version "${version}"
   license "AGPL-3.0-or-later"
+  depends_on "brotli" => :build
 
   resource "cli-assets" do
     url "${releaseUrl}/rom-weaver-cli-assets.tar.gz"
@@ -43,7 +44,7 @@ const source = `class RomWeaver < Formula
   end
 
   resource "identify-data" do
-    url "${releaseUrl}/rom-weaver-identify-data.tar.zst"
+    url "${releaseUrl}/rom-weaver-identify-data.tar.br", using: :nounzip
     sha256 "${identifyChecksum}"
   end
 
@@ -78,6 +79,8 @@ const source = `class RomWeaver < Formula
       fish_completion.install "completions/rom-weaver.fish"
     end
     resource("identify-data").stage do
+      system "brotli", "--decompress", "--force", "--output", "identify-data.tar", "rom-weaver-identify-data.tar.br"
+      system "tar", "--extract", "--file", "identify-data.tar"
       share.install "share/rom-weaver"
     end
   end

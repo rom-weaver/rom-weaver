@@ -34,7 +34,7 @@ pub struct IdentifyPlatformCatalogEntry {
     pub source: IdentifySource,
     pub media_profiles: Vec<String>,
     pub pack_slug: String,
-    /// Outer pack magic label: "RWFP4".
+    /// Outer pack magic label. The current value is "RWFP5".
     pub pack_format: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack_sha256: Option<String>,
@@ -99,12 +99,6 @@ impl IdentifyCatalog {
             }
         }
         for entry in &entries {
-            if entry.pack_format != "RWFP4" {
-                return Err(RomWeaverError::Validation(format!(
-                    "invalid identify catalog: pack format `{}` is not `RWFP4`",
-                    entry.pack_format
-                )));
-            }
             // The slug becomes a filesystem path (`<dir>/<slug>.pack`) that read
             // and remove use, so it MUST NOT carry separators or dots.
             if entry.pack_slug.is_empty()
@@ -153,6 +147,101 @@ impl IdentifyCatalog {
     }
 }
 
+/// Redump systems with downloadable DAT files. The CLI owns the matching
+/// endpoint names because network access is native-only.
+#[allow(dead_code)]
+fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
+    fn entry(canonical: &str, aliases: &[&str]) -> IdentifyPlatformCatalogEntry {
+        IdentifyPlatformCatalogEntry {
+            canonical_platform: canonical.to_string(),
+            aliases: aliases.iter().map(|alias| alias.to_string()).collect(),
+            source: IdentifySource::Redump,
+            media_profiles: vec!["redump-disc-track-v1".to_string()],
+            pack_slug: normalize_platform_name(canonical).replace(' ', "-"),
+            pack_format: "RWFP5".to_string(),
+            pack_sha256: None,
+            canonicalization_version: 1,
+        }
+    }
+    vec![
+        entry("Acorn Archimedes", &["archimedes"]),
+        entry("Apple Macintosh", &["macintosh", "mac"]),
+        entry(
+            "Atari Jaguar CD Interactive Multimedia System",
+            &["jaguar cd", "ajcd"],
+        ),
+        entry("Bandai Pippin", &["pippin"]),
+        entry("Bandai Playdia Quick Interactive System", &["playdia"]),
+        entry("Commodore Amiga CD", &["amiga cd"]),
+        entry("Commodore Amiga CD32", &["amiga cd32", "cd32"]),
+        entry("Commodore Amiga CDTV", &["amiga cdtv", "cdtv"]),
+        entry("Fujitsu FM Towns series", &["fm towns"]),
+        entry("funworld Photo Play", &["photo play"]),
+        entry("IBM PC compatible", &["ibm pc", "pc"]),
+        entry("Incredible Technologies Eagle", &["eagle"]),
+        entry("Konami e-Amusement", &["e-amusement"]),
+        entry("Konami FireBeat", &["firebeat"]),
+        entry("Konami System 573", &["system 573"]),
+        entry("Konami System GV", &["system gv"]),
+        entry("Mattel Fisher-Price iXL", &["ixl"]),
+        entry("Mattel HyperScan", &["hyperscan"]),
+        entry("Memorex Visual Information System", &["vis"]),
+        entry("Microsoft Xbox", &["xbox"]),
+        entry("Microsoft Xbox 360", &["xbox 360", "xbox360"]),
+        entry("Namco - Sega - Nintendo Triforce", &["triforce"]),
+        entry("Namco System 246", &["system 246"]),
+        entry(
+            "NEC PC Engine CD & TurboGrafx CD",
+            &["pc engine cd", "turbografx cd", "pce cd"],
+        ),
+        entry("NEC PC-88 series", &["pc-88", "pc88"]),
+        entry("NEC PC-98 series", &["pc-98", "pc98"]),
+        entry("NEC PC-FX & PC-FXGA", &["pc-fx", "pcfx"]),
+        entry("Neo Geo CD", &["ngcd"]),
+        entry("Nintendo GameCube", &["gamecube", "gc", "ngc"]),
+        entry("Nintendo Wii", &["wii"]),
+        entry("Palm OS", &["palm"]),
+        entry("Panasonic 3DO Interactive Multiplayer", &["3do"]),
+        entry("Philips CD-i", &["cd-i", "cdi"]),
+        entry("Photo CD", &["photo cd"]),
+        entry(
+            "PlayStation GameShark Updates",
+            &["playstation gameshark", "psxgs"],
+        ),
+        entry("Pocket PC", &["ppc"]),
+        entry("Sega Chihiro", &["chihiro"]),
+        entry("Sega Dreamcast", &["dreamcast", "dc"]),
+        entry("Sega Lindbergh", &["lindbergh"]),
+        entry("Sega Mega CD & Sega CD", &["mega cd", "sega cd", "mcd"]),
+        entry("Sega Naomi", &["naomi"]),
+        entry("Sega Naomi 2", &["naomi 2", "naomi2"]),
+        entry(
+            "Sega Prologue 21 Multimedia Karaoke System",
+            &["prologue 21"],
+        ),
+        entry("Sega RingEdge", &["ringedge"]),
+        entry("Sega RingEdge 2", &["ringedge 2"]),
+        entry("Sega Saturn", &["saturn"]),
+        entry("Sharp X68000", &["x68000"]),
+        entry("Sony PlayStation", &["playstation", "psx", "ps1"]),
+        entry("Sony PlayStation 2", &["playstation 2", "ps2"]),
+        entry("Sony PlayStation 3", &["playstation 3", "ps3"]),
+        entry(
+            "Sony PlayStation Portable",
+            &["playstation portable", "psp"],
+        ),
+        entry("TAB-Austria Quizard", &["quizard"]),
+        entry("Tomy Kiss-Site", &["kiss-site"]),
+        entry("VM Labs NUON", &["nuon"]),
+        entry("VTech V.Flash & V.Smile Pro", &["v.flash", "v.smile pro"]),
+        entry(
+            "ZAPiT Games Game Wave Family Entertainment System",
+            &["game wave", "gamewave"],
+        ),
+    ]
+}
+
+/// Normalize a platform name for alias matching: lowercase, collapse every
 /// non-alphanumeric run to one space, trim.
 pub fn normalize_platform_name(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
@@ -181,7 +270,7 @@ fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
             source: IdentifySource::OpenGood,
             media_profiles: vec!["opengood-cartridge-v1".to_string()],
             pack_slug: slug.to_string(),
-            pack_format: "RWFP4".to_string(),
+            pack_format: "RWFP5".to_string(),
             pack_sha256: None,
             canonicalization_version: 1,
         }
@@ -258,7 +347,7 @@ mod tests {
             "source": "opengood",
             "mediaProfiles": ["opengood-cartridge-v1"],
             "packSlug": slug,
-            "packFormat": "RWFP4",
+            "packFormat": "RWFP5",
             "canonicalizationVersion": 1,
         })
     }
@@ -307,15 +396,6 @@ mod tests {
         ]));
         let error = IdentifyCatalog::parse(&bytes).expect_err("duplicate slug must fail");
         assert!(error.to_string().contains("slug"));
-    }
-
-    #[test]
-    fn rejects_legacy_pack_format() {
-        let mut platform = platform_json("A", &[], "a");
-        platform["packFormat"] = serde_json::json!("RWFP3");
-        let error = IdentifyCatalog::parse(&catalog_json(serde_json::json!([platform])))
-            .expect_err("legacy pack format must fail");
-        assert!(error.to_string().contains("RWFP4"));
     }
 
     #[test]

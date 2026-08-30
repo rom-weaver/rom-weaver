@@ -26,8 +26,8 @@ test("generates a formula from release checksums", () => {
       `${"e".repeat(64)}  rom-weaver-cli-assets.tar.gz\n`,
     );
     writeFileSync(
-      join(checksums, "rom-weaver-identify-data.tar.zst.sha256"),
-      `${"f".repeat(64)}  rom-weaver-identify-data.tar.zst\n`,
+      join(checksums, "rom-weaver-identify-data.tar.br.sha256"),
+      `${"f".repeat(64)}  rom-weaver-identify-data.tar.br\n`,
     );
 
     const output = join(directory, "Formula", "rom-weaver.rb");
@@ -49,8 +49,11 @@ test("generates a formula from release checksums", () => {
     assert.match(formula, new RegExp(`sha256 "${"d".repeat(64)}"`));
     assert.match(formula, /rom-weaver-cli-assets\.tar\.gz/);
     assert.match(formula, new RegExp(`sha256 "${"e".repeat(64)}"`));
-    assert.match(formula, /rom-weaver-identify-data\.tar\.zst/);
+    assert.match(formula, /rom-weaver-identify-data\.tar\.br/);
     assert.match(formula, new RegExp(`sha256 "${"f".repeat(64)}"`));
+    assert.match(formula, /depends_on "brotli" => :build/);
+    assert.match(formula, /using: :nounzip/);
+    assert.match(formula, /system "brotli"/);
     assert.match(formula, /share\.install "share\/rom-weaver"/);
     assert.match(formula, /bin\.install "rom-weaver"/);
     assert.match(formula, /bash_completion\.install/);

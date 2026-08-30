@@ -38,6 +38,7 @@ assert_cmd = "2.1.1"
 assert_fs = "1.1.3"
 base16ct = "1.0"
 blake3 = "1.8.2"
+brotli = "8.0.2"
 # Load-bearing for BDF byte-parity: upstream `qbsdiff` depends on `bzip2` with
 # default features, which pulls in the pure-Rust `libbz2-rs-sys` backend. Feature
 # unification means this pin is the only thing keeping `bzip2` on the C backend

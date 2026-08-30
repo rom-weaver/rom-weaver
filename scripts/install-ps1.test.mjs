@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { brotliCompressSync } from "node:zlib";
 import test from "node:test";
 
 const hasPowerShell = spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
@@ -24,10 +25,31 @@ const createIdentifyArchive = (directory) => {
   mkdirSync(data, { recursive: true });
   writeFileSync(join(data, "index.json"), "{}\n");
   const tarPath = join(directory, "identify-data.tar");
-  const archive = join(directory, "identify-data.tar.zst");
+  const archive = join(directory, "identify-data.tar.br");
   execFileSync("tar", ["-cf", tarPath, "-C", source, "share"]);
-  execFileSync("zstd", ["-q", "-f", tarPath, "-o", archive]);
+  writeFileSync(archive, brotliCompressSync(readFileSync(tarPath)));
   return archive;
+};
+
+const brotliStub = () => {
+  const nodePath = process.execPath.replaceAll("'", "''");
+  return `
+function brotli {
+  param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Arguments)
+  $output = $null
+  $input = $null
+  for ($i = 0; $i -lt $Arguments.Count; $i++) {
+    switch ($Arguments[$i]) {
+      '--output' { $output = $Arguments[++$i] }
+      '--decompress' { }
+      '--force' { }
+      default { $input = $Arguments[$i] }
+    }
+  }
+  & '${nodePath}' -e 'const fs=require("node:fs");const zlib=require("node:zlib");const [output,input]=process.argv.slice(1);fs.writeFileSync(output,zlib.brotliDecompressSync(fs.readFileSync(input)));' $output $input
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+`;
 };
 
 // Invoke-WebRequest is stubbed by declaring a function of the same name in the
@@ -52,7 +74,7 @@ function Invoke-WebRequest {
     } finally {
       $archive.Dispose()
     }
-  } elseif ($Uri -like '*identify-data.tar.zst') {
+  } elseif ($Uri -like '*identify-data.tar.br') {
     Copy-Item -LiteralPath '${identifyArchive}' -Destination $OutFile
   } elseif ($Uri -like '*.tar.gz') {
     $stage = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
@@ -64,7 +86,7 @@ function Invoke-WebRequest {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
 }
-& '${resolve("install.ps1")}'
+${brotliStub()}& '${resolve("install.ps1")}'
 `;
 
 test("installs the binary", { skip: hasPowerShell ? false : "pwsh not available" }, () => {
@@ -93,7 +115,7 @@ test("installs the binary", { skip: hasPowerShell ? false : "pwsh not available"
     assert.deepEqual(readFileSync(urlLog, "utf8").trim().split("\n"), [
       `https://github.com/rom-weaver/rom-weaver/releases/latest/download/${asset}`,
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-cli-assets.zip",
-      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-identify-data.tar.zst",
+      "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-identify-data.tar.br",
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -155,7 +177,7 @@ function Invoke-WebRequest {
     } finally {
       $archive.Dispose()
     }
-  } elseif ($Uri -like '*identify-data.tar.zst') {
+  } elseif ($Uri -like '*identify-data.tar.br') {
     Copy-Item -LiteralPath '${identifyArchive}' -Destination $OutFile
   } elseif ($Uri -like '*.tar.gz') {
     $stage = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
@@ -167,7 +189,7 @@ function Invoke-WebRequest {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
 }
-`;
+${brotliStub()}`;
 
 // The endpoint is scoped to this repository and these bytes, so the only thing
 // install.ps1 reads out of the response is whether the array has anything in it.
@@ -315,7 +337,7 @@ function Invoke-WebRequest {
   Add-Content -Path '${urlLog}' -Value $Uri
   if ($Uri -like '*cli-assets.zip') {
     throw 'no docs'
-  } elseif ($Uri -like '*identify-data.tar.zst') {
+  } elseif ($Uri -like '*identify-data.tar.br') {
     $response = [System.Net.Http.HttpResponseMessage]::new(404)
     throw [Microsoft.PowerShell.Commands.HttpResponseException]::new('Not Found', $response)
   } elseif ($Uri -like '*.tar.gz') {

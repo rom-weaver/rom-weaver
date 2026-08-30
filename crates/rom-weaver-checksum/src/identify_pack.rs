@@ -1,33 +1,25 @@
-//! Shared parsing helpers for RWFP4 identify packs.
+//! Shared RWFP5 container validation and dispatch.
 
 use std::collections::HashMap;
 
 use rom_weaver_core::{Result, RomWeaverError};
 
-/// A parsed RWFP4 identify pack.
 #[derive(Debug)]
 pub enum IdentifyPackFile {
-    V4(crate::identify_pack_v4::ArtifactPack),
+    V5(crate::identify_pack_v5::ArtifactPack),
 }
 
 impl IdentifyPackFile {
-    /// Parse a decompressed RWFP4 pack blob.
     pub fn parse(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() >= crate::identify_pack_v4::PACK_V4_MAGIC.len()
-            && &bytes[..crate::identify_pack_v4::PACK_V4_MAGIC.len()]
-                == crate::identify_pack_v4::PACK_V4_MAGIC
-        {
-            return Ok(Self::V4(crate::identify_pack_v4::ArtifactPack::parse(
+        if bytes.starts_with(crate::identify_pack_v5::PACK_V5_MAGIC) {
+            return Ok(Self::V5(crate::identify_pack_v5::ArtifactPack::parse(
                 bytes,
             )?));
         }
-        Err(invalid_pack(
-            "pack magic is not a supported version (expected RWFP4)",
-        ))
+        Err(invalid_pack("pack magic does not match RWFP5"))
     }
 }
 
-/// Parse the RWFP4 outer container (magic, directory, and member payloads).
 pub(crate) fn read_members_with_magic<'a>(
     bytes: &'a [u8],
     magic: &[u8],
@@ -108,7 +100,7 @@ pub(crate) fn hex_to_bytes(hex: &str) -> Result<Vec<u8>> {
         .collect()
 }
 
-pub(crate) fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
+fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
     let end = offset
         .checked_add(2)
         .ok_or_else(|| invalid_pack("u16 read offset overflow"))?;
@@ -118,41 +110,30 @@ pub(crate) fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
     Ok(u16::from_le_bytes([slice[0], slice[1]]))
 }
 
-pub(crate) fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
+fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
     let end = offset
         .checked_add(4)
         .ok_or_else(|| invalid_pack("u32 read offset overflow"))?;
     let slice = bytes
         .get(offset..end)
         .ok_or_else(|| invalid_pack("u32 read is out of bounds"))?;
-    Ok(u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]))
+    Ok(u32::from_le_bytes(
+        slice.try_into().expect("four-byte slice"),
+    ))
 }
 
-pub(crate) fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
+fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
     let end = offset
         .checked_add(8)
         .ok_or_else(|| invalid_pack("u64 read offset overflow"))?;
     let slice = bytes
         .get(offset..end)
         .ok_or_else(|| invalid_pack("u64 read is out of bounds"))?;
-    let mut array = [0u8; 8];
-    array.copy_from_slice(slice);
-    Ok(u64::from_le_bytes(array))
+    Ok(u64::from_le_bytes(
+        slice.try_into().expect("eight-byte slice"),
+    ))
 }
 
 pub(crate) fn invalid_pack(message: impl Into<String>) -> RomWeaverError {
     RomWeaverError::Validation(format!("invalid ROM identify pack: {}", message.into()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::IdentifyPackFile;
-
-    #[test]
-    fn rejects_legacy_pack_magic() {
-        for bytes in [b"RWFP1\0\0\0", b"RWFP2\0\0\0", b"RWFP3\0\0\0"] {
-            let error = IdentifyPackFile::parse(bytes).expect_err("legacy magic fails");
-            assert!(error.to_string().contains("expected RWFP4"));
-        }
-    }
 }

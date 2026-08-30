@@ -216,7 +216,7 @@ const loadIndex = async (): Promise<IdentifyIndex> => {
   } catch (cause) {
     throw new IdentifyDataUnavailableError(`ROM identify index is not valid JSON: ${describe(cause)}`, { cause });
   }
-  if (index.format !== "rom-weaver-identify-system-pack-v1" || !Array.isArray(index.systems)) {
+  if (index.format !== "rom-weaver-identify-system-pack-v5" || !Array.isArray(index.systems)) {
     throw new IdentifyDataUnavailableError("ROM identify index is invalid");
   }
   return index as IdentifyIndex;
