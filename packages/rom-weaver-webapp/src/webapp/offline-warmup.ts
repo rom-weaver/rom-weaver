@@ -127,6 +127,8 @@ const readWithByteProgress = async (response: Response, onBytes?: (delta: number
 const bufferedResponse = (source: Response, buffer: ArrayBuffer) =>
   new Response(buffer, { headers: source.headers, status: source.status, statusText: source.statusText });
 
+const cachedRequestUrls = async (cache: Cache) => new Set((await cache.keys()).map((request) => request.url));
+
 /** Fetch one pack, verify its SHA-256, and return the request/response pair ready to cache. */
 const fetchVerifiedPack = async (
   pack: IdentifyOptionalPack,
@@ -211,11 +213,11 @@ const createOfflineWarmup = ({
     (await (await cache.match(emulatorJsMarkerUrl))?.text()) === emulatorJsVersion;
 
   /** Size and count of the emulatorjs manifest files already in the cache. */
-  const cachedEmulatorJsState = async (cache: Cache, manifest: EmulatorJsManifest) => {
+  const cachedEmulatorJsState = (cachedUrls: ReadonlySet<string>, manifest: EmulatorJsManifest) => {
     let bytes = 0;
     let files = 0;
     for (const file of manifest.files) {
-      if (await cache.match(emulatorJsAssetUrl(file.path))) {
+      if (cachedUrls.has(emulatorJsAssetUrl(file.path))) {
         bytes += file.sizeBytes;
         files += 1;
       }
@@ -224,11 +226,11 @@ const createOfflineWarmup = ({
   };
 
   /** Size and count of a not-yet-installed group's packs already in the cache. */
-  const cachedGroupState = async (cache: Cache, group: IdentifyOptionalPackGroup) => {
+  const cachedGroupState = (cachedUrls: ReadonlySet<string>, group: IdentifyOptionalPackGroup) => {
     let bytes = 0;
     let files = 0;
     for (const pack of group.packs) {
-      if (await cache.match(new URL(pack.url, scope).href)) {
+      if (cachedUrls.has(new URL(pack.url, scope).href)) {
         bytes += pack.sizeBytes || 0;
         files += 1;
       }
@@ -241,20 +243,26 @@ const createOfflineWarmup = ({
 
   const buildQueue = async (): Promise<WarmupUnit[]> => {
     const units: WarmupUnit[] = [];
-    const emulatorJsCache = await caches.open(emulatorJsCacheName);
-    if (!(await isEmulatorJsComplete(emulatorJsCache))) {
-      const manifest = await loadEmulatorJsManifest();
+    const [emulatorJsCache, identifyCache] = await Promise.all([
+      caches.open(emulatorJsCacheName),
+      caches.open(identifyOptionalCacheName),
+    ]);
+    const [emulatorJsReady, installedGroups] = await Promise.all([
+      isEmulatorJsComplete(emulatorJsCache),
+      Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(identifyCache, group))),
+    ]);
+    if (!emulatorJsReady) {
+      const [manifest, cachedUrls] = await Promise.all([loadEmulatorJsManifest(), cachedRequestUrls(emulatorJsCache)]);
       for (const file of manifest.files) {
-        if (!(await emulatorJsCache.match(emulatorJsAssetUrl(file.path)))) {
+        if (!cachedUrls.has(emulatorJsAssetUrl(file.path))) {
           units.push({ kind: "emulatorjs-file", path: file.path, sizeBytes: file.sizeBytes });
         }
       }
       // All files can already be cached (filled by the runtime route) with the
       // marker still missing; runNextUnit writes the marker on an empty queue.
     }
-    const identifyCache = await caches.open(identifyOptionalCacheName);
-    for (const group of identifyOptionalGroups) {
-      if (!(await isGroupInstalled(identifyCache, group))) units.push({ kind: "identify-group", group });
+    for (const [index, group] of identifyOptionalGroups.entries()) {
+      if (!installedGroups[index]) units.push({ kind: "identify-group", group });
     }
     return units;
   };
@@ -277,14 +285,23 @@ const createOfflineWarmup = ({
   };
 
   const getReadyState = async (): Promise<OfflineReadyState> => {
-    const emulatorJsCache = await caches.open(emulatorJsCacheName);
-    const identifyCache = await caches.open(identifyOptionalCacheName);
+    const [emulatorJsCache, identifyCache] = await Promise.all([
+      caches.open(emulatorJsCacheName),
+      caches.open(identifyOptionalCacheName),
+    ]);
+    const [emulatorJsReady, installedGroups] = await Promise.all([
+      isEmulatorJsComplete(emulatorJsCache),
+      Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(identifyCache, group))),
+    ]);
+    const [cachedEmulatorJsUrls, cachedIdentifyUrls] = await Promise.all([
+      emulatorJsReady ? null : cachedRequestUrls(emulatorJsCache),
+      installedGroups.every(Boolean) ? null : cachedRequestUrls(identifyCache),
+    ]);
     let totalBytes = 0;
     let cachedBytes = 0;
     let totalFiles = 0;
     let cachedFiles = 0;
     let pendingUnits = 0;
-    let emulatorJsReady = await isEmulatorJsComplete(emulatorJsCache);
     try {
       const manifest = await loadEmulatorJsManifest();
       const manifestBytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
@@ -294,7 +311,7 @@ const createOfflineWarmup = ({
         cachedBytes += manifestBytes;
         cachedFiles += manifest.files.length;
       } else {
-        const cached = await cachedEmulatorJsState(emulatorJsCache, manifest);
+        const cached = cachedEmulatorJsState(cachedEmulatorJsUrls || new Set(), manifest);
         cachedBytes += cached.bytes;
         cachedFiles += cached.files;
         pendingUnits += manifest.files.length;
@@ -309,17 +326,17 @@ const createOfflineWarmup = ({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    for (const group of identifyOptionalGroups) {
+    for (const [index, group] of identifyOptionalGroups.entries()) {
       const bytes = groupBytes(group);
       totalBytes += bytes;
       totalFiles += group.packs.length;
-      if (await isGroupInstalled(identifyCache, group)) {
+      if (installedGroups[index]) {
         cachedBytes += bytes;
         cachedFiles += group.packs.length;
       } else {
         // Partially cached groups (on-demand pack fetches, an interrupted
         // install) still credit their cached packs to the counters.
-        const cached = await cachedGroupState(identifyCache, group);
+        const cached = cachedGroupState(cachedIdentifyUrls || new Set(), group);
         cachedBytes += cached.bytes;
         cachedFiles += cached.files;
         pendingUnits += 1;
@@ -391,8 +408,9 @@ const createOfflineWarmup = ({
     const cache = await caches.open(emulatorJsCacheName);
     if (await isEmulatorJsComplete(cache)) return;
     const manifest = await loadEmulatorJsManifest();
+    const cachedUrls = await cachedRequestUrls(cache);
     for (const file of manifest.files) {
-      if (!(await cache.match(emulatorJsAssetUrl(file.path)))) return;
+      if (!cachedUrls.has(emulatorJsAssetUrl(file.path))) return;
     }
     await cache.put(
       emulatorJsMarkerUrl,

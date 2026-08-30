@@ -13,10 +13,14 @@ const sha256Hex = async (text: string) => {
 
 class FakeCache {
   entries = new Map<string, Response>();
+  keysCallCount = 0;
+  matchCallCount = 0;
   async keys() {
+    this.keysCallCount += 1;
     return [...this.entries.keys()].map((url) => new Request(url));
   }
   async match(request: RequestInfo | URL) {
+    this.matchCallCount += 1;
     const url = typeof request === "string" ? request : request instanceof URL ? request.href : request.url;
     const hit = this.entries.get(url);
     return hit ? hit.clone() : undefined;
@@ -106,6 +110,17 @@ describe("offline warm-up (service worker side)", () => {
     expect(state.totalBytes).toBe(3 + 5 + 7 + PACK_BODY.length);
     expect(state.cachedBytes).toBe(0);
     expect(state.pendingUnits).toBe(4);
+  });
+
+  it("reads each partial cache inventory once per ready-state snapshot", async () => {
+    const warmup = await createWarmup();
+    await warmup.getReadyState();
+    const emulatorJsCache = cacheStorage.caches.get(EMULATORJS_CACHE);
+    const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
+    expect(emulatorJsCache?.keysCallCount).toBe(1);
+    expect(emulatorJsCache?.matchCallCount).toBe(1);
+    expect(identifyCache?.keysCallCount).toBe(1);
+    expect(identifyCache?.matchCallCount).toBe(1);
   });
 
   it("pumps units to completion, writes markers, and flips ready", async () => {

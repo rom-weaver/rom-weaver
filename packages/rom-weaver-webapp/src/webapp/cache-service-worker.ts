@@ -13,6 +13,7 @@ import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
+import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
 declare const __EMULATORJS_VERSION__: string;
 declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
@@ -47,15 +48,23 @@ const PRECACHE_VERSION = import.meta.env.DEV
 setCacheNameDetails({
   precache: PRECACHE_ID,
   prefix: "precache",
-  runtime: `${PRECACHE_ID}-runtime`,
-  suffix: PRECACHE_VERSION,
+  runtime: `${PRECACHE_ID}-runtime-${PRECACHE_VERSION}`,
 });
 
 const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
-const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
+const MANAGED_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-`;
+const EMULATORJS_CACHE_PREFIX = `${MANAGED_CACHE_PREFIX}emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
-const IDENTIFY_OPTIONAL_CACHE_NAME = `${cacheNames.prefix}-${PRECACHE_ID}-identify-optional`;
+const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
+const CACHE_POLICY = createServiceWorkerCachePolicy({
+  emulatorJsCacheName: EMULATORJS_CACHE_NAME,
+  emulatorJsCachePrefix: EMULATORJS_CACHE_PREFIX,
+  identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
+  managedCachePrefix: MANAGED_CACHE_PREFIX,
+  precacheName: PRECACHE_NAME,
+  runtimeCacheName: RUNTIME_CACHE_NAME,
+});
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -346,12 +355,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) =>
-        cacheNames.filter((cacheName) => {
-          if (cacheName.startsWith(EMULATORJS_CACHE_PREFIX)) return cacheName !== EMULATORJS_CACHE_NAME;
-          return cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`);
-        }),
-      )
+      .then((cacheNames) => findStaleServiceWorkerCaches(cacheNames, CACHE_POLICY))
       .then((cachesToDelete) => {
         logServiceWorker("activate event; deleting stale caches", {
           cachesToDelete,
