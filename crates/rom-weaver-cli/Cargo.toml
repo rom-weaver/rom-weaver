@@ -56,7 +56,7 @@ tracing-subscriber.workspace = true
 # Native-only manifest URL downloads; the wasm build never sees this (the
 # browser prefetches with JS fetch instead).
 ureq = { version = "3", default-features = false, features = ["rustls"] }
-quick-xml = { version = "0.41", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 tar.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
