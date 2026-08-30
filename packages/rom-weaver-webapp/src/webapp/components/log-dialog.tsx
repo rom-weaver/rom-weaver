@@ -17,6 +17,7 @@ import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { DropdownSelect } from "../../public/react/components/ds/dropdown-select.tsx";
+import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { listBrowserOpfs } from "../../storage/browser/browser-opfs-cleanup.ts";
 import { LOG_LEVELS, type LogLevel } from "../../types/logging.ts";
@@ -26,10 +27,15 @@ import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogE
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
 import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
+import { queryOfflineCachedFiles } from "../pwa/offline-warmup-client.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
+import type { OfflineCachedFile } from "../offline-warmup.ts";
 import { ChangelogPanel } from "./changelog-panel.tsx";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
+  describeWarmupUnit,
+  installingRuntimeLabel,
+  offlineWarmupPercent,
   prefersReducedMotion,
   readPwaState,
   resolveRuntimeState,
@@ -37,7 +43,7 @@ import {
   RUNTIME_STATES,
   RuntimeGlyph,
 } from "./shell.tsx";
-import type { RuntimeState } from "./shell.tsx";
+import type { OfflineWarmupDisplayProgress, RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
@@ -227,15 +233,56 @@ const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
  * card above them - the badge is its value, the same way the commit hash is the
  * commit row's.
  */
-const StatusRows = ({ localizer, runtimeState }: { localizer: Localizer; runtimeState: RuntimeState }) => {
+const StatusRows = ({
+  localizer,
+  offlineProgress,
+  runtimeState,
+}: {
+  localizer: Localizer;
+  offlineProgress?: OfflineWarmupDisplayProgress | null;
+  runtimeState: RuntimeState;
+}) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
   const rows: Array<[string, React.ReactNode]> = [
     [
       localizer.message("ui.status.offline"),
-      <span className="sw-chip" data-sw={runtimeState} key="sw" role="status">
-        <RuntimeGlyph state={runtimeState} />
-        {localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+      <span className="sw-status-cell" key="sw">
+        <span className="sw-chip" data-sw={runtimeState} role="status">
+          <RuntimeGlyph
+            percent={runtimeState === "installing" ? offlineWarmupPercent(offlineProgress ?? null) : null}
+            state={runtimeState}
+          />
+          {runtimeState === "installing"
+            ? installingRuntimeLabel(localizer, offlineProgress ?? null)
+            : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+        </span>
+        {runtimeState === "installing" &&
+        offlineProgress &&
+        !offlineProgress.ready &&
+        offlineProgress.totalBytes > 0 ? (
+          <>
+            <span className="sw-progress-detail">
+              {typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
+                ? `${localizer.message("ui.runtime.detailFiles", {
+                    cached: offlineProgress.cachedFiles,
+                    total: offlineProgress.totalFiles,
+                  })} · `
+                : ""}
+              {`${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`}
+            </span>
+            {(() => {
+              const detail = describeWarmupUnit(localizer, offlineProgress);
+              if (!detail) return null;
+              const { unitLoadedBytes, unitTotalBytes } = offlineProgress;
+              const unitBytes =
+                typeof unitLoadedBytes === "number" && typeof unitTotalBytes === "number" && unitTotalBytes > 0
+                  ? ` (${localizer.formatBytes(unitLoadedBytes)} / ${localizer.formatBytes(unitTotalBytes)})`
+                  : "";
+              return <span className="sw-progress-detail">{`${detail}${unitBytes}`}</span>;
+            })()}
+          </>
+        ) : null}
       </span>,
     ],
     [
@@ -319,6 +366,48 @@ const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localize
         </div>
       ))}
     </dl>
+  </section>
+);
+
+const cachedFileLabel = (url: string) => {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}`;
+};
+
+const OfflineCachedFiles = ({
+  error,
+  files,
+  loading,
+  localizer,
+}: {
+  error: string | null;
+  files: OfflineCachedFile[];
+  loading: boolean;
+  localizer: Localizer;
+}) => (
+  <section className="sw-cached-files">
+    <h3 className="sr-only">{localizer.message("ui.status.cachedFiles")}</h3>
+    <Drawer
+      className="sw-cache-drawer"
+      label={localizer.message("ui.status.cachedFiles")}
+      readouts={<DrawerReadout muted>{loading ? "…" : files.length}</DrawerReadout>}
+    >
+      {loading ? <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesLoading")}</p> : null}
+      {!loading && error ? <p className="sw-cache-note sw-cache-error">{error}</p> : null}
+      {!(loading || error) && files.length === 0 ? (
+        <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesEmpty")}</p>
+      ) : null}
+      {!(loading || error) && files.length > 0 ? (
+        <ul className="sw-cache-list">
+          {files.map((file) => (
+            <li data-cache={file.cache} key={`${file.cache}:${file.url}`}>
+              <span title={file.cache}>{file.cache}</span>
+              <code title={file.url}>{cachedFileLabel(file.url)}</code>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Drawer>
   </section>
 );
 
@@ -799,6 +888,7 @@ const LogDialog = ({
   onSaveSettings,
   onTabChange,
   serviceWorkerStatus,
+  offlineProgress = null,
   settingsFocusHint,
   settingsPanel,
   updateReady = false,
@@ -813,6 +903,7 @@ const LogDialog = ({
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
+  offlineProgress?: OfflineWarmupDisplayProgress | null;
   settingsFocusHint?: SettingsFocusHint | null;
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
@@ -840,10 +931,13 @@ const LogDialog = ({
     [onTabChange],
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
-  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady);
+  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
+  const [cachedFiles, setCachedFiles] = useState<OfflineCachedFile[]>([]);
+  const [cachedFilesLoading, setCachedFilesLoading] = useState(false);
+  const [cachedFilesError, setCachedFilesError] = useState<string | null>(null);
   // Previous session's entries (promoted from localStorage at boot); the "previous" view shows a run that
   // OOM-reloaded the tab. Stable for the session, so read once.
   const previousEntries = useMemo(() => getLastSessionEntries(), []);
@@ -865,6 +959,25 @@ const LogDialog = ({
     if (!(open && showingOpfs)) return;
     void refreshOpfs();
   }, [open, refreshOpfs, showingOpfs]);
+  useEffect(() => {
+    if (!(open && tab === "status")) return;
+    let active = true;
+    setCachedFilesLoading(true);
+    setCachedFilesError(null);
+    void queryOfflineCachedFiles()
+      .then((files) => {
+        if (active) setCachedFiles(files);
+      })
+      .catch((error) => {
+        if (active) setCachedFilesError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (active) setCachedFilesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, tab]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
@@ -977,7 +1090,13 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows localizer={localizer} runtimeState={runtimeState} />
+            <StatusRows localizer={localizer} offlineProgress={offlineProgress} runtimeState={runtimeState} />
+            <OfflineCachedFiles
+              error={cachedFilesError}
+              files={cachedFiles}
+              loading={cachedFilesLoading}
+              localizer={localizer}
+            />
             <OfflineLegend current={runtimeState} localizer={localizer} />
             <AboutLink localizer={localizer} />
           </div>

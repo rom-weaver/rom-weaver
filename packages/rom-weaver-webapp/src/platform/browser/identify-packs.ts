@@ -265,6 +265,25 @@ const identifyPackGroups = (index: IdentifyIndex): IdentifyPackGroup[] => {
 const listOptionalIdentifyPackGroups = async (): Promise<IdentifyPackGroup[]> =>
   identifyPackGroups(await getIndex()).filter((group) => !group.default);
 
+/**
+ * Optional pack group ids whose systems overlap the selection the hints
+ * produce. Used to bump those groups to the front of the offline warm-up when
+ * an identify run starts. An unnarrowed selection bumps nothing - the
+ * cartridge fallback only touches default packs.
+ */
+const identifyGroupIdsForHints = async (hints: IdentifyPackHints): Promise<string[]> => {
+  try {
+    const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
+    const selected = new Set(selectIdentifySlugs(hints, catalog));
+    if (!selected.size) return [];
+    return identifyPackGroups(index)
+      .filter((group) => !group.default && group.systems.some((slug) => selected.has(slug)))
+      .map((group) => group.id);
+  } catch {
+    return [];
+  }
+};
+
 const installIdentifyPackGroup = async (groupId: string): Promise<void> => {
   const group = (await listOptionalIdentifyPackGroups()).find((candidate) => candidate.id === groupId);
   if (!group) throw new IdentifyDataUnavailableError(`Unknown ROM identify pack group: ${groupId}`);
@@ -395,6 +414,7 @@ const loadIdentifyPacks = async (
 ): Promise<BrowserIdentifyPack[]> => (await loadIdentifyPackSelection(hints, onSelected)).packs;
 
 export {
+  identifyGroupIdsForHints,
   IdentifyDataUnavailableError,
   installIdentifyPackGroup,
   listOptionalIdentifyPackGroups,

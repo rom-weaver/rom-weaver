@@ -462,6 +462,7 @@ type UtilityMenuProps = {
   moreTabs?: readonly WorkflowTab[];
   onOpenWorkflowTab?: (id: string) => void;
   runtimeState: RuntimeState;
+  runtimePercent?: number | null;
   toolsEnabled?: boolean;
 };
 
@@ -483,6 +484,7 @@ const UtilityMenu = ({
   moreTabs,
   onOpenWorkflowTab,
   runtimeState,
+  runtimePercent = null,
   toolsEnabled,
   menuClassName,
   open,
@@ -587,7 +589,7 @@ const UtilityMenu = ({
         role="menuitem"
         type="button"
       >
-        <RuntimeGlyph state={runtimeState} />
+        <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
         {localizer.message("ui.log.tabStatus")}
       </button>
       <button onClick={() => select(onOpenStorage ?? onOpenLog)} role="menuitem" type="button">
@@ -735,7 +737,17 @@ const readResolvedServiceWorkerStatus = (): ServiceWorkerStatus | null => {
   const enabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
   const serviceWorker = navigator.serviceWorker;
   if (!(enabled && serviceWorker)) return "off";
-  if (serviceWorker.controller) return typeof MessageChannel === "function" ? "active" : "ready";
+  // A controller alone is not "ready" any more: the offline copy also needs the
+  // background warm-up (EmulatorJS + identify packs). The warm-up client
+  // persists completion under this key; the resolver in `index.html` reads the
+  // same key and MUST stay in step.
+  let warmupReady = false;
+  try {
+    warmupReady = localStorage.getItem("rom-weaver-offline-ready") === "true";
+  } catch {
+    warmupReady = false;
+  }
+  if (serviceWorker.controller && warmupReady) return typeof MessageChannel === "function" ? "active" : "ready";
   return null;
 };
 
@@ -764,13 +776,79 @@ const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: Me
   update: { description: "ui.runtime.updateDesc", label: "ui.runtime.update" },
 };
 
-/** An update outranks everything: it is the only state that asks for an action. */
-const resolveRuntimeState = (status: ServiceWorkerStatus | null | undefined, updateReady: boolean): RuntimeState => {
+/** Byte progress of the background offline warm-up, when the page knows it. */
+type OfflineWarmupDisplayProgress = {
+  cachedBytes: number;
+  /** Files already cached (EmulatorJS files and identify packs counted individually). */
+  cachedFiles?: number;
+  /** Human description of the unit the progress event is about. */
+  detail?: { kind: string; name: string } | null;
+  ready: boolean;
+  totalBytes: number;
+  totalFiles?: number;
+  /** Warm-up unit label, e.g. "emulatorjs:loader.js" or "identify-group:<id>". */
+  unit?: string | null;
+  /** Bytes of the in-flight unit downloaded so far; null/absent outside a download. */
+  unitLoadedBytes?: number | null;
+  unitTotalBytes?: number | null;
+};
+
+/** Whole percent for an incomplete warm-up with known byte totals; null otherwise. */
+const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null =>
+  progress && !progress.ready && progress.totalBytes > 0
+    ? Math.min(99, Math.floor((progress.cachedBytes / progress.totalBytes) * 100))
+    : null;
+
+/**
+ * Human wording for a warm-up unit, for the status detail line. Prefers the
+ * structured detail (which carries a group's display label); falls back to
+ * parsing the internal unit label.
+ */
+const describeWarmupUnit = (
+  localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
+  progress: Pick<OfflineWarmupDisplayProgress, "detail" | "unit"> | null | undefined,
+): string | null => {
+  let kind = progress?.detail?.kind;
+  let name = progress?.detail?.name;
+  if (!(kind && name)) {
+    const unit = progress?.unit;
+    if (typeof unit !== "string" || !unit) return null;
+    const separator = unit.indexOf(":");
+    if (separator < 0) return null;
+    kind = unit.slice(0, separator);
+    name = unit.slice(separator + 1);
+  }
+  if (!name) return null;
+  if (kind === "emulatorjs") return localizer.message("ui.runtime.detailEmulatorFile", { name });
+  if (kind === "identify-group") return localizer.message("ui.runtime.detailIdentifyGroup", { name });
+  return null;
+};
+
+/**
+ * An update outranks everything: it is the only state that asks for an action.
+ * A working cache without a finished warm-up (EmulatorJS + all identify packs)
+ * is still "installing" - the offline copy is not complete yet.
+ */
+const resolveRuntimeState = (
+  status: ServiceWorkerStatus | null | undefined,
+  updateReady: boolean,
+  offlineProgress: OfflineWarmupDisplayProgress | null = null,
+): RuntimeState => {
   if (updateReady) return "update";
   if (status === "off") return "disabled";
+  if ((status === "active" || status === "ready") && !offlineProgress?.ready) return "installing";
   if (status === "active") return "active";
   if (status === "ready") return "ready";
   return "installing";
+};
+
+const installingRuntimeLabel = (
+  localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
+  offlineProgress: OfflineWarmupDisplayProgress | null,
+) => {
+  const percent = offlineWarmupPercent(offlineProgress);
+  if (percent === null) return localizer.message("ui.runtime.installing");
+  return localizer.message("ui.runtime.installingProgress", { percent });
 };
 
 const RUNTIME_ICONS = {
@@ -781,8 +859,41 @@ const RUNTIME_ICONS = {
   update: CloudDownload,
 } satisfies Record<RuntimeState, typeof CloudCheck>;
 
-/** Uses the shared Lucide set for every service-worker state. */
-const RuntimeGlyph = ({ state }: { state: RuntimeState }) => {
+const PROGRESS_RING_RADIUS = 9;
+const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_RADIUS;
+
+/** Determinate ring on the Lucide 24-box: the arc fills clockwise from 12 o'clock. */
+const ProgressRingGlyph = ({ percent }: { percent: number }) => {
+  const filled = (Math.min(100, Math.max(0, percent)) / 100) * PROGRESS_RING_CIRCUMFERENCE;
+  return (
+    <svg
+      aria-hidden="true"
+      className="sw-progress-ring"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.4}
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" opacity="0.25" r={PROGRESS_RING_RADIUS} />
+      <circle
+        cx="12"
+        cy="12"
+        r={PROGRESS_RING_RADIUS}
+        strokeDasharray={`${filled} ${PROGRESS_RING_CIRCUMFERENCE - filled}`}
+        strokeDashoffset={PROGRESS_RING_CIRCUMFERENCE / 4}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
+
+/**
+ * Uses the shared Lucide set for every service-worker state. An installing
+ * state with a known percent gets a determinate progress ring instead of the
+ * indeterminate spinner.
+ */
+const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?: number | null }) => {
+  if (state === "installing" && typeof percent === "number") return <ProgressRingGlyph percent={percent} />;
   const Icon = RUNTIME_ICONS[state];
   return <Icon aria-hidden="true" strokeWidth={2.4} />;
 };
@@ -921,6 +1032,7 @@ const Masthead = ({
   onPreloadSettings,
   tabsControlPanels = true,
   serviceWorkerStatus,
+  offlineProgress = null,
   confirmExternalNavigation,
   donateHref,
   githubHref,
@@ -951,6 +1063,7 @@ const Masthead = ({
   onPreloadSettings?: () => void;
   tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
+  offlineProgress?: OfflineWarmupDisplayProgress | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
@@ -977,8 +1090,14 @@ const Masthead = ({
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
-  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady);
-  const runtimeLabel = localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, offlineProgress);
+  const runtimeLabel =
+    runtimeState === "installing"
+      ? installingRuntimeLabel(localizer, offlineProgress)
+      : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const runtimePercent = runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null;
+  const runtimeDetail = runtimeState === "installing" ? describeWarmupUnit(localizer, offlineProgress) : null;
+  const runtimeTitle = runtimeDetail ? `${runtimeLabel} — ${runtimeDetail}` : runtimeLabel;
   const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
   const toggleUtility = (placement: "desktop" | "mobile", viaKeyboard: boolean) => {
     setUtilityPlacement(placement);
@@ -1120,6 +1239,7 @@ const Masthead = ({
               open={utilityOpen && utilityPlacement === "desktop"}
               renderMenu={utilityOpen && utilityPlacement === "desktop"}
               runtimeState={runtimeState}
+              runtimePercent={runtimePercent}
               toolsEnabled={betaToolsEnabled}
               triggerRef={desktopMoreRef}
             />
@@ -1128,13 +1248,17 @@ const Masthead = ({
         <div className="masthead-tools" ref={toolsRef}>
           <button
             aria-haspopup="dialog"
-            aria-label={runtimeLabel}
-            className="tool masthead-status sub-status"
+            aria-label={runtimeTitle}
+            className={join("tool masthead-status sub-status", runtimePercent !== null && "has-progress")}
             data-sw={runtimeState}
             onClick={onOpenStatus}
+            title={runtimeTitle}
             type="button"
           >
-            <RuntimeGlyph state={runtimeState} />
+            <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
+            {runtimePercent === null ? null : (
+              <span aria-hidden="true" className="masthead-status-percent">{`${runtimePercent}%`}</span>
+            )}
             <span className="sr-only sub-status-text">{runtimeLabel}</span>
           </button>
           <span className="mobile-utility-theme">
@@ -1188,6 +1312,7 @@ const Masthead = ({
               onOpenWorkflowTab={onSelectTab}
               open
               runtimeState={runtimeState}
+              runtimePercent={runtimePercent}
               toolsEnabled={betaToolsEnabled}
               triggerRef={activeMoreRef}
             />
@@ -1224,6 +1349,7 @@ const Masthead = ({
             open={utilityOpen && utilityPlacement === "mobile"}
             renderMenu={false}
             runtimeState={runtimeState}
+            runtimePercent={runtimePercent}
             toolsEnabled={betaToolsEnabled}
             triggerRef={mobileMoreRef}
           />
@@ -1332,9 +1458,12 @@ const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: (
   </button>
 );
 
-export type { RuntimeState };
+export type { OfflineWarmupDisplayProgress, RuntimeState };
 export {
+  describeWarmupUnit,
+  installingRuntimeLabel,
   Masthead,
+  offlineWarmupPercent,
   SiteFooter,
   prefersReducedMotion,
   readPwaState,

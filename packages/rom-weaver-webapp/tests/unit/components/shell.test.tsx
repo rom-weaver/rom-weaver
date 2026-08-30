@@ -113,7 +113,14 @@ describe("Masthead", () => {
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
     const { container, getByRole, queryByRole } = render(
-      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} serviceWorkerStatus="active" />),
+      withSettings(
+        <Masthead
+          {...mastheadProps}
+          offlineProgress={{ cachedBytes: 1, ready: true, totalBytes: 1 }}
+          onOpenStorage={onOpenStorage}
+          serviceWorkerStatus="active"
+        />,
+      ),
     );
     const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
     expect(more.getAttribute("aria-expanded")).toBe("false");
@@ -156,6 +163,7 @@ describe("Masthead", () => {
           commitsSinceVersion={3}
           dirty
           onOpenChangelog={onOpenChangelog}
+          offlineProgress={{ cachedBytes: 1, ready: true, totalBytes: 1 }}
           onOpenSettings={onOpenSettings}
           onOpenStatus={onOpenStatus}
           serviceWorkerStatus="active"
@@ -181,6 +189,18 @@ describe("Masthead", () => {
     expect(status.getAttribute("aria-label")).toBe("Offline active");
     fireEvent.click(status);
     expect(onOpenStatus).toHaveBeenCalledTimes(1);
+
+    rerender(
+      withSettings(
+        <Masthead
+          {...mastheadProps}
+          offlineProgress={{ cachedBytes: 25, ready: false, totalBytes: 100 }}
+          serviceWorkerStatus="active"
+        />,
+      ),
+    );
+    expect(container.querySelector(".masthead-status-percent")?.textContent).toBe("25%");
+    expect(container.querySelector(".sub-status")?.getAttribute("aria-label")).toBe("Installing offline copy — 25%");
 
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("disabled");

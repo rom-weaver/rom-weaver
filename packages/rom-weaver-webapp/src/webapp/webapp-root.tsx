@@ -25,10 +25,17 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
+import type { OfflineWarmupDisplayProgress } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
-import { scheduleEmulatorAssetPrefetch } from "./pwa/emulator-prefetch.ts";
+import {
+  createOfflineWarmupProgressGate,
+  persistOfflineReady,
+  queryOfflineReadyState,
+  readPersistedOfflineReady,
+  scheduleOfflineWarmup,
+} from "./pwa/offline-warmup-client.ts";
 import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
 import { shouldWarnBeforeUnload } from "./unload-guard.ts";
 import type { WebappView } from "./webapp-state-types.ts";
@@ -270,10 +277,26 @@ function WebappRoot({
     if (notFound) return;
     syncWorkflowSeoMetadata(state.currentView);
   }, [notFound, state.currentView]);
+  // Warm-up readiness gates the "Offline ready" chip: null means unknown or
+  // incomplete, so the chip stays "installing" until the full offline set
+  // (app + identify packs + EmulatorJS) is cached.
+  const [offlineProgress, setOfflineProgress] = useState<OfflineWarmupDisplayProgress | null>(() =>
+    readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
+  );
+  const onWarmupProgress = useCallback((progress: OfflineWarmupDisplayProgress) => {
+    setOfflineProgress(progress);
+    persistOfflineReady(progress.ready);
+  }, []);
   useEffect(() => {
     if (notFound) return undefined;
-    return scheduleEmulatorAssetPrefetch();
-  }, [notFound]);
+    const progressGate = createOfflineWarmupProgressGate(onWarmupProgress);
+    // A page that loads after the warm-up finished gets no progress events;
+    // ask the worker once so the chip does not stay "installing" forever.
+    void queryOfflineReadyState().then((state) => {
+      if (state) progressGate.acceptSnapshot(state);
+    });
+    return scheduleOfflineWarmup({ onProgress: progressGate.acceptLive });
+  }, [notFound, onWarmupProgress]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
@@ -597,6 +620,7 @@ function WebappRoot({
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+            offlineProgress={offlineProgress}
             threads={resolveThreads(threads)}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
@@ -736,6 +760,7 @@ function WebappRoot({
               onTabChange={handleDialogTabChange}
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+              offlineProgress={offlineProgress}
               settingsFocusHint={settingsFocusHint}
               settingsPanel={
                 <Suspense fallback={null}>

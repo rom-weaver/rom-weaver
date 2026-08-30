@@ -96,6 +96,7 @@ const createHarness = ({ controller = null, crossOriginIsolated = false } = {}) 
   return {
     client,
     controller,
+    getRegisterOptions: () => registerOptions,
     location,
     registration,
     serviceWorker,
@@ -110,6 +111,7 @@ test("initializes in controlled isolated mode without reloading", async () => {
   const harness = createHarness({ controller, crossOriginIsolated: true });
 
   harness.client.initialize();
+  expect(harness.getRegisterOptions().immediate).toBe(false);
   expect(harness.client.getState().serviceWorkerStatus).toBe("active");
   await flushAsync();
 
@@ -127,6 +129,7 @@ test("reloads once to gain control when registration is active but uncontrolled"
   });
 
   harness.client.initialize();
+  expect(harness.getRegisterOptions().immediate).toBe(true);
   await flushAsync();
 
   expect(harness.client.getState().serviceWorkerStatus).toBe("ready");

@@ -266,6 +266,22 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingDesc",
     message: "Caching the app so it can run offline…",
   }),
+  "ui.runtime.installingProgress": msg({
+    id: "ui.runtime.installingProgress",
+    message: "Installing offline copy — {percent}%",
+  }),
+  "ui.runtime.detailFiles": msg({
+    id: "ui.runtime.detailFiles",
+    message: "{cached} of {total} files",
+  }),
+  "ui.runtime.detailEmulatorFile": msg({
+    id: "ui.runtime.detailEmulatorFile",
+    message: "EmulatorJS: {name}",
+  }),
+  "ui.runtime.detailIdentifyGroup": msg({
+    id: "ui.runtime.detailIdentifyGroup",
+    message: "ROM database: {name}",
+  }),
   "ui.runtime.ready": msg({ id: "ui.runtime.ready", message: "Offline ready" }),
   "ui.runtime.readyDesc": msg({
     id: "ui.runtime.readyDesc",
@@ -284,6 +300,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.envWeb": msg({ id: "ui.status.envWeb", message: "Browser tab" }),
   "ui.status.about": msg({ id: "ui.status.about", message: "About rom-weaver, its licence and its privacy" }),
   "ui.status.build": msg({ id: "ui.status.build", message: "This build" }),
+  "ui.status.cachedFiles": msg({ id: "ui.status.cachedFiles", message: "Cached offline files" }),
+  "ui.status.cachedFilesEmpty": msg({ id: "ui.status.cachedFilesEmpty", message: "No offline files are cached." }),
+  "ui.status.cachedFilesLoading": msg({ id: "ui.status.cachedFilesLoading", message: "Loading cached files…" }),
   "ui.status.offline": msg({ id: "ui.status.offline", message: "Offline" }),
   "ui.status.offlineLegend": msg({ id: "ui.status.offlineLegend", message: "What the offline states mean" }),
   "ui.status.pullRequest": msg({ id: "ui.status.pullRequest", message: "Pull request" }),

@@ -542,7 +542,9 @@ const createPwaServiceWorkerClient = ({
     });
 
     updateServiceWorker = registerServiceWorker({
-      immediate: true,
+      // An unisolated first visit needs the worker before the boot gate can release. Pages that
+      // already have server or worker COOP/COEP headers can keep registration off the load path.
+      immediate: !isCrossOriginIsolated(),
       // Without this callback the registrar reloads the page itself the moment the incoming worker
       // takes control, and the reloadPage argument to updateServiceWorker() is ignored outright -
       // so a silent activation would still reload. Supplying it moves that decision here.

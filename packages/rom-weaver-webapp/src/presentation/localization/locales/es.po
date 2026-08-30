@@ -35,8 +35,18 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.romDatabase"
+#~ msgstr "Base de datos de ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailFiles"
+msgstr "{cached} de {total} archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -175,6 +185,11 @@ msgstr "por suma de verificación, aquí mismo en este navegador —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFiles"
+msgstr "Archivos sin conexión en caché"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Guardando la aplicación en caché para que funcione sin conexión…"
 
@@ -207,6 +222,11 @@ msgstr "Canal"
 #: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "La validación de la suma de comprobación falló."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Las sumas de verificación solo usan los caracteres hexadecimales 0-9 y a-f."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -295,6 +315,11 @@ msgstr "Códecs DVD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailEmulatorFile"
+msgstr "EmulatorJS: {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
 msgstr "Activar herramientas beta (Identificar, Recortar y Deshacer PPF)"
 
@@ -302,11 +327,6 @@ msgstr "Activar herramientas beta (Identificar, Recortar y Deshacer PPF)"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalid"
 msgstr "Introduce 8 (CRC32), 32 (MD5) o 40 (SHA-1) caracteres hexadecimales."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashInvalidChars"
-msgstr "Las sumas de verificación solo usan los caracteres hexadecimales 0-9 y a-f."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -355,6 +375,11 @@ msgstr "Identificar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Identifica por suma de verificación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "Incluir la ROM en el bundle"
 
@@ -367,6 +392,11 @@ msgstr "Aplicación instalada (PWA)"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Instalando la copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingProgress"
+msgstr "Instalando la copia sin conexión — {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -407,6 +437,11 @@ msgstr "Nivel personalizado"
 #: src/presentation/localization/messages.ts
 msgid "ui.theme.light"
 msgstr "Claro"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesLoading"
+msgstr "Cargando archivos en caché…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -480,6 +515,11 @@ msgstr "Ninguna línea coincide con «{q}»"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesEmpty"
+msgstr "No hay archivos sin conexión en caché."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No se encontró ningún archivo seleccionable."
 
@@ -517,11 +557,6 @@ msgstr "Incluye una ROM solo si tienes derecho a distribuirla. Compartir ROMs co
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "opcional"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Identifica por suma de verificación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -662,6 +697,11 @@ msgstr "Revierte una ROM parcheada a su volcado original,"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.rom"
 msgstr "ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailIdentifyGroup"
+msgstr "Base de datos ROM: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

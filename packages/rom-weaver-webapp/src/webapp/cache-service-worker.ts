@@ -11,13 +11,16 @@ import type { WorkboxPlugin } from "workbox-core/types.js";
 import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
+import { createOfflineWarmup } from "./offline-warmup.ts";
+import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
+import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
 declare const __EMULATORJS_VERSION__: string;
 declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
   id: string;
   label: string;
-  packs: Array<{ sha256: string; url: string }>;
+  packs: Array<{ sha256: string; sizeBytes?: number; url: string }>;
 }>;
 
 declare let self: ServiceWorkerGlobalScope & {
@@ -46,15 +49,23 @@ const PRECACHE_VERSION = import.meta.env.DEV
 setCacheNameDetails({
   precache: PRECACHE_ID,
   prefix: "precache",
-  runtime: `${PRECACHE_ID}-runtime`,
-  suffix: PRECACHE_VERSION,
+  runtime: `${PRECACHE_ID}-runtime-${PRECACHE_VERSION}`,
 });
 
 const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
-const EMULATORJS_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-emulatorjs-`;
+const MANAGED_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-`;
+const EMULATORJS_CACHE_PREFIX = `${MANAGED_CACHE_PREFIX}emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
-const IDENTIFY_OPTIONAL_CACHE_NAME = `${cacheNames.prefix}-${PRECACHE_ID}-identify-optional`;
+const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
+const CACHE_POLICY = createServiceWorkerCachePolicy({
+  emulatorJsCacheName: EMULATORJS_CACHE_NAME,
+  emulatorJsCachePrefix: EMULATORJS_CACHE_PREFIX,
+  identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
+  managedCachePrefix: MANAGED_CACHE_PREFIX,
+  precacheName: PRECACHE_NAME,
+  runtimeCacheName: RUNTIME_CACHE_NAME,
+});
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
 // In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
 // terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
@@ -190,7 +201,10 @@ const withCrossOriginIsolationHeaders = (
   });
 };
 
-const crossOriginIsolationPrecachePlugin: WorkboxPlugin = {
+const precachePlugin: WorkboxPlugin = {
+  async requestWillFetch({ event, request }) {
+    return prioritizePrecacheInstallRequest(request, event);
+  },
   async handlerWillRespond({ response }) {
     const credentialless = await ensureCoepModeHydrated();
     return withCrossOriginIsolationHeaders(response, credentialless) || response;
@@ -275,54 +289,43 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
-/* Default packs enter the precache. Optional packs enter their own cache only
-   after the user installs a complete group. Identify requests MUST stay local. */
+/* Default packs enter the precache. Optional packs enter their own cache via
+   the background warm-up, an explicit group install, or an on-demand
+   single-pack fetch during an identify run. Identify requests MUST stay local
+   once cached. */
 const isIdentifyPackRequest = (url: URL) =>
   url.origin === self.location.origin && /\/assets\/identify-.*\.pack$/u.test(url.pathname);
 
-const optionalGroupMarkerUrl = (groupId: string) =>
-  new URL(`/__rom-weaver-identify-group__/${groupId}`, self.location.origin).href;
+// `priority: "low"` is a fetch priority hint (Chromium); other engines ignore
+// the field. It keeps warm-up traffic behind interactive requests.
+const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
+  fetch(input, { ...init, priority: "low" } as RequestInit);
 
-const optionalGroupRevision = (group: (typeof __IDENTIFY_OPTIONAL_PACK_GROUPS__)[number]) =>
-  group.packs.map((pack) => `${pack.url}:${pack.sha256}`).join("\n");
-
-const isOptionalGroupInstalled = async (cache: Cache, group: (typeof __IDENTIFY_OPTIONAL_PACK_GROUPS__)[number]) =>
-  (await (await cache.match(optionalGroupMarkerUrl(group.id)))?.text()) === optionalGroupRevision(group);
+const offlineWarmup = createOfflineWarmup({
+  emulatorJsCacheName: EMULATORJS_CACHE_NAME,
+  emulatorJsVersion: __EMULATORJS_VERSION__,
+  fetchForWarmup,
+  // On-demand pack serves and settings-triggered installs block a waiting
+  // user, so they fetch without the low-priority hint.
+  fetchForInteractive: (input, init) => fetch(input, init),
+  identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
+  identifyOptionalGroups: __IDENTIFY_OPTIONAL_PACK_GROUPS__,
+  log: logServiceWorker,
+  scope: self.registration.scope,
+});
 
 const serveIdentifyPack = async ({ request }: { request: Request }) => {
   const precached = await matchPrecache(request.url);
   if (precached) return precached;
-  const requestUrl = new URL(request.url);
-  const group = __IDENTIFY_OPTIONAL_PACK_GROUPS__.find((candidate) =>
-    candidate.packs.some((pack) => new URL(pack.url, self.registration.scope).pathname === requestUrl.pathname),
-  );
-  if (!group) return Response.error();
-  const cache = await caches.open(IDENTIFY_OPTIONAL_CACHE_NAME);
-  if (!(await isOptionalGroupInstalled(cache, group))) return Response.error();
-  return (await cache.match(request.url)) || Response.error();
+  try {
+    return await offlineWarmup.serveOptionalIdentifyPack(request);
+  } catch (err) {
+    logServiceWorker("optional identify pack request failed", { error: formatError(err), url: request.url });
+    return Response.error();
+  }
 };
 
 registerRoute(({ url }) => isIdentifyPackRequest(url), serveIdentifyPack);
-
-const installOptionalIdentifyGroup = async (groupId: string) => {
-  const group = __IDENTIFY_OPTIONAL_PACK_GROUPS__.find((candidate) => candidate.id === groupId);
-  if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
-  const downloaded = await Promise.all(
-    group.packs.map(async (pack) => {
-      const request = new Request(new URL(pack.url, self.registration.scope));
-      const response = await fetch(request);
-      if (!response.ok) throw new Error(`ROM identify pack download failed with HTTP ${response.status}`);
-      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await response.clone().arrayBuffer()));
-      const actualSha256 = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-      if (actualSha256 !== pack.sha256) throw new Error(`ROM identify pack checksum failed: ${pack.url}`);
-      return { request, response };
-    }),
-  );
-  const cache = await caches.open(IDENTIFY_OPTIONAL_CACHE_NAME);
-  await Promise.all(downloaded.map(({ request, response }) => cache.put(request, response)));
-  await cache.put(optionalGroupMarkerUrl(group.id), new Response(optionalGroupRevision(group)));
-  return { id: group.id, installed: true, label: group.label, packs: group.packs.length };
-};
 
 logServiceWorker("script initialized", {
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
@@ -333,7 +336,7 @@ logServiceWorker("script initialized", {
   runtimeCacheName: RUNTIME_CACHE_NAME,
 });
 
-addPlugins([crossOriginIsolationPrecachePlugin]);
+addPlugins([precachePlugin]);
 precacheAndRoute(self.__WB_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
@@ -356,12 +359,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((cacheNames) =>
-        cacheNames.filter((cacheName) => {
-          if (cacheName.startsWith(EMULATORJS_CACHE_PREFIX)) return cacheName !== EMULATORJS_CACHE_NAME;
-          return cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`);
-        }),
-      )
+      .then((cacheNames) => findStaleServiceWorkerCaches(cacheNames, CACHE_POLICY))
       .then((cachesToDelete) => {
         logServiceWorker("activate event; deleting stale caches", {
           cachesToDelete,
@@ -404,21 +402,63 @@ self.addEventListener("message", (event) => {
     return;
   }
 
+  const replyTo = (response: unknown) => {
+    if (event.ports?.[0]) event.ports[0].postMessage(response);
+    else if (event.source && "postMessage" in event.source) event.source.postMessage(response);
+  };
+
+  if (event.data.action === "offline-warmup-pump") {
+    // Interim byte-level events stream over the same reply port while the
+    // unit downloads; the final "offline-warmup-progress" message ends the pump.
+    const pump = offlineWarmup
+      .runNextUnit((interim) => replyTo({ action: "offline-warmup-interim", ...interim }))
+      .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
+      .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));
+    event.waitUntil(pump.then(replyTo));
+    return;
+  }
+
+  if (event.data.action === "offline-warmup-bump") {
+    const target = event.data.target;
+    if (target?.kind === "emulatorjs") offlineWarmup.bumpPriority({ kind: "emulatorjs" });
+    else if (target?.kind === "identify-groups" && Array.isArray(target.groupIds)) {
+      offlineWarmup.bumpPriority({
+        kind: "identify-groups",
+        groupIds: target.groupIds.filter((id: unknown): id is string => typeof id === "string"),
+      });
+    }
+    return;
+  }
+
+  if (event.data.action === "get-offline-ready-state") {
+    const query = offlineWarmup
+      .getReadyState()
+      .then((state) => ({ action: "offline-ready-state", ...state }))
+      .catch((error) => ({ action: "offline-ready-state-failed", error: formatError(error) }));
+    event.waitUntil(query.then(replyTo));
+    return;
+  }
+
+  if (event.data.action === "get-offline-cached-files") {
+    const query = offlineWarmup
+      .getCachedFiles()
+      .then((files) => ({ action: "offline-cached-files", files }))
+      .catch((error) => ({ action: "offline-cached-files-failed", error: formatError(error) }));
+    event.waitUntil(query.then(replyTo));
+    return;
+  }
+
   if (event.data.action === "install-identify-pack-group") {
     const groupId = typeof event.data.groupId === "string" ? event.data.groupId : "";
-    const install = installOptionalIdentifyGroup(groupId)
+    const install = offlineWarmup
+      .installIdentifyGroup(groupId)
       .then((result) => ({ action: "identify-pack-group-installed", ...result }))
       .catch((error) => ({
         action: "identify-pack-group-install-failed",
         error: formatError(error),
         id: groupId,
       }));
-    event.waitUntil(
-      install.then((response) => {
-        if (event.ports?.[0]) event.ports[0].postMessage(response);
-        else if (event.source && "postMessage" in event.source) event.source.postMessage(response);
-      }),
-    );
+    event.waitUntil(install.then(replyTo));
     return;
   }
 
@@ -432,6 +472,5 @@ self.addEventListener("message", (event) => {
   };
 
   logServiceWorker("message received; reporting cache version", response);
-  if (event.ports?.[0]) event.ports[0].postMessage(response);
-  else if (event.source && "postMessage" in event.source) event.source.postMessage(response);
+  replyTo(response);
 });

@@ -168,7 +168,10 @@ const prepareIngestIdentify = async ({
   const trace = { logLevel, namespace: "runtime:browser-workflow", onLog };
   let entryNames: string[] = [];
   try {
-    const { loadIdentifyPackSelection, selectIdentifySlugs } = await import("./identify-packs.ts");
+    const { identifyGroupIdsForHints, loadIdentifyPackSelection, selectIdentifySlugs } =
+      await import("./identify-packs.ts");
+    const { bumpOfflineWarmupPriority, pauseOfflineWarmup, resumeOfflineWarmup } =
+      await import("../../webapp/pwa/offline-warmup-client.ts");
     let hints: Parameters<typeof loadIdentifyPackSelection>[0] = { fileName };
     // Always probe: the platform the probe reports (decoded from the actual
     // bytes) outranks the file extension for routing, and a mislabeled or
@@ -190,14 +193,25 @@ const prepareIngestIdentify = async ({
       fileName,
       slugs: selectIdentifySlugs(hints),
     });
-    const selection = await loadIdentifyPackSelection(hints, (platforms) => {
-      onProgress?.({
-        message:
-          platforms.length === 1
-            ? `Loading ${platforms[0]} identification data…`
-            : `Loading identification data for ${platforms.length} systems…`,
-      });
+    // Move the packs this run could need to the front of the offline warm-up,
+    // and hold the warm-up while the run's own downloads are in flight.
+    void identifyGroupIdsForHints(hints).then((groupIds) => {
+      if (groupIds.length) bumpOfflineWarmupPriority({ groupIds, kind: "identify-groups" });
     });
+    pauseOfflineWarmup();
+    let selection: Awaited<ReturnType<typeof loadIdentifyPackSelection>>;
+    try {
+      selection = await loadIdentifyPackSelection(hints, (platforms) => {
+        onProgress?.({
+          message:
+            platforms.length === 1
+              ? `Loading ${platforms[0]} identification data…`
+              : `Loading identification data for ${platforms.length} systems…`,
+        });
+      });
+    } finally {
+      resumeOfflineWarmup();
+    }
     return {
       entryNames,
       packs: selection.packs,

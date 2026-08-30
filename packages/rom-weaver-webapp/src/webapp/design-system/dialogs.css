@@ -1059,6 +1059,52 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   width: 13px;
   height: 13px;
 }
+.rw-app .sw-status-cell {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+}
+/* Warm-up byte counter and current download under the installing badge. */
+.rw-app .sw-progress-detail {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.65rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.rw-app .sw-cache-note {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--ink-3);
+}
+.rw-app .sw-cache-error {
+  color: var(--danger-text);
+}
+.rw-app .sw-cache-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xs);
+  max-height: 18rem;
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  list-style: none;
+}
+.rw-app .sw-cache-list li {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: var(--sp-s);
+  align-items: baseline;
+  font-size: 0.7rem;
+}
+.rw-app .sw-cache-list li > span {
+  color: var(--ink-3);
+}
+.rw-app .sw-cache-list code {
+  overflow-wrap: anywhere;
+}
 .rw-app .sw-chip[data-sw="active"] {
   color: var(--verified);
   border-color: color-mix(in oklab, var(--verified) 35%, transparent);

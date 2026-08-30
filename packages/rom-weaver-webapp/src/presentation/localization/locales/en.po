@@ -35,8 +35,18 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.romDatabase"
+#~ msgstr "ROM database"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailFiles"
+msgstr "{cached} of {total} files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -175,6 +185,11 @@ msgstr "with a database that stays local —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFiles"
+msgstr "Cached offline files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Caching the app so it can run offline…"
 
@@ -207,6 +222,11 @@ msgstr "Channel"
 #: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "Checksum validation failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Checksums use only the hex characters 0-9 and a-f."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -295,6 +315,11 @@ msgstr "DVD Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailEmulatorFile"
+msgstr "EmulatorJS: {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
 msgstr "Enable beta tools (Identify, Trim, and PPF undo)"
 
@@ -302,11 +327,6 @@ msgstr "Enable beta tools (Identify, Trim, and PPF undo)"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalid"
 msgstr "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashInvalidChars"
-msgstr "Checksums use only the hex characters 0-9 and a-f."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -355,6 +375,11 @@ msgstr "Identify"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Identify by checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "Include ROM in bundle"
 
@@ -367,6 +392,11 @@ msgstr "Installed app (PWA)"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Installing offline copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingProgress"
+msgstr "Installing offline copy — {percent}%"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -407,6 +437,11 @@ msgstr "Level override"
 #: src/presentation/localization/messages.ts
 msgid "ui.theme.light"
 msgstr "Light"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesLoading"
+msgstr "Loading cached files…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -480,6 +515,11 @@ msgstr "No lines match “{q}”"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesEmpty"
+msgstr "No offline files are cached."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No selectable file was found."
 
@@ -517,11 +557,6 @@ msgstr "Only include a ROM if you have the right to distribute it. Sharing copyr
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Identify by checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -662,6 +697,11 @@ msgstr "Revert a patched ROM to its original dump,"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.rom"
 msgstr "ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailIdentifyGroup"
+msgstr "ROM database: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

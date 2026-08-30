@@ -35,8 +35,18 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.romDatabase"
+#~ msgstr "ROM-Datenbank"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailFiles"
+msgstr "{cached} von {total} Dateien"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -175,6 +185,11 @@ msgstr "per Prüfsumme, direkt in diesem Browser —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFiles"
+msgstr "Zwischengespeicherte Offline-Dateien"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingDesc"
 msgstr "Die App wird für die Offline-Nutzung zwischengespeichert…"
 
@@ -207,6 +222,11 @@ msgstr "Kanal"
 #: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashInvalidChars"
+msgstr "Prüfsummen enthalten nur die Hex-Zeichen 0-9 und a-f."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -295,6 +315,11 @@ msgstr "DVD-Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailEmulatorFile"
+msgstr "EmulatorJS: {name}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
 msgstr "Beta-Tools aktivieren (Identifizieren, Trimmen und PPF rückgängig machen)"
 
@@ -302,11 +327,6 @@ msgstr "Beta-Tools aktivieren (Identifizieren, Trimmen und PPF rückgängig mach
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalid"
 msgstr "Geben Sie 8 (CRC32), 32 (MD5) oder 40 (SHA-1) Hex-Zeichen ein."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashInvalidChars"
-msgstr "Prüfsummen enthalten nur die Hex-Zeichen 0-9 und a-f."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -355,6 +375,11 @@ msgstr "Identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Per Prüfsumme identifizieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "ROM in Bundle einschließen"
 
@@ -367,6 +392,11 @@ msgstr "Installierte App (PWA)"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Offline-Kopie wird installiert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingProgress"
+msgstr "Offline-Kopie wird installiert — {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -407,6 +437,11 @@ msgstr "Eigene Stufe"
 #: src/presentation/localization/messages.ts
 msgid "ui.theme.light"
 msgstr "Hell"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesLoading"
+msgstr "Zwischengespeicherte Dateien werden geladen…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -480,6 +515,11 @@ msgstr "Keine Zeile passt zu „{q}“"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesEmpty"
+msgstr "Keine Offline-Dateien sind zwischengespeichert."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "Keine wählbare Datei gefunden."
 
@@ -517,11 +557,6 @@ msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen ur
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Per Prüfsumme identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -662,6 +697,11 @@ msgstr "Eine gepatchte ROM auf den Original-Dump zurücksetzen,"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.rom"
 msgstr "ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.detailIdentifyGroup"
+msgstr "ROM-Datenbank: {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
