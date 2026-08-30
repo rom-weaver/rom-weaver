@@ -12,6 +12,7 @@ import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } fr
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
+import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
@@ -200,7 +201,10 @@ const withCrossOriginIsolationHeaders = (
   });
 };
 
-const crossOriginIsolationPrecachePlugin: WorkboxPlugin = {
+const precachePlugin: WorkboxPlugin = {
+  async requestWillFetch({ event, request }) {
+    return prioritizePrecacheInstallRequest(request, event);
+  },
   async handlerWillRespond({ response }) {
     const credentialless = await ensureCoepModeHydrated();
     return withCrossOriginIsolationHeaders(response, credentialless) || response;
@@ -332,7 +336,7 @@ logServiceWorker("script initialized", {
   runtimeCacheName: RUNTIME_CACHE_NAME,
 });
 
-addPlugins([crossOriginIsolationPrecachePlugin]);
+addPlugins([precachePlugin]);
 precacheAndRoute(self.__WB_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
