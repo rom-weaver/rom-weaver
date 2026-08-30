@@ -190,6 +190,18 @@ describe("Masthead", () => {
     fireEvent.click(status);
     expect(onOpenStatus).toHaveBeenCalledTimes(1);
 
+    rerender(
+      withSettings(
+        <Masthead
+          {...mastheadProps}
+          offlineProgress={{ cachedBytes: 25, ready: false, totalBytes: 100 }}
+          serviceWorkerStatus="active"
+        />,
+      ),
+    );
+    expect(container.querySelector(".masthead-status-percent")?.textContent).toBe("25%");
+    expect(container.querySelector(".sub-status")?.getAttribute("aria-label")).toBe("Installing offline copy — 25%");
+
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("disabled");
     // an available update outranks every other runtime state

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bumpOfflineWarmupPriority,
+  createOfflineWarmupProgressGate,
   pauseOfflineWarmup,
   queryOfflineCachedFiles,
   resumeOfflineWarmup,
@@ -65,6 +66,25 @@ afterEach(async () => {
 });
 
 describe("offline warm-up client", () => {
+  it("ignores an initial snapshot that arrives after live progress", () => {
+    const onProgress = vi.fn();
+    const gate = createOfflineWarmupProgressGate(onProgress);
+    const completed = {
+      cachedBytes: 2,
+      cachedFiles: 2,
+      pendingUnits: 0,
+      ready: true,
+      totalBytes: 2,
+      totalFiles: 2,
+    };
+
+    gate.acceptLive({ ...completed, detail: null, unit: null, unitLoadedBytes: null, unitTotalBytes: null });
+    gate.acceptSnapshot({ ...completed, cachedBytes: 1, pendingUnits: 1, ready: false });
+
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
+  });
+
   it("queries the service worker for cached files", async () => {
     const files = [{ cache: "emulatorjs-4.2.3", url: "https://example.test/emulatorjs/data/loader.js" }];
     const { controller, messages } = createFakeController([{ action: "offline-cached-files", files }]);
@@ -106,6 +126,16 @@ describe("offline warm-up client", () => {
     expect(messages.map((message) => message.action)).toEqual(["offline-warmup-pump", "offline-warmup-pump"]);
     expect(onProgress).toHaveBeenCalledTimes(2);
     expect(onProgress.mock.calls[1]?.[0]).toMatchObject({ ready: true });
+  });
+
+  it("starts the first low-priority pump without a default delay", async () => {
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+
+    cancel = scheduleOfflineWarmup({ idleDelayMs: 0, navigator: { serviceWorker } });
+    await flush();
+
+    expect(messages.map((message) => message.action)).toEqual(["offline-warmup-pump"]);
   });
 
   it("does not pump before the delay elapses or without a controller", async () => {

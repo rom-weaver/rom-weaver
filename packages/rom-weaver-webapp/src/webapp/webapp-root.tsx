@@ -30,6 +30,7 @@ import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
 import {
+  createOfflineWarmupProgressGate,
   persistOfflineReady,
   queryOfflineReadyState,
   readPersistedOfflineReady,
@@ -288,12 +289,13 @@ function WebappRoot({
   }, []);
   useEffect(() => {
     if (notFound) return undefined;
+    const progressGate = createOfflineWarmupProgressGate(onWarmupProgress);
     // A page that loads after the warm-up finished gets no progress events;
     // ask the worker once so the chip does not stay "installing" forever.
     void queryOfflineReadyState().then((state) => {
-      if (state) onWarmupProgress({ ...state });
+      if (state) progressGate.acceptSnapshot(state);
     });
-    return scheduleOfflineWarmup({ onProgress: onWarmupProgress });
+    return scheduleOfflineWarmup({ onProgress: progressGate.acceptLive });
   }, [notFound, onWarmupProgress]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.

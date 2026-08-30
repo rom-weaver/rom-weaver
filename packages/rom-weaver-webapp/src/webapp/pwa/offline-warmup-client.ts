@@ -1,15 +1,13 @@
 /**
  * Page-side driver for the service worker's offline warm-up. The page pumps
- * the worker one unit at a time, waiting for browser idle time between units,
- * so the ~60 MB of EmulatorJS assets and identify packs download at low
- * priority without competing with interactive traffic. On data-saver
- * connections the automatic loop stays off; explicit priority bumps (an
- * identify run, the emulator test view) still download what they name.
+ * the worker one unit at a time. The first low-priority unit starts as soon as
+ * the worker controls the page, then later units wait for browser idle time.
+ * On data-saver connections the automatic loop stays off; explicit priority
+ * bumps (an identify run, the emulator test view) still download what they name.
  */
 import { createLogger } from "../../lib/logging.ts";
 import type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress } from "../offline-warmup.ts";
 
-const WARMUP_START_DELAY_MS = 5000;
 const IDLE_DELAY_MS = 250;
 const PUMP_TIMEOUT_MS = 120_000;
 const CACHE_INVENTORY_TIMEOUT_MS = 2000;
@@ -35,6 +33,21 @@ type ScheduleOfflineWarmupOptions = {
   idleDelayMs?: number;
   navigator?: NavigatorLike;
   onProgress?: (progress: OfflineWarmupProgress) => void;
+};
+
+const createOfflineWarmupProgressGate = (onProgress: (progress: OfflineReadyState) => void) => {
+  let liveProgressReceived = false;
+  return {
+    acceptLive: (progress: OfflineWarmupProgress) => {
+      liveProgressReceived = true;
+      onProgress(progress);
+    },
+    acceptSnapshot: (progress: OfflineReadyState) => {
+      // Snapshot and pump messages run independently in the service worker.
+      // Once a pump reports progress, an outstanding snapshot is stale.
+      if (!liveProgressReceived) onProgress(progress);
+    },
+  };
 };
 
 const getGlobalNavigator = (): NavigatorLike | undefined => (typeof navigator === "undefined" ? undefined : navigator);
@@ -259,12 +272,12 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
 
   activeController = { bump, notifyResume };
 
-  const startAfterDelay = () => {
+  const startWarmup = () => {
     if (started || signal.aborted || !serviceWorker.controller) return;
-    serviceWorker.removeEventListener?.("controllerchange", startAfterDelay);
+    serviceWorker.removeEventListener?.("controllerchange", startWarmup);
     const drained = pendingBumps.splice(0);
     for (const target of drained) bump(target);
-    void waitMs(options.delayMs ?? WARMUP_START_DELAY_MS, signal).then(() => {
+    const begin = () => {
       if (signal.aborted) return;
       if (saveData) {
         logger.debug("offline warm-up auto-start skipped; data saver is on");
@@ -272,7 +285,10 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
       }
       started = true;
       void runLoop();
-    });
+    };
+    const delayMs = options.delayMs ?? 0;
+    if (delayMs <= 0) begin();
+    else void waitMs(delayMs, signal).then(begin);
   };
 
   const onOnline = () => {
@@ -286,14 +302,14 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   };
   serviceWorker.addEventListener?.("controllerchange", onControllerChange);
 
-  if (serviceWorker.controller) startAfterDelay();
-  else serviceWorker.addEventListener?.("controllerchange", startAfterDelay);
+  if (serviceWorker.controller) startWarmup();
+  else serviceWorker.addEventListener?.("controllerchange", startWarmup);
 
   return () => {
     abortController.abort();
     if (activeController?.bump === bump) activeController = null;
     if (typeof removeEventListener === "function") removeEventListener("online", onOnline);
-    serviceWorker.removeEventListener?.("controllerchange", startAfterDelay);
+    serviceWorker.removeEventListener?.("controllerchange", startWarmup);
     serviceWorker.removeEventListener?.("controllerchange", onControllerChange);
   };
 };
@@ -345,6 +361,7 @@ const queryOfflineCachedFiles = async (nav?: NavigatorLike): Promise<OfflineCach
 
 export {
   bumpOfflineWarmupPriority,
+  createOfflineWarmupProgressGate,
   pauseOfflineWarmup,
   persistOfflineReady,
   queryOfflineCachedFiles,

@@ -772,6 +772,15 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   width: 16px;
   height: 16px;
 }
+.rw-app .masthead-status.has-progress {
+  width: auto;
+  min-width: clamp(54px, 46px + 1.2vw, 62px);
+  padding-inline: var(--sp-s);
+}
+.rw-app .masthead-status-percent {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
 /* Desktop keeps the important destinations compact; the tooltip and aria-label
    carry their names without turning the actions cluster into another nav. */
 .rw-app .tool-text {

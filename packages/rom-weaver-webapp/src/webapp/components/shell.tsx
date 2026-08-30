@@ -1249,13 +1249,16 @@ const Masthead = ({
           <button
             aria-haspopup="dialog"
             aria-label={runtimeTitle}
-            className="tool masthead-status sub-status"
+            className={join("tool masthead-status sub-status", runtimePercent !== null && "has-progress")}
             data-sw={runtimeState}
             onClick={onOpenStatus}
             title={runtimeTitle}
             type="button"
           >
             <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
+            {runtimePercent === null ? null : (
+              <span aria-hidden="true" className="masthead-status-percent">{`${runtimePercent}%`}</span>
+            )}
             <span className="sr-only sub-status-text">{runtimeLabel}</span>
           </button>
           <span className="mobile-utility-theme">
