@@ -544,7 +544,7 @@ fn download_redump_dat(platform: &str, database_dir: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// The RWFP5 reader rejects a whole pack when any record exceeds its caps, so
+/// The RWFP1 reader rejects a whole pack when any record exceeds its caps, so
 /// the writer MUST drop an oversized record instead of emitting an unreadable pack.
 #[cfg(not(target_arch = "wasm32"))]
 fn game_within_pack_caps(game: &PackGame) -> bool {
@@ -601,9 +601,9 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .expect("sha256 value present")
 }
 
-/// Build one platform's RWFP5 pack bytes from its unsorted game records.
+/// Build one platform's RWFP1 pack bytes from its unsorted game records.
 #[cfg(not(target_arch = "wasm32"))]
-fn build_pack_v5(
+fn build_pack_v1(
     platform: &str,
     mut games: Vec<PackGame>,
     provenance: &Value,
@@ -629,7 +629,7 @@ fn build_pack_v5(
         .collect::<std::collections::BTreeSet<_>>()
         .len();
     let game_count = games.len();
-    let pack = rom_weaver_checksum::identify_pack_v5::encode(
+    let pack = rom_weaver_checksum::identify_pack_v1::encode(
         platform,
         IdentifySource::Redump,
         media_profile_for(platform),
@@ -645,7 +645,7 @@ fn build_pack_v5(
     ))
 }
 
-/// Import each Redump XML DAT in a ZIP as one RWFP5 system pack.
+/// Import each Redump XML DAT in a ZIP as one RWFP1 system pack.
 #[cfg(not(target_arch = "wasm32"))]
 fn import_redump_dat(
     dump: &Path,
@@ -729,7 +729,7 @@ fn import_redump_dat(
             continue;
         }
         let (pack, game_count, component_count, routed_keys, shared_components) =
-            build_pack_v5(&platform, games, &provenance)?;
+            build_pack_v1(&platform, games, &provenance)?;
         let slug = slugify_platform(&platform);
         let file = format!("{slug}.pack");
         let path = database_dir.join(&file);
@@ -796,7 +796,7 @@ fn write_merged_catalog(
             source: IdentifySource::Redump,
             media_profiles: vec![media_profile_for(&system.platform).to_string()],
             pack_slug: system.slug.clone(),
-            pack_format: "RWFP5".to_string(),
+            pack_format: "RWFP1".to_string(),
             pack_sha256: Some(system.sha256.clone()),
             canonicalization_version: 1,
         });
@@ -917,7 +917,7 @@ impl CliApp {
                             ))
                         })?;
                         let format = match IdentifyPackFile::parse(&bytes) {
-                            Ok(IdentifyPackFile::V5(_)) => "RWFP5",
+                            Ok(IdentifyPackFile::V1(_)) => "RWFP1",
                             Err(_) => "invalid",
                         };
                         packs.push(json!({

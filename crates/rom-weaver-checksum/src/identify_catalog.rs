@@ -34,7 +34,7 @@ pub struct IdentifyPlatformCatalogEntry {
     pub source: IdentifySource,
     pub media_profiles: Vec<String>,
     pub pack_slug: String,
-    /// Outer pack magic label. The current value is "RWFP5".
+    /// Outer pack magic label. The current value is "RWFP1".
     pub pack_format: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack_sha256: Option<String>,
@@ -158,7 +158,7 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
             source: IdentifySource::Redump,
             media_profiles: vec!["redump-disc-track-v1".to_string()],
             pack_slug: normalize_platform_name(canonical).replace(' ', "-"),
-            pack_format: "RWFP5".to_string(),
+            pack_format: "RWFP1".to_string(),
             pack_sha256: None,
             canonicalization_version: 1,
         }
@@ -270,7 +270,7 @@ fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
             source: IdentifySource::OpenGood,
             media_profiles: vec!["opengood-cartridge-v1".to_string()],
             pack_slug: slug.to_string(),
-            pack_format: "RWFP5".to_string(),
+            pack_format: "RWFP1".to_string(),
             pack_sha256: None,
             canonicalization_version: 1,
         }
@@ -347,7 +347,7 @@ mod tests {
             "source": "opengood",
             "mediaProfiles": ["opengood-cartridge-v1"],
             "packSlug": slug,
-            "packFormat": "RWFP5",
+            "packFormat": "RWFP1",
             "canonicalizationVersion": 1,
         })
     }

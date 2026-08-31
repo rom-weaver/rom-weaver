@@ -285,7 +285,7 @@ impl IdentifyDatabaseSet {
         output: &mut Vec<IdentifyTitleMatch>,
     ) -> Result<()> {
         for (database_name, pack) in &self.packs {
-            let IdentifyPackFile::V5(pack) = pack;
+            let IdentifyPackFile::V1(pack) = pack;
             if raw_size.is_none() {
                 for (size, route_crc32) in pack.matching_routes(
                     raw_checksums.get("crc32").map(String::as_str),
@@ -298,7 +298,7 @@ impl IdentifyDatabaseSet {
                         .or_insert(route_crc32);
                     let outcome =
                         match_single_blob(database_name, pack, Some(size), &routed_checksums)?
-                            .expect("a positive RWFP5 hash size produces a fingerprint");
+                            .expect("a positive RWFP1 hash size produces a fingerprint");
                     push_artifact_matches(database_name, variant, outcome, seen, output);
                 }
                 continue;
@@ -328,7 +328,7 @@ impl IdentifyDatabaseSet {
         let mut output = Vec::new();
         let mut seen = BTreeSet::new();
         for (database_name, pack) in &self.packs {
-            let IdentifyPackFile::V5(pack) = pack;
+            let IdentifyPackFile::V1(pack) = pack;
             let outcome = match_fingerprint(database_name, pack, fingerprint)?;
             push_artifact_matches(database_name, variant, outcome, &mut seen, &mut output);
         }
@@ -361,7 +361,7 @@ impl IdentifyDatabaseSet {
         let mut seen = BTreeSet::new();
         for checksums in embedded {
             for (database_name, pack) in &self.packs {
-                let IdentifyPackFile::V5(pack) = pack;
+                let IdentifyPackFile::V1(pack) = pack;
                 for (size, route_crc32) in pack.matching_routes(
                     checksums.get("crc32").map(String::as_str),
                     checksums.get("md5").map(String::as_str),
@@ -458,12 +458,12 @@ fn database_info_for(
     pack: &LoadedPack,
     _entry: Option<&IdentifyPlatformCatalogEntry>,
 ) -> IdentifyDatabaseInfo {
-    let IdentifyPackFile::V5(artifact) = &pack.file;
+    let IdentifyPackFile::V1(artifact) = &pack.file;
     IdentifyDatabaseInfo {
         source: Some(source_label(artifact.source()).to_string()),
         upstream_sources: Vec::new(),
         revision: None,
-        pack_format: "RWFP5".to_string(),
+        pack_format: "RWFP1".to_string(),
         canonicalization_profile: Some(artifact.canonicalization_profile().to_string()),
     }
 }
@@ -916,11 +916,11 @@ impl CliApp {
                      database install-all` or pass `--database-dir` with an existing user database"
                 ));
             } else if let Some(selected) = selected.iter().find(|selected| {
-                let IdentifyPackFile::V5(pack) = &selected.pack.file;
+                let IdentifyPackFile::V1(pack) = &selected.pack.file;
                 let profile = Some(pack.canonicalization_profile().to_string());
                 profile.as_deref().is_some_and(profile_needs_tracks)
             }) {
-                let IdentifyPackFile::V5(pack) = &selected.pack.file;
+                let IdentifyPackFile::V1(pack) = &selected.pack.file;
                 let profile = pack.canonicalization_profile().to_string();
                 condition = Some("unsupported_media_profile".to_string());
                 hint = Some(format!(
@@ -1174,7 +1174,7 @@ impl CliApp {
         let mut merged = MergedMatches::default();
 
         for selected_pack in selected {
-            let IdentifyPackFile::V5(pack) = &selected_pack.pack.file;
+            let IdentifyPackFile::V1(pack) = &selected_pack.pack.file;
             let outcomes = match_variant_blobs(
                 &selected_pack.pack.name,
                 pack,
@@ -1185,7 +1185,7 @@ impl CliApp {
             if outcomes.is_empty() {
                 trace!(
                     database = %selected_pack.pack.name,
-                    "skipping RWFP5 pack: the raw payload size is unknown"
+                    "skipping RWFP1 pack: the raw payload size is unknown"
                 );
                 continue;
             }
@@ -1317,7 +1317,7 @@ impl MergedMatches {
         }
         if self.database.is_none() && !added.is_empty() {
             let mut info = database_info_for(pack, entry);
-            let IdentifyPackFile::V5(artifact) = &pack.file;
+            let IdentifyPackFile::V1(artifact) = &pack.file;
             info.upstream_sources = matched_upstream_sources(artifact.games(), &added);
             self.database = Some(info);
         }

@@ -36,7 +36,7 @@ The tags describe the historical dump. They do not replace the title or change s
 
 Libretro Database uses CC-BY-SA-4.0. OpenGood uses CC0-1.0. The generated identify artifacts remain separate from the application license.
 
-Each RWFP5 manifest records each source name, URL, commit, license, and generation date. Each match also keeps the provenance that contributed its lookup record.
+Each RWFP1 manifest records each source name, URL, commit, license, and generation date. Each match also keeps the provenance that contributed its lookup record.
 
 ## Local operation
 

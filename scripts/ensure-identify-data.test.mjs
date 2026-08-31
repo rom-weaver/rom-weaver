@@ -28,7 +28,7 @@ function buildCurrentDataDir() {
   ];
   const systems = platforms.map(([platform, source]) => {
     const slug = slugifyPlatform(platform);
-    const bytes = Buffer.from(`RWFP5\0\0\0pack:${slug}`, "binary");
+    const bytes = Buffer.from(`RWFP1\0\0\0pack:${slug}`, "binary");
     writeFileSync(join(dataDir, `${slug}.pack`), bytes);
     writeFileSync(join(dataDir, `${slug}.pack.br`), bytes);
     const group = packGroupFor(platform);
@@ -38,7 +38,7 @@ function buildCurrentDataDir() {
       brotliFile: `${slug}.pack.br`,
       brotliBytes: bytes.length,
       rawBytes: bytes.length,
-      packFormat: "RWFP5",
+      packFormat: "RWFP1",
       sha256: createHash("sha256").update(bytes).digest("hex"),
       source,
       group,

@@ -18,7 +18,7 @@ pub trait ArtifactPackReader {
     fn game(&self, index: u32) -> Option<&PackGame>;
     fn route(&self, crc32_hex: &str, size: u64) -> Result<Vec<(u32, u16)>>;
 }
-impl ArtifactPackReader for crate::identify_pack_v5::ArtifactPack {
+impl ArtifactPackReader for crate::identify_pack_v1::ArtifactPack {
     fn game(&self, index: u32) -> Option<&PackGame> {
         self.game(index)
     }

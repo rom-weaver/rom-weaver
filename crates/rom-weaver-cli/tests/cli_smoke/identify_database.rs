@@ -31,10 +31,10 @@ fn component_json(
     value
 }
 
-/// Build an RWFP5 pack for one platform. Every discriminating component with a
+/// Build an RWFP1 pack for one platform. Every discriminating component with a
 /// crc32 and a size is routed.
-pub(crate) fn pack_v5(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u8> {
-    let v5_games = games
+pub(crate) fn pack_v1(platform: &str, profile: &str, games: &[(&str, Vec<Value>)]) -> Vec<u8> {
+    let v1_games = games
         .iter()
         .map(|(name, components)| PackGame {
             name: (*name).to_string(),
@@ -90,14 +90,14 @@ pub(crate) fn pack_v5(platform: &str, profile: &str, games: &[(&str, Vec<Value>)
                 .collect(),
         })
         .collect();
-    rom_weaver_checksum::identify_pack_v5::encode(
+    rom_weaver_checksum::identify_pack_v1::encode(
         platform,
         IdentifySource::Redump,
         profile,
         &serde_json::json!([]),
-        v5_games,
+        v1_games,
     )
-    .expect("RWFP5 pack")
+    .expect("RWFP1 pack")
 }
 
 fn catalog_json(platforms: &[(&str, &[&str], &str, &str)]) -> Vec<u8> {
@@ -110,7 +110,7 @@ fn catalog_json(platforms: &[(&str, &[&str], &str, &str)]) -> Vec<u8> {
                 "source": "redump",
                 "mediaProfiles": [profile],
                 "packSlug": slug,
-                "packFormat": "RWFP5",
+                "packFormat": "RWFP1",
                 "canonicalizationVersion": 1,
             })
         })
@@ -199,7 +199,7 @@ fn playstation_database(temp: &TempDir, payload: &[u8], with_pack: bool) -> Path
     .expect("catalog fixture");
     if with_pack {
         let crc = format!("{:08x}", crc32_of(payload));
-        let pack = pack_v5(
+        let pack = pack_v1(
             "Sony PlayStation",
             "nointro-single-image-v1",
             &[(
@@ -228,7 +228,7 @@ fn identify_matches_headered_rom_against_artifact_pack_via_remove_header() {
     let rom = temp.child("headered.nes");
     fs::write(rom.path(), with_nes_header(&payload)).expect("ROM fixture");
     let crc = format!("{:08x}", crc32_of(&payload));
-    let pack = pack_v5(
+    let pack = pack_v1(
         "Nintendo Entertainment System",
         "libretro-clrmamepro-v1",
         &[(
@@ -263,7 +263,7 @@ fn identify_matches_headered_rom_against_artifact_pack_via_remove_header() {
 }
 
 #[test]
-fn identify_system_alias_routes_to_an_installed_rwfp5_pack() {
+fn identify_system_alias_routes_to_an_installed_rwfp1_pack() {
     let temp = setup_temp_dir();
     let payload = b"playstation payload".to_vec();
     fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
@@ -290,7 +290,7 @@ fn identify_system_alias_routes_to_an_installed_rwfp5_pack() {
     assert_eq!(identify["matches"][0]["name"], "Ridge Racer (USA)");
     assert_eq!(identify["matches"][0]["platform"], "Sony PlayStation");
     assert_eq!(identify["quality"], "exact");
-    assert_eq!(identify["database"]["pack_format"], "RWFP5");
+    assert_eq!(identify["database"]["pack_format"], "RWFP1");
     assert_eq!(
         identify["database"]["canonicalization_profile"],
         "nointro-single-image-v1"
@@ -307,12 +307,12 @@ fn identify_system_alias_routes_to_an_installed_rwfp5_pack() {
 }
 
 #[test]
-fn identify_matches_an_rwfp5_pack_passed_via_database() {
+fn identify_matches_an_rwfp1_pack_passed_via_database() {
     let temp = setup_temp_dir();
     let payload = b"v2 explicit pack payload".to_vec();
     fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
     let crc = format!("{:08x}", crc32_of(&payload));
-    let pack = pack_v5(
+    let pack = pack_v1(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -355,7 +355,7 @@ fn ingest_matches_an_artifact_pack_using_the_payload_size() {
     let payload = b"artifact pack ingest payload".to_vec();
     fs::write(temp.child("game.bin").path(), &payload).expect("ROM fixture");
     let crc = format!("{:08x}", crc32_of(&payload));
-    let pack = pack_v5(
+    let pack = pack_v1(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -496,7 +496,7 @@ fn missing_required_track_is_a_partial_match() {
     let track1 = b"data track payload".to_vec();
     fs::write(temp.child("track1.bin").path(), &track1).expect("track fixture");
     let crc1 = format!("{:08x}", crc32_of(&track1));
-    let pack = pack_v5(
+    let pack = pack_v1(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -548,7 +548,7 @@ fn shared_only_component_stays_unknown() {
     let crc = format!("{:08x}", crc32_of(&shared));
     // The shared component is non-discriminating, so it is not routed and can
     // never pick a game on its own.
-    let pack = pack_v5(
+    let pack = pack_v1(
         "Test Platform",
         "nointro-single-image-v1",
         &[(
@@ -582,7 +582,7 @@ fn shared_only_component_stays_unknown() {
 fn corrupt_pack_fails_the_command_instead_of_reporting_unknown() {
     let temp = setup_temp_dir();
     fs::write(temp.child("game.bin").path(), b"payload").expect("ROM fixture");
-    fs::write(temp.child("broken.pack").path(), b"RWFP5\0\0\0garbage").expect("pack fixture");
+    fs::write(temp.child("broken.pack").path(), b"RWFP1\0\0\0garbage").expect("pack fixture");
 
     let output = command_stdout(
         &[
@@ -626,7 +626,7 @@ fn database_list_status_path_remove_round_trip() {
         .find(|entry| entry["platform"] == "Sony PlayStation")
         .expect("PlayStation entry");
     assert_eq!(playstation["installed"], true);
-    assert_eq!(playstation["pack_format"], "RWFP5");
+    assert_eq!(playstation["pack_format"], "RWFP1");
     // The builtin OpenGood catalog entries are listed too.
     assert!(
         platforms
@@ -648,7 +648,7 @@ fn database_list_status_path_remove_round_trip() {
     let packs = status["details"]["packs"].as_array().expect("packs");
     assert_eq!(packs.len(), 1);
     assert_eq!(packs[0]["slug"], "sony-playstation");
-    assert_eq!(packs[0]["format"], "RWFP5");
+    assert_eq!(packs[0]["format"], "RWFP1");
     assert_eq!(packs[0]["sha256"].as_str().expect("sha256").len(), 64);
 
     let path = parse_single_json_line(&command_stdout(
@@ -866,7 +866,7 @@ fn import_redump_builds_packs_and_identify_uses_them() {
     assert_eq!(identify["status"], "matched");
     assert_eq!(identify["matches"][0]["name"], "Imported Game (USA)");
     assert_eq!(identify["database"]["source"], "redump");
-    assert_eq!(identify["database"]["pack_format"], "RWFP5");
+    assert_eq!(identify["database"]["pack_format"], "RWFP1");
     // The imported game's SignatureSource is Redump.
     assert_eq!(
         identify["database"]["upstream_sources"],

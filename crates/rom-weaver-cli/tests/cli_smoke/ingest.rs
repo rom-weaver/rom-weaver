@@ -78,7 +78,7 @@ fn ingest_identifies_a_chd_disc_from_per_track_pack_components() {
         2,
         "expected two split tracks: {probe:?}"
     );
-    let pack_bytes = super::identify_database::pack_v5(
+    let pack_bytes = super::identify_database::pack_v1(
         "Sony - PlayStation",
         "redump-cd-track-v1",
         &[("Two Track Quest (USA)", track_components)],
@@ -181,7 +181,7 @@ fn ingest_identifies_a_bare_cue_with_sibling_tracks() {
         2,
         "expected two bare tracks: {probe:?}"
     );
-    let pack_bytes = super::identify_database::pack_v5(
+    let pack_bytes = super::identify_database::pack_v1(
         "Sony - PlayStation",
         "redump-cd-track-v1",
         &[("Raw Quest (USA)", track_components)],
@@ -251,7 +251,7 @@ fn ingest_identifies_a_merged_bin_chd_disc_from_per_track_pack_components() {
         })
         .collect();
     assert_eq!(track_components.len(), 2, "expected two split tracks");
-    let pack_bytes = super::identify_database::pack_v5(
+    let pack_bytes = super::identify_database::pack_v1(
         "Sony - PlayStation",
         "redump-cd-track-v1",
         &[("Two Track Quest (USA)", track_components)],
@@ -566,7 +566,7 @@ fn ingest_rejects_an_invalid_identify_pack() {
     let rom = temp.child("game.bin");
     fs::write(rom.path(), b"ingest identify fixture").expect("ROM fixture");
     let pack = temp.child("broken.pack");
-    fs::write(pack.path(), b"not an RWFP5 pack").expect("invalid identify pack");
+    fs::write(pack.path(), b"not an RWFP1 pack").expect("invalid identify pack");
 
     let output = command_stdout(
         &[
