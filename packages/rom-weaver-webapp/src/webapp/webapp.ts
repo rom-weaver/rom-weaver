@@ -151,6 +151,7 @@ function logApplicationStatus(message: string, force = false) {
   logger.info(message, status);
 }
 const serviceWorkerClient = createPwaServiceWorkerClient({
+  appVersion: APP_BUILD_VERSION,
   cachePrefix: SERVICE_WORKER_CACHE_PREFIX,
   cacheVersionTimeoutMs: SERVICE_WORKER_CACHE_VERSION_TIMEOUT_MS,
   document: typeof document === "undefined" ? undefined : document,
@@ -162,6 +163,7 @@ const serviceWorkerClient = createPwaServiceWorkerClient({
     renderWebappRootIfReady();
   },
   sessionStorage: typeof sessionStorage === "undefined" ? undefined : sessionStorage,
+  shouldAutoApplyUpdate: () => !shouldWarnBeforeUnload(getNavigationGuardState()),
   updateIntervalMs: SERVICE_WORKER_UPDATE_INTERVAL_MS,
   window: typeof window === "undefined" ? undefined : window,
 });
