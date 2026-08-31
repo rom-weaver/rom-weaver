@@ -91,7 +91,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const createWarmup = async (fetcher = createFetcher()) =>
+const createWarmup = async (fetcher = createFetcher(), options: { emulatorJsBatchSize?: number } = {}) =>
   createOfflineWarmup({
     emulatorJsCacheName: EMULATORJS_CACHE,
     emulatorJsVersion: EMULATORJS_VERSION,
@@ -100,7 +100,11 @@ const createWarmup = async (fetcher = createFetcher()) =>
     identifyOptionalGroups: await buildGroups(),
     log: () => undefined,
     scope: SCOPE,
+    ...options,
   });
+
+/** One file per pump, for tests that assert queue ordering. */
+const createSerialWarmup = async (fetcher = createFetcher()) => createWarmup(fetcher, { emulatorJsBatchSize: 1 });
 
 describe("offline warm-up (service worker side)", () => {
   it("reports not-ready with full byte totals before any download", async () => {
@@ -124,7 +128,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("pumps units to completion, writes markers, and flips ready", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createSerialWarmup();
     let progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("emulatorjs:loader.js");
     expect(progress.ready).toBe(false);
@@ -154,7 +158,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("lists cached files without internal completion markers", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createSerialWarmup();
     await warmup.runNextUnit();
     await warmup.runNextUnit();
     const runtimeCache = await cacheStorage.open("rom-weaver-runtime");
@@ -186,7 +190,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("bumps identify groups ahead of emulatorjs files", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createSerialWarmup();
     // Build the queue: the first pump takes the first emulatorjs file.
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
     warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
@@ -196,7 +200,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("streams interim byte progress with the in-flight unit's name and size", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createSerialWarmup();
     const interims: Array<{ cachedBytes: number; detail: unknown; unitLoadedBytes: number | null }> = [];
     const progress = await warmup.runNextUnit((interim) => {
       interims.push({
@@ -215,7 +219,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("does not double-count a unit's already-cached bytes in interim progress", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createSerialWarmup();
     const groups = await buildGroups();
     const packUrl = new URL(groups[0].packs[0].url, SCOPE).href;
     // Cache the group's only pack on demand, then warm that group first: its
@@ -249,7 +253,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("serializes concurrent pumps so no unit is skipped", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createSerialWarmup();
     const [first, second] = await Promise.all([warmup.runNextUnit(), warmup.runNextUnit()]);
     expect(first.unit).toBe("emulatorjs:loader.js");
     expect(second.unit).toBe("emulatorjs:cores/core.wasm");
@@ -257,6 +261,33 @@ describe("offline warm-up (service worker side)", () => {
     progress = await warmup.runNextUnit();
     expect(progress.ready).toBe(true);
     expect(progress.cachedBytes).toBe(progress.totalBytes);
+  });
+
+  it("downloads a batch of emulatorjs files in one pump, largest first in the label", async () => {
+    const warmup = await createWarmup();
+    const interims: Array<{ cachedBytes: number; detail: unknown; unitTotalBytes: number | null }> = [];
+    const progress = await warmup.runNextUnit((interim) => {
+      interims.push({
+        cachedBytes: interim.cachedBytes,
+        detail: interim.detail,
+        unitTotalBytes: interim.unitTotalBytes,
+      });
+    });
+    // One pump caches every emulatorjs file and writes the completion marker.
+    expect(progress.unit).toBe("emulatorjs:cores/extra.data");
+    expect(progress.cachedFiles).toBe(3);
+    expect(interims[0]).toMatchObject({
+      detail: { kind: "emulatorjs", name: "cores/extra.data (+2)" },
+      unitTotalBytes: 3 + 5 + 7,
+    });
+    for (const interim of interims) {
+      expect(interim.cachedBytes).toBeLessThanOrEqual(progress.cachedBytes);
+    }
+    const emulatorCache = cacheStorage.caches.get(EMULATORJS_CACHE);
+    const marker = await emulatorCache?.match(`${SCOPE.replace(/\/$/, "")}/__rom-weaver-emulatorjs-complete__`);
+    expect(await marker?.text()).toBe(EMULATORJS_VERSION);
+    // Only the identify group remains.
+    expect((await warmup.runNextUnit()).ready).toBe(true);
   });
 
   it("rejects a manifest with missing sizes or unsafe paths", async () => {

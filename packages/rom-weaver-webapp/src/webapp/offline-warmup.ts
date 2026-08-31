@@ -1,10 +1,11 @@
 /**
  * Background offline warm-up for the service worker: downloads every
  * EmulatorJS asset and every optional identify pack group into their caches,
- * one unit per "pump" message, so the page controls pacing and a killed
- * worker loses at most one in-flight unit. Completion is derived from cache
- * contents alone (per-file entries plus per-unit markers), never from memory,
- * so it survives worker restarts and browser sessions.
+ * one batch per "pump" message, so the page controls pacing and a killed
+ * worker loses at most the bytes still in flight - every completed file is
+ * cached individually. Completion is derived from cache contents alone
+ * (per-file entries plus per-unit markers), never from memory, so it survives
+ * worker restarts and browser sessions.
  */
 
 type IdentifyOptionalPack = { sha256: string; sizeBytes?: number; url: string };
@@ -66,6 +67,8 @@ type OfflineWarmupOptions = {
   identifyOptionalGroups: IdentifyOptionalPackGroup[];
   log: (message: string, details?: Record<string, unknown>) => void;
   scope: string;
+  /** EmulatorJS files one pump downloads concurrently. Default {@link EMULATORJS_BATCH_SIZE}. */
+  emulatorJsBatchSize?: number;
 };
 
 type OfflineWarmup = {
@@ -81,6 +84,13 @@ type OfflineWarmup = {
 // Interim progress messages are throttled to this interval so a fast download
 // does not flood the message channel.
 const INTERIM_PROGRESS_MS = 200;
+
+// EmulatorJS files one pump downloads concurrently. Serial per-file pumps made
+// the many small files (translations, core reports) each cost a message
+// round-trip plus an idle wait, stretching the warm-up far past the network
+// time. Identify groups still install one at a time - their packs are large
+// and their installer is deliberately sequential.
+const EMULATORJS_BATCH_SIZE = 6;
 
 const EMULATORJS_COMPLETE_MARKER_PATH = "/__rom-weaver-emulatorjs-complete__";
 
@@ -180,6 +190,7 @@ const createOfflineWarmup = ({
   identifyOptionalGroups,
   log,
   scope,
+  emulatorJsBatchSize = EMULATORJS_BATCH_SIZE,
 }: OfflineWarmupOptions): OfflineWarmup => {
   const emulatorJsManifestUrl = new URL("emulatorjs/manifest.json", scope).href;
   const emulatorJsMarkerUrl = new URL(EMULATORJS_COMPLETE_MARKER_PATH, scope).href;
@@ -425,22 +436,43 @@ const createOfflineWarmup = ({
    * share from the baseline or those bytes count twice and the percentage
    * overshoots, then snaps back when the unit completes.
    */
-  const cachedUnitBytes = async (unit: WarmupUnit): Promise<number> => {
-    if (unit.kind === "emulatorjs-file") {
-      const cache = await caches.open(emulatorJsCacheName);
-      return (await cache.match(emulatorJsAssetUrl(unit.path))) ? unit.sizeBytes : 0;
+  const cachedUnitBytes = async (units: WarmupUnit[]): Promise<number> => {
+    let total = 0;
+    if (units.some((unit) => unit.kind === "emulatorjs-file")) {
+      const cachedUrls = await cachedRequestUrls(await caches.open(emulatorJsCacheName));
+      for (const unit of units) {
+        if (unit.kind === "emulatorjs-file" && cachedUrls.has(emulatorJsAssetUrl(unit.path))) total += unit.sizeBytes;
+      }
     }
-    const cache = await caches.open(identifyOptionalCacheName);
-    return cachedGroupState(await cachedRequestUrls(cache), unit.group).bytes;
+    for (const unit of units) {
+      if (unit.kind !== "identify-group") continue;
+      const cachedUrls = await cachedRequestUrls(await caches.open(identifyOptionalCacheName));
+      total += cachedGroupState(cachedUrls, unit.group).bytes;
+    }
+    return total;
   };
 
   const unitLabel = (unit: WarmupUnit) =>
     unit.kind === "emulatorjs-file" ? `emulatorjs:${unit.path}` : `identify-group:${unit.group.id}`;
 
-  const unitDetail = (unit: WarmupUnit): WarmupDetail =>
+  const unitDetail = (unit: WarmupUnit, batchSize = 1): WarmupDetail =>
     unit.kind === "emulatorjs-file"
-      ? { kind: "emulatorjs", name: unit.path }
+      ? { kind: "emulatorjs", name: batchSize > 1 ? `${unit.path} (+${batchSize - 1})` : unit.path }
       : { kind: "identify-group", name: unit.group.label };
+
+  const unitBytes = (unit: WarmupUnit) => (unit.kind === "emulatorjs-file" ? unit.sizeBytes : groupBytes(unit.group));
+
+  /**
+   * The units one pump processes together: a run of emulatorjs files up to the
+   * batch size, downloaded concurrently, or a single identify group. The
+   * detail line names the largest file of a batch - it is the one the user is
+   * actually waiting on.
+   */
+  const nextBatch = (units: WarmupUnit[]): WarmupUnit[] => {
+    if (units[0]?.kind !== "emulatorjs-file") return units.slice(0, 1);
+    const batch = units.filter((unit) => unit.kind === "emulatorjs-file").slice(0, emulatorJsBatchSize);
+    return batch.sort((left, right) => unitBytes(right) - unitBytes(left));
+  };
 
   // Serializes pumps: two clients (two open tabs, or a page retrying after its
   // pump timeout) MUST NOT process the queue concurrently, or both would take
@@ -456,19 +488,22 @@ const createOfflineWarmup = ({
       await finishEmulatorJsIfComplete();
       return unit;
     }
+    const batch = nextBatch(units);
+    // The queue head exists, so the batch is never empty.
+    const batchHead = batch[0] ?? unit;
     // Interim events add the in-flight bytes onto a baseline taken once per
-    // unit, so the counter rises smoothly during the download instead of
-    // jumping once when the whole unit lands.
+    // batch, so the counter rises smoothly during the download instead of
+    // jumping once when the whole batch lands.
     let onBytes: ((delta: number) => void) | undefined;
     if (onInterim) {
-      const [baseline, unitCachedBytes] = await Promise.all([getReadyState(), cachedUnitBytes(unit)]);
-      const detail = unitDetail(unit);
-      const label = unitLabel(unit);
-      const unitTotalBytes = unit.kind === "emulatorjs-file" ? unit.sizeBytes : groupBytes(unit.group);
-      // The baseline already counts this unit's cached share, and onBytes
-      // credits that share again while the unit runs - keep only one copy so
+      const [baseline, batchCachedBytes] = await Promise.all([getReadyState(), cachedUnitBytes(batch)]);
+      const detail = unitDetail(batchHead, batch.length);
+      const label = unitLabel(batchHead);
+      const unitTotalBytes = batch.reduce((sum, batchUnit) => sum + unitBytes(batchUnit), 0);
+      // The baseline already counts the batch's cached share, and onBytes
+      // credits that share again while the batch runs - keep only one copy so
       // cachedBytes rises monotonically instead of overshooting per unit.
-      const baseCachedBytes = Math.max(0, baseline.cachedBytes - unitCachedBytes);
+      const baseCachedBytes = Math.max(0, baseline.cachedBytes - batchCachedBytes);
       let loadedBytes = 0;
       let lastEmit = 0;
       const emit = () => {
@@ -493,16 +528,21 @@ const createOfflineWarmup = ({
       // One immediate event names the unit that just started downloading.
       emit();
     }
-    if (unit.kind === "emulatorjs-file") {
-      await downloadEmulatorJsFile(unit, onBytes);
-      // Remove by identity from the live queue: a bump may have replaced the
-      // array (or reordered it) while the download ran.
-      if (queue) queue = queue.filter((candidate) => candidate !== unit);
-      await finishEmulatorJsIfComplete();
-    } else {
-      await installGroupWith(fetchForWarmup, unit.group.id, onBytes);
-    }
-    return unit;
+    // Concurrent within the batch; every completed file is removed from the
+    // live queue by identity (a bump may have replaced or reordered the array
+    // while the download ran), so one failed file only re-queues itself.
+    await Promise.all(
+      batch.map(async (batchUnit) => {
+        if (batchUnit.kind === "emulatorjs-file") {
+          await downloadEmulatorJsFile(batchUnit, onBytes);
+          if (queue) queue = queue.filter((candidate) => candidate !== batchUnit);
+        } else {
+          await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes);
+        }
+      }),
+    );
+    if (batch.some((batchUnit) => batchUnit.kind === "emulatorjs-file")) await finishEmulatorJsIfComplete();
+    return batchHead;
   };
 
   const runNextUnit = (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupProgress> => {
