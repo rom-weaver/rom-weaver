@@ -57,6 +57,30 @@ const CLEAR_HIDDEN_SETTINGS = `
         }
       })();`;
 
+/**
+ * Stop EmulatorJS from calling home to `cdn.emulatorjs.org` for a version
+ * check. Its constructor runs the check whenever `EJS_DEBUG_XX` is true or the
+ * hostname is `localhost`/`127.0.0.1`, so the dev server, the browser tests,
+ * and every self-hosted deployment on a loopback address make a third-party
+ * request that this app promises never to make. There is no config flag for
+ * it, so the method itself is replaced on the prototype: `emulator.min.js`
+ * assigns `window.EmulatorJS` before `loader.js` constructs the instance,
+ * which gives this accessor the one window in which to neutralize it. The
+ * script MUST run before `loader.js`.
+ */
+const DISABLE_UPDATE_CHECK = `
+      (() => {
+        let EmulatorJS;
+        Object.defineProperty(window, 'EmulatorJS', {
+          configurable: true,
+          get: () => EmulatorJS,
+          set: (value) => {
+            if (value && value.prototype) value.prototype.checkForUpdates = () => {};
+            EmulatorJS = value;
+          },
+        });
+      })();`;
+
 const createEmulatorAudioContextBridgeScript = (gameName: string) => `
       (() => {
         const bridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
@@ -193,6 +217,7 @@ const createEmulatorDocument = (
       EJS_pathtodata = ${toScriptString(dataUrl)};
     </script>
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
+    <script>${DISABLE_UPDATE_CHECK}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>
     <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName)}</script>
     <script src="${dataUrl}loader.js"></script>
