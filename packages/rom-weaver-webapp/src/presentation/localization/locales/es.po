@@ -50,6 +50,11 @@ msgstr "{cached} de {total} archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineSizes"
+msgstr "{compressed} transferido · {uncompressed} almacenado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirlo} other {# parches están desactivados - márcalos para incluirlos}}"
 

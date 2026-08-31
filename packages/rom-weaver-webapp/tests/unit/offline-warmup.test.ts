@@ -157,17 +157,31 @@ describe("offline warm-up (service worker side)", () => {
     expect(state.pendingUnits).toBe(0);
   });
 
-  it("lists cached files without internal completion markers", async () => {
+  it("lists cached files with sizes and without internal completion markers", async () => {
     const warmup = await createSerialWarmup();
     await warmup.runNextUnit();
     await warmup.runNextUnit();
     const runtimeCache = await cacheStorage.open("rom-weaver-runtime");
     await runtimeCache.put("https://example.test/__rom-weaver-coep-mode__", new Response("credentialless"));
 
-    expect(await warmup.getCachedFiles()).toEqual([
-      { cache: EMULATORJS_CACHE, url: "https://example.test/emulatorjs/data/cores/core.wasm" },
-      { cache: EMULATORJS_CACHE, url: "https://example.test/emulatorjs/data/loader.js" },
+    const measured: number[] = [];
+    const files = await warmup.getCachedFiles(() => measured.push(1));
+    // The fake responses carry no Content-Length, so only the decoded size is known.
+    expect(files).toEqual([
+      {
+        cache: EMULATORJS_CACHE,
+        compressedBytes: null,
+        sizeBytes: 16,
+        url: "https://example.test/emulatorjs/data/cores/core.wasm",
+      },
+      {
+        cache: EMULATORJS_CACHE,
+        compressedBytes: null,
+        sizeBytes: 16,
+        url: "https://example.test/emulatorjs/data/loader.js",
+      },
     ]);
+    expect(measured).toHaveLength(2);
   });
 
   it("treats a new emulatorjs version as not ready", async () => {

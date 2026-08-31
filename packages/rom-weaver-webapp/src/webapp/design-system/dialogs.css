@@ -1092,15 +1092,22 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   overflow: auto;
   list-style: none;
 }
+/* Path takes the room it needs; the size column sits at the end, right-aligned
+   so the figures stack into a readable column. */
 .rw-app .sw-cache-list li {
   display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--sp-s);
   align-items: baseline;
   font-size: 0.7rem;
 }
 .rw-app .sw-cache-list li > span {
   color: var(--ink-3);
+}
+.rw-app .sw-cache-size {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 .rw-app .sw-cache-list code {
   overflow-wrap: anywhere;

@@ -478,8 +478,17 @@ self.addEventListener("message", (event) => {
   }
 
   if (event.data.action === "get-offline-cached-files") {
+    // Measuring sizes reads every cached body, which can outlive the client's
+    // reply deadline on a full offline set; throttled interim heartbeats reset
+    // that deadline the same way warm-up download progress does.
+    let lastHeartbeat = 0;
     const query = offlineWarmup
-      .getCachedFiles()
+      .getCachedFiles(() => {
+        const now = Date.now();
+        if (now - lastHeartbeat < 200) return;
+        lastHeartbeat = now;
+        replyTo({ action: "offline-warmup-interim" });
+      })
       .then((files) => ({ action: "offline-cached-files", files }))
       .catch((error) => ({ action: "offline-cached-files-failed", error: formatError(error) }));
     event.waitUntil(query.then(replyTo));

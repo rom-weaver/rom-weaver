@@ -145,7 +145,14 @@ describe("offline warm-up client", () => {
   });
 
   it("queries the service worker for cached files", async () => {
-    const files = [{ cache: "emulatorjs-4.2.3", url: "https://example.test/emulatorjs/data/loader.js" }];
+    const files = [
+      {
+        cache: "emulatorjs-4.2.3",
+        compressedBytes: 120,
+        sizeBytes: 400,
+        url: "https://example.test/emulatorjs/data/loader.js",
+      },
+    ];
     const { controller, messages } = createFakeController([{ action: "offline-cached-files", files }]);
     const { serviceWorker } = createServiceWorker(controller);
 

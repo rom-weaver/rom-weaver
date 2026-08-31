@@ -34,6 +34,13 @@ type OfflineReadyState = {
 
 type OfflineCachedFile = {
   cache: string;
+  /**
+   * Transfer (encoded) size from the stored Content-Length header; null when
+   * the header is absent. Equals sizeBytes for responses served unencoded.
+   */
+  compressedBytes: number | null;
+  /** Stored (decoded) body size; null when the body cannot be read (opaque response). */
+  sizeBytes: number | null;
   url: string;
 };
 
@@ -73,7 +80,7 @@ type OfflineWarmupOptions = {
 
 type OfflineWarmup = {
   bumpPriority: (target: WarmupBumpTarget) => void;
-  getCachedFiles: () => Promise<OfflineCachedFile[]>;
+  getCachedFiles: (onFileMeasured?: () => void) => Promise<OfflineCachedFile[]>;
   getReadyState: () => Promise<OfflineReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: true; label: string; packs: number }>;
   /** onInterim streams byte-level progress while the unit downloads. */
@@ -357,20 +364,40 @@ const createOfflineWarmup = ({
     return { cachedBytes, cachedFiles, pendingUnits, ready, totalBytes, totalFiles };
   };
 
-  const getCachedFiles = async (): Promise<OfflineCachedFile[]> => {
+  /**
+   * Inventory of every cached file with its sizes. Reads each stored body to
+   * measure the decoded size, so the walk is sequential to cap memory and
+   * onFileMeasured lets the caller keep its message deadline alive while a
+   * large cache set is measured.
+   */
+  const getCachedFiles = async (onFileMeasured?: () => void): Promise<OfflineCachedFile[]> => {
     const cacheNames = await caches.keys();
-    const files = await Promise.all(
-      cacheNames.map(async (cacheName) => {
-        const requests = await caches.open(cacheName).then((cache) => cache.keys());
-        return requests
-          .filter((request) => {
-            const path = new URL(request.url).pathname;
-            return !path.startsWith("/__rom-weaver-");
-          })
-          .map((request) => ({ cache: cacheName, url: request.url }));
-      }),
-    );
-    return files.flat().sort((left, right) => left.url.localeCompare(right.url));
+    const files: OfflineCachedFile[] = [];
+    for (const cacheName of cacheNames) {
+      const cache = await caches.open(cacheName);
+      const requests = (await cache.keys()).filter(
+        (request) => !new URL(request.url).pathname.startsWith("/__rom-weaver-"),
+      );
+      for (const request of requests) {
+        const response = await cache.match(request);
+        let compressedBytes: number | null = null;
+        let sizeBytes: number | null = null;
+        if (response) {
+          const contentLength = Number(response.headers.get("content-length"));
+          if (response.headers.has("content-length") && Number.isFinite(contentLength) && contentLength >= 0) {
+            compressedBytes = contentLength;
+          }
+          try {
+            sizeBytes = (await response.arrayBuffer()).byteLength;
+          } catch {
+            // Opaque or unreadable body: report the file without a decoded size.
+          }
+        }
+        files.push({ cache: cacheName, compressedBytes, sizeBytes, url: request.url });
+        onFileMeasured?.();
+      }
+    }
+    return files.sort((left, right) => left.url.localeCompare(right.url));
   };
 
   const installGroupWith = async (fetcher: WarmupFetcher, groupId: string, onBytes?: (delta: number) => void) => {

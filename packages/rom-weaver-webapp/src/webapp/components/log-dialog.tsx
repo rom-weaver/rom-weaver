@@ -234,10 +234,12 @@ const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
  * commit row's.
  */
 const StatusRows = ({
+  cachedFiles,
   localizer,
   offlineProgress,
   runtimeState,
 }: {
+  cachedFiles: OfflineCachedFile[];
   localizer: Localizer;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   runtimeState: RuntimeState;
@@ -291,6 +293,21 @@ const StatusRows = ({
             })()}
           </>
         ) : null}
+        {/* Finished offline copy: the measured cache is the honest size, so the
+            same transferred/stored pair the file list totals is shown here. */}
+        {runtimeState !== "installing" && runtimeState !== "disabled" && cachedFiles.length > 0
+          ? (() => {
+              const totals = cachedFileTotals(cachedFiles);
+              return (
+                <span className="sw-progress-detail">
+                  {localizer.message("ui.runtime.offlineSizes", {
+                    compressed: localizer.formatBytes(totals.compressedBytes),
+                    uncompressed: localizer.formatBytes(totals.sizeBytes),
+                  })}
+                </span>
+              );
+            })()
+          : null}
       </span>,
     ],
     [
@@ -377,9 +394,31 @@ const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localize
   </section>
 );
 
-const cachedFileLabel = (url: string) => {
-  const parsed = new URL(url);
-  return `${parsed.pathname}${parsed.search}`;
+// Path only: the cache name and revision/sha query params are noise in the
+// list - the full URL stays on the row's hover title.
+const cachedFileLabel = (url: string) => new URL(url).pathname;
+
+/**
+ * Compressed (transfer) and uncompressed (stored) totals over an inventory.
+ * A file missing one measurement counts its other one in both totals, so an
+ * unencoded or unreadable entry never drops out of a sum.
+ */
+const cachedFileTotals = (files: OfflineCachedFile[]) => {
+  let compressedBytes = 0;
+  let sizeBytes = 0;
+  for (const file of files) {
+    compressedBytes += file.compressedBytes ?? file.sizeBytes ?? 0;
+    sizeBytes += file.sizeBytes ?? file.compressedBytes ?? 0;
+  }
+  return { compressedBytes, sizeBytes };
+};
+
+const cachedFileSizeLabel = (localizer: Localizer, file: OfflineCachedFile) => {
+  const size = file.sizeBytes ?? file.compressedBytes;
+  if (size === null) return "—";
+  const compressed = file.compressedBytes;
+  if (compressed === null || compressed === size) return localizer.formatBytes(size);
+  return `${localizer.formatBytes(compressed)} / ${localizer.formatBytes(size)}`;
 };
 
 const OfflineCachedFiles = ({
@@ -392,32 +431,47 @@ const OfflineCachedFiles = ({
   files: OfflineCachedFile[];
   loading: boolean;
   localizer: Localizer;
-}) => (
-  <section className="sw-cached-files">
-    <h3 className="sr-only">{localizer.message("ui.status.cachedFiles")}</h3>
-    <Drawer
-      className="sw-cache-drawer"
-      label={localizer.message("ui.status.cachedFiles")}
-      readouts={<DrawerReadout muted>{loading ? "…" : files.length}</DrawerReadout>}
-    >
-      {loading ? <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesLoading")}</p> : null}
-      {!loading && error ? <p className="sw-cache-note sw-cache-error">{error}</p> : null}
-      {!(loading || error) && files.length === 0 ? (
-        <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesEmpty")}</p>
-      ) : null}
-      {!(loading || error) && files.length > 0 ? (
-        <ul className="sw-cache-list">
-          {files.map((file) => (
-            <li data-cache={file.cache} key={`${file.cache}:${file.url}`}>
-              <span title={file.cache}>{file.cache}</span>
-              <code title={file.url}>{cachedFileLabel(file.url)}</code>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </Drawer>
-  </section>
-);
+}) => {
+  const totals = cachedFileTotals(files);
+  return (
+    <section className="sw-cached-files">
+      <h3 className="sr-only">{localizer.message("ui.status.cachedFiles")}</h3>
+      <Drawer
+        className="sw-cache-drawer"
+        label={localizer.message("ui.status.cachedFiles")}
+        readouts={
+          <>
+            <DrawerReadout muted>{loading ? "…" : files.length}</DrawerReadout>
+            {!loading && files.length > 0 ? (
+              <DrawerReadout muted>
+                {localizer.message("ui.runtime.offlineSizes", {
+                  compressed: localizer.formatBytes(totals.compressedBytes),
+                  uncompressed: localizer.formatBytes(totals.sizeBytes),
+                })}
+              </DrawerReadout>
+            ) : null}
+          </>
+        }
+      >
+        {loading ? <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesLoading")}</p> : null}
+        {!loading && error ? <p className="sw-cache-note sw-cache-error">{error}</p> : null}
+        {!(loading || error) && files.length === 0 ? (
+          <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesEmpty")}</p>
+        ) : null}
+        {!(loading || error) && files.length > 0 ? (
+          <ul className="sw-cache-list">
+            {files.map((file) => (
+              <li data-cache={file.cache} key={`${file.cache}:${file.url}`}>
+                <code title={`${file.cache}: ${file.url}`}>{cachedFileLabel(file.url)}</code>
+                <span className="sw-cache-size">{cachedFileSizeLabel(localizer, file)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Drawer>
+    </section>
+  );
+};
 
 /**
  * One line out to the About guide, which is where licence, attribution and
@@ -1098,7 +1152,12 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows localizer={localizer} offlineProgress={offlineProgress} runtimeState={runtimeState} />
+            <StatusRows
+              cachedFiles={cachedFiles}
+              localizer={localizer}
+              offlineProgress={offlineProgress}
+              runtimeState={runtimeState}
+            />
             <OfflineCachedFiles
               error={cachedFilesError}
               files={cachedFiles}
@@ -1160,5 +1219,5 @@ const LogDialog = ({
   );
 };
 
-export { LogDialog };
+export { cachedFileSizeLabel, cachedFileTotals, LogDialog };
 export type { LogDialogTab, SettingsFocusHint };

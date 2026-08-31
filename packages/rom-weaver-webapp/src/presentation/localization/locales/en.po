@@ -50,6 +50,11 @@ msgstr "{cached} of {total} files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineSizes"
+msgstr "{compressed} transferred · {uncompressed} stored"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# patch is off - tick it to include it} other {# patches are off - tick them to include them}}"
 

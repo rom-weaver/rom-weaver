@@ -274,6 +274,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.detailFiles",
     message: "{cached} of {total} files",
   }),
+  "ui.runtime.offlineSizes": msg({
+    id: "ui.runtime.offlineSizes",
+    message: "{compressed} transferred · {uncompressed} stored",
+  }),
   "ui.runtime.detailEmulatorFile": msg({
     id: "ui.runtime.detailEmulatorFile",
     message: "EmulatorJS: {name}",

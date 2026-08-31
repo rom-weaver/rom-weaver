@@ -27,10 +27,20 @@ afterEach(() => {
 });
 
 describe("LogDialog", () => {
-  it("lists every cached offline file on Status", async () => {
+  it("lists every cached offline file with its sizes on Status", async () => {
     vi.mocked(queryOfflineCachedFiles).mockResolvedValue([
-      { cache: "emulatorjs-4.2.3", url: "https://example.test/emulatorjs/data/loader.js" },
-      { cache: "identify-optional", url: "https://example.test/assets/identify-consoles.pack?sha256=abc" },
+      {
+        cache: "emulatorjs-4.2.3",
+        compressedBytes: 1024,
+        sizeBytes: 4096,
+        url: "https://example.test/emulatorjs/data/loader.js",
+      },
+      {
+        cache: "identify-optional",
+        compressedBytes: 2048,
+        sizeBytes: 2048,
+        url: "https://example.test/assets/identify-consoles.pack?sha256=abc",
+      },
     ]);
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -43,9 +53,11 @@ describe("LogDialog", () => {
     expect(drawer?.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(drawer as HTMLButtonElement);
     expect(drawer?.getAttribute("aria-expanded")).toBe("true");
+    // Path plus sizes only: no cache name, no revision query string. A file
+    // stored unencoded shows one figure instead of an identical pair.
     expect(Array.from(container.querySelectorAll(".sw-cache-list li"), (row) => row.textContent)).toEqual([
-      "emulatorjs-4.2.3/emulatorjs/data/loader.js",
-      "identify-optional/assets/identify-consoles.pack?sha256=abc",
+      "/emulatorjs/data/loader.js1.02 KB / 4.1 KB",
+      "/assets/identify-consoles.pack2.05 KB",
     ]);
   });
 
