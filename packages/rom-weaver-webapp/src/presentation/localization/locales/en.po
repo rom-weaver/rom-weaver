@@ -40,6 +40,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.cachedFilesSize"
+#~ msgstr "Transferred / stored"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -830,6 +835,11 @@ msgstr "Storage is unavailable."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesStored"
+msgstr "Stored"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Strip padding and junk blocks from ROM dumps,"
 
@@ -945,8 +955,8 @@ msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.status.cachedFilesSize"
-msgstr "Transferred / stored"
+msgid "ui.status.cachedFilesTransferred"
+msgstr "Transferred"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

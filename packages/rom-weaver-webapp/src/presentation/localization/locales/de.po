@@ -40,6 +40,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.cachedFilesSize"
+#~ msgstr "Übertragen / gespeichert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
@@ -830,6 +835,11 @@ msgstr "Speicher ist nicht verfügbar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesStored"
+msgstr "Gespeichert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Füllbytes und Junk-Blöcke aus ROM-Dumps entfernen,"
 
@@ -945,8 +955,8 @@ msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.status.cachedFilesSize"
-msgstr "Übertragen / gespeichert"
+msgid "ui.status.cachedFilesTransferred"
+msgstr "Übertragen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

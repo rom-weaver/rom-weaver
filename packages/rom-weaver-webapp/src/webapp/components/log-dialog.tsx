@@ -415,35 +415,40 @@ const cachedFileTotals = (files: OfflineCachedFile[]) => {
 };
 
 /** Which column the cached-file list is ordered by, and which way. */
-type CachedFileSort = { column: "path" | "size"; direction: "asc" | "desc" };
+type CachedFileSort = { column: "path" | "compressed" | "stored"; direction: "asc" | "desc" };
 
 // Opening a column for the first time answers the question that column is
 // usually asked: paths alphabetically, sizes largest first.
 const CACHED_FILE_SORT_DEFAULTS: Record<CachedFileSort["column"], CachedFileSort["direction"]> = {
+  compressed: "desc",
   path: "asc",
-  size: "desc",
+  stored: "desc",
 };
 
-const cachedFileSize = (file: OfflineCachedFile) => file.sizeBytes ?? file.compressedBytes ?? 0;
+const cachedFileColumnBytes = (file: OfflineCachedFile, column: CachedFileSort["column"]) =>
+  column === "compressed" ? file.compressedBytes : file.sizeBytes;
 
-/** Sorted copy. Equal sizes fall back to the path so the order never wobbles. */
+/**
+ * Sorted copy. Equal sizes fall back to the path so the order never wobbles,
+ * and a file with no measurement for the sorted column sits at the end rather
+ * than posing as zero.
+ */
 const sortCachedFiles = (files: OfflineCachedFile[], sort: CachedFileSort) => {
   const factor = sort.direction === "asc" ? 1 : -1;
   return [...files].sort((left, right) => {
     const byPath = cachedFileLabel(left.url).localeCompare(cachedFileLabel(right.url));
     if (sort.column === "path") return factor * byPath;
-    const bySize = cachedFileSize(left) - cachedFileSize(right);
-    return bySize === 0 ? byPath : factor * bySize;
+    const leftBytes = cachedFileColumnBytes(left, sort.column);
+    const rightBytes = cachedFileColumnBytes(right, sort.column);
+    if (leftBytes === null && rightBytes === null) return byPath;
+    if (leftBytes === null) return 1;
+    if (rightBytes === null) return -1;
+    return leftBytes === rightBytes ? byPath : factor * (leftBytes - rightBytes);
   });
 };
 
-const cachedFileSizeLabel = (localizer: Localizer, file: OfflineCachedFile) => {
-  const size = file.sizeBytes ?? file.compressedBytes;
-  if (size === null) return "—";
-  const compressed = file.compressedBytes;
-  if (compressed === null || compressed === size) return localizer.formatBytes(size);
-  return `${localizer.formatBytes(compressed)} / ${localizer.formatBytes(size)}`;
-};
+const cachedFileBytesLabel = (localizer: Localizer, bytes: number | null) =>
+  bytes === null ? "—" : localizer.formatBytes(bytes);
 
 const OfflineCachedFiles = ({
   error,
@@ -514,7 +519,8 @@ const OfflineCachedFiles = ({
               <thead>
                 <tr>
                   {sortHeader("path", localizer.message("ui.status.cachedFilesPath"))}
-                  {sortHeader("size", localizer.message("ui.status.cachedFilesSize"))}
+                  {sortHeader("compressed", localizer.message("ui.status.cachedFilesTransferred"))}
+                  {sortHeader("stored", localizer.message("ui.status.cachedFilesStored"))}
                 </tr>
               </thead>
               <tbody>
@@ -523,7 +529,8 @@ const OfflineCachedFiles = ({
                     <td>
                       <code title={`${file.cache}: ${file.url}`}>{cachedFileLabel(file.url)}</code>
                     </td>
-                    <td className="sw-cache-size">{cachedFileSizeLabel(localizer, file)}</td>
+                    <td className="sw-cache-size">{cachedFileBytesLabel(localizer, file.compressedBytes)}</td>
+                    <td className="sw-cache-size">{cachedFileBytesLabel(localizer, file.sizeBytes)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1281,5 +1288,5 @@ const LogDialog = ({
   );
 };
 
-export { cachedFileSizeLabel, cachedFileTotals, LogDialog, sortCachedFiles };
+export { cachedFileBytesLabel, cachedFileTotals, LogDialog, sortCachedFiles };
 export type { LogDialogTab, SettingsFocusHint };

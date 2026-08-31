@@ -40,6 +40,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.cachedFilesSize"
+#~ msgstr "Transferido / almacenado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
@@ -830,6 +835,11 @@ msgstr "El almacenamiento no está disponible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesStored"
+msgstr "Almacenado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Elimina relleno y bloques basura de tus volcados de ROM,"
 
@@ -945,8 +955,8 @@ msgstr "Hilos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.status.cachedFilesSize"
-msgstr "Transferido / almacenado"
+msgid "ui.status.cachedFilesTransferred"
+msgstr "Transferido"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

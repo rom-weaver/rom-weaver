@@ -1096,13 +1096,16 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   border: 1px solid var(--seam-soft);
   border-radius: var(--r-s);
 }
+/* Auto layout on purpose: each size column takes exactly the width its figures
+   need and the path column absorbs the rest. `table-layout: fixed` reads widths
+   off the header row instead, which divided the table evenly and left the paths
+   in a third of the drawer. */
 .rw-app .sw-cache-list {
   width: 100%;
-  table-layout: fixed;
   border-collapse: collapse;
 }
-/* Path takes the room it needs; the size column sits at the end, right-aligned
-   so the figures stack into a readable column. */
+/* Path takes every pixel the size columns do not; those sit at the end,
+   right-aligned so the figures stack into readable columns. */
 .rw-app .sw-cache-list td,
 .rw-app .sw-cache-list th {
   padding: 3px var(--sp-s);
@@ -1111,7 +1114,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   vertical-align: baseline;
   text-align: start;
 }
-.rw-app .sw-cache-list td:first-child {
+.rw-app .sw-cache-col-path {
   width: 100%;
 }
 /* Sticky so the columns stay named while a long cache set scrolls under them. */
@@ -1123,7 +1126,8 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   background: var(--well);
   border-block-end: 1px solid var(--seam-soft);
 }
-.rw-app .sw-cache-col-size {
+.rw-app .sw-cache-col-compressed,
+.rw-app .sw-cache-col-stored {
   text-align: end;
 }
 .rw-app .sw-cache-sort {

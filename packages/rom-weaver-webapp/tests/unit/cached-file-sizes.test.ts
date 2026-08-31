@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cachedFileSizeLabel, cachedFileTotals, sortCachedFiles } from "../../src/webapp/components/log-dialog.tsx";
+import { cachedFileBytesLabel, cachedFileTotals, sortCachedFiles } from "../../src/webapp/components/log-dialog.tsx";
 
 const localizer = { formatBytes: (bytes: number) => `${bytes}B` } as never;
 
@@ -23,11 +23,10 @@ describe("cached file sizes", () => {
     ).toEqual({ compressedBytes: 10 + 7 + 3, sizeBytes: 40 + 7 + 3 });
   });
 
-  it("labels a row with one figure when it is stored unencoded", () => {
-    expect(cachedFileSizeLabel(localizer, file({ compressedBytes: 40 }))).toBe("40B");
-    expect(cachedFileSizeLabel(localizer, file({ compressedBytes: null }))).toBe("40B");
-    expect(cachedFileSizeLabel(localizer, file({}))).toBe("10B / 40B");
-    expect(cachedFileSizeLabel(localizer, file({ compressedBytes: null, sizeBytes: null }))).toBe("—");
+  it("labels each size cell on its own, with a dash for an unmeasured one", () => {
+    expect(cachedFileBytesLabel(localizer, 40)).toBe("40B");
+    expect(cachedFileBytesLabel(localizer, 0)).toBe("0B");
+    expect(cachedFileBytesLabel(localizer, null)).toBe("—");
   });
 });
 
@@ -44,15 +43,25 @@ describe("cached file sorting", () => {
     expect(paths(sortCachedFiles(files, { column: "path", direction: "desc" }))).toEqual(["/c.js", "/b.js", "/a.js"]);
   });
 
-  it("orders by size, breaking ties on the path in a stable way", () => {
-    // a.js measures 90 from its transferred size; b.js and c.js tie at 30.
-    expect(paths(sortCachedFiles(files, { column: "size", direction: "desc" }))).toEqual(["/a.js", "/b.js", "/c.js"]);
-    expect(paths(sortCachedFiles(files, { column: "size", direction: "asc" }))).toEqual(["/b.js", "/c.js", "/a.js"]);
+  it("orders each size column on its own figures", () => {
+    // Transferred: a.js 90, b.js 5; c.js has none and sits last either way.
+    expect(paths(sortCachedFiles(files, { column: "compressed", direction: "desc" }))).toEqual([
+      "/a.js",
+      "/b.js",
+      "/c.js",
+    ]);
+    expect(paths(sortCachedFiles(files, { column: "compressed", direction: "asc" }))).toEqual([
+      "/b.js",
+      "/a.js",
+      "/c.js",
+    ]);
+    // Stored: b.js and c.js tie at 30 and break on the path; a.js has none.
+    expect(paths(sortCachedFiles(files, { column: "stored", direction: "desc" }))).toEqual(["/b.js", "/c.js", "/a.js"]);
   });
 
   it("does not mutate the input", () => {
     const original = [...files];
-    sortCachedFiles(files, { column: "size", direction: "desc" });
+    sortCachedFiles(files, { column: "compressed", direction: "desc" });
     expect(files).toEqual(original);
   });
 });
