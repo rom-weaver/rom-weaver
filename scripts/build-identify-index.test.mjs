@@ -37,13 +37,19 @@ test("the consoles a ROM is most often identified against ship by default", () =
   for (const platform of [
     "Microsoft - Xbox",
     "Nintendo - Wii U",
-    "Nintendo - Wii U (Digital)",
     "Sony - PlayStation 3",
-    "Sony - PlayStation 3 (PSN)",
     "Sony - PlayStation Vita",
-    "Sony - PlayStation Vita (PSN)",
   ]) {
     assert.equal(packGroupFor(platform), "default", platform);
+  }
+  // Store-only variants stay optional: they are separate dumps of the same
+  // console, and most users never hold one.
+  for (const platform of [
+    "Nintendo - Wii U (Digital)",
+    "Sony - PlayStation 3 (PSN)",
+    "Sony - PlayStation Vita (PSN)",
+  ]) {
+    assert.notEqual(packGroupFor(platform), "default", platform);
   }
   // Arcade boards stay optional; Atomiswave is one, not a console.
   assert.equal(packGroupFor("Atomiswave"), "optional-arcade");

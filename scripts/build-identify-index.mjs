@@ -425,7 +425,6 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Nintendo - Super Nintendo Entertainment System",
   "Nintendo - Wii",
   "Nintendo - Wii U",
-  "Nintendo - Wii U (Digital)",
   "SNK - Neo Geo Pocket",
   "SNK - Neo Geo Pocket Color",
   "Sega - 32X",
@@ -438,10 +437,8 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Sony - PlayStation",
   "Sony - PlayStation 2",
   "Sony - PlayStation 3",
-  "Sony - PlayStation 3 (PSN)",
   "Sony - PlayStation Portable",
   "Sony - PlayStation Vita",
-  "Sony - PlayStation Vita (PSN)",
 ]);
 
 const DEFAULT_PACK_SET = new Set(DEFAULT_PACK_PLATFORMS);
