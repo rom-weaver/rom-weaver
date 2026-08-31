@@ -15,6 +15,7 @@ import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
+import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
@@ -649,6 +650,33 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
   };
 };
 
+// Every route document is derived from dist/index.html after the bundle is
+// written, and PRERENDER_ROOT injects two more inline scripts on the way, so
+// the minifier runs over the finished files rather than through
+// transformIndexHtml. It must stay ahead of VitePWA in the plugin list: the
+// precache manifest hashes these documents from disk.
+const minifyDocumentInlineScripts = () => {
+  let outDir = "dist";
+  return {
+    apply: "build",
+    closeBundle() {
+      const distDir = path.resolve(rootDir, outDir);
+      for (const name of fs.readdirSync(distDir, { recursive: true })) {
+        const relativePath = String(name);
+        if (!relativePath.endsWith(".html")) continue;
+        const filePath = path.join(distDir, relativePath);
+        const html = fs.readFileSync(filePath, "utf8");
+        const minified = minifyInlineScripts(html, relativePath);
+        if (minified !== html) fs.writeFileSync(filePath, minified);
+      }
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    name: "rom-weaver-minify-inline-scripts",
+  };
+};
+
 // Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
 // isolated from the first network load instead of round-tripping through the service worker's
 // COEP-injection reload. Hosts without header control still use the service-worker fallback.
@@ -1266,6 +1294,7 @@ export default defineConfig(({ command, mode }) => {
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
       writeChangelogAsset(releaseVersion),
+      minifyDocumentInlineScripts(),
       writeCloudflareHeadersAsset(appChannel),
       writeBrotliSidecars(),
       VitePWA({
