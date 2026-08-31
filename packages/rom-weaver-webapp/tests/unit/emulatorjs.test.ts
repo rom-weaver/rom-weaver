@@ -1,3 +1,4 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import {
   createEmulatorDocument,
@@ -86,6 +87,31 @@ describe("createEmulatorDocument", () => {
     expect(document).toContain(
       "if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);",
     );
+  });
+
+  it("neutralizes the EmulatorJS version check before the loader runs", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
+    const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");
+    const script = document.slice(document.lastIndexOf("(() => {", start), document.indexOf("})();", start) + 5);
+    const scope: { EmulatorJS?: typeof FakeEmulatorJS } = {};
+    let checked = false;
+
+    class FakeEmulatorJS {
+      constructor() {
+        this.checkForUpdates();
+      }
+      checkForUpdates() {
+        checked = true;
+      }
+    }
+
+    runInNewContext(script, { window: scope });
+    scope.EmulatorJS = FakeEmulatorJS;
+    new (scope.EmulatorJS as typeof FakeEmulatorJS)();
+
+    expect(checked).toBe(false);
+    expect(scope.EmulatorJS).toBe(FakeEmulatorJS);
+    expect(start).toBeLessThan(document.indexOf("loader.js"));
   });
 });
 
