@@ -1059,11 +1059,14 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   width: 13px;
   height: 13px;
 }
+/* The chip stacks over its detail lines, all starting at the value column's
+   left edge - this is one row of a label-and-value list, so it MUST line up
+   with the version and commit rows below it. */
 .rw-app .sw-status-cell {
   display: inline-flex;
   flex-direction: column;
   gap: 2px;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 /* Warm-up byte counter and current download under the installing badge. */
 .rw-app .sw-progress-detail {
