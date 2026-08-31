@@ -168,9 +168,38 @@ const readWithByteProgress = async (response: Response, onBytes?: (delta: number
   return buffer.buffer;
 };
 
+/**
+ * Header carrying the on-the-wire size of a response we downloaded ourselves.
+ * A server that compresses on the fly answers chunked and sends no
+ * Content-Length, so the encoded size cannot be read back off the stored
+ * response - the browser's own Resource Timing entry is the only place it
+ * exists, and it is gone by the next page load. Stamping it at download time
+ * keeps it with the cached file.
+ */
+const ENCODED_SIZE_HEADER = "x-rom-weaver-encoded-size";
+
+/**
+ * On-the-wire bytes the browser recorded for a just-completed same-origin
+ * request. Zero (its value for an unmeasured entry) and a missing entry both
+ * read as unknown.
+ */
+const encodedSizeOf = (url: string): number | undefined => {
+  try {
+    const entries = performance.getEntriesByName?.(url, "resource");
+    const encoded = (entries?.at(-1) as PerformanceResourceTiming | undefined)?.encodedBodySize;
+    return typeof encoded === "number" && encoded > 0 ? encoded : undefined;
+  } catch {
+    // Resource Timing is unavailable in this worker; the size stays unknown.
+    return undefined;
+  }
+};
+
 /** A cacheable copy of a fully read response, keeping its headers and status. */
-const bufferedResponse = (source: Response, buffer: ArrayBuffer) =>
-  new Response(buffer, { headers: source.headers, status: source.status, statusText: source.statusText });
+const bufferedResponse = (source: Response, buffer: ArrayBuffer, encodedBytes?: number) => {
+  const headers = new Headers(source.headers);
+  if (encodedBytes !== undefined) headers.set(ENCODED_SIZE_HEADER, String(encodedBytes));
+  return new Response(buffer, { headers, status: source.status, statusText: source.statusText });
+};
 
 const cachedRequestUrls = async (cache: Cache) => new Set((await cache.keys()).map((request) => request.url));
 
@@ -187,7 +216,7 @@ const fetchVerifiedPack = async (
   const buffer = await readWithByteProgress(response, onBytes);
   const actualSha256 = await sha256HexOf(buffer);
   if (actualSha256 !== pack.sha256) throw new Error(`ROM identify pack checksum failed: ${pack.url}`);
-  return { request, response: bufferedResponse(response, buffer) };
+  return { request, response: bufferedResponse(response, buffer, encodedSizeOf(request.url)) };
 };
 
 /** Relative path with no empty, ".", or ".." segments and no backslashes or leading slash. */
@@ -486,8 +515,13 @@ const createOfflineWarmup = ({
         let compressedBytes: number | null = null;
         let sizeBytes: number | null = null;
         if (response) {
+          // The measured wire size wins; Content-Length is the fallback for
+          // entries the precache wrote, which are served with one.
+          const measured = Number(response.headers.get(ENCODED_SIZE_HEADER));
           const contentLength = Number(response.headers.get("content-length"));
-          if (response.headers.has("content-length") && Number.isFinite(contentLength) && contentLength >= 0) {
+          if (response.headers.has(ENCODED_SIZE_HEADER) && Number.isFinite(measured) && measured >= 0) {
+            compressedBytes = measured;
+          } else if (response.headers.has("content-length") && Number.isFinite(contentLength) && contentLength >= 0) {
             compressedBytes = contentLength;
           }
           try {
@@ -586,7 +620,7 @@ const createOfflineWarmup = ({
     const response = await fetchForWarmup(url);
     if (!response.ok) throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
     const buffer = await readWithByteProgress(response, onBytes);
-    await cache.put(url, bufferedResponse(response, buffer));
+    await cache.put(url, bufferedResponse(response, buffer, encodedSizeOf(url)));
   };
 
   /** Write the completion marker once no emulatorjs file unit remains. */

@@ -240,12 +240,10 @@ const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
  * commit row's.
  */
 const StatusRows = ({
-  cachedFiles,
   localizer,
   offlineProgress,
   runtimeState,
 }: {
-  cachedFiles: OfflineCachedFile[];
   localizer: Localizer;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   runtimeState: RuntimeState;
@@ -299,21 +297,6 @@ const StatusRows = ({
             })()}
           </>
         ) : null}
-        {/* Finished offline copy: the measured cache is the honest size, so the
-            same transferred/stored pair the file list totals is shown here. */}
-        {runtimeState !== "installing" && runtimeState !== "disabled" && cachedFiles.length > 0
-          ? (() => {
-              const totals = cachedFileTotals(cachedFiles);
-              return (
-                <span className="sw-progress-detail">
-                  {localizer.message("ui.runtime.offlineSizes", {
-                    compressed: localizer.formatBytes(totals.compressedBytes),
-                    uncompressed: localizer.formatBytes(totals.sizeBytes),
-                  })}
-                </span>
-              );
-            })()
-          : null}
       </span>,
     ],
     [
@@ -1241,12 +1224,7 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows
-              cachedFiles={cachedFiles}
-              localizer={localizer}
-              offlineProgress={offlineProgress}
-              runtimeState={runtimeState}
-            />
+            <StatusRows localizer={localizer} offlineProgress={offlineProgress} runtimeState={runtimeState} />
             <OfflineCachedFiles
               error={cachedFilesError}
               files={cachedFiles}

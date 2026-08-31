@@ -1112,13 +1112,16 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
 /* The scroll lives in a well of its own so the rows sit inside a visible edge
    instead of running into the drawer's, and the scrollbar rides that inset
    rather than the dialog wall. */
+/* Spans the drawer's full inner width: the negative inline margin cancels the
+   10px `.cks-inner` padding, so the longest paths get every pixel the drawer
+   has rather than sitting in a narrower box inside it. */
 .rw-app .sw-cache-scroll {
   max-height: 18rem;
+  margin-inline: -10px;
   overflow: auto;
   overscroll-behavior: contain;
   background: var(--well);
-  border: 1px solid var(--seam-soft);
-  border-radius: var(--r-s);
+  border-block: 1px solid var(--seam-soft);
 }
 /* Auto layout on purpose: each size column takes exactly the width its figures
    need and the path column absorbs the rest. `table-layout: fixed` reads widths
