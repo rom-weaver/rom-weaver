@@ -793,11 +793,20 @@ type OfflineWarmupDisplayProgress = {
   unitTotalBytes?: number | null;
 };
 
-/** Whole percent for an incomplete warm-up with known byte totals; null otherwise. */
-const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null =>
-  progress && !progress.ready && progress.totalBytes > 0
-    ? Math.min(99, Math.floor((progress.cachedBytes / progress.totalBytes) * 100))
-    : null;
+/**
+ * Whole percent for an incomplete warm-up; null when nothing is known. Byte
+ * totals win; the first-install precache broadcasts file counts only (its byte
+ * sizes are unknown), so file counts are the fallback.
+ */
+const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null => {
+  if (!progress || progress.ready) return null;
+  const wholePercent = (done: number, total: number) => Math.min(99, Math.floor((done / total) * 100));
+  if (progress.totalBytes > 0) return wholePercent(progress.cachedBytes, progress.totalBytes);
+  if (typeof progress.totalFiles === "number" && progress.totalFiles > 0) {
+    return wholePercent(progress.cachedFiles ?? 0, progress.totalFiles);
+  }
+  return null;
+};
 
 /**
  * Human wording for a warm-up unit, for the status detail line. Prefers the

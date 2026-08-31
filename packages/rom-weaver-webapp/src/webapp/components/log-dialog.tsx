@@ -260,16 +260,24 @@ const StatusRows = ({
         {runtimeState === "installing" &&
         offlineProgress &&
         !offlineProgress.ready &&
-        offlineProgress.totalBytes > 0 ? (
+        (offlineProgress.totalBytes > 0 ||
+          (typeof offlineProgress.totalFiles === "number" && offlineProgress.totalFiles > 0)) ? (
           <>
             <span className="sw-progress-detail">
-              {typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
-                ? `${localizer.message("ui.runtime.detailFiles", {
-                    cached: offlineProgress.cachedFiles,
-                    total: offlineProgress.totalFiles,
-                  })} · `
-                : ""}
-              {`${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`}
+              {/* The first-install precache reports counts only; byte totals arrive with the warm-up. */}
+              {[
+                typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
+                  ? localizer.message("ui.runtime.detailFiles", {
+                      cached: offlineProgress.cachedFiles,
+                      total: offlineProgress.totalFiles,
+                    })
+                  : null,
+                offlineProgress.totalBytes > 0
+                  ? `${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
             {(() => {
               const detail = describeWarmupUnit(localizer, offlineProgress);

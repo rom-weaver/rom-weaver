@@ -201,9 +201,43 @@ const withCrossOriginIsolationHeaders = (
   });
 };
 
+// First-install precache progress, broadcast to the (still uncontrolled)
+// pages so the "installing" chip shows a percent instead of a bare spinner
+// through the largest download of the offline set. Only file counts are known
+// at this stage - the workbox manifest carries no sizes. Broadcasts are
+// throttled; the final count always goes out. Update installs stay silent:
+// the page there is already offline-ready and shows no install progress.
+// vite-plugin-pwa injects the manifest at the single `self.__WB_MANIFEST`
+// occurrence, so every other use MUST go through this binding.
+const PRECACHE_MANIFEST = self.__WB_MANIFEST;
+
+const PRECACHE_PROGRESS_THROTTLE_MS = 200;
+let firstInstallInProgress = false;
+let precacheInstalledCount = 0;
+let lastPrecacheBroadcast = 0;
+
+const broadcastPrecacheProgress = async () => {
+  const message = {
+    action: "offline-precache-progress",
+    cachedFiles: precacheInstalledCount,
+    totalFiles: PRECACHE_MANIFEST.length,
+  };
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  for (const client of clients) client.postMessage(message);
+};
+
 const precachePlugin: WorkboxPlugin = {
   async requestWillFetch({ event, request }) {
     return prioritizePrecacheInstallRequest(request, event);
+  },
+  async handlerDidComplete({ event }) {
+    if (event.type !== "install" || !firstInstallInProgress) return;
+    precacheInstalledCount += 1;
+    const done = precacheInstalledCount >= PRECACHE_MANIFEST.length;
+    const now = Date.now();
+    if (!done && now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
+    lastPrecacheBroadcast = now;
+    await broadcastPrecacheProgress();
   },
   async handlerWillRespond({ response }) {
     const credentialless = await ensureCoepModeHydrated();
@@ -337,7 +371,7 @@ logServiceWorker("script initialized", {
 });
 
 addPlugins([precachePlugin]);
-precacheAndRoute(self.__WB_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
+precacheAndRoute(PRECACHE_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
 self.addEventListener("install", () => {
@@ -347,8 +381,12 @@ self.addEventListener("install", () => {
   // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
   // running app and reads as an involuntary reload.
   const isFirstInstall = !self.registration.active;
+  // Runs before workbox's async install handler touches any entry (listeners
+  // fire in add order within the same task), so the plugin sees the flag.
+  firstInstallInProgress = isFirstInstall;
   logServiceWorker("install event", {
     isFirstInstall,
+    precacheEntries: PRECACHE_MANIFEST.length,
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,
   });

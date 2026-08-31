@@ -49,6 +49,17 @@ describe("runtime state with offline warm-up gating", () => {
     expect(offlineWarmupPercent({ cachedBytes: 100, ready: true, totalBytes: 100 })).toBeNull();
     expect(offlineWarmupPercent({ cachedBytes: 0, ready: false, totalBytes: 0 })).toBeNull();
     expect(offlineWarmupPercent(null)).toBeNull();
+    // Precache broadcasts carry file counts only; percent falls back to them.
+    expect(offlineWarmupPercent({ cachedBytes: 0, cachedFiles: 5, ready: false, totalBytes: 0, totalFiles: 20 })).toBe(
+      25,
+    );
+    expect(offlineWarmupPercent({ cachedBytes: 0, cachedFiles: 20, ready: false, totalBytes: 0, totalFiles: 20 })).toBe(
+      99,
+    );
+    // Known byte totals outrank file counts.
+    expect(
+      offlineWarmupPercent({ cachedBytes: 50, cachedFiles: 1, ready: false, totalBytes: 100, totalFiles: 20 }),
+    ).toBe(50);
   });
 
   it("describes warm-up units for the status detail line", () => {
