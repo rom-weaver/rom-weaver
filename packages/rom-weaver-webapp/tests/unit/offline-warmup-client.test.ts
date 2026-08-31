@@ -126,19 +126,28 @@ describe("offline warm-up client", () => {
     post({ action: "service-worker-cache-version" });
     expect(onProgress).not.toHaveBeenCalled();
 
-    post({ action: "offline-precache-progress", cachedFiles: 12, totalFiles: 40 });
-    expect(onProgress).toHaveBeenLastCalledWith({
-      cachedBytes: 0,
+    post({
+      action: "offline-precache-progress",
+      cachedBytes: 300,
       cachedFiles: 12,
-      pendingUnits: 28,
+      pendingUnits: 5,
+      totalBytes: 1200,
+      totalFiles: 40,
+    });
+    expect(onProgress).toHaveBeenLastCalledWith({
+      cachedBytes: 300,
+      cachedFiles: 12,
+      pendingUnits: 5,
       phase: "precache",
       ready: false,
-      totalBytes: 0,
+      totalBytes: 1200,
       totalFiles: 40,
     });
 
-    post({ action: "offline-precache-progress", cachedFiles: "junk", totalFiles: -1 });
-    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ cachedFiles: 0, totalFiles: 0 }));
+    post({ action: "offline-precache-progress", cachedBytes: "junk", cachedFiles: "junk", totalFiles: -1 });
+    expect(onProgress).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: 0 }),
+    );
 
     stop();
     post({ action: "offline-precache-progress", cachedFiles: 13, totalFiles: 40 });

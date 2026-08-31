@@ -212,16 +212,72 @@ const withCrossOriginIsolationHeaders = (
 const PRECACHE_MANIFEST = self.__WB_MANIFEST;
 
 const PRECACHE_PROGRESS_THROTTLE_MS = 200;
+// Written beside the bundle by the build's manifestTransform, because workbox
+// strips per-entry sizes before injecting the manifest. Absent in dev and on a
+// host serving an older bundle; the warm-up then falls back to entry counts.
+const PRECACHE_SIZES_URL = new URL("precache-sizes.json", self.registration.scope).href;
+
+const precacheEntryPath = (url: string) => new URL(url, self.registration.scope).pathname;
+
+let precacheSizesPromise: Promise<Map<string, number>> | null = null;
+
+/** Entry path to byte size, for the entries the build could measure. */
+const loadPrecacheSizes = (): Promise<Map<string, number>> => {
+  if (!precacheSizesPromise) {
+    precacheSizesPromise = (async () => {
+      const sizes = new Map<string, number>();
+      try {
+        const response = await fetchForWarmup(PRECACHE_SIZES_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const parsed: unknown = await response.json();
+        if (parsed && typeof parsed === "object") {
+          for (const [url, size] of Object.entries(parsed as Record<string, unknown>)) {
+            if (typeof size === "number" && Number.isFinite(size) && size >= 0) sizes.set(precacheEntryPath(url), size);
+          }
+        }
+      } catch (err) {
+        logServiceWorker("precache sizes unavailable; install progress falls back to entry counts", {
+          error: formatError(err),
+        });
+      }
+      return sizes;
+    })();
+  }
+  return precacheSizesPromise;
+};
+
+/**
+ * Bytes and entries of the precache, and how much of it is stored right now.
+ * Measured from cache contents, so it is correct while the install is still
+ * filling the cache and again once it is complete.
+ */
+const precacheState = async () => {
+  const [sizes, cache] = await Promise.all([loadPrecacheSizes(), caches.open(PRECACHE_NAME)]);
+  const cachedPaths = new Set((await cache.keys()).map((request) => new URL(request.url).pathname));
+  let cachedBytes = 0;
+  let cachedFiles = 0;
+  let totalBytes = 0;
+  for (const entry of PRECACHE_MANIFEST) {
+    const path = precacheEntryPath(typeof entry === "string" ? entry : entry.url);
+    const size = sizes.get(path) ?? 0;
+    totalBytes += size;
+    if (cachedPaths.has(path)) {
+      cachedBytes += size;
+      cachedFiles += 1;
+    }
+  }
+  return { cachedBytes, cachedFiles, totalBytes, totalFiles: PRECACHE_MANIFEST.length };
+};
+
 let firstInstallInProgress = false;
 let precacheInstalledCount = 0;
 let lastPrecacheBroadcast = 0;
 
+// The install-time readout runs the same combined totals the warm-up reports
+// later, so one percentage covers both stages instead of each filling its own.
 const broadcastPrecacheProgress = async () => {
-  const message = {
-    action: "offline-precache-progress",
-    cachedFiles: precacheInstalledCount,
-    totalFiles: PRECACHE_MANIFEST.length,
-  };
+  const state = await offlineWarmup.getReadyState();
+  const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
   for (const client of clients) client.postMessage(message);
 };
@@ -345,6 +401,7 @@ const offlineWarmup = createOfflineWarmup({
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
   identifyOptionalGroups: __IDENTIFY_OPTIONAL_PACK_GROUPS__,
   log: logServiceWorker,
+  precacheState,
   scope: self.registration.scope,
 });
 

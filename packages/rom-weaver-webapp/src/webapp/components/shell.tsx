@@ -800,27 +800,20 @@ type OfflineWarmupDisplayProgress = {
 };
 
 /**
- * Installing the offline copy runs two stages that measure different things:
- * the precache counts entries (the workbox manifest carries no sizes), then the
- * warm-up counts bytes. Each stage owns half the bar, so one percentage rises
- * from 0 to 100 across both instead of each stage filling its own bar. A
- * returning visitor whose app is already precached starts at the halfway mark,
- * which is what has actually been installed.
+ * Whole percent for an incomplete install; null when no total is known yet.
+ * Both install stages report the same combined byte totals - the app's own
+ * precache plus the warm-up set - so one percentage covers the whole install.
+ * Entry counts are the fallback for a build with no precache size map (dev, or
+ * a host still serving an older bundle).
  */
-const PRECACHE_PERCENT_SHARE = 50;
-
-/** Whole percent for an incomplete install; null when the stage knows no total. */
 const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null => {
   if (!progress || progress.ready) return null;
-  const fraction = (done: number, total: number) => (total > 0 ? Math.min(1, done / total) : null);
-  if (progress.phase === "precache") {
-    const done = fraction(progress.cachedFiles ?? 0, progress.totalFiles ?? 0);
-    // Held below the halfway mark: only the warm-up stage may reach it.
-    return done === null ? null : Math.min(PRECACHE_PERCENT_SHARE - 1, Math.floor(done * PRECACHE_PERCENT_SHARE));
+  const wholePercent = (done: number, total: number) => Math.min(99, Math.floor((done / total) * 100));
+  if (progress.totalBytes > 0) return wholePercent(progress.cachedBytes, progress.totalBytes);
+  if (typeof progress.totalFiles === "number" && progress.totalFiles > 0) {
+    return wholePercent(progress.cachedFiles ?? 0, progress.totalFiles);
   }
-  const done = fraction(progress.cachedBytes, progress.totalBytes);
-  if (done === null) return null;
-  return Math.min(99, PRECACHE_PERCENT_SHARE + Math.floor(done * (100 - PRECACHE_PERCENT_SHARE)));
+  return null;
 };
 
 /**

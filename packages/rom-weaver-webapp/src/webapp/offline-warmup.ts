@@ -73,6 +73,12 @@ type OfflineWarmupOptions = {
   identifyOptionalCacheName: string;
   identifyOptionalGroups: IdentifyOptionalPackGroup[];
   log: (message: string, details?: Record<string, unknown>) => void;
+  /**
+   * Bytes and entries of the app's own precache, and how much of it is stored.
+   * Counted into every readout so the install reports one total across both
+   * stages. Omitted (or failing) leaves the precache out of the totals.
+   */
+  precacheState?: () => Promise<{ cachedBytes: number; cachedFiles: number; totalBytes: number; totalFiles: number }>;
   scope: string;
   /** EmulatorJS files one pump downloads concurrently. Default {@link EMULATORJS_BATCH_SIZE}. */
   emulatorJsBatchSize?: number;
@@ -196,6 +202,7 @@ const createOfflineWarmup = ({
   identifyOptionalCacheName,
   identifyOptionalGroups,
   log,
+  precacheState,
   scope,
   emulatorJsBatchSize = EMULATORJS_BATCH_SIZE,
 }: OfflineWarmupOptions): OfflineWarmup => {
@@ -320,6 +327,20 @@ const createOfflineWarmup = ({
     let totalFiles = 0;
     let cachedFiles = 0;
     let pendingUnits = 0;
+    if (precacheState) {
+      try {
+        const precache = await precacheState();
+        totalBytes += precache.totalBytes;
+        cachedBytes += precache.cachedBytes;
+        totalFiles += precache.totalFiles;
+        cachedFiles += precache.cachedFiles;
+      } catch (error) {
+        // The app's own bytes drop out of the totals; the warm-up share still reports.
+        log("precache state unavailable for ready state", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     try {
       const manifest = await loadEmulatorJsManifest();
       const manifestBytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);

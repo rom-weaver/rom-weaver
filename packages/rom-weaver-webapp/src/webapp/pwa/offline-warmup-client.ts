@@ -353,9 +353,9 @@ const persistOfflineReady = (ready: boolean) => {
 
 /**
  * Progress of the first-install precache, broadcast by the installing worker
- * before it controls any page. Byte sizes are unknown at that stage, so the
- * events carry file counts only (totalBytes stays 0); the chip falls back to a
- * count-based percent. Returns a cleanup function.
+ * before it controls any page. It carries the same totals the warm-up reports
+ * later - the app's own bytes included - so both stages move one percentage.
+ * Returns a cleanup function.
  */
 const listenForOfflinePrecacheProgress = (
   onProgress: (progress: OfflinePrecacheProgress) => void,
@@ -363,18 +363,19 @@ const listenForOfflinePrecacheProgress = (
 ): (() => void) => {
   const container = (nav ?? getGlobalNavigator())?.serviceWorker;
   if (!container?.addEventListener) return () => undefined;
+  const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0);
   const onMessage = (event: MessageEvent) => {
-    const data = (event.data ?? {}) as { action?: unknown; cachedFiles?: unknown; totalFiles?: unknown };
+    const data = (event.data ?? {}) as Record<string, unknown>;
     if (data.action !== "offline-precache-progress") return;
-    const cachedFiles = typeof data.cachedFiles === "number" && data.cachedFiles >= 0 ? data.cachedFiles : 0;
-    const totalFiles = typeof data.totalFiles === "number" && data.totalFiles >= 0 ? data.totalFiles : 0;
+    const cachedFiles = count(data.cachedFiles);
+    const totalFiles = count(data.totalFiles);
     onProgress({
-      cachedBytes: 0,
+      cachedBytes: count(data.cachedBytes),
       cachedFiles,
-      pendingUnits: Math.max(0, totalFiles - cachedFiles),
+      pendingUnits: count(data.pendingUnits) || Math.max(0, totalFiles - cachedFiles),
       phase: "precache",
       ready: false,
-      totalBytes: 0,
+      totalBytes: count(data.totalBytes),
       totalFiles,
     });
   };

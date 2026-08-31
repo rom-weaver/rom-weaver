@@ -680,6 +680,39 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
+// The service worker cannot see how big its own precache is: workbox measures
+// every entry, sums the sizes for its build log, then deletes the field from
+// each entry before injecting the manifest (workbox-build's transform-manifest
+// - ManifestEntry is {integrity?, revision, url}). A manifestTransform runs
+// while the sizes are still there, so this writes them out beside the bundle
+// for the worker to fetch when it installs. Without it the install stage can
+// only count entries, and a 4 MB wasm module weighs the same as a translation
+// file. Emitted at the dist root, which keeps it out of the precache globs.
+const PRECACHE_SIZES_FILENAME = "precache-sizes.json";
+
+// The default identify packs join the manifest through additionalManifestEntries,
+// which workbox appends AFTER manifestTransforms run, so a transform never sees
+// them. They are measured here instead, off the Brotli sidecar their logical URL
+// resolves to at install time - read from the source tree, because the sidecars
+// are copied into dist later in the build.
+const identifyPackPrecacheSizes = Object.fromEntries(
+  identifyPackPrecacheEntries.flatMap((entry) => {
+    const sourcePath = identifyDataSources[`/${entry.url.split("?")[0]}.br`];
+    return sourcePath && isRegularFile(sourcePath) ? [[entry.url, fs.statSync(sourcePath).size]] : [];
+  }),
+);
+
+const writePrecacheSizes =
+  () =>
+  (manifestEntries, _compilation, distDir = path.resolve(rootDir, "dist")) => {
+    const sizes = { ...identifyPackPrecacheSizes };
+    for (const entry of manifestEntries) {
+      if (typeof entry.size === "number") sizes[entry.url] = entry.size;
+    }
+    fs.writeFileSync(path.join(distDir, PRECACHE_SIZES_FILENAME), `${JSON.stringify(sizes)}\n`);
+    return { manifest: manifestEntries };
+  };
+
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
@@ -1253,6 +1286,7 @@ export default defineConfig(({ command, mode }) => {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.
           additionalManifestEntries: identifyPackPrecacheEntries,
+          manifestTransforms: [writePrecacheSizes()],
           globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:

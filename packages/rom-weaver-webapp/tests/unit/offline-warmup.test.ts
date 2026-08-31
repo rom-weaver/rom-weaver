@@ -91,7 +91,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const createWarmup = async (fetcher = createFetcher(), options: { emulatorJsBatchSize?: number } = {}) =>
+const createWarmup = async (
+  fetcher = createFetcher(),
+  options: Partial<Parameters<typeof createOfflineWarmup>[0]> = {},
+) =>
   createOfflineWarmup({
     emulatorJsCacheName: EMULATORJS_CACHE,
     emulatorJsVersion: EMULATORJS_VERSION,
@@ -107,6 +110,28 @@ const createWarmup = async (fetcher = createFetcher(), options: { emulatorJsBatc
 const createSerialWarmup = async (fetcher = createFetcher()) => createWarmup(fetcher, { emulatorJsBatchSize: 1 });
 
 describe("offline warm-up (service worker side)", () => {
+  it("counts the app's own precache into the totals", async () => {
+    const warmup = await createWarmup(createFetcher(), {
+      precacheState: async () => ({ cachedBytes: 40, cachedFiles: 2, totalBytes: 100, totalFiles: 5 }),
+    });
+    const state = await warmup.getReadyState();
+    expect(state.totalBytes).toBe(100 + 3 + 5 + 7 + PACK_BODY.length);
+    expect(state.cachedBytes).toBe(40);
+    expect(state.totalFiles).toBe(5 + manifest.files.length + 1);
+    expect(state.cachedFiles).toBe(2);
+  });
+
+  it("leaves the precache out of the totals when its state cannot be read", async () => {
+    const warmup = await createWarmup(createFetcher(), {
+      precacheState: async () => {
+        throw new Error("sizes unavailable");
+      },
+    });
+    const state = await warmup.getReadyState();
+    expect(state.totalBytes).toBe(3 + 5 + 7 + PACK_BODY.length);
+    expect(state.cachedBytes).toBe(0);
+  });
+
   it("reports not-ready with full byte totals before any download", async () => {
     const warmup = await createWarmup();
     const state = await warmup.getReadyState();
