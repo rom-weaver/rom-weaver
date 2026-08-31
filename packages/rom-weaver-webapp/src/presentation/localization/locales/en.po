@@ -265,6 +265,11 @@ msgstr "Copy"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksFailed"
+msgstr "Could not change {label}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "Create {format} Bundle"
 
@@ -430,6 +435,11 @@ msgstr "into a compressed, shareable patch others can apply —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksNote"
+msgstr "Keep these offline. Unticked databases are still downloaded on demand when a ROM needs them; unticking one removes its cached copy."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.language"
 msgstr "Language"
 
@@ -582,6 +592,11 @@ msgstr "Only include a ROM if you have the right to distribute it. Sharing copyr
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacks"
+msgstr "Optional ROM databases"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -32,6 +32,20 @@ type OfflineReadyState = {
   totalFiles: number;
 };
 
+/**
+ * An optional pack group as settings shows it. The page side mirrors this shape
+ * as IdentifyPackGroupState (platform/browser/identify-packs.ts) - the two are
+ * separate bundles, so the reply is re-typed there rather than imported.
+ */
+type IdentifyGroupState = {
+  id: string;
+  installed: boolean;
+  label: string;
+  packs: number;
+  sizeBytes: number;
+  wanted: boolean;
+};
+
 type OfflineCachedFile = {
   cache: string;
   /**
@@ -87,11 +101,13 @@ type OfflineWarmupOptions = {
 type OfflineWarmup = {
   bumpPriority: (target: WarmupBumpTarget) => void;
   getCachedFiles: (onFileMeasured?: () => void) => Promise<OfflineCachedFile[]>;
+  getIdentifyGroupState: () => Promise<IdentifyGroupState[]>;
   getReadyState: () => Promise<OfflineReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: true; label: string; packs: number }>;
   /** onInterim streams byte-level progress while the unit downloads. */
   runNextUnit: (onInterim?: (progress: WarmupProgress) => void) => Promise<WarmupProgress>;
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
+  setIdentifyGroupWanted: (groupId: string, wanted: boolean) => Promise<IdentifyGroupState[]>;
 };
 
 // Interim progress messages are throttled to this interval so a fast download
@@ -109,6 +125,12 @@ const EMULATORJS_COMPLETE_MARKER_PATH = "/__rom-weaver-emulatorjs-complete__";
 
 const optionalGroupMarkerUrl = (scope: string, groupId: string) =>
   new URL(`/__rom-weaver-identify-group__/${groupId}`, scope).href;
+
+// Optional groups are opt-in: the background warm-up downloads only the groups
+// the user has ticked in settings. An unticked group still serves any single
+// pack an identify run asks for (see serveOptionalIdentifyPack), so nothing
+// stops working - it just is not held offline.
+const optionalGroupsWantedUrl = (scope: string) => new URL("/__rom-weaver-identify-wanted__", scope).href;
 
 const optionalGroupRevision = (group: IdentifyOptionalPackGroup) =>
   group.packs.map((pack) => `${pack.url}:${pack.sha256}`).join("\n");
@@ -234,6 +256,60 @@ const createOfflineWarmup = ({
   const isGroupInstalled = async (cache: Cache, group: IdentifyOptionalPackGroup) =>
     (await (await cache.match(optionalGroupMarkerUrl(scope, group.id)))?.text()) === optionalGroupRevision(group);
 
+  const wantedUrl = optionalGroupsWantedUrl(scope);
+
+  /**
+   * Group ids the user keeps offline. Stored in the cache rather than in memory
+   * so it survives a worker restart, like every other warm-up fact. On the
+   * first read after this became opt-in the list is seeded from whatever is
+   * already installed, so an existing install is never silently dropped.
+   */
+  // getReadyState runs on every throttled progress tick, so the list is read
+  // from the cache once per worker and kept in memory until a write replaces it.
+  let wantedPromise: Promise<Set<string>> | null = null;
+
+  const readWantedGroupIds = (cache: Cache, installedGroups?: boolean[]): Promise<Set<string>> => {
+    if (!wantedPromise) {
+      wantedPromise = loadWantedGroupIds(cache, installedGroups).catch((error) => {
+        wantedPromise = null;
+        throw error;
+      });
+    }
+    return wantedPromise;
+  };
+
+  /** `installedGroups` lets a caller that already checked the markers skip re-reading them. */
+  const loadWantedGroupIds = async (cache: Cache, installedGroups?: boolean[]): Promise<Set<string>> => {
+    const stored = await cache.match(wantedUrl);
+    if (stored) {
+      try {
+        const parsed: unknown = await stored.json();
+        if (Array.isArray(parsed)) return new Set(parsed.filter((id): id is string => typeof id === "string"));
+      } catch {
+        // A corrupt list is replaced by the seed below rather than failing the pump.
+      }
+    }
+    const installed =
+      installedGroups ?? (await Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(cache, group))));
+    const seeded = identifyOptionalGroups.filter((_, index) => installed[index]).map((group) => group.id);
+    await writeWantedGroupIds(cache, new Set(seeded));
+    return new Set(seeded);
+  };
+
+  const writeWantedGroupIds = async (cache: Cache, wanted: Set<string>) => {
+    await cache.put(
+      wantedUrl,
+      new Response(JSON.stringify([...wanted]), { headers: { "content-type": "application/json" } }),
+    );
+    wantedPromise = Promise.resolve(new Set(wanted));
+  };
+
+  /** Remove a group's packs and its completion marker. */
+  const removeGroupFromCache = async (cache: Cache, group: IdentifyOptionalPackGroup) => {
+    await Promise.all(group.packs.map((pack) => cache.delete(new URL(pack.url, scope).href)));
+    await cache.delete(optionalGroupMarkerUrl(scope, group.id));
+  };
+
   const isEmulatorJsComplete = async (cache: Cache) =>
     (await (await cache.match(emulatorJsMarkerUrl))?.text()) === emulatorJsVersion;
 
@@ -286,8 +362,9 @@ const createOfflineWarmup = ({
       // All files can already be cached (filled by the runtime route) with the
       // marker still missing; runNextUnit writes the marker on an empty queue.
     }
+    const wanted = await readWantedGroupIds(identifyCache, installedGroups);
     for (const [index, group] of identifyOptionalGroups.entries()) {
-      if (!installedGroups[index]) units.push({ kind: "identify-group", group });
+      if (!installedGroups[index] && wanted.has(group.id)) units.push({ kind: "identify-group", group });
     }
     return units;
   };
@@ -365,12 +442,17 @@ const createOfflineWarmup = ({
         error: error instanceof Error ? error.message : String(error),
       });
     }
+    const wanted = await readWantedGroupIds(identifyCache, installedGroups);
     for (const [index, group] of identifyOptionalGroups.entries()) {
-      const bytes = groupBytes(group);
-      totalBytes += bytes;
+      // Only the groups the user keeps offline are part of the offline set.
+      // An unticked group counts in neither total nor cached - its packs may
+      // still sit in the cache from an on-demand identify fetch, but they are
+      // not progress towards being offline-ready.
+      if (!wanted.has(group.id)) continue;
+      totalBytes += groupBytes(group);
       totalFiles += group.packs.length;
       if (installedGroups[index]) {
-        cachedBytes += bytes;
+        cachedBytes += groupBytes(group);
         cachedFiles += group.packs.length;
       } else {
         // Partially cached groups (on-demand pack fetches, an interrupted
@@ -442,8 +524,54 @@ const createOfflineWarmup = ({
     return { id: group.id, installed: true as const, label: group.label, packs: group.packs.length };
   };
 
-  // A user clicked Install in settings, so this one downloads at normal priority.
-  const installIdentifyGroup = (groupId: string) => installGroupWith(fetchForInteractive, groupId);
+  // A user ticked the group in settings, so this one downloads at normal
+  // priority and the group joins the set kept offline.
+  const installIdentifyGroup = async (groupId: string) => {
+    const result = await installGroupWith(fetchForInteractive, groupId);
+    const cache = await caches.open(identifyOptionalCacheName);
+    const wanted = await readWantedGroupIds(cache);
+    if (!wanted.has(groupId)) await writeWantedGroupIds(cache, new Set([...wanted, groupId]));
+    return result;
+  };
+
+  /** Every optional group with whether it is kept offline and already stored. */
+  const getIdentifyGroupState = async (): Promise<IdentifyGroupState[]> => {
+    const cache = await caches.open(identifyOptionalCacheName);
+    const installed = await Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(cache, group)));
+    const wanted = await readWantedGroupIds(cache, installed);
+    return identifyOptionalGroups.map((group, index) => ({
+      id: group.id,
+      installed: installed[index] ?? false,
+      label: group.label,
+      packs: group.packs.length,
+      sizeBytes: groupBytes(group),
+      wanted: wanted.has(group.id),
+    }));
+  };
+
+  /**
+   * Tick or untick a group. Unticking deletes what it cached - the point of the
+   * control is to reclaim that space - while leaving on-demand fetches working.
+   */
+  const setIdentifyGroupWanted = async (groupId: string, isWanted: boolean): Promise<IdentifyGroupState[]> => {
+    const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
+    if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
+    const cache = await caches.open(identifyOptionalCacheName);
+    const current = await readWantedGroupIds(cache);
+    if (isWanted === current.has(groupId)) return getIdentifyGroupState();
+    const wanted = new Set(current);
+    if (isWanted) wanted.add(groupId);
+    else wanted.delete(groupId);
+    await writeWantedGroupIds(cache, wanted);
+    if (!isWanted) {
+      await removeGroupFromCache(cache, group);
+      if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === groupId));
+    } else if (queue && !queue.some((unit) => unit.kind === "identify-group" && unit.group.id === groupId)) {
+      queue = [...queue, { group, kind: "identify-group" }];
+    }
+    log("identify group offline preference changed", { groupId, wanted: isWanted });
+    return getIdentifyGroupState();
+  };
 
   const downloadEmulatorJsFile = async (
     unit: Extract<WarmupUnit, { kind: "emulatorjs-file" }>,
@@ -651,7 +779,16 @@ const createOfflineWarmup = ({
     return response;
   };
 
-  return { bumpPriority, getCachedFiles, getReadyState, installIdentifyGroup, runNextUnit, serveOptionalIdentifyPack };
+  return {
+    bumpPriority,
+    getCachedFiles,
+    getIdentifyGroupState,
+    getReadyState,
+    installIdentifyGroup,
+    runNextUnit,
+    serveOptionalIdentifyPack,
+    setIdentifyGroupWanted,
+  };
 };
 
 export { createOfflineWarmup };

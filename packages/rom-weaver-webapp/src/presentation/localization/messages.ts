@@ -309,6 +309,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.envWeb": msg({ id: "ui.status.envWeb", message: "Browser tab" }),
   "ui.status.about": msg({ id: "ui.status.about", message: "About rom-weaver, its licence and its privacy" }),
   "ui.status.build": msg({ id: "ui.status.build", message: "This build" }),
+  "ui.settings.identifyPacks": msg({ id: "ui.settings.identifyPacks", message: "Optional ROM databases" }),
+  "ui.settings.identifyPacksNote": msg({
+    id: "ui.settings.identifyPacksNote",
+    message:
+      "Keep these offline. Unticked databases are still downloaded on demand when a ROM needs them; unticking one removes its cached copy.",
+  }),
+  "ui.settings.identifyPacksFailed": msg({
+    id: "ui.settings.identifyPacksFailed",
+    message: "Could not change {label}.",
+  }),
   "ui.status.cachedFiles": msg({ id: "ui.status.cachedFiles", message: "Cached offline files" }),
   "ui.status.cachedFilesEmpty": msg({ id: "ui.status.cachedFilesEmpty", message: "No offline files are cached." }),
   "ui.status.cachedFilesLoading": msg({ id: "ui.status.cachedFilesLoading", message: "Loading cached files…" }),

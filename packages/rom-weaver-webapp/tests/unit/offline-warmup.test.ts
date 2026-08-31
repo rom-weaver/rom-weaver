@@ -29,6 +29,10 @@ class FakeCache {
     const url = typeof request === "string" ? request : request instanceof URL ? request.href : request.url;
     this.entries.set(url, response);
   }
+  async delete(request: RequestInfo | URL) {
+    const url = typeof request === "string" ? request : request instanceof URL ? request.href : request.url;
+    return this.entries.delete(url);
+  }
 }
 
 class FakeCacheStorage {
@@ -109,9 +113,81 @@ const createWarmup = async (
 /** One file per pump, for tests that assert queue ordering. */
 const createSerialWarmup = async (fetcher = createFetcher()) => createWarmup(fetcher, { emulatorJsBatchSize: 1 });
 
+/**
+ * Optional groups are opt-in, so a test that expects one to download has to
+ * tick it first - the same act the settings checkbox performs.
+ */
+const createWarmupWithOptionalGroup = async (
+  fetcher = createFetcher(),
+  options: Partial<Parameters<typeof createOfflineWarmup>[0]> = {},
+) => {
+  const warmup = await createWarmup(fetcher, options);
+  await warmup.setIdentifyGroupWanted("optional-computers", true);
+  return warmup;
+};
+
 describe("offline warm-up (service worker side)", () => {
+  it("leaves optional groups out of the warm-up until they are ticked", async () => {
+    const fetcher = createFetcher();
+    const warmup = await createWarmup(fetcher);
+    // Drain: only the emulatorjs files are queued, never the optional group.
+    const units: Array<string | null> = [];
+    for (let pump = 0; pump < 6; pump += 1) units.push((await warmup.runNextUnit()).unit);
+    expect(units.filter((unit) => unit?.startsWith("identify-group:"))).toEqual([]);
+    expect(fetcher.mock.calls.some(([input]) => String(input).includes("identify-computers.pack"))).toBe(false);
+
+    // An untouched optional group is not part of the offline set, so a finished
+    // emulatorjs warm-up is genuinely ready.
+    const state = await warmup.getReadyState();
+    expect(state.ready).toBe(true);
+    expect(state.totalBytes).toBe(3 + 5 + 7);
+  });
+
+  it("downloads a group once it is ticked and forgets it when unticked", async () => {
+    const warmup = await createWarmup();
+    let groups = await warmup.getIdentifyGroupState();
+    expect(groups).toEqual([
+      {
+        id: "optional-computers",
+        installed: false,
+        label: "Computers",
+        packs: 1,
+        sizeBytes: PACK_BODY.length,
+        wanted: false,
+      },
+    ]);
+
+    groups = await warmup.setIdentifyGroupWanted("optional-computers", true);
+    expect(groups[0]?.wanted).toBe(true);
+    expect((await warmup.getReadyState()).totalBytes).toBe(3 + 5 + 7 + PACK_BODY.length);
+    while (!(await warmup.runNextUnit()).ready) {
+      // drain
+    }
+    expect((await warmup.getIdentifyGroupState())[0]?.installed).toBe(true);
+
+    // Unticking deletes the packs and the marker, and drops the group from the totals.
+    groups = await warmup.setIdentifyGroupWanted("optional-computers", false);
+    expect(groups[0]).toMatchObject({ installed: false, wanted: false });
+    const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
+    expect([...(identifyCache?.entries.keys() ?? [])].some((url) => url.includes("identify-computers.pack"))).toBe(
+      false,
+    );
+    expect((await warmup.getReadyState()).totalBytes).toBe(3 + 5 + 7);
+  });
+
+  it("keeps an already-installed group ticked when the opt-in list is first read", async () => {
+    const first = await createWarmup();
+    // Simulate the pre-opt-in world: the group was installed with no wanted list.
+    await first.installIdentifyGroup("optional-computers");
+    const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
+    identifyCache?.entries.delete("https://example.test/__rom-weaver-identify-wanted__");
+
+    const second = await createWarmup();
+    expect((await second.getIdentifyGroupState())[0]).toMatchObject({ installed: true, wanted: true });
+  });
+
   it("counts the app's own precache into the totals", async () => {
-    const warmup = await createWarmup(createFetcher(), {
+    const warmup = await createWarmupWithOptionalGroup(createFetcher(), {
       precacheState: async () => ({ cachedBytes: 40, cachedFiles: 2, totalBytes: 100, totalFiles: 5 }),
     });
     const state = await warmup.getReadyState();
@@ -122,7 +198,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("leaves the precache out of the totals when its state cannot be read", async () => {
-    const warmup = await createWarmup(createFetcher(), {
+    const warmup = await createWarmupWithOptionalGroup(createFetcher(), {
       precacheState: async () => {
         throw new Error("sizes unavailable");
       },
@@ -133,7 +209,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("reports not-ready with full byte totals before any download", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createWarmupWithOptionalGroup();
     const state = await warmup.getReadyState();
     expect(state.ready).toBe(false);
     expect(state.totalBytes).toBe(3 + 5 + 7 + PACK_BODY.length);
@@ -142,18 +218,23 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("reads each partial cache inventory once per ready-state snapshot", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createWarmupWithOptionalGroup();
+    const identifyCacheBefore = cacheStorage.caches.get(IDENTIFY_CACHE);
+    const identifyMatchesBefore = identifyCacheBefore?.matchCallCount ?? 0;
     await warmup.getReadyState();
     const emulatorJsCache = cacheStorage.caches.get(EMULATORJS_CACHE);
     const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
     expect(emulatorJsCache?.keysCallCount).toBe(1);
     expect(emulatorJsCache?.matchCallCount).toBe(1);
     expect(identifyCache?.keysCallCount).toBe(1);
-    expect(identifyCache?.matchCallCount).toBe(1);
+    // One marker read per group. The opt-in list is memoised by the ticking
+    // above, so a snapshot does not re-read it.
+    expect((identifyCache?.matchCallCount ?? 0) - identifyMatchesBefore).toBe(1);
   });
 
   it("pumps units to completion, writes markers, and flips ready", async () => {
     const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
     let progress = await warmup.runNextUnit();
     expect(progress.unit).toBe("emulatorjs:loader.js");
     expect(progress.ready).toBe(false);
@@ -172,7 +253,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("derives ready across a restart from cache contents alone", async () => {
-    const first = await createWarmup();
+    const first = await createWarmupWithOptionalGroup();
     while (!(await first.runNextUnit()).ready) {
       // drain
     }
@@ -230,6 +311,7 @@ describe("offline warm-up (service worker side)", () => {
 
   it("bumps identify groups ahead of emulatorjs files", async () => {
     const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
     // Build the queue: the first pump takes the first emulatorjs file.
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
     warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
@@ -240,6 +322,7 @@ describe("offline warm-up (service worker side)", () => {
 
   it("streams interim byte progress with the in-flight unit's name and size", async () => {
     const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
     const interims: Array<{ cachedBytes: number; detail: unknown; unitLoadedBytes: number | null }> = [];
     const progress = await warmup.runNextUnit((interim) => {
       interims.push({
@@ -259,6 +342,7 @@ describe("offline warm-up (service worker side)", () => {
 
   it("does not double-count a unit's already-cached bytes in interim progress", async () => {
     const warmup = await createSerialWarmup();
+    await warmup.setIdentifyGroupWanted("optional-computers", true);
     const groups = await buildGroups();
     const packUrl = new URL(groups[0].packs[0].url, SCOPE).href;
     // Cache the group's only pack on demand, then warm that group first: its
@@ -281,7 +365,7 @@ describe("offline warm-up (service worker side)", () => {
   });
 
   it("counts a partially cached group's packs without its marker", async () => {
-    const warmup = await createWarmup();
+    const warmup = await createWarmupWithOptionalGroup();
     const groups = await buildGroups();
     const packUrl = new URL(groups[0].packs[0].url, SCOPE).href;
     await warmup.serveOptionalIdentifyPack(new Request(packUrl));

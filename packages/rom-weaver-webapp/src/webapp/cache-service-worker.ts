@@ -552,6 +552,25 @@ self.addEventListener("message", (event) => {
     return;
   }
 
+  if (event.data.action === "get-identify-pack-group-state") {
+    const query = offlineWarmup
+      .getIdentifyGroupState()
+      .then((groups) => ({ action: "identify-pack-group-state", groups }))
+      .catch((error) => ({ action: "identify-pack-group-state-failed", error: formatError(error) }));
+    event.waitUntil(query.then(replyTo));
+    return;
+  }
+
+  if (event.data.action === "set-identify-pack-group-wanted") {
+    const groupId = typeof event.data.groupId === "string" ? event.data.groupId : "";
+    const update = offlineWarmup
+      .setIdentifyGroupWanted(groupId, event.data.wanted === true)
+      .then((groups) => ({ action: "identify-pack-group-state", groups }))
+      .catch((error) => ({ action: "identify-pack-group-state-failed", error: formatError(error) }));
+    event.waitUntil(update.then(replyTo));
+    return;
+  }
+
   if (event.data.action === "install-identify-pack-group") {
     const groupId = typeof event.data.groupId === "string" ? event.data.groupId : "";
     const install = offlineWarmup

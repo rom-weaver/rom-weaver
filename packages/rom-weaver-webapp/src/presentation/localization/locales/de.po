@@ -265,6 +265,11 @@ msgstr "Kopieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksFailed"
+msgstr "{label} konnte nicht geändert werden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "{format}-Bundle erstellen"
 
@@ -430,6 +435,11 @@ msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können —
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksNote"
+msgstr "Diese offline vorhalten. Nicht angehakte Datenbanken werden weiterhin bei Bedarf geladen, wenn ein ROM sie braucht; das Abwählen entfernt die zwischengespeicherte Kopie."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.language"
 msgstr "Sprache"
 
@@ -582,6 +592,11 @@ msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen ur
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacks"
+msgstr "Optionale ROM-Datenbanken"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
