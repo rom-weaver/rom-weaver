@@ -33,25 +33,35 @@ const identifyDataSources = Object.fromEntries(
 );
 const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
 const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
-const identifyPackPrecacheEntries = identifyPackGroups.defaultSystems.map((system) => ({
-  revision: system.sha256,
+const identifyPackEntry = (system) => ({
+  sha256: system.sha256,
+  sizeBytes: system.rawBytes || 0,
   url: `assets/identify-${system.file}?sha256=${system.sha256}`,
-}));
-const identifyOptionalPackGroups = identifyPackGroups.groups
-  .filter((group) => !group.default)
-  .map((group) => ({
-    id: group.id,
-    label: group.label,
-    packs: group.systems.map((slug) => {
-      const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
-      if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
-      return {
-        sha256: system.sha256,
-        sizeBytes: system.rawBytes || 0,
-        url: `assets/identify-${system.file}?sha256=${system.sha256}`,
-      };
-    }),
-  }));
+});
+// Default packs are downloaded by the background warm-up rather than precached:
+// they are three quarters of what a first visit would otherwise pull down, and
+// an identify run fetches whatever it needs on demand long before the warm-up
+// reaches it. `required` marks the group as never opt-out.
+const identifyDefaultPackGroup = {
+  id: "default",
+  label: "Built-in systems",
+  packs: identifyPackGroups.defaultSystems.map(identifyPackEntry),
+  required: true,
+};
+const identifyOptionalPackGroups = [
+  identifyDefaultPackGroup,
+  ...identifyPackGroups.groups
+    .filter((group) => !group.default)
+    .map((group) => ({
+      id: group.id,
+      label: group.label,
+      packs: group.systems.map((slug) => {
+        const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
+        if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
+        return identifyPackEntry(system);
+      }),
+    })),
+];
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -690,22 +700,10 @@ const writeCloudflareHeadersAsset = (channel) => {
 // file. Emitted at the dist root, which keeps it out of the precache globs.
 const PRECACHE_SIZES_FILENAME = "precache-sizes.json";
 
-// The default identify packs join the manifest through additionalManifestEntries,
-// which workbox appends AFTER manifestTransforms run, so a transform never sees
-// them. They are measured here instead, off the Brotli sidecar their logical URL
-// resolves to at install time - read from the source tree, because the sidecars
-// are copied into dist later in the build.
-const identifyPackPrecacheSizes = Object.fromEntries(
-  identifyPackPrecacheEntries.flatMap((entry) => {
-    const sourcePath = identifyDataSources[`/${entry.url.split("?")[0]}.br`];
-    return sourcePath && isRegularFile(sourcePath) ? [[entry.url, fs.statSync(sourcePath).size]] : [];
-  }),
-);
-
 const writePrecacheSizes =
   () =>
   (manifestEntries, _compilation, distDir = path.resolve(rootDir, "dist")) => {
-    const sizes = { ...identifyPackPrecacheSizes };
+    const sizes = {};
     for (const entry of manifestEntries) {
       if (typeof entry.size === "number") sizes[entry.url] = entry.size;
     }
@@ -1285,7 +1283,6 @@ export default defineConfig(({ command, mode }) => {
         injectManifest: {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.
-          additionalManifestEntries: identifyPackPrecacheEntries,
           manifestTransforms: [writePrecacheSizes()],
           globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [

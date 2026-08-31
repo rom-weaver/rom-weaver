@@ -84,6 +84,10 @@ const createFetcher = () =>
     return new Response("missing", { status: 404 });
   });
 
+/** URLs a fetcher was called with; the warm-up passes a Request for packs. */
+const fetchedUrls = (fetcher: ReturnType<typeof createFetcher>) =>
+  fetcher.mock.calls.map(([input]) => (typeof input === "string" ? input : input.url));
+
 let cacheStorage: FakeCacheStorage;
 
 beforeEach(() => {
@@ -127,6 +131,23 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
+  it("always warms a required group and never offers it as a choice", async () => {
+    const fetcher = createFetcher();
+    const warmup = await createWarmup(fetcher, {
+      identifyOptionalGroups: [{ ...(await buildGroups())[0], id: "default", label: "Built-in", required: true }],
+    });
+    // Settings only lists groups a user may actually turn off.
+    expect(await warmup.getIdentifyGroupState()).toEqual([]);
+    await expect(warmup.setIdentifyGroupWanted("default", false)).rejects.toThrow("always kept offline");
+
+    // It is queued and counted without anyone ticking anything.
+    expect((await warmup.getReadyState()).totalBytes).toBe(3 + 5 + 7 + PACK_BODY.length);
+    while (!(await warmup.runNextUnit()).ready) {
+      // drain
+    }
+    expect(fetchedUrls(fetcher).some((url) => url.includes("identify-computers.pack"))).toBe(true);
+  });
+
   it("leaves optional groups out of the warm-up until they are ticked", async () => {
     const fetcher = createFetcher();
     const warmup = await createWarmup(fetcher);
@@ -134,7 +155,7 @@ describe("offline warm-up (service worker side)", () => {
     const units: Array<string | null> = [];
     for (let pump = 0; pump < 6; pump += 1) units.push((await warmup.runNextUnit()).unit);
     expect(units.filter((unit) => unit?.startsWith("identify-group:"))).toEqual([]);
-    expect(fetcher.mock.calls.some(([input]) => String(input).includes("identify-computers.pack"))).toBe(false);
+    expect(fetchedUrls(fetcher).some((url) => url.includes("identify-computers.pack"))).toBe(false);
 
     // An untouched optional group is not part of the offline set, so a finished
     // emulatorjs warm-up is genuinely ready.

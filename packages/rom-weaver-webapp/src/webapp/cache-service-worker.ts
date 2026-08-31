@@ -21,6 +21,7 @@ declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
   id: string;
   label: string;
   packs: Array<{ sha256: string; sizeBytes?: number; url: string }>;
+  required?: boolean;
 }>;
 
 declare let self: ServiceWorkerGlobalScope & {
@@ -379,10 +380,9 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
-/* Default packs enter the precache. Optional packs enter their own cache via
-   the background warm-up, an explicit group install, or an on-demand
-   single-pack fetch during an identify run. Identify requests MUST stay local
-   once cached. */
+/* Every pack now enters the same cache through the background warm-up, an
+   explicit group install, or an on-demand single-pack fetch during an identify
+   run. Identify requests MUST stay local once cached. */
 const isIdentifyPackRequest = (url: URL) =>
   url.origin === self.location.origin && /\/assets\/identify-.*\.pack$/u.test(url.pathname);
 
@@ -405,6 +405,8 @@ const offlineWarmup = createOfflineWarmup({
   scope: self.registration.scope,
 });
 
+// Packs are no longer precached, but a build installed before that change may
+// still hold them there, so the precache is still consulted first.
 const serveIdentifyPack = async ({ request }: { request: Request }) => {
   const precached = await matchPrecache(request.url);
   if (precached) return precached;

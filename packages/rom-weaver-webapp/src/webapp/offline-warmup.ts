@@ -14,6 +14,8 @@ type IdentifyOptionalPackGroup = {
   id: string;
   label: string;
   packs: IdentifyOptionalPack[];
+  /** Always kept offline: part of the base set, so settings never offers it. */
+  required?: boolean;
 };
 
 type WarmupUnit =
@@ -287,6 +289,9 @@ const createOfflineWarmup = ({
 
   const wantedUrl = optionalGroupsWantedUrl(scope);
 
+  const isGroupWanted = (group: IdentifyOptionalPackGroup, wanted: ReadonlySet<string>) =>
+    group.required === true || wanted.has(group.id);
+
   /**
    * Group ids the user keeps offline. Stored in the cache rather than in memory
    * so it survives a worker restart, like every other warm-up fact. On the
@@ -393,7 +398,7 @@ const createOfflineWarmup = ({
     }
     const wanted = await readWantedGroupIds(identifyCache, installedGroups);
     for (const [index, group] of identifyOptionalGroups.entries()) {
-      if (!installedGroups[index] && wanted.has(group.id)) units.push({ kind: "identify-group", group });
+      if (!installedGroups[index] && isGroupWanted(group, wanted)) units.push({ kind: "identify-group", group });
     }
     return units;
   };
@@ -477,7 +482,7 @@ const createOfflineWarmup = ({
       // An unticked group counts in neither total nor cached - its packs may
       // still sit in the cache from an on-demand identify fetch, but they are
       // not progress towards being offline-ready.
-      if (!wanted.has(group.id)) continue;
+      if (!isGroupWanted(group, wanted)) continue;
       totalBytes += groupBytes(group);
       totalFiles += group.packs.length;
       if (installedGroups[index]) {
@@ -573,14 +578,20 @@ const createOfflineWarmup = ({
     const cache = await caches.open(identifyOptionalCacheName);
     const installed = await Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(cache, group)));
     const wanted = await readWantedGroupIds(cache, installed);
-    return identifyOptionalGroups.map((group, index) => ({
-      id: group.id,
-      installed: installed[index] ?? false,
-      label: group.label,
-      packs: group.packs.length,
-      sizeBytes: groupBytes(group),
-      wanted: wanted.has(group.id),
-    }));
+    return identifyOptionalGroups.flatMap((group, index) =>
+      group.required
+        ? []
+        : [
+            {
+              id: group.id,
+              installed: installed[index] ?? false,
+              label: group.label,
+              packs: group.packs.length,
+              sizeBytes: groupBytes(group),
+              wanted: wanted.has(group.id),
+            },
+          ],
+    );
   };
 
   /**
@@ -590,6 +601,7 @@ const createOfflineWarmup = ({
   const setIdentifyGroupWanted = async (groupId: string, isWanted: boolean): Promise<IdentifyGroupState[]> => {
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
+    if (group.required) throw new Error(`ROM identify pack group is always kept offline: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
     const current = await readWantedGroupIds(cache);
     if (isWanted === current.has(groupId)) return getIdentifyGroupState();
