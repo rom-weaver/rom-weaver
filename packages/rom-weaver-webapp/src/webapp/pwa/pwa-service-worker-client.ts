@@ -29,6 +29,7 @@ type DocumentLike = Pick<Document, "addEventListener" | "visibilityState">;
 type RegisterServiceWorker = typeof registerSW;
 
 type CreatePwaServiceWorkerClientOptions = {
+  appVersion: string;
   cachePrefix: string;
   cacheVersionTimeoutMs: number;
   document: DocumentLike | undefined;
@@ -39,6 +40,11 @@ type CreatePwaServiceWorkerClientOptions = {
   onStateChange: (state: ServiceWorkerCacheState) => void;
   registerServiceWorker?: RegisterServiceWorker;
   sessionStorage?: SessionStorageLike | undefined;
+  // Return true to apply an update as soon as it's detected instead of prompting. Called when an update
+  // is detected, while there's no in-progress work. Applied silently (skipWaiting, no reload) when the
+  // page already runs the incoming version, or with a reload when the running code is the outgoing
+  // controller's (see the appVersion comparison in onNeedRefresh).
+  shouldAutoApplyUpdate?: () => boolean;
   updateIntervalMs: number;
   window: WindowLike | undefined;
 };
@@ -59,6 +65,13 @@ const COI_RELOAD_REASON_COEP_DEGRADE = "coepdegrade";
 const COI_RELOAD_REASON_NOT_CONTROLLING = "notcontrolling";
 const logger = createLogger("rom-weaver-sw-client");
 const SERVICE_WORKER_READY_TIMEOUT_MS = 8000;
+// Per-tab-session budget on unattended auto-applies. Prompt mode had the user as the circuit breaker;
+// auto-apply needs its own so a deploy that ever serves a byte-varying worker cannot churn skipWaiting
+// on an idle tab endlessly. Past the budget we fall back to the manual update prompt. sessionStorage
+// clears on tab close, so this resets naturally per browsing session.
+const AUTO_APPLY_RELOAD_COUNT_KEY = "rom-weaver-sw-auto-apply-reloads";
+const AUTO_APPLY_RELOAD_BUDGET = 3;
+
 const logServiceWorkerClient = (message: string, details?: Record<string, unknown>) => {
   logger.info(message, details);
 };
@@ -90,6 +103,7 @@ const describeRegistration = (registration: ServiceWorkerRegistrationLike | null
     : null;
 
 const createPwaServiceWorkerClient = ({
+  appVersion,
   cachePrefix,
   cacheVersionTimeoutMs,
   document,
@@ -100,6 +114,7 @@ const createPwaServiceWorkerClient = ({
   onStateChange,
   registerServiceWorker: registerServiceWorkerOverride,
   sessionStorage: sessionStorageOverride,
+  shouldAutoApplyUpdate,
   updateIntervalMs,
   window,
 }: CreatePwaServiceWorkerClientOptions): PwaServiceWorkerClient => {
@@ -107,7 +122,8 @@ const createPwaServiceWorkerClient = ({
   const sessionStorage = sessionStorageOverride;
   let initialized = false;
   let state = createServiceWorkerCacheState();
-  // Keep the raw version so an in-flight cache query can retain the current display label.
+  // Raw version last reported by the controlling worker (or a sentinel like "network"/"unknown"). Used
+  // to decide whether an auto-applied update needs a reload; state itself only keeps a display label.
   let controllerVersion = "";
   let updateServiceWorker: ReturnType<RegisterServiceWorker> | null = null;
   let serviceWorkerRegistration: ServiceWorkerRegistrationLike | undefined;
@@ -555,9 +571,32 @@ const createPwaServiceWorkerClient = ({
         if (reload) reloadPage("reloading page to apply service worker update", "swupdate");
       },
       onNeedRefresh: () => {
-        logServiceWorkerClient("service worker update ready; awaiting update prompt confirmation");
-        // Keep every update behind the visible banner. The reload button still confirms before it can
-        // discard staged work, while idle pages also get a clear choice instead of a silent reload.
+        logServiceWorkerClient("service worker update ready");
+        const autoApplyReloads = Number.parseInt(getSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY), 10) || 0;
+        if (shouldAutoApplyUpdate?.() && updateServiceWorker && autoApplyReloads < AUTO_APPLY_RELOAD_BUDGET) {
+          // Reload only when the page is still running the code the outgoing controller cached. When the
+          // running version is already ahead of that controller — the shell was served fresh from the
+          // network — the page IS the incoming version, so a reload would swap in nothing; activate via
+          // skipWaiting silently and let the controllerchange handler re-sync COEP and the cache version.
+          const reloadToApply = controllerVersion === appVersion;
+          logServiceWorkerClient("auto-applying service worker update; no in-progress work", {
+            autoApplyReloads,
+            controllerVersion,
+            reloadToApply,
+            runningVersion: appVersion,
+          });
+          setSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY, String(autoApplyReloads + 1));
+          clearUpdateReady();
+          reloadOnIncomingControl = reloadToApply;
+          if (reloadToApply) onBeforeReload?.();
+          void updateServiceWorker();
+          return;
+        }
+        if (autoApplyReloads >= AUTO_APPLY_RELOAD_BUDGET) {
+          logServiceWorkerClient("auto-apply budget exhausted; deferring to manual update prompt", {
+            autoApplyReloads,
+          });
+        }
         markUpdateReady();
       },
       onOfflineReady: () => {
