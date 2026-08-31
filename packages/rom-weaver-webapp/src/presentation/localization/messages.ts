@@ -270,6 +270,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingProgress",
     message: "Installing offline copy — {percent}%",
   }),
+  "ui.runtime.installingApp": msg({ id: "ui.runtime.installingApp", message: "Installing app" }),
+  "ui.runtime.installingAppProgress": msg({
+    id: "ui.runtime.installingAppProgress",
+    message: "Installing app — {percent}%",
+  }),
   "ui.runtime.detailFiles": msg({
     id: "ui.runtime.detailFiles",
     message: "{cached} of {total} files",
@@ -307,6 +312,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.cachedFiles": msg({ id: "ui.status.cachedFiles", message: "Cached offline files" }),
   "ui.status.cachedFilesEmpty": msg({ id: "ui.status.cachedFilesEmpty", message: "No offline files are cached." }),
   "ui.status.cachedFilesLoading": msg({ id: "ui.status.cachedFilesLoading", message: "Loading cached files…" }),
+  "ui.status.cachedFilesPath": msg({ id: "ui.status.cachedFilesPath", message: "File" }),
+  "ui.status.cachedFilesSize": msg({ id: "ui.status.cachedFilesSize", message: "Transferred / stored" }),
+  "ui.status.cachedFilesSortBy": msg({ id: "ui.status.cachedFilesSortBy", message: "Sort by {column}" }),
   "ui.status.offline": msg({ id: "ui.status.offline", message: "Offline" }),
   "ui.status.offlineLegend": msg({ id: "ui.status.offlineLegend", message: "What the offline states mean" }),
   "ui.status.pullRequest": msg({ id: "ui.status.pullRequest", message: "Pull request" }),

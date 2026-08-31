@@ -1,5 +1,6 @@
 import {
   Activity,
+  ArrowUp,
   Check,
   Copy,
   Download,
@@ -413,6 +414,29 @@ const cachedFileTotals = (files: OfflineCachedFile[]) => {
   return { compressedBytes, sizeBytes };
 };
 
+/** Which column the cached-file list is ordered by, and which way. */
+type CachedFileSort = { column: "path" | "size"; direction: "asc" | "desc" };
+
+// Opening a column for the first time answers the question that column is
+// usually asked: paths alphabetically, sizes largest first.
+const CACHED_FILE_SORT_DEFAULTS: Record<CachedFileSort["column"], CachedFileSort["direction"]> = {
+  path: "asc",
+  size: "desc",
+};
+
+const cachedFileSize = (file: OfflineCachedFile) => file.sizeBytes ?? file.compressedBytes ?? 0;
+
+/** Sorted copy. Equal sizes fall back to the path so the order never wobbles. */
+const sortCachedFiles = (files: OfflineCachedFile[], sort: CachedFileSort) => {
+  const factor = sort.direction === "asc" ? 1 : -1;
+  return [...files].sort((left, right) => {
+    const byPath = cachedFileLabel(left.url).localeCompare(cachedFileLabel(right.url));
+    if (sort.column === "path") return factor * byPath;
+    const bySize = cachedFileSize(left) - cachedFileSize(right);
+    return bySize === 0 ? byPath : factor * bySize;
+  });
+};
+
 const cachedFileSizeLabel = (localizer: Localizer, file: OfflineCachedFile) => {
   const size = file.sizeBytes ?? file.compressedBytes;
   if (size === null) return "—";
@@ -433,6 +457,32 @@ const OfflineCachedFiles = ({
   localizer: Localizer;
 }) => {
   const totals = cachedFileTotals(files);
+  const [sort, setSort] = useState<CachedFileSort>({ column: "path", direction: "asc" });
+  const sorted = useMemo(() => sortCachedFiles(files, sort), [files, sort]);
+  // Re-clicking the active column reverses it; a new column opens at its own default.
+  const toggleSort = (column: CachedFileSort["column"]) =>
+    setSort((current) =>
+      current.column === column
+        ? { column, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { column, direction: CACHED_FILE_SORT_DEFAULTS[column] },
+    );
+  const sortHeader = (column: CachedFileSort["column"], label: string) => (
+    <th
+      aria-sort={sort.column === column ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      className={`sw-cache-col sw-cache-col-${column}`}
+      scope="col"
+    >
+      <button
+        className="sw-cache-sort"
+        onClick={() => toggleSort(column)}
+        title={localizer.message("ui.status.cachedFilesSortBy", { column: label })}
+        type="button"
+      >
+        {label}
+        <ArrowUp aria-hidden="true" className="sw-cache-sort-arrow" data-direction={sort.direction} />
+      </button>
+    </th>
+  );
   return (
     <section className="sw-cached-files">
       <h3 className="sr-only">{localizer.message("ui.status.cachedFiles")}</h3>
@@ -459,14 +509,26 @@ const OfflineCachedFiles = ({
           <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesEmpty")}</p>
         ) : null}
         {!(loading || error) && files.length > 0 ? (
-          <ul className="sw-cache-list">
-            {files.map((file) => (
-              <li data-cache={file.cache} key={`${file.cache}:${file.url}`}>
-                <code title={`${file.cache}: ${file.url}`}>{cachedFileLabel(file.url)}</code>
-                <span className="sw-cache-size">{cachedFileSizeLabel(localizer, file)}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="sw-cache-scroll">
+            <table className="sw-cache-list">
+              <thead>
+                <tr>
+                  {sortHeader("path", localizer.message("ui.status.cachedFilesPath"))}
+                  {sortHeader("size", localizer.message("ui.status.cachedFilesSize"))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((file) => (
+                  <tr data-cache={file.cache} key={`${file.cache}:${file.url}`}>
+                    <td>
+                      <code title={`${file.cache}: ${file.url}`}>{cachedFileLabel(file.url)}</code>
+                    </td>
+                    <td className="sw-cache-size">{cachedFileSizeLabel(localizer, file)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : null}
       </Drawer>
     </section>
@@ -1219,5 +1281,5 @@ const LogDialog = ({
   );
 };
 
-export { cachedFileSizeLabel, cachedFileTotals, LogDialog };
+export { cachedFileSizeLabel, cachedFileTotals, LogDialog, sortCachedFiles };
 export type { LogDialogTab, SettingsFocusHint };

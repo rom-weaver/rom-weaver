@@ -783,6 +783,12 @@ type OfflineWarmupDisplayProgress = {
   cachedFiles?: number;
   /** Human description of the unit the progress event is about. */
   detail?: { kind: string; name: string } | null;
+  /**
+   * Which install stage the numbers describe. The two stages count different
+   * things (precache entries, then warm-up bytes), so each is named for itself
+   * rather than restarting one label's percentage.
+   */
+  phase?: "precache" | "warmup";
   ready: boolean;
   totalBytes: number;
   totalFiles?: number;
@@ -794,18 +800,27 @@ type OfflineWarmupDisplayProgress = {
 };
 
 /**
- * Whole percent for an incomplete warm-up; null when nothing is known. Byte
- * totals win; the first-install precache broadcasts file counts only (its byte
- * sizes are unknown), so file counts are the fallback.
+ * Installing the offline copy runs two stages that measure different things:
+ * the precache counts entries (the workbox manifest carries no sizes), then the
+ * warm-up counts bytes. Each stage owns half the bar, so one percentage rises
+ * from 0 to 100 across both instead of each stage filling its own bar. A
+ * returning visitor whose app is already precached starts at the halfway mark,
+ * which is what has actually been installed.
  */
+const PRECACHE_PERCENT_SHARE = 50;
+
+/** Whole percent for an incomplete install; null when the stage knows no total. */
 const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null => {
   if (!progress || progress.ready) return null;
-  const wholePercent = (done: number, total: number) => Math.min(99, Math.floor((done / total) * 100));
-  if (progress.totalBytes > 0) return wholePercent(progress.cachedBytes, progress.totalBytes);
-  if (typeof progress.totalFiles === "number" && progress.totalFiles > 0) {
-    return wholePercent(progress.cachedFiles ?? 0, progress.totalFiles);
+  const fraction = (done: number, total: number) => (total > 0 ? Math.min(1, done / total) : null);
+  if (progress.phase === "precache") {
+    const done = fraction(progress.cachedFiles ?? 0, progress.totalFiles ?? 0);
+    // Held below the halfway mark: only the warm-up stage may reach it.
+    return done === null ? null : Math.min(PRECACHE_PERCENT_SHARE - 1, Math.floor(done * PRECACHE_PERCENT_SHARE));
   }
-  return null;
+  const done = fraction(progress.cachedBytes, progress.totalBytes);
+  if (done === null) return null;
+  return Math.min(99, PRECACHE_PERCENT_SHARE + Math.floor(done * (100 - PRECACHE_PERCENT_SHARE)));
 };
 
 /**
@@ -856,8 +871,11 @@ const installingRuntimeLabel = (
   offlineProgress: OfflineWarmupDisplayProgress | null,
 ) => {
   const percent = offlineWarmupPercent(offlineProgress);
-  if (percent === null) return localizer.message("ui.runtime.installing");
-  return localizer.message("ui.runtime.installingProgress", { percent });
+  const precache = offlineProgress?.phase === "precache";
+  if (percent === null) return localizer.message(precache ? "ui.runtime.installingApp" : "ui.runtime.installing");
+  return localizer.message(precache ? "ui.runtime.installingAppProgress" : "ui.runtime.installingProgress", {
+    percent,
+  });
 };
 
 const RUNTIME_ICONS = {

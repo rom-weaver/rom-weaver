@@ -31,7 +31,7 @@ describe("runtime state with offline warm-up gating", () => {
 
   it("labels installing with a percent when byte totals are known", () => {
     expect(installingRuntimeLabel(localizer, { cachedBytes: 50, ready: false, totalBytes: 100 })).toBe(
-      'ui.runtime.installingProgress:{"percent":50}',
+      'ui.runtime.installingProgress:{"percent":75}',
     );
     // Never claims 100% while not ready.
     expect(installingRuntimeLabel(localizer, { cachedBytes: 100, ready: false, totalBytes: 100 })).toBe(
@@ -43,23 +43,38 @@ describe("runtime state with offline warm-up gating", () => {
     );
   });
 
-  it("computes a whole percent only for an incomplete warm-up with known totals", () => {
-    expect(offlineWarmupPercent({ cachedBytes: 25, ready: false, totalBytes: 100 })).toBe(25);
+  it("gives each install stage half the bar so the percent only rises", () => {
+    // Precache stage: entry counts fill 0-49, never reaching the halfway mark.
+    const precache = { cachedBytes: 0, phase: "precache" as const, ready: false, totalBytes: 0 };
+    expect(offlineWarmupPercent({ ...precache, cachedFiles: 0, totalFiles: 20 })).toBe(0);
+    expect(offlineWarmupPercent({ ...precache, cachedFiles: 10, totalFiles: 20 })).toBe(25);
+    expect(offlineWarmupPercent({ ...precache, cachedFiles: 20, totalFiles: 20 })).toBe(49);
+    expect(offlineWarmupPercent({ ...precache, cachedFiles: 5, totalFiles: 0 })).toBeNull();
+
+    // Warm-up stage: bytes fill 50-99, so it opens where the precache stopped.
+    expect(offlineWarmupPercent({ cachedBytes: 0, ready: false, totalBytes: 100 })).toBe(50);
+    expect(offlineWarmupPercent({ cachedBytes: 50, ready: false, totalBytes: 100 })).toBe(75);
     expect(offlineWarmupPercent({ cachedBytes: 100, ready: false, totalBytes: 100 })).toBe(99);
+
     expect(offlineWarmupPercent({ cachedBytes: 100, ready: true, totalBytes: 100 })).toBeNull();
     expect(offlineWarmupPercent({ cachedBytes: 0, ready: false, totalBytes: 0 })).toBeNull();
     expect(offlineWarmupPercent(null)).toBeNull();
-    // Precache broadcasts carry file counts only; percent falls back to them.
-    expect(offlineWarmupPercent({ cachedBytes: 0, cachedFiles: 5, ready: false, totalBytes: 0, totalFiles: 20 })).toBe(
-      25,
-    );
-    expect(offlineWarmupPercent({ cachedBytes: 0, cachedFiles: 20, ready: false, totalBytes: 0, totalFiles: 20 })).toBe(
-      99,
-    );
-    // Known byte totals outrank file counts.
+  });
+
+  it("names the stage the percent belongs to", () => {
     expect(
-      offlineWarmupPercent({ cachedBytes: 50, cachedFiles: 1, ready: false, totalBytes: 100, totalFiles: 20 }),
-    ).toBe(50);
+      installingRuntimeLabel(localizer, {
+        cachedBytes: 0,
+        cachedFiles: 10,
+        phase: "precache",
+        ready: false,
+        totalBytes: 0,
+        totalFiles: 20,
+      }),
+    ).toBe('ui.runtime.installingAppProgress:{"percent":25}');
+    expect(installingRuntimeLabel(localizer, { cachedBytes: 50, ready: false, totalBytes: 100 })).toBe(
+      'ui.runtime.installingProgress:{"percent":75}',
+    );
   });
 
   it("describes warm-up units for the status detail line", () => {

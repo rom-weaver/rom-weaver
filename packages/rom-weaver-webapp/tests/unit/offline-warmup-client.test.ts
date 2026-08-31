@@ -131,6 +131,7 @@ describe("offline warm-up client", () => {
       cachedBytes: 0,
       cachedFiles: 12,
       pendingUnits: 28,
+      phase: "precache",
       ready: false,
       totalBytes: 0,
       totalFiles: 40,

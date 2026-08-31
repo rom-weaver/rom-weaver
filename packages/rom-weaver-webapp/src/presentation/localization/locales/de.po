@@ -350,6 +350,11 @@ msgstr "erwartet zuerst Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesPath"
+msgstr "Datei"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.byteUnits"
 msgstr "Dateigrößeneinheiten"
 
@@ -392,6 +397,16 @@ msgstr "ROM in Bundle einschließen"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.envPwa"
 msgstr "Installierte App (PWA)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingApp"
+msgstr "App wird installiert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingAppProgress"
+msgstr "App wird installiert — {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -795,6 +810,11 @@ msgstr "Zum Hauptinhalt springen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesSortBy"
+msgstr "Nach {column} sortieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabStatus"
 msgstr "Status"
 
@@ -922,6 +942,11 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesSize"
+msgstr "Übertragen / gespeichert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

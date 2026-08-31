@@ -1085,31 +1085,91 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
 .rw-app .sw-cache-error {
   color: var(--danger-text);
 }
-.rw-app .sw-cache-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-xs);
+/* The scroll lives in a well of its own so the rows sit inside a visible edge
+   instead of running into the drawer's, and the scrollbar rides that inset
+   rather than the dialog wall. */
+.rw-app .sw-cache-scroll {
   max-height: 18rem;
-  padding: 0;
-  margin: 0;
   overflow: auto;
-  list-style: none;
+  overscroll-behavior: contain;
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+}
+.rw-app .sw-cache-list {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 /* Path takes the room it needs; the size column sits at the end, right-aligned
    so the figures stack into a readable column. */
-.rw-app .sw-cache-list li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--sp-s);
-  align-items: baseline;
+.rw-app .sw-cache-list td,
+.rw-app .sw-cache-list th {
+  padding: 3px var(--sp-s);
   font-size: 0.7rem;
+  font-weight: inherit;
+  vertical-align: baseline;
+  text-align: start;
 }
-.rw-app .sw-cache-list li > span {
+.rw-app .sw-cache-list td:first-child {
+  width: 100%;
+}
+/* Sticky so the columns stay named while a long cache set scrolls under them. */
+.rw-app .sw-cache-list thead th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  padding-block: var(--sp-2xs);
+  background: var(--well);
+  border-block-end: 1px solid var(--seam-soft);
+}
+.rw-app .sw-cache-col-size {
+  text-align: end;
+}
+.rw-app .sw-cache-sort {
+  display: inline-flex;
+  gap: var(--sp-2xs);
+  align-items: center;
+  padding: 0;
+  font: inherit;
+  font-weight: 650;
   color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.18s;
+}
+@media (hover: hover) {
+  .rw-app .sw-cache-sort:hover {
+    color: var(--ink);
+  }
+}
+.rw-app .sw-cache-sort:active {
+  color: var(--ink);
+}
+/* The arrow marks the sorted column only, and points the way the rows run. */
+.rw-app .sw-cache-sort-arrow {
+  width: 0.72rem;
+  height: 0.72rem;
+  opacity: 0;
+  transition:
+    opacity 0.18s,
+    rotate 0.2s var(--ease);
+}
+.rw-app [aria-sort="ascending"] .sw-cache-sort-arrow,
+.rw-app [aria-sort="descending"] .sw-cache-sort-arrow {
+  opacity: 1;
+}
+.rw-app [aria-sort="descending"] .sw-cache-sort-arrow {
+  rotate: 180deg;
 }
 .rw-app .sw-cache-size {
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  color: var(--ink-3);
+  text-align: end;
   white-space: nowrap;
 }
 .rw-app .sw-cache-list code {

@@ -16,6 +16,9 @@ const logger = createLogger("offline-warmup");
 
 type OfflineWarmupProgress = WarmupProgress;
 
+/** First-install precache progress: entry counts, before any byte total is known. */
+type OfflinePrecacheProgress = OfflineReadyState & { phase: "precache" };
+
 type ServiceWorkerContainerLike = {
   controller: ServiceWorker | null;
   addEventListener?: {
@@ -355,7 +358,7 @@ const persistOfflineReady = (ready: boolean) => {
  * count-based percent. Returns a cleanup function.
  */
 const listenForOfflinePrecacheProgress = (
-  onProgress: (progress: OfflineReadyState) => void,
+  onProgress: (progress: OfflinePrecacheProgress) => void,
   nav?: NavigatorLike,
 ): (() => void) => {
   const container = (nav ?? getGlobalNavigator())?.serviceWorker;
@@ -369,6 +372,7 @@ const listenForOfflinePrecacheProgress = (
       cachedBytes: 0,
       cachedFiles,
       pendingUnits: Math.max(0, totalFiles - cachedFiles),
+      phase: "precache",
       ready: false,
       totalBytes: 0,
       totalFiles,

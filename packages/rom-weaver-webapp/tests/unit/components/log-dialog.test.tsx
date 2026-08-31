@@ -48,16 +48,16 @@ describe("LogDialog", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    await waitFor(() => expect(container.querySelectorAll(".sw-cache-list li")).toHaveLength(2));
+    await waitFor(() => expect(container.querySelectorAll(".sw-cache-list tbody tr")).toHaveLength(2));
     const drawer = container.querySelector<HTMLButtonElement>(".sw-cache-drawer > .cks-head");
     expect(drawer?.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(drawer as HTMLButtonElement);
     expect(drawer?.getAttribute("aria-expanded")).toBe("true");
-    // Path plus sizes only: no cache name, no revision query string. A file
-    // stored unencoded shows one figure instead of an identical pair.
-    expect(Array.from(container.querySelectorAll(".sw-cache-list li"), (row) => row.textContent)).toEqual([
-      "/emulatorjs/data/loader.js1.02 KB / 4.1 KB",
+    // Sorted by path by default. Path plus sizes only: no cache name, no
+    // revision query string, and one figure for a file stored unencoded.
+    expect(Array.from(container.querySelectorAll(".sw-cache-list tbody tr"), (row) => row.textContent)).toEqual([
       "/assets/identify-consoles.pack2.05 KB",
+      "/emulatorjs/data/loader.js1.02 KB / 4.1 KB",
     ]);
   });
 

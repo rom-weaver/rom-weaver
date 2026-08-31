@@ -199,8 +199,9 @@ describe("Masthead", () => {
         />,
       ),
     );
-    expect(container.querySelector(".masthead-status-percent")?.textContent).toBe("25%");
-    expect(container.querySelector(".sub-status")?.getAttribute("aria-label")).toBe("Installing offline copy — 25%");
+    // The warm-up stage owns the bar's upper half, so a quarter of its bytes reads as 62%.
+    expect(container.querySelector(".masthead-status-percent")?.textContent).toBe("62%");
+    expect(container.querySelector(".sub-status")?.getAttribute("aria-label")).toBe("Installing offline copy — 62%");
 
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("disabled");
