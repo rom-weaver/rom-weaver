@@ -40,6 +40,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.cachedFilesSize"
+#~ msgstr "Übertragen / gespeichert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
@@ -47,6 +52,11 @@ msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird.
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.detailFiles"
 msgstr "{cached} von {total} Dateien"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineSizes"
+msgstr "{compressed} übertragen · {uncompressed} gespeichert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -255,6 +265,11 @@ msgstr "Kopieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksFailed"
+msgstr "{label} konnte nicht geändert werden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "{format}-Bundle erstellen"
 
@@ -345,6 +360,11 @@ msgstr "erwartet zuerst Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesPath"
+msgstr "Datei"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.byteUnits"
 msgstr "Dateigrößeneinheiten"
 
@@ -390,6 +410,16 @@ msgstr "Installierte App (PWA)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingApp"
+msgstr "App wird installiert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingAppProgress"
+msgstr "App wird installiert — {percent} %"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Offline-Kopie wird installiert"
 
@@ -402,6 +432,11 @@ msgstr "Offline-Kopie wird installiert — {percent} %"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
 msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksNote"
+msgstr "Diese offline vorhalten. Nicht angehakte Datenbanken werden weiterhin bei Bedarf geladen, wenn ein ROM sie braucht; das Abwählen entfernt die zwischengespeicherte Kopie."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -557,6 +592,11 @@ msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen ur
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacks"
+msgstr "Optionale ROM-Datenbanken"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -790,6 +830,11 @@ msgstr "Zum Hauptinhalt springen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesSortBy"
+msgstr "Nach {column} sortieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabStatus"
 msgstr "Status"
 
@@ -802,6 +847,11 @@ msgstr "Speicher"
 #: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Speicher ist nicht verfügbar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesStored"
+msgstr "Gespeichert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -917,6 +967,11 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesTransferred"
+msgstr "Übertragen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

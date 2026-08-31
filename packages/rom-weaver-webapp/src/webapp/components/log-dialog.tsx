@@ -1,5 +1,6 @@
 import {
   Activity,
+  ArrowUp,
   Check,
   Copy,
   Download,
@@ -75,6 +76,11 @@ const MAX_DETAILS_CHARS = 4096;
 // The row height is fixed in CSS so the native scrollbar stays exact without a heavyweight list library.
 const TRACE_ROW_HEIGHT = 25;
 const VIRTUAL_OVERSCAN_ROWS = 12;
+
+// While an install is running the cached-file list re-reads the caches on this
+// interval so files appear as they land. Each pass measures every stored body,
+// so this stays well clear of the warm-up's own progress cadence.
+const CACHE_INVENTORY_REFRESH_MS = 2500;
 
 const formatDetails = (details: LogStoreEntry["details"]) => {
   if (!details || Object.keys(details).length === 0) return "";
@@ -260,16 +266,24 @@ const StatusRows = ({
         {runtimeState === "installing" &&
         offlineProgress &&
         !offlineProgress.ready &&
-        offlineProgress.totalBytes > 0 ? (
+        (offlineProgress.totalBytes > 0 ||
+          (typeof offlineProgress.totalFiles === "number" && offlineProgress.totalFiles > 0)) ? (
           <>
             <span className="sw-progress-detail">
-              {typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
-                ? `${localizer.message("ui.runtime.detailFiles", {
-                    cached: offlineProgress.cachedFiles,
-                    total: offlineProgress.totalFiles,
-                  })} · `
-                : ""}
-              {`${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`}
+              {/* The first-install precache reports counts only; byte totals arrive with the warm-up. */}
+              {[
+                typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
+                  ? localizer.message("ui.runtime.detailFiles", {
+                      cached: offlineProgress.cachedFiles,
+                      total: offlineProgress.totalFiles,
+                    })
+                  : null,
+                offlineProgress.totalBytes > 0
+                  ? `${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
             {(() => {
               const detail = describeWarmupUnit(localizer, offlineProgress);
@@ -369,10 +383,60 @@ const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localize
   </section>
 );
 
-const cachedFileLabel = (url: string) => {
-  const parsed = new URL(url);
-  return `${parsed.pathname}${parsed.search}`;
+// Path only: the cache name and revision/sha query params are noise in the
+// list - the full URL stays on the row's hover title.
+const cachedFileLabel = (url: string) => new URL(url).pathname;
+
+/**
+ * Compressed (transfer) and uncompressed (stored) totals over an inventory.
+ * A file missing one measurement counts its other one in both totals, so an
+ * unencoded or unreadable entry never drops out of a sum.
+ */
+const cachedFileTotals = (files: OfflineCachedFile[]) => {
+  let compressedBytes = 0;
+  let sizeBytes = 0;
+  for (const file of files) {
+    compressedBytes += file.compressedBytes ?? file.sizeBytes ?? 0;
+    sizeBytes += file.sizeBytes ?? file.compressedBytes ?? 0;
+  }
+  return { compressedBytes, sizeBytes };
 };
+
+/** Which column the cached-file list is ordered by, and which way. */
+type CachedFileSort = { column: "path" | "compressed" | "stored"; direction: "asc" | "desc" };
+
+// Opening a column for the first time answers the question that column is
+// usually asked: paths alphabetically, sizes largest first.
+const CACHED_FILE_SORT_DEFAULTS: Record<CachedFileSort["column"], CachedFileSort["direction"]> = {
+  compressed: "desc",
+  path: "asc",
+  stored: "desc",
+};
+
+const cachedFileColumnBytes = (file: OfflineCachedFile, column: CachedFileSort["column"]) =>
+  column === "compressed" ? file.compressedBytes : file.sizeBytes;
+
+/**
+ * Sorted copy. Equal sizes fall back to the path so the order never wobbles,
+ * and a file with no measurement for the sorted column sits at the end rather
+ * than posing as zero.
+ */
+const sortCachedFiles = (files: OfflineCachedFile[], sort: CachedFileSort) => {
+  const factor = sort.direction === "asc" ? 1 : -1;
+  return [...files].sort((left, right) => {
+    const byPath = cachedFileLabel(left.url).localeCompare(cachedFileLabel(right.url));
+    if (sort.column === "path") return factor * byPath;
+    const leftBytes = cachedFileColumnBytes(left, sort.column);
+    const rightBytes = cachedFileColumnBytes(right, sort.column);
+    if (leftBytes === null && rightBytes === null) return byPath;
+    if (leftBytes === null) return 1;
+    if (rightBytes === null) return -1;
+    return leftBytes === rightBytes ? byPath : factor * (leftBytes - rightBytes);
+  });
+};
+
+const cachedFileBytesLabel = (localizer: Localizer, bytes: number | null) =>
+  bytes === null ? "—" : localizer.formatBytes(bytes);
 
 const OfflineCachedFiles = ({
   error,
@@ -384,32 +448,87 @@ const OfflineCachedFiles = ({
   files: OfflineCachedFile[];
   loading: boolean;
   localizer: Localizer;
-}) => (
-  <section className="sw-cached-files">
-    <h3 className="sr-only">{localizer.message("ui.status.cachedFiles")}</h3>
-    <Drawer
-      className="sw-cache-drawer"
-      label={localizer.message("ui.status.cachedFiles")}
-      readouts={<DrawerReadout muted>{loading ? "…" : files.length}</DrawerReadout>}
+}) => {
+  const totals = cachedFileTotals(files);
+  const [sort, setSort] = useState<CachedFileSort>({ column: "path", direction: "asc" });
+  const sorted = useMemo(() => sortCachedFiles(files, sort), [files, sort]);
+  // Re-clicking the active column reverses it; a new column opens at its own default.
+  const toggleSort = (column: CachedFileSort["column"]) =>
+    setSort((current) =>
+      current.column === column
+        ? { column, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { column, direction: CACHED_FILE_SORT_DEFAULTS[column] },
+    );
+  const sortHeader = (column: CachedFileSort["column"], label: string) => (
+    <th
+      aria-sort={sort.column === column ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      className={`sw-cache-col sw-cache-col-${column}`}
+      scope="col"
     >
-      {loading ? <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesLoading")}</p> : null}
-      {!loading && error ? <p className="sw-cache-note sw-cache-error">{error}</p> : null}
-      {!(loading || error) && files.length === 0 ? (
-        <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesEmpty")}</p>
-      ) : null}
-      {!(loading || error) && files.length > 0 ? (
-        <ul className="sw-cache-list">
-          {files.map((file) => (
-            <li data-cache={file.cache} key={`${file.cache}:${file.url}`}>
-              <span title={file.cache}>{file.cache}</span>
-              <code title={file.url}>{cachedFileLabel(file.url)}</code>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </Drawer>
-  </section>
-);
+      <button
+        className="sw-cache-sort"
+        onClick={() => toggleSort(column)}
+        title={localizer.message("ui.status.cachedFilesSortBy", { column: label })}
+        type="button"
+      >
+        {label}
+        <ArrowUp aria-hidden="true" className="sw-cache-sort-arrow" data-direction={sort.direction} />
+      </button>
+    </th>
+  );
+  return (
+    <section className="sw-cached-files">
+      <h3 className="sr-only">{localizer.message("ui.status.cachedFiles")}</h3>
+      <Drawer
+        className="sw-cache-drawer"
+        label={localizer.message("ui.status.cachedFiles")}
+        readouts={
+          <>
+            <DrawerReadout muted>{loading ? "…" : files.length}</DrawerReadout>
+            {!loading && files.length > 0 ? (
+              <DrawerReadout muted>
+                {localizer.message("ui.runtime.offlineSizes", {
+                  compressed: localizer.formatBytes(totals.compressedBytes),
+                  uncompressed: localizer.formatBytes(totals.sizeBytes),
+                })}
+              </DrawerReadout>
+            ) : null}
+          </>
+        }
+      >
+        {loading ? <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesLoading")}</p> : null}
+        {!loading && error ? <p className="sw-cache-note sw-cache-error">{error}</p> : null}
+        {!(loading || error) && files.length === 0 ? (
+          <p className="sw-cache-note">{localizer.message("ui.status.cachedFilesEmpty")}</p>
+        ) : null}
+        {!(loading || error) && files.length > 0 ? (
+          <div className="sw-cache-scroll">
+            <table className="sw-cache-list">
+              <thead>
+                <tr>
+                  {sortHeader("path", localizer.message("ui.status.cachedFilesPath"))}
+                  {sortHeader("compressed", localizer.message("ui.status.cachedFilesTransferred"))}
+                  {sortHeader("stored", localizer.message("ui.status.cachedFilesStored"))}
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((file) => (
+                  <tr data-cache={file.cache} key={`${file.cache}:${file.url}`}>
+                    <td>
+                      <code title={`${file.cache}: ${file.url}`}>{cachedFileLabel(file.url)}</code>
+                    </td>
+                    <td className="sw-cache-size">{cachedFileBytesLabel(localizer, file.compressedBytes)}</td>
+                    <td className="sw-cache-size">{cachedFileBytesLabel(localizer, file.sizeBytes)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Drawer>
+    </section>
+  );
+};
 
 /**
  * One line out to the About guide, which is where licence, attribution and
@@ -959,25 +1078,40 @@ const LogDialog = ({
     if (!(open && showingOpfs)) return;
     void refreshOpfs();
   }, [open, refreshOpfs, showingOpfs]);
+  // The inventory reads every cached body to measure it, so it is refreshed on
+  // a slow tick rather than per progress event, and only while an install is
+  // actually adding files with this panel in front of the user.
+  const installing = runtimeState === "installing";
   useEffect(() => {
-    if (!(open && tab === "status")) return;
+    if (!(open && tab === "status")) return undefined;
     let active = true;
-    setCachedFilesLoading(true);
-    setCachedFilesError(null);
-    void queryOfflineCachedFiles()
-      .then((files) => {
-        if (active) setCachedFiles(files);
-      })
-      .catch((error) => {
-        if (active) setCachedFilesError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        if (active) setCachedFilesLoading(false);
-      });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = (initial: boolean) => {
+      if (initial) {
+        setCachedFilesLoading(true);
+        setCachedFilesError(null);
+      }
+      void queryOfflineCachedFiles()
+        .then((files) => {
+          if (active) setCachedFiles(files);
+        })
+        .catch((error) => {
+          // A refresh that fails leaves the list as it was; only the first
+          // load has nothing to show and so reports the error.
+          if (active && initial) setCachedFilesError(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          if (!active) return;
+          if (initial) setCachedFilesLoading(false);
+          if (installing) timer = setTimeout(() => load(false), CACHE_INVENTORY_REFRESH_MS);
+        });
+    };
+    load(true);
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [open, tab]);
+  }, [installing, open, tab]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
@@ -1152,5 +1286,5 @@ const LogDialog = ({
   );
 };
 
-export { LogDialog };
+export { cachedFileBytesLabel, cachedFileTotals, LogDialog, sortCachedFiles };
 export type { LogDialogTab, SettingsFocusHint };

@@ -27,10 +27,20 @@ afterEach(() => {
 });
 
 describe("LogDialog", () => {
-  it("lists every cached offline file on Status", async () => {
+  it("lists every cached offline file with its sizes on Status", async () => {
     vi.mocked(queryOfflineCachedFiles).mockResolvedValue([
-      { cache: "emulatorjs-4.2.3", url: "https://example.test/emulatorjs/data/loader.js" },
-      { cache: "identify-optional", url: "https://example.test/assets/identify-consoles.pack?sha256=abc" },
+      {
+        cache: "emulatorjs-4.2.3",
+        compressedBytes: 1024,
+        sizeBytes: 4096,
+        url: "https://example.test/emulatorjs/data/loader.js",
+      },
+      {
+        cache: "identify-optional",
+        compressedBytes: 2048,
+        sizeBytes: 2048,
+        url: "https://example.test/assets/identify-consoles.pack?sha256=abc",
+      },
     ]);
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -38,14 +48,16 @@ describe("LogDialog", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    await waitFor(() => expect(container.querySelectorAll(".sw-cache-list li")).toHaveLength(2));
+    await waitFor(() => expect(container.querySelectorAll(".sw-cache-list tbody tr")).toHaveLength(2));
     const drawer = container.querySelector<HTMLButtonElement>(".sw-cache-drawer > .cks-head");
     expect(drawer?.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(drawer as HTMLButtonElement);
     expect(drawer?.getAttribute("aria-expanded")).toBe("true");
-    expect(Array.from(container.querySelectorAll(".sw-cache-list li"), (row) => row.textContent)).toEqual([
-      "emulatorjs-4.2.3/emulatorjs/data/loader.js",
-      "identify-optional/assets/identify-consoles.pack?sha256=abc",
+    // Sorted by path by default, and transferred/stored are separate cells:
+    // no cache name and no revision query string in the visible text.
+    expect(Array.from(container.querySelectorAll(".sw-cache-list tbody tr"), (row) => row.textContent)).toEqual([
+      "/assets/identify-consoles.pack2.05 KB2.05 KB",
+      "/emulatorjs/data/loader.js1.02 KB4.1 KB",
     ]);
   });
 

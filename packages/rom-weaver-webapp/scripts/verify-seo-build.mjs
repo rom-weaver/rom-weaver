@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { resolveIdentifyPackGroups } from "../../../scripts/identify-pack-groups.mjs";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
 import { isLegalDocRoute } from "../src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
@@ -18,7 +17,6 @@ const distDir = path.join(packageDir, "dist");
 const identifyDataIndex = JSON.parse(
   fs.readFileSync(path.resolve(packageDir, "../../crates/rom-weaver-cli/data/identify/v1/index.json"), "utf8"),
 );
-const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
 const channel = process.env.ROM_WEAVER_CHANNEL || "prod";
 const production = channel === "prod";
 const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
@@ -356,19 +354,14 @@ const precacheManifest = read("cache-service-worker.js");
 const identifyPrecacheEntry = (system) =>
   `"revision":"${system.sha256}","url":"assets/identify-${system.file}?sha256=${system.sha256}"`;
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
-// Every default pack is installed before identification. Optional packs MUST
-// enter their local cache only after the user installs their complete group.
+// The index is precached because pack selection needs it before any pack. No
+// pack itself belongs there: the default set is downloaded by the background
+// warm-up and an identify run fetches on demand what it needs sooner, so
+// precaching them would put ~12 MB in front of the app being usable.
 assertIncludes(precacheManifest, '"assets/identify-index.json"', "identify index precache entry");
-for (const system of identifyPackGroups.defaultSystems) {
-  assertIncludes(precacheManifest, identifyPrecacheEntry(system), `${system.file} precache entry`);
-}
-for (const group of identifyPackGroups.groups.filter((candidate) => !candidate.default)) {
-  for (const slug of group.systems) {
-    const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
-    if (!system) throw new Error(`${group.id} names unknown identify system ${slug}`);
-    if (precacheManifest.includes(identifyPrecacheEntry(system))) {
-      throw new Error(`${system.file} from ${group.id} must not enter the default precache`);
-    }
+for (const system of identifyDataIndex.systems) {
+  if (precacheManifest.includes(identifyPrecacheEntry(system))) {
+    throw new Error(`${system.file} must not enter the precache; packs are warmed in the background`);
   }
 }
 for (const system of identifyDataIndex.systems) {

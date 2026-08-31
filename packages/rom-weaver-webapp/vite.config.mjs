@@ -33,25 +33,35 @@ const identifyDataSources = Object.fromEntries(
 );
 const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
 const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
-const identifyPackPrecacheEntries = identifyPackGroups.defaultSystems.map((system) => ({
-  revision: system.sha256,
+const identifyPackEntry = (system) => ({
+  sha256: system.sha256,
+  sizeBytes: system.rawBytes || 0,
   url: `assets/identify-${system.file}?sha256=${system.sha256}`,
-}));
-const identifyOptionalPackGroups = identifyPackGroups.groups
-  .filter((group) => !group.default)
-  .map((group) => ({
-    id: group.id,
-    label: group.label,
-    packs: group.systems.map((slug) => {
-      const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
-      if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
-      return {
-        sha256: system.sha256,
-        sizeBytes: system.rawBytes || 0,
-        url: `assets/identify-${system.file}?sha256=${system.sha256}`,
-      };
-    }),
-  }));
+});
+// Default packs are downloaded by the background warm-up rather than precached:
+// they are three quarters of what a first visit would otherwise pull down, and
+// an identify run fetches whatever it needs on demand long before the warm-up
+// reaches it. `required` marks the group as never opt-out.
+const identifyDefaultPackGroup = {
+  id: "default",
+  label: "Built-in systems",
+  packs: identifyPackGroups.defaultSystems.map(identifyPackEntry),
+  required: true,
+};
+const identifyOptionalPackGroups = [
+  identifyDefaultPackGroup,
+  ...identifyPackGroups.groups
+    .filter((group) => !group.default)
+    .map((group) => ({
+      id: group.id,
+      label: group.label,
+      packs: group.systems.map((slug) => {
+        const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
+        if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
+        return identifyPackEntry(system);
+      }),
+    })),
+];
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
@@ -680,6 +690,27 @@ const writeCloudflareHeadersAsset = (channel) => {
   };
 };
 
+// The service worker cannot see how big its own precache is: workbox measures
+// every entry, sums the sizes for its build log, then deletes the field from
+// each entry before injecting the manifest (workbox-build's transform-manifest
+// - ManifestEntry is {integrity?, revision, url}). A manifestTransform runs
+// while the sizes are still there, so this writes them out beside the bundle
+// for the worker to fetch when it installs. Without it the install stage can
+// only count entries, and a 4 MB wasm module weighs the same as a translation
+// file. Emitted at the dist root, which keeps it out of the precache globs.
+const PRECACHE_SIZES_FILENAME = "precache-sizes.json";
+
+const writePrecacheSizes =
+  () =>
+  (manifestEntries, _compilation, distDir = path.resolve(rootDir, "dist")) => {
+    const sizes = {};
+    for (const entry of manifestEntries) {
+      if (typeof entry.size === "number") sizes[entry.url] = entry.size;
+    }
+    fs.writeFileSync(path.join(distDir, PRECACHE_SIZES_FILENAME), `${JSON.stringify(sizes)}\n`);
+    return { manifest: manifestEntries };
+  };
+
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
@@ -1252,7 +1283,7 @@ export default defineConfig(({ command, mode }) => {
         injectManifest: {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.
-          additionalManifestEntries: identifyPackPrecacheEntries,
+          manifestTransforms: [writePrecacheSizes()],
           globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:

@@ -21,6 +21,7 @@ declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
   id: string;
   label: string;
   packs: Array<{ sha256: string; sizeBytes?: number; url: string }>;
+  required?: boolean;
 }>;
 
 declare let self: ServiceWorkerGlobalScope & {
@@ -201,9 +202,99 @@ const withCrossOriginIsolationHeaders = (
   });
 };
 
+// First-install precache progress, broadcast to the (still uncontrolled)
+// pages so the "installing" chip shows a percent instead of a bare spinner
+// through the largest download of the offline set. Only file counts are known
+// at this stage - the workbox manifest carries no sizes. Broadcasts are
+// throttled; the final count always goes out. Update installs stay silent:
+// the page there is already offline-ready and shows no install progress.
+// vite-plugin-pwa injects the manifest at the single `self.__WB_MANIFEST`
+// occurrence, so every other use MUST go through this binding.
+const PRECACHE_MANIFEST = self.__WB_MANIFEST;
+
+const PRECACHE_PROGRESS_THROTTLE_MS = 200;
+// Written beside the bundle by the build's manifestTransform, because workbox
+// strips per-entry sizes before injecting the manifest. Absent in dev and on a
+// host serving an older bundle; the warm-up then falls back to entry counts.
+const PRECACHE_SIZES_URL = new URL("precache-sizes.json", self.registration.scope).href;
+
+const precacheEntryPath = (url: string) => new URL(url, self.registration.scope).pathname;
+
+let precacheSizesPromise: Promise<Map<string, number>> | null = null;
+
+/** Entry path to byte size, for the entries the build could measure. */
+const loadPrecacheSizes = (): Promise<Map<string, number>> => {
+  if (!precacheSizesPromise) {
+    precacheSizesPromise = (async () => {
+      const sizes = new Map<string, number>();
+      try {
+        const response = await fetchForWarmup(PRECACHE_SIZES_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const parsed: unknown = await response.json();
+        if (parsed && typeof parsed === "object") {
+          for (const [url, size] of Object.entries(parsed as Record<string, unknown>)) {
+            if (typeof size === "number" && Number.isFinite(size) && size >= 0) sizes.set(precacheEntryPath(url), size);
+          }
+        }
+      } catch (err) {
+        logServiceWorker("precache sizes unavailable; install progress falls back to entry counts", {
+          error: formatError(err),
+        });
+      }
+      return sizes;
+    })();
+  }
+  return precacheSizesPromise;
+};
+
+/**
+ * Bytes and entries of the precache, and how much of it is stored right now.
+ * Measured from cache contents, so it is correct while the install is still
+ * filling the cache and again once it is complete.
+ */
+const precacheState = async () => {
+  const [sizes, cache] = await Promise.all([loadPrecacheSizes(), caches.open(PRECACHE_NAME)]);
+  const cachedPaths = new Set((await cache.keys()).map((request) => new URL(request.url).pathname));
+  let cachedBytes = 0;
+  let cachedFiles = 0;
+  let totalBytes = 0;
+  for (const entry of PRECACHE_MANIFEST) {
+    const path = precacheEntryPath(typeof entry === "string" ? entry : entry.url);
+    const size = sizes.get(path) ?? 0;
+    totalBytes += size;
+    if (cachedPaths.has(path)) {
+      cachedBytes += size;
+      cachedFiles += 1;
+    }
+  }
+  return { cachedBytes, cachedFiles, totalBytes, totalFiles: PRECACHE_MANIFEST.length };
+};
+
+let firstInstallInProgress = false;
+let precacheInstalledCount = 0;
+let lastPrecacheBroadcast = 0;
+
+// The install-time readout runs the same combined totals the warm-up reports
+// later, so one percentage covers both stages instead of each filling its own.
+const broadcastPrecacheProgress = async () => {
+  const state = await offlineWarmup.getReadyState();
+  const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
+  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+  for (const client of clients) client.postMessage(message);
+};
+
 const precachePlugin: WorkboxPlugin = {
   async requestWillFetch({ event, request }) {
     return prioritizePrecacheInstallRequest(request, event);
+  },
+  async handlerDidComplete({ event }) {
+    if (event.type !== "install" || !firstInstallInProgress) return;
+    precacheInstalledCount += 1;
+    const done = precacheInstalledCount >= PRECACHE_MANIFEST.length;
+    const now = Date.now();
+    if (!done && now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
+    lastPrecacheBroadcast = now;
+    await broadcastPrecacheProgress();
   },
   async handlerWillRespond({ response }) {
     const credentialless = await ensureCoepModeHydrated();
@@ -289,10 +380,9 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
 registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serveEmulatorJsAsset);
 
-/* Default packs enter the precache. Optional packs enter their own cache via
-   the background warm-up, an explicit group install, or an on-demand
-   single-pack fetch during an identify run. Identify requests MUST stay local
-   once cached. */
+/* Every pack now enters the same cache through the background warm-up, an
+   explicit group install, or an on-demand single-pack fetch during an identify
+   run. Identify requests MUST stay local once cached. */
 const isIdentifyPackRequest = (url: URL) =>
   url.origin === self.location.origin && /\/assets\/identify-.*\.pack$/u.test(url.pathname);
 
@@ -311,9 +401,12 @@ const offlineWarmup = createOfflineWarmup({
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
   identifyOptionalGroups: __IDENTIFY_OPTIONAL_PACK_GROUPS__,
   log: logServiceWorker,
+  precacheState,
   scope: self.registration.scope,
 });
 
+// Packs are no longer precached, but a build installed before that change may
+// still hold them there, so the precache is still consulted first.
 const serveIdentifyPack = async ({ request }: { request: Request }) => {
   const precached = await matchPrecache(request.url);
   if (precached) return precached;
@@ -337,7 +430,7 @@ logServiceWorker("script initialized", {
 });
 
 addPlugins([precachePlugin]);
-precacheAndRoute(self.__WB_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
+precacheAndRoute(PRECACHE_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
 self.addEventListener("install", () => {
@@ -347,8 +440,12 @@ self.addEventListener("install", () => {
   // SKIP_WAITING (see the message handler). Seizing control on every update re-inits the
   // running app and reads as an involuntary reload.
   const isFirstInstall = !self.registration.active;
+  // Runs before workbox's async install handler touches any entry (listeners
+  // fire in add order within the same task), so the plugin sees the flag.
+  firstInstallInProgress = isFirstInstall;
   logServiceWorker("install event", {
     isFirstInstall,
+    precacheEntries: PRECACHE_MANIFEST.length,
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,
   });
@@ -440,11 +537,39 @@ self.addEventListener("message", (event) => {
   }
 
   if (event.data.action === "get-offline-cached-files") {
+    // Measuring sizes reads every cached body, which can outlive the client's
+    // reply deadline on a full offline set; throttled interim heartbeats reset
+    // that deadline the same way warm-up download progress does.
+    let lastHeartbeat = 0;
     const query = offlineWarmup
-      .getCachedFiles()
+      .getCachedFiles(() => {
+        const now = Date.now();
+        if (now - lastHeartbeat < 200) return;
+        lastHeartbeat = now;
+        replyTo({ action: "offline-warmup-interim" });
+      })
       .then((files) => ({ action: "offline-cached-files", files }))
       .catch((error) => ({ action: "offline-cached-files-failed", error: formatError(error) }));
     event.waitUntil(query.then(replyTo));
+    return;
+  }
+
+  if (event.data.action === "get-identify-pack-group-state") {
+    const query = offlineWarmup
+      .getIdentifyGroupState()
+      .then((groups) => ({ action: "identify-pack-group-state", groups }))
+      .catch((error) => ({ action: "identify-pack-group-state-failed", error: formatError(error) }));
+    event.waitUntil(query.then(replyTo));
+    return;
+  }
+
+  if (event.data.action === "set-identify-pack-group-wanted") {
+    const groupId = typeof event.data.groupId === "string" ? event.data.groupId : "";
+    const update = offlineWarmup
+      .setIdentifyGroupWanted(groupId, event.data.wanted === true)
+      .then((groups) => ({ action: "identify-pack-group-state", groups }))
+      .catch((error) => ({ action: "identify-pack-group-state-failed", error: formatError(error) }));
+    event.waitUntil(update.then(replyTo));
     return;
   }
 

@@ -270,9 +270,18 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.installingProgress",
     message: "Installing offline copy — {percent}%",
   }),
+  "ui.runtime.installingApp": msg({ id: "ui.runtime.installingApp", message: "Installing app" }),
+  "ui.runtime.installingAppProgress": msg({
+    id: "ui.runtime.installingAppProgress",
+    message: "Installing app — {percent}%",
+  }),
   "ui.runtime.detailFiles": msg({
     id: "ui.runtime.detailFiles",
     message: "{cached} of {total} files",
+  }),
+  "ui.runtime.offlineSizes": msg({
+    id: "ui.runtime.offlineSizes",
+    message: "{compressed} transferred · {uncompressed} stored",
   }),
   "ui.runtime.detailEmulatorFile": msg({
     id: "ui.runtime.detailEmulatorFile",
@@ -300,9 +309,23 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.envWeb": msg({ id: "ui.status.envWeb", message: "Browser tab" }),
   "ui.status.about": msg({ id: "ui.status.about", message: "About rom-weaver, its licence and its privacy" }),
   "ui.status.build": msg({ id: "ui.status.build", message: "This build" }),
+  "ui.settings.identifyPacks": msg({ id: "ui.settings.identifyPacks", message: "Optional ROM databases" }),
+  "ui.settings.identifyPacksNote": msg({
+    id: "ui.settings.identifyPacksNote",
+    message:
+      "Keep these offline. Unticked databases are still downloaded on demand when a ROM needs them; unticking one removes its cached copy.",
+  }),
+  "ui.settings.identifyPacksFailed": msg({
+    id: "ui.settings.identifyPacksFailed",
+    message: "Could not change {label}.",
+  }),
   "ui.status.cachedFiles": msg({ id: "ui.status.cachedFiles", message: "Cached offline files" }),
   "ui.status.cachedFilesEmpty": msg({ id: "ui.status.cachedFilesEmpty", message: "No offline files are cached." }),
   "ui.status.cachedFilesLoading": msg({ id: "ui.status.cachedFilesLoading", message: "Loading cached files…" }),
+  "ui.status.cachedFilesPath": msg({ id: "ui.status.cachedFilesPath", message: "File" }),
+  "ui.status.cachedFilesStored": msg({ id: "ui.status.cachedFilesStored", message: "Stored" }),
+  "ui.status.cachedFilesTransferred": msg({ id: "ui.status.cachedFilesTransferred", message: "Transferred" }),
+  "ui.status.cachedFilesSortBy": msg({ id: "ui.status.cachedFilesSortBy", message: "Sort by {column}" }),
   "ui.status.offline": msg({ id: "ui.status.offline", message: "Offline" }),
   "ui.status.offlineLegend": msg({ id: "ui.status.offlineLegend", message: "What the offline states mean" }),
   "ui.status.pullRequest": msg({ id: "ui.status.pullRequest", message: "Pull request" }),

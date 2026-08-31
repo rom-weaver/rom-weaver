@@ -31,6 +31,7 @@ import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
 import {
   createOfflineWarmupProgressGate,
+  listenForOfflinePrecacheProgress,
   persistOfflineReady,
   queryOfflineReadyState,
   readPersistedOfflineReady,
@@ -295,7 +296,14 @@ function WebappRoot({
     void queryOfflineReadyState().then((state) => {
       if (state) progressGate.acceptSnapshot(state);
     });
-    return scheduleOfflineWarmup({ onProgress: progressGate.acceptLive });
+    // First visit: the installing worker broadcasts precache progress before
+    // it controls the page, long before the warm-up can pump.
+    const stopPrecacheProgress = listenForOfflinePrecacheProgress(progressGate.acceptPrecache);
+    const cancelWarmup = scheduleOfflineWarmup({ onProgress: progressGate.acceptLive });
+    return () => {
+      stopPrecacheProgress();
+      cancelWarmup();
+    };
   }, [notFound, onWarmupProgress]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.

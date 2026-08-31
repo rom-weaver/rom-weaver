@@ -40,6 +40,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.status.cachedFilesSize"
+#~ msgstr "Transferred / stored"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -47,6 +52,11 @@ msgstr "“{patch}” expects “{predecessor}” applied first."
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.detailFiles"
 msgstr "{cached} of {total} files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineSizes"
+msgstr "{compressed} transferred · {uncompressed} stored"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -255,6 +265,11 @@ msgstr "Copy"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksFailed"
+msgstr "Could not change {label}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "Create {format} Bundle"
 
@@ -345,6 +360,11 @@ msgstr "expects patch {n} first"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesPath"
+msgstr "File"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.byteUnits"
 msgstr "File size units"
 
@@ -390,6 +410,16 @@ msgstr "Installed app (PWA)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingApp"
+msgstr "Installing app"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.installingAppProgress"
+msgstr "Installing app — {percent}%"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.installing"
 msgstr "Installing offline copy"
 
@@ -402,6 +432,11 @@ msgstr "Installing offline copy — {percent}%"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
 msgstr "into a compressed, shareable patch others can apply —"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacksNote"
+msgstr "Keep these offline. Unticked databases are still downloaded on demand when a ROM needs them; unticking one removes its cached copy."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -557,6 +592,11 @@ msgstr "Only include a ROM if you have the right to distribute it. Sharing copyr
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.identifyPacks"
+msgstr "Optional ROM databases"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -790,6 +830,11 @@ msgstr "Skip to main content"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesSortBy"
+msgstr "Sort by {column}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabStatus"
 msgstr "Status"
 
@@ -802,6 +847,11 @@ msgstr "Storage"
 #: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Storage is unavailable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesStored"
+msgstr "Stored"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -917,6 +967,11 @@ msgstr "threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.status.cachedFilesTransferred"
+msgstr "Transferred"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -16,10 +16,19 @@ const logger = createLogger("offline-warmup");
 
 type OfflineWarmupProgress = WarmupProgress;
 
+/** First-install precache progress: entry counts, before any byte total is known. */
+type OfflinePrecacheProgress = OfflineReadyState & { phase: "precache" };
+
 type ServiceWorkerContainerLike = {
   controller: ServiceWorker | null;
-  addEventListener?: (type: "controllerchange", listener: () => void) => void;
-  removeEventListener?: (type: "controllerchange", listener: () => void) => void;
+  addEventListener?: {
+    (type: "controllerchange", listener: () => void): void;
+    (type: "message", listener: (event: MessageEvent) => void): void;
+  };
+  removeEventListener?: {
+    (type: "controllerchange", listener: () => void): void;
+    (type: "message", listener: (event: MessageEvent) => void): void;
+  };
 };
 
 type NavigatorLike = {
@@ -37,12 +46,20 @@ type ScheduleOfflineWarmupOptions = {
 
 const createOfflineWarmupProgressGate = (onProgress: (progress: OfflineReadyState) => void) => {
   let liveProgressReceived = false;
+  let snapshotReceived = false;
   return {
     acceptLive: (progress: OfflineWarmupProgress) => {
       liveProgressReceived = true;
       onProgress(progress);
     },
+    // Broadcast from the installing worker's precache, before the page is
+    // controlled. Warm-up sources are strictly newer information (the precache
+    // is finished by the time a pump can run), so they always win.
+    acceptPrecache: (progress: OfflineReadyState) => {
+      if (!(liveProgressReceived || snapshotReceived)) onProgress(progress);
+    },
     acceptSnapshot: (progress: OfflineReadyState) => {
+      snapshotReceived = true;
       // Snapshot and pump messages run independently in the service worker.
       // Once a pump reports progress, an outstanding snapshot is stale.
       if (!liveProgressReceived) onProgress(progress);
@@ -334,6 +351,38 @@ const persistOfflineReady = (ready: boolean) => {
   }
 };
 
+/**
+ * Progress of the first-install precache, broadcast by the installing worker
+ * before it controls any page. It carries the same totals the warm-up reports
+ * later - the app's own bytes included - so both stages move one percentage.
+ * Returns a cleanup function.
+ */
+const listenForOfflinePrecacheProgress = (
+  onProgress: (progress: OfflinePrecacheProgress) => void,
+  nav?: NavigatorLike,
+): (() => void) => {
+  const container = (nav ?? getGlobalNavigator())?.serviceWorker;
+  if (!container?.addEventListener) return () => undefined;
+  const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0);
+  const onMessage = (event: MessageEvent) => {
+    const data = (event.data ?? {}) as Record<string, unknown>;
+    if (data.action !== "offline-precache-progress") return;
+    const cachedFiles = count(data.cachedFiles);
+    const totalFiles = count(data.totalFiles);
+    onProgress({
+      cachedBytes: count(data.cachedBytes),
+      cachedFiles,
+      pendingUnits: count(data.pendingUnits) || Math.max(0, totalFiles - cachedFiles),
+      phase: "precache",
+      ready: false,
+      totalBytes: count(data.totalBytes),
+      totalFiles,
+    });
+  };
+  container.addEventListener("message", onMessage);
+  return () => container.removeEventListener?.("message", onMessage);
+};
+
 /** One-shot readiness query, for pages that load after the warm-up finished. */
 const queryOfflineReadyState = async (nav?: NavigatorLike): Promise<OfflineReadyState | null> => {
   const controller = (nav ?? getGlobalNavigator())?.serviceWorker?.controller;
@@ -362,6 +411,7 @@ const queryOfflineCachedFiles = async (nav?: NavigatorLike): Promise<OfflineCach
 export {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
+  listenForOfflinePrecacheProgress,
   pauseOfflineWarmup,
   persistOfflineReady,
   queryOfflineCachedFiles,

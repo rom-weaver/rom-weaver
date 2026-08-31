@@ -7,6 +7,7 @@ import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options
 import { ACCENTS } from "./accent.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
+import type { IdentifyPackGroupState } from "../platform/browser/identify-packs.ts";
 import { useTheme, type ThemePreference } from "./theme.ts";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
 import {
@@ -425,50 +426,71 @@ const SettingsGroup = ({
   );
 };
 
-type OptionalIdentifyGroup = { id: string; label: string; systems: string[] };
-
+/**
+ * Optional ROM databases are opt-in. An unticked group is never downloaded in
+ * the background, but an identify run still fetches any single pack it needs on
+ * demand - ticking a group only decides what is kept for offline use. Unticking
+ * deletes what that group cached.
+ */
 const IdentifyPackSettings = () => {
-  const [groups, setGroups] = useState<OptionalIdentifyGroup[]>([]);
-  const [status, setStatus] = useState<Record<string, "idle" | "installing" | "installed" | "failed">>({});
+  const localizer = useUiLocalizer();
+  const [groups, setGroups] = useState<IdentifyPackGroupState[] | null>(null);
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    let active = true;
     void import("../platform/browser/identify-packs.ts")
-      .then(({ listOptionalIdentifyPackGroups }) => listOptionalIdentifyPackGroups())
-      .then(setGroups)
-      .catch(() => setGroups([]));
+      .then(({ getIdentifyPackGroupState }) => getIdentifyPackGroupState())
+      .then((state) => {
+        if (active) setGroups(state);
+      })
+      .catch(() => {
+        if (active) setGroups([]);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
-  if (!groups.length) return null;
-  const install = async (group: OptionalIdentifyGroup) => {
-    setStatus((current) => ({ ...current, [group.id]: "installing" }));
+  if (!groups?.length) return null;
+  // Ticking downloads the group now, at normal priority, because the user is
+  // waiting on the choice they just made. Unticking removes it and its bytes.
+  const toggle = async (group: IdentifyPackGroupState, wanted: boolean) => {
+    setBusy((current) => ({ ...current, [group.id]: true }));
+    setError(null);
     try {
-      const { installIdentifyPackGroup } = await import("../platform/browser/identify-packs.ts");
-      await installIdentifyPackGroup(group.id);
-      setStatus((current) => ({ ...current, [group.id]: "installed" }));
+      const { getIdentifyPackGroupState, installIdentifyPackGroup, setIdentifyPackGroupWanted } =
+        await import("../platform/browser/identify-packs.ts");
+      if (wanted) {
+        await installIdentifyPackGroup(group.id);
+        setGroups(await getIdentifyPackGroupState());
+      } else {
+        setGroups(await setIdentifyPackGroupWanted(group.id, false));
+      }
     } catch {
-      setStatus((current) => ({ ...current, [group.id]: "failed" }));
+      setError(localizer.message("ui.settings.identifyPacksFailed", { label: group.label }));
+    } finally {
+      setBusy((current) => ({ ...current, [group.id]: false }));
     }
   };
   return (
     <div className="setgroup">
-      <div className="gtitle">Optional ROM databases</div>
-      {groups.map((group) => {
-        const state = status[group.id] ?? "idle";
-        return (
-          <div className="setrow" key={group.id}>
-            <span className="slabel">{group.label}</span>
-            <span className="sctl">
-              <button
-                className="btn"
-                disabled={state === "installing" || state === "installed"}
-                onClick={() => void install(group)}
-                type="button"
-              >
-                {state === "installing" ? "Installing…" : state === "installed" ? "Installed" : "Install"}
-              </button>
-              {state === "failed" ? <span className="validation bad">Install failed</span> : null}
-            </span>
-          </div>
-        );
-      })}
+      <div className="gtitle">{localizer.message("ui.settings.identifyPacks")}</div>
+      <p className="identify-pack-note">{localizer.message("ui.settings.identifyPacksNote")}</p>
+      <div className="setchecks">
+        {groups.map((group) => (
+          <label className="popt opt identify-pack-opt" key={group.id}>
+            <input
+              checked={group.wanted}
+              disabled={busy[group.id] === true}
+              onChange={(event) => void toggle(group, event.currentTarget.checked)}
+              type="checkbox"
+            />
+            <span className="identify-pack-label">{group.label}</span>
+            <span className="identify-pack-size">{localizer.formatBytes(group.sizeBytes)}</span>
+          </label>
+        ))}
+      </div>
+      {error ? <span className="validation bad">{error}</span> : null}
     </div>
   );
 };

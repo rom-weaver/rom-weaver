@@ -783,6 +783,12 @@ type OfflineWarmupDisplayProgress = {
   cachedFiles?: number;
   /** Human description of the unit the progress event is about. */
   detail?: { kind: string; name: string } | null;
+  /**
+   * Which install stage the numbers describe. The two stages count different
+   * things (precache entries, then warm-up bytes), so each is named for itself
+   * rather than restarting one label's percentage.
+   */
+  phase?: "precache" | "warmup";
   ready: boolean;
   totalBytes: number;
   totalFiles?: number;
@@ -793,11 +799,22 @@ type OfflineWarmupDisplayProgress = {
   unitTotalBytes?: number | null;
 };
 
-/** Whole percent for an incomplete warm-up with known byte totals; null otherwise. */
-const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null =>
-  progress && !progress.ready && progress.totalBytes > 0
-    ? Math.min(99, Math.floor((progress.cachedBytes / progress.totalBytes) * 100))
-    : null;
+/**
+ * Whole percent for an incomplete install; null when no total is known yet.
+ * Both install stages report the same combined byte totals - the app's own
+ * precache plus the warm-up set - so one percentage covers the whole install.
+ * Entry counts are the fallback for a build with no precache size map (dev, or
+ * a host still serving an older bundle).
+ */
+const offlineWarmupPercent = (progress: OfflineWarmupDisplayProgress | null): number | null => {
+  if (!progress || progress.ready) return null;
+  const wholePercent = (done: number, total: number) => Math.min(99, Math.floor((done / total) * 100));
+  if (progress.totalBytes > 0) return wholePercent(progress.cachedBytes, progress.totalBytes);
+  if (typeof progress.totalFiles === "number" && progress.totalFiles > 0) {
+    return wholePercent(progress.cachedFiles ?? 0, progress.totalFiles);
+  }
+  return null;
+};
 
 /**
  * Human wording for a warm-up unit, for the status detail line. Prefers the
@@ -847,8 +864,11 @@ const installingRuntimeLabel = (
   offlineProgress: OfflineWarmupDisplayProgress | null,
 ) => {
   const percent = offlineWarmupPercent(offlineProgress);
-  if (percent === null) return localizer.message("ui.runtime.installing");
-  return localizer.message("ui.runtime.installingProgress", { percent });
+  const precache = offlineProgress?.phase === "precache";
+  if (percent === null) return localizer.message(precache ? "ui.runtime.installingApp" : "ui.runtime.installing");
+  return localizer.message(precache ? "ui.runtime.installingAppProgress" : "ui.runtime.installingProgress", {
+    percent,
+  });
 };
 
 const RUNTIME_ICONS = {

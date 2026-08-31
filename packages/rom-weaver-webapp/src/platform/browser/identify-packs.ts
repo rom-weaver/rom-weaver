@@ -30,6 +30,16 @@ type IdentifySystem = {
   group?: string;
 };
 
+/** Mirrors the worker's IdentifyGroupState reply (see offline-warmup.ts). */
+type IdentifyPackGroupState = {
+  id: string;
+  installed: boolean;
+  label: string;
+  packs: number;
+  sizeBytes: number;
+  wanted: boolean;
+};
+
 type IdentifyPackGroup = {
   default: boolean;
   id: string;
@@ -284,6 +294,33 @@ const identifyGroupIdsForHints = async (hints: IdentifyPackHints): Promise<strin
   }
 };
 
+/** Ask the worker which optional groups are kept offline and which are stored. */
+const getIdentifyPackGroupState = async (): Promise<IdentifyPackGroupState[]> =>
+  requestIdentifyGroupState({ action: "get-identify-pack-group-state" });
+
+/** Tick or untick a group. Unticking deletes what that group cached. */
+const setIdentifyPackGroupWanted = async (groupId: string, wanted: boolean): Promise<IdentifyPackGroupState[]> =>
+  requestIdentifyGroupState({ action: "set-identify-pack-group-wanted", groupId, wanted });
+
+const requestIdentifyGroupState = (message: Record<string, unknown>): Promise<IdentifyPackGroupState[]> => {
+  const controller = navigator.serviceWorker?.controller;
+  if (!controller || typeof MessageChannel !== "function") {
+    throw new IdentifyDataUnavailableError("The service worker cannot manage ROM identify packs");
+  }
+  return new Promise<IdentifyPackGroupState[]>((resolve, reject) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = (event) => {
+      channel.port1.close();
+      if (event.data?.action === "identify-pack-group-state" && Array.isArray(event.data.groups)) {
+        resolve(event.data.groups as IdentifyPackGroupState[]);
+      } else {
+        reject(new IdentifyDataUnavailableError(event.data?.error || "Could not read ROM identify pack settings"));
+      }
+    };
+    controller.postMessage(message, [channel.port2]);
+  });
+};
+
 const installIdentifyPackGroup = async (groupId: string): Promise<void> => {
   const group = (await listOptionalIdentifyPackGroups()).find((candidate) => candidate.id === groupId);
   if (!group) throw new IdentifyDataUnavailableError(`Unknown ROM identify pack group: ${groupId}`);
@@ -414,6 +451,7 @@ const loadIdentifyPacks = async (
 ): Promise<BrowserIdentifyPack[]> => (await loadIdentifyPackSelection(hints, onSelected)).packs;
 
 export {
+  getIdentifyPackGroupState,
   identifyGroupIdsForHints,
   IdentifyDataUnavailableError,
   installIdentifyPackGroup,
@@ -422,5 +460,6 @@ export {
   loadIdentifyPackSelection,
   resetIdentifyPackCache,
   selectIdentifySlugs,
+  setIdentifyPackGroupWanted,
 };
-export type { BrowserIdentifyPack };
+export type { BrowserIdentifyPack, IdentifyPackGroupState };

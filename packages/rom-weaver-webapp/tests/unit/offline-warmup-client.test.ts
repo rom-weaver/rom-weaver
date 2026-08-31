@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
+  listenForOfflinePrecacheProgress,
   pauseOfflineWarmup,
   queryOfflineCachedFiles,
   resumeOfflineWarmup,
@@ -85,8 +86,83 @@ describe("offline warm-up client", () => {
     expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
   });
 
+  it("forwards precache progress only until a warmer source reports", () => {
+    const onProgress = vi.fn();
+    const gate = createOfflineWarmupProgressGate(onProgress);
+    const precache = {
+      cachedBytes: 0,
+      cachedFiles: 3,
+      pendingUnits: 7,
+      ready: false,
+      totalBytes: 0,
+      totalFiles: 10,
+    };
+
+    gate.acceptPrecache(precache);
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ cachedFiles: 3, totalFiles: 10 }));
+
+    gate.acceptSnapshot({ ...precache, cachedBytes: 5, totalBytes: 20 });
+    gate.acceptPrecache({ ...precache, cachedFiles: 4 });
+    expect(onProgress).toHaveBeenCalledTimes(2);
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ totalBytes: 20 }));
+  });
+
+  it("listens for precache broadcasts and cleans the listener up", () => {
+    const listeners: Array<(event: MessageEvent) => void> = [];
+    const serviceWorker = {
+      controller: null,
+      addEventListener: (_type: string, listener: (event: MessageEvent) => void) => listeners.push(listener),
+      removeEventListener: (_type: string, listener: (event: MessageEvent) => void) => {
+        const index = listeners.indexOf(listener);
+        if (index >= 0) listeners.splice(index, 1);
+      },
+    };
+    const onProgress = vi.fn();
+    const stop = listenForOfflinePrecacheProgress(onProgress, { serviceWorker });
+    const post = (data: unknown) => {
+      for (const listener of listeners.slice()) listener({ data } as MessageEvent);
+    };
+
+    post({ action: "service-worker-cache-version" });
+    expect(onProgress).not.toHaveBeenCalled();
+
+    post({
+      action: "offline-precache-progress",
+      cachedBytes: 300,
+      cachedFiles: 12,
+      pendingUnits: 5,
+      totalBytes: 1200,
+      totalFiles: 40,
+    });
+    expect(onProgress).toHaveBeenLastCalledWith({
+      cachedBytes: 300,
+      cachedFiles: 12,
+      pendingUnits: 5,
+      phase: "precache",
+      ready: false,
+      totalBytes: 1200,
+      totalFiles: 40,
+    });
+
+    post({ action: "offline-precache-progress", cachedBytes: "junk", cachedFiles: "junk", totalFiles: -1 });
+    expect(onProgress).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: 0 }),
+    );
+
+    stop();
+    post({ action: "offline-precache-progress", cachedFiles: 13, totalFiles: 40 });
+    expect(onProgress).toHaveBeenCalledTimes(2);
+  });
+
   it("queries the service worker for cached files", async () => {
-    const files = [{ cache: "emulatorjs-4.2.3", url: "https://example.test/emulatorjs/data/loader.js" }];
+    const files = [
+      {
+        cache: "emulatorjs-4.2.3",
+        compressedBytes: 120,
+        sizeBytes: 400,
+        url: "https://example.test/emulatorjs/data/loader.js",
+      },
+    ];
     const { controller, messages } = createFakeController([{ action: "offline-cached-files", files }]);
     const { serviceWorker } = createServiceWorker(controller);
 
