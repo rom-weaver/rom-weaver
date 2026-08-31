@@ -265,6 +265,7 @@
   align-self: stretch;
   padding: 0 var(--pad);
   margin: 0;
+  overflow: visible;
   background: none;
   border: 0;
   border-radius: 0;
@@ -274,14 +275,20 @@
   display: none;
 }
 .rw-app .hero-lead .lead-title {
-  max-width: min(97%, 1160px);
-  margin-inline: auto;
+  /* System UI fonts have no portable width axis. Expand the layout width to
+     keep wrapping aligned with the visually condensed title. */
+  --hero-title-scale: 0.86;
+  width: min(calc(97% / var(--hero-title-scale)), calc(1160px / var(--hero-title-scale)));
+  max-width: none;
+  margin-inline: 0;
   font-size: clamp(1.2rem, min(3.25vw, 7.2svh), 2.5rem);
   font-weight: 760;
   line-height: 1.14;
   color: var(--ink);
   letter-spacing: -0.018em;
   text-wrap: balance;
+  transform: scaleX(var(--hero-title-scale));
+  transform-origin: center;
 }
 .rw-app .hero-lead .lead-line {
   display: inline;
