@@ -490,6 +490,23 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // WebKit otherwise treats the workflow body's entrance translate as its
     // containing block and leaves the bar below the article.
     await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "mobile"));
+    // The guide the document already carries must not be fetched again as its
+    // HTML chunk: docs-page.tsx adopts the prerendered article
+    // (adoptPrerenderedDocsHtml) and the route document deliberately drops that
+    // chunk's modulepreload. Both halves are silent when they break - the page
+    // still renders, it just downloads the article twice - so watch the wire.
+    const guideChunkPattern = /\/assets\/get-started-[^/]*\.js(?:\?.*)?$/;
+    // The docs route chunk uses the same `<name>-<hash>.js` shape, so watching
+    // for it too keeps the guide assertion from passing vacuously if chunk
+    // naming ever changes and the guide pattern stops matching anything.
+    const routeChunkPattern = /\/assets\/docs-page-[^/]*\.js(?:\?.*)?$/;
+    const guideChunkRequests = [];
+    let routeChunkRequests = 0;
+    const recordGuideChunkRequest = (request) => {
+      if (guideChunkPattern.test(request.url())) guideChunkRequests.push(request.url());
+      if (routeChunkPattern.test(request.url())) routeChunkRequests += 1;
+    };
+    page.on("request", recordGuideChunkRequest);
     const docsReloadResponse = await page.goto(new URL("docs/get-started/", baseUrl).href, { waitUntil: "commit" });
     const docsReloadHtml = (await docsReloadResponse?.text()) ?? "";
     if (!docsReloadHtml.includes('class="warp-rail is-initializing"')) {
@@ -497,6 +514,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     if (!docsReloadHtml.includes('aria-current="true"')) {
       throw new Error("Docs route response is missing the static initial rail marker");
+    }
+    if (guideChunkPattern.test(docsReloadHtml)) {
+      throw new Error("Docs route document preloads the guide chunk whose article it already carries");
     }
     const docsTrail = page.locator(".docs-trail");
     await docsTrail.waitFor({ state: "attached" });
@@ -506,6 +526,14 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     });
     if (Math.abs(trailGeometry.bottom - trailGeometry.viewportHeight) > 1 || trailGeometry.height <= 0) {
       throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
+    }
+    await page.locator(".docs-article h1").waitFor({ state: "visible" });
+    page.off("request", recordGuideChunkRequest);
+    if (guideChunkRequests.length > 0) {
+      throw new Error(`Docs route refetched the article it was served: ${guideChunkRequests.join(", ")}`);
+    }
+    if (routeChunkRequests === 0) {
+      throw new Error("Docs route requested no docs-page chunk; the chunk request watch above proves nothing");
     }
 
     // A cold Docs tab load must keep the current panel until the lazy route is
