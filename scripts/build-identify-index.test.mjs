@@ -18,6 +18,7 @@ import {
   main,
   mediaProfileFor,
   mergeLegacyFallbackGames,
+  packGroupFor,
   parseClrMameProDat,
   parseLibretroGames,
   parseOpenGoodGames,
@@ -25,11 +26,27 @@ import {
 
 const NES = "Nintendo - Nintendo Entertainment System";
 
-test("fantasy console packs are optional except LowRes NX", () => {
-  assert.ok(DEFAULT_PACK_PLATFORMS.includes("LowRes NX"));
-  for (const platform of ["MicroW8", "PICO-8", "TIC-80", "WASM-4"]) {
+test("fantasy console packs are optional", () => {
+  for (const platform of ["LowRes NX", "MicroW8", "PICO-8", "TIC-80", "WASM-4"]) {
     assert.ok(!DEFAULT_PACK_PLATFORMS.includes(platform), platform);
+    assert.equal(packGroupFor(platform), "optional-fantasy", platform);
   }
+});
+
+test("the consoles a ROM is most often identified against ship by default", () => {
+  for (const platform of [
+    "Microsoft - Xbox",
+    "Nintendo - Wii U",
+    "Nintendo - Wii U (Digital)",
+    "Sony - PlayStation 3",
+    "Sony - PlayStation 3 (PSN)",
+    "Sony - PlayStation Vita",
+    "Sony - PlayStation Vita (PSN)",
+  ]) {
+    assert.equal(packGroupFor(platform), "default", platform);
+  }
+  // Arcade boards stay optional; Atomiswave is one, not a console.
+  assert.equal(packGroupFor("Atomiswave"), "optional-arcade");
 });
 const LIBRETRO_DAT = `clrmamepro (
  name "Nintendo - Nintendo Entertainment System"

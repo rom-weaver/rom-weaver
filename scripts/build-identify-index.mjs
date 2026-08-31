@@ -410,7 +410,7 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Atari - 5200",
   "Atari - 7800",
   "Atari - Lynx",
-  "LowRes NX",
+  "Microsoft - Xbox",
   "NEC - PC Engine - TurboGrafx 16",
   "NEC - PC Engine CD - TurboGrafx-CD",
   "Nintendo - Family Computer Disk System",
@@ -424,6 +424,8 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Nintendo - Nintendo Entertainment System",
   "Nintendo - Super Nintendo Entertainment System",
   "Nintendo - Wii",
+  "Nintendo - Wii U",
+  "Nintendo - Wii U (Digital)",
   "SNK - Neo Geo Pocket",
   "SNK - Neo Geo Pocket Color",
   "Sega - 32X",
@@ -435,7 +437,11 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Sega - Saturn",
   "Sony - PlayStation",
   "Sony - PlayStation 2",
+  "Sony - PlayStation 3",
+  "Sony - PlayStation 3 (PSN)",
   "Sony - PlayStation Portable",
+  "Sony - PlayStation Vita",
+  "Sony - PlayStation Vita (PSN)",
 ]);
 
 const DEFAULT_PACK_SET = new Set(DEFAULT_PACK_PLATFORMS);
@@ -444,7 +450,7 @@ const COMPUTER_PACK_PATTERN =
 export const packGroupFor = (platform) => {
   if (DEFAULT_PACK_SET.has(platform)) return "default";
   if (COMPUTER_PACK_PATTERN.test(platform)) return "optional-computers";
-  if (/^(?:MicroW8|PICO-8|TIC-80|WASM-4)$/u.test(platform)) return "optional-fantasy";
+  if (/^(?:LowRes NX|MicroW8|PICO-8|TIC-80|WASM-4)$/u.test(platform)) return "optional-fantasy";
   if (/Mobile|Palm OS|J2ME|Symbian|Zeebo/u.test(platform)) return "optional-mobile";
   if (/HBMAME|Atomiswave|Naomi|Arcade|Neo Geo$/u.test(platform)) return "optional-arcade";
   if (
