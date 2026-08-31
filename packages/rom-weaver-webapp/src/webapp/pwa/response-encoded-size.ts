@@ -10,6 +10,28 @@
 /** Header carrying the on-the-wire size of a response we downloaded ourselves. */
 const ENCODED_SIZE_HEADER = "x-rom-weaver-encoded-size";
 
+// Resource Timing keeps 250 entries by default and then silently records no
+// more. One install fetches several hundred files through this worker, so the
+// entries a measurement needs would be dropped long before the set is complete.
+const RESOURCE_TIMING_BUFFER_SIZE = 1000;
+
+/**
+ * Keep Resource Timing recording for the life of the worker. Each measurement
+ * is read immediately after its own fetch, so emptying a full buffer costs
+ * nothing and makes room for the entries still to come.
+ */
+const keepResourceTimingsRecording = (scope: {
+  addEventListener?: (type: string, listener: () => void) => void;
+  performance?: Performance;
+}) => {
+  try {
+    scope.performance?.setResourceTimingBufferSize?.(RESOURCE_TIMING_BUFFER_SIZE);
+    scope.addEventListener?.("resourcetimingbufferfull", () => scope.performance?.clearResourceTimings?.());
+  } catch {
+    // Resource Timing is unavailable here; sizes fall back to the headers.
+  }
+};
+
 /**
  * On-the-wire bytes the browser recorded for a just-completed same-origin
  * request. Zero (its value for an unmeasured entry) and a missing entry both
@@ -35,24 +57,22 @@ const bufferedResponse = (source: Response, buffer: ArrayBuffer, encodedBytes?: 
 };
 
 /**
- * A response ready to cache with its wire size stamped on. Responses that
- * already carry a size - their own Content-Length, or a stamp from an earlier
- * pass - are returned untouched, so only the entries that would otherwise
- * report nothing pay the cost of being buffered.
+ * A response ready to cache with its wire size stamped on. Only a compressed
+ * response with no Content-Length needs one: every other entry can be measured
+ * from what it is stored with, so it is returned untouched rather than read
+ * into memory here.
  */
 const withMeasuredEncodedSize = async (url: string, response: Response): Promise<Response> => {
   if (
     response.type === "opaque" ||
     !response.body ||
     response.headers.has(ENCODED_SIZE_HEADER) ||
-    response.headers.has("content-length")
+    response.headers.has("content-length") ||
+    !response.headers.has("content-encoding")
   )
     return response;
   const buffer = await response.arrayBuffer();
-  // No content-encoding means the wire body was the stored body, so the read
-  // size is the transfer size even when Resource Timing has nothing to say.
-  const measured = encodedSizeOf(url) ?? (response.headers.has("content-encoding") ? undefined : buffer.byteLength);
-  return bufferedResponse(response, buffer, measured);
+  return bufferedResponse(response, buffer, encodedSizeOf(url));
 };
 
-export { bufferedResponse, ENCODED_SIZE_HEADER, encodedSizeOf, withMeasuredEncodedSize };
+export { bufferedResponse, ENCODED_SIZE_HEADER, encodedSizeOf, keepResourceTimingsRecording, withMeasuredEncodedSize };

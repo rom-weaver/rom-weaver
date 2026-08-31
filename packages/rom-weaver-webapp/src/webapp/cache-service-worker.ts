@@ -13,7 +13,7 @@ import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
-import { withMeasuredEncodedSize } from "./pwa/response-encoded-size.ts";
+import { keepResourceTimingsRecording, withMeasuredEncodedSize } from "./pwa/response-encoded-size.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
@@ -298,6 +298,11 @@ const precachePlugin: WorkboxPlugin = {
     await broadcastPrecacheProgress();
   },
   async cacheWillUpdate({ request, response }) {
+    // Workbox drops its own defaultPrecacheCacheabilityPlugin as soon as any
+    // other plugin defines cacheWillUpdate, so this handler MUST repeat that
+    // plugin's guard: without it an error page answered during install is
+    // precached under the asset's URL and served offline until the next build.
+    if (!response || response.status >= 400) return null;
     // Stamp the download size onto entries the host sent without a
     // Content-Length - the prerendered documents, which are compressed on the
     // fly. Without it the cache inventory can only report what they occupy,
@@ -438,6 +443,7 @@ logServiceWorker("script initialized", {
   runtimeCacheName: RUNTIME_CACHE_NAME,
 });
 
+keepResourceTimingsRecording(self);
 addPlugins([precachePlugin]);
 precacheAndRoute(PRECACHE_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
