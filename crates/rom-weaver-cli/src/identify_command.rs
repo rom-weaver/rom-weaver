@@ -246,8 +246,8 @@ impl IdentifyDatabaseSet {
     }
 
     /// `raw_size` is the size of the raw payload behind the `raw` checksum
-    /// variant. Identify packs route by (crc32, size) and are only searched
-    /// when it is known.
+    /// variant. Packs route by (crc32, size); when the size is unknown the
+    /// lookup falls back to the pack's hash scan.
     pub(super) fn resolve_variants(
         &self,
         variants: &[Value],
@@ -255,11 +255,6 @@ impl IdentifyDatabaseSet {
     ) -> Result<IdentifyLookupResult> {
         let mut output = Vec::new();
         let mut seen = BTreeSet::new();
-        for variant in variants {
-            let variant_id = variant.get("id").and_then(Value::as_str).unwrap_or("raw");
-            let values = checksum_map(variant.get("checksums"));
-            let _ = (variant_id, values);
-        }
         for variant in variants {
             let variant_id = variant.get("id").and_then(Value::as_str).unwrap_or("raw");
             let checksums = checksum_map(variant.get("checksums"));
