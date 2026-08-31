@@ -77,6 +77,11 @@ const MAX_DETAILS_CHARS = 4096;
 const TRACE_ROW_HEIGHT = 25;
 const VIRTUAL_OVERSCAN_ROWS = 12;
 
+// While an install is running the cached-file list re-reads the caches on this
+// interval so files appear as they land. Each pass measures every stored body,
+// so this stays well clear of the warm-up's own progress cadence.
+const CACHE_INVENTORY_REFRESH_MS = 2500;
+
 const formatDetails = (details: LogStoreEntry["details"]) => {
   if (!details || Object.keys(details).length === 0) return "";
   try {
@@ -1090,25 +1095,40 @@ const LogDialog = ({
     if (!(open && showingOpfs)) return;
     void refreshOpfs();
   }, [open, refreshOpfs, showingOpfs]);
+  // The inventory reads every cached body to measure it, so it is refreshed on
+  // a slow tick rather than per progress event, and only while an install is
+  // actually adding files with this panel in front of the user.
+  const installing = runtimeState === "installing";
   useEffect(() => {
-    if (!(open && tab === "status")) return;
+    if (!(open && tab === "status")) return undefined;
     let active = true;
-    setCachedFilesLoading(true);
-    setCachedFilesError(null);
-    void queryOfflineCachedFiles()
-      .then((files) => {
-        if (active) setCachedFiles(files);
-      })
-      .catch((error) => {
-        if (active) setCachedFilesError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        if (active) setCachedFilesLoading(false);
-      });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = (initial: boolean) => {
+      if (initial) {
+        setCachedFilesLoading(true);
+        setCachedFilesError(null);
+      }
+      void queryOfflineCachedFiles()
+        .then((files) => {
+          if (active) setCachedFiles(files);
+        })
+        .catch((error) => {
+          // A refresh that fails leaves the list as it was; only the first
+          // load has nothing to show and so reports the error.
+          if (active && initial) setCachedFilesError(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          if (!active) return;
+          if (initial) setCachedFilesLoading(false);
+          if (installing) timer = setTimeout(() => load(false), CACHE_INVENTORY_REFRESH_MS);
+        });
+    };
+    load(true);
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, [open, tab]);
+  }, [installing, open, tab]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
