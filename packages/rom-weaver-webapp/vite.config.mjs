@@ -15,6 +15,7 @@ import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
+import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
 import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
@@ -602,7 +603,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         if (!docsShell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${route.slug}`);
         const routeShellHtml = withRoutePreloadLinks(
           indexHtml.replace(patcherRoot, PRERENDER_ROOT(docsShell)),
-          routePreloadLinks.get(`docs:${route.slug}`) ?? routePreloadLinks.get("docs"),
+          routePreloadLinks.get("docs"),
         );
         const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
         const extensionlessPath = path.join(distDir, `${route.slug}.html`);
@@ -646,6 +647,33 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       outDir = config.build.outDir;
     },
     name: "rom-weaver-static-assets",
+  };
+};
+
+// Every route document is derived from dist/index.html after the bundle is
+// written, and PRERENDER_ROOT injects two more inline scripts on the way, so
+// the minifier runs over the finished files rather than through
+// transformIndexHtml. It must stay ahead of VitePWA in the plugin list: the
+// precache manifest hashes these documents from disk.
+const minifyDocumentInlineScripts = () => {
+  let outDir = "dist";
+  return {
+    apply: "build",
+    closeBundle() {
+      const distDir = path.resolve(rootDir, outDir);
+      for (const name of fs.readdirSync(distDir, { recursive: true })) {
+        const relativePath = String(name);
+        if (!relativePath.endsWith(".html")) continue;
+        const filePath = path.join(distDir, relativePath);
+        const html = fs.readFileSync(filePath, "utf8");
+        const minified = minifyInlineScripts(html, relativePath);
+        if (minified !== html) fs.writeFileSync(filePath, minified);
+      }
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    name: "rom-weaver-minify-inline-scripts",
   };
 };
 
@@ -1132,20 +1160,15 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
         routePreloadLinks.set(view, links);
       }
       // Guide HTML is one chunk per docs page (scripts/docs-virtual-module.mjs),
-      // so each docs document also preloads its own guide's chunk alongside the
-      // docs route chunks - hydration needs it, and without the link it would
-      // only be requested after the route chunk evaluates.
-      const docsChunk = findChunkForModule(bundle, WORKFLOW_ROUTE_MODULES.docs);
-      const docsFiles = collectStaticImportClosure(bundle, [docsChunk]);
+      // and a docs document deliberately does NOT preload the chunk of the guide
+      // it is showing: that article is already in the served markup, which
+      // docs-page.tsx adopts instead of importing it (adoptPrerenderedDocsHtml).
+      // A preload link here would download the article a second time. The chunk
+      // must still exist for every guide, because a soft navigation to any other
+      // guide loads it on demand.
       for (const route of DOC_ROUTES) {
-        const pageChunk = findChunkForModule(bundle, `rom-weaver-docs-page/${route.slug}`);
-        if (!pageChunk)
+        if (!findChunkForModule(bundle, `rom-weaver-docs-page/${route.slug}`))
           throw new Error(`rom-weaver-preload-workflow-route-chunks: no chunk emitted for docs page ${route.slug}`);
-        const pageFiles = [...collectStaticImportClosure(bundle, [pageChunk])]
-          .filter((fileName) => !(alreadyLoaded.has(fileName) || docsFiles.has(fileName)))
-          .sort((left, right) => Number(left > right) - Number(left < right));
-        const links = [routePreloadLinks.get("docs"), renderRoutePreloadLinks(pageFiles)].filter(Boolean).join("\n");
-        routePreloadLinks.set(`docs:${route.slug}`, links);
       }
       return html.replace(
         "</head>",
@@ -1271,6 +1294,7 @@ export default defineConfig(({ command, mode }) => {
       preloadWorkflowRouteChunks(routePreloadLinks),
       writeWebappStaticAssets(appChannel, appChannelLabel, prerenderedShells, routePreloadLinks),
       writeChangelogAsset(releaseVersion),
+      minifyDocumentInlineScripts(),
       writeCloudflareHeadersAsset(appChannel),
       writeBrotliSidecars(),
       VitePWA({

@@ -114,6 +114,23 @@ const resolveDocsSlug = (slug?: string): string => {
   return findDocsRoute(readDocsSlugFromPathname(window.location.pathname)).slug;
 };
 
+// The served document already carries the guide it is standing on: importing
+// that guide's HTML chunk would fetch the same article a second time, up to
+// 14 kB brotli on the largest page, on the path the route mount awaits.
+// Adopting the parsed markup instead also makes hydration a guaranteed match,
+// because the string React re-applies is the one the parser built. Guides the
+// reader navigates to still load their own chunk.
+const adoptPrerenderedDocsHtml = () => {
+  if (typeof document === "undefined") return;
+  const article = document.querySelector(".docs-article[data-markdown-source]");
+  if (!article) return;
+  const slug = resolveDocsSlug();
+  if (article.getAttribute("data-markdown-source") !== findDocsRoute(slug).source) return;
+  docsHtmlCache.set(slug, article.innerHTML);
+};
+
+adoptPrerenderedDocsHtml();
+
 const preloadDocsHtml = (slug?: string): Promise<void> => {
   const resolved = resolveDocsSlug(slug);
   if (docsHtmlCache.has(resolved)) return Promise.resolve();
