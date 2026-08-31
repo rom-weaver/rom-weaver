@@ -253,6 +253,9 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-m);
 }
+.rw-app .opts-extra-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .rw-app .optsgroup + .optsgroup {
   padding-block-start: var(--sp-m);
   border-block-start: 1px solid var(--seam-soft);

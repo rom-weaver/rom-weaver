@@ -1,7 +1,5 @@
 /* RomWeaver React UI base tokens */
 
-@import "../assets/fonts/archivo.css";
-
 body {
   --rom-weaver-color-background: oklch(0.23 0.022 292);
   --rom-weaver-color-text: oklch(0.33 0.026 299);
@@ -11,10 +9,7 @@ body {
   --rom-weaver-color-muted: var(--rom-weaver-color-text-soft);
   margin: 0;
   font:
-    500 14.5px / 1.5 "Archivo",
-    "Archivo Fallback",
-    "Segoe UI",
-    system-ui,
+    500 14.5px / 1.5 system-ui,
     sans-serif;
   font-stretch: 94%;
   -webkit-font-smoothing: antialiased;

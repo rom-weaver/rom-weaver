@@ -72,7 +72,7 @@ describe("pages brotli sidecar function", () => {
   it("falls through for an extension the build stages no sidecar for", async () => {
     const { context, fetchLog } = makeContext({
       sidecarResponse: brSidecar(),
-      url: "https://rom-weaver.com/assets/archivo-var-latin-DXrUVZxZ.woff2",
+      url: "https://rom-weaver.com/assets/font-DXrUVZxZ.woff2",
     });
     expect(await onRequestGet(context)).toBe(NEXT_SENTINEL);
     expect(fetchLog).toEqual([]);
