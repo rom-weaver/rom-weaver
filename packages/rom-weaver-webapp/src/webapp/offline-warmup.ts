@@ -419,6 +419,21 @@ const createOfflineWarmup = ({
     log("emulatorjs warm-up complete", { version: emulatorJsVersion });
   };
 
+  /**
+   * Bytes of this unit already in its cache. The download callbacks credit
+   * already-cached files through onBytes, so interim math MUST subtract this
+   * share from the baseline or those bytes count twice and the percentage
+   * overshoots, then snaps back when the unit completes.
+   */
+  const cachedUnitBytes = async (unit: WarmupUnit): Promise<number> => {
+    if (unit.kind === "emulatorjs-file") {
+      const cache = await caches.open(emulatorJsCacheName);
+      return (await cache.match(emulatorJsAssetUrl(unit.path))) ? unit.sizeBytes : 0;
+    }
+    const cache = await caches.open(identifyOptionalCacheName);
+    return cachedGroupState(await cachedRequestUrls(cache), unit.group).bytes;
+  };
+
   const unitLabel = (unit: WarmupUnit) =>
     unit.kind === "emulatorjs-file" ? `emulatorjs:${unit.path}` : `identify-group:${unit.group.id}`;
 
@@ -446,22 +461,25 @@ const createOfflineWarmup = ({
     // jumping once when the whole unit lands.
     let onBytes: ((delta: number) => void) | undefined;
     if (onInterim) {
-      const baseline = await getReadyState();
+      const [baseline, unitCachedBytes] = await Promise.all([getReadyState(), cachedUnitBytes(unit)]);
       const detail = unitDetail(unit);
       const label = unitLabel(unit);
       const unitTotalBytes = unit.kind === "emulatorjs-file" ? unit.sizeBytes : groupBytes(unit.group);
+      // The baseline already counts this unit's cached share, and onBytes
+      // credits that share again while the unit runs - keep only one copy so
+      // cachedBytes rises monotonically instead of overshooting per unit.
+      const baseCachedBytes = Math.max(0, baseline.cachedBytes - unitCachedBytes);
       let loadedBytes = 0;
       let lastEmit = 0;
       const emit = () => {
+        const unitLoadedBytes = Math.min(loadedBytes, unitTotalBytes || loadedBytes);
         onInterim({
           ...baseline,
-          // Capped: a pack that was cached between the baseline read and the
-          // download reports its bytes twice, once in each half.
-          cachedBytes: Math.min(baseline.cachedBytes + loadedBytes, baseline.totalBytes || Number.MAX_SAFE_INTEGER),
+          cachedBytes: Math.min(baseCachedBytes + unitLoadedBytes, baseline.totalBytes || Number.MAX_SAFE_INTEGER),
           detail,
           ready: false,
           unit: label,
-          unitLoadedBytes: Math.min(loadedBytes, unitTotalBytes || loadedBytes),
+          unitLoadedBytes,
           unitTotalBytes,
         });
       };

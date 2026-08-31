@@ -214,6 +214,29 @@ describe("offline warm-up (service worker side)", () => {
     expect(progress.totalFiles).toBe(4);
   });
 
+  it("does not double-count a unit's already-cached bytes in interim progress", async () => {
+    const warmup = await createWarmup();
+    const groups = await buildGroups();
+    const packUrl = new URL(groups[0].packs[0].url, SCOPE).href;
+    // Cache the group's only pack on demand, then warm that group first: its
+    // bytes sit in both the baseline and the per-unit credit, and the interim
+    // counter must still never exceed what is really cached.
+    await warmup.serveOptionalIdentifyPack(new Request(packUrl));
+    // Build the queue: the first pump takes the first emulatorjs file.
+    expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:loader.js");
+    warmup.bumpPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
+    const interimCachedBytes: number[] = [];
+    const progress = await warmup.runNextUnit((interim) => {
+      interimCachedBytes.push(interim.cachedBytes);
+    });
+    expect(progress.unit).toBe("identify-group:optional-computers");
+    expect(interimCachedBytes.length).toBeGreaterThan(0);
+    for (const cachedBytes of interimCachedBytes) {
+      expect(cachedBytes).toBeLessThanOrEqual(progress.cachedBytes);
+    }
+    expect(progress.cachedBytes).toBe(3 + PACK_BODY.length);
+  });
+
   it("counts a partially cached group's packs without its marker", async () => {
     const warmup = await createWarmup();
     const groups = await buildGroups();
