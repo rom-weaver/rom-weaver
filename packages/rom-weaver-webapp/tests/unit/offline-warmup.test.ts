@@ -284,6 +284,34 @@ describe("offline warm-up (service worker side)", () => {
     expect(state.pendingUnits).toBe(0);
   });
 
+  it("reports a transfer size for every entry a header or the encoding can settle", async () => {
+    const warmup = await createWarmup();
+    const cache = await cacheStorage.open("rom-weaver-runtime");
+    await cache.put(
+      "https://example.test/stamped.html",
+      new Response("0123456789", { headers: { "content-encoding": "br", "x-rom-weaver-encoded-size": "4" } }),
+    );
+    await cache.put(
+      "https://example.test/with-length.js",
+      new Response("0123456789", { headers: { "content-encoding": "gzip", "content-length": "6" } }),
+    );
+    await cache.put("https://example.test/identity.css", new Response("0123456789"));
+    await cache.put(
+      "https://example.test/unmeasured.html",
+      new Response("0123456789", { headers: { "content-encoding": "br" } }),
+    );
+
+    const sizes = Object.fromEntries(
+      (await warmup.getCachedFiles()).map((file) => [new URL(file.url).pathname, file.compressedBytes]),
+    );
+    expect(sizes).toEqual({
+      "/identity.css": 10,
+      "/stamped.html": 4,
+      "/unmeasured.html": null,
+      "/with-length.js": 6,
+    });
+  });
+
   it("lists cached files with sizes and without internal completion markers", async () => {
     const warmup = await createSerialWarmup();
     await warmup.runNextUnit();
@@ -293,17 +321,18 @@ describe("offline warm-up (service worker side)", () => {
 
     const measured: number[] = [];
     const files = await warmup.getCachedFiles(() => measured.push(1));
-    // The fake responses carry no Content-Length, so only the decoded size is known.
+    // The fake responses carry no Content-Length and no Content-Encoding, so
+    // they were transferred exactly as they are stored.
     expect(files).toEqual([
       {
         cache: EMULATORJS_CACHE,
-        compressedBytes: null,
+        compressedBytes: 16,
         sizeBytes: 16,
         url: "https://example.test/emulatorjs/data/cores/core.wasm",
       },
       {
         cache: EMULATORJS_CACHE,
-        compressedBytes: null,
+        compressedBytes: 16,
         sizeBytes: 16,
         url: "https://example.test/emulatorjs/data/loader.js",
       },
