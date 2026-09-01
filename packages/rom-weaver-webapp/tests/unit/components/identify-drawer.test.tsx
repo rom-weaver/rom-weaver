@@ -43,6 +43,11 @@ describe("IdentifyDrawer", () => {
     expect(standardRows).toHaveLength(1);
     expect(standardRows[0]?.textContent).toContain("Pokemon - Emerald Version (USA, Europe)");
     expect(container.querySelectorAll('button[aria-label^="Copy alias name "]')).toHaveLength(2);
+    // A name too long for half a row takes the whole row instead of wrapping
+    // over three lines beside an empty column.
+    for (const row of container.querySelectorAll(".identify-alias-row")) {
+      expect(row.className).not.toContain("ck-half");
+    }
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("GBA");
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("CRC32");
     // The record's provenance names the source; the pack file name never does.
@@ -53,6 +58,16 @@ describe("IdentifyDrawer", () => {
     vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
     fireEvent.click(container.querySelector('button[aria-label^="Copy alias name "]') as HTMLButtonElement);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("Pokemon - Emerald Version (UE) [!]"));
+  });
+
+  it("pairs a short name with its neighbour", () => {
+    const { container } = render(
+      <IdentifyDrawer identification={{ matches: [gbaMatch("Tetris")], status: "matched" }} />,
+    );
+
+    const rows = container.querySelectorAll(".identify-alias-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.className).toContain("ck-half");
   });
 
   it("lists every candidate name and states the candidate count", () => {

@@ -24,17 +24,15 @@ const collectAliases = (matches: readonly ParsedIdentifyTitleMatch[], canonical:
    keeps the full row so it never collides with its neighbour. */
 const HALF_ROW_MAX_CHARS = 16;
 
+/** `ck-half` only while the value still fits half a row. Game names run long
+ * ("Pokemon - Emerald Version (USA, Europe)"), and a half row wraps them over
+ * three lines beside an empty column. */
+const halfRowClass = (value: string): string | undefined => (value.length < HALF_ROW_MAX_CHARS ? "ck-half" : undefined);
+
 const EvidenceRow = ({ label, values }: { label: string; values: readonly string[] }) => {
   if (!values.length) return null;
   const value = values.join(" · ");
-  return (
-    <ChecksumRow
-      className={value.length < HALF_ROW_MAX_CHARS ? "ck-half" : undefined}
-      copyValue={value}
-      label={label}
-      value={value}
-    />
-  );
+  return <ChecksumRow className={halfRowClass(value)} copyValue={value} label={label} value={value} />;
 };
 
 const IdentifyDrawer = ({
@@ -123,7 +121,7 @@ const IdentifyDrawer = ({
               {canonicalNames.map((name) => (
                 <ChecksumRow
                   ariaLabel={`Copy standard name ${name}`}
-                  className="identify-alias-row ck-half"
+                  className={["identify-alias-row", halfRowClass(name)].filter(Boolean).join(" ")}
                   copyValue={name}
                   key={name}
                   label="Standard"
@@ -133,7 +131,7 @@ const IdentifyDrawer = ({
               {aliases.map((name) => (
                 <ChecksumRow
                   ariaLabel={`Copy alias name ${name}`}
-                  className="identify-alias-row ck-half"
+                  className={["identify-alias-row", halfRowClass(name)].filter(Boolean).join(" ")}
                   copyValue={name}
                   key={name}
                   label="Alias"
