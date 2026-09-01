@@ -1995,3 +1995,7 @@ mod tests {
         assert!(report.label.to_ascii_lowercase().contains("cancel"));
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/patch_validate.rs"]
+mod unit_tests;
