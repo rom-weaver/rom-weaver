@@ -478,3 +478,7 @@ fn normalize_archive_name_relaxed(name: &str) -> String {
         .trim_matches('/')
         .to_string()
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/libarchive_entries.rs"]
+mod tests;
