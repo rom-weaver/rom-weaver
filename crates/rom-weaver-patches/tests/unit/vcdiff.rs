@@ -2203,3 +2203,819 @@ fn decode_secondary_try_decode_xdelta_fgk_sections_handles_flags() {
     assert_eq!(decoded_inst, inst);
     assert_eq!(decoded_addr, addr);
 }
+
+fn empty_window_index() -> WindowIndex {
+    WindowIndex {
+        source_kind: None,
+        source_segment_size: 0,
+        source_segment_position: 0,
+        target_window_size: 0,
+        delta_indicator: 0,
+        checksum: None,
+        data_start: 0,
+        data_len: 0,
+        inst_start: 0,
+        inst_len: 0,
+        addr_start: 0,
+        addr_len: 0,
+        output_offset: 0,
+    }
+}
+
+#[test]
+fn xdelta_djw_compress_rejects_an_empty_section() {
+    let error = xdelta_djw_compress(&[], DjwSectionKind::Data)
+        .expect_err("an empty section must be rejected");
+    assert!(
+        format!("{error}").contains("requires non-empty input"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn djw_select_groups_and_sector_size_covers_every_size_bucket() {
+    let cases: [(DjwSectionKind, usize, (usize, usize)); 18] = [
+        (DjwSectionKind::Data, 999, (1, 0)),
+        (DjwSectionKind::Data, 3_999, (2, 10)),
+        (DjwSectionKind::Data, 6_999, (3, 10)),
+        (DjwSectionKind::Data, 9_999, (4, 10)),
+        (DjwSectionKind::Data, 24_999, (5, 10)),
+        (DjwSectionKind::Data, 49_999, (7, 20)),
+        (DjwSectionKind::Data, 99_999, (8, 30)),
+        (DjwSectionKind::Data, 100_000, (8, 70)),
+        (DjwSectionKind::Inst, 6_999, (1, 0)),
+        (DjwSectionKind::Inst, 9_999, (2, 50)),
+        (DjwSectionKind::Inst, 24_999, (3, 50)),
+        (DjwSectionKind::Inst, 49_999, (6, 40)),
+        (DjwSectionKind::Inst, 50_000, (8, 40)),
+        (DjwSectionKind::Addr, 8_999, (1, 0)),
+        (DjwSectionKind::Addr, 24_999, (2, 130)),
+        (DjwSectionKind::Addr, 49_999, (3, 130)),
+        (DjwSectionKind::Addr, 99_999, (5, 130)),
+        (DjwSectionKind::Addr, 100_000, (7, 130)),
+    ];
+
+    for (kind, input_size, expected) in cases {
+        let selected =
+            djw_select_groups_and_sector_size(input_size, kind).expect("select group layout");
+        assert_eq!(selected, expected, "input size {input_size}");
+    }
+}
+
+#[test]
+fn xdelta_djw_compress_multi_group_rejects_invalid_parameters() {
+    let section = vec![7u8; 100];
+
+    let single = xdelta_djw_compress_multi_group(&section, 1, 10)
+        .expect_err("a single group must be rejected");
+    assert!(format!("{single}").contains("invalid group count"));
+
+    let too_many = xdelta_djw_compress_multi_group(&section, DJW_MAX_GROUPS + 1, 10)
+        .expect_err("more than DJW_MAX_GROUPS must be rejected");
+    assert!(format!("{too_many}").contains("invalid group count"));
+
+    let unaligned = xdelta_djw_compress_multi_group(&section, 2, 7)
+        .expect_err("a sector size off the multiple must be rejected");
+    assert!(format!("{unaligned}").contains("invalid sector size"));
+
+    let oversized = xdelta_djw_compress_multi_group(&section, 2, DJW_SECTORSZ_MAX + 5)
+        .expect_err("a sector size over the maximum must be rejected");
+    assert!(format!("{oversized}").contains("invalid sector size"));
+}
+
+#[test]
+fn djw_choose_best_sector_groups_validates_its_inputs() {
+    let section = vec![1u8; 40];
+    let lengths = vec![vec![1u8; DJW_ALPHABET_SIZE]];
+
+    let mut mis_sized = vec![0u8; 3];
+    let error = djw_choose_best_sector_groups(&section, 10, &lengths, &mut mis_sized)
+        .expect_err("a mis-sized selector vector must be rejected");
+    assert!(format!("{error}").contains("wrong size"));
+
+    let mut selected = vec![0u8; 4];
+    let empty = djw_choose_best_sector_groups(&section, 10, &[], &mut selected)
+        .expect_err("an empty code table list must be rejected");
+    assert!(format!("{empty}").contains("no group code tables"));
+}
+
+#[test]
+fn djw_choose_best_sector_groups_skips_a_group_missing_a_symbol_code() {
+    // Group 0 carries no code for byte 5, so both sectors must fall to group 1
+    // even though its codes are twice as long.
+    let mut first = vec![1u8; DJW_ALPHABET_SIZE];
+    first[5] = 0;
+    let second = vec![2u8; DJW_ALPHABET_SIZE];
+
+    let section = vec![5u8; 20];
+    let mut selected = vec![0u8; 2];
+    djw_choose_best_sector_groups(&section, 10, &[first, second], &mut selected)
+        .expect("choose sector groups");
+    assert_eq!(selected, vec![1u8, 1u8]);
+}
+
+#[test]
+fn djw_rebuild_group_frequencies_rejects_an_out_of_range_selector() {
+    let section = vec![3u8; 20];
+    let mut frequencies = djw_seed_group_frequencies(2);
+    let error = djw_rebuild_group_frequencies(&section, 10, &[0u8, 4u8], &mut frequencies)
+        .expect_err("an out-of-range selector must be rejected");
+    assert!(format!("{error}").contains("invalid group index 4"));
+}
+
+#[test]
+fn djw_bit_writer_rejects_invalid_bits_widths_and_values() {
+    let mut writer = DjwBitWriter::new();
+
+    let bit = writer
+        .write_bit(2)
+        .expect_err("a non-bit value must be rejected");
+    assert!(format!("{bit}").contains("non-bit value"));
+
+    let zero_width = writer
+        .write_bits(0, 0)
+        .expect_err("a zero bit width must be rejected");
+    assert!(format!("{zero_width}").contains("invalid bit width"));
+
+    let wide = writer
+        .write_bits(usize::BITS as usize, 0)
+        .expect_err("a bit width at the usize width must be rejected");
+    assert!(format!("{wide}").contains("invalid bit width"));
+
+    let out_of_range = writer
+        .write_bits(2, 4)
+        .expect_err("a value wider than its field must be rejected");
+    assert!(format!("{out_of_range}").contains("out of range"));
+}
+
+#[test]
+fn lzma_status_name_maps_every_known_status() {
+    use liblzma_sys as lzma_sys;
+
+    let cases = [
+        (lzma_sys::LZMA_OK, "ok"),
+        (lzma_sys::LZMA_STREAM_END, "stream end"),
+        (lzma_sys::LZMA_MEM_ERROR, "memory allocation failed"),
+        (lzma_sys::LZMA_MEMLIMIT_ERROR, "memory limit reached"),
+        (lzma_sys::LZMA_FORMAT_ERROR, "format error"),
+        (lzma_sys::LZMA_OPTIONS_ERROR, "unsupported options"),
+        (lzma_sys::LZMA_DATA_ERROR, "input data error"),
+        (lzma_sys::LZMA_BUF_ERROR, "output buffer too small"),
+        (lzma_sys::LZMA_PROG_ERROR, "programming error"),
+    ];
+    for (status, name) in cases {
+        assert_eq!(lzma_status_name(status), name);
+    }
+    assert_eq!(lzma_status_name(lzma_sys::LZMA_NO_CHECK), "unknown error");
+}
+
+#[test]
+fn xdelta_lzma_section_has_stream_header_reads_the_payload_prefix() {
+    // A truncated varint has no payload offset to look behind.
+    assert!(!xdelta_lzma_section_has_stream_header(&[0x80]));
+
+    let mut with_magic = Vec::new();
+    encode_varint_raw(&mut with_magic, 16);
+    with_magic.extend_from_slice(XZ_MAGIC_BYTES);
+    assert!(xdelta_lzma_section_has_stream_header(&with_magic));
+
+    let mut without_magic = Vec::new();
+    encode_varint_raw(&mut without_magic, 16);
+    without_magic.extend_from_slice(b"not-xz");
+    assert!(!xdelta_lzma_section_has_stream_header(&without_magic));
+}
+
+#[test]
+fn window_win_indicator_maps_every_source_kind() {
+    let mut window = empty_window_index();
+
+    window.source_kind = Some(WindowSourceKind::Source);
+    assert_eq!(window_win_indicator(&window), WIN_SOURCE);
+
+    window.source_kind = Some(WindowSourceKind::Target);
+    assert_eq!(window_win_indicator(&window), WIN_TARGET);
+
+    window.source_kind = None;
+    assert_eq!(window_win_indicator(&window), 0);
+
+    window.checksum = Some(0x1234_5678);
+    assert_eq!(window_win_indicator(&window), WIN_CHECKSUM);
+}
+
+#[test]
+fn decode_xdelta_lzma_section_rejects_a_size_over_the_window_ceiling() {
+    let mut section = Vec::new();
+    encode_varint_raw(&mut section, 4_096);
+    section.extend_from_slice(XZ_MAGIC_BYTES);
+
+    let mut decoder = XdeltaLzmaSectionDecoder::new();
+    let error = decode_xdelta_lzma_section_with_state(&section, true, &mut decoder, 16)
+        .expect_err("a declared size over the window ceiling must be rejected");
+    assert!(
+        format!("{error}").contains("bounds it to 16"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn decode_xdelta_lzma_section_passes_uncompressed_sections_through() {
+    let mut decoder = XdeltaLzmaSectionDecoder::new();
+    let section = b"plain-section".to_vec();
+    let decoded = decode_xdelta_lzma_section_with_state(&section, false, &mut decoder, 16)
+        .expect("uncompressed passthrough");
+    assert_eq!(decoded, section);
+}
+
+#[test]
+fn decode_djw_bits_reaches_end_of_input() {
+    let mut state = DjwBitState::decode_init();
+    let mut pos = 0usize;
+    let error = decode_djw_bits(&mut state, &[], &mut pos, DJW_GROUP_BITS)
+        .expect_err("an empty input must reach end of input");
+    assert!(format!("{error}").contains("end of input"));
+}
+
+#[test]
+fn build_djw_decoder_table_rejects_a_symbol_index_beyond_u8() {
+    let error = build_djw_decoder_table(&[1u8; 300], 300, DJW_MAX_CODELEN)
+        .err()
+        .expect("an alphabet larger than u8 must be rejected");
+    assert!(format!("{error}").contains("symbol index exceeded u8"));
+}
+
+#[test]
+fn decode_djw_symbol_rejects_an_offset_past_the_caller_maximum() {
+    let table = build_djw_decoder_table(&[1u8, 1u8], 2, DJW_MAX_CODELEN).expect("build table");
+    let mut state = DjwBitState::decode_init();
+    let mut pos = 0usize;
+    // Bit 1 decodes to symbol 1, which the caller's max_symbol of 0 excludes.
+    let error = decode_djw_symbol(&mut state, &[0x01], &mut pos, &table, 0)
+        .expect_err("a symbol past max_symbol must be rejected");
+    assert!(format!("{error}").contains("invalid symbol"));
+}
+
+#[test]
+fn decode_djw_symbol_rejects_a_code_below_the_table_base() {
+    // A hand-built table whose base exceeds the codes its limit admits: the
+    // decoder must bail instead of indexing below the inorder table.
+    let table = DjwDecodeTable {
+        inorder: vec![0u8, 1u8],
+        base: vec![0, 5, 0, 0],
+        limit: vec![0, 1, 0, 0],
+        min_len: 1,
+        max_len: 2,
+    };
+    let mut state = DjwBitState::decode_init();
+    let mut pos = 0usize;
+    let error = decode_djw_symbol(&mut state, &[0x00], &mut pos, &table, DJW_ALPHABET_SIZE)
+        .expect_err("a code below the table base must be rejected");
+    assert!(format!("{error}").contains("invalid symbol"));
+}
+
+#[test]
+fn djw_build_prefix_lengths_rejects_all_zero_frequencies() {
+    let error = djw_build_prefix_lengths(&[0u32; 4], DJW_MAX_CODELEN)
+        .expect_err("all-zero frequencies must be rejected");
+    assert!(format!("{error}").contains("at least one symbol"));
+}
+
+#[test]
+fn djw_build_prefix_lengths_rejects_a_frequency_sum_overflow() {
+    let error = djw_build_prefix_lengths(&[u32::MAX, u32::MAX, u32::MAX], DJW_MAX_CODELEN)
+        .expect_err("a u32 frequency sum overflow must be rejected");
+    assert!(format!("{error}").contains("frequency sum overflowed"));
+}
+
+#[test]
+fn djw_build_prefix_lengths_rescales_until_codes_fit_the_limit() {
+    // The first tree puts the two rarest symbols at depth 3; the builder halves
+    // the frequencies until every code fits the 2-bit limit.
+    let (lengths, total_bits) =
+        djw_build_prefix_lengths(&[1u32, 1, 1, 5], 2).expect("rescaled prefix lengths");
+    assert_eq!(lengths, vec![2u8, 2, 2, 2]);
+    assert!(total_bits > 0);
+}
+
+#[test]
+fn djw_update_1_2_rejects_an_overflowing_symbol_buffer() {
+    let mut mtf_run = 5usize;
+    let mut mtf_index = 0usize;
+    let mut mtf_symbols = [0u8; 1];
+    let mut frequencies = [0u32; 2];
+    let error = djw_update_1_2(
+        &mut mtf_run,
+        &mut mtf_index,
+        &mut mtf_symbols,
+        &mut frequencies,
+    )
+    .expect_err("a run longer than the symbol buffer must be rejected");
+    assert!(format!("{error}").contains("mtf symbol buffer overflowed"));
+}
+
+#[test]
+fn djw_compute_mtf_1_2_rejects_a_symbol_outside_the_mtf_table() {
+    let mut prefix = DjwPrefix::new(vec![9u8]);
+    let mut mtf_values = [0u8, 1, 2];
+    let mut frequencies = [0u32; 8];
+    let error = djw_compute_mtf_1_2(&mut prefix, &mut mtf_values, &mut frequencies, 4)
+        .expect_err("a symbol outside the MTF table must be rejected");
+    assert!(format!("{error}").contains("missing from MTF table"));
+}
+
+#[test]
+fn djw_compute_mtf_1_2_flushes_a_run_before_a_new_symbol() {
+    let mut prefix = DjwPrefix::new(vec![0u8, 0, 1]);
+    let mut mtf_values = [0u8, 1];
+    let mut frequencies = [0u32; 8];
+    djw_compute_mtf_1_2(&mut prefix, &mut mtf_values, &mut frequencies, 4).expect("compute mtf");
+    assert_eq!(prefix.mcount, 2);
+    assert_eq!(&prefix.mtfsym[..prefix.mcount], &[1u8, 2u8]);
+}
+
+#[test]
+fn djw_compute_mtf_1_2_flushes_a_trailing_run() {
+    let mut prefix = DjwPrefix::new(vec![0u8, 0]);
+    let mut mtf_values = [0u8, 1];
+    let mut frequencies = [0u32; 8];
+    djw_compute_mtf_1_2(&mut prefix, &mut mtf_values, &mut frequencies, 4).expect("compute mtf");
+    assert_eq!(prefix.mcount, 1);
+    assert_eq!(prefix.mtfsym[0], DJW_RUN_1 as u8);
+}
+
+#[test]
+fn djw_compute_mtf_1_2_rejects_a_symbol_past_the_declared_range() {
+    let mut prefix = DjwPrefix::new(vec![3u8]);
+    let mut mtf_values = [0u8, 1, 2, 3];
+    let mut frequencies = [0u32; 8];
+    let error = djw_compute_mtf_1_2(&mut prefix, &mut mtf_values, &mut frequencies, 1)
+        .expect_err("an MTF offset past the declared symbol count must be rejected");
+    assert!(format!("{error}").contains("exceeded expected range"));
+}
+
+#[test]
+fn djw_compute_mtf_1_2_rejects_an_overflowing_output_buffer() {
+    // `mtfsym` is deliberately one slot short of the two symbols this prefix
+    // encodes, so the second write must be refused.
+    let mut prefix = DjwPrefix {
+        symbol: vec![1u8, 2u8],
+        mtfsym: vec![0u8; 1],
+        mcount: 0,
+    };
+    let mut mtf_values = [0u8, 1, 2];
+    let mut frequencies = [0u32; 8];
+    let error = djw_compute_mtf_1_2(&mut prefix, &mut mtf_values, &mut frequencies, 4)
+        .expect_err("an overflowing MTF output buffer must be rejected");
+    assert!(format!("{error}").contains("mtf output overflowed"));
+}
+
+fn fgk_round_trip(alphabet_size: usize, symbols: &[usize]) -> Vec<usize> {
+    let mut encoder = FgkState::new(alphabet_size).expect("fgk encoder");
+    let mut bits = Vec::new();
+    for &symbol in symbols {
+        let mut remaining = encoder.fgk_encode_data(symbol).expect("fgk encode symbol");
+        while remaining != 0 {
+            remaining -= 1;
+            bits.push(encoder.fgk_get_encoded_bit().expect("fgk encoded bit"));
+        }
+    }
+
+    let mut decoder = FgkState::new(alphabet_size).expect("fgk decoder");
+    let mut decoded = Vec::with_capacity(symbols.len());
+    for bit in bits {
+        if decoder.fgk_decode_bit(bit).expect("fgk decode bit") {
+            decoded.push(usize::from(
+                decoder.fgk_decode_data().expect("fgk decode data"),
+            ));
+        }
+    }
+    decoded
+}
+
+#[test]
+fn fgk_state_round_trips_over_small_alphabets() {
+    for alphabet_size in [2usize, 3, 4, 8] {
+        let symbols: Vec<usize> = (0..40).map(|index| index % alphabet_size).collect();
+        assert_eq!(
+            fgk_round_trip(alphabet_size, &symbols),
+            symbols,
+            "alphabet size {alphabet_size}"
+        );
+    }
+}
+
+#[test]
+fn fgk_state_new_rejects_a_block_count_overflow() {
+    let error = FgkState::new(usize::MAX / 4 + 100)
+        .err()
+        .expect("an alphabet whose block count overflows must be rejected");
+    assert!(format!("{error}").contains("block count overflowed"));
+}
+
+#[test]
+fn fgk_decode_bit_rejects_a_non_bit_value() {
+    let mut state = FgkState::new(4).expect("fgk state");
+    let error = state
+        .fgk_decode_bit(2)
+        .expect_err("a non-bit value must be rejected");
+    assert!(format!("{error}").contains("invalid bit"));
+}
+
+#[test]
+fn fgk_decode_bit_rejects_an_overflowing_coded_bit_buffer() {
+    // A three-symbol alphabet buffers at most three zero-frequency bits; the
+    // fourth has nowhere to go.
+    let mut state = FgkState::new(3).expect("fgk state");
+    for _ in 0..3 {
+        state.fgk_decode_bit(0).expect("buffered zero-weight bit");
+    }
+    let error = state
+        .fgk_decode_bit(0)
+        .expect_err("a fourth buffered bit must be rejected");
+    assert!(format!("{error}").contains("coded bit buffer overflowed"));
+}
+
+#[test]
+fn fgk_decode_bit_rejects_a_leaf_without_a_right_child() {
+    let mut state = FgkState::new(2).expect("fgk state");
+    assert!(state.fgk_decode_bit(0).expect("first symbol bit"));
+    assert_eq!(state.fgk_decode_data().expect("first symbol"), 0);
+    // The 1 bit walks to the weighted leaf; a second 1 bit has no child left.
+    assert!(state.fgk_decode_bit(1).expect("walk to the weighted leaf"));
+    let error = state
+        .fgk_decode_bit(1)
+        .expect_err("descending past a leaf must be rejected");
+    assert!(format!("{error}").contains("missing right child"));
+}
+
+#[test]
+fn fgk_get_encoded_bit_rejects_an_empty_buffer() {
+    let mut state = FgkState::new(4).expect("fgk state");
+    let error = state
+        .fgk_get_encoded_bit()
+        .expect_err("an empty encoded bit buffer must be rejected");
+    assert!(format!("{error}").contains("encoded bit buffer was empty"));
+}
+
+#[test]
+fn fgk_symbol_indexes_are_bounds_checked() {
+    let state = FgkState::new(4).expect("fgk state");
+    let lookup = state
+        .fgk_find_nth_zero(9)
+        .expect_err("an index past the alphabet must be rejected");
+    assert!(format!("{lookup}").contains("exceeds alphabet size 4"));
+
+    let mut state = state;
+    let encode = state
+        .fgk_encode_data(9)
+        .expect_err("an index past the alphabet must be rejected");
+    assert!(format!("{encode}").contains("exceeds alphabet size 4"));
+}
+
+#[test]
+fn fgk_find_nth_zero_fails_once_a_symbol_left_the_zero_list() {
+    let mut state = FgkState::new(4).expect("fgk state");
+    state.fgk_encode_data(0).expect("encode symbol 0");
+    let error = state
+        .fgk_find_nth_zero(0)
+        .expect_err("a symbol already off the zero list must be rejected");
+    assert!(format!("{error}").contains("zero list traversal failed"));
+}
+
+#[test]
+fn vcdiff_handler_probes_by_extension() {
+    let handler = VcdiffPatchHandler::new(&VCDIFF);
+    assert!(matches!(
+        handler.probe(Path::new("update.vcdiff")),
+        ProbeConfidence::Extension
+    ));
+    assert_eq!(handler.descriptor().name, "VCDIFF");
+}
+
+#[test]
+fn vcdiff_handler_validate_reapplies_the_patch() {
+    let input = b"hello old world";
+    let patch_bytes = build_patch(TestPatch {
+        windows: vec![TestWindow {
+            win_indicator: WIN_SOURCE,
+            source_segment_size: Some(input.len() as u64),
+            source_segment_position: Some(0),
+            target_window_size: 15,
+            checksum: None,
+            data: b"new".to_vec(),
+            inst: vec![22, 4, 22],
+            addr: encode_all_varints(&[0, 9]),
+        }],
+        ..Default::default()
+    });
+
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let patch_path = temp.join("update.vcdiff");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&patch_path, &patch_bytes).expect("write patch");
+
+    let handler = VcdiffPatchHandler::new(&VCDIFF);
+    let report = handler
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context(),
+        )
+        .expect("validate patch");
+    assert_eq!(report.status, OperationStatus::Succeeded);
+}
+
+#[test]
+fn parse_patch_rejects_malformed_headers() {
+    let bad_magic = parse_patch(&mut Cursor::new(vec![0xD6, 0xC3, 0x00, 0x00]))
+        .expect_err("a bad magic must be rejected");
+    assert!(format!("{bad_magic}").contains("invalid VCDIFF header magic"));
+
+    let bad_version = parse_patch(&mut Cursor::new(vec![0xD6, 0xC3, 0xC4, 0x01, 0x00]))
+        .expect_err("an unsupported version byte must be rejected");
+    assert!(format!("{bad_version}").contains("version byte 0x01"));
+
+    let bad_flags = parse_patch(&mut Cursor::new(vec![0xD6, 0xC3, 0xC4, 0x00, 0x08]))
+        .expect_err("unknown header flags must be rejected");
+    assert!(format!("{bad_flags}").contains("header flags 0x08"));
+}
+
+#[test]
+fn parse_patch_rejects_malformed_window_headers() {
+    let bad_win = parse_patch(&mut Cursor::new(vec![0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x08]))
+        .expect_err("unknown window flags must be rejected");
+    assert!(format!("{bad_win}").contains("window flags 0x08"));
+
+    let both_sources = parse_patch(&mut Cursor::new(vec![
+        0xD6,
+        0xC3,
+        0xC4,
+        0x00,
+        0x00,
+        WIN_SOURCE | WIN_TARGET,
+    ]))
+    .expect_err("a window naming both source kinds must be rejected");
+    assert!(format!("{both_sources}").contains("both VCD_SOURCE and VCD_TARGET"));
+
+    // win_indicator, delta_encoding_len, target_window_size, delta_indicator
+    let bad_delta = parse_patch(&mut Cursor::new(vec![
+        0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x00, 0x05, 0x04, 0x08,
+    ]))
+    .expect_err("unknown delta section flags must be rejected");
+    assert!(format!("{bad_delta}").contains("delta section flags 0x08"));
+
+    // The same window with a deliberately wrong delta encoding length.
+    let length_mismatch = parse_patch(&mut Cursor::new(vec![
+        0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x00, 0x63, 0x04, 0x00, 0x00, 0x00, 0x00,
+    ]))
+    .expect_err("a delta encoding length mismatch must be rejected");
+    assert!(format!("{length_mismatch}").contains("delta encoding length mismatch"));
+}
+
+#[test]
+fn apply_patch_bytes_rejects_custom_code_tables() {
+    let patch_bytes = build_patch(TestPatch {
+        header_flags: HDR_CODE_TABLE,
+        code_table_near: Some(4),
+        code_table_same: Some(3),
+        code_table_data: vec![0u8; 8],
+        ..Default::default()
+    });
+
+    let error = apply_patch_bytes(b"", &patch_bytes)
+        .expect_err("a custom code table must be rejected in memory");
+    assert!(format!("{error}").contains("does not support custom code tables"));
+}
+
+#[test]
+fn apply_patch_bytes_supports_source_free_and_target_windows() {
+    let patch_bytes = build_patch(TestPatch {
+        windows: vec![
+            TestWindow {
+                win_indicator: 0,
+                source_segment_size: None,
+                source_segment_position: None,
+                target_window_size: 3,
+                checksum: None,
+                data: b"abc".to_vec(),
+                inst: vec![4],
+                addr: Vec::new(),
+            },
+            TestWindow {
+                win_indicator: WIN_TARGET,
+                source_segment_size: Some(3),
+                source_segment_position: Some(0),
+                target_window_size: 3,
+                checksum: None,
+                data: b"def".to_vec(),
+                inst: vec![4],
+                addr: Vec::new(),
+            },
+        ],
+        ..Default::default()
+    });
+
+    let output = apply_patch_bytes(b"", &patch_bytes).expect("apply target-window patch");
+    assert_eq!(output, b"abcdef");
+}
+
+#[test]
+fn vcdiff_output_size_sums_the_window_targets() {
+    let patch_bytes = build_patch(TestPatch {
+        windows: vec![
+            TestWindow {
+                win_indicator: 0,
+                source_segment_size: None,
+                source_segment_position: None,
+                target_window_size: 3,
+                checksum: None,
+                data: b"abc".to_vec(),
+                inst: vec![4],
+                addr: Vec::new(),
+            },
+            TestWindow {
+                win_indicator: 0,
+                source_segment_size: None,
+                source_segment_position: None,
+                target_window_size: 2,
+                checksum: None,
+                data: b"de".to_vec(),
+                inst: vec![3],
+                addr: Vec::new(),
+            },
+        ],
+        ..Default::default()
+    });
+
+    assert_eq!(
+        vcdiff_output_size(&patch_bytes).expect("read output size"),
+        5
+    );
+}
+
+#[test]
+fn apply_patch_bytes_accepts_an_lzma_header_without_compressed_sections() {
+    // The LZMA guard only rejects patches whose sections actually carry an xz
+    // stream; a secondary header with `delta_indicator == 0` must still apply.
+    let patch_bytes = build_patch(TestPatch {
+        header_flags: HDR_SECONDARY,
+        secondary_id: Some(XDELTA_LZMA_SECONDARY_ID),
+        windows: vec![TestWindow {
+            win_indicator: 0,
+            source_segment_size: None,
+            source_segment_position: None,
+            target_window_size: 3,
+            checksum: None,
+            data: b"abc".to_vec(),
+            inst: vec![4],
+            addr: Vec::new(),
+        }],
+        ..Default::default()
+    });
+
+    let output = apply_patch_bytes(b"", &patch_bytes).expect("apply uncompressed lzma patch");
+    assert_eq!(output, b"abc");
+}
+
+#[test]
+fn create_progress_emit_band_treats_zero_total_as_complete() {
+    let context = test_context();
+    let progress = CreateProgress::new(&context, "xdelta");
+    progress.emit_band(0.0, CREATE_ENCODE_BAND_END, 0, 0);
+    // A second emission at the same percent is deduplicated, so the band end is
+    // the highest percent this progress can report.
+    progress.emit_band(0.0, CREATE_ENCODE_BAND_END, 1, 1);
+}
+
+#[test]
+fn emit_native_instructions_encodes_runs() {
+    let target = vec![0x5Au8; 16];
+    let mut window = WindowEncoder::new(None, false);
+    emit_native_instructions(&mut window, &target, &[Instruction::Run { len: 16 }]);
+    let sections = window.finish_sections(Some(&target));
+    // A run carries its repeated byte in the data section, not the full target.
+    assert_eq!(sections.data_section, vec![0x5Au8]);
+    assert_eq!(sections.target_len, 16);
+}
+
+#[test]
+fn build_native_window_emits_a_single_add_at_level_zero() {
+    let options = CompressOptions {
+        level: 0,
+        checksum: false,
+        secondary: SecondaryCompression::None,
+        ..CompressOptions::default()
+    };
+
+    let target = b"level zero target".to_vec();
+    let window = build_native_window(&[], 0, &target, &options).expect("build level-0 window");
+    assert!(
+        window
+            .windows(target.len())
+            .any(|chunk| chunk == target.as_slice()),
+        "the level-0 window must carry the target verbatim"
+    );
+
+    let empty = build_native_window(&[], 0, &[], &options).expect("build empty level-0 window");
+    assert!(
+        empty.len() < window.len(),
+        "an empty target must produce a shorter window"
+    );
+}
+
+#[test]
+fn load_patch_for_xdelta_recode_rejects_custom_code_tables() {
+    let patch_bytes = build_patch(TestPatch {
+        header_flags: HDR_CODE_TABLE,
+        code_table_near: Some(4),
+        code_table_same: Some(3),
+        code_table_data: vec![0u8; 8],
+        ..Default::default()
+    });
+
+    let temp = create_temp_dir();
+    let patch_path = temp.join("custom-table.xdelta");
+    fs::write(&patch_path, &patch_bytes).expect("write patch");
+
+    let error = load_patch_for_xdelta_recode(&patch_path)
+        .expect_err("a custom code table must be rejected by the recoder");
+    assert!(format!("{error}").contains("does not support custom code tables"));
+}
+
+#[test]
+fn recode_rejects_a_baseline_that_already_declares_a_secondary_compressor() {
+    let patch_bytes = build_patch(TestPatch {
+        header_flags: HDR_SECONDARY,
+        secondary_id: Some(XDELTA_DJW_SECONDARY_ID),
+        windows: vec![TestWindow {
+            win_indicator: 0,
+            source_segment_size: None,
+            source_segment_position: None,
+            target_window_size: 3,
+            checksum: None,
+            data: b"abc".to_vec(),
+            inst: vec![4],
+            addr: Vec::new(),
+        }],
+        ..Default::default()
+    });
+
+    let temp = create_temp_dir();
+    let patch_path = temp.join("already-secondary.xdelta");
+    let output_path = temp.join("recoded.xdelta");
+    fs::write(&patch_path, &patch_bytes).expect("write patch");
+
+    let error = recode_patch_with_xdelta_options(
+        &patch_path,
+        &output_path,
+        Some(XDELTA_LZMA_SECONDARY_ID),
+        None,
+    )
+    .expect_err("recoding a compressed baseline must be rejected");
+    assert!(format!("{error}").contains("expected an uncompressed baseline patch"));
+}
+
+#[test]
+fn maybe_compress_xdelta_secondary_sections_declines_short_and_unprofitable_input() {
+    let short = b"tiny".to_vec();
+    let (djw_short, djw_short_flag) =
+        maybe_compress_xdelta_djw_section(&short, DjwSectionKind::Data).expect("short djw section");
+    assert!(!djw_short_flag);
+    assert_eq!(djw_short.as_ref(), short.as_slice());
+
+    let (fgk_short, fgk_short_flag) =
+        maybe_compress_xdelta_fgk_section(&short).expect("short fgk section");
+    assert!(!fgk_short_flag);
+    assert_eq!(fgk_short.as_ref(), short.as_slice());
+
+    // Twelve distinct bytes cost more in prefix tables than the symbols save, so
+    // both encoders must hand the section back uncompressed.
+    let incompressible: Vec<u8> = (0..12u8).collect();
+    let (djw, djw_flag) = maybe_compress_xdelta_djw_section(&incompressible, DjwSectionKind::Data)
+        .expect("djw section");
+    assert!(!djw_flag);
+    assert_eq!(djw.as_ref(), incompressible.as_slice());
+
+    let (fgk, fgk_flag) = maybe_compress_xdelta_fgk_section(&incompressible).expect("fgk section");
+    assert!(!fgk_flag);
+    assert_eq!(fgk.as_ref(), incompressible.as_slice());
+}
+
+#[test]
+fn move_or_copy_file_reports_a_destination_it_cannot_write() {
+    let temp = create_temp_dir();
+    let from = temp.join("source.bin");
+    let to = temp.join("destination");
+    fs::write(&from, b"payload").expect("write source");
+    fs::create_dir(&to).expect("create destination directory");
+
+    let error =
+        move_or_copy_file(&from, &to).expect_err("moving onto a directory must fail on both paths");
+    assert!(
+        matches!(error, RomWeaverError::Io(_)),
+        "unexpected: {error}"
+    );
+    assert!(from.exists(), "the source must survive a failed move");
+}
