@@ -30,6 +30,8 @@ You need the patch and your own copy of the exact game release it was made for. 
 
 A filename is only a hint. Two different releases can have similar names. A checksum is calculated from every byte, so it is the useful proof.
 
+When the patch author gives a checksum but the patch itself declares no source ROM, paste that checksum into **Identify by checksum** in **0x02 ROM**. rom-weaver looks it up in its local identification data and shows the expected ROM: its title, its region and revision, and every checksum and the size the data holds. Nothing is uploaded.
+
 Keep one clean original somewhere safe. rom-weaver writes a separate result, but a known-good copy makes updates and troubleshooting much easier.
 
 ## Add the files
