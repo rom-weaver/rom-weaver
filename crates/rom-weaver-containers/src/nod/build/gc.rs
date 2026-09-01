@@ -327,11 +327,11 @@ impl GCPartitionLayout {
                 if !self.user_files.iter().any(|info| info.name == path)
                     && !self.junk_files.contains(&path)
                 {
-                    println!("FST file {} not found", path);
+                    debug!("FST file {} not found", path);
                     return false;
                 }
             }
-            println!("Using existing FST");
+            debug!("Using existing FST");
             return true;
         }
         false
