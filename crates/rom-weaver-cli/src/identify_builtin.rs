@@ -1210,4 +1210,781 @@ mod tests {
         let compressed = brotli_compress(&raw);
         assert!(decompress_bytes(&compressed, "fixture", raw.len() - 1).is_err());
     }
+
+    // -----------------------------------------------------------------------
+    // Staged group fixtures
+    // -----------------------------------------------------------------------
+
+    /// A staged archive directory: `index.json`, `catalog.json`, and one
+    /// `packs/<slug>.pack.br` per index entry.
+    fn stage_dir(
+        index: &serde_json::Value,
+        catalog: &serde_json::Value,
+        packs: &[&str],
+    ) -> assert_fs::TempDir {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        fs::create_dir_all(temp.path().join("packs")).expect("packs directory");
+        fs::write(
+            temp.path().join("index.json"),
+            serde_json::to_vec(index).expect("index JSON"),
+        )
+        .expect("index fixture");
+        fs::write(
+            temp.path().join("catalog.json"),
+            serde_json::to_vec(catalog).expect("catalog JSON"),
+        )
+        .expect("catalog fixture");
+        for pack in packs {
+            fs::write(temp.path().join("packs").join(pack), b"pack").expect("pack fixture");
+        }
+        temp
+    }
+
+    fn group_index(
+        group: &str,
+        default: bool,
+        groups: usize,
+        slug: &str,
+        brotli_file: &str,
+    ) -> serde_json::Value {
+        let mut group_rows = vec![serde_json::json!({
+            "id": group,
+            "default": default,
+            "systems": [slug],
+        })];
+        for extra in 1..groups {
+            group_rows.push(serde_json::json!({
+                "id": format!("{group}-{extra}"),
+                "default": false,
+                "systems": [slug],
+            }));
+        }
+        serde_json::json!({
+            "groups": group_rows,
+            "systems": [{
+                "slug": slug,
+                "file": format!("{slug}.pack"),
+                "rawBytes": 4,
+                "sha256": sha256(b"pack"),
+                "brotliFile": brotli_file,
+                "brotliBytes": 4,
+                "brotliSha256": sha256(b"pack"),
+            }],
+        })
+    }
+
+    fn group_catalog(slug: &str) -> serde_json::Value {
+        serde_json::json!({
+            "format": "rom-weaver-identify-catalog-v1",
+            "platforms": [{
+                "canonicalPlatform": "Test System",
+                "aliases": [slug],
+                "source": "redump",
+                "mediaProfiles": ["redump-cd-track-v1"],
+                "packSlug": slug,
+                "packFormat": "RWFP1",
+                "canonicalizationVersion": 1,
+            }],
+        })
+    }
+
+    /// The message of a call that must fail; `Result`'s Ok type is not `Debug`.
+    fn error_text<T>(result: Result<T>) -> String {
+        match result {
+            Ok(_) => panic!("the call was expected to fail"),
+            Err(error) => error.to_string(),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Path and size helpers
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn candidate_data_dirs_needs_a_parent_directory() {
+        assert!(
+            candidate_data_dirs(Path::new("/")).is_empty(),
+            "a path with no parent names no data directory"
+        );
+        assert_eq!(
+            candidate_data_dirs(Path::new("/rom-weaver")),
+            vec![PathBuf::from("/").join(DATA_RELATIVE_PATH)],
+            "a bin dir with no parent contributes one candidate"
+        );
+    }
+
+    #[test]
+    fn pack_path_prefers_the_user_installed_data_dir() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let database = temp.path().join("identify");
+        assert!(pack_path(&database, "test").is_none());
+
+        let packs = database.join(USER_FULL_DATA_DIR).join("packs");
+        fs::create_dir_all(&packs).expect("user packs directory");
+        let pack = packs.join("test.pack.br");
+        fs::write(&pack, b"compressed").expect("pack fixture");
+        assert_eq!(pack_path(&database, "test"), Some(pack));
+        assert!(pack_path(&database, "other").is_none());
+    }
+
+    #[test]
+    fn pack_slugs_lists_the_user_installed_packs_without_duplicates() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let database = temp.path().join("identify");
+        assert!(
+            pack_slugs(&database).expect("slug listing").is_empty(),
+            "a database dir with no packs lists nothing"
+        );
+
+        let packs = database.join(USER_FULL_DATA_DIR).join("packs");
+        fs::create_dir_all(&packs).expect("user packs directory");
+        for name in ["sega-saturn.pack.br", "atari-2600.pack.br", "index.json"] {
+            fs::write(packs.join(name), b"payload").expect("pack fixture");
+        }
+        assert_eq!(
+            pack_slugs(&database).expect("slug listing"),
+            ["atari-2600", "sega-saturn"]
+        );
+    }
+
+    #[test]
+    fn pack_size_checks_name_the_side_that_is_too_large() {
+        assert!(check_pack_size(MAX_PACK_BYTES, "compressed").is_ok());
+        let error = error_text(check_pack_size(MAX_PACK_BYTES + 1, "decompressed"));
+        assert!(error.contains("identify pack decompressed size"));
+        assert!(error.contains(&MAX_PACK_BYTES.to_string()));
+    }
+
+    #[test]
+    fn archive_entry_sizes_are_capped_in_total_and_guarded_against_overflow() {
+        let mut total = 0;
+        check_archive_entry_size(MAX_PACK_BYTES, &mut total).expect("one entry at the cap");
+        assert_eq!(total, MAX_PACK_BYTES);
+
+        let mut near_limit = MAX_EXTRACTED_BYTES;
+        assert!(
+            error_text(check_archive_entry_size(1, &mut near_limit)).contains("extracted limit")
+        );
+
+        let mut overflowing = u64::MAX;
+        assert!(
+            error_text(check_archive_entry_size(1, &mut overflowing)).contains("size overflow")
+        );
+    }
+
+    #[test]
+    fn archive_directory_allowlist_covers_only_the_data_ancestors() {
+        for allowed in [
+            "share",
+            "share/rom-weaver",
+            "share/rom-weaver/identify",
+            ARCHIVE_PREFIX,
+            "share/rom-weaver/identify/v1/packs",
+        ] {
+            assert!(archive_directory_allowed(Path::new(allowed)));
+        }
+        assert!(!archive_directory_allowed(Path::new("share/other")));
+        assert!(!archive_directory_allowed(Path::new(
+            "share/rom-weaver/identify/v1/packs/nested"
+        )));
+    }
+
+    #[test]
+    fn archive_paths_accept_the_metadata_files_and_pack_directory() {
+        assert_eq!(
+            archive_relative_path(Path::new("share/rom-weaver/identify/v1/index.json"))
+                .expect("index path"),
+            PathBuf::from("index.json")
+        );
+        assert_eq!(
+            archive_relative_path(Path::new("share/rom-weaver/identify/v1/catalog.json"))
+                .expect("catalog path"),
+            PathBuf::from("catalog.json")
+        );
+        assert_eq!(
+            archive_relative_path(Path::new("share/rom-weaver/identify/v1/packs/a.pack.br"))
+                .expect("pack path"),
+            PathBuf::from("packs/a.pack.br")
+        );
+        assert!(
+            error_text(archive_relative_path(Path::new("etc/passwd")))
+                .contains("unexpected identify data archive path")
+        );
+        assert!(
+            archive_relative_path(Path::new(
+                "share/rom-weaver/identify/v1/packs/nested/a.pack.br"
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn group_ids_are_lowercase_alphanumeric_with_hyphens() {
+        validate_group_id("optional-computers").expect("a valid group id");
+        validate_group_id("group2").expect("digits are allowed");
+        for invalid in ["", "Optional", "group_1", "group/1", "grüp"] {
+            assert!(
+                error_text(validate_group_id(invalid)).contains("invalid identify pack group"),
+                "`{invalid}` must be rejected"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // decompress
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn decompress_rejects_a_pack_its_index_does_not_describe() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let packs = temp.path().join("packs");
+        fs::create_dir_all(&packs).expect("packs directory");
+        let raw = b"RWFP1 payload";
+        let compressed = brotli_compress(raw);
+        let pack = packs.join("test.pack.br");
+        fs::write(&pack, &compressed).expect("pack fixture");
+
+        assert!(
+            error_text(decompress(&pack)).contains("failed to read"),
+            "a missing index.json is reported by path"
+        );
+
+        fs::write(temp.path().join("index.json"), b"{ not json").expect("index fixture");
+        assert!(error_text(decompress(&pack)).contains("invalid identify index"));
+
+        fs::write(
+            temp.path().join("index.json"),
+            serde_json::to_vec(&serde_json::json!({ "systems": [] })).expect("index JSON"),
+        )
+        .expect("index fixture");
+        assert!(
+            error_text(decompress(&pack)).contains("is missing from"),
+            "a pack with no index row is rejected"
+        );
+    }
+
+    #[test]
+    fn decompress_rejects_a_wrong_compressed_size_and_a_wrong_raw_hash() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let packs = temp.path().join("packs");
+        fs::create_dir_all(&packs).expect("packs directory");
+        let raw = b"RWFP1 payload";
+        let compressed = brotli_compress(raw);
+        let pack = packs.join("test.pack.br");
+        fs::write(&pack, &compressed).expect("pack fixture");
+        let index = |raw_bytes: usize, sha256_value: String, brotli_bytes: usize| {
+            serde_json::json!({
+                "systems": [{
+                    "file": "test.pack",
+                    "rawBytes": raw_bytes,
+                    "sha256": sha256_value,
+                    "brotliFile": "packs/test.pack.br",
+                    "brotliBytes": brotli_bytes,
+                    "brotliSha256": sha256(&compressed),
+                }]
+            })
+        };
+        let write_index = |value: serde_json::Value| {
+            fs::write(
+                temp.path().join("index.json"),
+                serde_json::to_vec(&value).expect("index JSON"),
+            )
+            .expect("index fixture");
+        };
+
+        write_index(index(raw.len(), sha256(raw), compressed.len() + 1));
+        assert!(error_text(decompress(&pack)).contains("invalid compressed size"));
+
+        write_index(index(raw.len(), "0".repeat(64), compressed.len()));
+        assert!(error_text(decompress(&pack)).contains("invalid decompressed data"));
+    }
+
+    #[test]
+    fn verify_raw_pack_checks_both_the_length_and_the_hash() {
+        let raw = b"RWFP1 payload";
+        let entry = PackIndexEntry {
+            slug: "test".to_string(),
+            file: "test.pack".to_string(),
+            raw_bytes: raw.len() as u64,
+            sha256: sha256(raw),
+            brotli_file: "packs/test.pack.br".to_string(),
+            brotli_bytes: 1,
+            brotli_sha256: String::new(),
+        };
+        verify_raw_pack(&entry, raw).expect("matching raw pack");
+        assert!(
+            error_text(verify_raw_pack(&entry, b"short")).contains("invalid decompressed data")
+        );
+
+        let mut wrong_hash = entry;
+        wrong_hash.sha256 = "0".repeat(64);
+        assert!(verify_raw_pack(&wrong_hash, raw).is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // extract_archive
+    // -----------------------------------------------------------------------
+
+    /// A brotli-compressed tar of `entries`, each `(path, type, bytes)`.
+    fn tar_archive(entries: &[(&str, tar::EntryType, &[u8])]) -> Vec<u8> {
+        let mut tar_bytes = Vec::new();
+        {
+            let mut builder = tar::Builder::new(&mut tar_bytes);
+            for (path, entry_type, bytes) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_entry_type(*entry_type);
+                header.set_size(bytes.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder
+                    .append_data(&mut header, path, *bytes)
+                    .expect("archive entry");
+            }
+            builder.finish().expect("tar archive");
+        }
+        brotli_compress(&tar_bytes)
+    }
+
+    #[test]
+    fn archive_extraction_rejects_a_non_regular_entry() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let archive = tar_archive(&[(
+            "share/rom-weaver/identify/v1/index.json",
+            tar::EntryType::Symlink,
+            b"",
+        )]);
+        assert!(
+            error_text(extract_archive(archive.as_slice(), temp.path()))
+                .contains("is not a regular file")
+        );
+    }
+
+    #[test]
+    fn archive_extraction_rejects_a_path_outside_the_data_prefix() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let archive = tar_archive(&[(
+            "share/rom-weaver/identify/v1/notes.txt",
+            tar::EntryType::Regular,
+            b"notes",
+        )]);
+        assert!(
+            error_text(extract_archive(archive.as_slice(), temp.path()))
+                .contains("unexpected identify data archive path")
+        );
+    }
+
+    #[test]
+    fn archive_extraction_requires_both_metadata_files() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let archive = tar_archive(&[(
+            "share/rom-weaver/identify/v1/index.json",
+            tar::EntryType::Regular,
+            b"{}",
+        )]);
+        assert!(
+            error_text(extract_archive(archive.as_slice(), temp.path()))
+                .contains("archive is incomplete")
+        );
+    }
+
+    #[test]
+    fn archive_extraction_rejects_an_index_pack_path_that_escapes_packs() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let index = serde_json::to_vec(&group_index(
+            "optional",
+            false,
+            1,
+            "test",
+            "../outside.pack.br",
+        ))
+        .expect("index JSON");
+        let catalog = serde_json::to_vec(&group_catalog("test")).expect("catalog JSON");
+        let archive = tar_archive(&[
+            (
+                "share/rom-weaver/identify/v1/index.json",
+                tar::EntryType::Regular,
+                &index,
+            ),
+            (
+                "share/rom-weaver/identify/v1/catalog.json",
+                tar::EntryType::Regular,
+                &catalog,
+            ),
+        ]);
+        assert!(
+            error_text(extract_archive(archive.as_slice(), temp.path()))
+                .contains("invalid identify index pack path")
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Metadata merging
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn read_json_object_reports_the_reason_it_could_not_read_the_file() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        assert!(
+            error_text(read_json_object(&temp.path().join("absent.json")))
+                .contains("failed to read")
+        );
+
+        let broken = temp.path().join("broken.json");
+        fs::write(&broken, b"{ not json").expect("broken fixture");
+        assert!(error_text(read_json_object(&broken)).contains("invalid"));
+
+        let array = temp.path().join("array.json");
+        fs::write(&array, b"[1, 2]").expect("array fixture");
+        assert!(error_text(read_json_object(&array)).contains("expected a JSON object"));
+    }
+
+    #[test]
+    fn merging_records_replaces_by_key_and_sorts_the_result() {
+        let mut destination = serde_json::json!({
+            "systems": [
+                { "slug": "zeta", "file": "zeta.pack" },
+                { "slug": "alpha", "file": "old-alpha.pack" },
+            ],
+        })
+        .as_object()
+        .cloned()
+        .expect("destination object");
+        let incoming = serde_json::json!({
+            "systems": [
+                { "slug": "alpha", "file": "new-alpha.pack" },
+                { "slug": "mid", "file": "mid.pack" },
+            ],
+        })
+        .as_object()
+        .cloned()
+        .expect("incoming object");
+
+        merge_json_records(&mut destination, &incoming, "systems", "slug").expect("merge");
+        let systems = destination["systems"].as_array().expect("merged systems");
+        assert_eq!(
+            systems
+                .iter()
+                .map(|entry| entry["slug"].as_str().expect("slug"))
+                .collect::<Vec<_>>(),
+            ["alpha", "mid", "zeta"]
+        );
+        assert_eq!(systems[0]["file"], serde_json::json!("new-alpha.pack"));
+    }
+
+    #[test]
+    fn merging_records_rejects_missing_arrays_and_keyless_records() {
+        let empty = serde_json::Map::new();
+        let mut destination = empty.clone();
+        assert!(
+            error_text(merge_json_records(
+                &mut destination,
+                &empty,
+                "systems",
+                "slug"
+            ))
+            .contains("identify metadata has no `systems` array")
+        );
+
+        let incoming = serde_json::json!({ "systems": [{ "file": "a.pack" }] })
+            .as_object()
+            .cloned()
+            .expect("incoming object");
+        let mut destination = serde_json::Map::new();
+        assert!(
+            error_text(merge_json_records(
+                &mut destination,
+                &incoming,
+                "systems",
+                "slug"
+            ))
+            .contains("identify `systems` record has no `slug`")
+        );
+
+        let mut not_an_array = serde_json::json!({ "systems": 7 })
+            .as_object()
+            .cloned()
+            .expect("destination object");
+        let incoming = serde_json::json!({ "systems": [{ "slug": "a" }] })
+            .as_object()
+            .cloned()
+            .expect("incoming object");
+        assert!(
+            error_text(merge_json_records(
+                &mut not_an_array,
+                &incoming,
+                "systems",
+                "slug"
+            ))
+            .contains("installed identify metadata has no `systems` array")
+        );
+    }
+
+    #[test]
+    fn merged_metadata_starts_from_the_archive_when_nothing_is_installed() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let archive = temp.path().join("archive.json");
+        fs::write(
+            &archive,
+            serde_json::to_vec(&serde_json::json!({
+                "format": "rom-weaver-identify-index-v1",
+                "systems": [{ "slug": "test", "file": "test.pack" }],
+            }))
+            .expect("archive JSON"),
+        )
+        .expect("archive fixture");
+
+        let bytes = merged_metadata(
+            &temp.path().join("absent.json"),
+            &archive,
+            &[("systems", "slug")],
+        )
+        .expect("merged metadata");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("merged JSON");
+        assert_eq!(
+            value["format"],
+            serde_json::json!("rom-weaver-identify-index-v1")
+        );
+        assert_eq!(value["systems"].as_array().expect("systems").len(), 1);
+    }
+
+    #[test]
+    fn group_atomic_writes_replace_the_target_and_report_a_bad_path() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let path = temp.path().join("index.json");
+        write_group_atomic(&path, b"first").expect("atomic write");
+        write_group_atomic(&path, b"second").expect("atomic overwrite");
+        assert_eq!(fs::read(&path).expect("written file"), b"second");
+        assert!(!temp.path().join("index.part").exists());
+
+        assert!(
+            error_text(write_group_atomic(
+                &temp.path().join("absent").join("index.json"),
+                b"payload"
+            ))
+            .contains("failed to write")
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // group_archive_entries
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn group_archives_must_name_exactly_the_requested_non_default_group() {
+        let valid = group_index("optional", false, 1, "test", "packs/test.pack.br");
+        let catalog = group_catalog("test");
+
+        let stage = stage_dir(&valid, &catalog, &["test.pack.br"]);
+        let entries = group_archive_entries(stage.path(), "optional").expect("group entries");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].slug, "test");
+
+        assert!(
+            error_text(group_archive_entries(stage.path(), "other"))
+                .contains("does not contain group `other`")
+        );
+
+        let two_groups = stage_dir(
+            &group_index("optional", false, 2, "test", "packs/test.pack.br"),
+            &catalog,
+            &["test.pack.br"],
+        );
+        assert!(
+            error_text(group_archive_entries(two_groups.path(), "optional"))
+                .contains("lists more than one group")
+        );
+
+        let default_group = stage_dir(
+            &group_index("optional", true, 1, "test", "packs/test.pack.br"),
+            &catalog,
+            &["test.pack.br"],
+        );
+        assert!(
+            error_text(group_archive_entries(default_group.path(), "optional"))
+                .contains("is included by install-all")
+        );
+    }
+
+    #[test]
+    fn group_archives_must_agree_with_their_index_catalog_and_pack_files() {
+        let catalog = group_catalog("test");
+
+        let mut mismatched = group_index("optional", false, 1, "test", "packs/test.pack.br");
+        mismatched["groups"][0]["systems"] = serde_json::json!(["other"]);
+        let stage = stage_dir(&mismatched, &catalog, &["test.pack.br"]);
+        assert!(
+            error_text(group_archive_entries(stage.path(), "optional"))
+                .contains("does not match its archive systems")
+        );
+
+        let stage = stage_dir(
+            &group_index("optional", false, 1, "test", "packs/wrong.pack.br"),
+            &catalog,
+            &["test.pack.br"],
+        );
+        assert!(
+            error_text(group_archive_entries(stage.path(), "optional"))
+                .contains("has an invalid archive path")
+        );
+
+        let stage = stage_dir(
+            &group_index("optional", false, 1, "test", "packs/test.pack.br"),
+            &group_catalog("other"),
+            &["test.pack.br"],
+        );
+        assert!(
+            error_text(group_archive_entries(stage.path(), "optional"))
+                .contains("does not match its catalog platforms")
+        );
+
+        let stage = stage_dir(
+            &group_index("optional", false, 1, "test", "packs/test.pack.br"),
+            &catalog,
+            &["test.pack.br", "extra.pack.br"],
+        );
+        assert!(
+            error_text(group_archive_entries(stage.path(), "optional"))
+                .contains("contains unexpected pack files")
+        );
+    }
+
+    #[test]
+    fn group_archives_need_a_catalog_with_platform_pack_slugs() {
+        let index = group_index("optional", false, 1, "test", "packs/test.pack.br");
+        let stage = stage_dir(
+            &index,
+            &serde_json::json!({ "format": "x" }),
+            &["test.pack.br"],
+        );
+        assert!(
+            error_text(group_archive_entries(stage.path(), "optional"))
+                .contains("identify catalog has no `platforms` array")
+        );
+
+        let stage = stage_dir(
+            &index,
+            &serde_json::json!({ "format": "x", "platforms": [{ "canonicalPlatform": "T" }] }),
+            &["test.pack.br"],
+        );
+        assert!(
+            error_text(group_archive_entries(stage.path(), "optional"))
+                .contains("identify catalog platform has no `packSlug`")
+        );
+    }
+
+    #[test]
+    fn group_archive_entries_report_an_unreadable_index() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        assert!(
+            error_text(group_archive_entries(temp.path(), "optional")).contains("failed to read")
+        );
+        fs::write(temp.path().join("index.json"), b"{ not json").expect("index fixture");
+        assert!(
+            error_text(group_archive_entries(temp.path(), "optional"))
+                .contains("invalid identify index")
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Installation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn optional_group_install_reads_a_local_archive_from_disk() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let archive = temp.path().join("optional.tar.br");
+        fs::write(&archive, builder_style_archive(true)).expect("archive fixture");
+        let database = temp.path().join("identify");
+
+        assert_eq!(
+            install_group(&database, "optional", Some(&archive)).expect("install"),
+            1
+        );
+        assert_eq!(
+            fs::read(database.join("test.pack")).expect("installed pack"),
+            b"pack bytes"
+        );
+    }
+
+    #[test]
+    fn optional_group_install_reports_an_archive_it_cannot_read() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        assert!(
+            error_text(install_group(
+                temp.path(),
+                "optional",
+                Some(&temp.path().join("absent.tar.br"))
+            ))
+            .contains("failed to inspect identify group archive")
+        );
+    }
+
+    #[test]
+    fn optional_group_install_rejects_an_invalid_group_id_before_any_io() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        assert!(
+            error_text(install_group(temp.path(), "Optional", None))
+                .contains("invalid identify pack group")
+        );
+    }
+
+    #[test]
+    fn a_failed_group_install_leaves_the_database_untouched() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let database = temp.path().join("identify");
+        fs::create_dir_all(&database).expect("database directory");
+        fs::write(database.join("base.pack"), b"existing pack").expect("existing pack");
+
+        assert!(
+            install_group_archive(&database, "optional", b"not a Brotli archive").is_err(),
+            "a corrupt archive fails the install"
+        );
+        assert_eq!(
+            fs::read(database.join("base.pack")).expect("base pack"),
+            b"existing pack"
+        );
+        assert!(
+            fs::read_dir(temp.path())
+                .expect("parent listing")
+                .filter_map(|entry| entry.ok())
+                .all(|entry| !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".identify-group-")),
+            "the staging directory is removed"
+        );
+    }
+
+    #[test]
+    fn copy_directory_recreates_nested_files() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let source = temp.path().join("source");
+        fs::create_dir_all(source.join("packs")).expect("source tree");
+        fs::write(source.join("index.json"), b"index").expect("index fixture");
+        fs::write(source.join("packs/a.pack"), b"pack").expect("pack fixture");
+
+        let target = temp.path().join("target");
+        copy_directory(&source, &target).expect("directory copy");
+        assert_eq!(
+            fs::read(target.join("index.json")).expect("copied index"),
+            b"index"
+        );
+        assert_eq!(
+            fs::read(target.join("packs/a.pack")).expect("copied pack"),
+            b"pack"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_directory_refuses_an_entry_that_is_not_a_file_or_directory() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let source = temp.path().join("source");
+        fs::create_dir_all(&source).expect("source tree");
+        std::os::unix::fs::symlink("/dev/null", source.join("link")).expect("symlink fixture");
+        assert!(
+            error_text(copy_directory(&source, &temp.path().join("target")))
+                .contains("unsupported entry")
+        );
+    }
 }
