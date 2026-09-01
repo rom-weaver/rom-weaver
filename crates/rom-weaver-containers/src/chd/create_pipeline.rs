@@ -748,3 +748,7 @@ impl ChdContainerHandler {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/create_pipeline.rs"]
+mod create_pipeline_tests;

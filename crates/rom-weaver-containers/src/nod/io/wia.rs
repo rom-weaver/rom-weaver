@@ -2483,3 +2483,7 @@ mod tests {
         assert!(WIACompression::try_from(6).is_err());
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_wia.rs"]
+mod nod_wia_tests;
