@@ -156,7 +156,7 @@ GameCube and Wii disc support comes from [encounter/nod](https://github.com/enco
 
 The inlined copy is adapted from [encounter/nod](https://github.com/encounter/nod) and is intentionally self-contained; no nod checkout is required to build or publish rom-weaver.
 
-Its base is recorded in `crates/rom-weaver-containers/src/nod/NOD_VERSION`. Local patches are developed in the fork [brandonocasey/nod](https://github.com/brandonocasey/nod) on the `local-changes` branch, which is kept as upstream `main` plus the changes currently under upstream review. `NOD_VERSION` records the exact base, fork commit, and included pull requests; anything that lands upstream is dropped from `local-changes` rather than carried twice.
+Its base is recorded in `crates/rom-weaver-containers/src/nod/NOD_VERSION`. Local patches are developed in the fork [rom-weaver/nod](https://github.com/rom-weaver/nod) on the `local-changes` branch, which is kept as upstream `main` plus the changes currently under upstream review. `NOD_VERSION` records the exact base, fork commit, and included pull requests; anything that lands upstream is dropped from `local-changes` rather than carried twice.
 
 Unlike `LIBARCHIVE_VERSION`, `NOD_VERSION` records a **base, not a mirror**, and it lists the exact categories the two trees differ by. There is no `vendor-nod` script, so re-syncing is a deliberate merge rather than a copy.
 
