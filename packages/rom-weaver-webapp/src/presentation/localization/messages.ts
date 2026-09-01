@@ -220,6 +220,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.output.outOfOrder",
     message: "Output won't be verified - the patches are out of order.",
   }),
+  "ui.patch.bulkSelection": msg({ id: "ui.patch.bulkSelection", message: "Default selection" }),
+  "ui.patch.bulkSelectionAll": msg({ id: "ui.patch.bulkSelectionAll", message: "Turn all on" }),
+  "ui.patch.bulkSelectionOptional": msg({
+    id: "ui.patch.bulkSelectionOptional",
+    message: "Make all optional",
+  }),
+  "ui.patch.bulkSelectionUnchanged": msg({
+    id: "ui.patch.bulkSelectionUnchanged",
+    message: "Leave unchanged",
+  }),
   "ui.patch.offCount": msg({
     id: "ui.patch.offCount",
     message:
