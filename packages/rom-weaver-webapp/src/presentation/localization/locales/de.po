@@ -115,6 +115,11 @@ msgstr "Füge eine ROM und ihre Patches hinzu und lade die gepatchte ROM oder ei
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "wird nach Patch {n} angewendet"
 
@@ -157,6 +162,11 @@ msgstr "auto (vorheriger)"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "Basis-ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.beta"
+msgstr "Beta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -710,6 +720,11 @@ msgstr "vorherige Ausgabe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.project"
+msgstr "Projekt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.pullRequest"
 msgstr "Pull Request"
 
@@ -1037,6 +1052,11 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
+msgstr "Werkzeuge"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
