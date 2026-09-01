@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, type RefObject, useId, useState } from "react";
 import { join } from "./cx.ts";
 
 /**
@@ -59,6 +59,7 @@ const Drawer = ({
   onToggle,
   className,
   bodyClassName = "ckrows",
+  headingRef,
   children,
 }: {
   /** Independent trailing control, rendered beside rather than inside the drawer toggle. */
@@ -74,6 +75,8 @@ const Drawer = ({
   className?: string;
   /** Class of the wrapper inside the drawer body (`ckrows`, `trackrows`, `optsbody`, …). */
   bodyClassName?: string;
+  /** Ref to the toggle button, so a caller can scroll to and focus this drawer's heading. */
+  headingRef?: RefObject<HTMLButtonElement | null>;
   children: ReactNode;
 }) => {
   const bodyId = useId();
@@ -86,7 +89,14 @@ const Drawer = ({
   };
   return (
     <div className={join("cks", className, isOpen && "is-open")}>
-      <button aria-controls={bodyId} aria-expanded={isOpen} className="cks-head" onClick={toggle} type="button">
+      <button
+        aria-controls={bodyId}
+        aria-expanded={isOpen}
+        className="cks-head"
+        onClick={toggle}
+        ref={headingRef}
+        type="button"
+      >
         <ChevronRight aria-hidden="true" className="chev" />
         <span className={join("lab", labelIcon ? "opts-lab" : false)}>
           {labelIcon}
