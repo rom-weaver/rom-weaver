@@ -69,31 +69,6 @@ const submitHash = (value) => {
   getHashForm().dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 };
 
-/* An IPS carries no source checksum, so nothing in the run says which ROM it
-   targets - the case the checksum search exists for. */
-const mountWithBareIps = async () => {
-  const patchFile = await loadFixtureFile(RAW_PATCH);
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [patchFile], id: 1 } }));
-  await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
-};
-
-test("a run with no declared ROM offers a checksum search", async () => {
-  await mountWithBareIps();
-
-  expect(getHashForm().textContent).toContain("Identify by checksum");
-  expect(getHashInput().placeholder).toBe("crc32 / md5 / sha1");
-});
-
-test("a malformed checksum is rejected without a lookup", async () => {
-  await mountWithBareIps();
-
-  submitHash("zzzz");
-  await expect.poll(() => getHashError()?.textContent || "", { timeout: 30000 }).toContain("hex characters");
-
-  submitHash("abc");
-  await expect.poll(() => getHashError()?.textContent || "", { timeout: 30000 }).toContain("8 (CRC32)");
-});
-
 const hashCandidate = (hash, status, matches) => ({
   candidates: [{ checksumVariants: [], checksums: { crc32: hash }, matches, path: hash, status }],
   input: hash,
@@ -119,6 +94,50 @@ const MATCH = {
   revision: "Rev 1",
   variant: "manual",
 };
+
+/* An IPS carries no source checksum, so nothing in the run says which ROM it
+   targets - the case the checksum search exists for. */
+const mountWithBareIps = async () => {
+  const patchFile = await loadFixtureFile(RAW_PATCH);
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [patchFile], id: 1 } }));
+  await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
+};
+
+test("the empty apply page offers a checksum search", async () => {
+  mount(createElement(ApplyPatchForm, {}));
+
+  await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
+  expect(getHashForm().textContent).toContain("Identify by checksum");
+  expect(getHashInput().placeholder).toBe("crc32 / md5 / sha1");
+  expect(document.querySelector(".ghost-steps")).not.toBeNull();
+});
+
+test("a checksum pasted on the empty page raises the card there", async () => {
+  identifyChecks.mockResolvedValue(hashCandidate("d7ae93df", "matched", [MATCH]));
+  mount(createElement(ApplyPatchForm, {}));
+  await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
+
+  submitHash("d7ae93df");
+  await expect.poll(() => getExpectationCard()?.textContent || "", { timeout: 30000 }).toContain("Hello World (USA)");
+  expect(getExpectationCard().textContent).toContain("Found by checksum");
+});
+
+test("a run with no declared ROM offers a checksum search", async () => {
+  await mountWithBareIps();
+
+  expect(getHashForm().textContent).toContain("Identify by checksum");
+  expect(getHashInput().placeholder).toBe("crc32 / md5 / sha1");
+});
+
+test("a malformed checksum is rejected without a lookup", async () => {
+  await mountWithBareIps();
+
+  submitHash("zzzz");
+  await expect.poll(() => getHashError()?.textContent || "", { timeout: 30000 }).toContain("hex characters");
+
+  submitHash("abc");
+  await expect.poll(() => getHashError()?.textContent || "", { timeout: 30000 }).toContain("8 (CRC32)");
+});
 
 test("a pasted checksum raises the expected ROM card", async () => {
   identifyChecks.mockResolvedValue(hashCandidate("d7ae93df", "matched", [MATCH]));

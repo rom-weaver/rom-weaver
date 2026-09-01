@@ -2281,13 +2281,22 @@ function ApplyWorkflowFormView({
         supported={APPLY_SUPPORTED_FILES}
       />
       {workflowEmpty ? (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: localizer.message("ui.step.rom") },
-            { num: "0x03", title: localizer.message("ui.step.patches") },
-            { num: "0x04", title: localizer.message("ui.step.apply") },
-          ]}
-        />
+        <>
+          <GhostSteps
+            steps={[
+              { num: "0x02", title: localizer.message("ui.step.rom") },
+              { num: "0x03", title: localizer.message("ui.step.patches") },
+              { num: "0x04", title: localizer.message("ui.step.apply") },
+            ]}
+          />
+          {/* The empty bench has no 0x02 to hang these on, so the search and the
+              ROM it finds sit beside the ghost steps - the same pairing the
+              identify page uses for its own file-free start. */}
+          {romExpectation ? (
+            <RomExpectationCard expectation={romExpectation} identification={manualRomLookup?.identification} />
+          ) : null}
+          {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
+        </>
       ) : (
         <>
           <WorkflowRomInputStep
