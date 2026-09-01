@@ -145,7 +145,7 @@ describe("invokeRomWeaverIdentifyHashWorker", () => {
 
     await invokeRomWeaverIdentifyHashWorker({ databasePaths: [" /db.dat ", ""], hash: " ABCDEF " });
 
-    expect(lastCall()[0]).toEqual({ args: { database: ["/db.dat"], hash: "abcdef" }, type: "identify" });
+    expect(lastCall()[0]).toEqual({ args: { database: ["/db.dat"], hash: ["abcdef"] }, type: "identify" });
   });
 
   it("omits an empty database list", async () => {
