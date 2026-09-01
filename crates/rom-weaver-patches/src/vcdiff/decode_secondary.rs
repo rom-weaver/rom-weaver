@@ -474,6 +474,11 @@ pub(super) struct DjwPrefix {
     pub(super) symbol: Vec<u8>,
     pub(super) mtfsym: Vec<u8>,
     pub(super) mcount: usize,
+    /// Distance back to the position whose zero value implies this one, or 0
+    /// when every position is coded. The multi-group code length table sets it
+    /// to the alphabet size: a symbol the section never uses is coded once, in
+    /// the first group, and every later group repeats the zero for free.
+    pub(super) skip_offset: usize,
 }
 
 impl DjwPrefix {
@@ -482,6 +487,14 @@ impl DjwPrefix {
             mtfsym: vec![0; symbol.len().max(1)],
             symbol,
             mcount: 0,
+            skip_offset: 0,
+        }
+    }
+
+    pub(super) fn with_skip_offset(symbol: Vec<u8>, skip_offset: usize) -> Self {
+        Self {
+            skip_offset,
+            ..Self::new(symbol)
         }
     }
 }
@@ -720,7 +733,18 @@ pub(super) fn djw_compute_mtf_1_2(
     let mut mtf_index = 0usize;
     let mut mtf_run = 0usize;
 
-    for &symbol in &prefix.symbol {
+    let skip_offset = prefix.skip_offset;
+    for (index, &symbol) in prefix.symbol.iter().enumerate() {
+        // `decode_djw_1_2` writes these positions without reading a code, so
+        // coding one here desynchronizes the decoder for the whole stream.
+        if skip_offset != 0 && index >= skip_offset && prefix.symbol[index - skip_offset] == 0 {
+            if symbol != 0 {
+                return Err(RomWeaverError::Validation(
+                    "xdelta djw prefix symbol is unreachable behind a zero-length code".into(),
+                ));
+            }
+            continue;
+        }
         let position = mtf_values
             .iter()
             .position(|value| *value == symbol)

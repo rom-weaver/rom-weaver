@@ -2006,6 +2006,35 @@ fn decode_secondary_djw_round_trips_multi_group() {
 }
 
 #[test]
+fn djw_multi_group_encoder_output_decodes_for_every_group_count() {
+    // `xdelta_djw_compress` self-checks the multi-group encoder and silently
+    // falls back to one group, so only a direct call proves the bitstream the
+    // multi-group path writes is the one `decode_djw_secondary` reads.
+    for size in [1_500usize, 5_000, 8_000, 12_000, 30_000, 60_000] {
+        let mut section = Vec::with_capacity(size);
+        for index in 0..size {
+            let value = if (index / 100) % 2 == 0 {
+                (index % 7) as u8
+            } else {
+                200 + (index % 7) as u8
+            };
+            section.push(value);
+        }
+        let (groups, sector_size) =
+            djw_select_groups_and_sector_size(section.len(), DjwSectionKind::Data)
+                .expect("select groups");
+        assert!(groups > 1, "{size} bytes must select more than one group");
+
+        let payload = xdelta_djw_compress_multi_group(&section, groups, sector_size)
+            .expect("multi-group compress");
+        let decoded = decode_djw_secondary(&payload, section.len()).unwrap_or_else(|error| {
+            panic!("decode {groups}-group payload for {size} bytes: {error}")
+        });
+        assert_eq!(decoded, section, "round trip failed for {size} bytes");
+    }
+}
+
+#[test]
 fn decode_secondary_djw_rejects_trailing_input() {
     let original = b"repeat repeat repeat repeat".to_vec();
     let mut payload = xdelta_djw_compress(&original, DjwSectionKind::Data).expect("compress djw");
@@ -2560,6 +2589,7 @@ fn djw_compute_mtf_1_2_rejects_an_overflowing_output_buffer() {
         symbol: vec![1u8, 2u8],
         mtfsym: vec![0u8; 1],
         mcount: 0,
+        skip_offset: 0,
     };
     let mut mtf_values = [0u8, 1, 2];
     let mut frequencies = [0u32; 8];

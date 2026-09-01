@@ -2073,10 +2073,12 @@ fn collect_rup_chunk_records(
     while absolute < end {
         let chunk_len = usize::try_from((end - absolute).min(RUP_IO_BUFFER_SIZE as u64))
             .map_err(|_| RomWeaverError::Validation("RUP chunk length exceeded usize".into()))?;
-        let source_chunk_len = usize::try_from((source_size - absolute).min(chunk_len as u64))
-            .map_err(|_| {
-                RomWeaverError::Validation("RUP source chunk length exceeded usize".into())
-            })?;
+        // Past the end of the source every byte reads as zero, so a chunk that
+        // starts beyond `source_size` contributes nothing to read.
+        let source_chunk_len = usize::try_from(
+            source_size.saturating_sub(absolute).min(chunk_len as u64),
+        )
+        .map_err(|_| RomWeaverError::Validation("RUP source chunk length exceeded usize".into()))?;
         source.read_exact(&mut source_buffer[..source_chunk_len])?;
         target.read_exact(&mut target_buffer[..chunk_len])?;
         if source_chunk_len < chunk_len {

@@ -289,7 +289,7 @@ impl PatchHandler for SolidPatchHandler {
             _ => unreachable!(),
         }
 
-        let base_addr_len = decode_base_addr_len(addr_param)?;
+        let base_addr_len = decode_base_addr_len(addr_param);
         for primitive in &primitives {
             patch.push(0);
             patch.push(primitive.data.len() as u8);
@@ -436,7 +436,7 @@ fn parse_solid_patch_file(path: &Path) -> Result<ParsedSolidPatch> {
 
     let addr_param = parser.read_u8("SOLID addrParam")?;
     let uses_big_fields = addr_param & BIG_FILE_FLAG != 0;
-    let base_addr_len = decode_base_addr_len(addr_param)?;
+    let base_addr_len = decode_base_addr_len(addr_param);
     let mod_action = (addr_param & MOD_ACTION_MASK) >> 4;
     if mod_action > MOD_ACTION_TRUNCATE {
         return Err(RomWeaverError::ValidationCode(
@@ -577,7 +577,7 @@ fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
     let addr_param = bytes[cursor];
     cursor += 1;
     let uses_big_fields = addr_param & BIG_FILE_FLAG != 0;
-    let base_addr_len = decode_base_addr_len(addr_param)?;
+    let base_addr_len = decode_base_addr_len(addr_param);
     let mod_action = (addr_param & MOD_ACTION_MASK) >> 4;
     if mod_action > MOD_ACTION_TRUNCATE {
         return Err(RomWeaverError::ValidationCode(
@@ -1577,19 +1577,13 @@ fn decode_patch_date(bytes: &[u8]) -> Option<PatchDate> {
     Some(PatchDate { year, month, day })
 }
 
-fn decode_base_addr_len(addr_param: u8) -> Result<Option<usize>> {
+/// Decodes the base address width, which the mask keeps in 2..=8 bytes.
+fn decode_base_addr_len(addr_param: u8) -> Option<usize> {
     let encoded = addr_param & BASE_ADDR_SIZE_MASK;
     if encoded == 0 {
-        return Ok(None);
+        return None;
     }
-    let len = usize::from(encoded) + 1;
-    if !(2..=8).contains(&len) {
-        return Err(RomWeaverError::ValidationCode(
-            solid_validation_code("SOLID_BASE_ADDR_SIZE_UNSUPPORTED")
-                .with_field("base_addr_size", len),
-        ));
-    }
-    Ok(Some(len))
+    Some(usize::from(encoded) + 1)
 }
 
 fn read_required_base_addr(
