@@ -911,3 +911,7 @@ fn find_file_gap(file_infos: &[WriteInfo], fst_end: u64) -> Option<u64> {
     }
     None
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_build_gc.rs"]
+mod tests;

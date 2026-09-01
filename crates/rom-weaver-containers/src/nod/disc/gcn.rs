@@ -218,3 +218,7 @@ pub(crate) fn read_part_meta(
         raw_h3_table: None,
     })
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_gcn.rs"]
+mod tests;
