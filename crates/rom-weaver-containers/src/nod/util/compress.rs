@@ -856,3 +856,7 @@ pub(crate) mod lzma_api {
         Ok(lzma2_props_encode(&options))
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_compress.rs"]
+mod tests;

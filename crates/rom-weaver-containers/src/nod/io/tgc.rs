@@ -365,3 +365,7 @@ impl DiscWriter for DiscWriterTGC {
         DiscWriterWeight::Light
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_tgc.rs"]
+mod tests;

@@ -285,3 +285,7 @@ impl<T> IoResultContext<T> for std::io::Result<T> {
         self.map_err(|e| e.io_context(f()))
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/nod_mod.rs"]
+pub(crate) mod tests;

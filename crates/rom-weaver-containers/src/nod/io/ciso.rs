@@ -363,3 +363,7 @@ impl DiscWriter for DiscWriterCISO {
         DiscWriterWeight::Medium
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_ciso.rs"]
+mod tests;
