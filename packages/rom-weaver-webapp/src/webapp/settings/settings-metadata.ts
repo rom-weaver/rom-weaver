@@ -221,6 +221,35 @@ const ZIP_ZSTD_CODEC =
   getCompressionCodecOptions("zipCodec").find((option) => option.value === "zstd")?.value ||
   COMPRESSION_DEFAULTS.zipCodec;
 
+/**
+ * The settings panel's sections, in display order. Shared with Find so a
+ * setting can be reached by name from anywhere in the app.
+ */
+const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title: string }> = [
+  {
+    fields: ["language", "accent", "byteUnits", "logLevel", "onboardingEnabled", "betaToolsEnabled"],
+    title: "Webapp",
+  },
+  {
+    fields: [
+      "bundlePackage",
+      "postApplyDownloadBehavior",
+      "postApplyTestBehavior",
+      "emulatorSaveStorageEnabled",
+      "fixChecksum",
+      "identifiedOutputName",
+      "requireInputChecksumMatch",
+    ],
+    title: "Behavior",
+  },
+  { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
+  {
+    fields: ["zipCodec", "sevenZipCodec", "rvzCodec", "chdCreateCdCodecs", "chdCreateDvdCodecs"],
+    title: "Codecs",
+  },
+  { fields: ["rvzBlockSize"], title: "RVZ" },
+];
+
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
   betaToolsEnabled: {
     defaultValue: false,
@@ -683,6 +712,7 @@ export type {
 };
 export {
   copySettings,
+  SETTINGS_PANEL_SECTIONS,
   getCompressionProfileFromIndex,
   getDefaultSettings,
   getDefaultThreads,

@@ -115,6 +115,16 @@ msgstr "Add a ROM and its patches, then download the patched ROM or a reusable b
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.testDescription"
+msgstr "Add a supported ROM, raw or in an archive, to test the game in the browser emulator."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.app"
 msgstr "App"
 
@@ -395,6 +405,16 @@ msgstr "Filter log"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Find"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Find a tool, guide, or setting"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
 msgstr "Find its exact match."
 
@@ -407,6 +427,11 @@ msgstr "Fix order"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Fix ROM header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -607,6 +632,11 @@ msgstr "No selectable file was found."
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashRefine"
 msgstr "Not the ROM you meant?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nothing matches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -820,11 +850,6 @@ msgstr "rom-weaver is cached in this browser. The next visit loads from that cop
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testDescription"
-msgstr "Add a supported ROM, raw or in an archive, to test the game in the browser emulator."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Runs in your browser. Your files stay on this device."
 
@@ -872,6 +897,11 @@ msgstr "Sections"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "See your changes in play."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindSetting"
+msgstr "Setting"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1055,6 +1085,11 @@ msgstr "Threads"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.tools"
 msgstr "Tools"
 
@@ -1072,6 +1107,12 @@ msgstr "Try your ROM."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Turn all on"
+
+#~ msgid "ui.find.kindSetting"
+#~ msgstr "Setting"
+
+#~ msgid "ui.find.label"
+#~ msgstr "Find"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
