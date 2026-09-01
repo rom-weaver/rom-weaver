@@ -1,5 +1,5 @@
 type WorkflowView = "patcher" | "creator" | "identify" | "trim" | "ppf-undo" | "test";
-type WebappView = WorkflowView | "docs";
+type WebappView = WorkflowView | "docs" | "whats-new";
 
 type ValidationState = {
   messages: string[];

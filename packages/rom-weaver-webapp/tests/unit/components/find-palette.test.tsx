@@ -22,7 +22,7 @@ const props = {
   currentTab: "patcher",
   githubHref: "https://example.com/repo",
   homeHref: "/apply",
-  onOpenChangelog: () => undefined,
+  onOpenWhatsNew: () => undefined,
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onOpenStatus: () => undefined,

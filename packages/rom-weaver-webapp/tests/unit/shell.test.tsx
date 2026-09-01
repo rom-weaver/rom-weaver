@@ -38,7 +38,7 @@ const mastheadProps = {
   currentTab: "patcher",
   githubHref: "https://example.com/repo",
   homeHref: "/apply",
-  onOpenChangelog: () => undefined,
+  onOpenWhatsNew: () => undefined,
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onOpenStatus: () => undefined,
@@ -123,19 +123,12 @@ describe("More menu keyboard movement", () => {
 
 describe("More menu destinations", () => {
   it("routes each item to its handler and closes the menu", () => {
-    const onOpenChangelog = vi.fn();
     const onOpenLog = vi.fn();
     const onOpenStatus = vi.fn();
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(
       withSettings(
-        <Masthead
-          {...mastheadProps}
-          onOpenChangelog={onOpenChangelog}
-          onOpenLog={onOpenLog}
-          onOpenStatus={onOpenStatus}
-          onSelectTab={onSelectTab}
-        />,
+        <Masthead {...mastheadProps} onOpenLog={onOpenLog} onOpenStatus={onOpenStatus} onSelectTab={onSelectTab} />,
       ),
     );
 
@@ -148,8 +141,8 @@ describe("More menu destinations", () => {
     expect(onOpenLog).toHaveBeenCalledTimes(1);
 
     openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Changelog" }));
-    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    fireEvent.click(getByRole("menuitem", { name: "What\u2019s new" }));
+    expect(onSelectTab).toHaveBeenCalledWith("whats-new");
 
     openDesktopMore(container);
     fireEvent.click(getByRole("menuitem", { name: "Trim Beta" }));

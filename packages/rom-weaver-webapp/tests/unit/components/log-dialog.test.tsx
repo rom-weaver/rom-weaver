@@ -73,7 +73,7 @@ describe("LogDialog", () => {
     // the tabs are the header - there is no title competing with them
     expect(container.querySelector(".dlg-title")).toBeNull();
     const tabs = Array.from(container.querySelectorAll('.dialog-subrail [role="tab"]'));
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Changelog"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage"]);
     expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
     expect(container.querySelector("#logpanel-status")).not.toBeNull();
     expect(container.querySelector(".status-rows")).not.toBeNull();
@@ -119,13 +119,11 @@ describe("LogDialog", () => {
   });
 
   it("keeps update reload in the banner instead of duplicating it on Status", () => {
-    const onReload = vi.fn();
     const { container, queryByRole } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <LogDialog
           onClose={() => undefined}
           onLevelChange={() => undefined}
-          onReload={onReload}
           open
           serviceWorkerStatus="active"
           updateReady
@@ -135,7 +133,6 @@ describe("LogDialog", () => {
 
     expect(container.querySelector(".sw-summary")).toBeNull();
     expect(queryByRole("button", { name: "Reload now" })).toBeNull();
-    expect(onReload).not.toHaveBeenCalled();
   });
 
   it("reports every tab change so the host can stage a settings draft", () => {

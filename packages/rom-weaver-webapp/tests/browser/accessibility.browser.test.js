@@ -22,6 +22,7 @@ import { RomWeaverSettingsProvider } from "../../src/public/react/settings-conte
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
+import { WhatsNewPage } from "../../src/webapp/whats-new-page.tsx";
 import { Masthead, UpdateBanner } from "../../src/webapp/components/shell.tsx";
 import {
   getDefaultSettings,
@@ -442,7 +443,7 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
           ...mastheadProps,
           currentTab,
           homeHref: "/apply",
-          onOpenChangelog: noop,
+          onOpenWhatsNew: noop,
           onOpenLog: noop,
           onOpenSettings: noop,
           onOpenStatus: noop,
@@ -758,7 +759,7 @@ const Banners = () =>
   createElement(
     RomWeaverSettingsProvider,
     { settings: {} },
-    createElement("div", { className: "rw-app" }, createElement(UpdateBanner, { onOpenChangelog: noop, open: true })),
+    createElement("div", { className: "rw-app" }, createElement(UpdateBanner, { onOpenWhatsNew: noop, open: true })),
   );
 
 // ── Modals / dialogs ─────────────────────────────────────────────────────────
@@ -810,15 +811,8 @@ const DIALOGS = {
       open: true,
       title: "Reload and lose changes?",
     }),
-  "update changelog": () =>
-    createElement(LogDialog, {
-      initialTab: "changelog",
-      onClose: noop,
-      onLevelChange: noop,
-      onReload: noop,
-      open: true,
-      updateReady: true,
-    }),
+  // The changelog is its own route now, not a dialog tab.
+  "whats new": () => createElement(WhatsNewPage, { active: true, onReload: noop, updateReady: true }),
   log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
   // Settings is the unified dialog's first tab now, not a Modal of its own.
   settings: () =>
@@ -911,7 +905,7 @@ describe("webapp keyboard navigation", () => {
           createElement(Masthead, {
             currentTab: "patcher",
             homeHref: "/apply",
-            onOpenChangelog: noop,
+            onOpenWhatsNew: noop,
             onOpenLog: noop,
             onOpenSettings: noop,
             onOpenStatus: noop,
@@ -1145,7 +1139,7 @@ describe("webapp responsive navigation", () => {
             createElement(Masthead, {
               currentTab: "patcher",
               homeHref: "/apply",
-              onOpenChangelog: noop,
+              onOpenWhatsNew: noop,
               onOpenLog: noop,
               onOpenSettings: noop,
               onOpenStatus: noop,

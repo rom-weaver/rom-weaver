@@ -38,6 +38,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "trim",
   "ppf-undo",
   "test",
+  "whats-new",
 ];
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
@@ -58,6 +59,7 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   "ppf-undo": "ppf-undo",
   test: "test",
   trim: "trim",
+  "whats-new": "whats-new",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   apply: "patcher",
@@ -72,6 +74,8 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   test: "test",
   "test.html": "test",
   trim: "trim",
+  "whats-new": "whats-new",
+  "whats-new.html": "whats-new",
   // Keep old links usable when a host has not applied the server redirect.
   tools: "ppf-undo",
   weave: "patcher",

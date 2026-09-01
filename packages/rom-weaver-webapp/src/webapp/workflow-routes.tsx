@@ -3,6 +3,7 @@ import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { PpfUndoFormProps } from "./components/ppf-undo-form.tsx";
 import type { IdentifyFormProps } from "./components/identify-form.tsx";
+import type { WhatsNewPageProps } from "./whats-new-page.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
@@ -34,6 +35,7 @@ type WorkflowRouteProps = {
   };
   "ppf-undo": PpfUndoFormProps;
   trim: TrimPatchFormProps;
+  "whats-new": WhatsNewPageProps;
 };
 
 type WorkflowRouteComponent<View extends WebappView> = ComponentType<WorkflowRouteProps[View]>;
@@ -108,6 +110,9 @@ const PpfUndoRoute = createWorkflowRoute("ppf-undo", () =>
 const TrimRoute = createWorkflowRoute("trim", () =>
   import("../public/react/trim-form.tsx").then((module) => ({ default: module.TrimPatchForm })),
 );
+const WhatsNewRoute = createWorkflowRoute("whats-new", () =>
+  import("./whats-new-page.tsx").then((module) => ({ default: module.WhatsNewPage })),
+);
 
 const WORKFLOW_ROUTES = {
   creator: CreatorRoute,
@@ -117,6 +122,7 @@ const WORKFLOW_ROUTES = {
   test: TestRoute,
   "ppf-undo": PpfUndoRoute,
   trim: TrimRoute,
+  "whats-new": WhatsNewRoute,
 } as const;
 
 const CreatePatchRoute = CreatorRoute.Component;
@@ -126,6 +132,7 @@ const EmulatorTestRoute = TestRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
 const PpfUndoRouteForm = PpfUndoRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
+const WhatsNewPageRoute = WhatsNewRoute.Component;
 
 /** Resolve one route's chunk. Awaited before the first mount so the landing tab never suspends. */
 const preloadWorkflowRoute = (view: WebappView): Promise<unknown> => WORKFLOW_ROUTES[view].preload();
@@ -148,4 +155,5 @@ export {
   preloadWorkflowRoute,
   PpfUndoRouteForm,
   TrimPatchRoute,
+  WhatsNewPageRoute,
 };
