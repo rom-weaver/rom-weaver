@@ -625,7 +625,8 @@ html.vt-theme .mode-rail .mode {
 .rw-app .more-menu:focus-visible {
   outline: none;
 }
-.rw-app .more-menu [role="menuitem"],
+.rw-app .more-menu button,
+.rw-app .more-menu a,
 .rw-app .more-accent > button {
   display: flex;
   gap: var(--sp-s);
@@ -654,13 +655,15 @@ html.vt-theme .mode-rail .mode {
   color: var(--ink-2);
 }
 @media (hover: hover) {
-  .rw-app .more-menu [role="menuitem"]:hover,
+  .rw-app .more-menu button:hover,
+  .rw-app .more-menu a:hover,
   .rw-app .more-accent > button:hover {
     color: var(--ink);
     background: var(--well);
   }
 }
-.rw-app .more-menu [role="menuitem"]:active,
+.rw-app .more-menu button:active,
+.rw-app .more-menu a:active,
 .rw-app .more-accent > button:active {
   color: var(--ink);
   background: var(--plate-2);

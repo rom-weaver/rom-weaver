@@ -10,8 +10,25 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const tabs = [
   { href: "apply", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("svg", { "aria-hidden": true }), id: "creator", label: "Create" },
-  { href: "trim", icon: createElement("svg", { "aria-hidden": true }), id: "trim", label: "Trim" },
-  { href: "ppf-undo", icon: createElement("svg", { "aria-hidden": true }), id: "ppf-undo", label: "PPF undo" },
+  { href: "test", icon: createElement("svg", { "aria-hidden": true }), id: "test", label: "Test" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: createElement("svg", { "aria-hidden": true }),
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "ppf-undo",
+    icon: createElement("svg", { "aria-hidden": true }),
+    id: "ppf-undo",
+    label: "PPF undo",
+    placement: "more",
+  },
 ];
 
 const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
