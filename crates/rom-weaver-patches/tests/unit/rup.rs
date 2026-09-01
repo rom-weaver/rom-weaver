@@ -2565,3 +2565,21 @@ fn md5_hex_formatting_maps_out_of_range_nibbles_to_zero() {
     assert!(hex.ends_with("a5"));
     assert_eq!(nibble_to_hex(16), '0');
 }
+
+#[test]
+fn collect_rup_chunk_records_reads_zero_past_the_end_of_the_source() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    fs::write(&source_path, b"ab").expect("source");
+    fs::write(&target_path, b"abcdefgh").expect("target");
+
+    // A chunk that starts past `source_size` used to underflow the subtraction
+    // that sizes the source read.
+    let records = collect_rup_chunk_records(&source_path, 2, &target_path, 8, 4, 8)
+        .expect("chunk records past the end of the source");
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].offset, 4);
+    assert_eq!(records[0].xor, b"efgh".to_vec());
+}
