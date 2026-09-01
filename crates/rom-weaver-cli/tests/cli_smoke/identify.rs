@@ -209,6 +209,30 @@ fn identify_matches_an_external_pack() {
 }
 
 #[test]
+fn identify_prints_the_matched_title_in_the_human_output() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--input",
+            temp.child("hello.bin").path().to_str().expect("ROM path"),
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+        ],
+        0,
+    );
+    let text = String::from_utf8(output).expect("utf8 stdout");
+
+    assert!(
+        text.contains("Match") && text.contains("Hello World (Test) [!]"),
+        "expected the matched title in the human output, got: {text}"
+    );
+}
+
+#[test]
 fn identify_matches_a_brotli_pack() {
     let temp = setup_temp_dir();
     fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
