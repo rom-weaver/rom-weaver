@@ -126,7 +126,7 @@ Native identify performs no network access.
 
 ### Identify flags
 
-- `--database PACK` searches a local RWFP5 pack instead of the built-in data and the installed packs. Repeatable.
+- `--database PACK` searches a local RWFP1 pack instead of the built-in data and the installed packs. Repeatable.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
@@ -169,7 +169,7 @@ The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON re
 - `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the fix. `status` stays `unknown`.
 - `platform_candidates`: detected platforms with `confidence` and `evidence`.
 - `media`, `components`: the input's media kind and hashed components.
-- `database`: the pack that answered - `source`, `pack_format` (`RWFP5`), and `canonicalization_profile`.
+- `database`: the pack that answered - `source`, `pack_format` (`RWFP1`), and `canonicalization_profile`.
 - `matches[].provenance`: every source that contributed the matched hash record.
 - `matches[].legacy_variant`: true for an OpenGood-only record.
 - `matches[].dump_tags`: preserved GoodTools status tags for a legacy variant.

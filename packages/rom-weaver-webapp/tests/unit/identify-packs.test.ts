@@ -29,7 +29,7 @@ const stubFetch = (options: { index?: unknown; indexStatus?: number; packStatus?
       expect(init).toEqual({ cache: "no-cache" });
       if (options.indexStatus) return new Response("nope", { status: options.indexStatus });
       return new Response(
-        JSON.stringify(options.index ?? { format: "rom-weaver-identify-system-pack-v5", systems: INDEX_SYSTEMS }),
+        JSON.stringify(options.index ?? { format: "rom-weaver-identify-system-pack-v1", systems: INDEX_SYSTEMS }),
       );
     }
     if (options.packStatus) return new Response("nope", { status: options.packStatus });
@@ -154,7 +154,7 @@ describe("optional identify pack groups", () => {
   it("asks the service worker to install the complete optional computer group", async () => {
     stubFetch({
       index: {
-        format: "rom-weaver-identify-system-pack-v5",
+        format: "rom-weaver-identify-system-pack-v1",
         groups: [
           {
             default: false,

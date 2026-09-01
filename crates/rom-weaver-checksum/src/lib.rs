@@ -3,7 +3,7 @@ mod engine;
 pub mod identify_catalog;
 pub mod identify_pack;
 pub mod identify_pack_types;
-pub mod identify_pack_v5;
+pub mod identify_pack_v1;
 pub mod platform_detection;
 pub mod rom_headers;
 pub mod rom_identity;

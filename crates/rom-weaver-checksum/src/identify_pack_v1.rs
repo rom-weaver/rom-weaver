@@ -1,4 +1,4 @@
-//! Reader for RWFP5 artifact packs.
+//! Reader for RWFP1 artifact packs.
 
 use rom_weaver_core::Result;
 use serde::Deserialize;
@@ -11,7 +11,7 @@ use crate::identify_pack_types::{
     PackComponent, PackComponentRole, PackGame, PackProvenance, UpstreamSource,
 };
 
-pub(crate) const PACK_V5_MAGIC: &[u8] = b"RWFP5\0\0\0";
+pub(crate) const PACK_V1_MAGIC: &[u8] = b"RWFP1\0\0\0";
 const MAX_COUNT: usize = 4_000_000;
 const MAX_STRING: usize = 4096;
 
@@ -60,7 +60,7 @@ pub struct ArtifactPack {
 
 impl ArtifactPack {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
-        let members = read_members_with_magic(bytes, PACK_V5_MAGIC, "RWFP5")?;
+        let members = read_members_with_magic(bytes, PACK_V1_MAGIC, "RWFP1")?;
         let strings = Strings::parse(required_member(&members, "strings.bin")?)?;
         let hashes = parse_hashes(required_member(&members, "hashes.bin")?, &strings)?;
         let components = parse_components(
@@ -71,8 +71,8 @@ impl ArtifactPack {
         let manifest: Manifest =
             serde_json::from_slice(required_member(&members, "manifest.json")?)
                 .map_err(|e| invalid_pack(format!("manifest.json is invalid JSON: {e}")))?;
-        if manifest.format != "rom-weaver-identify-system-pack-v5" {
-            return Err(invalid_pack("manifest format is not RWFP5"));
+        if manifest.format != "rom-weaver-identify-system-pack-v1" {
+            return Err(invalid_pack("manifest format is not RWFP1"));
         }
         if manifest.canonicalization_version != 1 {
             return Err(invalid_pack(
@@ -200,7 +200,7 @@ impl ArtifactPack {
     }
 }
 
-/// Encode a deterministic RWFP5 pack. The input games are sorted by platform,
+/// Encode a deterministic RWFP1 pack. The input games are sorted by platform,
 /// name, and game id; all table ids are assigned from sorted keys.
 pub fn encode(
     platform: &str,
@@ -226,7 +226,7 @@ pub fn encode(
             for g in &games {
                 if g.platform != platform || g.source != source {
                     return Err(invalid_pack(
-                        "RWFP5 game platform or source does not match the pack",
+                        "RWFP1 game platform or source does not match the pack",
                     ));
                 }
                 intern(g.name.clone());
@@ -249,7 +249,7 @@ pub fn encode(
             Ok(())
         })()?;
         for (id, value) in strings.values_mut().enumerate() {
-            *value = u32::try_from(id).map_err(|_| invalid_pack("RWFP5 string count overflows"))?;
+            *value = u32::try_from(id).map_err(|_| invalid_pack("RWFP1 string count overflows"))?;
         }
         let mut hashes = HashIds::new();
         let mut components = Vec::new();
@@ -269,7 +269,7 @@ pub fn encode(
             }
         }
         for (id, value) in hashes.values_mut().enumerate() {
-            *value = u32::try_from(id).map_err(|_| invalid_pack("RWFP5 hash count overflows"))?;
+            *value = u32::try_from(id).map_err(|_| invalid_pack("RWFP1 hash count overflows"))?;
         }
         owners.resize_with(hashes.len(), Vec::new);
         for game in &games {
@@ -284,7 +284,7 @@ pub fn encode(
                 );
                 let id = hashes[&key];
                 let component_id = u32::try_from(components.len())
-                    .map_err(|_| invalid_pack("RWFP5 component count overflows"))?;
+                    .map_err(|_| invalid_pack("RWFP1 component count overflows"))?;
                 owners[id as usize].push(component_id);
                 components.push((id, component.clone()));
             }
@@ -324,7 +324,7 @@ pub fn encode(
         }
         let manifest_provenance: Vec<PackProvenance> = if provenance.is_array() {
             serde_json::from_value(provenance.clone())
-                .map_err(|error| invalid_pack(format!("RWFP5 provenance is invalid: {error}")))?
+                .map_err(|error| invalid_pack(format!("RWFP1 provenance is invalid: {error}")))?
         } else {
             Vec::new()
         };
@@ -343,7 +343,7 @@ pub fn encode(
                     .iter()
                     .map(|value| {
                         provenance_ids.get(value).copied().ok_or_else(|| {
-                            invalid_pack("RWFP5 game provenance is not in the manifest")
+                            invalid_pack("RWFP1 game provenance is not in the manifest")
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -424,7 +424,7 @@ pub fn encode(
                 gb.push(upstream(g.upstream_source));
             }
         }
-        let manifest=serde_json::to_vec(&json!({"format":"rom-weaver-identify-system-pack-v5","platform":platform,"source":source,"canonicalizationProfile":profile,"canonicalizationVersion":1,"provenance":manifest_provenance})).map_err(|e|invalid_pack(e.to_string()))?;
+        let manifest=serde_json::to_vec(&json!({"format":"rom-weaver-identify-system-pack-v1","platform":platform,"source":source,"canonicalizationProfile":profile,"canonicalizationVersion":1,"provenance":manifest_provenance})).map_err(|e|invalid_pack(e.to_string()))?;
         let members = [
             ("strings.bin", strings_bytes),
             ("hashes.bin", hb),
@@ -435,7 +435,7 @@ pub fn encode(
             ("sets.bin", sets),
             ("manifest.json", manifest),
         ];
-        out.extend_from_slice(PACK_V5_MAGIC);
+        out.extend_from_slice(PACK_V1_MAGIC);
         out.extend_from_slice(&(members.len() as u32).to_le_bytes());
         for (n, b) in &members {
             out.extend_from_slice(&(n.len() as u16).to_le_bytes());
@@ -570,7 +570,7 @@ struct Cursor<'a> {
 impl<'a> Cursor<'a> {
     fn new(b: &'a [u8], magic: &[u8; 4]) -> Result<Self> {
         if b.len() < 5 || &b[..4] != magic || b[4] != 1 {
-            return Err(invalid_pack("RWFP5 table header is invalid"));
+            return Err(invalid_pack("RWFP1 table header is invalid"));
         }
         Ok(Self { b, p: 5 })
     }
@@ -581,29 +581,29 @@ impl<'a> Cursor<'a> {
             let x = *self
                 .b
                 .get(self.p)
-                .ok_or_else(|| invalid_pack("RWFP5 variable integer is truncated"))?;
+                .ok_or_else(|| invalid_pack("RWFP1 variable integer is truncated"))?;
             self.p += 1;
             if shift == 63 && x > 1 {
-                return Err(invalid_pack("RWFP5 variable integer overflows u64"));
+                return Err(invalid_pack("RWFP1 variable integer overflows u64"));
             }
             v |= u64::from(x & 127) << shift;
             if x & 128 == 0 {
                 if self.p - start > 1 && x == 0 {
-                    return Err(invalid_pack("RWFP5 variable integer is not canonical"));
+                    return Err(invalid_pack("RWFP1 variable integer is not canonical"));
                 }
                 return Ok(v);
             }
         }
-        Err(invalid_pack("RWFP5 variable integer is too long"))
+        Err(invalid_pack("RWFP1 variable integer is too long"))
     }
     fn u32(&mut self) -> Result<u32> {
-        u32::try_from(self.var()?).map_err(|_| invalid_pack("RWFP5 integer overflows u32"))
+        u32::try_from(self.var()?).map_err(|_| invalid_pack("RWFP1 integer overflows u32"))
     }
     fn count(&mut self) -> Result<usize> {
         let n = usize::try_from(self.var()?)
-            .map_err(|_| invalid_pack("RWFP5 count overflows platform"))?;
+            .map_err(|_| invalid_pack("RWFP1 count overflows platform"))?;
         if n > MAX_COUNT {
-            return Err(invalid_pack("RWFP5 count exceeds limit"));
+            return Err(invalid_pack("RWFP1 count exceeds limit"));
         }
         Ok(n)
     }
@@ -611,13 +611,13 @@ impl<'a> Cursor<'a> {
         let x = *self
             .b
             .get(self.p)
-            .ok_or_else(|| invalid_pack("RWFP5 record is truncated"))?;
+            .ok_or_else(|| invalid_pack("RWFP1 record is truncated"))?;
         self.p += 1;
         Ok(x)
     }
     fn finish(&self) -> Result<()> {
         if self.p != self.b.len() {
-            Err(invalid_pack("RWFP5 table has trailing bytes"))
+            Err(invalid_pack("RWFP1 table has trailing bytes"))
         } else {
             Ok(())
         }
@@ -634,18 +634,18 @@ impl Strings {
         let mut v = Vec::with_capacity(n);
         for _ in 0..n {
             let l = usize::try_from(c.var()?)
-                .map_err(|_| invalid_pack("RWFP5 string length overflows"))?;
+                .map_err(|_| invalid_pack("RWFP1 string length overflows"))?;
             if l > MAX_STRING {
-                return Err(invalid_pack("RWFP5 string is too long"));
+                return Err(invalid_pack("RWFP1 string is too long"));
             }
             let end =
                 c.p.checked_add(l)
-                    .ok_or_else(|| invalid_pack("RWFP5 string offset overflows"))?;
+                    .ok_or_else(|| invalid_pack("RWFP1 string offset overflows"))?;
             let s = std::str::from_utf8(
                 c.b.get(c.p..end)
-                    .ok_or_else(|| invalid_pack("RWFP5 string is truncated"))?,
+                    .ok_or_else(|| invalid_pack("RWFP1 string is truncated"))?,
             )
-            .map_err(|e| invalid_pack(format!("RWFP5 string is not UTF-8: {e}")))?
+            .map_err(|e| invalid_pack(format!("RWFP1 string is not UTF-8: {e}")))?
             .to_string();
             c.p = end;
             v.push(s)
@@ -657,7 +657,7 @@ impl Strings {
         self.values
             .get(id as usize)
             .cloned()
-            .ok_or_else(|| invalid_pack("RWFP5 string id is out of range"))
+            .ok_or_else(|| invalid_pack("RWFP1 string id is out of range"))
     }
 }
 
@@ -672,25 +672,25 @@ fn parse_hashes(b: &[u8], s: &Strings) -> Result<Vec<Hash>> {
             d
         } else {
             size.checked_add(d)
-                .ok_or_else(|| invalid_pack("RWFP5 hash size overflows"))?
+                .ok_or_else(|| invalid_pack("RWFP1 hash size overflows"))?
         };
         let scope = match c.byte()? {
             0 => "full_file".into(),
             1 => "track_file".into(),
             255 => s.get(c.u32()?)?,
-            x => return Err(invalid_pack(format!("RWFP5 hash scope {x} is invalid"))),
+            x => return Err(invalid_pack(format!("RWFP1 hash scope {x} is invalid"))),
         };
         let mask = c.byte()?;
         if mask & !15 != 0 {
-            return Err(invalid_pack("RWFP5 hash mask is invalid"));
+            return Err(invalid_pack("RWFP1 hash mask is invalid"));
         }
         let mut next = |width: usize| -> Result<String> {
             let end =
                 c.p.checked_add(width)
-                    .ok_or_else(|| invalid_pack("RWFP5 hash offset overflows"))?;
+                    .ok_or_else(|| invalid_pack("RWFP1 hash offset overflows"))?;
             let x =
                 c.b.get(c.p..end)
-                    .ok_or_else(|| invalid_pack("RWFP5 hash is truncated"))?;
+                    .ok_or_else(|| invalid_pack("RWFP1 hash is truncated"))?;
             c.p = end;
             Ok(x.iter().map(|b| format!("{b:02x}")).collect())
         };
@@ -718,11 +718,11 @@ fn parse_components(b: &[u8], hashes: &[Hash], s: &Strings) -> Result<Vec<PackCo
     for _ in 0..n {
         let h = c.u32()?;
         if h as usize >= hashes.len() {
-            return Err(invalid_pack("RWFP5 component hash id is out of range"));
+            return Err(invalid_pack("RWFP1 component hash id is out of range"));
         }
         let presence = c.byte()?;
         if presence & !7 != 0 {
-            return Err(invalid_pack("RWFP5 component presence mask is invalid"));
+            return Err(invalid_pack("RWFP1 component presence mask is invalid"));
         }
         let filename = if presence & 1 != 0 {
             Some(s.get(c.u32()?)?)
@@ -748,11 +748,11 @@ fn parse_components(b: &[u8], hashes: &[Hash], s: &Strings) -> Result<Vec<PackCo
             5 => PackComponentRole::ContentFile,
             6 => PackComponentRole::DiskSide,
             7 => PackComponentRole::ChildDisc,
-            x => return Err(invalid_pack(format!("RWFP5 component role {x} is invalid"))),
+            x => return Err(invalid_pack(format!("RWFP1 component role {x} is invalid"))),
         };
         let flags = c.byte()?;
         if flags & !3 != 0 {
-            return Err(invalid_pack("RWFP5 component flags are invalid"));
+            return Err(invalid_pack("RWFP1 component flags are invalid"));
         }
         let x = &hashes[h as usize];
         out.push(PackComponent {
@@ -779,7 +779,7 @@ fn parse_owners(b: &[u8], hashes: usize, components: usize) -> Result<Vec<Vec<u3
     let mut c = Cursor::new(b, b"RWO5")?;
     let n = c.count()?;
     if n != hashes {
-        return Err(invalid_pack("RWFP5 owner hash count does not match hashes"));
+        return Err(invalid_pack("RWFP1 owner hash count does not match hashes"));
     }
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
@@ -792,10 +792,10 @@ fn parse_owners(b: &[u8], hashes: usize, components: usize) -> Result<Vec<Vec<u3
                 d
             } else {
                 last.checked_add(d)
-                    .ok_or_else(|| invalid_pack("RWFP5 owner id overflows"))?
+                    .ok_or_else(|| invalid_pack("RWFP1 owner id overflows"))?
             };
             if id as usize >= components || i > 0 && id <= last {
-                return Err(invalid_pack("RWFP5 owner ids are not ascending"));
+                return Err(invalid_pack("RWFP1 owner ids are not ascending"));
             }
             last = id;
             ids.push(id)
@@ -824,13 +824,13 @@ fn validate_owners(
                 || component.sha1 != hash.sha1
                 || component.sha256 != hash.sha256
             {
-                return Err(invalid_pack("RWFP5 owner mapping is invalid"));
+                return Err(invalid_pack("RWFP1 owner mapping is invalid"));
             }
             seen[component_id as usize] = true;
         }
     }
     if seen.iter().any(|value| !value) {
-        return Err(invalid_pack("RWFP5 owners do not cover all components"));
+        return Err(invalid_pack("RWFP1 owners do not cover all components"));
     }
     Ok(())
 }
@@ -849,26 +849,26 @@ fn parse_routes(
         let id = c.u32()?;
         let hash = hashes
             .get(id as usize)
-            .ok_or_else(|| invalid_pack("RWFP5 route hash id is out of range"))?;
+            .ok_or_else(|| invalid_pack("RWFP1 route hash id is out of range"))?;
         let crc = hash
             .crc32
             .as_deref()
             .map(hex_crc)
-            .ok_or_else(|| invalid_pack("RWFP5 routed hash has no crc32"))?;
+            .ok_or_else(|| invalid_pack("RWFP1 routed hash has no crc32"))?;
         if hash.size == 0
             || !owners[id as usize]
                 .iter()
                 .any(|owner| components[*owner as usize].discriminating)
         {
-            return Err(invalid_pack("RWFP5 route references an ineligible hash"));
+            return Err(invalid_pack("RWFP1 route references an ineligible hash"));
         }
         let key = (crc, hash.size, hash.scope.as_str(), id);
         if previous.as_ref().is_some_and(|prior| prior >= &key) {
-            return Err(invalid_pack("RWFP5 route ids are not in key order"));
+            return Err(invalid_pack("RWFP1 route ids are not in key order"));
         }
         previous = Some(key);
         if id as usize >= hashes.len() {
-            return Err(invalid_pack("RWFP5 route hash id is out of range"));
+            return Err(invalid_pack("RWFP1 route hash id is out of range"));
         }
         out.push(id)
     }
@@ -899,7 +899,7 @@ fn parse_routes(
         .collect::<Vec<_>>();
     if out != expected {
         return Err(invalid_pack(
-            "RWFP5 routes do not cover all eligible hashes",
+            "RWFP1 routes do not cover all eligible hashes",
         ));
     }
     Ok(out)
@@ -916,7 +916,7 @@ fn parse_sets(b: &[u8], s: &Strings, provenance: usize) -> Result<Sets> {
         for _ in 0..n {
             let id = c.u32()?;
             if id as usize >= provenance {
-                return Err(invalid_pack("RWFP5 provenance id is out of range"));
+                return Err(invalid_pack("RWFP1 provenance id is out of range"));
             }
             x.push(id);
         }
@@ -931,7 +931,7 @@ fn parse_sets(b: &[u8], s: &Strings, provenance: usize) -> Result<Sets> {
             let id = c.u32()?;
             x.push(id);
             if x.last().copied().unwrap() as usize >= s.values.len() {
-                return Err(invalid_pack("RWFP5 tag string id is out of range"));
+                return Err(invalid_pack("RWFP1 tag string id is out of range"));
             }
         }
         ts.push(x)
@@ -971,7 +971,7 @@ fn parse_games(
         let pset = c.u32()?;
         let tset = c.u32()?;
         if pset as usize >= ps.len() || tset as usize >= ts.len() {
-            return Err(invalid_pack("RWFP5 set id is out of range"));
+            return Err(invalid_pack("RWFP1 set id is out of range"));
         }
         let disc = if bits & 32 != 0 { Some(c.u32()?) } else { None };
         let upstream = if bits & 64 != 0 {
@@ -985,7 +985,7 @@ fn parse_games(
                 6 => UpstreamSource::OpenGood,
                 x => {
                     return Err(invalid_pack(format!(
-                        "RWFP5 upstream source {x} is invalid"
+                        "RWFP1 upstream source {x} is invalid"
                     )));
                 }
             }
@@ -994,9 +994,9 @@ fn parse_games(
         };
         let end = component
             .checked_add(count)
-            .ok_or_else(|| invalid_pack("RWFP5 component range overflows"))?;
+            .ok_or_else(|| invalid_pack("RWFP1 component range overflows"))?;
         if end > all.len() {
-            return Err(invalid_pack("RWFP5 game component range is out of bounds"));
+            return Err(invalid_pack("RWFP1 game component range is out of bounds"));
         }
         let mut components = all[component..end].to_vec();
         for (i, x) in components.iter_mut().enumerate() {
@@ -1030,7 +1030,7 @@ fn parse_games(
     }
     c.finish()?;
     if component != all.len() {
-        return Err(invalid_pack("RWFP5 unused components remain"));
+        return Err(invalid_pack("RWFP1 unused components remain"));
     }
     Ok(out)
 }
@@ -1166,10 +1166,10 @@ mod tests {
             vec![game()],
         )
         .expect("pack encodes");
-        let members = read_members_with_magic(&bytes, PACK_V5_MAGIC, "RWFP5").unwrap();
+        let members = read_members_with_magic(&bytes, PACK_V1_MAGIC, "RWFP1").unwrap();
         let mut members = members.into_iter().collect::<Vec<_>>();
         members.sort_by(|left, right| left.0.cmp(&right.0));
-        let mut corrupt = PACK_V5_MAGIC.to_vec();
+        let mut corrupt = PACK_V1_MAGIC.to_vec();
         corrupt.extend_from_slice(&(members.len() as u32).to_le_bytes());
         for (name, value) in &members {
             let value = if name == "routes.bin" {

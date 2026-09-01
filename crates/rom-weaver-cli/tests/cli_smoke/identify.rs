@@ -5,11 +5,11 @@ use rom_weaver_checksum::identify_pack_types::{
     PackComponent, PackComponentRole, PackGame, UpstreamSource,
 };
 
-fn rwfp5_pack(entries: &[([u8; 4], &str)]) -> Vec<u8> {
-    rwfp5_pack_with_size(entries, 5)
+fn rwfp1_pack(entries: &[([u8; 4], &str)]) -> Vec<u8> {
+    rwfp1_pack_with_size(entries, 5)
 }
 
-fn rwfp5_pack_with_size(entries: &[([u8; 4], &str)], size: u64) -> Vec<u8> {
+fn rwfp1_pack_with_size(entries: &[([u8; 4], &str)], size: u64) -> Vec<u8> {
     let games = entries
         .iter()
         .map(|(crc, name)| PackGame {
@@ -43,18 +43,18 @@ fn rwfp5_pack_with_size(entries: &[([u8; 4], &str)], size: u64) -> Vec<u8> {
             }],
         })
         .collect();
-    rom_weaver_checksum::identify_pack_v5::encode(
+    rom_weaver_checksum::identify_pack_v1::encode(
         "Test System",
         IdentifySource::Libretro,
         "full_file",
         &serde_json::json!([]),
         games,
     )
-    .expect("RWFP5 pack")
+    .expect("RWFP1 pack")
 }
 
 pub(crate) fn identify_pack_with_crc_size(crc32: [u8; 4], size: u64, name: &str) -> Vec<u8> {
-    rwfp5_pack_with_size(&[(crc32, name)], size)
+    rwfp1_pack_with_size(&[(crc32, name)], size)
 }
 
 pub(crate) fn identify_pack_with_sized_entries(entries: &[([u8; 4], u64, &str)]) -> Vec<u8> {
@@ -91,20 +91,20 @@ pub(crate) fn identify_pack_with_sized_entries(entries: &[([u8; 4], u64, &str)])
             }],
         })
         .collect();
-    rom_weaver_checksum::identify_pack_v5::encode(
+    rom_weaver_checksum::identify_pack_v1::encode(
         "Test System",
         IdentifySource::Libretro,
         "full_file",
         &serde_json::json!([]),
         games,
     )
-    .expect("RWFP5 pack")
+    .expect("RWFP1 pack")
 }
 
 /// A pack naming several ROMs by CRC32, for the archive tests where each member
 /// needs its own verdict.
 pub(crate) fn identify_pack_with_entries(entries: &[([u8; 4], &str)]) -> Vec<u8> {
-    rwfp5_pack(entries)
+    rwfp1_pack(entries)
 }
 
 fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name: &str) -> Vec<u8> {
@@ -138,14 +138,14 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
             session: None,
         }],
     };
-    rom_weaver_checksum::identify_pack_v5::encode(
+    rom_weaver_checksum::identify_pack_v1::encode(
         "Test System",
         IdentifySource::Libretro,
         "full_file",
         &serde_json::json!([]),
         vec![game],
     )
-    .expect("RWFP5 pack")
+    .expect("RWFP1 pack")
 }
 
 pub(crate) fn identify_pack_with_crc(crc32: [u8; 4], name: &str) -> Vec<u8> {
@@ -368,7 +368,7 @@ fn identify_matches_a_headerless_variant_inside_gzip() {
     encoder.finish().expect("finish gzip fixture");
     fs::write(
         temp.child("test.pack").path(),
-        rwfp5_pack_with_size(
+        rwfp1_pack_with_size(
             &[(crc32, "Compressed Header Test [!]")],
             payload.len() as u64,
         ),

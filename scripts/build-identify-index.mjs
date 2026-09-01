@@ -16,10 +16,10 @@ const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
 const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-identify-dats");
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
-const PACK_MAGIC_V5 = Buffer.from("RWFP5\0\0\0", "binary");
+const PACK_MAGIC_V1 = Buffer.from("RWFP1\0\0\0", "binary");
 const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v2";
 const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
-export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v5";
+export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
 export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 
 // OpenGood publishes GoodTools cartridge sets as CC0 Logiqx XML DATs. It adds
@@ -466,7 +466,7 @@ export function normalizeAlias(value) {
     .trim();
 }
 
-const usage = () => `Build per-system RWFP5 ROM-identify packs from pinned Libretro DATs.
+const usage = () => `Build per-system RWFP1 ROM-identify packs from pinned Libretro DATs.
 Mapped OpenGood records add legacy variants. index.json and catalog.json are
 written next to the packs.
 
@@ -1316,7 +1316,7 @@ export async function buildPlatformGames(platform, ctx) {
   return { ...paths, manifest: nextManifest, slug, source: "redump" };
 }
 
-function writePack(entries, magic = PACK_MAGIC_V5) {
+function writePack(entries, magic = PACK_MAGIC_V1) {
   const headerBytes =
     magic.length +
     4 +
@@ -1423,7 +1423,7 @@ export async function loadSortedGames(gamesPath) {
   }
   if (skippedOverCaps > 0) {
     console.error(
-      `[identify] skipped ${skippedOverCaps} game record(s) that exceed the RWFP5 reader caps`,
+      `[identify] skipped ${skippedOverCaps} game record(s) that exceed the RWFP1 reader caps`,
     );
   }
   // Codepoint comparison, never localeCompare: ICU collation varies by
@@ -1500,7 +1500,7 @@ function buildStringTable(values) {
 
 function encodeUvarint(value) {
   let remaining = BigInt(value);
-  if (remaining < 0n) throw new Error("RWFP5 variable integer cannot be negative");
+  if (remaining < 0n) throw new Error("RWFP1 variable integer cannot be negative");
   const bytes = [];
   do {
     let byte = Number(remaining & 0x7fn);
@@ -1545,9 +1545,9 @@ function buildRwfp5Tables(platform, source, games) {
   const componentHashes = [];
   for (const game of games) {
     if (game.platform !== platform)
-      throw new Error(`RWFP5 game platform does not match pack: ${game.name}`);
+      throw new Error(`RWFP1 game platform does not match pack: ${game.name}`);
     if (game.source !== source)
-      throw new Error(`RWFP5 game source does not match pack: ${game.name}`);
+      throw new Error(`RWFP1 game source does not match pack: ${game.name}`);
     for (const component of game.components) {
       const scope = component.hashScope ?? "full_file";
       const key = JSON.stringify([
@@ -1771,7 +1771,7 @@ function buildRwfp5Tables(platform, source, games) {
   };
 }
 
-export function buildSystemPackV5(platform, games, source = "libretro") {
+export function buildSystemPackV1(platform, games, source = "libretro") {
   const sharedComponents = markSharedComponents(games);
   const tables = buildRwfp5Tables(platform, source, games);
   const manifest = {
@@ -1795,7 +1795,7 @@ export function buildSystemPackV5(platform, games, source = "libretro") {
       ...tables.members,
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest), "utf8") },
     ],
-    PACK_MAGIC_V5,
+    PACK_MAGIC_V1,
   );
   return {
     componentCount: tables.componentCount,
@@ -1878,10 +1878,10 @@ async function readPlatformGames(platform, options, paths) {
   };
 }
 
-async function writeSystemPackV5(platform, gamesInfo, options) {
-  console.error(`[identify] ${platform}: building RWFP5 pack`);
+async function writeSystemPackV1(platform, gamesInfo, options) {
+  console.error(`[identify] ${platform}: building RWFP1 pack`);
   const games = gamesInfo.games;
-  const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV5(
+  const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV1(
     platform,
     games,
     gamesInfo.source,
@@ -1894,7 +1894,7 @@ async function writeSystemPackV5(platform, gamesInfo, options) {
     platform,
     slug: gamesInfo.slug,
     source: gamesInfo.source,
-    packFormat: "RWFP5",
+    packFormat: "RWFP1",
     file: fileName,
     rawBytes: pack.length,
     sha256: crypto.createHash("sha256").update(pack).digest("hex"),
@@ -1973,7 +1973,7 @@ export function buildCatalogPlatforms(systems) {
       source: system.source,
       mediaProfiles: [mediaProfileFor(system.platform, system.source)],
       packSlug: system.slug,
-      packFormat: system.packFormat ?? "RWFP5",
+      packFormat: system.packFormat ?? "RWFP1",
       canonicalizationVersion: 1,
     };
     if (system.sha256) entry.packSha256 = system.sha256;
@@ -2031,7 +2031,7 @@ export async function main(argv = process.argv.slice(2)) {
   const systems = [];
   for (const platform of selected) {
     const games = await readPlatformGames(platform, options, paths);
-    systems.push(await writeSystemPackV5(platform, games, options));
+    systems.push(await writeSystemPackV1(platform, games, options));
   }
 
   // The catalog always lists every configured platform. The pack itself may be
@@ -2050,7 +2050,7 @@ export async function main(argv = process.argv.slice(2)) {
         platform,
         slug,
         source: LIBRETRO_PLATFORM_PATHS[platform] ? "libretro" : "opengood",
-        packFormat: "RWFP5",
+        packFormat: "RWFP1",
       },
     );
   }

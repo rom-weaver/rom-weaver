@@ -13,7 +13,7 @@ import {
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
   buildCatalogPlatforms,
-  buildSystemPackV5,
+  buildSystemPackV1,
   extractGoodToolsDumpTags,
   main,
   mediaProfileFor,
@@ -93,7 +93,7 @@ function writeCachedDat(cacheDir, source, revision, datFile, bytes) {
 }
 
 function parsePack(bytes) {
-  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP5\0\0\0");
+  assert.equal(bytes.subarray(0, 8).toString("binary"), "RWFP1\0\0\0");
   const count = bytes.readUInt32LE(8);
   let cursor = 12;
   const directory = [];
@@ -221,13 +221,13 @@ test("family variants resolve to their shared pack", () => {
       platform: "Nintendo - Nintendo 64",
       slug: "nintendo-nintendo-64",
       source: "libretro",
-      packFormat: "RWFP5",
+      packFormat: "RWFP1",
     },
   ]);
   assert.ok(entry.aliases.includes("nintendo nintendo 64dd"));
 });
 
-test("the builder emits deterministic mixed and fallback-only RWFP5 packs", async () => {
+test("the builder emits deterministic mixed and fallback-only RWFP1 packs", async () => {
   const work = tempDir("mixed");
   const cacheDir = join(work, "cache");
   const outDir = join(work, "out");
@@ -260,7 +260,7 @@ test("the builder emits deterministic mixed and fallback-only RWFP5 packs", asyn
   const nes = parsePack(readFileSync(join(outDir, "nintendo-nintendo-entertainment-system.pack")));
   const manifest = JSON.parse(nes.get("manifest.json").toString("utf8"));
   assert.equal(manifest.source, "libretro");
-  assert.equal(manifest.format, "rom-weaver-identify-system-pack-v5");
+  assert.equal(manifest.format, "rom-weaver-identify-system-pack-v1");
   assert.equal(manifest.generationDate, IDENTIFY_GENERATION_DATE);
   for (const name of [
     "strings.bin",
@@ -314,7 +314,7 @@ test("the builder emits deterministic mixed and fallback-only RWFP5 packs", asyn
   }
 });
 
-test("RWFP5 rejects games outside the scoped pack", () => {
+test("RWFP1 rejects games outside the scoped pack", () => {
   const game = {
     name: "Title",
     platform: NES,
@@ -322,11 +322,11 @@ test("RWFP5 rejects games outside the scoped pack", () => {
     components: [],
   };
   assert.throws(
-    () => buildSystemPackV5("Other", [game]),
+    () => buildSystemPackV1("Other", [game]),
     /game platform does not match pack/u,
   );
   assert.throws(
-    () => buildSystemPackV5(NES, [{ ...game, source: "opengood" }]),
+    () => buildSystemPackV1(NES, [{ ...game, source: "opengood" }]),
     /game source does not match pack/u,
   );
 });

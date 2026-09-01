@@ -1,4 +1,4 @@
-//! Shared RWFP5 container validation and dispatch.
+//! Shared RWFP1 container validation and dispatch.
 
 use std::collections::HashMap;
 
@@ -6,17 +6,17 @@ use rom_weaver_core::{Result, RomWeaverError};
 
 #[derive(Debug)]
 pub enum IdentifyPackFile {
-    V5(crate::identify_pack_v5::ArtifactPack),
+    V1(crate::identify_pack_v1::ArtifactPack),
 }
 
 impl IdentifyPackFile {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
-        if bytes.starts_with(crate::identify_pack_v5::PACK_V5_MAGIC) {
-            return Ok(Self::V5(crate::identify_pack_v5::ArtifactPack::parse(
+        if bytes.starts_with(crate::identify_pack_v1::PACK_V1_MAGIC) {
+            return Ok(Self::V1(crate::identify_pack_v1::ArtifactPack::parse(
                 bytes,
             )?));
         }
-        Err(invalid_pack("pack magic does not match RWFP5"))
+        Err(invalid_pack("pack magic does not match RWFP1"))
     }
 }
 

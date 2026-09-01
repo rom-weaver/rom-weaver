@@ -142,7 +142,7 @@ match a file that is stored slightly differently."
         command(
             about = "Identify a ROM title from its checksums",
             long_about = "\
-Identify a ROM title from its checksums and local RWFP5 database packs.
+Identify a ROM title from its checksums and local RWFP1 database packs.
 
 Archives are opened automatically. The command checks the raw ROM and its
 common header and byte-order variants. Repeat --database to search more than

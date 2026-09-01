@@ -1,13 +1,13 @@
 # ROM identify data
 
-ROMWeaver builds deterministic RWFP5 packs from pinned Libretro and OpenGood data. Native packages and the webapp use the same Brotli assets.
+ROMWeaver builds deterministic RWFP1 packs from pinned Libretro and OpenGood data. Native packages and the webapp use the same Brotli assets.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Build-time data](#build-time-data)
 - [Source policy](#source-policy)
-- [RWFP5 records](#rwfp5-records)
+- [RWFP1 records](#rwfp1-records)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Determinism and provenance](#determinism-and-provenance)
@@ -41,11 +41,11 @@ The deduplication key contains the hash algorithm, normalized hash, file size, a
 
 OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
-## RWFP5 records
+## RWFP1 records
 
-Every built-in and imported pack uses RWFP5. The reader accepts only RWFP5.
+Every built-in and imported pack uses RWFP1. The reader accepts only RWFP1.
 
-RWFP5 stores strings, hashes, components, games, owners, routes, and sets in variable-width binary tables. Hash sizes and sorted owner IDs use deltas. Count-prefixed lists replace cumulative offsets. Components and routes refer to one shared hash record.
+RWFP1 stores strings, hashes, components, games, owners, routes, and sets in variable-width binary tables. Hash sizes and sorted owner IDs use deltas. Count-prefixed lists replace cumulative offsets. Components and routes refer to one shared hash record.
 
 The pack manifest owns the platform and source. Game records do not repeat them. Component ordinals are their positions in each game and are reconstructed during decoding.
 

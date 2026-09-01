@@ -640,7 +640,7 @@ pub struct IdentifyCommand {
             short = 'd',
             long = "database",
             value_name = "PACK",
-            help = "RWFP5 identify pack to search instead of the built-in data (repeatable)"
+            help = "RWFP1 identify pack to search instead of the built-in data (repeatable)"
         )
     )]
     #[serde(default)]
@@ -770,7 +770,7 @@ pub struct IngestCommand {
             long = "database",
             value_name = "PACK",
             action = ArgAction::Append,
-            help = "RWFP5 identify pack to use for ROM titles (repeatable; native defaults to built-in OpenGood data)"
+            help = "RWFP1 identify pack to use for ROM titles (repeatable; native defaults to built-in OpenGood data)"
         )
     )]
     #[serde(default)]

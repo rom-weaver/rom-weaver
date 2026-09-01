@@ -45,14 +45,14 @@ const identifyPack = () => {
     [
       "manifest.json",
       encoder.encode(
-        '{"format":"rom-weaver-identify-system-pack-v5","platform":"Test System","source":"libretro","canonicalizationProfile":"full_file","canonicalizationVersion":1,"provenance":[]}',
+        '{"format":"rom-weaver-identify-system-pack-v1","platform":"Test System","source":"libretro","canonicalizationProfile":"full_file","canonicalizationVersion":1,"provenance":[]}',
       ),
     ],
   ];
   const directory = members.map(([name, bytes]) =>
     concat(u16(name.length), u64(bytes.byteLength), encoder.encode(name)),
   );
-  return concat(encoder.encode("RWFP5\0\0\0"), u32(members.length), ...directory, ...members.map(([, bytes]) => bytes));
+  return concat(encoder.encode("RWFP1\0\0\0"), u32(members.length), ...directory, ...members.map(([, bytes]) => bytes));
 };
 
 describe("ROM identify WASM command", () => {

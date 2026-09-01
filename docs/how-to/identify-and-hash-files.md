@@ -43,7 +43,7 @@ Use a locally built pack instead of the built-in data:
 rom-weaver identify --input game.iso --database playstation.pack
 ```
 
-Repeat `--database` to search more packs. `--database` accepts RWFP5 packs.
+Repeat `--database` to search more packs. `--database` accepts RWFP1 packs.
 
 ## Install the default identify data
 
