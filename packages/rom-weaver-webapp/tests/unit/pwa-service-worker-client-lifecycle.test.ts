@@ -143,7 +143,9 @@ const createHarness = ({
       if (getRegistrationsError) throw getRegistrationsError;
       return registrations;
     }),
-    ...(ready === "missing" ? {} : { ready: ready === "never" ? new Promise<FakeRegistration>(() => {}) : ready }),
+    ...(ready === "missing"
+      ? {}
+      : { ready: ready === "never" ? new Promise<FakeRegistration>(() => undefined) : ready }),
   };
   const states: Array<ReturnType<typeof createServiceWorkerCacheState>> = [];
   let registerOptions: RegisterOptions | undefined;

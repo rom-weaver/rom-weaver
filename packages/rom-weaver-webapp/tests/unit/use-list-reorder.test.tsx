@@ -76,14 +76,14 @@ const Harness = ({
         }
       }}
     >
-      {Array.from({ length: count }, (_, index) => {
+      {Array.from({ length: count }, (_, index) => `row-${index}`).map((rowKey, index) => {
         const row = rowProps(index);
         return (
           <div
             className={`row ${row.className ?? ""}`}
             data-index={index}
             data-transform={row.style?.transform ?? ""}
-            key={index}
+            key={rowKey}
             ref={(element) => {
               if (element) applyRect(element, () => rectFor(index));
               if (index === skipRowRef) return;
