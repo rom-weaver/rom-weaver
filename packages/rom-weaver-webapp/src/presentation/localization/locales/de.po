@@ -120,6 +120,11 @@ msgstr "und die Dateien fürs Archiv verkleinern —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.app"
 msgstr "App"
 
@@ -390,6 +395,16 @@ msgstr "Protokoll filtern"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Suchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Werkzeug, Anleitung oder Einstellung finden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Reihenfolge korrigieren"
 
@@ -397,6 +412,11 @@ msgstr "Reihenfolge korrigieren"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "ROM-Header korrigieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -567,6 +587,11 @@ msgstr "Keine Offline-Dateien sind zwischengespeichert."
 #: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "Keine wählbare Datei gefunden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nichts passt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -810,6 +835,11 @@ msgstr "Bereiche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindSetting"
+msgstr "Einstellung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Einstellungen"
 
@@ -982,6 +1012,11 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Werkzeug"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

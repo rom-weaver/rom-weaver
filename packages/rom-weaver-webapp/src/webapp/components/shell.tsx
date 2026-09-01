@@ -12,14 +12,17 @@ import {
   PackageCheck,
   Palette,
   ScrollText,
+  Search,
   Settings,
   SunMedium,
   X,
 } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
+import { FindPalette } from "./find-palette.tsx";
+import type { FindAction } from "../find-index.ts";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
@@ -1087,6 +1090,7 @@ const Masthead = ({
   onOpenStorage,
   onPreloadLog,
   onOpenSettings,
+  onOpenSettingsField,
   onOpenThreads,
   onPreloadSettings,
   tabsControlPanels = true,
@@ -1117,6 +1121,8 @@ const Masthead = ({
   onOpenStorage?: () => void;
   onPreloadLog?: () => void;
   onOpenSettings: () => void;
+  /** Find's deep link into one settings field; falls back to plain Settings. */
+  onOpenSettingsField?: (fieldId: string) => void;
   /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
   onOpenThreads?: () => void;
   onPreloadSettings?: () => void;
@@ -1141,6 +1147,45 @@ const Masthead = ({
   const [utilityViaKeyboard, setUtilityViaKeyboard] = useState(false);
   const desktopMoreRef = useRef<HTMLButtonElement | null>(null);
   const mobileMoreRef = useRef<HTMLButtonElement | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findPlacement, setFindPlacement] = useState<"desktop" | "mobile">("desktop");
+  const desktopFindRef = useRef<HTMLButtonElement | null>(null);
+  const mobileFindRef = useRef<HTMLButtonElement | null>(null);
+  const activeFindRef = findPlacement === "mobile" ? mobileFindRef : desktopFindRef;
+  const findLabel = localizerFindLabel(localizer);
+  const findSources = useMemo(() => ({ donateHref, githubHref, tabs }), [donateHref, githubHref, tabs]);
+  const closeFind = useCallback(() => setFindOpen(false), []);
+  const toggleFind = (placement: "desktop" | "mobile") => {
+    setFindPlacement(placement);
+    setUtilityOpen(false);
+    setFindOpen((open) => !open);
+  };
+  const onFindAction = (action: FindAction) => {
+    if (action.type === "view") onSelectTab(action.view);
+    else if (action.type === "settings") {
+      if (action.fieldId && onOpenSettingsField) onOpenSettingsField(action.fieldId);
+      else onOpenSettings();
+    } else if (action.type === "status") onOpenStatus();
+    else if (action.type === "storage") (onOpenStorage ?? onOpenLog)();
+    else if (action.type === "logs") onOpenLog();
+    else if (action.type === "changelog") onOpenChangelog();
+    else if (action.type === "external") openExternalFromFind(action.href, confirmExternalNavigation);
+  };
+  // ⌘K / Ctrl+K from anywhere; the trigger that owns focus return is the one
+  // the current layout shows, which the dock threshold decides.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey || event.key.toLowerCase() !== "k") return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      event.preventDefault();
+      const desktopVisible = !!desktopFindRef.current?.offsetParent;
+      setFindPlacement(desktopVisible ? "desktop" : "mobile");
+      setUtilityOpen(false);
+      setFindOpen((open) => !open);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
   const toolsRef = useRef<HTMLDivElement | null>(null);
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
@@ -1161,6 +1206,7 @@ const Masthead = ({
   const toggleUtility = (placement: "desktop" | "mobile", viaKeyboard: boolean) => {
     setUtilityPlacement(placement);
     setUtilityViaKeyboard(viaKeyboard);
+    setFindOpen(false);
     setUtilityOpen((open) => !open);
   };
   const closeUtility = () => {
@@ -1275,34 +1321,58 @@ const Masthead = ({
           onSelect={onSelectTab}
           tabs={tabs}
           trailing={
-            <MoreMenu
-              autoFocusFirst={utilityViaKeyboard}
-              buttonClassName="mode-more"
-              className="desktop-more"
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
-              localizer={localizer}
-              menuId="more-menu"
-              moreLabel={moreLabel}
-              onClose={closeUtility}
-              onOpenChangelog={onOpenChangelog}
-              onOpenLog={onOpenLog}
-              onOpenSettings={onOpenSettings}
-              onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              moreTabs={moreTabs}
-              onOpenWorkflowTab={onSelectTab}
-              onPreloadLog={onPreloadLog}
-              onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
-              open={utilityOpen && utilityPlacement === "desktop"}
-              renderMenu={utilityOpen && utilityPlacement === "desktop"}
-              runtimeState={runtimeState}
-              runtimePercent={runtimePercent}
-              toolsEnabled={betaToolsEnabled}
-              triggerRef={desktopMoreRef}
-            />
+            <>
+              <span className="desktop-find">
+                <button
+                  aria-controls="find-palette"
+                  aria-expanded={findOpen && findPlacement === "desktop"}
+                  aria-haspopup="dialog"
+                  className="mode-more mode-find"
+                  onClick={() => toggleFind("desktop")}
+                  ref={desktopFindRef}
+                  type="button"
+                >
+                  <Search aria-hidden="true" />
+                  <span className="tool-text">{findLabel}</span>
+                </button>
+              </span>
+              <MoreMenu
+                autoFocusFirst={utilityViaKeyboard}
+                buttonClassName="mode-more"
+                className="desktop-more"
+                confirmExternalNavigation={confirmExternalNavigation}
+                donateHref={donateHref}
+                githubHref={githubHref}
+                localizer={localizer}
+                menuId="more-menu"
+                moreLabel={moreLabel}
+                onClose={closeUtility}
+                onOpenChangelog={onOpenChangelog}
+                onOpenLog={onOpenLog}
+                onOpenSettings={onOpenSettings}
+                onOpenStatus={onOpenStatus}
+                onOpenStorage={onOpenStorage ?? onOpenLog}
+                moreTabs={moreTabs}
+                onOpenWorkflowTab={onSelectTab}
+                onPreloadLog={onPreloadLog}
+                onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
+                open={utilityOpen && utilityPlacement === "desktop"}
+                renderMenu={utilityOpen && utilityPlacement === "desktop"}
+                runtimeState={runtimeState}
+                runtimePercent={runtimePercent}
+                toolsEnabled={betaToolsEnabled}
+                triggerRef={desktopMoreRef}
+              />
+            </>
           }
+        />
+        <FindPalette
+          localizer={localizer}
+          onAction={onFindAction}
+          onClose={closeFind}
+          open={findOpen}
+          sources={findSources}
+          triggerRef={activeFindRef}
         />
         <div className="masthead-tools" ref={toolsRef}>
           <button
@@ -1386,31 +1456,45 @@ const Masthead = ({
         controlsPanels={tabsControlPanels}
         current={currentTab}
         mobileActions={
-          <MoreMenu
-            buttonClassName="dock-action"
-            className="mobile-more"
-            confirmExternalNavigation={confirmExternalNavigation}
-            donateHref={donateHref}
-            githubHref={githubHref}
-            localizer={localizer}
-            menuId="more-menu"
-            moreLabel={moreLabel}
-            onClose={closeUtility}
-            onOpenChangelog={onOpenChangelog}
-            onOpenLog={onOpenLog}
-            onOpenStatus={onOpenStatus}
-            onOpenStorage={onOpenStorage ?? onOpenLog}
-            moreTabs={moreTabs}
-            onOpenWorkflowTab={onSelectTab}
-            onPreloadLog={onPreloadLog}
-            onToggle={(viaKeyboard) => toggleUtility("mobile", viaKeyboard)}
-            open={utilityOpen && utilityPlacement === "mobile"}
-            renderMenu={false}
-            runtimeState={runtimeState}
-            runtimePercent={runtimePercent}
-            toolsEnabled={betaToolsEnabled}
-            triggerRef={mobileMoreRef}
-          />
+          <>
+            <button
+              aria-controls="find-palette"
+              aria-expanded={findOpen && findPlacement === "mobile"}
+              aria-haspopup="dialog"
+              className="dock-action dock-find"
+              onClick={() => toggleFind("mobile")}
+              ref={mobileFindRef}
+              type="button"
+            >
+              <Search aria-hidden="true" />
+              <span>{findLabel}</span>
+            </button>
+            <MoreMenu
+              buttonClassName="dock-action"
+              className="mobile-more"
+              confirmExternalNavigation={confirmExternalNavigation}
+              donateHref={donateHref}
+              githubHref={githubHref}
+              localizer={localizer}
+              menuId="more-menu"
+              moreLabel={moreLabel}
+              onClose={closeUtility}
+              onOpenChangelog={onOpenChangelog}
+              onOpenLog={onOpenLog}
+              onOpenStatus={onOpenStatus}
+              onOpenStorage={onOpenStorage ?? onOpenLog}
+              moreTabs={moreTabs}
+              onOpenWorkflowTab={onSelectTab}
+              onPreloadLog={onPreloadLog}
+              onToggle={(viaKeyboard) => toggleUtility("mobile", viaKeyboard)}
+              open={utilityOpen && utilityPlacement === "mobile"}
+              renderMenu={false}
+              runtimeState={runtimeState}
+              runtimePercent={runtimePercent}
+              toolsEnabled={betaToolsEnabled}
+              triggerRef={mobileMoreRef}
+            />
+          </>
         }
         navLabel={navLabel}
         onSelect={onSelectTab}
@@ -1418,6 +1502,19 @@ const Masthead = ({
       />
     </>
   );
+};
+
+const localizerFindLabel = (localizer: Localizer) => localizer.message("ui.find.label");
+
+/** Find's external rows open like the footer links: guarded when a job is running. */
+const openExternalFromFind = (href: string, confirmExternalNavigation?: (href: string) => Promise<boolean>) => {
+  if (!confirmExternalNavigation) {
+    window.open(href, "_blank", "noopener,noreferrer");
+    return;
+  }
+  void confirmExternalNavigation(href).then((accepted) => {
+    if (accepted) window.open(href, "_blank", "noopener,noreferrer");
+  });
 };
 
 const SiteFooter = ({

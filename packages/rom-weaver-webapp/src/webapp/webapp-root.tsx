@@ -648,6 +648,7 @@ function WebappRoot({
             onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
+            onOpenSettingsField={openSettingsTab}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}

@@ -120,6 +120,11 @@ msgstr "y redúcelos para almacenarlos —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.app"
 msgstr "App"
 
@@ -390,6 +395,16 @@ msgstr "Filtrar el registro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Buscar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Buscar una herramienta, guía o ajuste"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Corregir orden"
 
@@ -397,6 +412,11 @@ msgstr "Corregir orden"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Corregir cabecera ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Guía"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -567,6 +587,11 @@ msgstr "No hay archivos sin conexión en caché."
 #: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No se encontró ningún archivo seleccionable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nada coincide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -810,6 +835,11 @@ msgstr "Secciones"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindSetting"
+msgstr "Ajuste"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Ajustes"
 
@@ -982,6 +1012,11 @@ msgstr "hilos"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Hilos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Herramienta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

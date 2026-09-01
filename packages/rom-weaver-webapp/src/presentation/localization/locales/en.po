@@ -120,6 +120,11 @@ msgstr "and shrink them for storage —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.app"
 msgstr "App"
 
@@ -390,6 +395,16 @@ msgstr "Filter log"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Find"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Find a tool, guide, or setting"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Fix order"
 
@@ -397,6 +412,11 @@ msgstr "Fix order"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Fix ROM header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -567,6 +587,11 @@ msgstr "No offline files are cached."
 #: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No selectable file was found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nothing matches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -810,6 +835,11 @@ msgstr "Sections"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindSetting"
+msgstr "Setting"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Settings"
 
@@ -982,6 +1012,11 @@ msgstr "threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

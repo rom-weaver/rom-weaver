@@ -1,0 +1,177 @@
+/* ═══ Find ═══
+   One box for tools, settings, app surfaces and guides. Its trigger is a
+   button in the rail and a dock action on phones; the palette itself is one
+   element that the dock threshold repositions: a dropdown under the masthead
+   on desktop, a sheet above the dock on phones. */
+.rw-app .find-palette {
+  position: absolute;
+  inset-block-start: calc(100% + var(--sp-xs));
+  inset-inline-start: 50%;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  inline-size: min(520px, calc(100vw - 24px));
+  max-block-size: min(70vh, 32rem);
+  padding: var(--sp-xs);
+  background: var(--plate);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-m);
+  box-shadow: var(--overlay-shadow);
+  transform: translateX(-50%);
+  animation: drop-in 0.16s var(--ease);
+}
+.rw-app .find-box {
+  display: flex;
+  flex: none;
+  gap: var(--sp-s);
+  align-items: center;
+  padding: 0 10px;
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .find-box svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--ink-3);
+}
+.rw-app .find-input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 44px;
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  outline: none;
+  background: transparent;
+  border: 0;
+}
+.rw-app .find-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+.rw-app .find-key {
+  flex: none;
+  padding: 1px 5px;
+  font-family: inherit;
+  font-size: 0.62rem;
+  color: var(--ink-3);
+  border: 1px solid var(--seam);
+  border-radius: 4px;
+}
+.rw-app .find-empty {
+  padding: 12px 10px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+.rw-app .find-results {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-xs) 0 0;
+  overflow: auto;
+}
+.rw-app .find-option {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr) auto;
+  gap: var(--sp-s);
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: 40px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+}
+.rw-app .find-option.is-active {
+  color: var(--ink);
+  background: var(--well);
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .find-option:active {
+  color: var(--ink);
+  background: var(--plate-2);
+}
+.rw-app .find-kind {
+  font-size: 0.58rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.rw-app .find-kind.is-tool {
+  color: var(--thread-text);
+}
+.rw-app .find-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-app .find-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+/* The rail trigger is a sibling of More: nav level, never a tab. */
+.rw-app .desktop-find {
+  position: relative;
+  display: inline-flex;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .find-palette {
+    animation: none;
+  }
+}
+/* ▼ dock threshold, shared with masthead.css: the palette becomes a sheet. The
+   input sits at the sheet's bottom edge, in the thumb zone, and the results
+   stack upward from it so the best match is the row touching the input. */
+@media (max-width: 999px) {
+  .rw-app .desktop-find {
+    display: none;
+  }
+  .rw-app .find-palette {
+    position: fixed;
+    inset-block: auto calc(var(--dock-h) + var(--sp-xs));
+    inset-inline: max(var(--sp-s), var(--safe-l)) max(var(--sp-s), var(--safe-r));
+    flex-direction: column-reverse;
+    inline-size: auto;
+    max-block-size: min(60vh, 28rem);
+    transform: none;
+  }
+  .rw-app .find-box {
+    border-block-start: 1px solid var(--seam);
+    border-block-end: 0;
+  }
+  .rw-app .find-key {
+    display: none;
+  }
+  .rw-app .find-results {
+    flex-direction: column-reverse;
+    padding: 0 0 var(--sp-xs);
+  }
+  /* the dock keeps the tablist's DOM order; only the paint order changes so
+     Find lands dead center in the thumb zone */
+  .rw-app .dock .dock-find {
+    order: 1;
+  }
+  .rw-app .dock .dock-tab[data-mode="test"] {
+    order: 2;
+  }
+  .rw-app .dock .mobile-more {
+    order: 3;
+  }
+}
+@media (min-width: 1000px) {
+  .rw-app .dock-find {
+    display: none;
+  }
+}

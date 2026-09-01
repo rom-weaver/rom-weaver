@@ -22,6 +22,7 @@ import {
   isSettingsFieldDisabled,
   SETTINGS_FIELD_ID_TO_KEY,
   SETTINGS_FIELD_METADATA,
+  SETTINGS_PANEL_SECTIONS,
   SETTINGS_PANEL_FIELD_ORDER,
 } from "./settings/settings-state.ts";
 import type { ValidationState } from "./webapp-state-types.ts";
@@ -49,31 +50,6 @@ type SettingsPanelProps = Omit<SettingsFieldShared, "uiState"> & {
 type FieldRenderProps = SettingsFieldShared & {
   fieldKey: SettingsFieldKey;
 };
-
-const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
-  {
-    fields: ["language", "accent", "byteUnits", "logLevel", "onboardingEnabled", "betaToolsEnabled"],
-    title: "Webapp",
-  },
-  {
-    fields: [
-      "bundlePackage",
-      "postApplyDownloadBehavior",
-      "postApplyTestBehavior",
-      "emulatorSaveStorageEnabled",
-      "fixChecksum",
-      "identifiedOutputName",
-      "requireInputChecksumMatch",
-    ],
-    title: "Behavior",
-  },
-  { fields: ["defaultCompression", "compressionProfile", "threads"], title: "Compression" },
-  {
-    fields: ["zipCodec", "sevenZipCodec", "rvzCodec", "chdCreateCdCodecs", "chdCreateDvdCodecs"],
-    title: "Codecs",
-  },
-  { fields: ["rvzBlockSize"], title: "RVZ" },
-];
 
 // Per-format groups render in the same single-column stack (`.setcols`); the settings
 // groups above them stay full-width in the grouped settings layout.
@@ -497,8 +473,8 @@ const IdentifyPackSettings = () => {
 
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
   const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
-  const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
-  const gridSections = settingsPanelSections.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
+  const fullWidthSections = SETTINGS_PANEL_SECTIONS.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
+  const gridSections = SETTINGS_PANEL_SECTIONS.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
   return (
     <div className="settings-panel">
       {fullWidthSections.map((section) => (
