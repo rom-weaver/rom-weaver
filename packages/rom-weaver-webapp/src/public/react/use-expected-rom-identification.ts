@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
@@ -49,16 +50,9 @@ const useExpectedRomIdentification = (checks: ParsedBundleChecks | undefined, en
     setIdentification(undefined);
     void (async () => {
       try {
-        const { identifyChecks } = await import("../../platform/browser/browser-api.ts");
-        const current = latestChecks.current;
-        const result = await identifyChecks(
-          { checksums: current?.checksums || {}, ...(typeof current?.size === "number" ? { size: current.size } : {}) },
-          { signal: controller.signal },
-        );
+        const found = await lookupExpectedRom(latestChecks.current || {}, { signal: controller.signal });
         if (!live) return;
-        const candidate = result.candidates[0];
-        if (!candidate || candidate.status === "unavailable" || !candidate.matches.length) return;
-        setIdentification({ matches: candidate.matches, status: candidate.status });
+        if (found && found.status !== "unavailable") setIdentification(found);
       } catch {
         // A checksum nobody can look up is not an apply error; the card still
         // renders the check's own values.

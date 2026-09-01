@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import { identifyHashAlgorithm } from "../../types/identify.ts";
@@ -59,46 +60,27 @@ const useRomHashLookup = (messages: { invalid: string; invalidChars: string }) =
     abortRef.current = controller;
     setState((current) => ({ ...current, busy: true, error: "", result: undefined, stage: "" }));
     try {
-      const { identifyChecks } = await import("../../platform/browser/browser-api.ts");
-      const result = await identifyChecks(
-        { checksums: { [algorithm]: hash } },
-        {
-          onProgress: (progress) => {
-            if (runRef.current !== run) return;
-            setState((current) => ({ ...current, stage: progress.message || progress.label || "" }));
-          },
-          signal: controller.signal,
+      const checks = { checksums: { [algorithm]: hash } };
+      const found = await lookupExpectedRom(checks, {
+        onProgress: (progress) => {
+          if (runRef.current !== run) return;
+          setState((current) => ({ ...current, stage: progress.message || progress.label || "" }));
         },
-      );
+        signal: controller.signal,
+      });
       if (runRef.current !== run) return;
-      const candidate = result.candidates[0];
-      if (!candidate || candidate.status === "unavailable") {
+      if (!found || found.status === "unavailable") {
         setState((current) => ({
           ...current,
           busy: false,
-          error: "The identification data is not available on this device, so this checksum cannot be looked up.",
+          error: found
+            ? "The identification data is not available on this device, so this checksum cannot be looked up."
+            : "No ROM in the identification data has this checksum.",
           stage: "",
         }));
         return;
       }
-      if (!candidate.matches.length) {
-        setState((current) => ({
-          ...current,
-          busy: false,
-          error: "No ROM in the identification data has this checksum.",
-          stage: "",
-        }));
-        return;
-      }
-      setState((current) => ({
-        ...current,
-        busy: false,
-        stage: "",
-        result: {
-          checks: { checksums: { [algorithm]: hash } },
-          identification: { matches: candidate.matches, status: candidate.status },
-        },
-      }));
+      setState((current) => ({ ...current, busy: false, stage: "", result: { checks, identification: found } }));
     } catch (error) {
       if (runRef.current !== run || controller.signal.aborted) return;
       setState((current) => ({
