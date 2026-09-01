@@ -370,3 +370,7 @@ impl CliApp {
         )
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/patch_apply_dcp.rs"]
+mod tests;
