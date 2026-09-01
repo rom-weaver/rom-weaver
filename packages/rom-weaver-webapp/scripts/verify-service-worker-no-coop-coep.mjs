@@ -354,9 +354,9 @@ try {
         .evaluate(async () =>
           (
             await Promise.all(
-              (
-                await caches.keys()
-              ).map(async (name) => (await (await caches.open(name)).keys()).map((request) => request.url)),
+              (await caches.keys()).map(async (name) =>
+                (await (await caches.open(name)).keys()).map((request) => request.url),
+              ),
             )
           )
             .flat()
