@@ -862,3 +862,146 @@ fn apply_zero_fills_target_bytes_past_the_end_of_a_shorter_source() {
         .expect("apply");
     assert_eq!(fs::read(output_path).expect("output"), target);
 }
+
+#[test]
+fn apply_without_source_checks_falls_back_to_the_target_size_and_to_equal_sizes() {
+    let temp = TestDir::new();
+    let relaxed = |threads: usize| {
+        test_context_with_threads(&temp, threads)
+            .with_patch_checksum_validation(PatchChecksumValidation::Ignore)
+    };
+
+    // Input length matches the declared target, so the reverse direction wins.
+    let reverse_patch = temp.child("reverse.ups");
+    let reverse_input = temp.child("reverse-input.bin");
+    let reverse_output = temp.child("reverse-output.bin");
+    let patch = create_ups_patch_bytes(b"ABCD", b"ABCDEFGHIJ")
+        .expect("patch")
+        .bytes;
+    fs::write(&reverse_patch, &patch).expect("patch fixture");
+    fs::write(&reverse_input, b"0123456789").expect("input fixture");
+    UpsPatchHandler::new(&UPS)
+        .apply(
+            &PatchApplyRequest {
+                input: reverse_input,
+                patches: vec![reverse_patch],
+                output: reverse_output.clone(),
+            },
+            &relaxed(1),
+        )
+        .expect("reverse apply with checksum validation off");
+    assert_eq!(fs::read(reverse_output).expect("output").len(), 4);
+
+    // Neither length matches, but the patch declares equal source and target
+    // sizes, so the forward direction is assumed.
+    let equal_patch = temp.child("equal.ups");
+    let equal_input = temp.child("equal-input.bin");
+    let equal_output = temp.child("equal-output.bin");
+    let patch = create_ups_patch_bytes(b"ABCDEFGH", b"IJKLMNOP")
+        .expect("patch")
+        .bytes;
+    fs::write(&equal_patch, &patch).expect("patch fixture");
+    fs::write(&equal_input, b"12345").expect("input fixture");
+    UpsPatchHandler::new(&UPS)
+        .apply(
+            &PatchApplyRequest {
+                input: equal_input,
+                patches: vec![equal_patch],
+                output: equal_output.clone(),
+            },
+            &relaxed(1),
+        )
+        .expect("equal-size apply with checksum validation off");
+    assert_eq!(fs::read(equal_output).expect("output").len(), 8);
+}
+
+#[test]
+fn apply_rejects_a_change_past_the_output_length() {
+    let temp = TestDir::new();
+    let source = b"ABCDEFGH";
+    let target = b"ABCDEFGH";
+
+    // The record starts inside the file but its four xor bytes run past the end.
+    let mut records = Vec::new();
+    super::push_varint(&mut records, 6);
+    records.extend_from_slice(&[1, 2, 3, 4]);
+    records.push(0);
+    let patch = build_ups_patch(source, target, &records);
+
+    // Both the single-threaded and the pooled apply path must refuse it.
+    for threads in [1usize, 4] {
+        let source_path = temp.child(&format!("oob-source-{threads}.bin"));
+        let patch_path = temp.child(&format!("oob-{threads}.ups"));
+        let output_path = temp.child(&format!("oob-output-{threads}.bin"));
+        fs::write(&source_path, source).expect("source fixture");
+        fs::write(&patch_path, &patch).expect("patch fixture");
+
+        let error = UpsPatchHandler::new(&UPS)
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context_with_threads(&temp, threads),
+            )
+            .expect_err("an out-of-bounds change must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("UPS change exceeds declared patch file bounds"),
+            "unexpected error at {threads} thread(s): {error}"
+        );
+    }
+}
+
+#[test]
+fn create_in_parallel_zero_fills_past_the_end_of_a_shorter_source() {
+    let temp = TestDir::new();
+    let source_path = temp.child("parallel-grow-source.bin");
+    let target_path = temp.child("parallel-grow-target.bin");
+    let patch_path = temp.child("parallel-grow.ups");
+    let output_path = temp.child("parallel-grow-output.bin");
+
+    // The create scan splits at 4 MiB, so the target must clear two chunk
+    // boundaries for a whole chunk to sit past the end of the source.
+    let source: Vec<u8> = (0..4 * 1024 * 1024 + 1)
+        .map(|index| (index % 251) as u8)
+        .collect();
+    let mut target = source.clone();
+    target.extend((0..4 * 1024 * 1024).map(|index| (index % 97) as u8 | 1));
+
+    fs::write(&source_path, &source).expect("source fixture");
+    fs::write(&target_path, &target).expect("target fixture");
+
+    let handler = UpsPatchHandler::new(&UPS);
+    let report = handler
+        .create(
+            &PatchCreateRequest {
+                original: source_path.clone(),
+                modified: target_path,
+                output: patch_path.clone(),
+                format: "UPS".into(),
+            },
+            &test_context_with_threads(&temp, 4),
+        )
+        .expect("create");
+    assert!(
+        report
+            .thread_execution
+            .expect("thread execution")
+            .used_parallelism
+    );
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 4),
+        )
+        .expect("apply");
+    assert_eq!(fs::read(output_path).expect("output"), target);
+}

@@ -730,3 +730,110 @@ fn validate_warns_when_the_patch_exceeds_the_allocated_space() {
         report.label
     );
 }
+
+fn dldi_create_error(temp: &TestDir, name: &str, original: &[u8], modified: &[u8]) -> String {
+    let original_path = temp.child(&format!("{name}-original.nds"));
+    let modified_path = temp.child(&format!("{name}-modified.nds"));
+    let output_path = temp.child(&format!("{name}.dldi"));
+    fs::write(&original_path, original).expect("original fixture");
+    fs::write(&modified_path, modified).expect("modified fixture");
+
+    DldiPatchHandler::new(&DLDI)
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: output_path,
+                format: "DLDI".into(),
+            },
+            &test_context_with_threads(temp, 1),
+        )
+        .expect_err("create should fail")
+        .to_string()
+}
+
+#[test]
+fn apply_rejects_an_input_slot_that_declares_more_than_the_file_holds() {
+    let temp = TestDir::new();
+    let input_path = temp.child("short-slot.nds");
+    let patch_path = temp.child("short-slot-driver.dldi");
+    let output_path = temp.child("short-slot-output.nds");
+
+    // Keep the slot header but cut the file short of the 4 KiB it advertises.
+    let slot_offset = 0x200;
+    let mut input = build_test_app_with_slot(slot_offset, 12, 0x0200_0000i32, "Default driver");
+    input.truncate(slot_offset + 0x90);
+    fs::write(&input_path, &input).expect("input fixture");
+
+    let patch = build_test_dldi_driver(
+        8,
+        0xBF80_0000u32 as i32,
+        "Test Driver",
+        FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+    );
+    fs::write(&patch_path, &patch).expect("patch fixture");
+
+    let error = DldiPatchHandler::new(&DLDI)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path,
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("a slot larger than the remaining file must be rejected");
+    assert!(
+        error.to_string().contains(
+            "input DLDI section declares 4096 byte(s), but only 144 byte(s) are available"
+        ),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn create_rejects_inputs_whose_dldi_section_moved() {
+    let temp = TestDir::new();
+    let original = build_test_app_with_slot(0x200, 8, 0x0200_0000i32, "Default driver");
+    let modified = build_test_app_with_slot(0x400, 8, 0x0200_0000i32, "Test Driver");
+
+    let error = dldi_create_error(&temp, "moved", &original, &modified);
+    assert!(
+        error.contains("DLDI section moved between inputs"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn create_rejects_a_modified_input_that_differs_outside_the_dldi_section() {
+    let temp = TestDir::new();
+    let original = build_test_app_with_slot(0x200, 8, 0x0200_0000i32, "Default driver");
+    let mut modified = build_test_app_with_slot(0x200, 8, 0x0200_0000i32, "Test Driver");
+    // A byte well before the slot cannot be reproduced by a DLDI patch.
+    modified[0x10] ^= 0xFF;
+
+    let error = dldi_create_error(&temp, "outside", &original, &modified);
+    assert!(
+        error.contains("not representable as a pure DLDI patch over original"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn create_rejects_inputs_without_a_patchable_slot() {
+    let temp = TestDir::new();
+    let with_slot = build_test_app_with_slot(0x200, 8, 0x0200_0000i32, "Default driver");
+    let without_slot = vec![0xCDu8; 0x800];
+
+    let missing_original = dldi_create_error(&temp, "no-original", &without_slot, &with_slot);
+    assert!(
+        missing_original.contains("original input does not contain a patchable DLDI section"),
+        "unexpected error: {missing_original}"
+    );
+
+    let missing_modified = dldi_create_error(&temp, "no-modified", &with_slot, &without_slot);
+    assert!(
+        missing_modified.contains("modified input does not contain a patchable DLDI section"),
+        "unexpected error: {missing_modified}"
+    );
+}
