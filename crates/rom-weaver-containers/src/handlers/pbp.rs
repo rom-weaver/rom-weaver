@@ -1148,3 +1148,7 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         Err(extract_only_create_error(PBP.name))
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/pbp.rs"]
+mod tests;
