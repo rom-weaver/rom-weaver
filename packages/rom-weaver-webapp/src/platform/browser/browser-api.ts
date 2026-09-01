@@ -119,13 +119,28 @@ type BrowserIdentifyHashOptions = {
   signal?: AbortSignal;
 };
 
+/** The checks to identify from: one or more digests plus an optional exact size. */
+type BrowserIdentifyCheck = { checksums: Readonly<Record<string, string>>; size?: number };
+
+const identifyCheckHashes = (check: BrowserIdentifyCheck): string[] =>
+  Object.values(check.checksums)
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
 /**
- * Identify by a bare crc32/md5/sha1 checksum through the `identify --hash`
- * command. A checksum narrows to no platform, so the FULL pack set is loaded;
- * an unloadable database reports `unavailable`, never a false "no match".
+ * Identify from checks alone - a bare crc32/md5/sha1 digest, or the whole rom
+ * check a bundle entry or a patch's source requirement carries - through the
+ * `identify --hash` command. A checksum narrows to no platform, so the FULL
+ * pack set is loaded; an unloadable database reports `unavailable`, never a
+ * false "no match".
  */
-const identifyHash = async (hash: string, options: BrowserIdentifyHashOptions = {}): Promise<ParsedIdentifyResult> => {
-  const normalized = hash.trim().toLowerCase();
+const identifyChecks = async (
+  check: BrowserIdentifyCheck,
+  options: BrowserIdentifyHashOptions = {},
+): Promise<ParsedIdentifyResult> => {
+  const hashes = identifyCheckHashes(check);
+  const normalized = hashes[0] || "";
+  if (!normalized) throw new Error("Identify needs at least one checksum.");
   const workerIo = browserRuntime.workerIo;
   if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
   const { IdentifyDataUnavailableError, loadIdentifyPacks } = await import("./identify-packs.ts");
@@ -157,9 +172,10 @@ const identifyHash = async (hash: string, options: BrowserIdentifyHashOptions = 
     const result = await invokeRomWeaverIdentifyHashWorker(
       {
         databasePaths: staged.map((entry) => entry.filePath),
-        hash: normalized,
+        hash: hashes,
         knownInputPaths: staged.map((entry) => entry.filePath),
         signal: options.signal,
+        ...(typeof check.size === "number" && Number.isFinite(check.size) ? { size: check.size } : {}),
       },
       options.onProgress,
     );
@@ -180,6 +196,10 @@ const identifyHash = async (hash: string, options: BrowserIdentifyHashOptions = 
     await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
   }
 };
+
+/** The single-digest entry point the identify page pastes into. */
+const identifyHash = (hash: string, options: BrowserIdentifyHashOptions = {}): Promise<ParsedIdentifyResult> =>
+  identifyChecks({ checksums: { hash } }, options);
 
 const getIngestOutputBlob = async (
   output: Parameters<NonNullable<typeof browserRuntime.publicOutput>["getBlob"]>[0],
@@ -313,6 +333,7 @@ export {
   CreateWorkflow,
   getCreatePatchFormatCandidates,
   getIngestOutputBlob,
+  identifyChecks,
   identifyHash,
   identifyRom,
   ingestRom,

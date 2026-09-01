@@ -1183,27 +1183,32 @@ const invokeRomWeaverIngestWorker = async (
 const invokeRomWeaverIdentifyHashWorker = async (
   input: {
     databasePaths?: string[];
-    hash: string;
+    hash: string | string[];
     knownInputPaths?: string[];
     logLevel?: LogLevel | string;
     signal?: AbortSignal;
+    /** Exact byte size, narrowing the lookup to records of that size. */
+    size?: number;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
 ): Promise<ParsedIdentifyCommandResult & { timing: ReturnType<typeof getRunResultTiming> }> => {
-  const hash = String(input.hash || "")
-    .trim()
-    .toLowerCase();
-  if (!hash) throw new Error("Identify hash is required");
+  const hash = toTrimmedList(Array.isArray(input.hash) ? input.hash : [input.hash]).map((value) => value.toLowerCase());
+  if (!hash.length) throw new Error("Identify hash is required");
   const database = toTrimmedList(input.databasePaths);
+  // The command contract carries u64 fields as bigint; the run-request
+  // serializer narrows them back to JSON-safe numbers.
+  const size = typeof input.size === "number" && Number.isFinite(input.size) ? Math.floor(input.size) : undefined;
   const command = createRomWeaverCommand("identify", {
     hash,
+    ...(size === undefined ? {} : { size: BigInt(size) }),
     ...(database.length ? { database } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson identify dispatch", {
     command,
     databaseCount: database.length,
     hash,
+    size,
   });
   const result = await runRomWeaverJson(
     command,
@@ -1216,7 +1221,7 @@ const invokeRomWeaverIdentifyHashWorker = async (
     }),
   );
   if (!(result.ok && result.exitCode === 0)) {
-    await throwRomWeaverFailureWithBrowserOutputContext(result, "Identify failed", `identify \`${hash}\``);
+    await throwRomWeaverFailureWithBrowserOutputContext(result, "Identify failed", `identify \`${hash.join(" ")}\``);
   }
   const terminal = getLastEvent(result);
   const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
