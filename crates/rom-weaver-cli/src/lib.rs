@@ -150,7 +150,9 @@ one system pack, or install packs with `identify database` and let the
 detected platform pick the pack. Nothing is uploaded."
         )
     )]
-    Identify(IdentifyCommand),
+    // Boxed: by far the widest command struct, and an unboxed one sets the
+    // size of every `Commands` value the dispatcher moves.
+    Identify(Box<IdentifyCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(

@@ -46,6 +46,8 @@ The webapp precaches the default groups. A user can install a complete optional 
 
 Identification reads only installed application assets. A missing local pack makes identification unavailable. It does not start a network lookup.
 
+A checksum with no file behind it - the expected ROM a bundle or a patch declares - is looked up the same local way. ROMWeaver still sends nothing.
+
 ## Related
 
 - [Identify and hash ROMs from the CLI](../how-to/identify-and-hash-files.md)
