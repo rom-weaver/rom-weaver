@@ -1068,3 +1068,383 @@ fn parse_gdi_file_rejects_inconsistent_track_tables() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- Multi-track create/extract round trips ---------------------------------
+
+fn test_context(temp_root: &Path) -> OperationContext {
+    OperationContext::new(
+        rom_weaver_core::ThreadBudget::Fixed(2),
+        temp_root.to_path_buf(),
+        Arc::new(rom_weaver_core::NoopProgressSink),
+        rom_weaver_core::CancellationToken::new(),
+    )
+}
+
+fn create_request(input: &Path, output: &Path) -> ContainerCreateRequest {
+    ContainerCreateRequest {
+        inputs: vec![input.to_path_buf()],
+        output: output.to_path_buf(),
+        format: "chd".to_string(),
+        codec: None,
+        level: None,
+        parent: None,
+    }
+}
+
+fn extract_request_for(
+    source: &Path,
+    out_dir: &Path,
+    selections: Vec<String>,
+    split_bin: bool,
+) -> ContainerExtractRequest {
+    ContainerExtractRequest {
+        source: source.to_path_buf(),
+        out_dir: out_dir.to_path_buf(),
+        selections,
+        kind_filter: ArchiveEntryKindFilter::default(),
+        containing_archive: None,
+        split_bin,
+        ignore_common_files: false,
+        overwrite: true,
+        parent: None,
+    }
+}
+
+/// A two-track CD fixture (one data track, one audio track) sharing one `.bin`,
+/// with both tracks already aligned to the 4-frame CD boundary so extraction
+/// output equals the source payload byte for byte.
+fn write_two_track_cd_fixture(dir: &Path) -> (PathBuf, Vec<u8>) {
+    let payload = raw_frames(16);
+    write_file(dir, "disc.bin", &payload);
+    let cue = write_file(
+        dir,
+        "disc.cue",
+        concat!(
+            "FILE \"disc.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 01 00:00:08\n",
+        )
+        .as_bytes(),
+    );
+    (cue, payload)
+}
+
+#[test]
+fn extract_cd_writes_a_single_bin_and_a_multi_track_cue() {
+    let dir = scratch_dir("extract-cd-single-bin");
+    let (cue, payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    let report = handler
+        .extract(
+            &extract_request_for(&chd_path, &out_dir, Vec::new(), false),
+            &test_context(&dir),
+        )
+        .expect("extract cd chd");
+
+    assert_eq!(report.status, OperationStatus::Succeeded);
+    assert_eq!(
+        fs::read(out_dir.join("disc.bin")).expect("read extracted bin"),
+        payload,
+        "a merged single-bin extract must reproduce the source payload"
+    );
+    let extracted_cue = fs::read_to_string(out_dir.join("disc.cue")).expect("read cue");
+    assert!(extracted_cue.contains("FILE \"disc.bin\" BINARY"));
+    assert!(extracted_cue.contains("TRACK 01 MODE1/2352"));
+    assert!(extracted_cue.contains("TRACK 02 AUDIO"));
+    // Track 2 starts 8 frames into the merged bin.
+    assert!(
+        extracted_cue.contains("INDEX 01 00:00:08"),
+        "cue offsets must advance with output frames: {extracted_cue}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_split_bin_writes_one_file_per_track() {
+    let dir = scratch_dir("extract-cd-split-bin");
+    let (cue, payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    handler
+        .extract(
+            &extract_request_for(&chd_path, &out_dir, Vec::new(), true),
+            &test_context(&dir),
+        )
+        .expect("extract cd chd split");
+
+    let first = fs::read(out_dir.join("disc (Track 1).bin")).expect("read track 1");
+    let second = fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2");
+    assert_eq!(first.len(), 8 * 2352);
+    assert_eq!(second.len(), 8 * 2352);
+    assert_eq!(
+        [first, second].concat(),
+        payload,
+        "the per-track bins concatenate back into the source payload"
+    );
+
+    let extracted_cue = fs::read_to_string(out_dir.join("disc.cue")).expect("read cue");
+    assert!(extracted_cue.contains("FILE \"disc (Track 1).bin\" BINARY"));
+    assert!(extracted_cue.contains("FILE \"disc (Track 2).bin\" BINARY"));
+    // Each split track restarts its own file, so every INDEX 01 is at zero.
+    assert_eq!(extracted_cue.matches("INDEX 01 00:00:00").count(), 2);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_honors_a_single_track_selection() {
+    let dir = scratch_dir("extract-cd-selection");
+    let (cue, payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    handler
+        .extract(
+            &extract_request_for(
+                &chd_path,
+                &out_dir,
+                vec!["disc (Track 2).bin".to_string()],
+                true,
+            ),
+            &test_context(&dir),
+        )
+        .expect("extract selected cd track");
+
+    assert!(
+        !out_dir.join("disc (Track 1).bin").exists(),
+        "an unselected track must not be written"
+    );
+    assert!(
+        !out_dir.join("disc.cue").exists(),
+        "the cue was not selected"
+    );
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2"),
+        payload[8 * 2352..],
+        "the selected track must hold exactly its own frames"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_rejects_a_selection_that_matches_nothing() {
+    let dir = scratch_dir("extract-cd-bad-selection");
+    let (cue, _payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    let err = match handler.extract(
+        &extract_request_for(
+            &chd_path,
+            &dir.join("out"),
+            vec!["disc (Track 9).bin".to_string()],
+            true,
+        ),
+        &test_context(&dir),
+    ) {
+        Ok(_) => panic!("expected an unmatched-selection error"),
+        Err(err) => err,
+    };
+    assert!(matches!(err, RomWeaverError::Validation(_)), "{err}");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_gd_writes_a_gdi_and_per_track_bins() {
+    let dir = scratch_dir("extract-gd");
+    let first_payload = raw_frames(4);
+    let second_payload = raw_frames(6);
+    write_file(&dir, "track01.bin", &first_payload);
+    write_file(&dir, "track02.raw", &second_payload);
+    let gdi = write_file(
+        &dir,
+        "disc.gdi",
+        concat!(
+            "2\n",
+            "1 0 4 2352 \"track01.bin\" 0\n",
+            "2 4 0 2352 \"track02.raw\" 0\n",
+        )
+        .as_bytes(),
+    );
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&gdi, &chd_path), &test_context(&dir))
+        .expect("create gd chd");
+    handler
+        .extract(
+            &extract_request_for(&chd_path, &out_dir, Vec::new(), false),
+            &test_context(&dir),
+        )
+        .expect("extract gd chd");
+
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 1).bin")).expect("read track 1"),
+        first_payload
+    );
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2"),
+        second_payload,
+        "the audio track must round-trip through CHD's big-endian storage"
+    );
+    let extracted_gdi = fs::read_to_string(out_dir.join("disc.gdi")).expect("read gdi");
+    let lines = extracted_gdi.lines().collect::<Vec<_>>();
+    assert_eq!(lines[0], "2", "the gdi header counts its track lines");
+    assert_eq!(lines[1], "1 0 4 2352 \"disc (Track 1).bin\" 0");
+    assert_eq!(lines[2], "2 4 0 2352 \"disc (Track 2).bin\" 0");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_gd_honors_a_single_track_selection() {
+    let dir = scratch_dir("extract-gd-selection");
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    let second_payload = raw_frames(6);
+    write_file(&dir, "track02.bin", &second_payload);
+    let gdi = write_file(
+        &dir,
+        "disc.gdi",
+        concat!(
+            "2\n",
+            "1 0 4 2352 \"track01.bin\" 0\n",
+            "2 4 4 2352 \"track02.bin\" 0\n",
+        )
+        .as_bytes(),
+    );
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&gdi, &chd_path), &test_context(&dir))
+        .expect("create gd chd");
+    handler
+        .extract(
+            &extract_request_for(
+                &chd_path,
+                &out_dir,
+                vec!["disc (Track 2).bin".to_string()],
+                false,
+            ),
+            &test_context(&dir),
+        )
+        .expect("extract selected gd track");
+
+    assert!(!out_dir.join("disc (Track 1).bin").exists());
+    assert!(!out_dir.join("disc.gdi").exists());
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2"),
+        second_payload
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn read_disc_tracks_recovers_the_cd_layout_written_at_create_time() {
+    let dir = scratch_dir("read-disc-tracks");
+    let (cue, _payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+
+    let session = ChdReadSession::open(&chd_path, None).expect("open chd");
+    let layout = handler
+        .read_disc_tracks(&session, DiscKind::CdRom)
+        .expect("read cd track metadata");
+    assert_eq!(layout.kind, DiscKind::CdRom);
+    assert_eq!(
+        layout
+            .tracks
+            .iter()
+            .map(|track| (track.number, track.mode, track.frames, track.pad_frames))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, DiscTrackMode::Mode1Raw, 8, 0),
+            (2, DiscTrackMode::Audio, 8, 0),
+        ]
+    );
+
+    // A CD image carries no GD-ROM track metadata at all.
+    let err = match handler.read_disc_tracks(&session, DiscKind::GdRom) {
+        Ok(_) => panic!("expected missing gd metadata"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("missing GD track metadata"),
+        "unexpected error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_rejects_a_chd_whose_units_are_not_cd_frames() {
+    let dir = scratch_dir("extract-cd-wrong-units");
+    // A DVD image uses 2048-byte units, so the CD extract path must refuse it
+    // rather than mis-framing the payload.
+    let iso = write_file(&dir, "movie.iso", &[0_u8; 2048 * 64]);
+    let chd_path = dir.join("movie.chd");
+    let handler = ChdContainerHandler;
+    handler
+        .create(
+            &ContainerCreateRequest {
+                inputs: vec![iso],
+                output: chd_path.clone(),
+                format: "chd-dvd".to_string(),
+                codec: None,
+                level: None,
+                parent: None,
+            },
+            &test_context(&dir),
+        )
+        .expect("create dvd chd");
+
+    let session = ChdReadSession::open(&chd_path, None).expect("open chd");
+    let context = test_context(&dir);
+    let execution = context.plan_threads(ThreadCapability::parallel(None));
+    let err = match handler.extract_cd(
+        session,
+        &extract_request_for(&chd_path, &dir.join("out"), Vec::new(), false),
+        &context,
+        execution,
+    ) {
+        Ok(_) => panic!("expected a unit-size rejection"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("current extract expects"),
+        "unexpected error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
