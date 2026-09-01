@@ -362,27 +362,52 @@ export const KNOWN_PLATFORM_PROFILES = Object.freeze({
 // space, trim. A platform's own normalized name always wins over another
 // platform's curated alias (e.g. a discovered "GBA" dump directory claims
 // "gba"); a collision between two platforms' own names is a build error.
+// Every alias the Rust built-in fallback catalog promises
+// (crates/rom-weaver-checksum/src/identify_catalog.rs) MUST appear here too:
+// a build that ships data resolves names through this catalog instead, so an
+// alias missing here stops resolving the moment the packaged data is present.
 export const CURATED_ALIASES = Object.freeze({
+  "Atari - 2600": ["atari 2600", "2600", "atari vcs", "vcs"],
+  "Atari - 5200": ["atari 5200", "5200"],
+  "Atari - 7800": ["atari 7800", "7800"],
+  "Atari - Lynx": ["atari lynx", "lynx"],
+  "Nintendo - Nintendo 64": ["nintendo 64", "n64"],
+  "Nintendo - Virtual Boy": ["nintendo virtual boy", "virtual boy"],
+  "Sega - 32X": ["sega 32x", "32x", "megadrive 32x"],
+  "Sega - Dreamcast": ["sega dreamcast", "dreamcast", "dc"],
+  "Sega - Saturn": ["sega saturn", "saturn"],
   "Nintendo - Family Computer Disk System": ["fds", "famicom disk system", "nintendo fds"],
   "SNK - Neo Geo Pocket": ["neo geo pocket", "ngp"],
-  "SNK - Neo Geo Pocket Color": ["neo geo pocket color", "ngpc"],
+  "SNK - Neo Geo Pocket Color": ["neo geo pocket color", "neo geo pocket colour", "ngpc"],
   "Nintendo - Nintendo 3DS": ["nintendo 3ds", "3ds"],
   "Nintendo - Nintendo DS": ["nintendo ds", "nds", "ds"],
   "Nintendo - Nintendo Entertainment System": [
     "nintendo entertainment system",
     "nes",
     "famicom",
+    "nintendo famicom",
     "family computer",
   ],
-  "Nintendo - Game Boy": ["nintendo game boy", "game boy", "gb"],
-  "Nintendo - Game Boy Advance": ["nintendo game boy advance", "game boy advance", "gba"],
-  "Nintendo - Game Boy Color": ["nintendo game boy color", "game boy color", "gbc"],
+  "Nintendo - Game Boy": ["nintendo game boy", "game boy", "gameboy", "gb"],
+  "Nintendo - Game Boy Advance": [
+    "nintendo game boy advance",
+    "game boy advance",
+    "gameboy advance",
+    "gba",
+  ],
+  "Nintendo - Game Boy Color": [
+    "nintendo game boy color",
+    "game boy color",
+    "gameboy color",
+    "gbc",
+  ],
   "Nintendo - GameCube": ["nintendo gamecube", "gamecube", "gc", "ngc"],
   "Nintendo - Super Nintendo Entertainment System": [
     "nintendo super nintendo entertainment system",
     "snes",
     "super famicom",
     "super nintendo",
+    "super nes",
   ],
   "Nintendo - Wii": ["nintendo wii", "wii"],
   "Sega - Game Gear": ["sega game gear", "game gear", "gg"],
@@ -401,7 +426,9 @@ export const CURATED_ALIASES = Object.freeze({
     "turbografx-16 pc engine",
     "turbografx",
     "turbografx 16",
+    "tg16",
     "pc engine",
+    "pce",
   ],
 });
 

@@ -21,7 +21,7 @@ const MAX_EXTRACTED_BYTES: u64 = 1024 * 1024 * 1024;
     not(target_arch = "wasm32"),
     any(feature = "bundled-identify-data", test)
 ))]
-const DATA_RELATIVE_PATH: &str = "share/rom-weaver/identify/v1/packs";
+const DATA_RELATIVE_PATH: &str = "share/rom-weaver/identify/v1";
 
 #[cfg(all(
     not(target_arch = "wasm32"),
@@ -48,19 +48,38 @@ fn data_dirs() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
+/// Every data tree that can hold `catalog.json`, `index.json`, and `packs/`,
+/// in lookup order: the user install first, then the packaged trees beside the
+/// executable.
+#[cfg(all(not(target_arch = "wasm32"), feature = "bundled-identify-data"))]
+pub(super) fn data_roots(database_dir: &Path) -> Vec<PathBuf> {
+    let mut roots = vec![database_dir.join(USER_FULL_DATA_DIR)];
+    roots.extend(data_dirs());
+    roots
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "bundled-identify-data")))]
+pub(super) fn data_roots(_database_dir: &Path) -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// The `catalog.json` of the first data tree that has one. The generated
+/// catalog names the slugs the packaged packs actually use, so a build that
+/// ships data MUST prefer it over the built-in fallback catalog.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn catalog_path(database_dir: &Path) -> Option<PathBuf> {
+    data_roots(database_dir)
+        .into_iter()
+        .map(|root| root.join("catalog.json"))
+        .find(|path| path.is_file())
+}
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "bundled-identify-data"))]
 pub(super) fn pack_path(database_dir: &Path, slug: &str) -> Option<PathBuf> {
     let file = format!("{slug}.pack.br");
-    let user = database_dir
-        .join(USER_FULL_DATA_DIR)
-        .join("packs")
-        .join(&file);
-    if user.is_file() {
-        return Some(user);
-    }
-    data_dirs()
+    data_roots(database_dir)
         .into_iter()
-        .map(|dir| dir.join(&file))
+        .map(|root| root.join("packs").join(&file))
         .find(|path| path.is_file())
 }
 
@@ -75,9 +94,10 @@ pub(super) fn pack_path(
 #[cfg(all(not(target_arch = "wasm32"), feature = "bundled-identify-data"))]
 pub(super) fn pack_slugs(database_dir: &Path) -> Result<Vec<String>> {
     let mut slugs = Vec::new();
-    let mut dirs = vec![database_dir.join(USER_FULL_DATA_DIR).join("packs")];
-    dirs.extend(data_dirs());
-    for dir in dirs.into_iter().filter(|dir| dir.is_dir()) {
+    let dirs = data_roots(database_dir)
+        .into_iter()
+        .map(|root| root.join("packs"));
+    for dir in dirs.filter(|dir| dir.is_dir()) {
         for entry in fs::read_dir(&dir).map_err(|error| {
             RomWeaverError::Validation(format!(
                 "failed to read packaged identify data `{}`: {error}",
@@ -140,6 +160,36 @@ pub(super) fn decompress(path: &Path) -> Result<Vec<u8>> {
     )?;
     verify_raw_pack(&entry, &decompressed)?;
     Ok(decompressed)
+}
+
+/// Decompress a Brotli pack that has no `index.json` entry to check it
+/// against, such as a file passed to `--database`. The size cap is the only
+/// guard here, so it MUST stay in place: the input is user-supplied and a
+/// Brotli frame can expand without bound.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn decompress_standalone(bytes: &[u8], label: &str) -> Result<Vec<u8>> {
+    let decoder = brotli::Decompressor::new(bytes, 4096);
+    let mut decompressed = Vec::new();
+    decoder
+        .take(MAX_PACK_BYTES.saturating_add(1))
+        .read_to_end(&mut decompressed)
+        .map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to decompress identify pack `{label}`: {error}"
+            ))
+        })?;
+    check_pack_size(decompressed.len() as u64, "decompressed")?;
+    Ok(decompressed)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn decompress_standalone(
+    _bytes: &[u8],
+    label: &str,
+) -> rom_weaver_core::Result<Vec<u8>> {
+    Err(rom_weaver_core::RomWeaverError::Validation(format!(
+        "identify pack `{label}` is Brotli compressed; this build reads raw packs only"
+    )))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -990,8 +1040,8 @@ mod tests {
         assert_eq!(
             dirs,
             vec![
-                PathBuf::from("/opt/rom-weaver/bin/share/rom-weaver/identify/v1/packs"),
-                PathBuf::from("/opt/rom-weaver/share/rom-weaver/identify/v1/packs"),
+                PathBuf::from("/opt/rom-weaver/bin/share/rom-weaver/identify/v1"),
+                PathBuf::from("/opt/rom-weaver/share/rom-weaver/identify/v1"),
             ]
         );
     }

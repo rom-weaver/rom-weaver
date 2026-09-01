@@ -222,6 +222,33 @@ pub struct IdentifyResult {
 /// Parsed identify packs shared by one command invocation (ingest and patch
 /// hints). Packs are parsed once, then reused for every ROM asset and patch
 /// descriptor produced by that invocation.
+/// Read a pack named by `--database`, decompressing it when it is a Brotli
+/// pack. The packaged data ships `.pack.br`, so a path copied out of it MUST
+/// work here without a manual decompression step.
+fn read_pack_bytes(path: &Path) -> Result<Vec<u8>> {
+    let bytes = fs::read(path).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "failed to read ROM identify pack `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    if rom_weaver_checksum::identify_pack::is_pack(&bytes) {
+        return Ok(bytes);
+    }
+    trace!(database = %path.display(), "decompressing brotli ROM identify pack");
+    super::identify_builtin::decompress_standalone(&bytes, &path.display().to_string()).map_err(
+        // A file that is neither a raw pack nor a Brotli frame fails inside the
+        // decoder, which names Brotli and hides the simpler cause.
+        |_| {
+            RomWeaverError::Validation(format!(
+                "invalid ROM identify pack `{}`: the file does not read as an \
+                 RWFP1 pack or as a Brotli-compressed one",
+                path.display()
+            ))
+        },
+    )
+}
+
 pub(super) struct IdentifyDatabaseSet {
     packs: Vec<(String, IdentifyPackFile)>,
 }
@@ -238,12 +265,7 @@ impl IdentifyDatabaseSet {
         let mut packs = Vec::with_capacity(databases.len());
         for database in databases {
             trace!(database = %database.display(), "loading ROM identify pack");
-            let bytes = fs::read(database).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to read ROM identify pack `{}`: {error}",
-                    database.display()
-                ))
-            })?;
+            let bytes = read_pack_bytes(database)?;
             let pack = IdentifyPackFile::parse(&bytes).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "invalid ROM identify pack `{}`: {error}",
@@ -1199,12 +1221,7 @@ impl CliApp {
         let mut selected = Vec::with_capacity(databases.len());
         for database in databases {
             trace!(database = %database.display(), "loading ROM identify pack");
-            let bytes = fs::read(database).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to read ROM identify pack `{}`: {error}",
-                    database.display()
-                ))
-            })?;
+            let bytes = read_pack_bytes(database)?;
             let file = IdentifyPackFile::parse(&bytes).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "invalid ROM identify pack `{}`: {error}",

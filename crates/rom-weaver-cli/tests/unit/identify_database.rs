@@ -13,6 +13,62 @@ fn slugify_matches_the_builder_script() {
     assert_eq!(slugify_platform("Sony PlayStation"), "sony-playstation");
 }
 
+/// The packaged catalog names the slugs the packaged packs use; the built-in
+/// fallback catalog disagrees for several platforms, including NES.
+#[test]
+fn packaged_catalog_wins_over_the_builtin_catalog() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let data_dir = temp.path().join("full-v1");
+    fs::create_dir_all(&data_dir).expect("data dir");
+    fs::write(
+        data_dir.join("catalog.json"),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-catalog-v1",
+            "platforms": [{
+                "canonicalPlatform": "Nintendo - Nintendo Entertainment System",
+                "aliases": ["nes"],
+                "source": "libretro",
+                "mediaProfiles": ["opengood-cartridge-v1"],
+                "packSlug": "nintendo-nintendo-entertainment-system",
+                "packFormat": "RWFP1",
+                "canonicalizationVersion": 1,
+            }],
+        }))
+        .expect("catalog json"),
+    )
+    .expect("catalog file");
+
+    let provider = IdentifyPackProvider::new(Some(temp.path().to_path_buf())).expect("provider");
+    let entry = provider.resolve_entry("nes").expect("nes entry");
+
+    assert_eq!(entry.pack_slug, "nintendo-nintendo-entertainment-system");
+    let listed: Vec<String> = provider
+        .catalog_entries()
+        .into_iter()
+        .map(|entry| entry.canonical_platform)
+        .filter(|platform| platform.ends_with("Nintendo Entertainment System"))
+        .filter(|platform| !platform.contains("Super"))
+        .collect();
+    assert_eq!(
+        listed,
+        ["Nintendo - Nintendo Entertainment System"],
+        "the builtin NES entry must not be listed beside the packaged one"
+    );
+    let error = resolve_install_platform(&provider, "nes").expect_err("install is refused");
+    assert!(
+        error.to_string().contains("never installed from Redump"),
+        "unexpected error: {error}"
+    );
+    assert_eq!(
+        IdentifyCatalog::builtin()
+            .resolve_platform("nes")
+            .expect("builtin nes entry")
+            .pack_slug,
+        "nintendo-entertainment-system",
+        "the built-in fallback still names the slug this test guards against"
+    );
+}
+
 #[test]
 fn shared_components_are_marked_non_discriminating() {
     let component = |md5: &str| PackComponent {

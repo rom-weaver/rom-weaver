@@ -209,6 +209,65 @@ fn identify_matches_an_external_pack() {
 }
 
 #[test]
+fn identify_matches_a_brotli_pack() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
+    let mut compressed = Vec::new();
+    {
+        let mut encoder = brotli::CompressorWriter::new(&mut compressed, 4096, 5, 22);
+        std::io::Write::write_all(&mut encoder, &identify_pack()).expect("brotli pack");
+    }
+    fs::write(temp.child("test.pack.br").path(), &compressed).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--input",
+            temp.child("hello.bin").path().to_str().expect("ROM path"),
+            "--database",
+            temp.child("test.pack.br")
+                .path()
+                .to_str()
+                .expect("pack path"),
+            "--json",
+        ],
+        0,
+    );
+    let identify = &parse_single_json_line(&output)["details"]["identify"];
+
+    assert_eq!(identify["status"], "matched");
+    assert_eq!(identify["matches"][0]["name"], "Hello World (Test) [!]");
+}
+
+#[test]
+fn identify_rejects_a_pack_that_is_neither_raw_nor_brotli() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
+    fs::write(temp.child("test.pack").path(), b"not a pack at all").expect("junk pack");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "identify",
+            "--input",
+            temp.child("hello.bin").path().to_str().expect("ROM path"),
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stderr
+        .clone();
+
+    let text = String::from_utf8(output).expect("utf8 stderr");
+    assert!(
+        text.contains("does not read as an RWFP1 pack or as a Brotli-compressed one"),
+        "unexpected error: {text}"
+    );
+}
+
+#[test]
 fn identify_uses_built_in_packs_by_default() {
     let temp = setup_temp_dir();
     fs::write(
