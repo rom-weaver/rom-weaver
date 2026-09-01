@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { Masthead, Reveal, SiteFooter, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 
 /**
  * App-shell contract: the masthead tablist and the phone dock (both named
@@ -22,11 +23,27 @@ const withSettings = (children: ReactNode) => (
 const TABS = [
   { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
-  { href: "ppf-undo", icon: <svg aria-hidden="true" />, id: "ppf-undo", label: "PPF undo" },
-];
+  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: <svg aria-hidden="true" />,
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "ppf-undo",
+    icon: <svg aria-hidden="true" />,
+    id: "ppf-undo",
+    label: "PPF undo",
+    placement: "more",
+  },
+] satisfies WorkflowTab[];
 
 const mastheadProps = {
   currentTab: "patcher",
@@ -62,11 +79,12 @@ describe("Masthead", () => {
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
     for (const [list, selectedClass, labels] of [
-      [rail, "mode", ["Apply", "Create", "Docs", "Test"]],
-      [dock, "dock-tab", ["Apply", "Create", "Docs", "Test"]],
+      [rail, "mode", ["Apply", "Create", "Test"]],
+      [dock, "dock-tab", ["Apply", "Create", "Test"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
       expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
+      expect(list?.querySelector('[data-mode="docs"]')).toBeNull();
       expect(list?.querySelector('[data-mode="trim"]')).toBeNull();
       expect(list?.querySelector('[data-mode="ppf-undo"]')).toBeNull();
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
@@ -112,7 +130,7 @@ describe("Masthead", () => {
 
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
-    const { container, getByRole, queryByRole } = render(
+    const { container, getByRole } = render(
       withSettings(
         <Masthead
           {...mastheadProps}
@@ -134,9 +152,15 @@ describe("Masthead", () => {
     expect(menuStatus.classList.contains("more-status")).toBe(true);
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
-    expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
-    expect(getByRole("menuitem", { name: "Trim" })).toBeTruthy();
-    expect(getByRole("menuitem", { name: "PPF undo" })).toBeTruthy();
+    // Docs and the beta tools file under their own headed groups.
+    expect(getByRole("menuitem", { name: "Docs" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "Trim Beta" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "PPF undo Beta" })).toBeTruthy();
+    expect(getByRole("group", { name: "Tools" })).toBeTruthy();
+    expect(getByRole("group", { name: "Docs" })).toBeTruthy();
+    expect(getByRole("group", { name: "Project" })).toBeTruthy();
+    // The head row keeps the app's own surfaces one tap away on desktop too.
+    expect(getByRole("menuitem", { name: "Settings" }).classList.contains("more-head-item")).toBe(true);
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
     expect(more.getAttribute("aria-expanded")).toBe("false");

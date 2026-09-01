@@ -120,6 +120,11 @@ msgstr "y redúcelos para almacenarlos —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "se aplica después del parche {n}"
 
@@ -167,6 +172,11 @@ msgstr "auto (anterior)"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "ROM base"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.beta"
+msgstr "Beta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -675,6 +685,11 @@ msgstr "salida anterior"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.project"
+msgstr "Proyecto"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.pullRequest"
 msgstr "Pull request"
 
@@ -967,6 +982,11 @@ msgstr "hilos"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Hilos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
+msgstr "Herramientas"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

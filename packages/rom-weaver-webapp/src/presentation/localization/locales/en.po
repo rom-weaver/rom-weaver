@@ -120,6 +120,11 @@ msgstr "and shrink them for storage —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "applies after patch {n}"
 
@@ -167,6 +172,11 @@ msgstr "auto (previous)"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "base ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.beta"
+msgstr "Beta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -675,6 +685,11 @@ msgstr "previous output"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.project"
+msgstr "Project"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.pullRequest"
 msgstr "Pull request"
 
@@ -967,6 +982,11 @@ msgstr "threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
+msgstr "Tools"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

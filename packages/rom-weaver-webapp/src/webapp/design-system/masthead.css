@@ -515,10 +515,6 @@ html.vt-theme .mode-rail .mode {
 .rw-app .mode[aria-selected="true"] {
   color: var(--thread-ink);
 }
-html:not([data-beta-tools-enabled="true"]) .rw-app .mode[data-beta-tool],
-html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
-  display: none;
-}
 @media (hover: hover) {
   .rw-app .mode:not([aria-selected="true"]):hover {
     color: var(--ink);
@@ -600,7 +596,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  min-inline-size: 224px;
+  min-inline-size: 264px;
   max-inline-size: calc(100vw - 24px);
   padding: var(--sp-xs);
   background: var(--plate);
@@ -623,8 +619,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 .rw-app .more-menu:focus-visible {
   outline: none;
 }
-.rw-app .more-menu > button,
-.rw-app .more-menu > a,
+.rw-app .more-menu [role="menuitem"],
 .rw-app .more-accent > button {
   display: flex;
   gap: var(--sp-s);
@@ -653,39 +648,105 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
   color: var(--ink-2);
 }
 @media (hover: hover) {
-  .rw-app .more-menu > button:hover,
-  .rw-app .more-menu > a:hover,
+  .rw-app .more-menu [role="menuitem"]:hover,
   .rw-app .more-accent > button:hover {
     color: var(--ink);
     background: var(--well);
   }
 }
-.rw-app .more-menu > button:active,
-.rw-app .more-menu > a:active,
+.rw-app .more-menu [role="menuitem"]:active,
 .rw-app .more-accent > button:active {
   color: var(--ink);
   background: var(--plate-2);
 }
 /* Support wears the footer donate color; the icon inherits it (see footer.css). */
-.rw-app .more-menu > .more-support,
-.rw-app .more-menu > .more-support svg {
+.rw-app .more-menu .more-support,
+.rw-app .more-menu .more-support svg {
   color: var(--thread-text);
 }
 @media (hover: hover) {
-  .rw-app .more-menu > .more-support:hover,
-  .rw-app .more-menu > .more-support:hover svg {
+  .rw-app .more-menu .more-support:hover,
+  .rw-app .more-menu .more-support:hover svg {
     color: var(--thread-text);
   }
-  .rw-app .more-menu > .more-support:hover svg {
+  .rw-app .more-menu .more-support:hover svg {
     fill: currentcolor;
   }
 }
-.rw-app .more-menu > .more-support:active,
-.rw-app .more-menu > .more-support:active svg {
+.rw-app .more-menu .more-support:active,
+.rw-app .more-menu .more-support:active svg {
   color: var(--thread-text);
 }
-.rw-app .more-menu > .more-support:active svg {
+.rw-app .more-menu .more-support:active svg {
   fill: currentcolor;
+}
+/* The head row: the app's own surfaces as four equal tiles, one tap from More
+   on both layouts. Tiles stack icon over label, unlike the rows below. The
+   fieldset chrome is reset here and on the groups; the legend is the group's
+   accessible name and, for the groups, the visible heading. */
+.rw-app .more-head,
+.rw-app .more-group {
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.rw-app .more-head {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-xs);
+  padding-block-end: var(--sp-xs);
+  margin-block-end: var(--sp-xs);
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .more-menu .more-head-item {
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  min-block-size: 56px;
+  padding: 6px 4px;
+  font-size: 0.62rem;
+  text-align: center;
+  background: var(--well);
+}
+.rw-app .more-group {
+  display: flex;
+  flex-direction: column;
+}
+.rw-app .more-group + .more-group {
+  padding-block-start: var(--sp-xs);
+  margin-block-start: var(--sp-xs);
+  border-block-start: 1px solid var(--seam);
+}
+.rw-app .more-group-label {
+  float: left;
+  inline-size: 100%;
+  padding: 4px 10px 2px;
+  font-size: 0.62rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+/* On the phone sheet the head row sits at the bottom, in the thumb zone; the
+   groups scroll above it. DOM order is unchanged, so the arrow keys still start
+   on Settings. */
+.rw-app .shared-more-menu .more-head {
+  order: 1;
+  padding-block: var(--sp-xs) 0;
+  margin-block: var(--sp-xs) 0;
+  border-block-start: 1px solid var(--seam);
+  border-block-end: 0;
+}
+.rw-app .more-beta {
+  padding: 1px 6px;
+  margin-inline-start: auto;
+  font-size: 0.58rem;
+  color: var(--thread-text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
 }
 .rw-app .more-accent-tray {
   display: flex;

@@ -52,12 +52,23 @@ const readPwaState = () => {
   return displayModeMatches || iosStandalone;
 };
 
-type WorkflowTab = { href: string; id: string; label: string; icon: ReactNode };
-/* Utility routes that stay out of both primary navs and are reached from More.
-   Adding one here is what makes it discoverable without crowding the rail. */
-const MORE_MENU_TAB_IDS: readonly string[] = ["identify", "trim", "ppf-undo"];
-const isMoreMenuTab = (tab: WorkflowTab) => MORE_MENU_TAB_IDS.includes(tab.id);
-const isBetaWorkflowTab = (tab: WorkflowTab) => isMoreMenuTab(tab);
+/**
+ * One entry of the primary nav. `placement: "rail"` (the default) puts it in
+ * the desktop rail and the phone dock; `placement: "more"` files it under the
+ * named group of the More menu instead, on both layouts. A `beta` entry stays
+ * behind the beta-tools setting and wears a chip while it is on.
+ */
+type WorkflowTab = {
+  beta?: boolean;
+  group?: MoreMenuGroup;
+  href: string;
+  icon: ReactNode;
+  id: string;
+  label: string;
+  placement?: "rail" | "more";
+};
+type MoreMenuGroup = "tools" | "docs";
+const isMoreMenuTab = (tab: WorkflowTab) => tab.placement === "more";
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
 
@@ -131,7 +142,6 @@ const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
  * measure positions it (and re-positions on resize / font swap).
  */
 const ModeRail = ({
-  betaToolsEnabled = true,
   tabs,
   current,
   navLabel,
@@ -139,7 +149,6 @@ const ModeRail = ({
   controlsPanels = true,
   trailing,
 }: {
-  betaToolsEnabled?: boolean;
   tabs: WorkflowTab[];
   current: string;
   navLabel: string;
@@ -177,10 +186,9 @@ const ModeRail = ({
   // current view is not always one of these tabs - the 404 shell renders the
   // rail with nothing selected. Roving focus falls back to the first tab.
   const railTabs = tabs.filter((tab) => !isMoreMenuTab(tab));
-  const interactiveTabs = betaToolsEnabled ? railTabs : railTabs.filter((tab) => !isBetaWorkflowTab(tab));
-  const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
+  const selectedIndex = railTabs.findIndex((tab) => tab.id === current);
   const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
-  const focusedId = interactiveTabs[focusIndex]?.id ?? "";
+  const focusedId = railTabs[focusIndex]?.id ?? "";
 
   // The rail can be scrolled past its column in the snug 1000-1159px band, so
   // the tab that just became current must never be left off-screen.
@@ -189,7 +197,7 @@ const ModeRail = ({
   }, [current]);
 
   const handleKeyDown = createTabListKeyDown(
-    interactiveTabs.map((tab) => tab.id),
+    railTabs.map((tab) => tab.id),
     focusedId,
     onSelect,
     (id) => railRef.current?.querySelector<HTMLAnchorElement>(`.mode[data-mode="${id}"]`)?.focus(),
@@ -213,7 +221,6 @@ const ModeRail = ({
                 aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
                 aria-selected={tab.id === current}
                 className="mode"
-                data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
                 data-mode={tab.id}
                 href={tab.href}
                 id={`tab-${tab.id}`}
@@ -242,7 +249,6 @@ const ModeRail = ({
  * does not (see phone dock rules in masthead.css).
  */
 const PhoneDock = ({
-  betaToolsEnabled = true,
   controlsPanels = true,
   current,
   mobileActions,
@@ -250,7 +256,6 @@ const PhoneDock = ({
   onSelect,
   tabs,
 }: {
-  betaToolsEnabled?: boolean;
   controlsPanels?: boolean;
   current: string;
   mobileActions?: ReactNode;
@@ -260,11 +265,10 @@ const PhoneDock = ({
 }) => {
   const dockRef = useRef<HTMLDivElement | null>(null);
   const dockTabs = tabs.filter((tab) => !isMoreMenuTab(tab));
-  const interactiveTabs = betaToolsEnabled ? dockTabs : dockTabs.filter((tab) => !isBetaWorkflowTab(tab));
-  const selectedIndex = interactiveTabs.findIndex((tab) => tab.id === current);
-  const focusedId = interactiveTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
+  const selectedIndex = dockTabs.findIndex((tab) => tab.id === current);
+  const focusedId = dockTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
   const handleKeyDown = createTabListKeyDown(
-    interactiveTabs.map((tab) => tab.id),
+    dockTabs.map((tab) => tab.id),
     focusedId,
     onSelect,
     (id) => dockRef.current?.querySelector<HTMLAnchorElement>(`.dock-tab[data-mode="${id}"]`)?.focus(),
@@ -286,7 +290,6 @@ const PhoneDock = ({
               aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
               aria-selected={tab.id === current}
               className="dock-tab"
-              data-beta-tool={isBetaWorkflowTab(tab) ? "" : undefined}
               data-mode={tab.id}
               href={tab.href}
               id={`docktab-${tab.id}`}
@@ -458,7 +461,7 @@ type UtilityMenuProps = {
   onOpenStatus: () => void;
   onOpenSettings?: () => void;
   onOpenStorage?: () => void;
-  /** Utility routes shown at the foot of the menu (Identify, Tools, …). */
+  /** Nav entries with `placement: "more"`, filed under their group. */
   moreTabs?: readonly WorkflowTab[];
   onOpenWorkflowTab?: (id: string) => void;
   runtimeState: RuntimeState;
@@ -497,11 +500,12 @@ const UtilityMenu = ({
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
   /* Rendered hidden and revealed here: the beta-tools setting is client-only, so
-     the prerendered shell must not disagree with the first hydration pass. */
+     the prerendered shell must not disagree with the first hydration pass. The
+     whole Tools group toggles, heading included, so an empty group never shows. */
   useEffect(() => {
     const enabled = !!(toolsEnabled && onOpenWorkflowTab);
-    for (const item of menuRef.current?.querySelectorAll<HTMLElement>("[data-more-workflow]") ?? []) {
-      item.hidden = !enabled;
+    for (const group of menuRef.current?.querySelectorAll<HTMLElement>("[data-more-beta-group]") ?? []) {
+      group.hidden = !enabled;
     }
   }, [onOpenWorkflowTab, toolsEnabled]);
 
@@ -538,6 +542,27 @@ const UtilityMenu = ({
     action();
   };
 
+  const groupTabs = (group: MoreMenuGroup, beta: boolean) =>
+    (moreTabs ?? []).filter((tab) => (tab.group ?? "tools") === group && !!tab.beta === beta);
+  const betaTabs = groupTabs("tools", true);
+  const toolTabs = groupTabs("tools", false);
+  const docsTabs = groupTabs("docs", false);
+  const workflowItem = (tab: WorkflowTab) => (
+    <button
+      data-more-workflow={tab.id}
+      key={tab.id}
+      onClick={() => {
+        if (onOpenWorkflowTab) select(() => onOpenWorkflowTab(tab.id));
+      }}
+      role="menuitem"
+      type="button"
+    >
+      {tab.icon}
+      {tab.label}
+      {tab.beta ? <span className="more-beta">{localizer.message("ui.tools.beta")}</span> : null}
+    </button>
+  );
+
   return (
     <div
       aria-label={localizer.message("ui.tools.more")}
@@ -567,89 +592,103 @@ const UtilityMenu = ({
       role="menu"
       tabIndex={-1}
     >
+      {/* The head row keeps the app's own surfaces one tap from More on both
+          layouts; the groups below it are the index of everything else. */}
+      <fieldset className="more-head">
+        <legend className="sr-only">{localizer.message("ui.tools.app")}</legend>
+        {onOpenSettings ? (
+          <button className="more-head-item" onClick={() => select(onOpenSettings)} role="menuitem" type="button">
+            <Settings aria-hidden="true" />
+            {localizer.message("ui.settings.title")}
+          </button>
+        ) : null}
+        {/* Each item wears the icon its tab wears inside the dialog it opens. */}
+        <button
+          className="more-head-item more-status"
+          data-sw={runtimeState}
+          onClick={() => select(onOpenStatus)}
+          role="menuitem"
+          type="button"
+        >
+          <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
+          {localizer.message("ui.log.tabStatus")}
+        </button>
+        <button
+          className="more-head-item"
+          onClick={() => select(onOpenStorage ?? onOpenLog)}
+          role="menuitem"
+          type="button"
+        >
+          <HardDrive aria-hidden="true" />
+          {localizer.message("ui.log.tabStorage")}
+        </button>
+        <button className="more-head-item" onClick={() => select(onOpenLog)} role="menuitem" type="button">
+          <ScrollText aria-hidden="true" />
+          {localizer.message("ui.log.tabLogs")}
+        </button>
+      </fieldset>
       {mobile ? (
         <>
-          {/* Docs has no panel head to hang the page-level gear on, so the
-              mobile menu keeps a settings route of its own. */}
-          {onOpenSettings ? (
-            <button onClick={() => select(onOpenSettings)} role="menuitem" type="button">
-              <Settings aria-hidden="true" />
-              {localizer.message("ui.settings.title")}
-            </button>
-          ) : null}
           <ThemeMenuItem localizer={localizer} onClose={onClose} />
           <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
         </>
       ) : null}
-      {/* Each item wears the icon its tab wears inside the dialog it opens. */}
-      <button
-        className="more-status"
-        data-sw={runtimeState}
-        onClick={() => select(onOpenStatus)}
-        role="menuitem"
-        type="button"
-      >
-        <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
-        {localizer.message("ui.log.tabStatus")}
-      </button>
-      <button onClick={() => select(onOpenStorage ?? onOpenLog)} role="menuitem" type="button">
-        <HardDrive aria-hidden="true" />
-        {localizer.message("ui.log.tabStorage")}
-      </button>
-      <button onClick={() => select(onOpenLog)} role="menuitem" type="button">
-        <ScrollText aria-hidden="true" />
-        {localizer.message("ui.log.tabLogs")}
-      </button>
-      <button onClick={() => select(onOpenChangelog)} role="menuitem" type="button">
-        <Newspaper aria-hidden="true" />
-        {localizer.message("ui.log.tabChangelog")}
-      </button>
-      {(moreTabs ?? []).map((tab) => (
-        <button
-          data-more-workflow={tab.id}
-          hidden
-          key={tab.id}
-          onClick={() => {
-            if (onOpenWorkflowTab) select(() => onOpenWorkflowTab(tab.id));
-          }}
-          role="menuitem"
-          type="button"
-        >
-          {tab.icon}
-          {tab.label}
+      {betaTabs.length > 0 ? (
+        <fieldset className="more-group" data-more-beta-group="" hidden>
+          <legend className="more-group-label">{localizer.message("ui.tools.tools")}</legend>
+          {betaTabs.map((tab) => workflowItem(tab))}
+        </fieldset>
+      ) : null}
+      {toolTabs.length > 0 ? (
+        <fieldset className="more-group">
+          <legend className="more-group-label">{localizer.message("ui.tools.tools")}</legend>
+          {toolTabs.map((tab) => workflowItem(tab))}
+        </fieldset>
+      ) : null}
+      {docsTabs.length > 0 ? (
+        <fieldset className="more-group">
+          <legend className="more-group-label">{localizer.message("ui.nav.docs")}</legend>
+          {docsTabs.map((tab) => workflowItem(tab))}
+        </fieldset>
+      ) : null}
+      <fieldset className="more-group">
+        <legend className="more-group-label">{localizer.message("ui.tools.project")}</legend>
+        <button onClick={() => select(onOpenChangelog)} role="menuitem" type="button">
+          <Newspaper aria-hidden="true" />
+          {localizer.message("ui.log.tabChangelog")}
         </button>
-      ))}
-      {githubHref ? (
-        <a
-          href={githubHref}
-          onClick={(event) => {
-            onClose();
-            guardFooterExternalClick(event, githubHref, confirmExternalNavigation);
-          }}
-          rel="noreferrer"
-          role="menuitem"
-          target="_blank"
-        >
-          <Github aria-hidden="true" />
-          {localizer.message("ui.tools.github")}
-        </a>
-      ) : null}
-      {donateHref ? (
-        <a
-          className="more-support"
-          href={donateHref}
-          onClick={(event) => {
-            onClose();
-            guardFooterExternalClick(event, donateHref, confirmExternalNavigation);
-          }}
-          rel="noreferrer"
-          role="menuitem"
-          target="_blank"
-        >
-          <Heart aria-hidden="true" />
-          {localizer.message("ui.footer.donate")}
-        </a>
-      ) : null}
+        {githubHref ? (
+          <a
+            href={githubHref}
+            onClick={(event) => {
+              onClose();
+              guardFooterExternalClick(event, githubHref, confirmExternalNavigation);
+            }}
+            rel="noreferrer"
+            role="menuitem"
+            target="_blank"
+          >
+            <Github aria-hidden="true" />
+            {localizer.message("ui.tools.github")}
+          </a>
+        ) : null}
+        {donateHref ? (
+          <a
+            className="more-support"
+            href={donateHref}
+            onClick={(event) => {
+              onClose();
+              guardFooterExternalClick(event, donateHref, confirmExternalNavigation);
+            }}
+            rel="noreferrer"
+            role="menuitem"
+            target="_blank"
+          >
+            <Heart aria-hidden="true" />
+            {localizer.message("ui.footer.donate")}
+          </a>
+        ) : null}
+      </fieldset>
     </div>
   );
 };
@@ -1230,7 +1269,6 @@ const Masthead = ({
           </span>
         </span>
         <ModeRail
-          betaToolsEnabled={betaToolsEnabled}
           controlsPanels={tabsControlPanels}
           current={currentTab}
           navLabel={navLabel}
@@ -1250,6 +1288,7 @@ const Masthead = ({
               onClose={closeUtility}
               onOpenChangelog={onOpenChangelog}
               onOpenLog={onOpenLog}
+              onOpenSettings={onOpenSettings}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
               moreTabs={moreTabs}
@@ -1344,7 +1383,6 @@ const Masthead = ({
         <span className="shell-identity" hidden />
       </header>
       <PhoneDock
-        betaToolsEnabled={betaToolsEnabled}
         controlsPanels={tabsControlPanels}
         current={currentTab}
         mobileActions={
@@ -1478,7 +1516,7 @@ const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: (
   </button>
 );
 
-export type { OfflineWarmupDisplayProgress, RuntimeState };
+export type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab };
 export {
   describeWarmupUnit,
   installingRuntimeLabel,
