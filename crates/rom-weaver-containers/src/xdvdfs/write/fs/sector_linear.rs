@@ -165,3 +165,7 @@ impl<E> core::ops::Index<u64> for SectorLinearBlockDevice<E> {
             .unwrap_or(&SectorLinearBlockContents::Empty)
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/unit/xdvdfs_sector_linear.rs"]
+mod tests;
