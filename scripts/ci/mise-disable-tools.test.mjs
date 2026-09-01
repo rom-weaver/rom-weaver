@@ -13,9 +13,13 @@ const JOBS = {
     ["node", "rust", "binaryen"],
     "aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint",
   ],
+  "rust-lint": [
+    ["node", "rust", "cargo-deny", "cargo-machete"],
+    "github:WebAssembly/binaryen,ubi:nextest-rs/nextest,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint",
+  ],
   "rust-host": [
-    ["node", "rust", "cargo-deny", "cargo-machete", "nextest"],
-    "github:WebAssembly/binaryen,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint",
+    ["node", "rust", "nextest"],
+    "github:WebAssembly/binaryen,aqua:EmbarkStudios/cargo-deny,ubi:bnjbvr/cargo-machete,ubi:obi1kenobi/cargo-semver-checks,aqua:rhysd/actionlint,aqua:koalaman/shellcheck,aqua:hadolint/hadolint",
   ],
   "rust-macos": [
     ["rust", "nextest"],
