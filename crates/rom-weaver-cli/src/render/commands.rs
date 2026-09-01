@@ -282,3 +282,7 @@ fn humanize_key(key: &str) -> String {
         None => spaced,
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/render_commands.rs"]
+mod tests;

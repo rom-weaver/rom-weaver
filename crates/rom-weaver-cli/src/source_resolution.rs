@@ -515,3 +515,7 @@ impl CliApp {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/source_resolution.rs"]
+mod tests;
