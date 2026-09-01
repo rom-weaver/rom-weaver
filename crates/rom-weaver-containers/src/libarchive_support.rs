@@ -193,7 +193,6 @@ fn libarchive_write_archive_entry<F>(
     entry: &ArchiveInputEntry,
     entry_size_bytes: u64,
     io_buffer_bytes: usize,
-    progress_on_source_read: bool,
     mut on_source_bytes: F,
 ) -> Result<u64>
 where
@@ -231,17 +230,12 @@ where
             if read == 0 {
                 break;
             }
-            if progress_on_source_read {
-                on_source_bytes(read as u64);
-            }
             archive.write_data_all(
                 &buffer[..read],
                 &format!("{format_name} create failed while writing payload"),
             )?;
             logical_bytes = logical_bytes.saturating_add(read as u64);
-            if !progress_on_source_read {
-                on_source_bytes(read as u64);
-            }
+            on_source_bytes(read as u64);
         }
     }
 
@@ -405,7 +399,6 @@ pub(crate) fn write_archive_with_libarchive(
     )?;
     let input_progress_enabled =
         total_input_bytes > 0 && !matches!(config.format, LibarchiveCreateFormat::SevenZ);
-    let observed_input_progress = false;
     let input_progress_label = format!("creating `{}`", config.format_name);
     let input_progress_bytes = Arc::new(AtomicU64::new(0));
     let emitted_input_progress_bucket = Arc::new(AtomicU8::new(0));
@@ -424,7 +417,6 @@ pub(crate) fn write_archive_with_libarchive(
                 entry,
                 entry_size_bytes,
                 config.io_buffer_bytes,
-                observed_input_progress,
                 |delta| {
                     if !input_progress_enabled {
                         return;
@@ -434,44 +426,6 @@ pub(crate) fn write_archive_with_libarchive(
                         .saturating_add(delta)
                         .min(total_input_bytes);
                     if accepted >= total_input_bytes {
-                        return;
-                    }
-                    if observed_input_progress {
-                        let percent_bucket = accepted
-                            .saturating_mul(100)
-                            .checked_div(total_input_bytes)
-                            .unwrap_or(100)
-                            .min(99) as u8;
-                        if percent_bucket == 0 {
-                            return;
-                        }
-                        loop {
-                            let previous_bucket =
-                                emitted_input_progress_bucket.load(Ordering::Relaxed);
-                            if percent_bucket <= previous_bucket {
-                                return;
-                            }
-                            if emitted_input_progress_bucket
-                                .compare_exchange(
-                                    previous_bucket,
-                                    percent_bucket,
-                                    Ordering::Relaxed,
-                                    Ordering::Relaxed,
-                                )
-                                .is_ok()
-                            {
-                                break;
-                            }
-                        }
-                        emit_container_running_progress(
-                            &input_progress_context,
-                            "compress",
-                            input_progress_format,
-                            "create",
-                            input_progress_label.clone(),
-                            percent_bucket as f32,
-                            Some(&input_progress_execution),
-                        );
                         return;
                     }
                     maybe_emit_container_byte_progress(
