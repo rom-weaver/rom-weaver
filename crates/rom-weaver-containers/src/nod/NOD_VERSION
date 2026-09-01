@@ -4,6 +4,7 @@ commit: 23ce2cb1678e6686c1ac9b65301156795ff79941
 upstream: https://github.com/encounter/nod
 upstream-commit: ac12dba52493328e803a02df947d07f1fd82e168
 includes-prs: encounter/nod#27 encounter/nod#28 encounter/nod#29
+fork-prs: brandonocasey/nod#1 (disc reader panics, Wii FST size, bzip2 raw store)
 refreshed-by: hand (there is no vendor-nod script)
 
 The inlined tree is not byte-identical to the branch above. Audited against
@@ -27,16 +28,17 @@ into one of these:
                  request_rx/stat_tx, last_adjust and its commented-out adaptive
                  thread block, thread_id, shutdown(); nkit's ExtraData and
                  IndexFile variants.
-  bug fixes      Fixes found by the rom-weaver test sweep, all pending
-                 upstreaming: bzip2 stores an incompressible block raw instead
-                 of failing (util/compress.rs); read_dol floors the DOL size at
-                 the header and saturates the section sums (disc/gcn.rs);
-                 Fst::new computes the string table base in u64 (disc/fst.rs);
-                 FstBuilder pads a Wii FST to four bytes so the boot header can
-                 describe it (disc/fst.rs); the decrypted-partition guess makes
-                 data_end_sector absolute (disc/reader.rs); two println! calls
-                 became tracing (io/gcz.rs, build/gc.rs). These ARE functional
-                 divergences - the only ones.
+  bug fixes      Fixes found by the rom-weaver test sweep, developed on the
+                 fork in brandonocasey/nod#1 and mirrored here: bzip2 stores an
+                 incompressible block raw instead of failing (util/compress.rs);
+                 read_dol floors the DOL size at the header and saturates the
+                 section sums (disc/gcn.rs); Fst::new computes the string table
+                 base in u64 (disc/fst.rs); FstBuilder pads a Wii FST to four
+                 bytes so the boot header can describe it (disc/fst.rs); the
+                 decrypted-partition guess makes data_end_sector absolute
+                 (disc/reader.rs); three println! calls became tracing
+                 (io/gcz.rs, build/gc.rs). These ARE functional divergences -
+                 the only ones, and they are candidates for upstreaming.
   clippy         Two refactors that exist only here, replacing upstream #[allow]s
                  and worth upstreaming: CheckBlockOptions in disc/writer.rs
                  (replaces #[allow(clippy::too_many_arguments)]; call sites in
