@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { SwapIcon } from "./components/ds/swap-icon.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -17,10 +18,14 @@ import { useUiLocalizer } from "./settings-context.tsx";
 type CreatePatchFormViewModel = {
   /** Active candidate-selection dialog (or nothing). */
   dialog?: ReactNode;
+  /** True once a create run has produced a downloadable patch. */
+  done?: boolean;
   /** Unified ROM/archive drop zone (step 0x01). */
   dropZone: ComponentProps<typeof UnifiedDropZone>;
   /** Modified source step (0x03). */
   modifiedStep: ComponentProps<typeof WorkflowRomInputStep>;
+  /** The nav's own tab-switch handler, threaded down for the related-links strip. */
+  onSelectTab?: (id: string) => void;
   /** Original source step (0x02). */
   originalStep: ComponentProps<typeof WorkflowRomInputStep>;
   /** Output step (0x04): patch type, filename, compression, run action. */
@@ -33,8 +38,10 @@ type CreatePatchFormViewModel = {
 
 const CreatePatchFormView = ({
   dialog,
+  done,
   dropZone,
   modifiedStep,
+  onSelectTab,
   originalStep,
   output,
   sourcesEmpty,
@@ -72,6 +79,7 @@ const CreatePatchFormView = ({
           ) : null}
           <WorkflowRomInputStep {...modifiedStep} />
           <WorkflowOutputStep {...output} />
+          {done && onSelectTab ? <RelatedStrip entryKey="creator" onSelectTab={onSelectTab} /> : null}
         </>
       )}
       {dialog}

@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -19,8 +20,12 @@ type TrimPatchFormViewModel = {
   confirm: ComponentProps<typeof ConfirmDialog>;
   /** Active candidate-selection dialog (or nothing). */
   dialog?: ReactNode;
+  /** True once a trim run has produced a downloadable ROM. */
+  done?: boolean;
   /** Unified ROM/archive drop zone (step 0x01). */
   dropZone: ComponentProps<typeof UnifiedDropZone>;
+  /** The nav's own tab-switch handler, threaded down for the related-links strip. */
+  onSelectTab?: (id: string) => void;
   /** Output step (0x03): filename, output format, compression, run action. */
   output: ComponentProps<typeof WorkflowOutputStep>;
   /** No source staged yet - show only the hero. */
@@ -29,7 +34,16 @@ type TrimPatchFormViewModel = {
   sourceStep: ComponentProps<typeof WorkflowRomInputStep>;
 };
 
-const TrimPatchFormView = ({ confirm, dialog, dropZone, output, sourceEmpty, sourceStep }: TrimPatchFormViewModel) => {
+const TrimPatchFormView = ({
+  confirm,
+  dialog,
+  done,
+  dropZone,
+  onSelectTab,
+  output,
+  sourceEmpty,
+  sourceStep,
+}: TrimPatchFormViewModel) => {
   const localizer = useUiLocalizer();
   return (
     <section className="panel" id="trim-builder-container">
@@ -45,6 +59,7 @@ const TrimPatchFormView = ({ confirm, dialog, dropZone, output, sourceEmpty, sou
         <>
           <WorkflowRomInputStep {...sourceStep} />
           <WorkflowOutputStep {...output} />
+          {done && onSelectTab ? <RelatedStrip entryKey="trim" onSelectTab={onSelectTab} /> : null}
         </>
       )}
       <ConfirmDialog {...confirm} />

@@ -34,6 +34,7 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
+import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
 import type { OfflineWarmupDisplayProgress, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
@@ -490,6 +491,36 @@ function WebappRoot({
     [notFound],
   );
 
+  // The nav's own tab switch. Shared with the related-links strips (workflow
+  // results, the docs footer, the not-found page) so every "go here next"
+  // affordance in the app resolves through this one router.
+  const handleSelectTab = useCallback(
+    (id: string) => {
+      if (notFound) {
+        const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
+        if (href) window.location.assign(`/${href}`);
+        return;
+      }
+      const view = id as WebappRootProps["state"]["currentView"];
+      if (view === "test") requestEmulatorStartFromUserAction();
+      if (view === "docs") {
+        // Keep the current panel visible until the lazy Docs route is ready;
+        // switching first leaves its navigation bar absent for one frame.
+        const startingView = currentViewRef.current;
+        pendingViewRef.current = view;
+        void preloadWorkflowRoute(view).then(() => {
+          if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
+          pendingViewRef.current = null;
+          selectViewWithTransition(() => actions.onSelectView(view));
+        });
+        return;
+      }
+      pendingViewRef.current = null;
+      selectViewWithTransition(() => actions.onSelectView(view));
+    },
+    [actions, notFound],
+  );
+
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
   const deliverUrlSessionFiles = useCallback(
@@ -672,29 +703,7 @@ function WebappRoot({
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
-            onSelectTab={(id) => {
-              if (notFound) {
-                const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
-                if (href) window.location.assign(`/${href}`);
-                return;
-              }
-              const view = id as WebappRootProps["state"]["currentView"];
-              if (view === "test") requestEmulatorStartFromUserAction();
-              if (view === "docs") {
-                // Keep the current panel visible until the lazy Docs route is ready;
-                // switching first leaves its navigation bar absent for one frame.
-                const startingView = currentViewRef.current;
-                pendingViewRef.current = view;
-                void preloadWorkflowRoute(view).then(() => {
-                  if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
-                  pendingViewRef.current = null;
-                  selectViewWithTransition(() => actions.onSelectView(view));
-                });
-                return;
-              }
-              pendingViewRef.current = null;
-              selectViewWithTransition(() => actions.onSelectView(view));
-            }}
+            onSelectTab={handleSelectTab}
             settingsOpen={logOpen && logTab === "settings"}
             tabs={mastheadTabs}
             tabsControlPanels={!notFound}
@@ -734,6 +743,7 @@ function WebappRoot({
                       Browse docs
                     </a>
                   </div>
+                  <RelatedStrip entryKey="not-found" onSelectTab={handleSelectTab} />
                 </div>
               </section>
             ) : (
@@ -745,6 +755,7 @@ function WebappRoot({
                     onBundlePackageChange={actions.onPatcherBundlePackageChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
+                    onSelectTab={handleSelectTab}
                     onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={pageDropFor("patcher")}
@@ -757,17 +768,25 @@ function WebappRoot({
                     onModifiedChange={actions.onCreatorModifiedChange}
                     onOriginalChange={actions.onCreatorOriginalChange}
                     onPatchTypeChange={actions.onCreatorPatchTypeChange}
+                    onSelectTab={handleSelectTab}
                     onSettingsChange={actions.onCreatorSettingsChange}
                     pageDrop={pageDropFor("creator")}
                   />,
                 )}
-                {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
-                {workflowPanel("identify", <IdentifyRouteForm pageDrop={pageDropFor("identify")} />)}
+                {workflowPanel(
+                  "docs",
+                  <DocsPageRoute active={state.currentView === "docs"} onSelectTab={handleSelectTab} slug={docsSlug} />,
+                )}
+                {workflowPanel(
+                  "identify",
+                  <IdentifyRouteForm onSelectTab={handleSelectTab} pageDrop={pageDropFor("identify")} />,
+                )}
                 {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
                     onOutputFormatChange={actions.onTrimOutputFormatChange}
+                    onSelectTab={handleSelectTab}
                     onSettingsChange={actions.onTrimSettingsChange}
                     onSourceChange={actions.onTrimSourceChange}
                     pageDrop={pageDropFor("trim")}
