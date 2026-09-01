@@ -1293,13 +1293,12 @@ impl CliApp {
             }
         }
         if selected.is_empty() && candidates.is_empty() {
-            // No detection signal at all: search the builtin packs, matching
-            // the pre-routing behavior.
-            for entry in IdentifyCatalog::builtin().entries() {
+            // No detection signal at all: search every available catalog pack.
+            for entry in provider.catalog_entries() {
                 if let Some(pack) = provider.pack_for_slug(&entry.pack_slug)? {
                     selected.push(SelectedPack {
                         pack,
-                        entry: Some(entry.clone()),
+                        entry: Some(entry),
                     });
                 }
             }

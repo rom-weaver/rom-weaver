@@ -724,7 +724,7 @@ fn install_rejects_an_opengood_system() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "failed");
     let label = json["label"].as_str().expect("label");
-    assert!(label.contains("OpenGood platform"));
+    assert!(label.contains("never installed from Redump"));
 }
 
 fn redump_dat_for(platform: &str, games: &[(&str, &[u8])]) -> Vec<u8> {

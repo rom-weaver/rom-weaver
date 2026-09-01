@@ -957,7 +957,7 @@ fn install_targets_resolve_through_redump_then_the_catalog() {
 
     let error = resolve_install_platform(&provider, "Nintendo 64")
         .expect_err("an OpenGood platform is never installed from Redump");
-    assert!(error.to_string().contains("is an OpenGood platform"));
+    assert!(error.to_string().contains("never installed from Redump"));
 
     let error = resolve_install_platform(&provider, "not-a-system")
         .expect_err("an unknown system is rejected");

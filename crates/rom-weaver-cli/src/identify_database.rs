@@ -246,7 +246,12 @@ impl IdentifyPackProvider {
         IdentifyCatalog::builtin().resolve_platform(name).cloned()
     }
 
-    /// Every catalog entry, with earlier catalogs overriding later ones.
+    /// Every catalog entry: the database dir's entries, then the packaged
+    /// catalog's, then the builtin ones neither already covers, sorted by
+    /// canonical platform. The three catalogs spell the same platform
+    /// differently ("Nintendo - Nintendo Entertainment System" against
+    /// "Nintendo Entertainment System"), so a name that already resolves in an
+    /// earlier catalog is dropped instead of listed twice.
     pub(super) fn catalog_entries(&self) -> Vec<IdentifyPlatformCatalogEntry> {
         let mut entries: Vec<IdentifyPlatformCatalogEntry> = self
             .dir_catalog
