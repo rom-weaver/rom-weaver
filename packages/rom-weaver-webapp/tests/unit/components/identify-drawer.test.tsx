@@ -6,12 +6,14 @@ import { navigatorWith } from "../navigator-test-utils.ts";
 
 const gbaMatch = (name: string) => ({
   algorithm: "crc32",
-  // The pack-file shape the backend really reports; the drawer renders it as "OpenGood".
+  // The pack-file shape the backend really reports. It is a file name, not a
+  // source, so it must not reach the drawer.
   database: "nintendo-game-boy-advance.pack",
   name,
   // Upper case on purpose: identify databases report platforms in upper case,
   // and the drawer must still abbreviate them ("GBA").
   platform: "NINTENDO GAME BOY ADVANCE",
+  provenance: [{ source: "opengood", sourceName: "SnowflakePowered/opengood" }],
   variant: "raw",
 });
 
@@ -43,7 +45,9 @@ describe("IdentifyDrawer", () => {
     expect(container.querySelectorAll('button[aria-label^="Copy alias name "]')).toHaveLength(2);
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("GBA");
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("CRC32");
+    // The record's provenance names the source; the pack file name never does.
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("OpenGood");
+    expect(container.querySelector(".identify-drawer-evidence")?.textContent).not.toContain(".pack");
 
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
