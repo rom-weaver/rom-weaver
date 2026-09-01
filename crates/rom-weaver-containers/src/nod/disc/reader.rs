@@ -602,3 +602,7 @@ fn guess_disc_size(part_info: &[PartitionInfo]) -> u64 {
         DL_DVD_SIZE
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_reader_wii.rs"]
+mod tests;
