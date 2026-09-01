@@ -9,6 +9,12 @@ pub mod rom_headers;
 pub mod rom_identity;
 mod variants;
 
+// One owner for the shared test subscriber: `#[path]`-including it from each test
+// module instead would compile the same file several times over (clippy::duplicate_mod).
+#[cfg(test)]
+#[path = "../tests/unit/trace_capture.rs"]
+pub(crate) mod trace_capture;
+
 pub use engine::*;
 pub use rom_identity::{
     DETECT_PREFIX_BYTES, DiscFormat, IdentityPrefix, RomIdentity, detect_rom_identity,

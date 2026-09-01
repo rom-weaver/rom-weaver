@@ -20,7 +20,7 @@ use super::{
     BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD, BLAKE3_PARALLEL_THRESHOLD, CRC16_GF2_DIM,
     CRC16_PARALLEL_MIN_BYTES_PER_THREAD, CRC16_PARALLEL_THRESHOLD,
     CRC32_PARALLEL_MIN_BYTES_PER_THREAD, CRC32_PARALLEL_THRESHOLD,
-    CRC32C_PARALLEL_MIN_BYTES_PER_THREAD, CRC32C_PARALLEL_THRESHOLD, ChecksumMode,
+    CRC32C_PARALLEL_MIN_BYTES_PER_THREAD, CRC32C_PARALLEL_THRESHOLD, ChecksumMode, ChecksumPlan,
     ChecksumProgress, ChecksumProgressTracker, ChecksumSourceRef, Crc16State,
     FANOUT_PARALLEL_THRESHOLD, MAX_EAGER_MAP_RANGE_BYTES, MappedRange, NativeChecksumEngine,
     ResolvedRange, StreamingChecksum, StreamingChecksumTiming, adler32_checksum, adler32_combine,
@@ -30,8 +30,8 @@ use super::{
     compute_parallel_blake3, compute_parallel_crc16, compute_parallel_crc32,
     compute_parallel_crc32c, compute_parallel_fanout, compute_sequential,
     compute_sequential_stream, crc16_arc_combine, crc32_parallel_chunk_size, crc32c_append,
-    gf2_matrix_square_u16, gf2_matrix_times_u16, map_range, partition_algorithms, plan_checksum,
-    supported_algorithms,
+    execute_plan, gf2_matrix_square_u16, gf2_matrix_times_u16, map_range, partition_algorithms,
+    plan_checksum, supported_algorithms,
 };
 
 #[test]
@@ -1559,4 +1559,241 @@ fn map_range_returns_none_for_a_missing_source() {
     let temp = TestDir::new();
     let missing = temp.path().join("absent.bin");
     assert!(map_range(&missing, &whole_file_range(16)).is_none());
+}
+
+// --- planning.rs: plan selection and dispatch --------------------------------
+
+use crate::trace_capture::TraceCapture;
+
+#[test]
+fn execute_plan_dispatches_every_mode_to_a_matching_digest() {
+    let temp = TestDir::new();
+    let source = temp.path().join("dispatch.bin");
+    write_patterned_file(&source, 512 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let range = whole_file_range(bytes.len() as u64);
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+
+    let mut crc16_state = Crc16State::<ARC>::new();
+    crc16_state.update(&bytes);
+    let cases: Vec<(ChecksumMode, Vec<Algorithm>, &str, String)> = vec![
+        // `Sequential` reaches the pooled match only when a caller hands
+        // `execute_plan` a parallel capability with a sequential mode; the
+        // planner itself never pairs the two.
+        (
+            ChecksumMode::Sequential,
+            vec![Algorithm::Crc32],
+            "crc32",
+            format!("{:08x}", crc32fast::hash(&bytes)),
+        ),
+        (
+            ChecksumMode::ParallelFanout,
+            vec![Algorithm::Crc32, Algorithm::Md5],
+            "crc32",
+            format!("{:08x}", crc32fast::hash(&bytes)),
+        ),
+        (
+            ChecksumMode::ParallelCrc32,
+            vec![Algorithm::Crc32],
+            "crc32",
+            format!("{:08x}", crc32fast::hash(&bytes)),
+        ),
+        (
+            ChecksumMode::ParallelCrc32c,
+            vec![Algorithm::Crc32c],
+            "crc32c",
+            format!("{:08x}", crc32c_append(0, &bytes)),
+        ),
+        (
+            ChecksumMode::ParallelCrc16,
+            vec![Algorithm::Crc16],
+            "crc16",
+            format!("{:04x}", crc16_state.get()),
+        ),
+        (
+            ChecksumMode::ParallelAdler32,
+            vec![Algorithm::Adler32],
+            "adler32",
+            format!("{:08x}", adler32_checksum(&bytes)),
+        ),
+        (
+            ChecksumMode::ParallelBlake3,
+            vec![Algorithm::Blake3],
+            "blake3",
+            blake3::hash(&bytes).to_hex().to_string(),
+        ),
+    ];
+
+    for (mode, algorithms, name, expected) in cases {
+        let plan = ChecksumPlan::parallel(mode, 4);
+        let mut noop = |_: ChecksumProgress| {};
+        let (execution, values) =
+            execute_plan(&source, &range, &algorithms, &context, &plan, &mut noop)
+                .unwrap_or_else(|error| panic!("{mode:?}: {error}"));
+        assert!(execution.used_parallelism, "{mode:?} lost its pool");
+        assert_eq!(values.get(name), Some(&expected), "{mode:?}");
+        assert_eq!(values.len(), algorithms.len(), "{mode:?}");
+    }
+}
+
+#[test]
+fn execute_plan_runs_sequentially_when_the_budget_allows_one_thread() {
+    let temp = TestDir::new();
+    let source = temp.path().join("sequential.bin");
+    write_patterned_file(&source, 128 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let range = whole_file_range(bytes.len() as u64);
+    // A one-thread budget collapses even a parallel plan onto the calling thread.
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(1));
+    let plan = ChecksumPlan::parallel(ChecksumMode::ParallelCrc32, 4);
+
+    let mut percents = Vec::new();
+    let mut on_progress = |progress: ChecksumProgress| percents.push(progress.processed_bytes);
+    let (execution, values) = execute_plan(
+        &source,
+        &range,
+        &[Algorithm::Crc32],
+        &context,
+        &plan,
+        &mut on_progress,
+    )
+    .expect("sequential execution");
+
+    assert!(!execution.used_parallelism);
+    assert_eq!(execution.effective_threads, 1);
+    assert_eq!(
+        values.get("crc32"),
+        Some(&format!("{:08x}", crc32fast::hash(&bytes)))
+    );
+    // Progress always ends at the full range so a UI bar reaches 100%.
+    assert_eq!(percents.last(), Some(&range.len));
+}
+
+#[test]
+fn an_empty_algorithm_list_short_circuits_before_any_read() {
+    let temp = TestDir::new();
+    let source = temp.path().join("unread.bin");
+    fs::write(&source, b"never hashed").expect("fixture");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let request = ChecksumRequest {
+        source,
+        algorithms: Vec::new(),
+        start: None,
+        length: None,
+    };
+
+    let computed = super::compute_checksum_values(&request, &context).expect("empty algorithms");
+    assert!(computed.values.is_empty());
+    // Nothing was hashed, so the plan must not claim any parallelism.
+    assert!(!computed.execution.used_parallelism);
+    assert_eq!(computed.execution.effective_threads, 1);
+}
+
+#[test]
+fn compute_checksum_values_matches_the_progress_reporting_variant() {
+    let temp = TestDir::new();
+    let source = temp.path().join("values.bin");
+    fs::write(&source, b"hello world").expect("fixture");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(2));
+    let request = ChecksumRequest {
+        source,
+        algorithms: vec!["crc32".into(), "sha1".into()],
+        start: None,
+        length: None,
+    };
+
+    let quiet = super::compute_checksum_values(&request, &context).expect("quiet");
+    let mut seen = Vec::new();
+    let loud = super::compute_checksum_values_with_progress(&request, &context, &mut |progress| {
+        seen.push(progress.processed_bytes)
+    })
+    .expect("loud");
+
+    assert_eq!(quiet.values, loud.values);
+    assert_eq!(
+        quiet.values.get("crc32"),
+        Some(&"0d4a1185".to_string()),
+        "{:?}",
+        quiet.values
+    );
+    assert_eq!(seen.last(), Some(&11));
+}
+
+#[test]
+fn an_unknown_algorithm_is_rejected_before_the_range_is_resolved() {
+    let temp = TestDir::new();
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(1));
+    let request = ChecksumRequest {
+        // The source does not exist; the algorithm check must fail first.
+        source: temp.path().join("absent.bin"),
+        algorithms: vec!["crc99".into()],
+        start: None,
+        length: None,
+    };
+    let error = super::compute_checksum_values(&request, &context)
+        .map(|_| ())
+        .expect_err("an unknown algorithm must fail");
+    assert!(error.to_string().contains("crc99"), "{error}");
+}
+
+#[test]
+fn the_checksum_planner_traces_the_plan_it_selected_and_the_result() {
+    let temp = TestDir::new();
+    let source = temp.path().join("traced.bin");
+    write_patterned_file(&source, 64 * 1024);
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(2));
+    let request = ChecksumRequest {
+        source,
+        algorithms: vec!["crc32".into(), "md5".into()],
+        start: Some(0),
+        length: Some(64 * 1024),
+    };
+
+    let capture = TraceCapture::default();
+    let computed = capture
+        .record(|| super::compute_checksum_values(&request, &context))
+        .expect("checksum");
+    assert_eq!(computed.values.len(), 2);
+
+    capture.assert_contains_all(&[
+        "computing checksum values",
+        "selected checksum execution plan",
+        "executing checksum plan",
+        "checksum execution thread plan resolved",
+        "checksum plan completed with",
+        "mode=Sequential",
+    ]);
+}
+
+#[test]
+fn a_pooled_plan_traces_its_pooled_completion() {
+    let temp = TestDir::new();
+    let source = temp.path().join("pooled.bin");
+    write_patterned_file(&source, 256 * 1024);
+    let range = whole_file_range(256 * 1024);
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let plan = ChecksumPlan::parallel(ChecksumMode::ParallelFanout, 2);
+
+    let capture = TraceCapture::default();
+    let mut noop = |_: ChecksumProgress| {};
+    let (_, values) = capture
+        .record(|| {
+            execute_plan(
+                &source,
+                &range,
+                &[Algorithm::Crc32, Algorithm::Md5],
+                &context,
+                &plan,
+                &mut noop,
+            )
+        })
+        .expect("pooled execution");
+    assert_eq!(values.len(), 2);
+
+    capture.assert_contains_all(&[
+        "executing checksum plan",
+        "mode=ParallelFanout",
+        "checksum plan completed with pooled execution",
+        "algorithm_count=2",
+    ]);
 }
