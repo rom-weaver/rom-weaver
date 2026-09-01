@@ -44,6 +44,7 @@ pub(crate) fn pack_v1(platform: &str, profile: &str, games: &[(&str, Vec<Value>)
             provenance: Vec::new(),
             legacy_variant: false,
             dump_tags: Vec::new(),
+            alternate_names: Vec::new(),
             game_id: None,
             region: None,
             language: None,

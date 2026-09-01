@@ -1050,6 +1050,14 @@ export function mergeLegacyFallbackGames(libretroGames, openGoodGames) {
     }
     owner.provenance = mergeProvenance(owner.provenance, fallback.provenance);
     owner.dumpTags = [...new Set([...owner.dumpTags, ...fallback.dumpTags])].sort();
+    // The Libretro record keeps the canonical name, so the GoodTools name -
+    // the one carrying a revision tag such as "(PRG0)" - would otherwise be
+    // lost for every dump both sources describe.
+    if (fallback.name !== owner.name) {
+      owner.alternateNames = [
+        ...new Set([...(owner.alternateNames ?? []), ...(fallback.alternateNames ?? []), fallback.name]),
+      ].sort();
+    }
     for (const component of fallback.components) {
       if (componentKeys(component).some((key) => owners.has(key))) continue;
       owner.components.push({ ...component, ordinal: owner.components.length });
@@ -1558,6 +1566,7 @@ function buildRwfp5Tables(platform, source, games) {
       game.revision,
       game.parent,
       ...(game.dumpTags ?? []),
+      ...(game.alternateNames ?? []),
     );
     for (const component of game.components)
       stringValues.push(component.filename, component.hashScope ?? "full_file");
@@ -1722,6 +1731,14 @@ function buildRwfp5Tables(platform, source, games) {
     );
     return Buffer.concat([values[0], Buffer.from([presence]), ...values.slice(1)]);
   });
+  // One row per game, in the game table's order. The member is written only
+  // when a game carries an alternate name, so a pack without any keeps the
+  // exact bytes it had before the member existed.
+  const alternateNameRows = games.map((game) => {
+    const ids = [...new Set((game.alternateNames ?? []).map(stringId))].sort((a, b) => a - b);
+    return Buffer.concat([encodeUvarint(ids.length), ...ids.map(encodeUvarint)]);
+  });
+  const hasAlternateNames = games.some((game) => (game.alternateNames ?? []).length > 0);
   const ownerRows = hashes.map((_, hashId) => {
     const owners = [];
     components.forEach(({ hashId: id }, componentId) => {
@@ -1794,6 +1811,14 @@ function buildRwfp5Tables(platform, source, games) {
           ...setRows(tSets),
         ]),
       },
+      ...(hasAlternateNames
+        ? [
+            {
+              name: "alternate-names.bin",
+              bytes: variableTable("RWN5", games.length, alternateNameRows),
+            },
+          ]
+        : []),
     ],
   };
 }

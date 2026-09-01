@@ -44,6 +44,12 @@ pub struct IdentifyTitleMatch {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dump_tags: Vec<String>,
+    /// Names other databases give this dump. The pack build keeps one record
+    /// per hash under one canonical name, so the other source's name reaches
+    /// the reader through this field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub alternate_names: Vec<String>,
     /// What the database says this title's bytes are. A caller holding only a
     /// partial check (a patch's source crc32, say) reads every other checksum
     /// and the size from here.
@@ -672,6 +678,7 @@ fn identify_title_match(
             .collect(),
         legacy_variant: game_match.legacy_variant,
         dump_tags: game_match.dump_tags,
+        alternate_names: game_match.alternate_names,
         expected_components: game_match
             .components
             .into_iter()

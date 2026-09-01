@@ -60,6 +60,27 @@ describe("IdentifyDrawer", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("Pokemon - Emerald Version (UE) [!]"));
   });
 
+  it("lists a name another database uses as an alias", () => {
+    const { container } = render(
+      <IdentifyDrawer
+        identification={{
+          matches: [
+            {
+              ...gbaMatch("Legend of Zelda, The (USA)"),
+              alternateNames: ["Legend of Zelda, The (U) (PRG0) [!]"],
+            },
+          ],
+          status: "matched",
+        }}
+      />,
+    );
+
+    const aliases = [...container.querySelectorAll('button[aria-label^="Copy alias name "]')];
+    expect(aliases.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Legend of Zelda, The (U) (PRG0) [!]"),
+    ]);
+  });
+
   it("pairs a short name with its neighbour", () => {
     const { container } = render(
       <IdentifyDrawer identification={{ matches: [gbaMatch("Tetris")], status: "matched" }} />,

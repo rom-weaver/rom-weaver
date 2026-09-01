@@ -331,6 +331,12 @@ export type IdentifyStatus = "matched" | "ambiguous" | "unknown";
 
 export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, provenance?: Array<IdentifyProvenance>, legacy_variant?: boolean, dump_tags?: Array<string>,
 /**
+ * Names other databases give this dump. The pack build keeps one record
+ * per hash under one canonical name, so the other source's name reaches
+ * the reader through this field.
+ */
+alternate_names?: Array<string>,
+/**
  * What the database says this title's bytes are. A caller holding only a
  * partial check (a patch's source crc32, say) reads every other checksum
  * and the size from here.

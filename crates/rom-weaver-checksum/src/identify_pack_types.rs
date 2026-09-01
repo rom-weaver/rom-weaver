@@ -79,6 +79,11 @@ pub struct PackGame {
     pub legacy_variant: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dump_tags: Vec<String>,
+    /// Other names the same dump is known by. A merge keeps one record per
+    /// hash and one canonical name, so the name the other source used (a
+    /// GoodTools name with its revision tag, say) survives only here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternate_names: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

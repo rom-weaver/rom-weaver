@@ -2,7 +2,6 @@ import { ScanSearch } from "lucide-react";
 import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import {
-  formatIdentifySource,
   IDENTIFY_CONDITION_LABEL,
   IDENTIFY_QUALITY_LABEL,
   IDENTIFY_STATUS_MARK,
@@ -18,7 +17,9 @@ const unique = (values: Iterable<string>) => [...new Set([...values].map((value)
 
 /** Raw dump names that differ from the derived standard names. */
 const collectAliases = (matches: readonly ParsedIdentifyTitleMatch[], canonical: readonly string[]) =>
-  unique(matches.map((match) => match.name)).filter((name) => !canonical.includes(name));
+  unique([...matches.map((match) => match.name), ...matches.flatMap((match) => match.alternateNames ?? [])]).filter(
+    (name) => !canonical.includes(name),
+  );
 
 /* A value shorter than this pairs two rows per line (ck-half); a longer one
    keeps the full row so it never collides with its neighbour. */
@@ -68,7 +69,6 @@ const IdentifyDrawer = ({
   const platforms = unique(matches.map((match) => match.platform));
   const algorithms = unique(matches.map((match) => match.algorithm.toUpperCase()));
   const variants = unique(matches.map((match) => match.variant));
-  const databases = unique(matches.map((match) => formatIdentifySource(match.database)));
   const provenance = unique(
     matches.flatMap(
       (match) => match.provenance?.map((item) => identifySourceLabel(item.sourceName || item.source)) ?? [],

@@ -187,7 +187,22 @@ fn curated_aliases(platform: &str) -> &'static [&'static str] {
 pub(super) struct IdentifyPackProvider {
     database_dir: PathBuf,
     dir_catalog: Option<IdentifyCatalog>,
+    data_catalog: Option<IdentifyCatalog>,
     cache: RefCell<HashMap<String, Rc<LoadedPack>>>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_catalog(path: Option<PathBuf>) -> Result<Option<IdentifyCatalog>> {
+    let Some(path) = path.filter(|path| path.is_file()) else {
+        return Ok(None);
+    };
+    let bytes = fs::read(&path).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "failed to read identify catalog `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    Ok(Some(IdentifyCatalog::parse(&bytes)?))
 }
 
 impl IdentifyPackProvider {
@@ -197,26 +212,18 @@ impl IdentifyPackProvider {
             Some(dir) => dir,
             None => default_database_dir()?,
         };
-        let catalog_path = database_dir.join("catalog.json");
-        let dir_catalog = if catalog_path.is_file() {
-            let bytes = fs::read(&catalog_path).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to read identify catalog `{}`: {error}",
-                    catalog_path.display()
-                ))
-            })?;
-            Some(IdentifyCatalog::parse(&bytes)?)
-        } else {
-            None
-        };
+        let dir_catalog = read_catalog(Some(database_dir.join("catalog.json")))?;
+        let data_catalog = read_catalog(super::identify_builtin::catalog_path(&database_dir))?;
         trace!(
             database_dir = %database_dir.display(),
             has_catalog = dir_catalog.is_some(),
+            has_data_catalog = data_catalog.is_some(),
             "identify pack provider initialized"
         );
         Ok(Self {
             database_dir,
             dir_catalog,
+            data_catalog,
             cache: RefCell::new(HashMap::new()),
         })
     }
@@ -226,32 +233,50 @@ impl IdentifyPackProvider {
         &self.database_dir
     }
 
-    /// Resolve a platform name or alias: the database dir's catalog first,
-    /// then the builtin OpenGood catalog.
+    /// Resolve through the user, packaged, then built-in catalogs.
     pub(super) fn resolve_entry(&self, name: &str) -> Option<IdentifyPlatformCatalogEntry> {
-        if let Some(catalog) = &self.dir_catalog
-            && let Some(entry) = catalog.resolve_platform(name)
+        for catalog in [self.dir_catalog.as_ref(), self.data_catalog.as_ref()]
+            .into_iter()
+            .flatten()
         {
-            return Some(entry.clone());
+            if let Some(entry) = catalog.resolve_platform(name) {
+                return Some(entry.clone());
+            }
         }
         IdentifyCatalog::builtin().resolve_platform(name).cloned()
     }
 
-    /// Every catalog entry: the database dir's entries plus builtin entries it
-    /// does not override, sorted by canonical platform.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Every catalog entry, with earlier catalogs overriding later ones.
     pub(super) fn catalog_entries(&self) -> Vec<IdentifyPlatformCatalogEntry> {
         let mut entries: Vec<IdentifyPlatformCatalogEntry> = self
             .dir_catalog
             .as_ref()
             .map(|catalog| catalog.entries().to_vec())
             .unwrap_or_default();
-        for builtin in IdentifyCatalog::builtin().entries() {
-            if !entries
-                .iter()
-                .any(|entry| entry.canonical_platform == builtin.canonical_platform)
-            {
-                entries.push(builtin.clone());
+        let listed = |catalogs: &[Option<&IdentifyCatalog>],
+                      entry: &IdentifyPlatformCatalogEntry| {
+            catalogs.iter().flatten().any(|catalog| {
+                std::iter::once(&entry.canonical_platform)
+                    .chain(entry.aliases.iter())
+                    .any(|name| catalog.resolve_platform(name).is_some())
+            })
+        };
+        for extra in self
+            .data_catalog
+            .as_ref()
+            .map(IdentifyCatalog::entries)
+            .unwrap_or_default()
+        {
+            if !listed(&[self.dir_catalog.as_ref()], extra) {
+                entries.push(extra.clone());
+            }
+        }
+        for extra in IdentifyCatalog::builtin().entries() {
+            if !listed(
+                &[self.dir_catalog.as_ref(), self.data_catalog.as_ref()],
+                extra,
+            ) {
+                entries.push(extra.clone());
             }
         }
         entries.sort_by(|a, b| a.canonical_platform.cmp(&b.canonical_platform));
@@ -487,6 +512,7 @@ fn redump_game_record(game: RedumpGame, platform: &str) -> Option<PackGame> {
         provenance: Vec::new(),
         legacy_variant: false,
         dump_tags: Vec::new(),
+        alternate_names: Vec::new(),
         game_id: None,
         region: None,
         language: None,
@@ -1152,9 +1178,9 @@ fn resolve_install_platform(provider: &IdentifyPackProvider, system: &str) -> Re
         return Ok(platform.to_string());
     }
     if let Some(entry) = provider.resolve_entry(system) {
-        if entry.source == IdentifySource::OpenGood {
+        if entry.source != IdentifySource::Redump {
             return Err(RomWeaverError::Validation(format!(
-                "`{}` is an OpenGood platform; its pack is built in and never installed from Redump",
+                "`{}` is a built-in platform; its pack ships with rom-weaver and is never installed from Redump",
                 entry.canonical_platform
             )));
         }

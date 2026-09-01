@@ -195,6 +195,23 @@ fn render_identify(surface: &Surface, event: &ProgressEvent) {
         let key = if names.len() == 1 { "Match" } else { "Matches" };
         pairs.push((key.to_string(), names.join(", ")));
     }
+    let alternates: Vec<String> = identify
+        .get("matches")
+        .and_then(Value::as_array)
+        .map(|matches| {
+            matches
+                .iter()
+                .filter_map(|entry| entry.get("alternate_names").and_then(Value::as_array))
+                .flatten()
+                .filter_map(Value::as_str)
+                .filter(|name| !names.iter().any(|primary| primary == name))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    if !alternates.is_empty() {
+        pairs.push(("Also known as".to_string(), alternates.join(", ")));
+    }
     collect_pairs("", identify, &mut pairs);
     if pairs.is_empty() {
         return label_line(surface, event);

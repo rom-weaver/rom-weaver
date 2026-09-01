@@ -10,7 +10,22 @@ fn rwfp1_pack(entries: &[([u8; 4], &str)]) -> Vec<u8> {
 }
 
 fn rwfp1_pack_with_size(entries: &[([u8; 4], &str)], size: u64) -> Vec<u8> {
-    let games = entries
+    encode_rwfp1(rwfp1_games(entries, size))
+}
+
+fn encode_rwfp1(games: Vec<PackGame>) -> Vec<u8> {
+    rom_weaver_checksum::identify_pack_v1::encode(
+        "Test System",
+        IdentifySource::Libretro,
+        "full_file",
+        &serde_json::json!([]),
+        games,
+    )
+    .expect("RWFP1 pack")
+}
+
+fn rwfp1_games(entries: &[([u8; 4], &str)], size: u64) -> Vec<PackGame> {
+    entries
         .iter()
         .map(|(crc, name)| PackGame {
             name: (*name).to_string(),
@@ -20,6 +35,7 @@ fn rwfp1_pack_with_size(entries: &[([u8; 4], &str)], size: u64) -> Vec<u8> {
             provenance: Vec::new(),
             legacy_variant: false,
             dump_tags: Vec::new(),
+            alternate_names: Vec::new(),
             game_id: None,
             region: None,
             language: None,
@@ -42,15 +58,7 @@ fn rwfp1_pack_with_size(entries: &[([u8; 4], &str)], size: u64) -> Vec<u8> {
                 session: None,
             }],
         })
-        .collect();
-    rom_weaver_checksum::identify_pack_v1::encode(
-        "Test System",
-        IdentifySource::Libretro,
-        "full_file",
-        &serde_json::json!([]),
-        games,
-    )
-    .expect("RWFP1 pack")
+        .collect()
 }
 
 pub(crate) fn identify_pack_with_crc_size(crc32: [u8; 4], size: u64, name: &str) -> Vec<u8> {
@@ -68,6 +76,7 @@ pub(crate) fn identify_pack_with_sized_entries(entries: &[([u8; 4], u64, &str)])
             provenance: Vec::new(),
             legacy_variant: false,
             dump_tags: Vec::new(),
+            alternate_names: Vec::new(),
             game_id: None,
             region: None,
             language: None,
@@ -116,6 +125,7 @@ fn identify_pack_with_hashes(crc32: [u8; 4], md5: [u8; 16], sha1: [u8; 20], name
         provenance: Vec::new(),
         legacy_variant: false,
         dump_tags: Vec::new(),
+        alternate_names: Vec::new(),
         game_id: None,
         region: None,
         language: None,
@@ -229,6 +239,33 @@ fn identify_prints_the_matched_title_in_the_human_output() {
     assert!(
         text.contains("Match") && text.contains("Hello World (Test) [!]"),
         "expected the matched title in the human output, got: {text}"
+    );
+}
+
+#[test]
+fn identify_reports_the_name_another_database_uses() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
+    let mut games = rwfp1_games(&[([0x36, 0x10, 0xa6, 0x86], "Hello World (Test) [!]")], 5);
+    games[0].alternate_names = vec!["Hello World (U) [!]".to_string()];
+    fs::write(temp.child("test.pack").path(), encode_rwfp1(games)).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--input",
+            temp.child("hello.bin").path().to_str().expect("ROM path"),
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ],
+        0,
+    );
+    let identify = &parse_single_json_line(&output)["details"]["identify"];
+
+    assert_eq!(
+        identify["matches"][0]["alternate_names"][0],
+        "Hello World (U) [!]"
     );
 }
 
