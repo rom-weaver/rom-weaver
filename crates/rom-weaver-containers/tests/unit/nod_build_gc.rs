@@ -470,7 +470,7 @@ fn a_wii_partition_pads_the_user_region_to_a_sector() {
     files.insert("sys/apploader.img", Arc::from(apploader_bytes()));
     files.insert("sys/main.dol", Arc::from(dol_bytes()));
     // The file name is chosen so the FST byte size is a multiple of four; see
-    // `a_wii_fst_whose_size_is_not_a_multiple_of_four_is_rejected`.
+    // `a_wii_fst_whose_size_is_not_a_multiple_of_four_is_padded`.
     files.insert("files/banner.bin", payload(64, 5));
 
     let mut builder = GCPartitionBuilder::new(true, base_overrides());
@@ -518,7 +518,7 @@ fn a_wii_partition_pads_the_user_region_to_a_sector() {
 }
 
 #[test]
-fn a_wii_fst_whose_size_is_not_a_multiple_of_four_is_rejected() {
+fn a_wii_fst_whose_size_is_not_a_multiple_of_four_is_padded() {
     let mut files = FileMap::default();
     files.insert("sys/apploader.img", Arc::from(apploader_bytes()));
     files.insert("sys/main.dol", Arc::from(dol_bytes()));
@@ -540,14 +540,21 @@ fn a_wii_fst_whose_size_is_not_a_multiple_of_four_is_rejected() {
             .expect("add file");
     }
 
-    // `BootHeader::set_fst_size` stores a Wii FST size divided by four and
-    // truncates, so a 58-byte FST reads back as 56 and the generated table no
-    // longer matches the header.
-    let err = build_err(builder.build(files.write_callback()));
-    assert!(
-        matches!(&err, Error::Other(msg) if msg == "FST size mismatch: 58 != 56"),
-        "unexpected error: {err}"
-    );
+    // `BootHeader::set_fst_size` stores a Wii FST size divided by four, so an
+    // unpadded 58-byte FST used to read back as 56 and fail the build with an
+    // FST size mismatch. FstBuilder now rounds a Wii FST up to 60.
+    let writer = builder.build(files.write_callback()).expect("build disc");
+    let mut out = Vec::new();
+    writer
+        .write_to(&mut out, files.write_callback())
+        .expect("write disc");
+
+    let boot_header =
+        BootHeader::read_from_bytes(&out[BB2_OFFSET..BB2_OFFSET + size_of::<BootHeader>()])
+            .expect("boot header");
+    let fst_size = boot_header.fst_size(true);
+    assert_eq!(fst_size, 60);
+    assert_eq!(fst_size % 4, 0);
 }
 
 #[test]

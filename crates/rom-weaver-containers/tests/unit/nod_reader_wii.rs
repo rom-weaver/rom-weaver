@@ -695,11 +695,17 @@ fn read_partition_info_guesses_the_data_end_for_a_zero_sized_partition() {
 
     let disc = open_wii(image, &DiscOptions::default());
     let partition = &disc.partitions()[0];
-    // The guess is derived from the highest FST file end, rounded up to a
-    // whole sector.
-    let expected =
-        (CONTENT_FILE_OFFSET + CONTENT_FILE_SIZE as u64).div_ceil(SECTOR_SIZE as u64) as u32;
+    // The guess is derived from the highest FST file end, rounded up to a whole
+    // sector. `data_end_sector` is an absolute disc sector, so the
+    // partition-relative count is added to the partition's data start.
+    let expected = partition.data_start_sector
+        + (CONTENT_FILE_OFFSET + CONTENT_FILE_SIZE as u64).div_ceil(SECTOR_SIZE as u64) as u32;
     assert_eq!(partition.data_end_sector, expected);
+    // Absolute means the partition describes a non-empty region, which the
+    // relative count did not: data_size() underflowed and data_contains_sector
+    // was false everywhere.
+    assert!(partition.data_end_sector > partition.data_start_sector);
+    assert!(partition.data_contains_sector(partition.data_start_sector));
 }
 
 #[test]
