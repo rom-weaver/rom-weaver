@@ -141,13 +141,6 @@ fn artifact_match(name: &str, platform: &str) -> ArtifactGameMatch {
         provenance: Vec::new(),
         legacy_variant: false,
         dump_tags: Vec::new(),
-        evidence: MatchEvidence {
-            required_components_matched: 1,
-            required_components_total: 1,
-            layout_matched: true,
-            missing: Vec::new(),
-            unexpected: Vec::new(),
-        },
         components: Vec::new(),
         game_id: None,
         region: None,
@@ -155,6 +148,13 @@ fn artifact_match(name: &str, platform: &str) -> ArtifactGameMatch {
         disc_number: None,
         revision: None,
         parent: None,
+        evidence: MatchEvidence {
+            required_components_matched: 1,
+            required_components_total: 1,
+            layout_matched: true,
+            missing: Vec::new(),
+            unexpected: Vec::new(),
+        },
     }
 }
 

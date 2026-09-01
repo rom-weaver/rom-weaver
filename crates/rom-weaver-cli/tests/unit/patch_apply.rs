@@ -377,6 +377,7 @@ fn a_hard_link_counts_as_the_same_output_file() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn path_occupancy_sees_a_dangling_symlink() {
     let temp = assert_fs::TempDir::new().expect("temp dir");
