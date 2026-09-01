@@ -1,6 +1,6 @@
 use std::{
-    fs::{self, File},
-    io::{self, Cursor, Read},
+    fs::{self, File, OpenOptions},
+    io::{self, Cursor, Read, Write},
 };
 
 use rom_weaver_core::{
@@ -10,8 +10,18 @@ use rom_weaver_core::{
 };
 
 use super::{
-    RUP_COMMAND_OPEN_NEW_FILE, RupFile, RupMetadata, RupPatchHandler, build_xor_records,
-    create_rup_patch_bytes, encode_rup_patch, format_md5_hex, md5_bytes, parse_rup_bytes,
+    COPIER_HEADER_SIZE, GAME_BOY_BANK_SIZE, LYNX_HEADER_SIZE, NES_INES_HEADER_SIZE, PCE_BANK_SIZE,
+    RUP_COMMAND_END, RUP_COMMAND_OPEN_NEW_FILE, RUP_COMMAND_XOR_RECORD, RUP_HEADER_SIZE, RupFile,
+    RupMetadata, RupOverflowMode, RupPatchHandler, RupPreparedRecord, RupPreparedTask, RupRecord,
+    SMD_BLOCK_SIZE, SNES_BANK_SIZE, apply_rup_prepared_records, apply_xor_records_in_place,
+    build_rup_prepared_tasks, build_xor_records, collect_rup_chunk_records,
+    collect_rup_records_parallel, copy_exact_bytes, copy_unif_payload_chunks,
+    create_rup_patch_bytes, create_rup_patch_parallel, deinterleave_smd_block,
+    deinterleave_snes_payload, encode_rup_patch, format_md5_hex, is_unif_payload_chunk, md5_bytes,
+    nibble_to_hex, normalize_rup_input, parallel_chunked_capability, parse_rup_bytes,
+    prepare_rup_write_task, push_vlv, read_unif_chunk_header, read_xor_suffix,
+    rebuild_unif_payload, snes_payload_needs_deinterleave, validate_rup_ranges, write_fixed_string,
+    write_n64_big_endian_to_temp, write_smd_deinterleaved_to_temp,
 };
 use crate::{
     RUP,
@@ -1613,4 +1623,945 @@ fn smd_interleave_block(payload: &[u8]) -> Vec<u8> {
         output[0x2000 + index] = payload[(index * 2) + 1];
     }
     output
+}
+
+/// The 0x800-byte metadata header every RUP patch starts with, taken from a
+/// real encode so the size check in the parser is satisfied exactly.
+fn rup_header_bytes() -> Vec<u8> {
+    let mut bytes = encode_rup_patch(&RupMetadata::default(), &[]).expect("header");
+    bytes.truncate(RUP_HEADER_SIZE);
+    bytes
+}
+
+fn rup_patch_with_commands(commands: &[u8]) -> Vec<u8> {
+    let mut bytes = rup_header_bytes();
+    bytes.extend_from_slice(commands);
+    bytes
+}
+
+fn rup_file_of_type(rom_type: u8) -> RupFile {
+    typed_rup_file(b"", b"", rom_type)
+}
+
+fn sized_fixture(temp: &TestDir, name: &str, len: usize) -> std::path::PathBuf {
+    let path = temp.child(name);
+    let bytes = (0..len)
+        .map(|index| (index & 0xff) as u8)
+        .collect::<Vec<_>>();
+    fs::write(&path, bytes).expect("fixture");
+    path
+}
+
+#[test]
+fn parse_rejects_a_patch_smaller_than_its_header() {
+    let error = parse_rup_bytes(&[0u8; 16]).expect_err("an undersized patch should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("too small to contain a valid header"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parse_rejects_an_xor_record_before_any_file_header() {
+    let bytes = rup_patch_with_commands(&[RUP_COMMAND_XOR_RECORD, 0, 0, RUP_COMMAND_END]);
+    let error = parse_rup_bytes(&bytes).expect_err("a leading XOR record should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("XOR record before any file header"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parse_rejects_an_unknown_command_byte() {
+    let bytes = rup_patch_with_commands(&[0x7f, RUP_COMMAND_END]);
+    let error = parse_rup_bytes(&bytes).expect_err("an unknown command should fail");
+    assert!(
+        error.to_string().contains("invalid command"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parse_rejects_a_patch_without_an_end_command() {
+    let bytes = rup_header_bytes();
+    let error = parse_rup_bytes(&bytes).expect_err("a patch with no commands should fail");
+    assert!(
+        error.to_string().contains("missing the end command"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parse_rejects_a_command_stream_that_ends_mid_record() {
+    let bytes = rup_patch_with_commands(&[RUP_COMMAND_OPEN_NEW_FILE]);
+    let error = parse_rup_bytes(&bytes).expect_err("a truncated record should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("ended unexpectedly while reading data"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parse_rejects_a_vlv_wider_than_sixty_four_bits() {
+    let bytes = rup_patch_with_commands(&[RUP_COMMAND_OPEN_NEW_FILE, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let error = parse_rup_bytes(&bytes).expect_err("a 9-byte VLV should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("VLV length exceeded 64-bit range"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn apply_rejects_an_endpoint_selection_that_names_a_missing_variant() {
+    let temp = TestDir::new();
+    let input_path = temp.child("source.bin");
+    let patch_path = temp.child("update.rup");
+    fs::write(&input_path, b"source").expect("source");
+    fs::write(&patch_path, typed_rup_patch(b"source", b"target", 0)).expect("patch");
+
+    let error = RupPatchHandler::new(&RUP)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1).with_patch_endpoint_selection(
+                PatchEndpointSelection {
+                    variant: 3,
+                    direction: PatchApplyDirection::Forward,
+                },
+            ),
+        )
+        .expect_err("a missing variant should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("RUP endpoint variant 3 is not present"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn apply_rejects_a_selected_endpoint_whose_checksum_does_not_match() {
+    let temp = TestDir::new();
+    let input_path = temp.child("source.bin");
+    let patch_path = temp.child("update.rup");
+    fs::write(&input_path, b"source").expect("source");
+    fs::write(&patch_path, typed_rup_patch(b"source", b"target", 0)).expect("patch");
+
+    let error = RupPatchHandler::new(&RUP)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1).with_patch_endpoint_selection(
+                PatchEndpointSelection {
+                    variant: 0,
+                    direction: PatchApplyDirection::Reverse,
+                },
+            ),
+        )
+        .expect_err("the reverse endpoint does not match the source input");
+    assert!(
+        error
+            .to_string()
+            .contains("RUP selected reverse endpoint checksum mismatch"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn validate_without_checksums_falls_back_to_the_only_file_variant() {
+    let temp = TestDir::new();
+    let input_path = temp.child("other.bin");
+    let patch_path = temp.child("update.rup");
+    fs::write(&input_path, b"zzzzzz").expect("input");
+    fs::write(&patch_path, typed_rup_patch(b"source", b"target", 0)).expect("patch");
+
+    let report = RupPatchHandler::new(&RUP)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect("the single variant is used when checksums are ignored");
+    assert!(report.label.contains("validated"), "{}", report.label);
+}
+
+#[test]
+fn validate_without_checksums_rejects_a_multi_variant_patch() {
+    let temp = TestDir::new();
+    let input_path = temp.child("other.bin");
+    let patch_path = temp.child("multi.rup");
+    fs::write(&input_path, b"zzzzzz").expect("input");
+    let bytes = encode_rup_patch(
+        &RupMetadata::default(),
+        &[
+            typed_rup_file(b"source", b"target", 0),
+            typed_rup_file(b"source", b"tarGet", 0),
+        ],
+    )
+    .expect("multi-variant patch");
+    fs::write(&patch_path, bytes).expect("patch");
+
+    let error = RupPatchHandler::new(&RUP)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect_err("multiple variants leave the direction ambiguous");
+    assert!(
+        error.to_string().contains("input direction is ambiguous"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn validate_rejects_an_input_that_matches_more_than_one_variant() {
+    let temp = TestDir::new();
+    let input_path = temp.child("source.bin");
+    let patch_path = temp.child("duplicate.rup");
+    fs::write(&input_path, b"source").expect("input");
+    let bytes = encode_rup_patch(
+        &RupMetadata::default(),
+        &[
+            typed_rup_file(b"source", b"target", 0),
+            typed_rup_file(b"source", b"target", 0),
+        ],
+    )
+    .expect("duplicate-variant patch");
+    fs::write(&patch_path, bytes).expect("patch");
+
+    let error = RupPatchHandler::new(&RUP)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("two matching variants are ambiguous");
+    assert!(
+        error.to_string().contains("matched multiple file variants"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn apply_rejects_a_patch_whose_target_checksum_does_not_match_the_result() {
+    let temp = TestDir::new();
+    let input_path = temp.child("source.bin");
+    let patch_path = temp.child("bad-target.rup");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, b"source").expect("input");
+
+    let mut file = typed_rup_file(b"source", b"target", 0);
+    file.target_md5 = md5_bytes(b"not-the-target");
+    fs::write(
+        &patch_path,
+        encode_rup_patch(&RupMetadata::default(), &[file]).expect("patch"),
+    )
+    .expect("patch file");
+
+    let error = RupPatchHandler::new(&RUP)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path,
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("a wrong target md5 should fail");
+    assert!(
+        error.to_string().contains("RUP target checksum mismatch"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn normalization_leaves_bank_aligned_and_unmarked_inputs_alone() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    let cases = [
+        ("gb-aligned.bin", GAME_BOY_BANK_SIZE as usize, 5u8),
+        ("pce-aligned.bin", PCE_BANK_SIZE as usize, 8),
+        ("lynx-plain.bin", 0x80, 9),
+        ("n64-plain.bin", 0x40, 4),
+        ("unknown-type.bin", 0x40, 200),
+    ];
+    for (name, len, rom_type) in cases {
+        let path = sized_fixture(&temp, name, len);
+        let normalized =
+            normalize_rup_input(&path, &rup_file_of_type(rom_type), &context).expect("normalize");
+        assert_eq!(normalized.path, path, "{name} should not be rewritten");
+        assert!(normalized.reconstruction.is_identity(), "{name}");
+    }
+}
+
+#[test]
+fn normalization_strips_copier_headers_from_game_boy_and_pce_inputs() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    for (name, bank_size, rom_type) in [
+        ("gb-headered.bin", GAME_BOY_BANK_SIZE, 5u8),
+        ("pce-headered.bin", PCE_BANK_SIZE, 8),
+    ] {
+        let len = (bank_size + COPIER_HEADER_SIZE) as usize;
+        let path = sized_fixture(&temp, name, len);
+        let normalized =
+            normalize_rup_input(&path, &rup_file_of_type(rom_type), &context).expect("normalize");
+        assert_ne!(normalized.path, path, "{name} should be rewritten");
+        assert_eq!(
+            fs::metadata(&normalized.path).expect("normalized").len(),
+            bank_size
+        );
+        // The copier header is dropped, not preserved, for these rom types.
+        assert!(normalized.reconstruction.is_identity(), "{name}");
+    }
+}
+
+#[test]
+fn normalization_strips_and_preserves_lynx_and_nes_ffe_headers() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    let lynx = temp.child("game.lnx");
+    let mut lynx_bytes = b"LYNX".to_vec();
+    lynx_bytes.resize(LYNX_HEADER_SIZE as usize + 0x20, 0x11);
+    fs::write(&lynx, &lynx_bytes).expect("lynx fixture");
+    let normalized =
+        normalize_rup_input(&lynx, &rup_file_of_type(9), &context).expect("lynx normalize");
+    assert_eq!(fs::metadata(&normalized.path).expect("payload").len(), 0x20);
+    assert!(!normalized.reconstruction.is_identity());
+
+    let ffe = temp.child("game.nes");
+    let mut ffe_bytes = vec![0u8; COPIER_HEADER_SIZE as usize + 0x30];
+    ffe_bytes[8] = 0xaa;
+    ffe_bytes[9] = 0xbb;
+    fs::write(&ffe, &ffe_bytes).expect("ffe fixture");
+    let normalized =
+        normalize_rup_input(&ffe, &rup_file_of_type(1), &context).expect("nes normalize");
+    assert_eq!(fs::metadata(&normalized.path).expect("payload").len(), 0x30);
+    assert!(!normalized.reconstruction.is_identity());
+}
+
+#[test]
+fn normalization_reports_inputs_that_are_shorter_than_their_headers() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    let ines = temp.child("tiny.nes");
+    fs::write(&ines, b"NES\x1A").expect("ines fixture");
+    let ines_error = normalize_rup_input(&ines, &rup_file_of_type(1), &context)
+        .expect_err("an iNES file shorter than its header should fail");
+    assert!(
+        ines_error.to_string().contains(&format!(
+            "requires at least 0x{NES_INES_HEADER_SIZE:X} bytes"
+        )),
+        "unexpected error: {ines_error}"
+    );
+
+    let snes = sized_fixture(&temp, "tiny.sfc", 100);
+    let snes_error = normalize_rup_input(&snes, &rup_file_of_type(3), &context)
+        .expect_err("a headered SNES file shorter than 0x200 should fail");
+    assert!(
+        snes_error
+            .to_string()
+            .contains("SNES header normalization requires at least 0x200 bytes"),
+        "unexpected error: {snes_error}"
+    );
+
+    let smd = temp.child("tiny.smd");
+    let mut smd_bytes = vec![0u8; 0x100];
+    smd_bytes[8] = 0xaa;
+    smd_bytes[9] = 0xbb;
+    fs::write(&smd, &smd_bytes).expect("smd fixture");
+    let smd_error = normalize_rup_input(&smd, &rup_file_of_type(7), &context)
+        .expect_err("an interleaved SMD file shorter than 0x200 should fail");
+    assert!(
+        smd_error
+            .to_string()
+            .contains("SMD normalization requires at least 0x200 bytes"),
+        "unexpected error: {smd_error}"
+    );
+}
+
+#[test]
+fn normalization_keeps_native_sms_images_untouched() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+    let path = temp.child("game.sms");
+    let mut bytes = vec![0u8; 0x8000];
+    bytes[0x7ff4..0x7ff8].copy_from_slice(b"SEGA");
+    fs::write(&path, &bytes).expect("sms fixture");
+
+    let normalized =
+        normalize_rup_input(&path, &rup_file_of_type(6), &context).expect("sms normalize");
+    assert_eq!(normalized.path, path);
+    assert!(normalized.reconstruction.is_identity());
+}
+
+#[test]
+fn n64_normalization_requires_a_length_that_matches_the_byte_order_unit() {
+    let temp = TestDir::new();
+    let path = sized_fixture(&temp, "odd.n64", 6);
+    let context = test_context_with_threads(&temp, 1)
+        .with_patch_input_n64_byte_order(PatchInputN64ByteOrder::LittleEndian);
+
+    let error = normalize_rup_input(&path, &rup_file_of_type(4), &context)
+        .expect_err("a 6-byte little-endian image is not word aligned");
+    assert!(
+        error
+            .to_string()
+            .contains("requires a byte length divisible by 4"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn n64_big_endian_rewrite_copies_the_input_byte_for_byte() {
+    let temp = TestDir::new();
+    let path = sized_fixture(&temp, "native.n64", 16);
+    let context = test_context_with_threads(&temp, 1);
+
+    let rewritten =
+        write_n64_big_endian_to_temp(&path, &context, PatchInputN64ByteOrder::BigEndian)
+            .expect("rewrite");
+    assert_eq!(
+        fs::read(&rewritten).expect("rewritten"),
+        fs::read(&path).expect("source")
+    );
+    fs::remove_file(&rewritten).expect("cleanup");
+}
+
+#[test]
+fn smd_deinterleave_writes_a_short_trailing_block_verbatim() {
+    let temp = TestDir::new();
+    let payload_len = SMD_BLOCK_SIZE + 5;
+    let path = sized_fixture(&temp, "smd-tail.bin", payload_len);
+    let context = test_context_with_threads(&temp, 1);
+
+    let output = write_smd_deinterleaved_to_temp(&path, 0, payload_len as u64, &context, "probe")
+        .expect("deinterleave");
+    let bytes = fs::read(&output).expect("output");
+    let source = fs::read(&path).expect("source");
+    assert_eq!(bytes.len(), payload_len);
+    assert_eq!(
+        bytes[..SMD_BLOCK_SIZE],
+        deinterleave_smd_block(&source[..SMD_BLOCK_SIZE])[..]
+    );
+    assert_eq!(bytes[SMD_BLOCK_SIZE..], source[SMD_BLOCK_SIZE..]);
+    fs::remove_file(&output).expect("cleanup");
+}
+
+#[test]
+fn smd_block_deinterleave_reassembles_alternating_halves() {
+    let block = (0..16u8).collect::<Vec<_>>();
+    let deinterleaved = deinterleave_smd_block(&block);
+    assert_eq!(
+        deinterleaved,
+        vec![0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15]
+    );
+}
+
+#[test]
+fn snes_deinterleave_leaves_images_with_fewer_than_two_banks_alone() {
+    let payload = vec![7u8; SNES_BANK_SIZE as usize];
+    assert_eq!(deinterleave_snes_payload(&payload), payload);
+
+    let bank = SNES_BANK_SIZE as usize;
+    let mut two_banks = vec![0u8; bank * 2];
+    two_banks[..bank].fill(0xaa);
+    two_banks[bank..].fill(0xbb);
+    let swapped = deinterleave_snes_payload(&two_banks);
+    assert_eq!(swapped[..bank], vec![0xbb; bank][..]);
+    assert_eq!(swapped[bank..], vec![0xaa; bank][..]);
+}
+
+#[test]
+fn snes_deinterleave_detection_reads_the_lo_and_hi_rom_headers() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+
+    let small = sized_fixture(&temp, "small.sfc", 0x100);
+    assert!(!snes_payload_needs_deinterleave(&small, &context).expect("small payload"));
+
+    let lo = temp.child("lo.sfc");
+    let mut bytes = vec![0u8; 0x8000];
+    bytes[0x7fd5] = 0x21; // odd map-mode nibble marks an interleaved LoROM image
+    bytes[0x7fdc..0x7fde].copy_from_slice(&0x1234u16.to_le_bytes());
+    bytes[0x7fde..0x7fe0].copy_from_slice(&0xedcbu16.to_le_bytes());
+    fs::write(&lo, &bytes).expect("lo fixture");
+    assert!(snes_payload_needs_deinterleave(&lo, &context).expect("lo header"));
+
+    bytes[0x7fd5] = 0x20;
+    fs::write(&lo, &bytes).expect("even lo fixture");
+    assert!(!snes_payload_needs_deinterleave(&lo, &context).expect("even lo header"));
+
+    let hi = temp.child("hi.sfc");
+    let mut hi_bytes = vec![0u8; 0x10000];
+    hi_bytes[0xffd5] = 0x31;
+    hi_bytes[0xffdc..0xffde].copy_from_slice(&0x1234u16.to_le_bytes());
+    hi_bytes[0xffde..0xffe0].copy_from_slice(&0xedcbu16.to_le_bytes());
+    fs::write(&hi, &hi_bytes).expect("hi fixture");
+    assert!(!snes_payload_needs_deinterleave(&hi, &context).expect("hi header"));
+
+    // A HiROM header whose checksum pair does not complement still reports no
+    // deinterleave once the map-mode nibble is present.
+    hi_bytes[0xffdc..0xffe0].fill(0);
+    fs::write(&hi, &hi_bytes).expect("unchecksummed hi fixture");
+    assert!(!snes_payload_needs_deinterleave(&hi, &context).expect("unchecksummed hi header"));
+}
+
+#[test]
+fn unif_chunk_headers_stop_at_a_short_tail_and_reject_oversized_lengths() {
+    let temp = TestDir::new();
+    let short = temp.child("short-tail.unif");
+    fs::write(&short, vec![0u8; 0x24]).expect("short fixture");
+    let mut file = File::open(&short).expect("open short");
+    assert!(
+        read_unif_chunk_header(&mut file, 0x20, 0x24)
+            .expect("short tail")
+            .is_none()
+    );
+
+    let oversized = temp.child("oversized.unif");
+    let mut bytes = b"UNIF".to_vec();
+    bytes.resize(0x20, 0);
+    push_unif_chunk(&mut bytes, b"PRG0", b"data");
+    // Rewrite the chunk length so it claims more bytes than the file holds.
+    let len_offset = 0x24;
+    bytes[len_offset..len_offset + 4].copy_from_slice(&0xffffu32.to_le_bytes());
+    fs::write(&oversized, &bytes).expect("oversized fixture");
+    let mut file = File::open(&oversized).expect("open oversized");
+    let file_len = bytes.len() as u64;
+    let error = read_unif_chunk_header(&mut file, 0x20, file_len)
+        .expect_err("an oversized chunk length should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("chunk length exceeded file size"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn unif_payload_chunk_ids_are_prg_and_chr_with_a_hex_suffix() {
+    assert!(is_unif_payload_chunk(b"PRG0"));
+    assert!(is_unif_payload_chunk(b"CHRA"));
+    assert!(is_unif_payload_chunk(b"CHRF"));
+    assert!(!is_unif_payload_chunk(b"PRGZ"));
+    assert!(!is_unif_payload_chunk(b"NAME"));
+}
+
+#[test]
+fn unif_normalization_and_reconstruction_require_a_full_container_header() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+    let tiny = temp.child("tiny.unif");
+    fs::write(&tiny, b"UNIF").expect("tiny fixture");
+    let payload = temp.child("payload.bin");
+    fs::write(&payload, b"").expect("payload fixture");
+
+    let mut input = File::open(&tiny).expect("open tiny");
+    let mut output = File::create(&payload).expect("create payload");
+    let extract_error = copy_unif_payload_chunks(&mut input, &mut output, &context)
+        .expect_err("a 4-byte UNIF file cannot be normalized");
+    assert!(
+        extract_error
+            .to_string()
+            .contains("UNIF normalization requires at least 0x20 bytes"),
+        "unexpected error: {extract_error}"
+    );
+
+    let mut template = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&tiny)
+        .expect("open template");
+    let mut normalized = File::open(&payload).expect("open normalized");
+    let rebuild_error = rebuild_unif_payload(&mut template, &mut normalized)
+        .expect_err("a 4-byte UNIF template cannot be rebuilt");
+    assert!(
+        rebuild_error
+            .to_string()
+            .contains("UNIF reconstruction requires at least 0x20 bytes"),
+        "unexpected error: {rebuild_error}"
+    );
+}
+
+#[test]
+fn unif_reconstruction_rejects_a_payload_larger_than_the_template() {
+    let temp = TestDir::new();
+    let template_path = temp.child("template.unif");
+    let payload_path = temp.child("too-long.bin");
+    fs::write(&template_path, unif_fixture(b"PPPP", b"CCCC")).expect("template");
+    fs::write(&payload_path, b"PPPPCCCCEXTRA").expect("payload");
+
+    let mut template = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&template_path)
+        .expect("open template");
+    let mut payload = File::open(&payload_path).expect("open payload");
+    let error = rebuild_unif_payload(&mut template, &mut payload)
+        .expect_err("an over-long payload should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("exceeded template PRG/CHR capacity"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn copy_exact_bytes_reports_an_input_that_ends_early() {
+    let temp = TestDir::new();
+    let source = temp.child("short-source.bin");
+    let destination = temp.child("destination.bin");
+    fs::write(&source, b"AB").expect("source");
+    fs::write(&destination, b"").expect("destination");
+
+    let mut input = File::open(&source).expect("open source");
+    let mut output = OpenOptions::new()
+        .write(true)
+        .open(&destination)
+        .expect("open destination");
+    let error = copy_exact_bytes(&mut input, &mut output, 8, "probe")
+        .expect_err("a short input should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("probe ended unexpectedly while copying bytes"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn range_validation_rejects_records_and_overflow_data_past_the_output() {
+    let mut file = typed_rup_file(b"abcd", b"abcd", 0);
+    file.records.push(RupRecord {
+        offset: 3,
+        xor: vec![1, 1, 1],
+    });
+    let error =
+        validate_rup_ranges(&file, false, 4).expect_err("a record past the output should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("record exceeded declared output size"),
+        "unexpected error: {error}"
+    );
+
+    let mut append = typed_rup_file(b"abcd", b"abcd", 0);
+    append.target_file_size = 8;
+    append.overflow_mode = Some(RupOverflowMode::Append);
+    append.overflow_data = vec![0xff; 6];
+    let overflow_error = validate_rup_ranges(&append, false, 8)
+        .expect_err("overflow data past the output should fail");
+    assert!(
+        overflow_error
+            .to_string()
+            .contains("overflow data exceeded declared output size"),
+        "unexpected error: {overflow_error}"
+    );
+    // Applying the same patch in reverse never writes the append payload.
+    validate_rup_ranges(&append, true, 4).expect("undo skips append overflow");
+
+    let mut minify = typed_rup_file(b"abcd", b"abcd", 0);
+    minify.target_file_size = 2;
+    minify.overflow_mode = Some(RupOverflowMode::Minify);
+    minify.overflow_data = vec![0xff; 2];
+    validate_rup_ranges(&minify, true, 4).expect("undo restores the minified tail");
+    validate_rup_ranges(&minify, false, 2).expect("forward skips minify overflow");
+}
+
+#[test]
+fn prepared_record_tasks_report_out_of_range_indexes_and_oversized_records() {
+    let temp = TestDir::new();
+    let input_path = temp.child("prepared-input.bin");
+    fs::write(&input_path, b"abcd").expect("input");
+    let context = test_context_with_threads(&temp, 1);
+    let mut file = typed_rup_file(b"abcd", b"abcd", 0);
+    file.records.push(RupRecord {
+        offset: 0,
+        xor: vec![1, 1],
+    });
+
+    let tasks = build_rup_prepared_tasks(file.records.len());
+    assert_eq!(tasks.len(), 1);
+
+    let missing = prepare_rup_write_task(
+        &RupPreparedTask { index: 9 },
+        &file,
+        &input_path,
+        4,
+        4,
+        &context,
+    )
+    .expect_err("an out-of-range task index should fail");
+    assert!(
+        missing
+            .to_string()
+            .contains("record index was out of bounds"),
+        "unexpected error: {missing}"
+    );
+
+    let oversized = prepare_rup_write_task(&tasks[0], &file, &input_path, 4, 1, &context)
+        .expect_err("a record past the output should fail");
+    assert!(
+        oversized
+            .to_string()
+            .contains("record exceeded declared output size"),
+        "unexpected error: {oversized}"
+    );
+}
+
+#[test]
+fn prepared_records_treat_bytes_past_the_input_as_zero() {
+    let temp = TestDir::new();
+    let input_path = temp.child("short-input.bin");
+    fs::write(&input_path, b"ab").expect("input");
+    let context = test_context_with_threads(&temp, 1);
+    let mut file = typed_rup_file(b"ab", b"ab", 0);
+    file.records.push(RupRecord {
+        offset: 2,
+        xor: vec![0x41, 0x42],
+    });
+
+    let prepared = prepare_rup_write_task(
+        &RupPreparedTask { index: 0 },
+        &file,
+        &input_path,
+        2,
+        4,
+        &context,
+    )
+    .expect("prepare");
+    assert_eq!(prepared.index, 0);
+    assert_eq!(prepared.bytes, b"AB");
+}
+
+#[test]
+fn applying_prepared_records_reports_an_out_of_range_index() {
+    let temp = TestDir::new();
+    let output_path = temp.child("prepared-output.bin");
+    fs::write(&output_path, b"abcd").expect("output");
+    let mut output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&output_path)
+        .expect("open output");
+    let file = typed_rup_file(b"abcd", b"abcd", 0);
+
+    let error = apply_rup_prepared_records(
+        &file,
+        &[RupPreparedRecord {
+            index: 4,
+            bytes: vec![0],
+        }],
+        &mut output,
+        &test_context_with_threads(&temp, 1),
+    )
+    .expect_err("an out-of-range prepared index should fail");
+    assert!(
+        error.to_string().contains("record index was out of bounds"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn in_place_xor_rejects_oversized_records_and_zero_fills_past_the_input() {
+    let temp = TestDir::new();
+    let input_path = temp.child("in-place-input.bin");
+    let output_path = temp.child("in-place-output.bin");
+    fs::write(&input_path, b"ab").expect("input");
+    fs::write(&output_path, b"ab\0\0").expect("output");
+    let mut file = typed_rup_file(b"ab", b"ab", 0);
+    file.records.push(RupRecord {
+        offset: 2,
+        xor: vec![0x41, 0x42],
+    });
+
+    let mut input = File::open(&input_path).expect("open input");
+    let mut output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&output_path)
+        .expect("open output");
+    let error = apply_xor_records_in_place(&file, 3, 2, &mut input, &mut output)
+        .expect_err("a record past the output should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("record exceeded declared output size"),
+        "unexpected error: {error}"
+    );
+
+    apply_xor_records_in_place(&file, 4, 2, &mut input, &mut output).expect("in-place apply");
+    output.flush().expect("flush");
+    drop(output);
+    assert_eq!(fs::read(&output_path).expect("output"), b"abAB");
+}
+
+#[test]
+fn encoding_rejects_a_size_changing_file_without_an_overflow_mode() {
+    let mut file = typed_rup_file(b"abcd", b"abcd", 0);
+    file.target_file_size = 8;
+
+    let error = encode_rup_patch(&RupMetadata::default(), &[file])
+        .expect_err("a size change needs an overflow mode");
+    assert!(
+        error
+            .to_string()
+            .contains("overflow mode was missing for a size-changing patch"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn in_memory_create_encodes_a_minify_overflow_for_a_shrinking_target() {
+    let created = create_rup_patch_bytes(b"long-source-bytes", b"short").expect("patch");
+    let parsed = parse_rup_bytes(&created.bytes).expect("parse");
+
+    assert_eq!(parsed.files.len(), 1);
+    assert_eq!(parsed.files[0].overflow_mode, Some(RupOverflowMode::Minify));
+    assert_eq!(
+        parsed.files[0].overflow_data,
+        b"source-bytes"
+            .iter()
+            .map(|byte| byte ^ 0xff)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn parallel_create_encodes_both_overflow_directions() {
+    let temp = TestDir::new();
+    let smaller = temp.child("smaller.bin");
+    let larger = temp.child("larger.bin");
+    fs::write(&smaller, b"abcd").expect("smaller");
+    fs::write(&larger, b"abcdEFGH").expect("larger");
+    let context = test_context_with_threads(&temp, 4);
+    let (_, pool) = context
+        .build_pool(parallel_chunked_capability(8, 4 * 1024 * 1024))
+        .expect("pool");
+
+    let grown = create_rup_patch_parallel(&smaller, &larger, &pool).expect("append patch");
+    let parsed = parse_rup_bytes(&grown.bytes).expect("parse append");
+    assert_eq!(parsed.files[0].overflow_mode, Some(RupOverflowMode::Append));
+    assert_eq!(
+        parsed.files[0].overflow_data,
+        b"EFGH".iter().map(|byte| byte ^ 0xff).collect::<Vec<_>>()
+    );
+
+    let shrunk = create_rup_patch_parallel(&larger, &smaller, &pool).expect("minify patch");
+    let parsed = parse_rup_bytes(&shrunk.bytes).expect("parse minify");
+    assert_eq!(parsed.files[0].overflow_mode, Some(RupOverflowMode::Minify));
+    assert_eq!(
+        parsed.files[0].overflow_data,
+        b"EFGH".iter().map(|byte| byte ^ 0xff).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn parallel_record_collection_is_empty_when_the_files_share_no_bytes() {
+    let temp = TestDir::new();
+    let empty = temp.child("empty.bin");
+    let target = temp.child("target.bin");
+    fs::write(&empty, b"").expect("empty");
+    fs::write(&target, b"abcd").expect("target");
+    let context = test_context_with_threads(&temp, 2);
+    let (_, pool) = context
+        .build_pool(parallel_chunked_capability(0, 4 * 1024 * 1024))
+        .expect("pool");
+
+    let records =
+        collect_rup_records_parallel(&empty, 0, &target, 4, 0, &pool).expect("no shared bytes");
+    assert!(records.is_empty());
+}
+
+#[test]
+fn chunk_record_collection_pads_a_source_that_ends_inside_the_range() {
+    let temp = TestDir::new();
+    let source = temp.child("chunk-source.bin");
+    let target = temp.child("chunk-target.bin");
+    fs::write(&source, b"ab").expect("source");
+    fs::write(&target, b"abcd").expect("target");
+
+    let records = collect_rup_chunk_records(&source, 2, &target, 4, 0, 4).expect("chunk records");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].offset, 2);
+    assert_eq!(records[0].xor, b"cd");
+}
+
+#[test]
+fn xor_suffix_reads_the_complement_of_every_trailing_byte() {
+    let temp = TestDir::new();
+    let path = temp.child("suffix.bin");
+    fs::write(&path, b"ABC").expect("fixture");
+
+    assert_eq!(
+        read_xor_suffix(&path, 1).expect("suffix"),
+        vec![b'B' ^ 0xff, b'C' ^ 0xff]
+    );
+    assert!(read_xor_suffix(&path, 3).expect("empty suffix").is_empty());
+}
+
+#[test]
+fn vlv_encoding_uses_one_length_byte_and_little_endian_digits() {
+    let mut bytes = Vec::new();
+    push_vlv(&mut bytes, 0).expect("zero");
+    assert_eq!(bytes, vec![0]);
+
+    bytes.clear();
+    push_vlv(&mut bytes, 0x1234).expect("two bytes");
+    assert_eq!(bytes, vec![2, 0x34, 0x12]);
+
+    bytes.clear();
+    push_vlv(&mut bytes, u64::MAX).expect("eight bytes");
+    assert_eq!(bytes[0], 8);
+    assert_eq!(&bytes[1..], &[0xff; 8]);
+}
+
+#[test]
+fn fixed_strings_are_truncated_and_nul_padded_to_their_field_width() {
+    let mut bytes = Vec::new();
+    write_fixed_string(&mut bytes, "abc", 5);
+    assert_eq!(bytes, b"abc\0\0");
+
+    bytes.clear();
+    write_fixed_string(&mut bytes, "abcdef", 3);
+    assert_eq!(bytes, b"abc");
+}
+
+#[test]
+fn md5_hex_formatting_maps_out_of_range_nibbles_to_zero() {
+    let mut value = [0u8; 16];
+    value[0] = 0x0f;
+    value[15] = 0xa5;
+    let hex = format_md5_hex(value);
+
+    assert!(hex.starts_with("0f"));
+    assert!(hex.ends_with("a5"));
+    assert_eq!(nibble_to_hex(16), '0');
 }
