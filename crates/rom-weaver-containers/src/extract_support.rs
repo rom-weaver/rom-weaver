@@ -766,6 +766,418 @@ impl<'a> ExtractChunkWriter<'a> {
 mod tests {
     use super::*;
 
+    use std::sync::Arc;
+
+    use rom_weaver_core::{
+        CancellationToken, OperationFamily, RecordingProgressSink, ThreadBudget,
+    };
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "rom-weaver-containers-extract-support-{}-{name}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("temp dir");
+            Self { path }
+        }
+
+        fn child(&self, name: &str) -> PathBuf {
+            self.path.join(name)
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn recording_context(temp: &TestDir) -> (OperationContext, Arc<RecordingProgressSink>) {
+        let sink = Arc::new(RecordingProgressSink::default());
+        let context = OperationContext::new(
+            ThreadBudget::Fixed(1),
+            temp.path.clone(),
+            sink.clone(),
+            CancellationToken::new(),
+        );
+        (context, sink)
+    }
+
+    fn progress_context<'a>(
+        context: &'a OperationContext,
+        stage: &'a str,
+    ) -> ContainerProgressContext<'a> {
+        ContainerProgressContext {
+            context,
+            command: "extract",
+            format: "test",
+            stage,
+            thread_execution: None,
+        }
+    }
+
+    #[test]
+    fn output_extension_reads_the_trailing_component() {
+        assert_eq!(
+            output_extension(Path::new("/tmp/rom.nes")),
+            Some(".nes".to_string())
+        );
+        assert_eq!(output_extension(Path::new("/tmp/rom")), None);
+    }
+
+    #[test]
+    fn emit_container_indeterminate_progress_reports_a_running_event() {
+        let temp = TestDir::new("indeterminate");
+        let (context, sink) = recording_context(&temp);
+
+        emit_container_indeterminate_progress(
+            &context, "extract", "test", "decode", "working", None,
+        );
+
+        let events = sink.snapshot();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].stage, "decode");
+        assert_eq!(events[0].family, OperationFamily::Container);
+        assert_eq!(events[0].status, OperationStatus::Running);
+        assert!(events[0].percent.is_none());
+    }
+
+    #[test]
+    fn emit_container_step_progress_skips_a_zero_step_total() {
+        let temp = TestDir::new("steps");
+        let (context, sink) = recording_context(&temp);
+        let progress = progress_context(&context, "extract");
+
+        emit_container_step_progress(&progress, 0, 0, "nothing to do");
+        assert!(sink.snapshot().is_empty());
+
+        emit_container_step_progress(&progress, 1, 4, "quarter");
+        // A completed count past the total is clamped rather than reported over 100%.
+        emit_container_step_progress(&progress, 9, 4, "clamped");
+
+        let percents = sink
+            .snapshot()
+            .into_iter()
+            .filter_map(|event| event.percent)
+            .collect::<Vec<_>>();
+        assert_eq!(percents, vec![25.0, 100.0]);
+    }
+
+    #[test]
+    fn emit_variant_plan_forwards_the_planned_rows() {
+        let temp = TestDir::new("variant-plan");
+        let (context, sink) = recording_context(&temp);
+
+        emit_variant_plan(
+            &context,
+            "test",
+            &temp.child("out.nes"),
+            &[("raw".to_string(), "Raw".to_string())],
+        );
+
+        let events = sink.snapshot();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].status, OperationStatus::Running);
+    }
+
+    #[test]
+    fn copy_reader_with_progress_copies_every_byte_and_reports_progress() {
+        let temp = TestDir::new("copy");
+        let (context, sink) = recording_context(&temp);
+        let progress = progress_context(&context, "extract");
+
+        let payload = (0..200_000u32)
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        let mut reader = payload.as_slice();
+        let mut written = Vec::new();
+        let copied = copy_reader_with_progress(
+            &mut reader,
+            &mut written,
+            payload.len() as u64,
+            &progress,
+            "copying",
+        )
+        .expect("copy");
+
+        assert_eq!(copied, payload.len() as u64);
+        assert_eq!(written, payload);
+        assert!(
+            sink.snapshot().iter().any(|event| event.percent.is_some()),
+            "a known total length must produce byte progress"
+        );
+    }
+
+    #[test]
+    fn copy_reader_with_progress_stays_silent_without_a_known_total() {
+        let temp = TestDir::new("copy-unknown");
+        let (context, sink) = recording_context(&temp);
+        let progress = progress_context(&context, "extract");
+
+        let mut reader = b"payload".as_slice();
+        let mut written = Vec::new();
+        let copied = copy_reader_with_progress(&mut reader, &mut written, 0, &progress, "copying")
+            .expect("copy");
+
+        assert_eq!(copied, 7);
+        assert_eq!(written, b"payload");
+        assert!(sink.snapshot().is_empty());
+    }
+
+    #[test]
+    fn extract_hasher_is_absent_without_requested_algorithms() {
+        let temp = TestDir::new("hasher-none");
+        let (context, _sink) = recording_context(&temp);
+        let mut hasher =
+            ExtractHasher::new(&context, Some(4), &temp.child("rom.nes"), 1).expect("hasher");
+
+        assert!(matches!(hasher, ExtractHasher::None));
+        hasher.update(b"data").expect("update");
+        assert!(hasher.take_ready_variant_plan().is_none());
+        assert!(
+            hasher
+                .finish(&temp.child("rom.nes"))
+                .expect("finish")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn extract_hasher_rom_only_skips_sidecars_and_disc_sheets() {
+        let temp = TestDir::new("hasher-rom-only");
+        let (context, _sink) = recording_context(&temp);
+        let context = context
+            .with_extract_checksum_algorithms(vec!["crc32".to_string()])
+            .with_extract_checksum_rom_only(true);
+
+        let sidecar = ExtractHasher::new(&context, Some(4), &temp.child("readme.txt"), 1)
+            .expect("sidecar hasher");
+        assert!(matches!(sidecar, ExtractHasher::None));
+
+        let sheet =
+            ExtractHasher::new(&context, Some(4), &temp.child("disc.cue"), 1).expect("cue hasher");
+        assert!(matches!(sheet, ExtractHasher::None));
+
+        let rom =
+            ExtractHasher::new(&context, Some(4), &temp.child("game.nes"), 1).expect("rom hasher");
+        assert!(!matches!(rom, ExtractHasher::None));
+    }
+
+    #[test]
+    fn extract_hasher_without_a_known_length_produces_a_plain_checksum() {
+        let temp = TestDir::new("hasher-plain");
+        let (context, _sink) = recording_context(&temp);
+        let context = context.with_extract_checksum_algorithms(vec!["crc32".to_string()]);
+        let output_path = temp.child("game.nes");
+
+        let mut hasher = ExtractHasher::new(&context, None, &output_path, 1).expect("hasher");
+        assert!(matches!(hasher, ExtractHasher::Plain { .. }));
+        // A plain hasher never plans variants.
+        assert!(hasher.take_ready_variant_plan().is_none());
+
+        hasher.update(b"abcd").expect("update");
+        hasher.update(b"efgh").expect("update");
+        let entry = hasher
+            .finish(&output_path)
+            .expect("finish")
+            .expect("checksum entry");
+
+        assert_eq!(entry.size_bytes, 8);
+        assert_eq!(entry.path, output_path);
+        assert!(entry.variants.is_empty());
+        assert!(entry.values.contains_key("crc32"));
+    }
+
+    #[test]
+    fn extract_hasher_with_a_known_length_produces_variant_rows() {
+        let temp = TestDir::new("hasher-variants");
+        let (context, _sink) = recording_context(&temp);
+        let context = context.with_extract_checksum_algorithms(vec!["crc32".to_string()]);
+        let output_path = temp.child("game.nes");
+
+        let payload = vec![0x5A_u8; 4096];
+        let mut hasher = ExtractHasher::new(&context, Some(payload.len() as u64), &output_path, 2)
+            .expect("hasher");
+        assert!(matches!(hasher, ExtractHasher::Variants { .. }));
+
+        hasher.update(&payload).expect("update");
+        // The output file must exist: a deferred fix-header variant re-reads it.
+        std::fs::write(&output_path, &payload).expect("write output");
+        let (entry, timing) = hasher.finish_timed(&output_path).expect("finish");
+        let entry = entry.expect("checksum entry");
+
+        assert_eq!(entry.size_bytes, payload.len() as u64);
+        assert!(
+            entry.variants.iter().any(|row| row.id == "raw"),
+            "the variant engine must always emit a raw row"
+        );
+        assert!(entry.values.contains_key("crc32"));
+        assert!(timing.workers <= 64);
+    }
+
+    #[test]
+    fn attach_extract_checksum_details_only_decorates_successful_reports() {
+        let temp = TestDir::new("attach");
+        let output_path = temp.child("game.nes");
+        std::fs::write(&output_path, b"payload").expect("write output");
+
+        let entry = ExtractedFileChecksum {
+            path: output_path.clone(),
+            size_bytes: 7,
+            values: BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]),
+            variants: Vec::new(),
+            timing: Some(ExtractTiming {
+                total_ms: 4.0,
+                decode_ms: 3.0,
+                opfs_write_ms: 0.5,
+                checksum_ms: 1.0,
+                overlap_ms: 0.25,
+                threaded: true,
+                workers: 2,
+            }),
+            rom_identity: RomIdentity::default(),
+        };
+
+        let succeeded = OperationReport::succeeded(
+            OperationFamily::Container,
+            Some("test".to_string()),
+            "extract",
+            "extracted",
+            Some(100.0),
+            None,
+        );
+        let decorated = attach_extract_checksum_details(succeeded, vec![entry.clone()]);
+        let emitted = decorated
+            .details
+            .as_ref()
+            .and_then(|details| details.get("emitted_files"))
+            .and_then(|files| files.as_array())
+            .expect("emitted_files");
+        assert_eq!(emitted.len(), 1);
+        assert!(emitted[0].get("checksums").is_some());
+        assert!(emitted[0].get("timing").is_some());
+
+        // An empty checksum list leaves the report untouched.
+        let untouched = OperationReport::succeeded(
+            OperationFamily::Container,
+            Some("test".to_string()),
+            "extract",
+            "extracted",
+            Some(100.0),
+            None,
+        );
+        assert!(
+            attach_extract_checksum_details(untouched, Vec::new())
+                .details
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn build_extract_checksum_emitted_file_detail_needs_checksum_values() {
+        let temp = TestDir::new("detail");
+        let output_path = temp.child("game.nes");
+        std::fs::write(&output_path, b"payload").expect("write output");
+
+        assert!(
+            build_extract_checksum_emitted_file_detail(
+                &output_path,
+                7,
+                BTreeMap::new(),
+                Vec::new(),
+                None,
+                RomIdentity::default(),
+            )
+            .is_none()
+        );
+
+        let detail = build_extract_checksum_emitted_file_detail(
+            &output_path,
+            7,
+            BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]),
+            Vec::new(),
+            None,
+            RomIdentity::default(),
+        )
+        .expect("detail");
+        assert!(detail.get("checksums").is_some());
+        assert!(detail.get("timing").is_none());
+    }
+
+    #[test]
+    fn extract_chunk_writer_writes_ordered_chunks_and_hashes_them() {
+        let temp = TestDir::new("chunk-writer");
+        let (context, _sink) = recording_context(&temp);
+        let context = context.with_extract_checksum_algorithms(vec!["crc32".to_string()]);
+        let execution = context
+            .single_thread_execution()
+            .expect("single-thread execution plan");
+        let output_path = temp.child("game.nes");
+
+        let chunks = [vec![1_u8; 16], vec![2_u8; 16], vec![3_u8; 16]];
+        let total = chunks.iter().map(|chunk| chunk.len() as u64).sum::<u64>();
+
+        let mut writer = ExtractChunkWriter::new(
+            &context,
+            &execution,
+            "test",
+            "extracting".to_string(),
+            total,
+            &output_path,
+            true,
+        )
+        .expect("chunk writer");
+        for (index, chunk) in chunks.iter().enumerate() {
+            writer
+                .write(index, chunk.clone(), chunk.len() as u64)
+                .expect("write chunk");
+        }
+        let checksums = writer.finish(&output_path).expect("finish");
+
+        assert_eq!(checksums.len(), 1);
+        assert_eq!(checksums[0].size_bytes, total);
+        assert!(checksums[0].values.contains_key("crc32"));
+
+        let written = std::fs::read(&output_path).expect("output");
+        assert_eq!(written, chunks.concat());
+    }
+
+    #[test]
+    fn extract_chunk_writer_rejects_a_chunk_of_the_wrong_length() {
+        let temp = TestDir::new("chunk-writer-bad-len");
+        let (context, _sink) = recording_context(&temp);
+        let execution = context
+            .single_thread_execution()
+            .expect("single-thread execution plan");
+        let output_path = temp.child("game.nes");
+
+        let mut writer = ExtractChunkWriter::new(
+            &context,
+            &execution,
+            "test",
+            "extracting".to_string(),
+            16,
+            &output_path,
+            true,
+        )
+        .expect("chunk writer");
+
+        let error = writer
+            .write(0, vec![0_u8; 8], 16)
+            .expect_err("a short chunk must be rejected");
+        assert!(
+            error.to_string().contains("wrote 8 bytes but expected 16"),
+            "unexpected error: {error}"
+        );
+    }
+
     /// Regression: a real disc fans out into far more decode tasks than the writer's reorder
     /// window (~2x thread count) holds. `decode_tasks_ordered` must deliver chunks in strict
     /// ascending order so a small-window [`OrderedChunkWriter`] never trips "exceeded max reorder
