@@ -2,6 +2,7 @@ use std::fs;
 
 use rom_weaver_core::{
     PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence,
 };
 
 use super::{
@@ -475,4 +476,454 @@ fn build_aps_patch(
         }
     }
     bytes
+}
+
+fn simple_and_rle_patch() -> Vec<u8> {
+    build_aps_patch(
+        0,
+        None,
+        10,
+        vec![
+            TestRecord::Simple {
+                offset: 1,
+                data: b"XY".to_vec(),
+            },
+            TestRecord::Rle {
+                offset: 4,
+                byte: b'Z',
+                length: 3,
+            },
+        ],
+    )
+}
+
+#[test]
+fn probe_reports_extension_confidence() {
+    let handler = ApsN64PatchHandler::new(&APS);
+    assert!(matches!(
+        handler.probe(std::path::Path::new("update.aps")),
+        ProbeConfidence::Extension
+    ));
+}
+
+#[test]
+fn parse_omits_the_n64_label_for_a_plain_patch() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("plain.aps");
+    fs::write(&patch_path, simple_and_rle_patch()).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    let report = handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse report");
+    assert!(!report.label.contains("n64 source cart id"));
+}
+
+#[test]
+fn apply_in_memory_matches_the_streaming_output() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.aps");
+    let streamed_path = temp.child("streamed.bin");
+    let in_memory_path = temp.child("in-memory.bin");
+
+    fs::write(&input_path, b"abcdefghij").expect("fixture");
+    fs::write(&patch_path, simple_and_rle_patch()).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path.clone(),
+                patches: vec![patch_path.clone()],
+                output: streamed_path.clone(),
+            },
+            &test_context_with_threads(&temp, 4),
+        )
+        .expect("streaming apply");
+
+    let report = handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: in_memory_path.clone(),
+            },
+            &test_context_with_threads(&temp, 4).with_patch_apply_in_memory_limit(1 << 24),
+        )
+        .expect("in-memory apply");
+
+    // The in-memory path writes the whole output at once, so it always reports
+    // serial execution however many threads the budget offered.
+    let execution = report.thread_execution.expect("thread execution");
+    assert!(!execution.used_parallelism);
+    assert_eq!(execution.effective_threads, 1);
+
+    assert_eq!(fs::read(streamed_path).expect("streamed"), b"aXYdZZZhij");
+    assert_eq!(fs::read(in_memory_path).expect("in-memory"), b"aXYdZZZhij");
+}
+
+#[test]
+fn apply_in_memory_grows_a_short_input_to_the_declared_output_size() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.aps");
+    let output_path = temp.child("output.bin");
+
+    fs::write(&input_path, b"abcd").expect("fixture");
+    let patch = build_aps_patch(
+        0,
+        None,
+        8,
+        vec![TestRecord::Rle {
+            byte: b'!',
+            offset: 6,
+            length: 2,
+        }],
+    );
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(1 << 24),
+        )
+        .expect("in-memory apply");
+    assert_eq!(fs::read(output_path).expect("output"), b"abcd\0\0!!");
+}
+
+#[test]
+fn apply_in_memory_rejects_a_record_past_the_output_size() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let simple_patch = temp.child("simple.aps");
+    let rle_patch = temp.child("rle.aps");
+    let output_path = temp.child("output.bin");
+
+    fs::write(&input_path, b"abcdefghij").expect("fixture");
+    fs::write(
+        &simple_patch,
+        build_aps_patch(
+            0,
+            None,
+            10,
+            vec![TestRecord::Simple {
+                offset: 9,
+                data: b"XY".to_vec(),
+            }],
+        ),
+    )
+    .expect("fixture");
+    fs::write(
+        &rle_patch,
+        build_aps_patch(
+            0,
+            None,
+            10,
+            vec![TestRecord::Rle {
+                offset: 9,
+                byte: b'Z',
+                length: 4,
+            }],
+        ),
+    )
+    .expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    let context = || test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(1 << 24);
+
+    let simple = handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path.clone(),
+                patches: vec![simple_patch],
+                output: output_path.clone(),
+            },
+            &context(),
+        )
+        .expect_err("a simple record past the output size must be rejected");
+    assert!(
+        simple
+            .to_string()
+            .contains("APS record exceeded output size")
+    );
+
+    let rle = handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![rle_patch],
+                output: output_path,
+            },
+            &context(),
+        )
+        .expect_err("an RLE record past the output size must be rejected");
+    assert!(
+        rle.to_string()
+            .contains("APS RLE record exceeded output size")
+    );
+}
+
+#[test]
+fn validate_accepts_a_matching_source() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.aps");
+
+    fs::write(&input_path, b"abcdefghij").expect("fixture");
+    fs::write(&patch_path, simple_and_rle_patch()).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    let report = handler
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+    assert_eq!(report.stage, "validate");
+    assert!(report.label.contains("validated APS patch source"));
+}
+
+#[test]
+fn validate_rejects_a_mismatched_n64_source() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.z64");
+    let patch_path = temp.child("update.aps");
+
+    let mut input = vec![0u8; 0x100];
+    input[APS_N64_CART_ID_OFFSET as usize..APS_N64_CART_ID_OFFSET as usize + 3]
+        .copy_from_slice(b"ZZZ");
+    fs::write(&input_path, &input).expect("fixture");
+
+    let patch = build_aps_patch(
+        APS_N64_MODE,
+        Some(TestN64Header {
+            original_format: 1,
+            cart_id: *b"ABC",
+            crc: [1, 2, 3, 4, 5, 6, 7, 8],
+            pad: [0; 5],
+        }),
+        0x100,
+        vec![],
+    );
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    let error = handler
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("a mismatched cart id must be rejected");
+    assert!(error.to_string().contains("Source ROM checksum mismatch"));
+}
+
+#[test]
+fn validate_n64_source_rejects_an_input_too_short_for_the_header_fields() {
+    let temp = TestDir::new();
+    let input_path = temp.child("tiny.z64");
+    let patch_path = temp.child("update.aps");
+
+    fs::write(&input_path, b"short").expect("fixture");
+    let patch = build_aps_patch(
+        APS_N64_MODE,
+        Some(TestN64Header {
+            original_format: 1,
+            cart_id: *b"ABC",
+            crc: [1, 2, 3, 4, 5, 6, 7, 8],
+            pad: [0; 5],
+        }),
+        0x10,
+        vec![],
+    );
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    let error = handler
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("an input shorter than the N64 header fields must be rejected");
+    assert!(error.to_string().contains("Source ROM checksum mismatch"));
+}
+
+#[test]
+fn parse_aps_bytes_rejects_truncated_headers_and_records() {
+    let short = parse_aps_bytes(&[0u8; 8]).expect_err("a short header must be rejected");
+    assert!(
+        short
+            .to_string()
+            .contains("too small to contain a valid header")
+    );
+
+    // An N64-mode header that stops before its 17 extra bytes.
+    let mut truncated_n64 = vec![0u8; 61];
+    truncated_n64[..5].copy_from_slice(b"APS10");
+    truncated_n64[5] = APS_N64_MODE;
+    let error =
+        parse_aps_bytes(&truncated_n64).expect_err("a truncated N64 header must be rejected");
+    assert!(error.to_string().contains("APS N64 header was truncated"));
+
+    let mut short_record = build_aps_patch(
+        0,
+        None,
+        10,
+        vec![TestRecord::Simple {
+            offset: 0,
+            data: b"XY".to_vec(),
+        }],
+    );
+    // Drop the record payload, leaving only part of its 5-byte header.
+    short_record.truncate(short_record.len() - 4);
+    let error =
+        parse_aps_bytes(&short_record).expect_err("a truncated record header must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("APS record header exceeded patch bounds")
+    );
+
+    let mut short_rle = build_aps_patch(
+        0,
+        None,
+        10,
+        vec![TestRecord::Rle {
+            offset: 0,
+            byte: b'Z',
+            length: 2,
+        }],
+    );
+    short_rle.truncate(short_rle.len() - 1);
+    let error = parse_aps_bytes(&short_rle).expect_err("a truncated RLE record must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("APS RLE record exceeded patch bounds")
+    );
+
+    let mut short_data = build_aps_patch(
+        0,
+        None,
+        10,
+        vec![TestRecord::Simple {
+            offset: 0,
+            data: b"XYZW".to_vec(),
+        }],
+    );
+    short_data.truncate(short_data.len() - 2);
+    let error = parse_aps_bytes(&short_data).expect_err("a truncated payload must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("APS record data exceeded patch bounds")
+    );
+}
+
+#[test]
+fn parse_aps_file_rejects_truncated_headers_and_records() {
+    let temp = TestDir::new();
+    let handler = ApsN64PatchHandler::new(&APS);
+    let context = test_context_with_threads(&temp, 1);
+
+    let short = temp.child("short.aps");
+    fs::write(&short, [0u8; 8]).expect("fixture");
+    let error = handler
+        .parse(&short, &context)
+        .expect_err("a short header must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("too small to contain a valid header")
+    );
+
+    let bad_magic = temp.child("bad-magic.aps");
+    let mut bytes = vec![0u8; 61];
+    bytes[..5].copy_from_slice(b"BAD10");
+    fs::write(&bad_magic, bytes).expect("fixture");
+    let error = handler
+        .parse(&bad_magic, &context)
+        .expect_err("a bad magic must be rejected");
+    assert!(error.to_string().contains("Patch header invalid"));
+
+    let short_record = temp.child("short-record.aps");
+    let mut record_bytes = build_aps_patch(
+        0,
+        None,
+        10,
+        vec![TestRecord::Simple {
+            offset: 0,
+            data: b"XY".to_vec(),
+        }],
+    );
+    record_bytes.truncate(record_bytes.len() - 4);
+    fs::write(&short_record, record_bytes).expect("fixture");
+    let error = handler
+        .parse(&short_record, &context)
+        .expect_err("a truncated record header must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("APS record header exceeded patch bounds")
+    );
+
+    let short_rle = temp.child("short-rle.aps");
+    let mut rle_bytes = build_aps_patch(
+        0,
+        None,
+        10,
+        vec![TestRecord::Rle {
+            offset: 0,
+            byte: b'Z',
+            length: 2,
+        }],
+    );
+    rle_bytes.truncate(rle_bytes.len() - 1);
+    fs::write(&short_rle, rle_bytes).expect("fixture");
+    let error = handler
+        .parse(&short_rle, &context)
+        .expect_err("a truncated RLE record must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("APS RLE record exceeded patch bounds")
+    );
+}
+
+#[test]
+fn parse_reports_lowercase_hex_for_high_crc_nibbles() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("hex.aps");
+    let patch = build_aps_patch(
+        APS_N64_MODE,
+        Some(TestN64Header {
+            original_format: 1,
+            cart_id: *b"ABC",
+            crc: [0xAB, 0xCD, 0xEF, 0x0F, 0xF0, 0x99, 0xA0, 0x0A],
+            pad: [0; 5],
+        }),
+        0x100,
+        vec![],
+    );
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let handler = ApsN64PatchHandler::new(&APS);
+    let report = handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse report");
+    assert!(report.label.contains("abcdef0ff099a00a"));
 }

@@ -1,6 +1,9 @@
 use std::fs;
 
-use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
+use rom_weaver_core::{
+    OperationStatus, PatchApplyRequest, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence,
+};
 
 use super::{
     DLDI_MAGIC, DLDI_VERSION, DO_ALLOCATED_SPACE, DO_BSS_END, DO_BSS_START, DO_CODE, DO_DATA_END,
@@ -538,4 +541,192 @@ fn build_test_dldi_driver(
 
 fn write_i32(bytes: &mut [u8], offset: usize, value: i32) {
     bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+}
+
+/// A minimal DLDI header block: valid magic and version, with the caller free to
+/// corrupt one field.
+fn build_dldi_header_block() -> Vec<u8> {
+    let mut bytes = vec![0u8; 0x80];
+    bytes[DO_MAGIC_STRING..DO_MAGIC_STRING + DLDI_MAGIC.len()].copy_from_slice(&DLDI_MAGIC);
+    bytes[DO_VERSION] = DLDI_VERSION;
+    bytes[DO_DRIVER_SIZE] = 7;
+    bytes[DO_ALLOCATED_SPACE] = 7;
+    bytes
+}
+
+fn parse_dldi_error(temp: &TestDir, name: &str, bytes: &[u8]) -> String {
+    let patch_path = temp.child(name);
+    fs::write(&patch_path, bytes).expect("fixture");
+    DldiPatchHandler::new(&DLDI)
+        .parse(&patch_path, &test_context_with_threads(temp, 1))
+        .expect_err("parse should fail")
+        .to_string()
+}
+
+#[test]
+fn probe_reports_extension_confidence() {
+    let handler = DldiPatchHandler::new(&DLDI);
+    assert!(matches!(
+        handler.probe(std::path::Path::new("driver.dldi")),
+        ProbeConfidence::Extension
+    ));
+}
+
+#[test]
+fn parse_reports_the_driver_name_and_size() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("driver.dldi");
+    let patch = build_test_dldi_driver(
+        8,
+        0xBF80_0000u32 as i32,
+        "Test Driver",
+        FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+    );
+    fs::write(&patch_path, &patch).expect("fixture");
+
+    let handler = DldiPatchHandler::new(&DLDI);
+    let report = handler
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    assert!(
+        report
+            .label
+            .contains("parsed DLDI patch for driver `Test Driver` (256 byte(s))"),
+        "unexpected label: {}",
+        report.label
+    );
+}
+
+#[test]
+fn parse_rejects_malformed_dldi_headers() {
+    let temp = TestDir::new();
+
+    let too_small = parse_dldi_error(&temp, "tiny.dldi", &[0u8; 16]);
+    assert!(too_small.contains("too small to contain a valid DLDI header"));
+
+    let mut bad_version = build_dldi_header_block();
+    bad_version[DO_VERSION] = DLDI_VERSION + 1;
+    let error = parse_dldi_error(&temp, "version.dldi", &bad_version);
+    assert!(error.contains("unsupported DLDI version"));
+
+    // A 64-byte driver cannot hold the 128-byte DLDI header.
+    let mut small_driver = build_dldi_header_block();
+    small_driver[DO_DRIVER_SIZE] = 6;
+    let error = parse_dldi_error(&temp, "small-driver.dldi", &small_driver);
+    assert!(error.contains("is smaller than header size"));
+
+    let mut huge_exponent = build_dldi_header_block();
+    huge_exponent[DO_DRIVER_SIZE] = 200;
+    let error = parse_dldi_error(&temp, "huge-exponent.dldi", &huge_exponent);
+    assert!(error.contains("exceeds platform limits"));
+
+    // The header declares 512 bytes, but the file holds only its 128-byte header.
+    let mut over_declared = build_dldi_header_block();
+    over_declared[DO_DRIVER_SIZE] = 9;
+    let error = parse_dldi_error(&temp, "over-declared.dldi", &over_declared);
+    assert!(
+        error.contains("declares 512 byte(s), but only 128 byte(s) are available"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn validate_reports_the_driver_it_would_patch() {
+    let temp = TestDir::new();
+    let input_path = temp.child("validate-input.nds");
+    let patch_path = temp.child("validate-driver.dldi");
+
+    let slot_offset = 0x200;
+    let input = build_test_app_with_slot(slot_offset, 12, 0x0200_0000i32, "Default driver");
+    let patch = build_test_dldi_driver(
+        8,
+        0xBF80_0000u32 as i32,
+        "Test Driver",
+        FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+    );
+    fs::write(&input_path, &input).expect("fixture");
+    fs::write(&patch_path, &patch).expect("fixture");
+
+    let report = DldiPatchHandler::new(&DLDI)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+
+    assert_eq!(report.stage, "validate");
+    assert!(
+        report
+            .label
+            .contains("validated DLDI driver `Test Driver` for `Default driver` at 0x00000200"),
+        "unexpected label: {}",
+        report.label
+    );
+}
+
+#[test]
+fn validate_reports_unsupported_when_the_input_has_no_dldi_slot() {
+    let temp = TestDir::new();
+    let input_path = temp.child("no-slot.nds");
+    let patch_path = temp.child("no-slot-driver.dldi");
+
+    fs::write(&input_path, vec![0xCDu8; 0x800]).expect("fixture");
+    let patch = build_test_dldi_driver(
+        8,
+        0xBF80_0000u32 as i32,
+        "Test Driver",
+        FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+    );
+    fs::write(&patch_path, &patch).expect("fixture");
+
+    let report = DldiPatchHandler::new(&DLDI)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+
+    assert_eq!(report.status, OperationStatus::Unsupported);
+    assert_eq!(report.stage, "validate");
+}
+
+#[test]
+fn validate_warns_when_the_patch_exceeds_the_allocated_space() {
+    let temp = TestDir::new();
+    let input_path = temp.child("small-slot.nds");
+    let patch_path = temp.child("big-driver.dldi");
+
+    let input = build_test_app_with_slot(0x500, 8, 0x0220_0000i32, "Default driver");
+    let patch = build_test_dldi_driver(
+        12,
+        0xBF82_0000u32 as i32,
+        "Oversized Driver",
+        FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+    );
+    fs::write(&input_path, &input).expect("fixture");
+    fs::write(&patch_path, &patch).expect("fixture");
+
+    let report = DldiPatchHandler::new(&DLDI)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+
+    assert!(
+        report
+            .label
+            .contains("warning=not enough space for DLDI patch"),
+        "unexpected label: {}",
+        report.label
+    );
 }
