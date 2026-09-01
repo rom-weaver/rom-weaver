@@ -866,6 +866,7 @@ mod tests {
     fn test_pack(temp: &std::path::Path) -> PathBuf {
         let game = PackGame {
             name: "Hello World (USA)".to_string(),
+            alternate_names: Vec::new(),
             platform: "Test System".to_string(),
             source: IdentifySource::Libretro,
             upstream_source: UpstreamSource::Libretro,

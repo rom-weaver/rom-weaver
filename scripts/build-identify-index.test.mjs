@@ -209,6 +209,9 @@ test("merge dedupes identical scoped hashes and retains legacy GoodTools data", 
   assert.equal(games[0].components.length, 1);
   assert.deepEqual(games[0].dumpTags, ["!"]);
   assert.equal(games[0].provenance.length, 2);
+  // The Libretro name wins, so the GoodTools one - the only place a revision
+  // tag such as "(PRG0)" survives - is kept beside it.
+  assert.deepEqual(games[0].alternateNames, ["Alpha Quest (U) [!]"]);
   const legacy = games.find((game) => game.name.startsWith("Legacy Quest"));
   assert.equal(legacy.legacyVariant, true);
   assert.deepEqual(legacy.dumpTags, ["b1", "T-Eng"]);

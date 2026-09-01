@@ -129,7 +129,7 @@ Native identify performs no network access.
 - `--input ROM` names the ROM to hash and identify. Use `-` to read from stdin.
 - `--hash HEX` identifies from a checksum instead of a file. The algorithm comes from the length: 8 characters for CRC32, 32 for MD5, 40 for SHA-1, 64 for SHA-256. Repeatable, one value per algorithm. Give exactly one of `--input` or `--hash`.
 - `--size BYTES` gives the exact byte size to pair with `--hash`, narrowing the lookup to records of that size. It only applies with `--hash`.
-- `--database PACK` searches a local RWFP1 pack instead of the built-in data and the installed packs. Repeatable.
+- `--database PACK` searches a local RWFP1 pack instead of the built-in data and the installed packs. The pack may be raw or Brotli compressed (`.pack.br`, as the packaged data ships it). Repeatable.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.

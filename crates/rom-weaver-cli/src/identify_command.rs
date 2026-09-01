@@ -44,6 +44,12 @@ pub struct IdentifyTitleMatch {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dump_tags: Vec<String>,
+    /// Names other databases give this dump. The pack build keeps one record
+    /// per hash under one canonical name, so the other source's name reaches
+    /// the reader through this field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub alternate_names: Vec<String>,
     /// What the database says this title's bytes are. A caller holding only a
     /// partial check (a patch's source crc32, say) reads every other checksum
     /// and the size from here.
@@ -222,6 +228,33 @@ pub struct IdentifyResult {
 /// Parsed identify packs shared by one command invocation (ingest and patch
 /// hints). Packs are parsed once, then reused for every ROM asset and patch
 /// descriptor produced by that invocation.
+/// Read a pack named by `--database`, decompressing it when it is a Brotli
+/// pack. The packaged data ships `.pack.br`, so a path copied out of it MUST
+/// work here without a manual decompression step.
+fn read_pack_bytes(path: &Path) -> Result<Vec<u8>> {
+    let bytes = fs::read(path).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "failed to read ROM identify pack `{}`: {error}",
+            path.display()
+        ))
+    })?;
+    if rom_weaver_checksum::identify_pack::is_pack(&bytes) {
+        return Ok(bytes);
+    }
+    trace!(database = %path.display(), "decompressing brotli ROM identify pack");
+    super::identify_builtin::decompress_standalone(&bytes, &path.display().to_string()).map_err(
+        // A file that is neither a raw pack nor a Brotli frame fails inside the
+        // decoder, which names Brotli and hides the simpler cause.
+        |_| {
+            RomWeaverError::Validation(format!(
+                "invalid ROM identify pack `{}`: the file does not read as an \
+                 RWFP1 pack or as a Brotli-compressed one",
+                path.display()
+            ))
+        },
+    )
+}
+
 pub(super) struct IdentifyDatabaseSet {
     packs: Vec<(String, IdentifyPackFile)>,
 }
@@ -238,12 +271,7 @@ impl IdentifyDatabaseSet {
         let mut packs = Vec::with_capacity(databases.len());
         for database in databases {
             trace!(database = %database.display(), "loading ROM identify pack");
-            let bytes = fs::read(database).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to read ROM identify pack `{}`: {error}",
-                    database.display()
-                ))
-            })?;
+            let bytes = read_pack_bytes(database)?;
             let pack = IdentifyPackFile::parse(&bytes).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "invalid ROM identify pack `{}`: {error}",
@@ -650,6 +678,7 @@ fn identify_title_match(
             .collect(),
         legacy_variant: game_match.legacy_variant,
         dump_tags: game_match.dump_tags,
+        alternate_names: game_match.alternate_names,
         expected_components: game_match
             .components
             .into_iter()
@@ -1199,12 +1228,7 @@ impl CliApp {
         let mut selected = Vec::with_capacity(databases.len());
         for database in databases {
             trace!(database = %database.display(), "loading ROM identify pack");
-            let bytes = fs::read(database).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to read ROM identify pack `{}`: {error}",
-                    database.display()
-                ))
-            })?;
+            let bytes = read_pack_bytes(database)?;
             let file = IdentifyPackFile::parse(&bytes).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "invalid ROM identify pack `{}`: {error}",
@@ -1269,13 +1293,12 @@ impl CliApp {
             }
         }
         if selected.is_empty() && candidates.is_empty() {
-            // No detection signal at all: search the builtin packs, matching
-            // the pre-routing behavior.
-            for entry in IdentifyCatalog::builtin().entries() {
+            // No detection signal at all: search every available catalog pack.
+            for entry in provider.catalog_entries() {
                 if let Some(pack) = provider.pack_for_slug(&entry.pack_slug)? {
                     selected.push(SelectedPack {
                         pack,
-                        entry: Some(entry.clone()),
+                        entry: Some(entry),
                     });
                 }
             }

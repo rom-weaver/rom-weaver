@@ -49,6 +49,7 @@ fn pack_game(name: &str, platform: &str, components: Vec<PackComponent>) -> Pack
         }],
         legacy_variant: false,
         dump_tags: vec!["verified".to_string()],
+        alternate_names: Vec::new(),
         game_id: None,
         region: None,
         language: None,

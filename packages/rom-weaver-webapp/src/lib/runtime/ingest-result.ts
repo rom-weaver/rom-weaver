@@ -109,6 +109,7 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
         .filter((item): item is ParsedIdentifyProvenance => item !== undefined)
     : [];
   const dumpTags = toStringList(record.dump_tags);
+  const alternateNames = toStringList(record.alternate_names);
   const expectedComponents = parseExpectedComponents(record.expected_components);
   const gameId = toStringValue(record.game_id);
   const region = toStringValue(record.region);
@@ -125,6 +126,7 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
     ...(provenance.length ? { provenance } : {}),
     ...(record.legacy_variant === true ? { legacyVariant: true } : {}),
     ...(dumpTags ? { dumpTags } : {}),
+    ...(alternateNames ? { alternateNames } : {}),
     ...(expectedComponents.length ? { expectedComponents } : {}),
     ...(gameId ? { gameId } : {}),
     ...(region ? { region } : {}),

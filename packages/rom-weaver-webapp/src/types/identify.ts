@@ -76,6 +76,8 @@ type ParsedIdentifyTitleMatch = {
   provenance?: ParsedIdentifyProvenance[];
   legacyVariant?: boolean;
   dumpTags?: string[];
+  /** Names other databases give this dump. */
+  alternateNames?: string[];
   expectedComponents?: ParsedIdentifyExpectedComponent[];
   gameId?: string;
   region?: string;

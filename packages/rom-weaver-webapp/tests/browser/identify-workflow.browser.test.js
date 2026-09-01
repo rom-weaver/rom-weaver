@@ -22,7 +22,8 @@ const gbaMatch = (name) => ({
   algorithm: "crc32",
   database: "nintendo-game-boy-advance.pack",
   name,
-  platform: "Nintendo Game Boy Advance",
+  platform: "Nintendo - Game Boy Advance",
+  provenance: [{ source: "opengood", sourceName: "SnowflakePowered/opengood" }],
   variant: "raw",
 });
 
@@ -114,9 +115,11 @@ test("a matched ROM shows its title, its evidence, and a colour-free identified 
   expect(evidence).toContain("GBA");
   expect(evidence).toContain("CRC32");
   expect(evidence).toContain("raw");
-  // The pack file name renders as its provenance, not its platform-shaped stem.
+  // The record's own provenance names the source; the pack file name is not a
+  // source and never reaches the drawer.
   expect(evidence).toContain("OpenGood");
   expect(evidence).not.toContain(".pack");
+  expect(evidence).not.toContain("SnowflakePowered");
   expect(host.textContent).toContain("abcd1234");
 });
 

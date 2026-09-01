@@ -148,6 +148,9 @@ fn pack_component_role(role: PackComponentRole) -> ComponentRole {
 #[serde(rename_all = "snake_case")]
 pub struct ArtifactGameMatch {
     pub name: String,
+    /// Names other sources give this same dump; empty for most records.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternate_names: Vec<String>,
     pub platform: String,
     pub provenance: Vec<PackProvenance>,
     pub legacy_variant: bool,
@@ -406,6 +409,7 @@ pub fn match_artifact<P: ArtifactPackReader + ?Sized>(
                 result.quality,
                 ArtifactGameMatch {
                     name: game.name.clone(),
+                    alternate_names: game.alternate_names.clone(),
                     platform: game.platform.clone(),
                     provenance: game.provenance.clone(),
                     legacy_variant: game.legacy_variant,

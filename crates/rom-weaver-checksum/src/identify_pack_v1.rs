@@ -103,6 +103,7 @@ impl ArtifactPack {
             &manifest,
             &provenance_sets,
             &tag_sets,
+            members.get("alternate-names.bin").copied(),
         )?;
         let provenance =
             serde_json::to_value(&manifest.provenance).map_err(|e| invalid_pack(e.to_string()))?;
@@ -245,6 +246,9 @@ pub fn encode(
                 for x in &g.dump_tags {
                     intern(x.clone());
                 }
+                for x in &g.alternate_names {
+                    intern(x.clone());
+                }
             }
             Ok(())
         })()?;
@@ -382,50 +386,15 @@ pub fn encode(
                 }
             }
         }
-        let mut gb = b"RWG5\x01".to_vec();
-        gb.extend(enc(games.len() as u64));
-        for (g, (game_provenance, game_tags)) in games.into_iter().zip(game_sets) {
-            gb.extend(enc(*strings.get(&g.name).unwrap() as u64));
-            let mut bits = 0;
-            for (b, x) in [
-                (1, &g.game_id),
-                (2, &g.region),
-                (4, &g.language),
-                (8, &g.revision),
-                (16, &g.parent),
-            ] {
-                if x.is_some() {
-                    bits |= b
-                }
-            }
-            if g.disc_number.is_some() {
-                bits |= 32
-            }
-            if g.upstream_source != UpstreamSource::Unknown {
-                bits |= 64
-            }
-            if g.legacy_variant {
-                bits |= 128
-            }
-            gb.push(bits);
-            for x in [&g.game_id, &g.region, &g.language, &g.revision, &g.parent]
-                .into_iter()
-                .flatten()
-            {
-                gb.extend(enc(*strings.get(x).unwrap() as u64))
-            }
-            gb.extend(enc(g.components.len() as u64));
-            gb.extend(enc(provenance_set_ids[&game_provenance] as u64));
-            gb.extend(enc(tag_set_ids[&game_tags] as u64));
-            if let Some(x) = g.disc_number {
-                gb.extend(enc(x as u64))
-            }
-            if g.upstream_source != UpstreamSource::Unknown {
-                gb.push(upstream(g.upstream_source));
-            }
-        }
+        let (gb, alternate_bytes, has_alternate_names) = encode_game_tables(
+            games,
+            &game_sets,
+            &strings,
+            &provenance_set_ids,
+            &tag_set_ids,
+        );
         let manifest=serde_json::to_vec(&json!({"format":"rom-weaver-identify-system-pack-v1","platform":platform,"source":source,"canonicalizationProfile":profile,"canonicalizationVersion":1,"provenance":manifest_provenance})).map_err(|e|invalid_pack(e.to_string()))?;
-        let members = [
+        let mut members = vec![
             ("strings.bin", strings_bytes),
             ("hashes.bin", hb),
             ("components.bin", cb),
@@ -435,6 +404,9 @@ pub fn encode(
             ("sets.bin", sets),
             ("manifest.json", manifest),
         ];
+        if has_alternate_names {
+            members.push(("alternate-names.bin", alternate_bytes));
+        }
         out.extend_from_slice(PACK_V1_MAGIC);
         out.extend_from_slice(&(members.len() as u32).to_le_bytes());
         for (n, b) in &members {
@@ -448,6 +420,88 @@ pub fn encode(
         Ok(out)
     })()
 }
+/// The game table plus its optional alternate-name companion. Both are written
+/// in one pass so the rows stay index-aligned with `games.bin`; the third value
+/// says whether any alternate name exists, which decides if that member is
+/// written at all.
+fn encode_game_tables(
+    games: Vec<PackGame>,
+    game_sets: &[(Vec<u32>, Vec<u32>)],
+    strings: &BTreeMap<String, u32>,
+    provenance_set_ids: &BTreeMap<Vec<u32>, u32>,
+    tag_set_ids: &BTreeMap<Vec<u32>, u32>,
+) -> (Vec<u8>, Vec<u8>, bool) {
+    let mut alternate_bytes = b"RWN5\x01".to_vec();
+    alternate_bytes.extend(enc(games.len() as u64));
+    let mut has_alternate_names = false;
+    let mut gb = b"RWG5\x01".to_vec();
+    gb.extend(enc(games.len() as u64));
+    for (g, (game_provenance, game_tags)) in games.into_iter().zip(game_sets) {
+        has_alternate_names |=
+            encode_alternate_names(&mut alternate_bytes, &g.alternate_names, strings);
+        gb.extend(enc(*strings.get(&g.name).unwrap() as u64));
+        let mut bits = 0;
+        for (b, x) in [
+            (1, &g.game_id),
+            (2, &g.region),
+            (4, &g.language),
+            (8, &g.revision),
+            (16, &g.parent),
+        ] {
+            if x.is_some() {
+                bits |= b
+            }
+        }
+        if g.disc_number.is_some() {
+            bits |= 32
+        }
+        if g.upstream_source != UpstreamSource::Unknown {
+            bits |= 64
+        }
+        if g.legacy_variant {
+            bits |= 128
+        }
+        gb.push(bits);
+        for x in [&g.game_id, &g.region, &g.language, &g.revision, &g.parent]
+            .into_iter()
+            .flatten()
+        {
+            gb.extend(enc(*strings.get(x).unwrap() as u64))
+        }
+        gb.extend(enc(g.components.len() as u64));
+        gb.extend(enc(provenance_set_ids[game_provenance] as u64));
+        gb.extend(enc(tag_set_ids[game_tags] as u64));
+        if let Some(x) = g.disc_number {
+            gb.extend(enc(x as u64))
+        }
+        if g.upstream_source != UpstreamSource::Unknown {
+            gb.push(upstream(g.upstream_source));
+        }
+    }
+    (gb, alternate_bytes, has_alternate_names)
+}
+
+/// Append one game's alternate-name row: its string ids, sorted and deduped.
+/// Returns whether the row holds anything, which decides if the member is
+/// written at all.
+fn encode_alternate_names(
+    out: &mut Vec<u8>,
+    names: &[String],
+    strings: &BTreeMap<String, u32>,
+) -> bool {
+    let mut ids = names
+        .iter()
+        .map(|value| *strings.get(value).expect("alternate name was interned"))
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids.dedup();
+    out.extend(enc(ids.len() as u64));
+    for id in &ids {
+        out.extend(enc(*id as u64));
+    }
+    !ids.is_empty()
+}
+
 fn encode_component_tables(
     components: &[(u32, PackComponent)],
     owners: &[Vec<u32>],
@@ -940,6 +994,27 @@ fn parse_sets(b: &[u8], s: &Strings, provenance: usize) -> Result<Sets> {
     Ok((ps, ts))
 }
 
+/// The optional `alternate-names.bin` member: one string-id list per game, in
+/// the game table's order. A pack written before the member existed has none.
+fn parse_alternate_names(bytes: Option<&[u8]>, s: &Strings) -> Result<Option<Vec<Vec<String>>>> {
+    let Some(bytes) = bytes else {
+        return Ok(None);
+    };
+    let mut c = Cursor::new(bytes, b"RWN5")?;
+    let games = c.count()?;
+    let mut out = Vec::with_capacity(games);
+    for _ in 0..games {
+        let count = c.count()?;
+        let mut names = Vec::with_capacity(count);
+        for _ in 0..count {
+            names.push(s.get(c.u32()?)?);
+        }
+        out.push(names);
+    }
+    c.finish()?;
+    Ok(Some(out))
+}
+
 fn parse_games(
     b: &[u8],
     s: &Strings,
@@ -947,12 +1022,21 @@ fn parse_games(
     m: &Manifest,
     ps: &[Vec<u32>],
     ts: &[Vec<u32>],
+    alternates: Option<&[u8]>,
 ) -> Result<Vec<PackGame>> {
     let mut c = Cursor::new(b, b"RWG5")?;
     let n = c.count()?;
+    let mut alternate_names = parse_alternate_names(alternates, s)?;
+    if let Some(names) = &alternate_names
+        && names.len() != n
+    {
+        return Err(invalid_pack(
+            "RWFP1 alternate name count does not match the game count",
+        ));
+    }
     let mut out = Vec::with_capacity(n);
     let mut component = 0usize;
-    for _ in 0..n {
+    for index in 0..n {
         let name = s.get(c.u32()?)?;
         let bits = c.byte()?;
         let get = |c: &mut Cursor<'_>, bit: u8, s: &Strings, bits: u8| -> Result<Option<String>> {
@@ -1019,6 +1103,10 @@ fn parse_games(
             provenance,
             legacy_variant: bits & 128 != 0,
             dump_tags,
+            alternate_names: alternate_names
+                .as_mut()
+                .map(|names| std::mem::take(&mut names[index]))
+                .unwrap_or_default(),
             game_id,
             region,
             language,
@@ -1055,6 +1143,7 @@ mod tests {
             provenance: Vec::new(),
             legacy_variant: false,
             dump_tags: Vec::new(),
+            alternate_names: Vec::new(),
             game_id: None,
             region: None,
             language: None,
@@ -1120,6 +1209,47 @@ mod tests {
         assert_eq!(pack.games()[0].provenance, input_game.provenance);
         assert_eq!(pack.games()[0].dump_tags, input_game.dump_tags);
         assert_eq!(pack.route("aabbccdd", 4).unwrap(), vec![(0, 0)]);
+    }
+
+    #[test]
+    fn alternate_names_round_trip_and_cost_nothing_when_unused() {
+        let plain = encode(
+            "Test",
+            IdentifySource::Redump,
+            "test-v1",
+            &json!([]),
+            vec![game()],
+        )
+        .expect("pack encodes");
+
+        let mut named = game();
+        named.alternate_names = vec!["Example (U) [!]".to_string(), "Example (U) [!]".to_string()];
+        let with_names = encode(
+            "Test",
+            IdentifySource::Redump,
+            "test-v1",
+            &json!([]),
+            vec![named],
+        )
+        .expect("pack encodes");
+
+        // A pack whose games carry no alternate name keeps the bytes it had
+        // before the member existed.
+        assert!(with_names.len() > plain.len());
+        assert!(
+            ArtifactPack::parse(&plain)
+                .expect("plain pack parses")
+                .games()[0]
+                .alternate_names
+                .is_empty()
+        );
+        assert_eq!(
+            ArtifactPack::parse(&with_names)
+                .expect("named pack parses")
+                .games()[0]
+                .alternate_names,
+            ["Example (U) [!]"]
+        );
     }
 
     #[test]

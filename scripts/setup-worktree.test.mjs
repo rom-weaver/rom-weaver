@@ -16,12 +16,18 @@ for (const prime of HOOK_CARGO_PRIMES) {
   test(`${prime.task} is primed into the target dir the hook uses`, () => {
     assert.ok(line, `no lefthook command runs \`mise run ${prime.task}\``);
     assert.match(line, new RegExp(`CARGO_TARGET_DIR=${prime.targetDir}\\b`));
+    assert.match(line, /env -u __MISE_DIFF/);
   });
   test(`${prime.task} is primed with the rustflags the hook uses`, () => {
     const hookFlags = /RUSTFLAGS="\$\{RUSTFLAGS:-\} ([^"]*)"/.exec(line ?? "")?.[1] ?? "";
     assert.equal(prime.rustflags, hookFlags);
   });
 }
+
+test("worktree primes do not restore an activated mise environment", () => {
+  const source = primeHookTargets.toString();
+  assert.match(source, /delete env\.__MISE_DIFF/);
+});
 
 // A RUSTFLAGS override replaces the configured [target.*] rustflags rather than
 // extending them, so a hook that sets it drops the threaded-WASM target features

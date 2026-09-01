@@ -43,6 +43,7 @@ pub fn render_success(surface: &Surface, event: &ProgressEvent) {
             }
         }
         "checksum" => render_checksum(surface, event),
+        "identify" => render_identify(surface, event),
         _ => render_details_or_label(surface, event),
     }
     render_elapsed(surface, event);
@@ -166,6 +167,58 @@ fn render_candidates(surface: &Surface, event: &ProgressEvent) {
 }
 
 /// Fallback: render a recognized `details` object as flattened key/values, else the plain label.
+/// Identify: the matched title first, then the rest of the identify object.
+/// The generic renderer drops arrays of objects, so without this the one field
+/// the user asked for - the game's name - never reaches the terminal.
+fn render_identify(surface: &Surface, event: &ProgressEvent) {
+    let Some(identify) = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("identify"))
+        .and_then(Value::as_object)
+    else {
+        return render_details_or_label(surface, event);
+    };
+    let names: Vec<String> = identify
+        .get("matches")
+        .and_then(Value::as_array)
+        .map(|matches| {
+            matches
+                .iter()
+                .filter_map(|entry| entry.get("name").and_then(Value::as_str))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut pairs = Vec::new();
+    if !names.is_empty() {
+        let key = if names.len() == 1 { "Match" } else { "Matches" };
+        pairs.push((key.to_string(), names.join(", ")));
+    }
+    let alternates: Vec<String> = identify
+        .get("matches")
+        .and_then(Value::as_array)
+        .map(|matches| {
+            matches
+                .iter()
+                .filter_map(|entry| entry.get("alternate_names").and_then(Value::as_array))
+                .flatten()
+                .filter_map(Value::as_str)
+                .filter(|name| !names.iter().any(|primary| primary == name))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    if !alternates.is_empty() {
+        pairs.push(("Also known as".to_string(), alternates.join(", ")));
+    }
+    collect_pairs("", identify, &mut pairs);
+    if pairs.is_empty() {
+        return label_line(surface, event);
+    }
+    surface.key_values(&pairs);
+}
+
 fn render_details_or_label(surface: &Surface, event: &ProgressEvent) {
     match event.details.as_ref() {
         Some(details) if details.is_object() => render_object(surface, details),

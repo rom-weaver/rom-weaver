@@ -9,6 +9,13 @@ pub enum IdentifyPackFile {
     V1(crate::identify_pack_v1::ArtifactPack),
 }
 
+/// Whether the bytes open with a supported pack magic. Callers that accept a
+/// compressed pack use this to tell a raw pack from a compressed one before
+/// they spend a decompression pass on it.
+pub fn is_pack(bytes: &[u8]) -> bool {
+    bytes.starts_with(crate::identify_pack_v1::PACK_V1_MAGIC)
+}
+
 impl IdentifyPackFile {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         if bytes.starts_with(crate::identify_pack_v1::PACK_V1_MAGIC) {

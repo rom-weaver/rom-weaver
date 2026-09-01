@@ -100,6 +100,7 @@ fn game(name: &str, platform: &str, components: Vec<PackComponent>) -> PackGame 
         provenance: Vec::new(),
         legacy_variant: false,
         dump_tags: Vec::new(),
+        alternate_names: Vec::new(),
         game_id: None,
         region: None,
         language: None,
@@ -135,6 +136,7 @@ fn loaded_pack(name: &str, platform: &str, profile: &str, games: Vec<PackGame>) 
 fn artifact_match(name: &str, platform: &str) -> ArtifactGameMatch {
     ArtifactGameMatch {
         name: name.to_string(),
+        alternate_names: Vec::new(),
         platform: platform.to_string(),
         provenance: Vec::new(),
         legacy_variant: false,
@@ -235,6 +237,7 @@ fn title_match(name: &str, platform: &str, variant: &str) -> IdentifyTitleMatch 
         provenance: Vec::new(),
         legacy_variant: false,
         dump_tags: Vec::new(),
+        alternate_names: Vec::new(),
         expected_components: Vec::new(),
         game_id: None,
         region: None,
