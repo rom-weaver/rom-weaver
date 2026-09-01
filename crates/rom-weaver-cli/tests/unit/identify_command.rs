@@ -139,6 +139,13 @@ fn artifact_match(name: &str, platform: &str) -> ArtifactGameMatch {
         provenance: Vec::new(),
         legacy_variant: false,
         dump_tags: Vec::new(),
+        components: Vec::new(),
+        game_id: None,
+        region: None,
+        language: None,
+        disc_number: None,
+        revision: None,
+        parent: None,
         evidence: MatchEvidence {
             required_components_matched: 1,
             required_components_total: 1,
@@ -164,7 +171,8 @@ fn outcome(matches: Vec<ArtifactGameMatch>) -> ArtifactMatchOutcome {
 fn identify_args(input: Option<PathBuf>, database: Vec<PathBuf>) -> IdentifyCommand {
     IdentifyCommand {
         input,
-        hash: None,
+        hash: Vec::new(),
+        size: None,
         database,
         system: None,
         offline: false,
@@ -227,6 +235,13 @@ fn title_match(name: &str, platform: &str, variant: &str) -> IdentifyTitleMatch 
         provenance: Vec::new(),
         legacy_variant: false,
         dump_tags: Vec::new(),
+        expected_components: Vec::new(),
+        game_id: None,
+        region: None,
+        language: None,
+        disc_number: None,
+        revision: None,
+        parent: None,
     }
 }
 
@@ -909,7 +924,7 @@ fn identify_requires_exactly_one_of_input_or_hash() {
 
     let (app, sink) = recording_app();
     let mut args = identify_args(Some(PathBuf::from("rom.sfc")), Vec::new());
-    args.hash = Some("aabbccdd".to_string());
+    args.hash = vec!["aabbccdd".to_string()];
     assert_eq!(
         app.run_identify(args).status,
         OperationStatus::Failed,
@@ -935,7 +950,7 @@ fn identify_by_hash_rejects_lengths_that_name_no_algorithm() {
     for hash in ["zzzzzzzz", "aabb", ""] {
         let (app, sink) = recording_app();
         let mut args = identify_args(None, vec![path.clone()]);
-        args.hash = Some(hash.to_string());
+        args.hash = vec![hash.to_string()];
         assert_eq!(app.run_identify(args).status, OperationStatus::Failed);
         assert!(last_label(&sink).contains("--hash must be hex"));
     }
@@ -959,7 +974,7 @@ fn identify_by_hash_matches_through_the_pack_routes() {
 
     let (app, sink) = recording_app();
     let mut args = identify_args(None, vec![path.clone()]);
-    args.hash = Some("AABBCCDD".to_string());
+    args.hash = vec!["AABBCCDD".to_string()];
     assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
     let details = identify_details(&sink);
     assert_eq!(details["status"], json!("matched"));
@@ -970,13 +985,13 @@ fn identify_by_hash_matches_through_the_pack_routes() {
 
     let (app, sink) = recording_app();
     let mut args = identify_args(None, vec![path.clone()]);
-    args.hash = Some("d41d8cd98f00b204e9800998ecf8427e".to_string());
+    args.hash = vec!["d41d8cd98f00b204e9800998ecf8427e".to_string()];
     assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
     assert_eq!(identify_details(&sink)["matches"][0]["name"], json!("A"));
 
     let (app, sink) = recording_app();
     let mut args = identify_args(None, vec![path]);
-    args.hash = Some("0".repeat(40));
+    args.hash = vec!["0".repeat(40)];
     assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
     assert_eq!(identify_details(&sink)["status"], json!("unknown"));
     assert_eq!(last_label(&sink), "no title matched the supplied database");
@@ -1001,7 +1016,7 @@ fn identify_by_hash_reports_ambiguity_across_titles() {
 
     let (app, sink) = recording_app();
     let mut args = identify_args(None, vec![path]);
-    args.hash = Some("aabbccdd".to_string());
+    args.hash = vec!["aabbccdd".to_string()];
     assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
     assert_eq!(identify_details(&sink)["status"], json!("ambiguous"));
     assert_eq!(last_label(&sink), "found 2 possible titles");
@@ -1012,7 +1027,7 @@ fn identify_by_hash_reports_an_unreadable_pack() {
     let temp = assert_fs::TempDir::new().expect("temporary directory");
     let (app, sink) = recording_app();
     let mut args = identify_args(None, vec![temp.path().join("absent.pack")]);
-    args.hash = Some("aabbccdd".to_string());
+    args.hash = vec!["aabbccdd".to_string()];
     assert_eq!(app.run_identify(args).status, OperationStatus::Failed);
     assert!(last_label(&sink).contains("failed to read ROM identify pack"));
 }
