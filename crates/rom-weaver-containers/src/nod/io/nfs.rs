@@ -248,3 +248,7 @@ impl BlockReaderNFS {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_nfs.rs"]
+mod tests;

@@ -385,3 +385,7 @@ impl DiscWriter for DiscWriterGCZ {
         DiscWriterWeight::Heavy
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_gcz.rs"]
+mod tests;
