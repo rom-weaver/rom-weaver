@@ -8,6 +8,7 @@ import type { ChecksumMap, ChecksumVariant } from "../../types/checksum.ts";
 import { isIdentifyCondition, isIdentifyLookupStatus, isIdentifyQuality } from "../../types/identify.ts";
 import type {
   ParsedIdentifyEvidence,
+  ParsedIdentifyExpectedComponent,
   ParsedIdentifyLookupResult,
   ParsedIdentifyPlatformCandidate,
   ParsedIdentifyProvenance,
@@ -49,6 +50,37 @@ const toChecksumMap = (value: unknown): ChecksumMap => {
   return map as ChecksumMap;
 };
 
+/* The matched record's own components. A component with neither a size nor a
+   checksum describes nothing, so it is dropped rather than rendered empty. */
+const parseExpectedComponents = (value: unknown): ParsedIdentifyExpectedComponent[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry): ParsedIdentifyExpectedComponent | undefined => {
+      const record = asRecord(entry);
+      if (!record) return undefined;
+      const size = toNumberValue(record.size) ?? 0;
+      const crc32 = toStringValue(record.crc32);
+      const md5 = toStringValue(record.md5);
+      const sha1 = toStringValue(record.sha1);
+      const sha256 = toStringValue(record.sha256);
+      if (!(size || crc32 || md5 || sha1 || sha256)) return undefined;
+      const hashScope = toStringValue(record.hash_scope);
+      const filename = toStringValue(record.filename);
+      return {
+        role: toStringValue(record.role) || "primary_payload",
+        ordinal: toNumberValue(record.ordinal) ?? 0,
+        size,
+        ...(hashScope ? { hashScope } : {}),
+        ...(filename ? { filename } : {}),
+        ...(crc32 ? { crc32 } : {}),
+        ...(md5 ? { md5 } : {}),
+        ...(sha1 ? { sha1 } : {}),
+        ...(sha256 ? { sha256 } : {}),
+      };
+    })
+    .filter((entry): entry is ParsedIdentifyExpectedComponent => entry !== undefined);
+};
+
 const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefined => {
   const match = asRecord(value) as WireRecord<IdentifyTitleMatch> | undefined;
   if (!match) return undefined;
@@ -77,6 +109,13 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
         .filter((item): item is ParsedIdentifyProvenance => item !== undefined)
     : [];
   const dumpTags = toStringList(record.dump_tags);
+  const expectedComponents = parseExpectedComponents(record.expected_components);
+  const gameId = toStringValue(record.game_id);
+  const region = toStringValue(record.region);
+  const language = toStringValue(record.language);
+  const discNumber = toNumberValue(record.disc_number);
+  const revision = toStringValue(record.revision);
+  const parent = toStringValue(record.parent);
   return {
     algorithm: toStringValue(match.algorithm) || "",
     database: toStringValue(match.database) || "",
@@ -86,6 +125,13 @@ const parseIdentifyMatch = (value: unknown): ParsedIdentifyTitleMatch | undefine
     ...(provenance.length ? { provenance } : {}),
     ...(record.legacy_variant === true ? { legacyVariant: true } : {}),
     ...(dumpTags ? { dumpTags } : {}),
+    ...(expectedComponents.length ? { expectedComponents } : {}),
+    ...(gameId ? { gameId } : {}),
+    ...(region ? { region } : {}),
+    ...(language ? { language } : {}),
+    ...(discNumber === undefined ? {} : { discNumber }),
+    ...(revision ? { revision } : {}),
+    ...(parent ? { parent } : {}),
   };
 };
 

@@ -126,6 +126,9 @@ Native identify performs no network access.
 
 ### Identify flags
 
+- `--input ROM` names the ROM to hash and identify. Use `-` to read from stdin.
+- `--hash HEX` identifies from a checksum instead of a file. The algorithm comes from the length: 8 characters for CRC32, 32 for MD5, 40 for SHA-1, 64 for SHA-256. Repeatable, one value per algorithm. Give exactly one of `--input` or `--hash`.
+- `--size BYTES` gives the exact byte size to pair with `--hash`, narrowing the lookup to records of that size. It only applies with `--hash`.
 - `--database PACK` searches a local RWFP1 pack instead of the built-in data and the installed packs. Repeatable.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
@@ -173,9 +176,13 @@ The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON re
 - `matches[].provenance`: every source that contributed the matched hash record.
 - `matches[].legacy_variant`: true for an OpenGood-only record.
 - `matches[].dump_tags`: preserved GoodTools status tags for a legacy variant.
+- `matches[].expected_components`: the matched record's own components - `size` and every checksum the database holds, plus `filename` and `hash_scope`. A partial check reads the checksums it does not itself carry from here.
+- `matches[].game_id`, `matches[].region`, `matches[].language`, `matches[].disc_number`, `matches[].revision`, `matches[].parent`: record metadata, each present when the pack holds it.
 - `evidence`: `required_components_matched`, `required_components_total`, and `layout_matched`.
 
 CUE/GDI/CHD inputs are identified per selected payload track, not yet as complete track sets. A single matched data track reports `quality: "partial"`, with `evidence` counting the required components that did not match.
+
+A `--hash` run has no input components, so `components` reports the matched record's components instead of the input's.
 
 The internal `ingest` command also identifies each ROM asset. It identifies a patch's expected source when the patch supplies a source checksum. Its JSON result puts these compact matches in `details.ingest`.
 

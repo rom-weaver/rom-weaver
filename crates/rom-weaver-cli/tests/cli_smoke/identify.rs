@@ -288,6 +288,110 @@ fn identify_matches_a_manual_hash() {
     assert_eq!(identify["matches"][0]["name"], "Hello World (Test) [!]");
     assert_eq!(identify["matches"][0]["algorithm"], "components");
     assert_eq!(identify["matches"][0]["variant"], "manual");
+    // The whole point of a checks-only lookup: the record supplies the size and
+    // the checksums the caller did not have.
+    let expected = &identify["matches"][0]["expected_components"][0];
+    assert_eq!(expected["size"], 5);
+    assert_eq!(expected["crc32"], "3610a686");
+    assert_eq!(expected["md5"], "5d41402abc4b2a76b9719d911017c592");
+    assert_eq!(expected["sha1"], "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d");
+    assert_eq!(expected["hash_scope"], "full_file");
+    assert_eq!(
+        identify["components"][0]["md5"],
+        "5d41402abc4b2a76b9719d911017c592"
+    );
+}
+
+#[test]
+fn identify_matches_a_whole_rom_check() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--hash",
+            "3610A686",
+            "--hash",
+            "5d41402abc4b2a76b9719d911017c592",
+            "--size",
+            "5",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let identify = &json["details"]["identify"];
+
+    assert_eq!(identify["status"], "matched");
+    assert_eq!(identify["checksums"]["crc32"], "3610a686");
+    assert_eq!(
+        identify["checksums"]["md5"],
+        "5d41402abc4b2a76b9719d911017c592"
+    );
+    assert_eq!(identify["matches"][0]["name"], "Hello World (Test) [!]");
+    assert_eq!(
+        identify["matches"][0]["expected_components"][0]["sha1"],
+        "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+    );
+}
+
+#[test]
+fn identify_rejects_two_values_for_one_algorithm() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--hash",
+            "3610a686",
+            "--hash",
+            "deadbeef",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("two different crc32 values")
+    );
+}
+
+#[test]
+fn identify_rejects_a_size_without_a_hash() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--input",
+            temp.child("hello.bin").path().to_str().expect("ROM path"),
+            "--size",
+            "5",
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("--size only applies with --hash")
+    );
 }
 
 #[test]
@@ -326,7 +430,7 @@ fn identify_rejects_an_invalid_hash_length() {
         json["label"]
             .as_str()
             .expect("label")
-            .contains("8 chars for crc32, 32 for md5, or 40 for sha1")
+            .contains("8 chars for crc32, 32 for md5, 40 for sha1, or 64 for sha256")
     );
 }
 

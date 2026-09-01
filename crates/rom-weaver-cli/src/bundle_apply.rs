@@ -9,6 +9,7 @@ use super::bundle_load::{LoadedBundleSource, is_stream_codec_format_name};
 use super::bundle_parse::{
     bundle_bytes_are_valid, bundle_file_name_codec, is_bundle_json_candidate, parse_bundle_bytes,
 };
+use super::identify_command::{IdentifyDatabaseSet, IdentifyStatus};
 use super::patch_filename_checksum::FilenameRequirements;
 use super::*;
 
@@ -362,6 +363,7 @@ impl CliApp {
             if let Some(size) = rom_checks.size {
                 coded.push_field("expected_size", size);
             }
+            describe_expected_rom(rom_checks, &mut coded);
         }
         Err(RomWeaverError::ValidationCode(coded))
     }
@@ -765,4 +767,193 @@ fn matches_bundle_entry(matcher: &mut Option<SelectionMatcher>, entry: &BundlePa
         return true;
     }
     bundle_entry_file_name(entry).is_some_and(|name| matcher.matches(name))
+}
+
+/// Look the bundle's rom checks up in the local identify data and add what the
+/// database knows to the "provide this ROM yourself" failure: the title, and
+/// the checksums and size the manifest itself did not carry. Best effort - a
+/// missing, unreadable, or ambiguous database leaves the manifest's own fields
+/// standing alone and never turns into a second failure.
+///
+/// A bare checksum routes to no platform, so this loads every installed pack.
+/// It runs only on the terminal "no ROM to patch" failure, never on a path that
+/// goes on to do work.
+fn describe_expected_rom(rom_checks: &BundleChecks, coded: &mut ValidationCodeError) {
+    if rom_checks.checksums.is_empty() {
+        return;
+    }
+    let Ok(Some(databases)) = IdentifyDatabaseSet::load(&[]) else {
+        trace!("expected-rom lookup skipped: no identify database is available");
+        return;
+    };
+    push_expected_rom_fields(rom_checks, &databases, coded);
+}
+
+/// The lookup half of [`describe_expected_rom`], split out so a test can drive
+/// it with a pack of its own.
+fn push_expected_rom_fields(
+    rom_checks: &BundleChecks,
+    databases: &IdentifyDatabaseSet,
+    coded: &mut ValidationCodeError,
+) {
+    let variants = vec![serde_json::json!({
+        "id": "bundle-rom-checks",
+        "label": "Bundle rom.checks",
+        "checksums": rom_checks.checksums,
+    })];
+    let Ok(lookup) = databases.resolve_variants(&variants, rom_checks.size) else {
+        trace!("expected-rom lookup failed; reporting the manifest's own checks only");
+        return;
+    };
+    if lookup.status != IdentifyStatus::Matched {
+        trace!(status = ?lookup.status, "expected-rom lookup did not settle on one title");
+        return;
+    }
+    let Some(matched) = lookup.matches.first() else {
+        return;
+    };
+    coded.push_field("expected_title", matched.name.clone());
+    if !matched.platform.is_empty() {
+        coded.push_field("expected_platform", matched.platform.clone());
+    }
+    for (field, value) in [
+        ("expected_region", matched.region.as_deref()),
+        ("expected_revision", matched.revision.as_deref()),
+    ] {
+        if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+            coded.push_field(field, value.to_owned());
+        }
+    }
+    // Only one component can describe "the ROM"; a multi-track disc record has
+    // no single expected file, so its extra checksums would be misleading here.
+    let [component] = matched.expected_components.as_slice() else {
+        return;
+    };
+    let known: BTreeMap<&str, &str> = [
+        ("crc32", component.crc32.as_deref()),
+        ("md5", component.md5.as_deref()),
+        ("sha1", component.sha1.as_deref()),
+        ("sha256", component.sha256.as_deref()),
+    ]
+    .into_iter()
+    .filter_map(|(algorithm, value)| value.map(|value| (algorithm, value)))
+    .filter(|(algorithm, _)| !rom_checks.checksums.contains_key(*algorithm))
+    .collect();
+    if !known.is_empty() {
+        let rendered = known
+            .iter()
+            .map(|(algorithm, value)| format!("{algorithm}={value}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        coded.push_field("database_checksums", rendered);
+    }
+    if rom_checks.size.is_none() && component.size > 0 {
+        coded.push_field("database_size", component.size);
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use assert_fs::TempDir;
+    use rom_weaver_checksum::identify_catalog::IdentifySource;
+    use rom_weaver_checksum::identify_pack_types::{
+        PackComponent, PackComponentRole, PackGame, UpstreamSource,
+    };
+    use std::collections::BTreeMap;
+
+    /// A one-title pack whose record knows more than any single check does.
+    fn test_pack(temp: &std::path::Path) -> PathBuf {
+        let game = PackGame {
+            name: "Hello World (USA)".to_string(),
+            platform: "Test System".to_string(),
+            source: IdentifySource::Libretro,
+            upstream_source: UpstreamSource::Libretro,
+            provenance: Vec::new(),
+            legacy_variant: false,
+            dump_tags: Vec::new(),
+            game_id: None,
+            region: Some("USA".to_string()),
+            language: None,
+            disc_number: None,
+            revision: Some("Rev 1".to_string()),
+            parent: None,
+            components: vec![PackComponent {
+                role: PackComponentRole::PrimaryPayload,
+                ordinal: 0,
+                hash_scope: "full_file".to_string(),
+                filename: None,
+                size: 5,
+                crc32: Some("3610a686".to_string()),
+                md5: Some("5d41402abc4b2a76b9719d911017c592".to_string()),
+                sha1: Some("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d".to_string()),
+                sha256: None,
+                required: true,
+                discriminating: true,
+                track: None,
+                session: None,
+            }],
+        };
+        let bytes = rom_weaver_checksum::identify_pack_v1::encode(
+            "Test System",
+            IdentifySource::Libretro,
+            "full_file",
+            &serde_json::json!([]),
+            vec![game],
+        )
+        .expect("RWFP1 pack");
+        let path = temp.join("test.pack");
+        fs::write(&path, bytes).expect("write pack");
+        path
+    }
+
+    fn fields(coded: &ValidationCodeError) -> String {
+        format!("{coded}")
+    }
+
+    #[test]
+    fn expected_rom_fields_add_the_title_and_the_missing_checksums() {
+        let temp = TempDir::new().expect("temp dir");
+        let databases = IdentifyDatabaseSet::load(&[test_pack(temp.path())])
+            .expect("load")
+            .expect("packs");
+        let checks = BundleChecks {
+            checksums: BTreeMap::from([("crc32".to_string(), "3610a686".to_string())]),
+            size: Some(5),
+        };
+        let mut coded = ValidationCodeError::new("bundle.rom.missing");
+
+        push_expected_rom_fields(&checks, &databases, &mut coded);
+
+        let rendered = fields(&coded);
+        assert!(rendered.contains("Hello World (USA)"), "{rendered}");
+        assert!(rendered.contains("Test System"), "{rendered}");
+        assert!(rendered.contains("USA"), "{rendered}");
+        assert!(rendered.contains("Rev 1"), "{rendered}");
+        // The check already carried crc32 and the size, so only what it lacked
+        // is reported as coming from the database.
+        assert!(
+            rendered.contains("md5=5d41402abc4b2a76b9719d911017c592"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("crc32=3610a686"), "{rendered}");
+        assert!(!rendered.contains("database_size"), "{rendered}");
+    }
+
+    #[test]
+    fn expected_rom_fields_stay_silent_when_nothing_matches() {
+        let temp = TempDir::new().expect("temp dir");
+        let databases = IdentifyDatabaseSet::load(&[test_pack(temp.path())])
+            .expect("load")
+            .expect("packs");
+        let checks = BundleChecks {
+            checksums: BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]),
+            size: Some(5),
+        };
+        let mut coded = ValidationCodeError::new("bundle.rom.missing");
+
+        push_expected_rom_fields(&checks, &databases, &mut coded);
+
+        assert!(!fields(&coded).contains("expected_title"));
+    }
 }

@@ -11,7 +11,7 @@ use rom_weaver_core::{ComponentRole, Result};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-use crate::identify_pack_types::{PackComponent, PackGame, PackProvenance};
+use crate::identify_pack_types::{PackComponent, PackComponentRole, PackGame, PackProvenance};
 
 /// The read-only pack operations needed by the artifact matcher.
 pub trait ArtifactPackReader {
@@ -101,6 +101,49 @@ pub struct MatchEvidence {
     pub unexpected: Vec<String>,
 }
 
+/// One component of the matched database record: what the pack says the
+/// expected bytes are, as opposed to the artifact's own hashes.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct MatchedComponent {
+    pub role: ComponentRole,
+    pub ordinal: u32,
+    pub hash_scope: String,
+    pub size: u64,
+    pub filename: Option<String>,
+    pub crc32: Option<String>,
+    pub md5: Option<String>,
+    pub sha1: Option<String>,
+    pub sha256: Option<String>,
+}
+
+fn matched_component(component: &PackComponent) -> MatchedComponent {
+    MatchedComponent {
+        role: pack_component_role(component.role),
+        ordinal: component.ordinal,
+        hash_scope: component.hash_scope.clone(),
+        size: component.size,
+        filename: component.filename.clone(),
+        crc32: component.crc32.clone(),
+        md5: component.md5.clone(),
+        sha1: component.sha1.clone(),
+        sha256: component.sha256.clone(),
+    }
+}
+
+fn pack_component_role(role: PackComponentRole) -> ComponentRole {
+    match role {
+        PackComponentRole::PrimaryPayload => ComponentRole::PrimaryPayload,
+        PackComponentRole::DataTrack => ComponentRole::DataTrack,
+        PackComponentRole::AudioTrack => ComponentRole::AudioTrack,
+        PackComponentRole::ArcadeRom => ComponentRole::ArcadeRom,
+        PackComponentRole::Partition => ComponentRole::Partition,
+        PackComponentRole::ContentFile => ComponentRole::ContentFile,
+        PackComponentRole::DiskSide => ComponentRole::DiskSide,
+        PackComponentRole::ChildDisc => ComponentRole::ChildDisc,
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ArtifactGameMatch {
@@ -110,6 +153,22 @@ pub struct ArtifactGameMatch {
     pub legacy_variant: bool,
     pub dump_tags: Vec<String>,
     pub evidence: MatchEvidence,
+    /// The record's own expected components, so a caller holding only a partial
+    /// check can show every checksum and the size the database knows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<MatchedComponent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disc_number: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -352,6 +411,13 @@ pub fn match_artifact<P: ArtifactPackReader + ?Sized>(
                     legacy_variant: game.legacy_variant,
                     dump_tags: game.dump_tags.clone(),
                     evidence: result.evidence,
+                    components: game.components.iter().map(matched_component).collect(),
+                    game_id: game.game_id.clone(),
+                    region: game.region.clone(),
+                    language: game.language.clone(),
+                    disc_number: game.disc_number,
+                    revision: game.revision.clone(),
+                    parent: game.parent.clone(),
                 },
             ));
         }

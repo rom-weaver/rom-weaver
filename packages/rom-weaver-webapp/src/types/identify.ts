@@ -49,6 +49,24 @@ type ParsedIdentifyDatabaseInfo = {
   source?: string;
 };
 
+/**
+ * One component of the matched database record - what the database says the
+ * expected bytes are. Distinct from the input's own hashes: these are known
+ * before any file is staged, so a bare rom check can still name every checksum
+ * and the size.
+ */
+type ParsedIdentifyExpectedComponent = {
+  role: string;
+  ordinal: number;
+  size: number;
+  hashScope?: string;
+  filename?: string;
+  crc32?: string;
+  md5?: string;
+  sha1?: string;
+  sha256?: string;
+};
+
 type ParsedIdentifyTitleMatch = {
   algorithm: string;
   database: string;
@@ -58,6 +76,13 @@ type ParsedIdentifyTitleMatch = {
   provenance?: ParsedIdentifyProvenance[];
   legacyVariant?: boolean;
   dumpTags?: string[];
+  expectedComponents?: ParsedIdentifyExpectedComponent[];
+  gameId?: string;
+  region?: string;
+  language?: string;
+  discNumber?: number;
+  revision?: string;
+  parent?: string;
 };
 
 type ParsedIdentifyProvenance = {
@@ -164,6 +189,7 @@ export type {
   IdentifyStatus,
   ParsedIdentifyCandidate,
   ParsedIdentifyEvidence,
+  ParsedIdentifyExpectedComponent,
   ParsedIdentifyLookupResult,
   ParsedIdentifyPlatformCandidate,
   ParsedIdentifyProvenance,

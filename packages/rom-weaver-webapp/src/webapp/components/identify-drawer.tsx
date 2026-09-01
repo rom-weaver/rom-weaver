@@ -77,6 +77,12 @@ const IdentifyDrawer = ({
     ),
   );
   const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? []));
+  const regions = unique(matches.map((match) => match.region ?? ""));
+  const languages = unique(matches.map((match) => match.language ?? ""));
+  const revisions = unique(matches.map((match) => match.revision ?? ""));
+  const discs = unique(
+    matches.map((match) => (typeof match.discNumber === "number" ? `Disc ${match.discNumber}` : "")),
+  );
   const legacyVariant = matches.some((match) => match.legacyVariant);
   const mark = status ? IDENTIFY_STATUS_MARK[status] : undefined;
   // The matched title's own platform outranks the probe's tag.
@@ -167,6 +173,10 @@ const IdentifyDrawer = ({
               <EvidenceRow label="Matched by" values={algorithms} />
               <EvidenceRow label="Variant" values={variants} />
               <EvidenceRow label="Platform" values={platforms.map(abbreviatePlatform)} />
+              {regions.length ? <EvidenceRow label="Region" values={regions} /> : null}
+              {languages.length ? <EvidenceRow label="Language" values={languages} /> : null}
+              {revisions.length ? <EvidenceRow label="Revision" values={revisions} /> : null}
+              {discs.length ? <EvidenceRow label="Disc" values={discs} /> : null}
               <EvidenceRow label="Source" values={databases} />
               {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
               {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}

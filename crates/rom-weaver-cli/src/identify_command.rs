@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use rom_weaver_checksum::artifact_match::{
-    ArtifactFingerprint, ArtifactMatchOutcome, ArtifactMatchQuality, ArtifactMatchStatus,
-    ArtifactPackReader, match_artifact,
+    ArtifactFingerprint, ArtifactGameMatch, ArtifactMatchOutcome, ArtifactMatchQuality,
+    ArtifactMatchStatus, ArtifactPackReader, match_artifact,
 };
 use rom_weaver_checksum::identify_catalog::{
     IdentifyCatalog, IdentifyPlatformCatalogEntry, IdentifySource,
@@ -44,6 +44,30 @@ pub struct IdentifyTitleMatch {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dump_tags: Vec<String>,
+    /// What the database says this title's bytes are. A caller holding only a
+    /// partial check (a patch's source crc32, say) reads every other checksum
+    /// and the size from here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub expected_components: Vec<IdentifyComponent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub game_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub region: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub disc_number: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub parent: Option<String>,
 }
 
 fn is_false(value: &bool) -> bool {
@@ -97,6 +121,14 @@ pub struct IdentifyComponent {
     pub role: ComponentRole,
     pub ordinal: u32,
     pub size: u64,
+    /// Only set on a database record's component; the input's own components
+    /// are always hashed whole.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub hash_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub filename: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub crc32: Option<String>,
@@ -106,6 +138,9 @@ pub struct IdentifyComponent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub sha1: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub sha256: Option<String>,
 }
 
 /// Which database produced the match.
@@ -587,6 +622,58 @@ fn match_fingerprint<P: ArtifactPackReader + ?Sized>(
     Ok(outcome)
 }
 
+/// Map one matched pack record onto the reported title match. Both lookup
+/// paths (the compact `push_artifact_matches` funnel and the merged
+/// multi-pack accumulator) route through here so the record's expected
+/// components and metadata are never dropped by only one of them.
+fn identify_title_match(
+    database: String,
+    variant: &str,
+    game_match: ArtifactGameMatch,
+) -> IdentifyTitleMatch {
+    IdentifyTitleMatch {
+        name: game_match.name,
+        platform: game_match.platform,
+        algorithm: "components".to_string(),
+        variant: variant.to_string(),
+        database,
+        provenance: game_match
+            .provenance
+            .into_iter()
+            .map(|item| IdentifyProvenance {
+                source: item.source,
+                source_name: item.source_name,
+                source_url: item.source_url,
+                source_commit: item.source_commit,
+                license: item.license,
+            })
+            .collect(),
+        legacy_variant: game_match.legacy_variant,
+        dump_tags: game_match.dump_tags,
+        expected_components: game_match
+            .components
+            .into_iter()
+            .map(|component| IdentifyComponent {
+                role: component.role,
+                ordinal: component.ordinal,
+                size: component.size,
+                hash_scope: Some(component.hash_scope),
+                filename: component.filename,
+                crc32: component.crc32,
+                md5: component.md5,
+                sha1: component.sha1,
+                sha256: component.sha256,
+            })
+            .collect(),
+        game_id: game_match.game_id,
+        region: game_match.region,
+        language: game_match.language,
+        disc_number: game_match.disc_number,
+        revision: game_match.revision,
+        parent: game_match.parent,
+    }
+}
+
 /// Fold one pack's artifact match outcome into the deduped title-match list.
 fn push_artifact_matches(
     database_name: &str,
@@ -603,26 +690,11 @@ fn push_artifact_matches(
         if !seen.insert(key) {
             continue;
         }
-        output.push(IdentifyTitleMatch {
-            name: game_match.name,
-            platform: game_match.platform,
-            algorithm: "components".to_string(),
-            variant: variant.to_string(),
-            database: database_name.to_string(),
-            provenance: game_match
-                .provenance
-                .into_iter()
-                .map(|item| IdentifyProvenance {
-                    source: item.source,
-                    source_name: item.source_name,
-                    source_url: item.source_url,
-                    source_commit: item.source_commit,
-                    license: item.license,
-                })
-                .collect(),
-            legacy_variant: game_match.legacy_variant,
-            dump_tags: game_match.dump_tags,
-        });
+        output.push(identify_title_match(
+            database_name.to_string(),
+            variant,
+            game_match,
+        ));
     }
 }
 
@@ -640,13 +712,21 @@ impl CliApp {
                 thread_execution,
             )
         };
-        if args.input.is_some() == args.hash.is_some() {
+        let has_hash = !args.hash.is_empty();
+        if args.input.is_some() == has_hash {
             return self.finish(
                 "identify",
                 identify_failed("provide exactly one of --input or --hash".to_string(), None),
             );
         }
-        if let Some(hash) = args.hash.take() {
+        if args.size.is_some() && !has_hash {
+            return self.finish(
+                "identify",
+                identify_failed("--size only applies with --hash".to_string(), None),
+            );
+        }
+        if has_hash {
+            let hashes = std::mem::take(&mut args.hash);
             let databases = match IdentifyDatabaseSet::load(&args.database) {
                 Ok(Some(databases)) => databases,
                 Ok(None) => {
@@ -663,7 +743,7 @@ impl CliApp {
                     return self.finish("identify", identify_failed(error.to_string(), None));
                 }
             };
-            return self.run_identify_hash(&hash, &databases);
+            return self.run_identify_hash(&hashes, args.size, &databases);
         }
         let Some(mut input) = args.input.take() else {
             return self.finish(
@@ -707,6 +787,7 @@ impl CliApp {
         let IdentifyCommand {
             input: _,
             hash: _,
+            size: _,
             database,
             system,
             offline: _,
@@ -946,9 +1027,12 @@ impl CliApp {
                 role: ComponentRole::PrimaryPayload,
                 ordinal: 0,
                 size,
+                hash_scope: None,
+                filename: None,
                 crc32: checksums.get("crc32").cloned(),
                 md5: checksums.get("md5").cloned(),
                 sha1: checksums.get("sha1").cloned(),
+                sha256: checksums.get("sha256").cloned(),
             }],
             None => Vec::new(),
         };
@@ -995,45 +1079,73 @@ impl CliApp {
         self.finish("identify", report)
     }
 
-    fn run_identify_hash(&self, hash: &str, databases: &IdentifyDatabaseSet) -> AppRunOutcome {
-        let hash = hash.trim().to_ascii_lowercase();
-        let algorithm = match hash.len() {
-            _ if !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) => None,
+    /// The algorithm a bare hex digest belongs to, inferred from its length.
+    fn hash_algorithm(hash: &str) -> Option<&'static str> {
+        if !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return None;
+        }
+        match hash.len() {
             8 => Some("crc32"),
             32 => Some("md5"),
             40 => Some("sha1"),
+            64 => Some("sha256"),
             _ => None,
-        };
-        let Some(algorithm) = algorithm else {
-            return self.finish(
+        }
+    }
+
+    /// Identify from checks alone - the checksums and optional size a bundle
+    /// rom entry or a patch's source requirement carries, with no file to hash.
+    fn run_identify_hash(
+        &self,
+        hashes: &[String],
+        size: Option<u64>,
+        databases: &IdentifyDatabaseSet,
+    ) -> AppRunOutcome {
+        let hash_failed = |message: &str| {
+            OperationReport::failed(
+                OperationFamily::Command,
+                Some("identify".to_string()),
                 "identify",
-                OperationReport::failed(
-                    OperationFamily::Command,
-                    Some("identify".to_string()),
-                    "identify",
-                    "--hash must be hex: 8 chars for crc32, 32 for md5, or 40 for sha1",
-                    None,
-                ),
-            );
+                message.to_string(),
+                None,
+            )
         };
+        let mut checksums: BTreeMap<String, String> = BTreeMap::new();
+        for raw in hashes {
+            let hash = raw.trim().to_ascii_lowercase();
+            let Some(algorithm) = Self::hash_algorithm(&hash) else {
+                return self.finish(
+                    "identify",
+                    hash_failed(
+                        "--hash must be hex: 8 chars for crc32, 32 for md5, 40 for sha1, or 64 \
+                         for sha256",
+                    ),
+                );
+            };
+            if let Some(existing) = checksums.get(algorithm)
+                && existing != &hash
+            {
+                return self.finish(
+                    "identify",
+                    hash_failed(&format!(
+                        "two different {algorithm} values were given to --hash: {existing} and {hash}"
+                    )),
+                );
+            }
+            checksums.insert(algorithm.to_string(), hash);
+        }
+        if checksums.is_empty() {
+            return self.finish("identify", hash_failed("identify needs --hash <HEX>"));
+        }
         let checksum_variants = vec![json!({
             "id": "manual",
             "label": "Manual",
-            "checksums": { algorithm: hash },
+            "checksums": checksums,
         })];
-        let lookup = match databases.resolve_variants(&checksum_variants, None) {
+        let lookup = match databases.resolve_variants(&checksum_variants, size) {
             Ok(lookup) => lookup,
             Err(error) => {
-                return self.finish(
-                    "identify",
-                    OperationReport::failed(
-                        OperationFamily::Command,
-                        Some("identify".to_string()),
-                        "identify",
-                        error.to_string(),
-                        None,
-                    ),
-                );
+                return self.finish("identify", hash_failed(&error.to_string()));
             }
         };
         let label = match lookup.status {
@@ -1041,17 +1153,29 @@ impl CliApp {
             IdentifyStatus::Ambiguous => format!("found {} possible titles", lookup.matches.len()),
             IdentifyStatus::Unknown => "no title matched the supplied database".to_string(),
         };
+        // Without a file there are no input components; the record's own
+        // components are what the caller came for, so an unambiguous match
+        // reports them here as well as on the match.
+        let components = match (lookup.status, lookup.matches.first()) {
+            (IdentifyStatus::Matched, Some(matched)) => matched.expected_components.clone(),
+            _ => Vec::new(),
+        };
+        let input = checksums
+            .values()
+            .next()
+            .cloned()
+            .expect("checksums is non-empty");
         let result = IdentifyResult {
             status: lookup.status,
-            input: hash.clone(),
+            input,
             detected_platform: None,
-            checksums: BTreeMap::from([(algorithm.to_string(), hash)]),
+            checksums,
             checksum_variants,
             matches: lookup.matches,
             quality: None,
             platform_candidates: Vec::new(),
             media: None,
-            components: Vec::new(),
+            components,
             database: None,
             evidence: None,
             condition: None,
@@ -1289,26 +1413,8 @@ impl MergedMatches {
                     unexpected_components,
                 });
             }
-            self.matches.push(IdentifyTitleMatch {
-                name: game_match.name,
-                platform: game_match.platform,
-                algorithm: "components".to_string(),
-                variant: variant.to_string(),
-                database: pack.name.clone(),
-                provenance: game_match
-                    .provenance
-                    .into_iter()
-                    .map(|item| IdentifyProvenance {
-                        source: item.source,
-                        source_name: item.source_name,
-                        source_url: item.source_url,
-                        source_commit: item.source_commit,
-                        license: item.license,
-                    })
-                    .collect(),
-                legacy_variant: game_match.legacy_variant,
-                dump_tags: game_match.dump_tags,
-            });
+            self.matches
+                .push(identify_title_match(pack.name.clone(), variant, game_match));
         }
         if self.database.is_none() && !added.is_empty() {
             let mut info = database_info_for(pack, entry);

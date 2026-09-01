@@ -329,7 +329,13 @@ export type ChecksumCommand = { input: string, algo?: Array<string>, select?: Ar
 
 export type IdentifyStatus = "matched" | "ambiguous" | "unknown";
 
-export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, provenance?: Array<IdentifyProvenance>, legacy_variant?: boolean, dump_tags?: Array<string>, };
+export type IdentifyTitleMatch = { name: string, platform: string, algorithm: string, variant: string, database: string, provenance?: Array<IdentifyProvenance>, legacy_variant?: boolean, dump_tags?: Array<string>,
+/**
+ * What the database says this title's bytes are. A caller holding only a
+ * partial check (a patch's source crc32, say) reads every other checksum
+ * and the size from here.
+ */
+expected_components?: Array<IdentifyComponent>, game_id?: string, region?: string, language?: string, disc_number?: number, revision?: string, parent?: string, };
 
 export type IdentifyProvenance = { source: string, source_name?: string, source_url?: string, source_commit?: string, license?: string, };
 
@@ -351,7 +357,12 @@ platform: string, confidence: DetectionConfidence, evidence: DetectionEvidence, 
 
 export type IdentifyMedia = { kind: MediaKind, container?: string, sessions?: number, };
 
-export type IdentifyComponent = { role: ComponentRole, ordinal: number, size: bigint, crc32?: string, md5?: string, sha1?: string, };
+export type IdentifyComponent = { role: ComponentRole, ordinal: number, size: bigint,
+/**
+ * Only set on a database record's component; the input's own components
+ * are always hashed whole.
+ */
+hash_scope?: string, filename?: string, crc32?: string, md5?: string, sha1?: string, sha256?: string, };
 
 export type IdentifyDatabaseInfo = { source?: string, upstream_sources?: Array<string>, revision?: string, pack_format: string, canonicalization_profile?: string, };
 
@@ -392,7 +403,7 @@ export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabas
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 
-export type IdentifyCommand = { input?: string, hash?: string, database?: Array<string>, system?: string, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
 
 export type IngestCommand = { input: string, output: string, database?: Array<string>, select?: Array<string>,
 /**

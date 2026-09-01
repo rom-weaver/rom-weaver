@@ -628,12 +628,23 @@ pub struct IdentifyCommand {
         arg(
             long = "hash",
             value_name = "HEX",
-            help = "Identify by a checksum instead of a file; accepts crc32/md5/sha1 hex"
+            help = "Identify by a checksum instead of a file; accepts crc32/md5/sha1 hex (repeatable, one per algorithm)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub hash: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "size",
+            value_name = "BYTES",
+            help = "Exact byte size to pair with --hash, narrowing the lookup to records of that size"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub hash: Option<String>,
+    pub size: Option<u64>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

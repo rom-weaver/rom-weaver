@@ -70,6 +70,13 @@ type SourceInfoExpectedChecks = {
   checksums?: Record<string, string>;
   name?: string;
   size?: number;
+  /**
+   * Checksums the identify database supplies for the same record, for
+   * algorithms the check itself does not assert. Informational only: they never
+   * carry a match mark and never decide the mismatch verdict, because nobody
+   * authored them as an expectation.
+   */
+  databaseChecksums?: Record<string, string>;
 };
 
 const EXPECTED_CHECK_LABELS: Record<string, string> = { crc32: "CRC32", md5: "MD5", sha1: "SHA-1" };
@@ -140,7 +147,9 @@ const matchesExpected = (expected: SourceInfoExpectedChecks, set: ComputedCheckS
 
 /* When the expectation matches, the drawer collapses to this ONE group: the
    expected values with their verified marks, filled out with the matched set's
-   remaining hashes - no duplicate Computed group, no other variants. */
+   remaining hashes - no duplicate Computed group, no other variants. The
+   database's own values are omitted here on purpose: a matched set already
+   supplies every hash, measured from the real bytes. */
 const MatchedExpectedGroup = ({
   expected,
   matched,
@@ -212,6 +221,25 @@ const CollapsedVariantGroups = ({
   );
 };
 
+/* Checksums the identify database knows for the same record but the check does
+   not assert. They answer "what else is this ROM supposed to be" without
+   pretending to be an authored expectation, so they carry no match mark. */
+const DatabaseCheckRows = ({ checksums }: { checksums?: Record<string, string> }) => {
+  const algorithms = Object.keys(checksums || {}).sort();
+  if (!algorithms.length) return null;
+  return (
+    <>
+      {algorithms.map((algorithm) => (
+        <ChecksumRow
+          key={algorithm}
+          label={`${EXPECTED_CHECK_LABELS[algorithm] || algorithm.toUpperCase()} (db)`}
+          value={checksums?.[algorithm] || ""}
+        />
+      ))}
+    </>
+  );
+};
+
 /* The bundle's expected-ROM rows inside the same Checks drawer, each carrying a
    per-row match/mismatch mark against the computed checksums - so the
    expectation survives the ghost card once the real ROM is staged. */
@@ -276,6 +304,7 @@ const ExpectedChecksGroup = ({
           value={expectedSize}
         />
       ) : null}
+      <DatabaseCheckRows checksums={expected?.databaseChecksums} />
     </div>
   );
 };
