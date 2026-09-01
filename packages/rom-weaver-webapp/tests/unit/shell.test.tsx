@@ -32,6 +32,14 @@ const TABS = [
     label: "Trim",
     placement: "more",
   },
+  {
+    group: "tools",
+    href: "apply#bundle",
+    icon: <svg aria-hidden="true" />,
+    id: "bundle",
+    label: "Bundles",
+    placement: "more",
+  },
 ] satisfies WorkflowTab[];
 
 const mastheadProps = {
@@ -158,6 +166,21 @@ describe("More menu destinations", () => {
     openDesktopMore(container);
     fireEvent.click(getByRole("menuitem", { name: "Docs" }));
     expect(onSelectTab).toHaveBeenCalledWith("docs");
+
+    openDesktopMore(container);
+    fireEvent.click(getByRole("menuitem", { name: "Bundles" }));
+    expect(onSelectTab).toHaveBeenCalledWith("bundle");
+  });
+
+  it("lists a non-beta tools entry under the visible Tools group", () => {
+    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} />));
+
+    const { menu } = openDesktopMore(container);
+    const toolsGroup = menu.querySelector('[data-more-beta-group=""]')?.nextElementSibling as HTMLElement;
+
+    expect(toolsGroup.hidden).toBe(false);
+    expect(toolsGroup.querySelector(".more-group-label")?.textContent).toBe("Tools");
+    expect(getByRole("menuitem", { name: "Bundles" })).toBeTruthy();
   });
 
   it("falls back to the Log dialog when no Storage handler is given", () => {

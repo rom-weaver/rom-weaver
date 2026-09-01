@@ -1778,6 +1778,13 @@ const BundleOutputFields = ({
   );
 };
 
+// Matches the "Bundles" More-menu entry's `apply#bundle` href, so a direct
+// visit to that URL and a same-page reopen both reveal the same step.
+const BUNDLE_STEP_HASH = "#bundle";
+
+const isBundleStepRequested = () =>
+  typeof window !== "undefined" && window.location.hash.toLowerCase() === BUNDLE_STEP_HASH;
+
 /**
  * Bundle export is a separate job from Apply. It follows the primary action so
  * a normal Apply run stays focused on producing the patched ROM, while a saved
@@ -1795,12 +1802,32 @@ const BundleSecondaryJob = ({
   disabled: boolean;
 }) => {
   const localizer = useUiLocalizer();
+  const [open, setOpen] = useState(false);
+  const headingRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const revealBundleStep = () => {
+      if (!isBundleStepRequested()) return;
+      setOpen(true);
+      // The drawer body expands on the next frame; wait for it before
+      // measuring where to scroll.
+      requestAnimationFrame(() => {
+        headingRef.current?.scrollIntoView({ block: "start" });
+        headingRef.current?.focus();
+      });
+    };
+    revealBundleStep();
+    window.addEventListener("hashchange", revealBundleStep);
+    return () => window.removeEventListener("hashchange", revealBundleStep);
+  }, []);
   return (
     <div id="rom-weaver-bundle-job">
       <Drawer
         bodyClassName="bundle-job-content"
         className="bundle-job"
+        headingRef={headingRef}
         label={localizer.message("ui.bundleExport.shareTitle")}
+        onToggle={setOpen}
+        open={open}
         readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
       >
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
