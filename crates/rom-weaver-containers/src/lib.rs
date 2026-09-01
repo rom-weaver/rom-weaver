@@ -243,3 +243,7 @@ pub(crate) use z3ds::Z3dsContainerHandler;
 #[cfg(test)]
 #[path = "../tests/unit/handlers.rs"]
 mod handlers_tests;
+
+#[cfg(test)]
+#[path = "../tests/unit/nod_regressions.rs"]
+mod nod_regressions_tests;

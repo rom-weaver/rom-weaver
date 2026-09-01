@@ -376,8 +376,13 @@ mod bzip2_api {
             return Err(map_code("bzip2 compressor init", init));
         }
 
-        let mut ret = bzip2_raw::BZ_RUN_OK;
-        while ret == bzip2_raw::BZ_RUN_OK || ret == bzip2_raw::BZ_FINISH_OK {
+        // libbzip2 makes no progress once the output buffer is full and answers
+        // BZ_SEQUENCE_ERROR instead of BZ_FINISH_OK, so the full buffer is what
+        // ends the loop; the caller stores the block raw on Ok(false).
+        let mut ret = bzip2_raw::BZ_FINISH_OK;
+        while (ret == bzip2_raw::BZ_RUN_OK || ret == bzip2_raw::BZ_FINISH_OK)
+            && stream.avail_out != 0
+        {
             ret = unsafe { bzip2_raw::BZ2_bzCompress(&mut stream, bzip2_raw::BZ_FINISH) };
         }
 
