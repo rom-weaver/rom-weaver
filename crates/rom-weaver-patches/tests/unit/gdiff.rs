@@ -1,8 +1,14 @@
 use std::fs;
 
-use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
+use rom_weaver_core::{
+    PatchApplyRequest, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+};
 
-use super::{GdiffPatchHandler, write_gdiff_header};
+use super::{
+    GDIFF_INLINE_DATA_MAX, GdiffPatchHandler, create_gdiff_patch_parallel,
+    encode_data_command_bytes, ensure_copy_range, read_gdiff_command, write_gdiff_header,
+};
+use crate::shared::threading::parallel_chunked_capability;
 use crate::{
     GDIFF,
     test_support::{RoundTripCase, TestDir, assert_round_trip, test_context_with_threads},
@@ -315,4 +321,298 @@ fn create_is_deterministic_across_thread_budgets() {
         fs::read(single_patch).expect("single patch"),
         fs::read(parallel_patch).expect("parallel patch")
     );
+}
+
+/// A patch that copies `source[0..4]`, then appends two literal bytes, encoded
+/// with the opcode pair the caller names. Every copy opcode addresses the same
+/// range, so one source fixture drives them all.
+fn patch_with_copy_opcode(opcode: u8) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    write_gdiff_header(&mut bytes).expect("header");
+    bytes.push(opcode);
+    match opcode {
+        249 => {
+            bytes.extend_from_slice(&0u16.to_be_bytes());
+            bytes.push(4);
+        }
+        250 => {
+            bytes.extend_from_slice(&0u16.to_be_bytes());
+            bytes.extend_from_slice(&4u16.to_be_bytes());
+        }
+        251 => {
+            bytes.extend_from_slice(&0u16.to_be_bytes());
+            bytes.extend_from_slice(&4i32.to_be_bytes());
+        }
+        252 => {
+            bytes.extend_from_slice(&0i32.to_be_bytes());
+            bytes.push(4);
+        }
+        253 => {
+            bytes.extend_from_slice(&0i32.to_be_bytes());
+            bytes.extend_from_slice(&4u16.to_be_bytes());
+        }
+        254 => {
+            bytes.extend_from_slice(&0i32.to_be_bytes());
+            bytes.extend_from_slice(&4i32.to_be_bytes());
+        }
+        255 => {
+            bytes.extend_from_slice(&0i64.to_be_bytes());
+            bytes.extend_from_slice(&4i32.to_be_bytes());
+        }
+        other => panic!("opcode {other} is not a copy opcode"),
+    }
+    // A 248-encoded data command exercises the 32-bit literal length arm.
+    bytes.push(248);
+    bytes.extend_from_slice(&2i32.to_be_bytes());
+    bytes.extend_from_slice(b"XY");
+    bytes.push(0);
+    bytes
+}
+
+#[test]
+fn probe_reports_extension_confidence() {
+    let temp = TestDir::new();
+    let patch = temp.child("probe.gdiff");
+    fs::write(&patch, [0xD1, 0xFF, 0xD1, 0xFF, 4]).expect("fixture");
+
+    assert_eq!(
+        GdiffPatchHandler::new(&GDIFF).probe(&patch),
+        ProbeConfidence::Extension
+    );
+}
+
+#[test]
+fn every_copy_opcode_addresses_the_same_source_range() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    fs::write(&source_path, b"abcdefgh").expect("fixture");
+    let handler = GdiffPatchHandler::new(&GDIFF);
+
+    for opcode in [249u8, 250, 251, 252, 253, 254, 255] {
+        let patch_path = temp.child(&format!("opcode-{opcode}.gdiff"));
+        let output_path = temp.child(&format!("output-{opcode}.bin"));
+        fs::write(&patch_path, patch_with_copy_opcode(opcode)).expect("fixture");
+
+        let report = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect("parse");
+        assert_eq!(
+            report.label, "parsed GDIFF patch with 2 command(s): 1 copy / 1 data; output 6 byte(s)",
+            "opcode {opcode}"
+        );
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("apply");
+        assert_eq!(
+            fs::read(&output_path).expect("output"),
+            b"abcdXY",
+            "opcode {opcode}"
+        );
+    }
+}
+
+#[test]
+fn validate_checks_every_copy_range_without_writing_output() {
+    let temp = TestDir::new();
+    let source_path = temp.child("validate-source.bin");
+    let patch_path = temp.child("validate.gdiff");
+    fs::write(&source_path, b"abcdefgh").expect("fixture");
+    fs::write(&patch_path, patch_with_copy_opcode(249)).expect("fixture");
+
+    let report = GdiffPatchHandler::new(&GDIFF)
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+    assert_eq!(
+        report.label,
+        "validated GDIFF patch source with 2 command(s): 1 copy / 1 data; output would be 6 byte(s)"
+    );
+}
+
+#[test]
+fn validate_rejects_a_copy_that_runs_past_the_source() {
+    let temp = TestDir::new();
+    let source_path = temp.child("short-source.bin");
+    let patch_path = temp.child("far-copy.gdiff");
+    fs::write(&source_path, b"ab").expect("fixture");
+    fs::write(&patch_path, patch_with_copy_opcode(249)).expect("fixture");
+
+    let error = GdiffPatchHandler::new(&GDIFF)
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("a copy past the source should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("copy command exceeded available source length (4 > 2)"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn copy_ranges_are_checked_for_overflow_and_for_the_source_end() {
+    ensure_copy_range(8, 4, 4).expect("a range that ends exactly at the source end");
+    ensure_copy_range(8, 0, 0).expect("an empty range");
+
+    let overflow =
+        ensure_copy_range(8, u64::MAX, 1).expect_err("a range whose end leaves u64 should fail");
+    assert!(
+        overflow.to_string().contains("copy range overflowed"),
+        "unexpected error: {overflow}"
+    );
+
+    let past_end = ensure_copy_range(8, 6, 4).expect_err("a range past the source end should fail");
+    assert!(
+        past_end
+            .to_string()
+            .contains("copy command exceeded available source length (10 > 8)"),
+        "unexpected error: {past_end}"
+    );
+}
+
+#[test]
+fn a_negative_length_or_position_is_rejected_by_the_decoder() {
+    let temp = TestDir::new();
+    let source_path = temp.child("negative-source.bin");
+    fs::write(&source_path, b"abcdefgh").expect("fixture");
+    let handler = GdiffPatchHandler::new(&GDIFF);
+
+    // Opcode 248 is a 32-bit literal length; opcode 253 a 32-bit copy position.
+    for (opcode, tail, needle) in [
+        (248u8, (-1_i32).to_be_bytes().to_vec(), "data length"),
+        (
+            253u8,
+            {
+                let mut tail = (-1_i32).to_be_bytes().to_vec();
+                tail.extend_from_slice(&4u16.to_be_bytes());
+                tail
+            },
+            "copy position",
+        ),
+    ] {
+        let patch_path = temp.child(&format!("negative-{opcode}.gdiff"));
+        let mut patch = Vec::new();
+        write_gdiff_header(&mut patch).expect("header");
+        patch.push(opcode);
+        patch.extend_from_slice(&tail);
+        patch.push(0);
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let error = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect_err("a negative field should fail");
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("GDIFF {needle} must be non-negative")),
+            "opcode {opcode}: unexpected error: {error}"
+        );
+    }
+}
+
+#[test]
+fn a_patch_that_ends_mid_command_names_the_field_it_was_reading() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("truncated.gdiff");
+    let mut patch = Vec::new();
+    write_gdiff_header(&mut patch).expect("header");
+    // A 247 data command promising two length bytes that the file does not hold.
+    patch.push(247);
+    patch.push(0x00);
+    fs::write(&patch_path, patch).expect("fixture");
+
+    let error = GdiffPatchHandler::new(&GDIFF)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect_err("a truncated command should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("GDIFF patch ended unexpectedly while reading data length"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_wrong_version_byte_is_rejected() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("version.gdiff");
+    fs::write(&patch_path, [0xD1, 0xFF, 0xD1, 0xFF, 9, 0]).expect("fixture");
+
+    let error = GdiffPatchHandler::new(&GDIFF)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect_err("an unsupported version should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("GDIFF patch version 9 is not supported"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn the_command_decoder_refuses_an_opcode_it_is_never_handed() {
+    // `parse_gdiff_patch` breaks on opcode 0 before decoding, so this arm is a
+    // contract check on the decoder itself rather than a reachable patch shape.
+    // `GdiffCommand` is not `Debug`, so the success arm cannot use `expect_err`.
+    let Err(error) = read_gdiff_command(&mut std::io::Cursor::new(Vec::new()), 0) else {
+        panic!("opcode 0 is not a command");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("GDIFF opcode 0 is not supported"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn data_commands_switch_to_the_16_bit_length_form_past_the_inline_maximum() {
+    let inline = encode_data_command_bytes(&vec![0xAB; GDIFF_INLINE_DATA_MAX]).expect("inline");
+    assert_eq!(inline[0], GDIFF_INLINE_DATA_MAX as u8);
+    assert_eq!(inline.len(), GDIFF_INLINE_DATA_MAX + 1);
+
+    let extended =
+        encode_data_command_bytes(&vec![0xCD; GDIFF_INLINE_DATA_MAX + 1]).expect("extended");
+    assert_eq!(extended[0], 247);
+    assert_eq!(
+        u16::from_be_bytes([extended[1], extended[2]]),
+        (GDIFF_INLINE_DATA_MAX + 1) as u16
+    );
+    assert_eq!(extended.len(), GDIFF_INLINE_DATA_MAX + 4);
+}
+
+#[test]
+fn parallel_create_writes_a_bare_terminator_for_an_empty_input() {
+    let temp = TestDir::new();
+    let modified = temp.child("empty.bin");
+    fs::write(&modified, b"").expect("fixture");
+    let context = test_context_with_threads(&temp, 4);
+    let (_, pool) = context
+        .build_pool(parallel_chunked_capability(0, 4 * 1024 * 1024))
+        .expect("pool");
+
+    let mut output = Vec::new();
+    let (command_count, output_bytes) =
+        create_gdiff_patch_parallel(&modified, &pool, &mut output).expect("create");
+
+    assert_eq!((command_count, output_bytes), (0, 0));
+    assert_eq!(output, vec![0xD1, 0xFF, 0xD1, 0xFF, 4, 0]);
 }
