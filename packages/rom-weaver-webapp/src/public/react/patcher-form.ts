@@ -86,6 +86,8 @@ type ApplyPatchFormProps = {
   onInputsChange?: (inputs: BinarySource[]) => void;
   onPatchesChange?: (patches: BinarySource[]) => void;
   onSelectView?: (view: "test") => void;
+  /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
+  onSelectTab?: (id: string) => void;
   onSettingsChange?: (settings: ApplyPatchFormSettings) => void;
   /** Fires when the output-card bundle dropdown changes, to persist the "Bundle" setting ("" hides it). */
   onBundlePackageChange?: (value: string) => void;

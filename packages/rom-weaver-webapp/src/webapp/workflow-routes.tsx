@@ -26,6 +26,7 @@ type WorkflowRouteProps = {
   creator: CreatePatchFormProps;
   docs: {
     active: boolean;
+    onSelectTab?: (id: string) => void;
     slug: string;
   };
   home: HomePageProps;

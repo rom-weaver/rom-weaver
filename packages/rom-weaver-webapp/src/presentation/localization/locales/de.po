@@ -145,8 +145,23 @@ msgstr "Anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.applyAPatch"
+msgstr "Ein Patch anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
 msgstr "Wende einen Patch an."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.applyThisPatch"
+msgstr "Diesen Patch anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.applyTool"
+msgstr "Anwenden-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -305,6 +320,11 @@ msgstr "{format}-ROM-Bundle erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.createTool"
+msgstr "Erstellen-Tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.dark"
 msgstr "Dunkel"
 
@@ -440,6 +460,11 @@ msgstr "Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.kindGuide"
+msgstr "Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.identify"
 msgstr "Identifizieren"
 
@@ -447,6 +472,16 @@ msgstr "Identifizieren"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashDisclosure"
 msgstr "Per Prüfsumme identifizieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.identifyFile"
+msgstr "Diese Datei identifizieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.identifyTool"
+msgstr "Identifizieren-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -675,6 +710,11 @@ msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen ur
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.hintGuide"
+msgstr "Öffnet die Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
 
@@ -777,6 +817,11 @@ msgstr "Abgelegte Dateien werden gelesen…"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis2"
 msgstr "Stelle das Original wieder her."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.heading"
+msgstr "Verwandt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -995,6 +1040,11 @@ msgstr "Zum hellen Design wechseln"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.hintTool"
+msgstr "Wechselt den Tab"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tippen, um Dateien zu wählen"
 
@@ -1002,6 +1052,16 @@ msgstr "Tippen, um Dateien zu wählen"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabTest"
 msgstr "Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.testRom"
+msgstr "Dieses ROM testen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.testTool"
+msgstr "Test-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1095,6 +1155,11 @@ msgstr "Werkzeug"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.kindTool"
+msgstr "Tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.tools"
 msgstr "Werkzeuge"
 
@@ -1102,6 +1167,11 @@ msgstr "Werkzeuge"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Übertragen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.trimTool"
+msgstr "Trimmen-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
