@@ -588,20 +588,30 @@ impl<'pool> BspVm<'pool> {
     }
 
     fn get_file_halfword(&mut self, position: u32) -> VmResult<u16> {
-        let position = position as usize;
-        if position + 2 > self.file_buffer.len() {
+        // The addition MUST stay in u32: usize is 32 bits on wasm32, so adding
+        // to the cast position wraps past the bound check below.
+        let end = position
+            .checked_add(2)
+            .ok_or_else(|| "attempted to read past the end of the file buffer".to_string())?;
+        if end as usize > self.file_buffer.len() {
             return Err("attempted to read past the end of the file buffer".to_string());
         }
+        let position = position as usize;
         let mut output = [0u8; 2];
         self.file_buffer.read_exact_at(position, &mut output)?;
         Ok(u16::from_le_bytes(output))
     }
 
     fn get_file_word(&mut self, position: u32) -> VmResult<u32> {
-        let position = position as usize;
-        if position + 4 > self.file_buffer.len() {
+        // The addition MUST stay in u32: usize is 32 bits on wasm32, so adding
+        // to the cast position wraps past the bound check below.
+        let end = position
+            .checked_add(4)
+            .ok_or_else(|| "attempted to read past the end of the file buffer".to_string())?;
+        if end as usize > self.file_buffer.len() {
             return Err("attempted to read past the end of the file buffer".to_string());
         }
+        let position = position as usize;
         let mut output = [0u8; 4];
         self.file_buffer.read_exact_at(position, &mut output)?;
         Ok(u32::from_le_bytes(output))
@@ -1595,11 +1605,12 @@ impl<'pool> BspVm<'pool> {
     }
 
     fn bsppatch_opcode(&mut self, variable: u8, start: u32, len: u32) -> VmResult<StepControl> {
-        let start = start as usize;
-        let len = len as usize;
-        if start + len > self.patch_len() {
+        // u64 keeps the sum exact on wasm32, where usize is 32 bits.
+        if u64::from(start) + u64::from(len) > self.patch_len() as u64 {
             return Err("attempted to read past the end of the patch space".to_string());
         }
+        let start = start as usize;
+        let len = len as usize;
         if len == 0 {
             return Err("invalid zero length".to_string());
         }
