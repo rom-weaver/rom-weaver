@@ -1341,3 +1341,7 @@ fn checksum_map(value: Option<&Value>) -> BTreeMap<String, String> {
         })
         .unwrap_or_default()
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "../tests/unit/identify_command.rs"]
+mod tests;

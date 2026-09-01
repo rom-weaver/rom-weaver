@@ -1233,66 +1233,6 @@ fn import_report(
     report
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn slugify_matches_the_builder_script() {
-        assert_eq!(
-            slugify_platform("Sega Mega Drive _ Genesis"),
-            "sega-mega-drive-genesis"
-        );
-        assert_eq!(
-            slugify_platform("TurboGrafx-16_PC Engine"),
-            "turbografx-16-pc-engine"
-        );
-        assert_eq!(slugify_platform("Sony PlayStation"), "sony-playstation");
-    }
-
-    #[test]
-    fn shared_components_are_marked_non_discriminating() {
-        let component = |md5: &str| PackComponent {
-            role: PackComponentRole::PrimaryPayload,
-            ordinal: 0,
-            hash_scope: "full_file".to_string(),
-            filename: None,
-            size: 10,
-            crc32: Some("aabbccdd".to_string()),
-            md5: Some(md5.to_string()),
-            sha1: None,
-            sha256: None,
-            required: true,
-            discriminating: true,
-            track: None,
-            session: None,
-        };
-        let game = |name: &str, md5: &str| PackGame {
-            name: name.to_string(),
-            platform: "P".to_string(),
-            source: IdentifySource::Redump,
-            upstream_source: UpstreamSource::Unknown,
-            provenance: Vec::new(),
-            legacy_variant: false,
-            dump_tags: Vec::new(),
-            game_id: None,
-            region: None,
-            language: None,
-            disc_number: None,
-            revision: None,
-            parent: None,
-            components: vec![component(md5)],
-        };
-        let shared_md5 = "d41d8cd98f00b204e9800998ecf8427e";
-        let mut games = vec![
-            game("A", shared_md5),
-            game("B", shared_md5),
-            game("C", "00000000000000000000000000000001"),
-        ];
-        let shared = mark_shared_components(&mut games);
-        assert_eq!(shared, 2);
-        assert!(!games[0].components[0].discriminating);
-        assert!(!games[1].components[0].discriminating);
-        assert!(games[2].components[0].discriminating);
-    }
-}
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "../tests/unit/identify_database.rs"]
+mod tests;
