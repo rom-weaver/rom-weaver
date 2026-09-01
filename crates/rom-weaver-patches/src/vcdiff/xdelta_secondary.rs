@@ -148,7 +148,7 @@ pub(super) fn xdelta_djw_compress_multi_group(
     for lengths in &group_lengths {
         group_symbols.extend_from_slice(lengths);
     }
-    let mut group_prefix = DjwPrefix::new(group_symbols);
+    let mut group_prefix = DjwPrefix::with_skip_offset(group_symbols, DJW_ALPHABET_SIZE);
     djw_encode_prefix(&mut writer, &mut group_prefix)?;
 
     let mut selector_prefix = DjwPrefix::new(selected_groups.clone());
