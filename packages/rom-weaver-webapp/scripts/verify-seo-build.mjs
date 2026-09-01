@@ -202,8 +202,10 @@ assertIncludes(
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
   "weave robots metadata",
 );
-assertIncludes(applyHtml, 'data-mode="docs"', "apply guides tab");
-assertIncludes(createHtml, 'data-mode="docs"', "create guides tab");
+// Docs sits under More, which the static shell does not expand; the footer
+// carries the crawlable link instead.
+assertIncludes(applyHtml, 'class="footer-link footer-docs" href="docs"', "apply guides link");
+assertIncludes(createHtml, 'class="footer-link footer-docs" href="docs"', "create guides link");
 
 for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
@@ -245,7 +247,7 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(docsHtml, 'aria-selected="true" class="mode" data-mode="docs"', `${route.slug} selected guides tab`);
+  assertIncludes(docsHtml, 'class="mode-more is-current"', `${route.slug} More marked current for the guides`);
   assertIncludes(
     docsHtml,
     '<button aria-label="Switch to light theme" class="tool"',

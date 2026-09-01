@@ -193,19 +193,19 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
   mountWebappRoot();
-  // Docs is reference rather than a workflow, but it rides in the rail so the
-  // readers it is written for do not have to go hunting for it.
+  // The rail holds the three workflows; Docs is reference and files under More
+  // with the beta tools, which stay hidden while the setting is off.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Docs", "Test"]);
+    .toEqual(["Apply", "Create", "Test"]);
   await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Identify" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Identify Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
 });
 
 const dropOnPage = async (fileName) => {
@@ -248,11 +248,11 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
     mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
     await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
-    await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
     // Identify is one click from More: it has its own route, so it never hid
     // behind the old Tools page.
-    await expect.element(page.getByRole("menuitem", { name: "Identify" })).toBeInTheDocument();
-    await page.getByRole("menuitem", { name: "PPF undo" }).click();
+    await expect.element(page.getByRole("menuitem", { name: "Identify Beta" })).toBeInTheDocument();
+    await page.getByRole("menuitem", { name: "PPF undo Beta" }).click();
     // Only ONE Identify form can exist. PPF undo links nowhere near it, so a page
     // drop has exactly one consumer and the two cannot fight over the activity key.
     expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
@@ -270,14 +270,14 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
       // than tooltipped like the actions cluster it left. The label is a flex
       // item inside `.mode-more`, so its computed display blockifies - that it
       // is not `none` is the assertion, alongside the missing tooltip.
-      const moreLabel = document.querySelector(".mode-more .tool-text");
+      const moreLabel = document.querySelector(".desktop-more .mode-more .tool-text");
       expect(getComputedStyle(moreLabel).display).not.toBe("none");
       expect(moreLabel.textContent).toBe("More");
-      expect(document.querySelector(".mode-more .tip")).toBeNull();
+      expect(document.querySelector(".desktop-more .mode-more .tip")).toBeNull();
       await page.getByRole("button", { name: "Settings" }).first().hover();
       await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
     }
-    await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
   }
   await page.viewport(1280, 900);

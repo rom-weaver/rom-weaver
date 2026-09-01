@@ -1,5 +1,15 @@
 import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useMemo,
+} from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
@@ -25,7 +35,7 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
-import type { OfflineWarmupDisplayProgress } from "./components/shell.tsx";
+import type { OfflineWarmupDisplayProgress, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
@@ -55,19 +65,42 @@ import {
 } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
-const WORKFLOW_TABS = [
+const WORKFLOW_TABS: WorkflowTab[] = [
   // "Apply": the tab both applies patch chains and edits/exports them as bundles.
   { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
-  // Reference rather than a workflow. It stays direct in the desktop rail and
-  // moves into More on the phone dock.
-  { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
-  // Beta utility routes. The shell keeps these out of both primary navs and
-  // exposes them from More when the beta-tools setting is enabled.
-  { href: "identify", icon: <ScanSearch aria-hidden="true" />, id: "identify", label: "Identify" },
-  { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
-  { href: "ppf-undo", icon: <RotateCcw aria-hidden="true" />, id: "ppf-undo", label: "PPF undo" },
+  // Reference rather than a workflow: filed under Docs in More on both layouts.
+  { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  // Beta utility routes. They stay behind the beta-tools setting and show up
+  // under Tools in More once it is on.
+  {
+    beta: true,
+    group: "tools",
+    href: "identify",
+    icon: <ScanSearch aria-hidden="true" />,
+    id: "identify",
+    label: "Identify",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: <Scissors aria-hidden="true" />,
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "ppf-undo",
+    icon: <RotateCcw aria-hidden="true" />,
+    id: "ppf-undo",
+    label: "PPF undo",
+    placement: "more",
+  },
 ];
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
@@ -451,6 +484,11 @@ function WebappRoot({
     setLogTab("storage");
     setLogOpen(true);
   }, [preloadLogDialog]);
+  // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
+  const mastheadTabs = useMemo(
+    () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
+    [notFound],
+  );
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -625,6 +663,7 @@ function WebappRoot({
             onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
+            onOpenSettingsField={openSettingsTab}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
@@ -657,7 +696,7 @@ function WebappRoot({
               selectViewWithTransition(() => actions.onSelectView(view));
             }}
             settingsOpen={logOpen && logTab === "settings"}
-            tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
+            tabs={mastheadTabs}
             tabsControlPanels={!notFound}
           />
           <UpdateBanner
@@ -747,6 +786,7 @@ function WebappRoot({
           </main>
           <SiteFooter
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
+            docsHref={notFound ? "/docs" : "docs"}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
           />

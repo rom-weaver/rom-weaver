@@ -415,7 +415,15 @@ const PAGE_TABS = [
   { href: "apply", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
   { href: "test", icon: createElement("span", { "aria-hidden": "true" }), id: "test", label: "Test" },
-  { href: "trim", icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: createElement("span", { "aria-hidden": "true" }),
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
 ];
 
 // Production page chrome (single <main className="workbench"> + one tabpanel)
@@ -1104,8 +1112,23 @@ describe("webapp responsive navigation", () => {
   // second masthead row.
   const ALL_TABS = [
     ...PAGE_TABS,
-    { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
-    { href: "ppf-undo", icon: createElement("span", { "aria-hidden": "true" }), id: "ppf-undo", label: "PPF undo" },
+    {
+      group: "docs",
+      href: "docs",
+      icon: createElement("span", { "aria-hidden": "true" }),
+      id: "docs",
+      label: "Docs",
+      placement: "more",
+    },
+    {
+      beta: true,
+      group: "tools",
+      href: "ppf-undo",
+      icon: createElement("span", { "aria-hidden": "true" }),
+      id: "ppf-undo",
+      label: "PPF undo",
+      placement: "more",
+    },
   ];
 
   const renderMastheadOnly = async (tabs) =>

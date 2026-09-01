@@ -65,6 +65,11 @@ msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirl
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.resultCount"
+msgstr "{count} resultados"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} aviso(s)"
 
@@ -120,6 +125,16 @@ msgstr "y redúcelos para almacenarlos —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "se aplica después del parche {n}"
 
@@ -167,6 +182,11 @@ msgstr "auto (anterior)"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "ROM base"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.beta"
+msgstr "Beta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -380,6 +400,16 @@ msgstr "Filtrar el registro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Buscar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Buscar una herramienta, guía o ajuste"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Corregir orden"
 
@@ -387,6 +417,11 @@ msgstr "Corregir orden"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Corregir cabecera ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Guía"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -560,6 +595,11 @@ msgstr "No se encontró ningún archivo seleccionable."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nada coincide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Actual"
 
@@ -672,6 +712,11 @@ msgstr "Compilación de vista previa"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "salida anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.project"
+msgstr "Proyecto"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -792,6 +837,11 @@ msgstr "Buscando…"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabsLabel"
 msgstr "Secciones"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindSetting"
+msgstr "Ajuste"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -967,6 +1017,16 @@ msgstr "hilos"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Hilos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Herramienta"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
+msgstr "Herramientas"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

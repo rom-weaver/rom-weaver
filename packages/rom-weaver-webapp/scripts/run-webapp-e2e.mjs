@@ -564,7 +564,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await docsChunkReleased;
         await route.continue();
       });
-      await docsNavigationPage.locator('[role="tab"][data-mode="docs"]:visible').first().click();
+      // Docs lives under More on both layouts now.
+      await docsNavigationPage.locator(".desktop-more .mode-more:visible").click();
+      await docsNavigationPage.locator('[data-more-workflow="docs"]:visible').click();
       await docsChunkStarted;
       await docsNavigationPage
         .locator('.mode[role="tab"][aria-selected="true"][data-mode="patcher"]')
@@ -574,9 +576,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       }
       releaseDocsChunk();
       await docsNavigationPage.locator(".docs-rails .guide-nav").waitFor({ state: "visible" });
-      await docsNavigationPage
-        .locator('.mode[role="tab"][aria-selected="true"][data-mode="docs"]')
-        .waitFor({ state: "visible" });
+      await docsNavigationPage.locator(".desktop-more .mode-more.is-current").waitFor({ state: "visible" });
     } finally {
       await docsNavigationContext.close();
     }
@@ -604,13 +604,14 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
-      // Trim and PPF undo live in the More menu, not the mode rail.
+      // Trim and PPF undo live in the More menu, not the mode rail; their Beta
+      // chip is part of the accessible name.
       for (const [label, panelId] of [
         ["Trim", "panel-trim"],
         ["PPF undo", "panel-ppf-undo"],
       ]) {
         await page.getByRole("button", { name: "More", exact: true }).click();
-        await page.getByRole("menuitem", { name: label, exact: true }).click();
+        await page.getByRole("menuitem", { name: `${label} Beta`, exact: true }).click();
         await page.locator(`#${panelId}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);

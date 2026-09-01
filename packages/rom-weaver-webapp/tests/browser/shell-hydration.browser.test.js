@@ -10,8 +10,25 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const tabs = [
   { href: "apply", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("svg", { "aria-hidden": true }), id: "creator", label: "Create" },
-  { href: "trim", icon: createElement("svg", { "aria-hidden": true }), id: "trim", label: "Trim" },
-  { href: "ppf-undo", icon: createElement("svg", { "aria-hidden": true }), id: "ppf-undo", label: "PPF undo" },
+  { href: "test", icon: createElement("svg", { "aria-hidden": true }), id: "test", label: "Test" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: createElement("svg", { "aria-hidden": true }),
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "ppf-undo",
+    icon: createElement("svg", { "aria-hidden": true }),
+    id: "ppf-undo",
+    label: "PPF undo",
+    placement: "more",
+  },
 ];
 
 const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
@@ -89,9 +106,10 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
     });
   });
 
-  // Every beta workflow (Identify, Trim, PPF undo) lives in More now, so no
-  // rail or dock tab carries the beta marker.
-  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(0);
+  // Every beta workflow (Identify, Trim, PPF undo) and Docs live in More now,
+  // so the rail and dock carry only the three workflow tabs.
+  expect(host.querySelectorAll('.mode-rail [role="tab"]').length).toBe(3);
+  expect(host.querySelectorAll('.dock-tabs [role="tab"]').length).toBe(3);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

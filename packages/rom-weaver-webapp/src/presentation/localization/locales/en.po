@@ -65,6 +65,11 @@ msgstr "{count, plural, one {# patch is off - tick it to include it} other {# pa
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.resultCount"
+msgstr "{count} results"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} warning(s)"
 
@@ -120,6 +125,16 @@ msgstr "and shrink them for storage —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "applies after patch {n}"
 
@@ -167,6 +182,11 @@ msgstr "auto (previous)"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "base ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.beta"
+msgstr "Beta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -380,6 +400,16 @@ msgstr "Filter log"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Find"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Find a tool, guide, or setting"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Fix order"
 
@@ -387,6 +417,11 @@ msgstr "Fix order"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Fix ROM header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -560,6 +595,11 @@ msgstr "No selectable file was found."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nothing matches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Now"
 
@@ -672,6 +712,11 @@ msgstr "Preview build"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "previous output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.project"
+msgstr "Project"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -792,6 +837,11 @@ msgstr "Searching…"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabsLabel"
 msgstr "Sections"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindSetting"
+msgstr "Setting"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -967,6 +1017,16 @@ msgstr "threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
+msgstr "Tools"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
