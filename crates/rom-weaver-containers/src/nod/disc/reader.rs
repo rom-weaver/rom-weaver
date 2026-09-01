@@ -547,9 +547,12 @@ fn read_partition_info(
                             .unwrap_or(0);
                         if max_fst_offset > data_size {
                             if data_size == 0 {
-                                // Guess data size for decrypted partitions
-                                data_end_sector =
-                                    max_fst_offset.div_ceil(SECTOR_SIZE as u64) as u32;
+                                // Guess data size for decrypted partitions.
+                                // `max_fst_offset` is partition-relative, but
+                                // `data_end_sector` is an absolute disc sector
+                                // everywhere it is read.
+                                data_end_sector = data_start_sector
+                                    + max_fst_offset.div_ceil(SECTOR_SIZE as u64) as u32;
                             } else {
                                 return Err(Error::DiscFormat(format!(
                                     "Partition {group_idx}:{part_idx} FST exceeds data size",

@@ -159,9 +159,11 @@ impl<'a> Fst<'a> {
         let Ok((root_node, _)) = Node::ref_from_prefix(buf) else {
             return Err("FST root node not found");
         };
-        // String table starts after the last node
-        let string_base = root_node.length() * size_of::<Node>() as u32;
-        if string_base > buf.len() as u32 {
+        // String table starts after the last node. The root length is an
+        // attacker-controlled u32, so the product MUST be computed in u64 or a
+        // length above u32::MAX / 12 wraps to a small in-bounds value.
+        let string_base = u64::from(root_node.length()) * size_of::<Node>() as u64;
+        if string_base > buf.len() as u64 {
             return Err("FST string table out of bounds");
         }
         let (node_buf, string_table) = buf.split_at(string_base as usize);
@@ -396,11 +398,19 @@ impl FstBuilder {
 
     /// Get the byte size of the FST.
     pub fn byte_size(&self) -> usize {
-        size_of_val(self.nodes.as_slice()) + self.string_table.len()
+        (size_of_val(self.nodes.as_slice()) + self.string_table.len())
+            .next_multiple_of(self.size_alignment())
+    }
+
+    /// Wii boot headers store the FST size divided by four, so a Wii FST that is
+    /// not a multiple of four cannot be described and MUST be padded.
+    fn size_alignment(&self) -> usize {
+        if self.is_wii { 4 } else { 1 }
     }
 
     /// Finalize the FST and return the serialized data.
     pub fn finalize(mut self) -> Box<[u8]> {
+        let alignment = self.size_alignment();
         // Finalize directory lengths
         let node_count = self.nodes.len() as u32;
         while let Some((_, idx)) = self.stack.pop() {
@@ -411,10 +421,11 @@ impl FstBuilder {
         // Serialize nodes and string table
         let nodes_data = self.nodes.as_bytes();
         let string_table_data = self.string_table.as_bytes();
-        let mut data =
-            <[u8]>::new_box_zeroed_with_elems(nodes_data.len() + string_table_data.len()).unwrap();
+        let size = (nodes_data.len() + string_table_data.len()).next_multiple_of(alignment);
+        let mut data = <[u8]>::new_box_zeroed_with_elems(size).unwrap();
         data[..nodes_data.len()].copy_from_slice(self.nodes.as_bytes());
-        data[nodes_data.len()..].copy_from_slice(self.string_table.as_bytes());
+        data[nodes_data.len()..nodes_data.len() + string_table_data.len()]
+            .copy_from_slice(self.string_table.as_bytes());
         data
     }
 

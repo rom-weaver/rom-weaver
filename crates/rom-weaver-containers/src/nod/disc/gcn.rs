@@ -137,11 +137,15 @@ pub(crate) fn read_dol(
         .seek(SeekFrom::Start(boot_header.dol_offset(is_wii)))
         .context("Seeking to DOL offset")?;
     let dol_header: DolHeader = read_from(reader).context("Reading DOL header")?;
+    // Section offsets and sizes come straight from the disc: a crafted pair
+    // overflows the sum, and an all-zero header leaves a DOL smaller than the
+    // header this function copies into it.
     let dol_size = (dol_header.text_offs.iter().zip(&dol_header.text_sizes))
         .chain(dol_header.data_offs.iter().zip(&dol_header.data_sizes))
-        .map(|(offs, size)| offs.get() + size.get())
+        .map(|(offs, size)| offs.get().saturating_add(size.get()))
         .max()
-        .unwrap_or(size_of::<DolHeader>() as u32);
+        .unwrap_or(0)
+        .max(size_of::<DolHeader>() as u32);
     let mut raw_dol = <[u8]>::new_box_zeroed_with_elems(dol_size as usize)?;
     raw_dol[..size_of::<DolHeader>()].copy_from_slice(dol_header.as_bytes());
     reader
