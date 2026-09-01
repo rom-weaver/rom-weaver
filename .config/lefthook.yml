@@ -21,17 +21,17 @@ pre-commit:
       run: mise run fmt
     rust-clippy:
       glob: "*.{rs,toml,lock}"
-      run: mise run clippy
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target mise run clippy
     rust-typegen:
       glob: "*.rs"
-      run: CARGO_TARGET_DIR=target/hook-typegen mise run typegen-check
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-typegen mise run typegen-check
     # No RUSTFLAGS override here: the env var replaces the configured
     # [target.wasm32-wasip1-threads] rustflags rather than extending them, which
     # is how this check spent its life verifying the non-threaded config.
     # `-D warnings` lives in .cargo/config.toml alongside the rest of the list.
     wasm-threaded-check:
       glob: "*.{rs,toml,lock}"
-      run: CARGO_TARGET_DIR=target/hook-wasm mise run wasm-check
+      run: env -u __MISE_DIFF CARGO_TARGET_DIR=target/hook-wasm mise run wasm-check
     licenses-check:
       glob: "*.{toml,lock}"
       run: mise run licenses-check
