@@ -1,10 +1,12 @@
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
+    path::Path,
 };
 
 use rom_weaver_core::{
     PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, ThreadCapability,
 };
 
 use super::{
@@ -730,4 +732,501 @@ fn apply_dps_records_in_place_supports_shrinking_output() {
     drop(output);
 
     assert_eq!(fs::read(&output_path).expect("output"), b"abXY");
+}
+
+/// A DPS header (198 bytes) with no records. Record-shaped suffixes are
+/// appended to it to build the malformed-record fixtures.
+fn dps_header_only_bytes() -> Vec<u8> {
+    encode_dps_patch(
+        &[],
+        DpsHeaderMetadata {
+            patch_name: "truncated.dps",
+            patch_author: "test",
+            patch_version_text: "1",
+            patch_flag: 0,
+        },
+        8,
+    )
+    .expect("header")
+}
+
+/// `(label of the field whose read runs off the end, record bytes that stop
+/// just before it)`. Every fixture is a record that starts inside the file, so
+/// the record loop always enters and then fails on the named field.
+fn truncated_record_fixtures() -> Vec<(&'static str, Vec<u8>)> {
+    let copy_mode = vec![super::DPS_RECORD_COPY_FROM_SOURCE];
+    let mut copy_output_offset = copy_mode.clone();
+    copy_output_offset.extend_from_slice(&0u32.to_le_bytes());
+    let mut copy_source_offset = copy_output_offset.clone();
+    copy_source_offset.extend_from_slice(&0u32.to_le_bytes());
+
+    let mut embedded_output_offset = vec![DPS_RECORD_EMBEDDED_DATA];
+    embedded_output_offset.extend_from_slice(&0u32.to_le_bytes());
+    let mut embedded_payload = embedded_output_offset.clone();
+    embedded_payload.extend_from_slice(&8u32.to_le_bytes());
+    embedded_payload.extend_from_slice(b"AB");
+
+    vec![
+        ("DPS output offset", copy_mode),
+        ("DPS source offset", copy_output_offset),
+        ("DPS source length", copy_source_offset),
+        ("DPS embedded data length", embedded_output_offset),
+        ("DPS embedded record payload", embedded_payload),
+    ]
+}
+
+fn dps_metadata(name: &str) -> DpsHeaderMetadata<'_> {
+    DpsHeaderMetadata {
+        patch_name: name,
+        patch_author: "test",
+        patch_version_text: "1",
+        patch_flag: 0,
+    }
+}
+
+#[test]
+fn probe_reports_extension_confidence() {
+    let handler = DpsPatchHandler::new(&DPS);
+    assert_eq!(
+        handler.probe(Path::new("update.dps")),
+        ProbeConfidence::Extension
+    );
+}
+
+#[test]
+fn validate_accepts_records_that_fit_the_source_and_output() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("update.dps");
+    fs::write(&source_path, b"ABCDEFGH").expect("fixture");
+
+    let records = vec![
+        DpsRecord::CopyFromSource {
+            output_offset: 0,
+            source_offset: 0,
+            length: 4,
+        },
+        DpsRecord::EmbeddedData {
+            output_offset: 4,
+            data: b"WXYZ".to_vec(),
+        },
+    ];
+    let bytes = encode_dps_patch(&records, dps_metadata("update.dps"), 8).expect("patch");
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    let report = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+    assert_eq!(report.label, "validated DPS patch source with 2 record(s)");
+}
+
+#[test]
+fn validate_rejects_a_source_whose_size_does_not_match_the_header() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("update.dps");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+
+    let records = vec![DpsRecord::EmbeddedData {
+        output_offset: 0,
+        data: b"Z".to_vec(),
+    }];
+    let bytes = encode_dps_patch(&records, dps_metadata("update.dps"), 16).expect("patch");
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    let error = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("source size mismatch");
+    let message = error.to_string();
+    assert!(message.contains("DPS_SOURCE_SIZE_MISMATCH"), "{message}");
+    assert!(message.contains("expected=16"), "{message}");
+    assert!(message.contains("actual=4"), "{message}");
+}
+
+#[test]
+fn validate_skips_the_source_size_check_when_checksums_are_ignored() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("update.dps");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+
+    let records = vec![DpsRecord::EmbeddedData {
+        output_offset: 0,
+        data: b"Z".to_vec(),
+    }];
+    let bytes = encode_dps_patch(&records, dps_metadata("update.dps"), 16).expect("patch");
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    let report = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect("validate");
+    assert_eq!(
+        report.label,
+        "validated DPS patch source with 1 record(s); source size validation skipped"
+    );
+}
+
+#[test]
+fn validate_rejects_a_copy_record_that_reads_past_the_source() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("update.dps");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+
+    let records = vec![DpsRecord::CopyFromSource {
+        output_offset: 0,
+        source_offset: 0,
+        length: 8,
+    }];
+    let bytes = encode_dps_patch(&records, dps_metadata("update.dps"), 4).expect("patch");
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    let error = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("copy past source end");
+    let message = error.to_string();
+    assert!(message.contains("DPS_RANGE_EXCEEDED_LIMIT"), "{message}");
+    assert!(message.contains("label=DPS source copy"), "{message}");
+}
+
+#[test]
+fn parse_file_rejects_a_patch_shorter_than_the_header() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("tiny.dps");
+    fs::write(&patch_path, vec![0u8; super::DPS_HEADER_BYTES - 1]).expect("fixture");
+
+    let error = super::parse_dps_file(&patch_path, DpsParseMode::Strict).expect_err("short patch");
+    let message = error.to_string();
+    assert!(message.contains("DPS_PATCH_HEADER_TOO_SMALL"), "{message}");
+    assert!(message.contains("expected_min_bytes=198"), "{message}");
+}
+
+#[test]
+fn parse_bytes_rejects_a_patch_shorter_than_the_header() {
+    let error = parse_dps_bytes(&[0u8; 4], DpsParseMode::Strict).expect_err("short patch");
+    assert!(
+        error.to_string().contains("DPS_PATCH_HEADER_TOO_SMALL"),
+        "{error}"
+    );
+}
+
+#[test]
+fn parse_file_rejects_unsupported_patch_version() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("version.dps");
+    let mut bytes = dps_header_only_bytes();
+    bytes[193] = DPS_PATCH_VERSION + 1;
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let error =
+        super::parse_dps_file(&patch_path, DpsParseMode::Strict).expect_err("unsupported version");
+    let message = error.to_string();
+    assert!(
+        message.contains("DPS patch version is not supported"),
+        "{message}"
+    );
+    assert!(message.contains("found_version=2"), "{message}");
+}
+
+#[test]
+fn parse_file_strict_rejects_records_truncated_mid_field() {
+    let temp = TestDir::new();
+    for (label, suffix) in truncated_record_fixtures() {
+        let mut bytes = dps_header_only_bytes();
+        bytes.extend_from_slice(&suffix);
+        let patch_path = temp.child(&format!("strict-{}.dps", label.replace(' ', "-")));
+        fs::write(&patch_path, bytes).expect("fixture");
+
+        let error =
+            super::parse_dps_file(&patch_path, DpsParseMode::Strict).expect_err("truncated record");
+        assert!(
+            error.to_string().contains(label),
+            "expected `{label}` in `{error}`"
+        );
+    }
+}
+
+#[test]
+fn parse_file_warns_and_stops_on_records_truncated_mid_field() {
+    let temp = TestDir::new();
+    for (label, suffix) in truncated_record_fixtures() {
+        let mut bytes = dps_header_only_bytes();
+        bytes.extend_from_slice(&suffix);
+        let patch_path = temp.child(&format!("warn-{}.dps", label.replace(' ', "-")));
+        fs::write(&patch_path, bytes).expect("fixture");
+
+        let parsed = super::parse_dps_file(&patch_path, DpsParseMode::WarnAndStopOnMalformedRecord)
+            .expect("warn parse");
+        assert!(parsed.records.is_empty(), "{label}");
+        let warning = parsed.malformed_record_warning.expect("warning");
+        assert!(
+            warning.contains("ignored malformed DPS record at byte offset 198"),
+            "{warning}"
+        );
+        assert!(warning.contains(label), "expected `{label}` in `{warning}`");
+    }
+}
+
+#[test]
+fn parse_bytes_strict_rejects_records_truncated_mid_field() {
+    for (label, suffix) in truncated_record_fixtures() {
+        let mut bytes = dps_header_only_bytes();
+        bytes.extend_from_slice(&suffix);
+        let error = parse_dps_bytes(&bytes, DpsParseMode::Strict).expect_err("truncated record");
+        assert!(
+            error.to_string().contains(label),
+            "expected `{label}` in `{error}`"
+        );
+    }
+}
+
+#[test]
+fn parse_bytes_warns_and_stops_on_records_truncated_mid_field() {
+    for (label, suffix) in truncated_record_fixtures() {
+        let mut bytes = dps_header_only_bytes();
+        bytes.extend_from_slice(&suffix);
+        let parsed = parse_dps_bytes(&bytes, DpsParseMode::WarnAndStopOnMalformedRecord)
+            .expect("warn parse");
+        assert!(parsed.records.is_empty(), "{label}");
+        let warning = parsed.malformed_record_warning.expect("warning");
+        assert!(
+            warning.contains("ignored malformed DPS record at byte offset 198"),
+            "{warning}"
+        );
+        assert!(warning.contains(label), "expected `{label}` in `{warning}`");
+    }
+}
+
+#[test]
+fn parse_file_rejects_an_unsupported_record_mode() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("mode.dps");
+    let mut bytes = dps_header_only_bytes();
+    bytes.push(9);
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let error =
+        super::parse_dps_file(&patch_path, DpsParseMode::Strict).expect_err("unsupported mode");
+    let message = error.to_string();
+    assert!(
+        message.contains("DPS record mode is not supported"),
+        "{message}"
+    );
+    assert!(message.contains("record_offset=198"), "{message}");
+    assert!(message.contains("mode=9"), "{message}");
+}
+
+#[test]
+fn parse_file_warns_and_stops_on_an_unsupported_record_mode() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("mode-warn.dps");
+    let mut bytes = dps_header_only_bytes();
+    bytes.push(9);
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let parsed = super::parse_dps_file(&patch_path, DpsParseMode::WarnAndStopOnMalformedRecord)
+        .expect("warn parse");
+    assert!(parsed.records.is_empty());
+    assert_eq!(
+        parsed.malformed_record_warning.expect("warning"),
+        "ignored malformed DPS record at byte offset 198: DPS record mode 9 is not supported"
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_an_unsupported_record_mode() {
+    let mut bytes = dps_header_only_bytes();
+    bytes.push(9);
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    let error = parse_dps_bytes(&bytes, DpsParseMode::Strict).expect_err("unsupported mode");
+    assert!(
+        error
+            .to_string()
+            .contains("DPS record mode is not supported"),
+        "{error}"
+    );
+}
+
+#[test]
+fn parse_bytes_warns_and_stops_on_an_unsupported_record_mode() {
+    let mut bytes = dps_header_only_bytes();
+    bytes.push(9);
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    let parsed =
+        parse_dps_bytes(&bytes, DpsParseMode::WarnAndStopOnMalformedRecord).expect("warn parse");
+    assert!(parsed.records.is_empty());
+    assert_eq!(
+        parsed.malformed_record_warning.expect("warning"),
+        "ignored malformed DPS record at byte offset 198: DPS record mode 9 is not supported"
+    );
+}
+
+#[test]
+fn parse_bytes_reports_header_metadata_and_record_counts() {
+    let records = vec![
+        DpsRecord::CopyFromSource {
+            output_offset: 0,
+            source_offset: 2,
+            length: 3,
+        },
+        DpsRecord::EmbeddedData {
+            output_offset: 3,
+            data: b"XY".to_vec(),
+        },
+    ];
+    let bytes = encode_dps_patch(
+        &records,
+        DpsHeaderMetadata {
+            patch_name: "metadata.dps",
+            patch_author: "someone",
+            patch_version_text: "7",
+            patch_flag: 0x2A,
+        },
+        64,
+    )
+    .expect("patch");
+
+    let parsed = parse_dps_bytes(&bytes, DpsParseMode::Strict).expect("parse");
+    assert_eq!(parsed.patch_name, "metadata.dps");
+    assert_eq!(parsed.patch_author, "someone");
+    assert_eq!(parsed.patch_version_text, "7");
+    assert_eq!(parsed.patch_flag, 0x2A);
+    assert_eq!(parsed.source_size, 64);
+    assert_eq!(parsed.output_size, 5);
+    assert_eq!(parsed.copy_record_count, 1);
+    assert_eq!(parsed.data_record_count, 1);
+    assert!(parsed.malformed_record_warning.is_none());
+}
+
+#[test]
+fn parallel_record_collection_returns_nothing_for_an_empty_target() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+    fs::write(&target_path, b"").expect("fixture");
+
+    let context = test_context_with_threads(&temp, 2);
+    let (_, pool) = context
+        .build_pool(ThreadCapability::parallel(Some(2)))
+        .expect("pool");
+    let records = super::collect_dps_records_parallel(&source_path, 4, &target_path, 0, &pool)
+        .expect("collect");
+    assert!(records.is_empty());
+}
+
+#[test]
+fn parallel_create_rejects_an_oversized_target_declaration() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+    // Sparse file just past u32::MAX: only its length matters to the guard.
+    File::create(&target_path)
+        .expect("create")
+        .set_len(u64::from(u32::MAX) + 1)
+        .expect("set len");
+
+    let context = test_context_with_threads(&temp, 2);
+    let (_, pool) = context
+        .build_pool(ThreadCapability::parallel(Some(2)))
+        .expect("pool");
+    let error = super::create_dps_records_parallel(&source_path, &target_path, &pool)
+        .expect_err("oversized target");
+    assert!(
+        error
+            .to_string()
+            .contains("DPS create does not support oversized targets"),
+        "{error}"
+    );
+}
+
+#[test]
+fn streaming_create_rejects_an_oversized_target_declaration() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+    File::create(&target_path)
+        .expect("create")
+        .set_len(u64::from(u32::MAX) + 1)
+        .expect("set len");
+
+    let error = super::create_dps_records_streaming(&source_path, &target_path)
+        .expect_err("oversized target");
+    assert!(
+        error
+            .to_string()
+            .contains("DPS create does not support oversized targets"),
+        "{error}"
+    );
+}
+
+#[test]
+fn apply_accepts_a_zero_length_copy_record_on_both_thread_paths() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("empty-copy.dps");
+    fs::write(&source_path, b"ABCD").expect("fixture");
+
+    let records = vec![
+        DpsRecord::CopyFromSource {
+            output_offset: 0,
+            source_offset: 0,
+            length: 0,
+        },
+        DpsRecord::EmbeddedData {
+            output_offset: 0,
+            data: b"XY".to_vec(),
+        },
+    ];
+    let bytes = encode_dps_patch(&records, dps_metadata("empty-copy.dps"), 4).expect("patch");
+    fs::write(&patch_path, bytes).expect("fixture");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    for (threads, name) in [(1usize, "serial.bin"), (4usize, "parallel.bin")] {
+        let output_path = temp.child(name);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, threads),
+            )
+            .expect("apply");
+        assert_eq!(fs::read(&output_path).expect("output"), b"XY", "{threads}");
+    }
 }
