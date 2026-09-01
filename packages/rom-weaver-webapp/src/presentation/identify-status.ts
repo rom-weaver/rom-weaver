@@ -57,9 +57,23 @@ const IDENTIFY_CONDITION_LABEL: Readonly<Record<IdentifyCondition, string>> = {
   unsupported_media_profile: "Media profile not supported",
 };
 
-/** Reader-facing source names for the machine source ids the packs carry. */
-const identifySourceLabel = (source: string): string =>
-  source === "libretro" ? "Libretro" : source === "opengood" ? "OpenGood" : source === "redump" ? "Redump" : source;
+/** Reader-facing source names for the machine source ids the packs carry.
+ * Provenance entries name their upstream repository ("SnowflakePowered/
+ * opengood"), which is too long for a drawer row, so the owner segment is
+ * dropped before the lookup. */
+const SOURCE_LABELS: Readonly<Record<string, string>> = {
+  libretro: "Libretro",
+  "no-intro": "No-Intro",
+  opengood: "OpenGood",
+  redump: "Redump",
+  tosec: "TOSEC",
+};
+
+const identifySourceLabel = (source: string): string => {
+  const trimmed = source.trim();
+  const name = trimmed.slice(trimmed.lastIndexOf("/") + 1);
+  return SOURCE_LABELS[name.toLowerCase()] ?? trimmed;
+};
 
 /** "3 of 4 required components matched" - the denominator must stay visible. */
 const identifyComponentEvidenceLabel = (matched: number, total: number): string =>
@@ -68,14 +82,7 @@ const identifyComponentEvidenceLabel = (matched: number, total: number): string 
 /** "1 possible match" / "3 possible matches" - the count must be visible, not implied. */
 const identifyMatchCountLabel = (count: number): string => `${count} possible ${count === 1 ? "match" : "matches"}`;
 
-/**
- * Old results only report a pack file name. New results carry structured
- * provenance, while synthetic database names pass through.
- */
-const formatIdentifySource = (database: string): string => (database.endsWith(".pack") ? "OpenGood" : database);
-
 export {
-  formatIdentifySource,
   IDENTIFY_CONDITION_LABEL,
   IDENTIFY_QUALITY_LABEL,
   IDENTIFY_QUALITY_MARK,

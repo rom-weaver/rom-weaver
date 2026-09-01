@@ -297,6 +297,12 @@
 .rw-app .identify-drawer-group {
   min-width: 0;
 }
+/* The identify header carries a platform name it does not control, so every
+   chip here may shrink - the shared rule freezes all but the last, which lets
+   an un-abbreviated platform push the status chip off a phone screen. */
+.rw-app .identify-drawer > .cks-head .readouts > .rb {
+  flex: 0 1 auto;
+}
 .rw-app .identify-drawer-aliases .ck-v,
 .rw-app .identify-drawer-evidence .ck-v {
   text-transform: none;

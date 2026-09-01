@@ -177,7 +177,6 @@ const IdentifyDrawer = ({
               {languages.length ? <EvidenceRow label="Language" values={languages} /> : null}
               {revisions.length ? <EvidenceRow label="Revision" values={revisions} /> : null}
               {discs.length ? <EvidenceRow label="Disc" values={discs} /> : null}
-              <EvidenceRow label="Source" values={databases} />
               {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
               {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
               {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
