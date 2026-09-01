@@ -65,6 +65,26 @@ msgstr "{count, plural, one {# patch is off - tick it to include it} other {# pa
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelection"
+msgstr "Default selection"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionAll"
+msgstr "Turn all on"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionOptional"
+msgstr "Make all optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionUnchanged"
+msgstr "Leave unchanged"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} warning(s)"
 

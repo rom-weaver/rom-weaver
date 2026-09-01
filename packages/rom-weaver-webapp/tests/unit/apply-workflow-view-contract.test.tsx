@@ -320,10 +320,9 @@ describe("apply workflow view - staged bench", () => {
     expect((getByLabelText("Author") as HTMLInputElement).value).toBe("Author");
 
     const versionInput = getByLabelText("Version");
-    const selection = container.querySelector("#rom-weaver-shared-patch-enablement") as HTMLSelectElement;
     fireEvent.change(versionInput, { target: { value: "2.0" } });
     fireEvent.change(getByLabelText("Author"), { target: { value: "New author" } });
-    fireEvent.change(selection, { target: { value: "none" } });
+    fireEvent.change(getByLabelText("Default selection"), { target: { value: "none" } });
     fireEvent.submit(versionInput.closest("form") as HTMLFormElement);
 
     expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
@@ -335,9 +334,7 @@ describe("apply workflow view - staged bench", () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(button));
 
     fireEvent.click(button);
-    fireEvent.change(container.querySelector("#rom-weaver-shared-patch-enablement") as HTMLSelectElement, {
-      target: { value: "all" },
-    });
+    fireEvent.change(getByLabelText("Default selection"), { target: { value: "all" } });
     fireEvent.submit(getByLabelText("Version").closest("form") as HTMLFormElement);
     expect(onToggle).toHaveBeenCalledTimes(2);
     expect(onToggle).toHaveBeenNthCalledWith(2, 1);
