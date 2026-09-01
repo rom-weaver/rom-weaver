@@ -15,6 +15,23 @@
     "no-empty": "error",
     "no-useless-concat": "error",
     "react-hooks/exhaustive-deps": "error",
+    // oxlint 1.79 split `react/react-compiler` into per-category rules and put these four in
+    // `correctness`, which this config enables wholesale. They are React Compiler diagnostics, and
+    // this webapp does not run React Compiler (there is no `babel-plugin-react-compiler` in the
+    // build), so they report against a compiler that never sees the code. Turning them on is a
+    // deliberate future choice, not a side effect of a dependency bump.
+    //
+    // `react/refs` cannot follow a ref read into a callback: it reports
+    // `(id) => railRef.current?.querySelector(...)?.focus()` passed to `createTabListKeyDown`
+    // (`src/webapp/components/shell.tsx`) as a render-time read, and it reports the standard
+    // `useLatestRef` pattern (`src/public/react/use-latest-ref.ts`).
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    // Reports "React Compiler has skipped optimizing this component" - no compiler run exists.
+    "react/preserve-manual-memoization": "off",
+    // Only fires on the test harness components in `tests/browser/*.browser.test.js`, which assign
+    // the controller under test to an outer variable so assertions can reach it.
+    "react/globals": "off",
     "eslint/no-unused-vars": "error",
     "eslint/no-control-regex": "error",
     "typescript/no-explicit-any": "error",
