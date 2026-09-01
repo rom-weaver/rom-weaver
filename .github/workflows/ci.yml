@@ -149,13 +149,14 @@ jobs:
   # build remains image-plumbing only because its release path is exercised by
   # the prebuilt smoke below.
   #
-  # `DIST=prebuilt` is not the way to lift the cost here: it skips the whole
+  # `DIST=prebuilt` is not the way to lift the webapp cost here: it skips the whole
   # builder stage - rustup, the WASI SDK pins, binaryen - which is precisely the
   # fragile half this job exists to test. That path is covered instead,
   # unconditionally and for free, by the webapp prebuilt smoke below. What the
   # webapp leg does reuse is the wasm module itself, through `WASM=prebuilt` on
-  # a cache hit; see the restore step. The CLI image has no wasm in it at all -
-  # it is `cargo build --release -p rom-weaver-cli`.
+  # a cache hit; see the restore step. The CLI image still compiles its binary,
+  # but reuses the architecture-independent identify tree that a separate job
+  # packages and validates.
   #
   # Both architectures build here, each on a runner of its own architecture.
   # arm64 is not a formality: the webapp Dockerfile pins an arm64 WASI SDK and
@@ -167,8 +168,16 @@ jobs:
     name: Docker build (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    needs: changes
-    if: github.ref_type != 'tag' && needs.changes.outputs.docker_matrix != '[]'
+    needs: [changes, identify-release-data]
+    if: >-
+      always()
+      && github.ref_type != 'tag'
+      && needs.changes.result == 'success'
+      && needs.changes.outputs.docker_matrix != '[]'
+      && (
+        !contains(needs.changes.outputs.docker_matrix, 'rom-weaver-cli')
+        || needs.identify-release-data.result == 'success'
+      )
     permissions:
       contents: read
       # Read to restore the cache; write so a merge to main can refresh it and
@@ -194,6 +203,17 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The CLI source and prebuilt paths used to generate the same identify
+      # tree inside every architecture's Docker build. Download the one tree
+      # that `identify-release-data` packages, while leaving the release binary
+      # compile inside the source image.
+      - name: Download CLI identify data
+        if: matrix.name == 'CLI'
+        uses: actions/download-artifact@v8
+        with:
+          name: ci-identify-release-data
+          path: target
 
       # The webapp image compiles the wasm module the `wasm` job has already
       # built in this same run - ~390s of this job's ~570s, spent reproducing a
@@ -236,7 +256,9 @@ jobs:
           file: ${{ matrix.file }}
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
-          build-args: ${{ steps.wasm.outputs.cache-hit == 'true' && 'WASM=prebuilt' || '' }}
+          build-args: |
+            ${{ matrix.name == 'CLI' && 'IDENTIFY_DATA=prebuilt' || '' }}
+            ${{ steps.wasm.outputs.cache-hit == 'true' && 'WASM=prebuilt' || '' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
           cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
@@ -248,7 +270,12 @@ jobs:
           set -euo pipefail
           mkdir -p "prebuilt/${{ matrix.arch }}"
           printf 'stub\n' > "prebuilt/${{ matrix.arch }}/rom-weaver"
-          docker build --file Dockerfile --build-arg BINARY=prebuilt --tag prebuilt-smoke .
+          docker build \
+            --file Dockerfile \
+            --build-arg BINARY=prebuilt \
+            --build-arg IDENTIFY_DATA=prebuilt \
+            --tag prebuilt-smoke \
+            .
 
   # The per-arch legs above push tagless digests; this is what makes them a
   # single `nightly` tag that resolves per architecture.
@@ -629,7 +656,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: changes
-    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    if: >-
+      github.ref_type != 'tag'
+      && (
+        needs.changes.outputs.rust == 'true'
+        || contains(needs.changes.outputs.docker_matrix, 'rom-weaver-cli')
+      )
     steps:
       - name: Checkout
         uses: actions/checkout@v7

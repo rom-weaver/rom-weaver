@@ -54,7 +54,7 @@ The performance gates need the production WASM artifact and the webapp build fir
 
 ## Reproduce the Docker jobs
 
-`docker` is conditional on image-plumbing changes and is most directly reproduced with the source-build commands in the [self-hosting guide](../hosting/self-hosting.md).
+`docker` is conditional on image-plumbing changes and is most directly reproduced with the source-build commands in the [self-hosting guide](../hosting/self-hosting.md). CI stages `target/identify-release/share` first and passes `IDENTIFY_DATA=prebuilt` to both CLI image paths; run `mise run identify-data` and `node scripts/build-identify-release-data.mjs` before that variant.
 
 `docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle staged under `prebuilt/`. The CLI job uses `BINARY=prebuilt` when its packaging inputs change.
 
