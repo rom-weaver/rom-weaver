@@ -1,7 +1,8 @@
 use std::{io, path::PathBuf};
 
 use super::{
-    IoOp, IoResultExt, RomWeaverError, RomWeaverErrorKind, UnsupportedOp, ValidationCodeError,
+    ChdMediaScope, FormatOperationKind, IoOp, IoResultExt, RomWeaverError, RomWeaverErrorKind,
+    UnsupportedOp, ValidationCodeError, ValidationFieldValue,
 };
 
 fn assert_error_contract(error: RomWeaverError, expected: RomWeaverErrorKind) {
@@ -202,4 +203,271 @@ fn every_variant_is_covered_by_the_contract() {
             "classify_message lost the kind for `{error}`"
         );
     }
+}
+
+#[test]
+fn validation_code_error_renders_code_message_and_fields() {
+    let bare = ValidationCodeError::new("E_BAD");
+    assert_eq!(bare.code(), "E_BAD");
+    assert!(bare.fields().is_empty());
+    assert_eq!(bare.to_string(), "E_BAD");
+    assert_eq!(
+        RomWeaverError::ValidationCode(bare).to_string(),
+        "validation failed: E_BAD"
+    );
+
+    assert_eq!(
+        ValidationCodeError::new("E_BAD")
+            .with_message("bad input")
+            .to_string(),
+        "bad input [E_BAD]"
+    );
+
+    let mut full = ValidationCodeError::new("E_RANGE")
+        .with_message("out of range")
+        .with_field("enabled", true)
+        .with_field("start", -1i32);
+    full.push_field("length", 42u64);
+    full.push_field("index", 7usize);
+    full.push_field("path", "/roms/game.iso");
+    assert_eq!(full.fields().len(), 5);
+    assert_eq!(full.fields()[0].key, "enabled");
+    assert_eq!(
+        full.to_string(),
+        "out of range [E_RANGE] (enabled=true, start=-1, length=42, index=7, path=/roms/game.iso)"
+    );
+
+    // A code with fields but no message keeps the bare-code head.
+    assert_eq!(
+        ValidationCodeError::new("E_CODE")
+            .with_field("count", 3u8)
+            .to_string(),
+        "E_CODE (count=3)"
+    );
+}
+
+#[test]
+fn validation_field_value_converts_and_renders_every_supported_width() {
+    let cases: Vec<(ValidationFieldValue, &str)> = vec![
+        (true.into(), "true"),
+        (false.into(), "false"),
+        (7i8.into(), "7"),
+        ((-8i16).into(), "-8"),
+        (9i32.into(), "9"),
+        ((-10i64).into(), "-10"),
+        (11u8.into(), "11"),
+        (12u16.into(), "12"),
+        (13u32.into(), "13"),
+        (14u64.into(), "14"),
+        (15usize.into(), "15"),
+        (String::from("owned").into(), "owned"),
+        ("borrowed".into(), "borrowed"),
+    ];
+    for (value, rendered) in &cases {
+        assert_eq!(value.to_string(), *rendered);
+    }
+
+    // Every signed width collapses to `I64` and every unsigned one to `U64`;
+    // `usize` keeps its own variant so a pointer-width value never renders as a
+    // signed number.
+    assert_eq!(
+        ValidationFieldValue::from(1i8),
+        ValidationFieldValue::I64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1i16),
+        ValidationFieldValue::I64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1i32),
+        ValidationFieldValue::I64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1i64),
+        ValidationFieldValue::I64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1u8),
+        ValidationFieldValue::U64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1u16),
+        ValidationFieldValue::U64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1u32),
+        ValidationFieldValue::U64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1u64),
+        ValidationFieldValue::U64(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from(1usize),
+        ValidationFieldValue::Usize(1)
+    );
+    assert_eq!(
+        ValidationFieldValue::from("s"),
+        ValidationFieldValue::Text("s".to_string())
+    );
+    assert_eq!(
+        ValidationFieldValue::from(String::from("s")),
+        ValidationFieldValue::Text("s".to_string())
+    );
+}
+
+#[test]
+fn io_op_renders_a_verb_for_every_operation() {
+    let cases = [
+        (IoOp::Open, "open"),
+        (IoOp::Create, "create"),
+        (IoOp::Write, "write to"),
+        (IoOp::CreateDir, "create directory"),
+        (IoOp::ReadDir, "list directory"),
+        (IoOp::Inspect, "inspect"),
+    ];
+    for (op, verb) in cases {
+        assert_eq!(op.to_string(), verb);
+        // The verb is spliced straight into the user-facing message.
+        assert_eq!(
+            RomWeaverError::io_path(op, "/x", io::Error::other("nope")).to_string(),
+            format!("i/o error: cannot {verb} `/x`: nope")
+        );
+    }
+}
+
+#[test]
+fn unsupported_op_renders_every_variant() {
+    let cases = [
+        (
+            UnsupportedOp::FormatOperation {
+                format: "zip".to_string(),
+                operation: FormatOperationKind::ListEntries,
+            },
+            "zip does not support listing entries",
+        ),
+        (
+            UnsupportedOp::FormatOperation {
+                format: "chd".to_string(),
+                operation: FormatOperationKind::CreateDryRunSize,
+            },
+            "chd does not support create dry-run size measurement",
+        ),
+        (
+            UnsupportedOp::HandlerNotRegistered {
+                handler: "chd",
+                feature: "disc extract",
+            },
+            "chd handler is not registered; disc extract is unavailable",
+        ),
+        (
+            UnsupportedOp::ExtractOnlyCreate {
+                format: "rar".to_string(),
+                supported_create_formats: "zip, 7z".to_string(),
+            },
+            "rar is extract-only; supported create formats are zip, 7z",
+        ),
+        (
+            UnsupportedOp::LibarchiveCodec {
+                format: "7z".to_string(),
+                codec: "brotli".to_string(),
+            },
+            "libarchive does not support 7z codec `brotli`",
+        ),
+        (
+            UnsupportedOp::ChdCodecForMedia {
+                codec: "flac".to_string(),
+                scope: ChdMediaScope::CompressedMediaMode,
+            },
+            "rust chd compressed create does not support codec `flac` for this media mode",
+        ),
+        (
+            UnsupportedOp::ChdCodecForMedia {
+                codec: "avhu".to_string(),
+                scope: ChdMediaScope::Disc,
+            },
+            "rust chd compressed create does not support codec `avhu` for disc media",
+        ),
+        (
+            UnsupportedOp::ChdCodecInvalidForMedia {
+                codec: "cdlz".to_string(),
+                media: "hd".to_string(),
+            },
+            "chd codec `cdlz` is not valid for hd media",
+        ),
+        (
+            UnsupportedOp::ChdCodecListInvalid {
+                media: "raw".to_string(),
+            },
+            "chd codec list is invalid for raw media",
+        ),
+        (
+            UnsupportedOp::PatchCreateNotImplemented {
+                format: "RUP",
+                alternative: "bps",
+            },
+            "RUP patch creation is not implemented; use bps",
+        ),
+        (
+            UnsupportedOp::RupNamedFileEntries,
+            "RUP patches with named file entries are not supported by single-file patch-apply",
+        ),
+        (
+            UnsupportedOp::HdiffDirectoryPatch,
+            "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)",
+        ),
+        (
+            UnsupportedOp::ChdAvhuffRequiresChavFrames,
+            "rust chd compressed create supports `avhuff` only for `chav` frame inputs",
+        ),
+        (
+            UnsupportedOp::ChdStoreModeOnly,
+            "rust chd create currently supports only raw/dvd/hd/disc `store` mode",
+        ),
+        (
+            UnsupportedOp::ChdParentRequiresCompression,
+            "chd create with parent requires at least one compressed codec; `store` mode cannot reference parent hunks",
+        ),
+        (
+            UnsupportedOp::ChdAvhuffSampleLimit {
+                max_samples_per_channel: 4096,
+            },
+            "avhuff encode currently supports up to 4096 audio samples per channel",
+        ),
+    ];
+
+    for (op, expected) in cases {
+        assert_eq!(op.to_string(), expected);
+        // Every reason reaches the user wrapped in the shared error, whose
+        // prefix the worker-error classifier keys off.
+        let error = RomWeaverError::Unsupported(op);
+        assert_eq!(
+            error.to_string(),
+            format!("unsupported operation: {expected}")
+        );
+        assert_eq!(
+            RomWeaverErrorKind::classify_message(&error.to_string()),
+            Some(RomWeaverErrorKind::Unsupported)
+        );
+    }
+}
+
+#[test]
+fn io_path_appends_access_advice_only_for_permission_denials() {
+    let denied = RomWeaverError::io_path(
+        IoOp::Open,
+        std::env::temp_dir(),
+        io::Error::from(io::ErrorKind::PermissionDenied),
+    );
+    let rendered = denied.to_string();
+    assert!(
+        rendered.starts_with("i/o error: cannot open `"),
+        "{rendered}"
+    );
+    // Advice is optional (it depends on what the path resolves to), but the
+    // blamed path is not.
+    assert_eq!(
+        denied.permission_denied_path(),
+        Some(std::env::temp_dir().as_path())
+    );
 }

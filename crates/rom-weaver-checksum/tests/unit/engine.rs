@@ -12,6 +12,7 @@ use crc32fast::Hasher as Crc32Hasher;
 use proptest::prelude::*;
 use rom_weaver_core::{
     CancellationToken, ChecksumRequest, NoopProgressSink, OperationContext, ThreadBudget,
+    ThreadCapability,
 };
 
 use super::{
@@ -19,12 +20,17 @@ use super::{
     BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD, BLAKE3_PARALLEL_THRESHOLD, CRC16_GF2_DIM,
     CRC16_PARALLEL_MIN_BYTES_PER_THREAD, CRC16_PARALLEL_THRESHOLD,
     CRC32_PARALLEL_MIN_BYTES_PER_THREAD, CRC32_PARALLEL_THRESHOLD,
-    CRC32C_PARALLEL_MIN_BYTES_PER_THREAD, CRC32C_PARALLEL_THRESHOLD, ChecksumMode, Crc16State,
-    FANOUT_PARALLEL_THRESHOLD, NativeChecksumEngine, ResolvedRange, StreamingChecksum,
-    StreamingChecksumTiming, adler32_checksum, adler32_combine,
-    checksum_reader_values_with_progress, combine_adler32_partials, combine_crc16_partials,
-    combine_crc32_partials, combine_crc32c_partials, crc16_arc_combine, crc32c_append,
-    gf2_matrix_square_u16, gf2_matrix_times_u16, partition_algorithms, plan_checksum,
+    CRC32C_PARALLEL_MIN_BYTES_PER_THREAD, CRC32C_PARALLEL_THRESHOLD, ChecksumMode,
+    ChecksumProgress, ChecksumProgressTracker, ChecksumSourceRef, Crc16State,
+    FANOUT_PARALLEL_THRESHOLD, MAX_EAGER_MAP_RANGE_BYTES, MappedRange, NativeChecksumEngine,
+    ResolvedRange, StreamingChecksum, StreamingChecksumTiming, adler32_checksum, adler32_combine,
+    checksum_reader_values_with_progress, collect_parallel_partials_mapped,
+    collect_parallel_partials_stream, combine_adler32_partials, combine_crc16_partials,
+    combine_crc32_partials, combine_crc32c_partials, compute_parallel_adler32,
+    compute_parallel_blake3, compute_parallel_crc16, compute_parallel_crc32,
+    compute_parallel_crc32c, compute_parallel_fanout, compute_sequential,
+    compute_sequential_stream, crc16_arc_combine, crc32_parallel_chunk_size, crc32c_append,
+    gf2_matrix_square_u16, gf2_matrix_times_u16, map_range, partition_algorithms, plan_checksum,
     supported_algorithms,
 };
 
@@ -1026,4 +1032,531 @@ fn checksum_reader_values_with_progress_reports_total_and_digests() {
         values.values.get("adler32").expect("adler32 present"),
         &format!("{:08x}", adler32_checksum(&data))
     );
+}
+
+// --- execution.rs: parallel and streaming checksum paths ---------------------
+
+/// A range that deliberately claims more bytes than the file holds, so the
+/// streaming readers run past EOF and take their short-source branch.
+fn oversized_range(file_len: u64) -> ResolvedRange {
+    ResolvedRange {
+        start: 0,
+        len: file_len.saturating_add(4096),
+        file_len,
+        explicit: true,
+    }
+}
+
+fn whole_file_range(file_len: u64) -> ResolvedRange {
+    ResolvedRange {
+        start: 0,
+        len: file_len,
+        file_len,
+        explicit: false,
+    }
+}
+
+fn short_fixture(temp: &TestDir, name: &str) -> (PathBuf, u64) {
+    let path = temp.path().join(name);
+    fs::write(&path, b"0123456789abcdef").expect("fixture");
+    (path, 16)
+}
+
+fn assert_unexpected_eof(error: &rom_weaver_core::RomWeaverError) {
+    let rom_weaver_core::RomWeaverError::Io(io_error) = error else {
+        panic!("expected an io error, got {error}");
+    };
+    assert_eq!(io_error.kind(), std::io::ErrorKind::UnexpectedEof);
+}
+
+#[test]
+fn sequential_stream_fails_when_the_source_ends_before_the_range() {
+    let temp = TestDir::new();
+    let (source, file_len) = short_fixture(&temp, "short.bin");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(1));
+    let execution = context.plan_threads(ThreadCapability::single_threaded());
+    let range = oversized_range(file_len);
+    let mut noop = |_: ChecksumProgress| {};
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+
+    let error = compute_sequential_stream(
+        &source,
+        &range,
+        &[Algorithm::Crc32],
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect_err("a range past EOF must fail");
+    assert_unexpected_eof(&error);
+}
+
+#[test]
+fn sequential_stream_and_mapped_agree_on_a_partial_range() {
+    let temp = TestDir::new();
+    let source = temp.path().join("range.bin");
+    write_patterned_file(&source, 300 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(1));
+    let execution = context.plan_threads(ThreadCapability::single_threaded());
+    let range = ResolvedRange {
+        start: 1024,
+        len: 200 * 1024,
+        file_len: bytes.len() as u64,
+        explicit: true,
+    };
+    let slice = &bytes[1024..1024 + 200 * 1024];
+    let algorithms = [Algorithm::Crc32, Algorithm::Md5];
+
+    let mut noop = |_: ChecksumProgress| {};
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    let streamed = compute_sequential_stream(
+        &source,
+        &range,
+        &algorithms,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect("streamed sequential");
+
+    let mapped = MappedRange {
+        bytes: slice.to_vec(),
+    };
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    let from_map = compute_sequential(
+        Some(&mapped),
+        &source,
+        &range,
+        &algorithms,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect("mapped sequential");
+
+    assert_eq!(streamed, from_map);
+    assert_eq!(
+        streamed.get("crc32").expect("crc32"),
+        &format!("{:08x}", crc32fast::hash(slice))
+    );
+}
+
+#[test]
+fn parallel_fanout_agrees_across_mapped_and_streamed_sources() {
+    let temp = TestDir::new();
+    let source = temp.path().join("fanout.bin");
+    write_patterned_file(&source, 768 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let (execution, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let algorithms = [Algorithm::Crc32, Algorithm::Md5, Algorithm::Sha1];
+    let range = whole_file_range(bytes.len() as u64);
+
+    let streamed_bytes = AtomicU64::new(0);
+    let mut on_stream = |progress: ChecksumProgress| {
+        streamed_bytes.store(progress.processed_bytes, Ordering::SeqCst);
+    };
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut on_stream);
+    let streamed = compute_parallel_fanout(
+        ChecksumSourceRef {
+            mapped: None,
+            source: &source,
+            range: &range,
+        },
+        &algorithms,
+        &pool,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect("streamed fanout");
+
+    let mapped = MappedRange {
+        bytes: bytes.clone(),
+    };
+    let mut noop = |_: ChecksumProgress| {};
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    let from_map = compute_parallel_fanout(
+        ChecksumSourceRef {
+            mapped: Some(&mapped),
+            source: &source,
+            range: &range,
+        },
+        &algorithms,
+        &pool,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect("mapped fanout");
+
+    assert_eq!(streamed, from_map);
+    assert_eq!(streamed.len(), algorithms.len());
+    assert_eq!(streamed_bytes.load(Ordering::SeqCst), range.len);
+    assert_eq!(
+        streamed.get("crc32").expect("crc32"),
+        &format!("{:08x}", crc32fast::hash(&bytes))
+    );
+}
+
+#[test]
+fn parallel_fanout_stream_fails_when_the_source_ends_before_the_range() {
+    let temp = TestDir::new();
+    let (source, file_len) = short_fixture(&temp, "short-fanout.bin");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let (execution, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let range = oversized_range(file_len);
+    let mut noop = |_: ChecksumProgress| {};
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+
+    let error = compute_parallel_fanout(
+        ChecksumSourceRef {
+            mapped: None,
+            source: &source,
+            range: &range,
+        },
+        &[Algorithm::Crc32, Algorithm::Md5],
+        &pool,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect_err("a range past EOF must fail");
+    assert_unexpected_eof(&error);
+}
+
+#[test]
+fn parallel_blake3_agrees_across_mapped_and_streamed_sources() {
+    let temp = TestDir::new();
+    let source = temp.path().join("blake3.bin");
+    write_patterned_file(&source, 512 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let (execution, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let range = whole_file_range(bytes.len() as u64);
+    let mut noop = |_: ChecksumProgress| {};
+
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    let streamed = compute_parallel_blake3(
+        None,
+        &source,
+        &range,
+        &pool,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect("streamed blake3");
+
+    let mapped = MappedRange {
+        bytes: bytes.clone(),
+    };
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    let from_map = compute_parallel_blake3(
+        Some(&mapped),
+        &source,
+        &range,
+        &pool,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect("mapped blake3");
+
+    assert_eq!(streamed, from_map);
+    assert_eq!(
+        streamed.get("blake3").expect("blake3"),
+        &blake3::hash(&bytes).to_hex().to_string()
+    );
+}
+
+#[test]
+fn parallel_blake3_fails_when_the_source_ends_before_the_range() {
+    let temp = TestDir::new();
+    let (source, file_len) = short_fixture(&temp, "short-blake3.bin");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let (execution, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let range = oversized_range(file_len);
+    let mut noop = |_: ChecksumProgress| {};
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+
+    let error = compute_parallel_blake3(
+        None,
+        &source,
+        &range,
+        &pool,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect_err("a range past EOF must fail");
+    assert_unexpected_eof(&error);
+}
+
+#[test]
+fn parallel_chunked_checksums_agree_across_mapped_and_streamed_sources() {
+    let temp = TestDir::new();
+    let source = temp.path().join("chunked.bin");
+    write_patterned_file(&source, 640 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let (execution, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let range = whole_file_range(bytes.len() as u64);
+    let mapped = MappedRange {
+        bytes: bytes.clone(),
+    };
+
+    let mut crc16_state = Crc16State::<ARC>::new();
+    crc16_state.update(&bytes);
+    let expected = [
+        ("crc32", format!("{:08x}", crc32fast::hash(&bytes))),
+        ("crc32c", format!("{:08x}", crc32c_append(0, &bytes))),
+        ("crc16", format!("{:04x}", crc16_state.get())),
+        ("adler32", format!("{:08x}", adler32_checksum(&bytes))),
+    ];
+
+    type ChunkedFn = fn(
+        Option<&MappedRange>,
+        &Path,
+        &ResolvedRange,
+        &rom_weaver_core::SharedThreadPool,
+        &rom_weaver_core::ThreadExecution,
+        &CancellationToken,
+        &mut ChecksumProgressTracker<'_>,
+    ) -> rom_weaver_core::Result<BTreeMap<String, String>>;
+    let computers: [ChunkedFn; 4] = [
+        compute_parallel_crc32,
+        compute_parallel_crc32c,
+        compute_parallel_crc16,
+        compute_parallel_adler32,
+    ];
+
+    let mut noop = |_: ChecksumProgress| {};
+    for (compute, (name, value)) in computers.into_iter().zip(expected) {
+        let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+        let streamed = compute(
+            None,
+            &source,
+            &range,
+            &pool,
+            &execution,
+            context.cancel(),
+            &mut progress,
+        )
+        .unwrap_or_else(|error| panic!("streamed {name}: {error}"));
+
+        let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+        let from_map = compute(
+            Some(&mapped),
+            &source,
+            &range,
+            &pool,
+            &execution,
+            context.cancel(),
+            &mut progress,
+        )
+        .unwrap_or_else(|error| panic!("mapped {name}: {error}"));
+
+        assert_eq!(streamed, from_map, "{name} mapped/streamed disagreement");
+        assert_eq!(streamed.get(name), Some(&value), "{name}");
+    }
+}
+
+#[test]
+fn parallel_chunked_stream_fails_when_the_source_ends_before_the_range() {
+    let temp = TestDir::new();
+    let (source, file_len) = short_fixture(&temp, "short-chunked.bin");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
+    let (execution, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let range = oversized_range(file_len);
+    let mut noop = |_: ChecksumProgress| {};
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+
+    let error = compute_parallel_crc32(
+        None,
+        &source,
+        &range,
+        &pool,
+        &execution,
+        context.cancel(),
+        &mut progress,
+    )
+    .expect_err("a range past EOF must fail");
+    assert_unexpected_eof(&error);
+}
+
+#[test]
+fn collect_parallel_partials_agree_between_mapped_and_streamed_readers() {
+    let temp = TestDir::new();
+    let source = temp.path().join("partials.bin");
+    write_patterned_file(&source, 400 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(3));
+    let (_, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let range = whole_file_range(bytes.len() as u64);
+    let chunk_size = crc32_parallel_chunk_size(range.len, 3);
+    let compute = |chunk: &[u8]| (crc32c_append(0, chunk), chunk.len());
+
+    let mapped_bytes = AtomicU64::new(0);
+    let mut on_mapped = |progress: ChecksumProgress| {
+        mapped_bytes.store(progress.processed_bytes, Ordering::SeqCst);
+    };
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut on_mapped);
+    let mapped = collect_parallel_partials_mapped(
+        &bytes,
+        chunk_size,
+        &pool,
+        context.cancel(),
+        &mut progress,
+        compute,
+    )
+    .expect("mapped partials");
+
+    let mut noop = |_: ChecksumProgress| {};
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    let streamed = collect_parallel_partials_stream(
+        &source,
+        &range,
+        3,
+        &pool,
+        context.cancel(),
+        &mut progress,
+        compute,
+    )
+    .expect("streamed partials");
+
+    assert_eq!(mapped.len(), streamed.len());
+    assert_eq!(mapped_bytes.load(Ordering::SeqCst), range.len);
+    assert_eq!(
+        combine_crc32c_partials(mapped).expect("combine mapped"),
+        combine_crc32c_partials(streamed).expect("combine streamed")
+    );
+}
+
+#[test]
+fn parallel_partial_collection_is_cancelled_before_any_read() {
+    let temp = TestDir::new();
+    let source = temp.path().join("cancelled.bin");
+    write_patterned_file(&source, 128 * 1024);
+    let bytes = fs::read(&source).expect("read fixture");
+    let range = whole_file_range(bytes.len() as u64);
+    let context = checksum_context(temp.path(), ThreadBudget::Fixed(2));
+    let (_, pool) = context
+        .build_pool(ThreadCapability::parallel(None))
+        .expect("pool");
+    let cancel = CancellationToken::new();
+    cancel.cancel();
+    let mut noop = |_: ChecksumProgress| {};
+
+    let count_bytes = |chunk: &[u8]| chunk.len();
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    assert!(matches!(
+        collect_parallel_partials_mapped(&bytes, 4096, &pool, &cancel, &mut progress, count_bytes),
+        Err(rom_weaver_core::RomWeaverError::Cancelled)
+    ));
+
+    let mut progress = ChecksumProgressTracker::new(range.len, &mut noop);
+    assert!(matches!(
+        collect_parallel_partials_stream(
+            &source,
+            &range,
+            2,
+            &pool,
+            &cancel,
+            &mut progress,
+            count_bytes
+        ),
+        Err(rom_weaver_core::RomWeaverError::Cancelled)
+    ));
+}
+
+#[test]
+fn empty_partial_lists_combine_to_each_algorithm_identity() {
+    // An empty partial list means an empty range, so each combine must return
+    // the algorithm's identity value rather than a sum over nothing.
+    assert_eq!(combine_crc32c_partials(Vec::new()).expect("crc32c"), 0);
+    assert_eq!(combine_crc16_partials(Vec::new()).expect("crc16"), 0);
+    assert_eq!(combine_adler32_partials(Vec::new()).expect("adler32"), 1);
+    assert_eq!(
+        combine_adler32_partials(Vec::new()).expect("adler32"),
+        adler32_checksum(b"")
+    );
+}
+
+#[test]
+fn map_range_declines_ranges_it_cannot_serve() {
+    let temp = TestDir::new();
+    let source = temp.path().join("map.bin");
+    fs::write(&source, b"0123456789abcdef").expect("fixture");
+
+    assert!(
+        map_range(
+            &source,
+            &ResolvedRange {
+                start: 0,
+                len: 0,
+                file_len: 16,
+                explicit: true,
+            }
+        )
+        .is_none(),
+        "an empty range has nothing to map"
+    );
+    assert!(
+        map_range(
+            &source,
+            &ResolvedRange {
+                start: 0,
+                len: 16,
+                file_len: 0,
+                explicit: false,
+            }
+        )
+        .is_none(),
+        "an empty file has nothing to map"
+    );
+    // Over the eager threshold the range streams instead, so progress can be
+    // reported while it is read.
+    assert!(
+        map_range(
+            &source,
+            &ResolvedRange {
+                start: 0,
+                len: MAX_EAGER_MAP_RANGE_BYTES + 1,
+                file_len: MAX_EAGER_MAP_RANGE_BYTES + 1,
+                explicit: false,
+            }
+        )
+        .is_none(),
+        "a range over the eager threshold must stream"
+    );
+    // A range the file cannot satisfy fails the eager read and falls back.
+    assert!(
+        map_range(&source, &oversized_range(16)).is_none(),
+        "a short source cannot be mapped"
+    );
+    let mapped = map_range(&source, &whole_file_range(16)).expect("mapped");
+    assert_eq!(mapped.bytes(), b"0123456789abcdef");
+}
+
+#[test]
+fn map_range_returns_none_for_a_missing_source() {
+    let temp = TestDir::new();
+    let missing = temp.path().join("absent.bin");
+    assert!(map_range(&missing, &whole_file_range(16)).is_none());
 }
