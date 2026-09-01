@@ -106,8 +106,8 @@ fn parse_and_apply_round_trip_for_ppf1() {
     let report = handler
         .apply(
             &PatchApplyRequest {
-                input: input_path,
-                patches: vec![patch_path],
+                input: input_path.clone(),
+                patches: vec![patch_path.clone()],
                 output: output_path.clone(),
             },
             &test_context_with_threads(&temp, 8),
@@ -117,10 +117,28 @@ fn parse_and_apply_round_trip_for_ppf1() {
     assert!(handler.capabilities().threaded_output);
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
-    assert_eq!(execution.effective_threads, 1);
-    assert!(!execution.used_parallelism);
+    // The test context sets the in-memory limit to 0, which PPF now honours, so
+    // this is the streaming path: one thread per non-overlapping record.
+    assert_eq!(execution.effective_threads, 2);
 
-    assert_eq!(fs::read(output_path).expect("output"), b"abXYZfg!!!!");
+    assert_eq!(fs::read(&output_path).expect("output"), b"abXYZfg!!!!");
+
+    let in_memory_output = temp.child("output-in-memory.bin");
+    let in_memory = handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: in_memory_output.clone(),
+            },
+            &test_context_with_threads(&temp, 8).with_patch_apply_in_memory_limit(u64::MAX),
+        )
+        .expect("apply in memory");
+
+    let in_memory_execution = in_memory.thread_execution.expect("thread execution");
+    assert_eq!(in_memory_execution.effective_threads, 1);
+    assert!(!in_memory_execution.used_parallelism);
+    assert_eq!(fs::read(in_memory_output).expect("output"), b"abXYZfg!!!!");
 }
 
 #[test]
