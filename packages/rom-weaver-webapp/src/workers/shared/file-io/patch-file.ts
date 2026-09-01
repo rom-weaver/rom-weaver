@@ -181,6 +181,21 @@ class PatchFile implements PatchFileLike {
     const notifyLoaded = () => {
       if (typeof onLoad === "function") onLoad(this);
     };
+    if (source instanceof PatchFile) {
+      // A PatchFile satisfies SyncByteSource, so this branch MUST stay ahead of
+      // the isSyncByteSource one or the copy takes the source object itself as
+      // its byte source and never inherits its metadata. The copy shares the
+      // source's byte source rather than reading it into memory - callers clone
+      // GB-sized OPFS-backed files just to rename them, and `materialize()` is
+      // the deep-copy path. A source with no byte source of its own is a
+      // browser-backed file staged later, and stays lazy behind the source.
+      _setByteSource(this, source._byteSource ?? source);
+      _copyFileMetadata(source, this);
+      this.fileSize = source.fileSize;
+      notifyLoaded();
+      return;
+    }
+
     if (isSyncByteSource(source)) {
       _setByteSource(this, source);
       notifyLoaded();
@@ -196,14 +211,6 @@ class PatchFile implements PatchFileLike {
       this.fileSize = browserSource.size;
       this._file = browserSource;
       throw new Error("PatchFile does not accept browser File sources directly; stage or materialize them first");
-    }
-    if (source instanceof PatchFile) {
-      const bytes = new Uint8Array(new ArrayBuffer(source.fileSize));
-      if (source.fileSize) source.readIntoAt(bytes, 0, source.fileSize, 0);
-      _setByteSource(this, new MemoryByteSource(bytes, { fileName: source.fileName, fileType: source.fileType }));
-      this.littleEndian = source.littleEndian;
-      notifyLoaded();
-      return;
     }
     if (source instanceof ArrayBuffer || ArrayBuffer.isView(source) || typeof source === "number") {
       _setByteSource(this, new MemoryByteSource(source));

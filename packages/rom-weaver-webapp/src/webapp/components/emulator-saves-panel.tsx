@@ -160,11 +160,12 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
           <DropdownSelect
             className="select"
             id="emulator-save-import-kind"
-            onChange={(event) =>
-              setPendingImport((current) =>
-                current ? { ...current, kind: event.currentTarget.value as "combined" | "sram" | "state" } : current,
-              )
-            }
+            onChange={(event) => {
+              // React pools the event: `currentTarget` is null by the time the
+              // lazy updater runs, so the value MUST be read during dispatch.
+              const kind = event.currentTarget.value as "combined" | "sram" | "state";
+              setPendingImport((current) => (current ? { ...current, kind } : current));
+            }}
             value={pendingImport.kind}
           >
             <option value="combined">rom-weaver exported save</option>
