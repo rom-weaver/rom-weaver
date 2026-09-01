@@ -1689,3 +1689,7 @@ pub(crate) fn apply_bsp_patch_file_native_from_path(
         ))),
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/bsp_native_vm.rs"]
+mod tests;
