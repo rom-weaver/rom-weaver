@@ -82,3 +82,7 @@ impl<R: Read> LabeledFileParser<R> {
         Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/labeled_parser.rs"]
+mod tests;

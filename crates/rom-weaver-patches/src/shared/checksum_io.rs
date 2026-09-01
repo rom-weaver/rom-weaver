@@ -78,3 +78,7 @@ pub(crate) fn read_footer<const N: usize>(path: &Path, footer_offset: u64) -> Re
     file.read_exact(&mut footer)?;
     Ok(footer)
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/checksum_io.rs"]
+mod tests;

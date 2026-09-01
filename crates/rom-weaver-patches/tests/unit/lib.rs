@@ -4,7 +4,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::PatchRegistry;
+use super::{
+    PatchRegistry, explicitly_unsupported_patch_reason_for_name,
+    explicitly_unsupported_patch_reason_for_path,
+};
 
 fn temp_file_path(label: &str) -> PathBuf {
     temp_file_path_with_extension(label, "ips")
@@ -597,4 +600,86 @@ fn ninja1_handler_reports_unsupported_for_every_operation() {
         )
         .expect("create report");
     assert_eq!(create_report.status, OperationStatus::Unsupported);
+}
+
+/// Every signature the registry routes on that no other test already covers,
+/// paired with the handler name it must resolve to. Each fixture carries an
+/// unknown extension so only the leading magic can decide.
+const SIGNATURE_ROUTES: &[(&str, &[u8], &str)] = &[
+    ("ups", b"UPS1\0\0\0\0", "UPS"),
+    ("vcdiff", &[0xD6, 0xC3, 0xC4, 0x00, 0x00], "VCDIFF"),
+    ("hdiff", b"HDIFF13&\0\0\0", "HDiffPatch/HPatchZ"),
+    ("rup", b"NINJA2\0\0\0\0", "RUP"),
+    ("ppf1", b"PPF10\0\0\0\0", "PPF"),
+    ("ppf2", b"PPF20\0\0\0\0", "PPF"),
+    ("ppf3", b"PPF30\0\0\0\0", "PPF"),
+    ("solid", b"SP\x04\0\0\0\0\0", "SOLID"),
+    ("mod", b"PMSR\0\0\0\0", "MOD"),
+    ("bsdiff", b"BSDIFF40\0\0\0", "BDF/BSDIFF40"),
+];
+
+#[test]
+fn probe_routes_every_remaining_signature_to_its_handler() {
+    for (label, fixture, expected) in SIGNATURE_ROUTES {
+        let path = temp_file_path_with_extension(label, "bin");
+        assert_probe_for_fixture(path, fixture, expected, label);
+    }
+}
+
+#[test]
+fn probe_signature_matches_magic_but_never_falls_back_to_the_extension() {
+    let registry = PatchRegistry::new();
+
+    let path = temp_file_path_with_extension("probe-signature-magic", "bin");
+    fs::write(&path, b"UPS1\0\0\0\0").expect("fixture");
+    let handler = registry.probe_signature(&path).expect("ups signature");
+    assert_eq!(handler.descriptor().name, "UPS");
+    let _ = fs::remove_file(&path);
+
+    // A recognised extension with no matching magic is an extension-only match,
+    // which `probe_signature` deliberately refuses so container probing can run.
+    assert!(registry.probe_signature(Path::new("update.aps")).is_none());
+}
+
+#[test]
+fn probe_reports_no_handler_for_bytes_and_an_extension_it_does_not_know() {
+    let path = temp_file_path_with_extension("unknown-signature", "bin");
+    fs::write(&path, b"NOTAPATCHATALL\0\0").expect("fixture");
+
+    let registry = PatchRegistry::new();
+    assert!(registry.probe(&path).is_none());
+
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn probe_reports_no_handler_for_a_file_it_cannot_read() {
+    let registry = PatchRegistry::new();
+    let missing = temp_file_path_with_extension("never-created", "bin");
+
+    assert!(registry.probe_signature(&missing).is_none());
+}
+
+#[test]
+fn the_default_registry_matches_a_freshly_built_one() {
+    let defaulted = PatchRegistry::default();
+    let built = PatchRegistry::new();
+    assert_eq!(defaulted.handlers().len(), built.handlers().len());
+    for (left, right) in defaulted.handlers().iter().zip(built.handlers()) {
+        assert_eq!(left.descriptor().name, right.descriptor().name);
+    }
+}
+
+#[test]
+fn pds_is_reported_as_explicitly_unsupported_by_name_and_by_path() {
+    let by_name = explicitly_unsupported_patch_reason_for_name("PDS").expect("pds reason");
+    assert!(by_name.to_ascii_lowercase().contains("pds"), "{by_name}");
+    assert_eq!(
+        explicitly_unsupported_patch_reason_for_path(Path::new("Some.Patch.PDS")),
+        Some(by_name)
+    );
+
+    assert!(explicitly_unsupported_patch_reason_for_name("ips").is_none());
+    assert!(explicitly_unsupported_patch_reason_for_path(Path::new("update.ips")).is_none());
+    assert!(explicitly_unsupported_patch_reason_for_path(Path::new("..")).is_none());
 }

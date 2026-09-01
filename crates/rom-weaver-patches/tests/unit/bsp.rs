@@ -723,3 +723,78 @@ fn apply_rejects_read_word_past_file_end() {
     // 0x0E reads a word; on an empty file get_file_word's bounds guard fires.
     assert_bsp_program_error(&[0x0E, 0x00], vec![], "past the end of the file buffer");
 }
+
+#[test]
+fn apply_in_place_patches_the_input_file_without_seeding_a_copy() {
+    let temp = TestDir::new();
+    let path = temp.child("in-place.bin");
+    let patch_path = temp.child("in-place.bsp");
+    fs::write(&path, [0x01, 0x02, 0x03]).expect("fixture");
+    fs::write(&patch_path, [0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
+
+    // input == output, so the handler edits the file the VM already owns
+    // instead of copying the input over itself and truncating it.
+    let report = BspPatchHandler::new(&BSP)
+        .apply(
+            &PatchApplyRequest {
+                input: path.clone(),
+                patches: vec![patch_path],
+                output: path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("in-place apply");
+
+    assert!(report.label.contains("wrote 3 byte(s)"), "{}", report.label);
+    assert_eq!(fs::read(&path).expect("output"), vec![0xFF, 0x02, 0x03]);
+}
+
+#[test]
+fn validate_dry_runs_the_patch_script_and_leaves_no_output() {
+    let temp = TestDir::new();
+    let input_path = temp.child("validate-source.bin");
+    let patch_path = temp.child("validate.bsp");
+    fs::write(&input_path, [0x01, 0x02, 0x03]).expect("fixture");
+    fs::write(&patch_path, [0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
+
+    let report = BspPatchHandler::new(&BSP)
+        .validate(
+            &rom_weaver_core::PatchValidateRequest {
+                input: input_path.clone(),
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+
+    assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+    // The dry run must not disturb the input it read.
+    assert_eq!(
+        fs::read(&input_path).expect("input"),
+        vec![0x01, 0x02, 0x03]
+    );
+}
+
+#[test]
+fn validate_surfaces_a_script_that_exits_non_zero() {
+    let temp = TestDir::new();
+    let input_path = temp.child("validate-fail.bin");
+    let patch_path = temp.child("validate-fail.bsp");
+    fs::write(&input_path, [0x00]).expect("fixture");
+    // `exit 1`: opcode 0x06 with a non-zero status word.
+    fs::write(&patch_path, [0x06, 0x01, 0x00, 0x00, 0x00]).expect("fixture");
+
+    let error = BspPatchHandler::new(&BSP)
+        .validate(
+            &rom_weaver_core::PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("a non-zero exit should fail validation");
+    assert!(
+        error.to_string().contains("exit"),
+        "unexpected error: {error}"
+    );
+}
