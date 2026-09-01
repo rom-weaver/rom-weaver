@@ -700,3 +700,45 @@ fn apply_prepares_writes_in_parallel_for_a_large_target() {
     expected.extend_from_slice(&extra);
     assert_eq!(fs::read(output_path).expect("output"), expected);
 }
+
+#[test]
+fn apply_in_parallel_skips_source_addition_when_a_record_starts_past_the_source() {
+    let temp = TestDir::new();
+    let add_len = 300_000usize;
+
+    let source = vec![0x11u8; 16];
+    let delta: Vec<u8> = (0..add_len).map(|index| (index % 251) as u8).collect();
+    // The leading seek moves the source cursor past the 16-byte source, so the
+    // pooled worker has no overlapping source bytes to add.
+    let patch = build_bsdiff_patch(
+        &[(0, 0, 4_096), (add_len as i64, 0, 0)],
+        &delta,
+        &[],
+        add_len as i64,
+    );
+
+    let source_path = temp.child("no-overlap-source.bin");
+    let patch_path = temp.child("no-overlap.bdf");
+    let output_path = temp.child("no-overlap-output.bin");
+    fs::write(&source_path, &source).expect("source fixture");
+    fs::write(&patch_path, &patch).expect("patch fixture");
+
+    let report = BdfPatchHandler::new(&BDF_BSDIFF40)
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 4),
+        )
+        .expect("apply");
+
+    assert!(
+        report
+            .thread_execution
+            .expect("thread execution")
+            .used_parallelism
+    );
+    assert_eq!(fs::read(output_path).expect("output"), delta);
+}
