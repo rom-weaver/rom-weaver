@@ -89,9 +89,10 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
     });
   });
 
-  // Every beta workflow (Identify, Trim, PPF undo) lives in More now, so no
-  // rail or dock tab carries the beta marker.
-  expect(host.querySelectorAll("[data-beta-tool]").length).toBe(0);
+  // Every beta workflow (Identify, Trim, PPF undo) and Docs live in More now,
+  // so the rail and dock carry only the three workflow tabs.
+  expect(host.querySelectorAll('.mode-rail [role="tab"]').length).toBe(3);
+  expect(host.querySelectorAll('.dock-tabs [role="tab"]').length).toBe(3);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

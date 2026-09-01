@@ -15,6 +15,10 @@ const KIND_MESSAGE: Record<
   tool: "ui.find.kindTool",
 };
 
+/** The chord as the visitor's keyboard writes it. */
+const shortcutHint = () =>
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl+K";
+
 const isPlainActivation = (event: React.MouseEvent) =>
   event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 
@@ -89,7 +93,10 @@ const FindPalette = ({
   };
   const activate = (result: FindResult) => {
     onClose();
-    onAction(result.entry.action, result.entry);
+    // A guide row is a real link and the document's soft navigation opens it;
+    // dispatching a view switch as well would double-route (and on the 404
+    // shell would drop the slug).
+    if (result.entry.kind !== "guide") onAction(result.entry.action, result.entry);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape") {
@@ -122,7 +129,7 @@ const FindPalette = ({
           aria-autocomplete="list"
           aria-controls={listId}
           aria-describedby={statusId}
-          aria-expanded="true"
+          aria-expanded={results.length > 0}
           aria-label={label}
           autoComplete="off"
           className="find-input"
@@ -138,10 +145,14 @@ const FindPalette = ({
           type="search"
           value={query}
         />
-        <kbd className="find-key">⌘K</kbd>
+        <span aria-hidden="true" className="find-key">
+          {shortcutHint()}
+        </span>
       </div>
       <p aria-live="polite" className="sr-only" id={statusId} role="status">
-        {results.length === 0 ? localizer.message("ui.find.empty") : `${results.length}`}
+        {results.length === 0
+          ? localizer.message("ui.find.empty")
+          : localizer.message("ui.find.resultCount", { count: String(results.length) })}
       </p>
       {results.length === 0 ? (
         <p className="find-empty">{localizer.message("ui.find.empty")}</p>

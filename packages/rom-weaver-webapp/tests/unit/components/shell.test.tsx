@@ -153,7 +153,10 @@ describe("Masthead", () => {
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
     // Docs and the beta tools file under their own headed groups.
-    expect(getByRole("menuitem", { name: "Docs" })).toBeTruthy();
+    // Real links: a middle-click or "open in new tab" still reaches the route.
+    expect(getByRole("menuitem", { name: "Docs" }).getAttribute("href")).toBe("docs");
+    // With the selected workflow in the rail, More is not "you are here".
+    expect(more.classList.contains("is-current")).toBe(false);
     expect(getByRole("menuitem", { name: "Trim Beta" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "PPF undo Beta" })).toBeTruthy();
     expect(getByRole("group", { name: "Tools" })).toBeTruthy();
@@ -164,6 +167,12 @@ describe("Masthead", () => {
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
     expect(more.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("marks More current when the selected workflow lives inside it", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
+    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
+    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
   });
 
   it("activates a tab with Space as well as Enter", () => {
@@ -290,7 +299,7 @@ describe("Masthead", () => {
       withSettings(
         <>
           <Masthead {...mastheadProps} />
-          <SiteFooter donateHref="https://example.com/donate" githubHref="https://example.com/repo" />
+          <SiteFooter docsHref="docs" donateHref="https://example.com/donate" githubHref="https://example.com/repo" />
         </>,
       ),
     );
@@ -300,6 +309,8 @@ describe("Masthead", () => {
     expect(getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe("https://example.com/repo");
     expect(getByRole("link", { name: "Support" }).closest(".site-footer")).toBe(footer);
     expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
+    // The one crawlable path to the guides now that the rail has no Docs tab.
+    expect(getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
     expect(container.querySelector(".masthead-tools a")).toBeNull();
   });
 

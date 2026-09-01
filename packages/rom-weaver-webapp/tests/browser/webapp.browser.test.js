@@ -193,19 +193,19 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
   mountWebappRoot();
-  // Docs is reference rather than a workflow, but it rides in the rail so the
-  // readers it is written for do not have to go hunting for it.
+  // The rail holds the three workflows; Docs is reference and files under More
+  // with the beta tools, which stay hidden while the setting is off.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Docs", "Test"]);
+    .toEqual(["Apply", "Create", "Test"]);
   await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Identify" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Identify Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
 });
 
 const dropOnPage = async (fileName) => {

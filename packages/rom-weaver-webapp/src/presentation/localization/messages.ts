@@ -137,6 +137,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.find.kindTool": msg({ id: "ui.find.kindTool", message: "Tool" }),
   "ui.find.label": msg({ id: "ui.find.label", message: "Find" }),
   "ui.find.placeholder": msg({ id: "ui.find.placeholder", message: "Find a tool, guide, or setting" }),
+  "ui.find.resultCount": msg({ id: "ui.find.resultCount", message: "{count} results" }),
   "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Support" }),
   "ui.nav.docs": msg({ id: "ui.nav.docs", message: "Docs" }),
   "ui.nav.home": msg({ id: "ui.nav.home", message: "rom-weaver home" }),
