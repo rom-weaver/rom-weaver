@@ -38,21 +38,21 @@ const useExpectedRomIdentification = (checks: ParsedBundleChecks | undefined, en
   // and reads the check itself through a ref - depending on the object would
   // reload the whole pack set on every render.
   const latestChecks = useLatestRef(checks);
-  const [identification, setIdentification] = useState<ParsedIdentifyResolution | undefined>(undefined);
+  const [identified, setIdentified] = useState<{ key: string; value: ParsedIdentifyResolution } | undefined>(undefined);
   useEffect(() => {
     if (!key) {
-      setIdentification(undefined);
+      setIdentified(undefined);
       return;
     }
     if (!enabled) return;
     const controller = new AbortController();
     let live = true;
-    setIdentification(undefined);
+    setIdentified(undefined);
     void (async () => {
       try {
         const found = await lookupExpectedRom(latestChecks.current || {}, { signal: controller.signal });
         if (!live) return;
-        if (found && found.status !== "unavailable") setIdentification(found);
+        if (found && found.status !== "unavailable") setIdentified({ key, value: found });
       } catch {
         // A checksum nobody can look up is not an apply error; the card still
         // renders the check's own values.
@@ -63,7 +63,7 @@ const useExpectedRomIdentification = (checks: ParsedBundleChecks | undefined, en
       controller.abort();
     };
   }, [enabled, key, latestChecks]);
-  return identification;
+  return identified?.key === key ? identified.value : undefined;
 };
 
 export { useExpectedRomIdentification };

@@ -124,6 +124,21 @@ describe("useExpectedRomIdentification", () => {
     expect(mockedLookup).toHaveBeenCalledTimes(1);
   });
 
+  it("does not keep an answer after a disabled check changes", async () => {
+    mockedLookup.mockResolvedValue({ matches: [match("Hello World (USA)")], status: "matched" });
+    const first = { checksums: { crc32: "d7ae93df" } };
+
+    const hook = renderHook(({ checks, enabled }) => useExpectedRomIdentification(checks, enabled), {
+      initialProps: { checks: first, enabled: true },
+    });
+    await waitFor(() => expect(hook.result.current?.matches[0]?.name).toBe("Hello World (USA)"));
+
+    hook.rerender({ checks: { checksums: { crc32: "3610a686" } }, enabled: false });
+
+    expect(hook.result.current).toBeUndefined();
+    expect(mockedLookup).toHaveBeenCalledTimes(1);
+  });
+
   it("does not look up a check with no checksums", async () => {
     renderHook(() => useExpectedRomIdentification({ size: 1024 }));
 
