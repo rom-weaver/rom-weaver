@@ -384,3 +384,7 @@ pub fn match_artifact<P: ArtifactPackReader + ?Sized>(
         matches,
     })
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/artifact_match.rs"]
+mod tests;

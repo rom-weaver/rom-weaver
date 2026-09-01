@@ -446,3 +446,7 @@ impl FstBuilder {
         idx
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_fst.rs"]
+mod tests;

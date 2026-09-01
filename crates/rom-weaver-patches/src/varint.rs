@@ -93,6 +93,64 @@ mod tests {
     }
 
     #[test]
+    fn rejects_a_data_byte_that_overflows_the_accumulator() {
+        // Nine continuation bytes leave `shift` at 2^63; a final data byte of 2
+        // or more cannot be scaled by it without leaving u64.
+        let mut bytes = vec![0u8; 9];
+        bytes.push(0xFF);
+        let error = read_varint(reader(bytes), "TEST").expect_err("must reject");
+        assert_eq!(
+            error.to_string(),
+            "validation failed: TEST varint overflowed available range"
+        );
+    }
+
+    #[test]
+    fn rejects_a_final_byte_that_pushes_the_total_past_u64() {
+        // Same nine continuation bytes, but a final data value of 1: the scale
+        // fits and the running total is what overflows.
+        let mut bytes = vec![0u8; 9];
+        bytes.push(0x81);
+        let error = read_varint(reader(bytes), "TEST").expect_err("must reject");
+        assert_eq!(
+            error.to_string(),
+            "validation failed: TEST varint overflowed available range"
+        );
+    }
+
+    #[test]
+    fn rejects_a_continuation_bias_that_overflows_the_accumulator() {
+        // Nine maximal continuation bytes: the implicit +1-per-continuation bias
+        // added after the eighth shift is what leaves u64.
+        let error = read_varint(reader(vec![0x7f; 9]), "TEST").expect_err("must reject");
+        assert_eq!(
+            error.to_string(),
+            "validation failed: TEST varint overflowed available range"
+        );
+    }
+
+    #[test]
+    fn round_trips_the_encoding_boundaries() {
+        for value in [0u64, 1, 127, 128, 129, 16511, 16512, u64::from(u32::MAX)] {
+            let mut buffer = [0u8; VARINT_MAX_LEN];
+            let len = encode_varint(&mut buffer, value);
+            assert!(len <= VARINT_MAX_LEN);
+            let decoded = read_varint(reader(buffer[..len].to_vec()), "TEST").expect("decode");
+            assert_eq!(decoded, value, "round trip failed for {value}");
+        }
+    }
+
+    #[test]
+    fn push_varint_appends_the_same_bytes_encode_varint_produces() {
+        let mut buffer = [0u8; VARINT_MAX_LEN];
+        let len = encode_varint(&mut buffer, 300);
+        let mut pushed = vec![0xAAu8];
+        push_varint(&mut pushed, 300);
+        assert_eq!(pushed[0], 0xAA);
+        assert_eq!(&pushed[1..], &buffer[..len]);
+    }
+
+    #[test]
     fn rejects_unterminated_stream_without_overflow_panic() {
         // 0x00 bytes never set the terminator bit; a malformed over-long run must
         // return a validation error rather than wrapping or looping forever.

@@ -1495,4 +1495,202 @@ mod tests {
             Some(&String::from("raw-sha1"))
         );
     }
+
+    use crate::trace_capture::TraceCapture;
+
+    fn deferred(patches: BTreeMap<u64, Vec<u8>>) -> DeferredFixHeader {
+        DeferredFixHeader {
+            id: "fix-header".to_string(),
+            label: "Fixed header".to_string(),
+            apply_compatibility: json!({ "apply": true }),
+            transforms: json!([{ "kind": "fix-header" }]),
+            patches,
+            hash_thread_budget: 2,
+        }
+    }
+
+    #[test]
+    fn variant_row_renders_the_shared_json_shape() {
+        let row = VariantRow {
+            id: "raw".to_string(),
+            label: "Raw".to_string(),
+            checksums: BTreeMap::from([("crc32".to_string(), "0d4a1185".to_string())]),
+            apply_compatibility: json!({ "apply": true }),
+            transforms: json!([]),
+        };
+        // Both the `checksum` command and the extract `emitted_files` entries
+        // serialize through this one shape, so the key names are a contract.
+        assert_eq!(
+            row.to_json(),
+            json!({
+                "id": "raw",
+                "label": "Raw",
+                "checksums": { "crc32": "0d4a1185" },
+                "applyCompatibility": { "apply": true },
+                "transforms": [],
+            })
+        );
+    }
+
+    #[test]
+    fn n64_order_detection_needs_a_full_four_byte_magic() {
+        assert!(N64Order::detect(&[]).is_none());
+        assert!(N64Order::detect(&[0x80, 0x37, 0x12]).is_none());
+        assert!(N64Order::detect(&[0x00, 0x11, 0x22, 0x33]).is_none());
+
+        for (magic, order, label) in [
+            (N64_BIG_ENDIAN_MAGIC, N64Order::BigEndian, "big-endian"),
+            (
+                N64_LITTLE_ENDIAN_MAGIC,
+                N64Order::LittleEndian,
+                "little-endian",
+            ),
+            (
+                N64_BYTE_SWAPPED_MAGIC,
+                N64Order::ByteSwapped,
+                "byte-swapped",
+            ),
+        ] {
+            let mut prefix = magic.to_vec();
+            prefix.extend_from_slice(&[0u8; 8]);
+            let detected = N64Order::detect(&prefix).expect("magic must be recognized");
+            assert!(detected == order);
+            assert_eq!(detected.id(), label);
+        }
+    }
+
+    #[test]
+    fn extension_with_dot_ignores_directories_and_degenerate_dots() {
+        assert_eq!(extension_with_dot("game.sfc").as_deref(), Some(".sfc"));
+        assert_eq!(
+            extension_with_dot("dir/sub\\game.SMC").as_deref(),
+            Some(".SMC")
+        );
+        // A dotfile has no extension, and neither does a trailing dot.
+        assert_eq!(extension_with_dot(".gitignore"), None);
+        assert_eq!(extension_with_dot("game."), None);
+        assert_eq!(extension_with_dot("game"), None);
+        assert_eq!(extension_with_dot("dir.d/game"), None);
+    }
+
+    #[test]
+    fn overlay_checksums_applies_patches_that_straddle_chunk_bounds() {
+        // The reader chunk is 1 MiB, so a patch that starts before the second
+        // chunk and ends inside it exercises both the write and source offsets.
+        let mut payload = vec![0xAAu8; (1024 * 1024) + 16];
+        let patch_offset = (1024 * 1024 - 4) as u64;
+        let patch_bytes = vec![0xBBu8; 8];
+        let patches = BTreeMap::from([
+            (patch_offset, patch_bytes.clone()),
+            // Far past the end of the stream, so every chunk skips it.
+            (u64::from(u32::MAX), vec![0xCCu8; 4]),
+        ]);
+
+        let overlaid = overlay_checksums(
+            &mut Cursor::new(payload.clone()),
+            &algorithms(),
+            &patches,
+            1,
+        )
+        .expect("overlay");
+
+        // The same bytes hashed directly must produce the same digests.
+        let start = patch_offset as usize;
+        payload[start..start + patch_bytes.len()].copy_from_slice(&patch_bytes);
+        let direct = overlay_checksums(
+            &mut Cursor::new(payload.clone()),
+            &algorithms(),
+            &BTreeMap::new(),
+            1,
+        )
+        .expect("direct");
+        assert_eq!(overlaid, direct);
+        assert_eq!(
+            overlaid.get("crc32"),
+            Some(&format!("{:08x}", crc32fast::hash(&payload)))
+        );
+    }
+
+    #[test]
+    fn overlay_checksums_without_algorithms_produces_no_digests() {
+        let result = overlay_checksums(&mut Cursor::new(vec![0u8; 32]), &[], &BTreeMap::new(), 4)
+            .expect("overlay");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn finishing_no_deferred_header_is_a_no_op() {
+        let mut rows = Vec::new();
+        finish_deferred_fix_header(
+            &mut rows,
+            None,
+            &algorithms(),
+            std::path::Path::new("/definitely/absent"),
+        )
+        .expect("a missing deferral must not touch the filesystem");
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn finishing_a_deferred_header_re_reads_the_file_and_appends_one_row() {
+        let dir = std::env::temp_dir().join(format!(
+            "rom-weaver-variants-deferred-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("rom.bin");
+        let mut payload = (0..=255u8).cycle().take(4096).collect::<Vec<_>>();
+        std::fs::write(&path, &payload).expect("write fixture");
+
+        let patches = BTreeMap::from([(4u64, vec![0xDE, 0xAD, 0xBE, 0xEF])]);
+        let mut rows = Vec::new();
+        let capture = TraceCapture::default();
+        capture
+            .record(|| {
+                finish_deferred_fix_header(
+                    &mut rows,
+                    Some(deferred(patches.clone())),
+                    &algorithms(),
+                    &path,
+                )
+            })
+            .expect("deferred finish");
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "fix-header");
+        assert_eq!(rows[0].label, "Fixed header");
+        assert_eq!(rows[0].transforms, json!([{ "kind": "fix-header" }]));
+
+        // The appended row's digests are those of the patched bytes.
+        payload[4..8].copy_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
+        assert_eq!(
+            rows[0].checksums.get("crc32"),
+            Some(&format!("{:08x}", crc32fast::hash(&payload)))
+        );
+        capture.assert_contains_all(&[
+            "hashing deferred fix-header variant via sparse overlay re-read",
+            "hash_thread_budget=2",
+        ]);
+
+        std::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    #[test]
+    fn finishing_a_deferred_header_surfaces_a_missing_source() {
+        let mut rows = Vec::new();
+        let error = finish_deferred_fix_header(
+            &mut rows,
+            Some(deferred(BTreeMap::new())),
+            &algorithms(),
+            std::path::Path::new("/definitely/absent/rom.bin"),
+        )
+        .map(|_| ())
+        .expect_err("a missing source must fail");
+        assert!(matches!(error, RomWeaverError::Io(_)), "{error}");
+        assert!(rows.is_empty());
+    }
 }

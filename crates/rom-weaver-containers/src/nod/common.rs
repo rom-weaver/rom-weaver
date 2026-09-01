@@ -365,3 +365,7 @@ impl PartitionInfo {
         Some(Fst::new(self.raw_fst.as_deref()?).unwrap())
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/nod_common.rs"]
+mod tests;

@@ -446,4 +446,94 @@ mod tests {
             "turbografx 16 pc engine"
         );
     }
+
+    #[test]
+    fn rejects_bytes_that_are_not_catalog_json() {
+        for bytes in [b"{not json".as_slice(), b"[]".as_slice(), b"{}".as_slice()] {
+            let error = IdentifyCatalog::parse(bytes).expect_err("malformed catalog must fail");
+            assert!(
+                error
+                    .to_string()
+                    .starts_with("validation failed: invalid identify catalog: "),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_alias_that_normalizes_to_an_empty_string() {
+        let bytes = catalog_json(serde_json::json!([platform_json("A", &["***"], "a")]));
+        let error = IdentifyCatalog::parse(&bytes).expect_err("empty alias must fail");
+        assert!(
+            error.to_string().contains("normalizes to an empty string"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn entries_are_returned_in_file_order() {
+        let bytes = catalog_json(serde_json::json!([
+            platform_json("Second", &[], "second"),
+            platform_json("First", &[], "first"),
+        ]));
+        let catalog = IdentifyCatalog::parse(&bytes).expect("catalog parses");
+        let order = catalog
+            .entries()
+            .iter()
+            .map(|entry| entry.canonical_platform.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(order, ["Second", "First"]);
+    }
+
+    #[test]
+    fn redump_entries_form_a_valid_catalog_with_resolvable_aliases() {
+        let entries = redump_entries();
+        assert!(!entries.is_empty());
+        for entry in &entries {
+            assert_eq!(entry.source, IdentifySource::Redump);
+            assert_eq!(entry.pack_format, "RWFP1");
+            assert_eq!(entry.media_profiles, ["redump-disc-track-v1"]);
+            assert_eq!(entry.canonicalization_version, 1);
+            assert_eq!(entry.pack_sha256, None);
+        }
+
+        // `from_entries` is the same gate `parse` applies, so this proves the
+        // built-in Redump table has no colliding alias, no duplicate slug, and no
+        // slug that would escape `<dir>/<slug>.pack`.
+        let catalog = IdentifyCatalog::from_entries(entries.clone())
+            .expect("redump entries must pass catalog validation");
+        assert_eq!(catalog.entries().len(), entries.len());
+
+        let cases = [
+            ("PSX", "Sony PlayStation"),
+            ("ps2", "Sony PlayStation 2"),
+            ("dreamcast", "Sega Dreamcast"),
+            ("Xbox 360", "Microsoft Xbox 360"),
+            ("pc engine cd", "NEC PC Engine CD & TurboGrafx CD"),
+            ("3DO", "Panasonic 3DO Interactive Multiplayer"),
+            ("Nintendo GameCube", "Nintendo GameCube"),
+        ];
+        for (alias, canonical) in cases {
+            let entry = catalog
+                .resolve_platform(alias)
+                .unwrap_or_else(|| panic!("`{alias}` must resolve"));
+            assert_eq!(entry.canonical_platform, canonical);
+        }
+        assert!(catalog.resolve_platform("atari 2600").is_none());
+    }
+
+    #[test]
+    fn redump_pack_slugs_are_derived_from_the_canonical_name() {
+        let entries = redump_entries();
+        let slugs = entries
+            .iter()
+            .map(|entry| (entry.canonical_platform.as_str(), entry.pack_slug.as_str()))
+            .collect::<HashMap<_, _>>();
+        assert_eq!(slugs.get("Sony PlayStation"), Some(&"sony-playstation"));
+        assert_eq!(slugs.get("Philips CD-i"), Some(&"philips-cd-i"));
+        assert_eq!(
+            slugs.get("NEC PC Engine CD & TurboGrafx CD"),
+            Some(&"nec-pc-engine-cd-turbografx-cd")
+        );
+    }
 }

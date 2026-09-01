@@ -458,3 +458,7 @@ pub fn generate_junk_sector(
         pos,
     );
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_block.rs"]
+mod tests;

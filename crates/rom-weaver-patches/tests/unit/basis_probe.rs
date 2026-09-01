@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use rom_weaver_core::{PatchCreateRequest, PatchHandler};
 
-use super::{PatchBasis, decide_basis, probe_patch_basis};
+use super::{BasisEvidence, BasisProbe, PatchBasis, decide_basis, probe_patch_basis};
 use crate::{
     IPS,
     ips::IpsPatchHandler,
@@ -291,4 +291,84 @@ fn overlap_after_the_edge_sample_cap_still_voids_the_edge_rule() {
         .expect("patch is IPS and the header leaves a headerless candidate");
     assert!(probe.overlapping_records);
     assert!(decide_basis(&probe).basis().is_none());
+}
+
+/// A probe whose two candidates carry the same edge counts, so no rule fires
+/// unless a test changes one of the fields.
+fn alike_probe(records: usize, untrimmed: usize) -> BasisProbe {
+    let evidence = BasisEvidence {
+        source_len: 0x8000,
+        comparable_records: records,
+        untrimmed_records: untrimmed,
+        ..BasisEvidence::default()
+    };
+    BasisProbe {
+        raw: evidence,
+        headerless: evidence,
+        records,
+        overlapping_records: false,
+        header_is_copier_junk: true,
+    }
+}
+
+#[test]
+fn basis_labels_name_the_two_candidates() {
+    assert_eq!(PatchBasis::Raw.label(), "raw");
+    assert_eq!(PatchBasis::Headerless.label(), "headerless");
+}
+
+#[test]
+fn a_patch_with_no_records_decides_nothing() {
+    let decision = decide_basis(&alike_probe(0, 0));
+
+    assert_eq!(decision.basis(), None);
+    assert_eq!(decision.reason(), "patch has no records");
+}
+
+#[test]
+fn edges_that_look_alike_on_both_candidates_decide_nothing() {
+    let decision = decide_basis(&alike_probe(12, 3));
+
+    assert_eq!(decision.basis(), None);
+    assert_eq!(
+        decision.reason(),
+        "record edges look alike on both candidates (3 raw, 3 headerless untrimmed)"
+    );
+}
+
+#[test]
+fn a_decided_basis_reports_the_rule_that_fired() {
+    let mut probe = alike_probe(12, 0);
+    probe.headerless.untrimmed_records = 4;
+
+    let decision = decide_basis(&probe);
+    assert_eq!(decision.basis(), Some(PatchBasis::Raw));
+    assert_eq!(
+        decision.reason(),
+        "every record edge differs from the raw bytes, against 4 untrimmed on the other candidate"
+    );
+}
+
+#[test]
+fn gap_records_on_the_shorter_candidate_choose_the_raw_basis() {
+    let mut probe = alike_probe(12, 0);
+    probe.headerless.gap_records = 2;
+
+    let decision = decide_basis(&probe);
+    assert_eq!(decision.basis(), Some(PatchBasis::Raw));
+    assert_eq!(
+        decision.reason(),
+        "2 record(s) start past the end of the headerless bytes"
+    );
+}
+
+#[test]
+fn too_few_comparable_records_leaves_the_edge_rule_silent() {
+    let decision = decide_basis(&alike_probe(4, 0));
+
+    assert_eq!(decision.basis(), None);
+    assert_eq!(
+        decision.reason(),
+        "too few records lie inside both candidates to compare edges"
+    );
 }

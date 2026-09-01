@@ -1,12 +1,18 @@
-use std::fs;
+use std::{
+    fs::{self, OpenOptions},
+    path::Path,
+};
 
-use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler, PatchValidateRequest};
+use rom_weaver_core::{
+    PatchApplyRequest, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    ThreadCapability,
+};
 
 use super::{
-    CREATE_THREAD_SCAN_CHUNK_BYTES, FILE_ID_BEGIN_MARKER, FILE_ID_END_MARKER, PPF_HEADER_MIN_SIZE,
-    PPF_VALIDATION_BLOCK_SIZE, PPF2_BLOCKCHECK_OFFSET, PpfPatchHandler, PpfVersion,
-    collect_ppf_chunk_diff_runs, collect_ppf_chunk_diff_runs_from_bytes, parse_ppf_bytes,
-    parse_ppf_file, undo_ppf,
+    CREATE_THREAD_SCAN_CHUNK_BYTES, FILE_ID_BEGIN_MARKER, FILE_ID_END_MARKER, FileIdTrailerKind,
+    PPF_HEADER_MIN_SIZE, PPF_VALIDATION_BLOCK_SIZE, PPF2_BLOCKCHECK_OFFSET, PpfPatchHandler,
+    PpfRecord, PpfVersion, collect_ppf_chunk_diff_runs, collect_ppf_chunk_diff_runs_from_bytes,
+    parse_ppf_bytes, parse_ppf_file, undo_ppf,
 };
 use crate::{
     PPF, read_original_modified_chunk,
@@ -1337,4 +1343,704 @@ fn parse_file_rejects_ppf3_offset_beyond_i64_max() {
         error.contains("PPF3 record offset exceeded supported range"),
         "error: {error}"
     );
+}
+
+#[test]
+fn probe_reports_extension_confidence() {
+    let handler = PpfPatchHandler::new(&PPF);
+    assert_eq!(
+        handler.probe(Path::new("update.ppf")),
+        ProbeConfidence::Extension
+    );
+}
+
+#[test]
+fn version_detection_rejects_truncated_headers() {
+    assert!(
+        super::detect_version(b"PP")
+            .expect_err("magic truncated")
+            .to_string()
+            .contains("PPF_HEADER_TRUNCATED")
+    );
+    assert!(
+        super::detect_version(b"PPF3")
+            .expect_err("digits truncated")
+            .to_string()
+            .contains("PPF_VERSION_DIGITS_TRUNCATED")
+    );
+    assert!(
+        super::detect_version(b"PPF30")
+            .expect_err("method truncated")
+            .to_string()
+            .contains("PPF patch encoding method is truncated")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_a_patch_smaller_than_the_header() {
+    let error = parse_ppf_bytes(&[0u8; 8]).expect_err("short patch");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF patch is too small to contain a valid header")
+    );
+}
+
+#[test]
+fn parse_bytes_reads_ppf1_records() {
+    let bytes = build_ppf1_patch(
+        "ppf1 bytes",
+        vec![
+            V1V2Record {
+                offset: 4,
+                data: b"XY".to_vec(),
+            },
+            V1V2Record {
+                offset: 16,
+                data: b"Z".to_vec(),
+            },
+        ],
+    );
+
+    let parsed = parse_ppf_bytes(&bytes).expect("parse");
+    assert_eq!(parsed.version, PpfVersion::V1);
+    assert!(parsed.expected_input_len.is_none());
+    assert!(parsed.blockcheck.is_none());
+    assert!(!parsed.has_undo_data());
+    assert_eq!(parsed.records.len(), 2);
+    assert_eq!(parsed.records[0].offset, 4);
+    assert_eq!(parsed.records[0].data, b"XY");
+    assert_eq!(parsed.records[1].offset, 16);
+}
+
+#[test]
+fn parse_bytes_reads_ppf2_blockcheck_and_expected_input_length() {
+    let block = sample_block();
+    let bytes = build_ppf2_patch(
+        "ppf2 bytes",
+        2048,
+        &block,
+        vec![V1V2Record {
+            offset: 1,
+            data: b"Q".to_vec(),
+        }],
+    );
+
+    let parsed = parse_ppf_bytes(&bytes).expect("parse");
+    assert_eq!(parsed.version, PpfVersion::V2);
+    assert_eq!(parsed.expected_input_len, Some(2048));
+    let blockcheck = parsed.blockcheck.expect("blockcheck");
+    assert_eq!(blockcheck.input_offset, PPF2_BLOCKCHECK_OFFSET);
+    assert_eq!(blockcheck.expected, block);
+    assert_eq!(parsed.records.len(), 1);
+}
+
+#[test]
+fn parse_bytes_rejects_ppf2_missing_the_validation_header() {
+    let mut bytes = build_header(PpfHeaderVersion::V2, "short ppf2", 1);
+    bytes.extend_from_slice(&16u32.to_le_bytes());
+    let error = parse_ppf_bytes(&bytes).expect_err("missing validation header");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF2 patch is too small to contain a validation header")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_ppf2_whose_file_id_swallows_the_payload() {
+    let block = sample_block();
+    let mut bytes = build_ppf2_patch("ppf2 file_id", 16, &block, Vec::new());
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+
+    let error = parse_ppf_bytes(&bytes).expect_err("file_id swallows payload");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF2 payload ended before record data started")
+    );
+}
+
+#[test]
+fn parse_bytes_reads_ppf3_records_with_undo_data() {
+    let block = sample_block();
+    let bytes = build_ppf3_patch(
+        "ppf3 bytes",
+        0,
+        true,
+        true,
+        Some(&block),
+        vec![V3Record {
+            offset: 8,
+            data: b"NN".to_vec(),
+            undo: b"OO".to_vec(),
+        }],
+    );
+
+    let parsed = parse_ppf_bytes(&bytes).expect("parse");
+    assert_eq!(parsed.version, PpfVersion::V3);
+    assert!(parsed.has_undo_data());
+    assert_eq!(parsed.records[0].offset, 8);
+    assert_eq!(parsed.records[0].data, b"NN");
+    assert_eq!(
+        parsed.records[0].undo_data.as_deref(),
+        Some(b"OO".as_slice())
+    );
+    assert_eq!(
+        parsed.blockcheck.expect("blockcheck").input_offset,
+        super::PPF3_BIN_BLOCKCHECK_OFFSET
+    );
+}
+
+#[test]
+fn parse_bytes_uses_the_gi_blockcheck_offset_for_non_bin_image_types() {
+    let block = sample_block();
+    let bytes = build_ppf3_patch("ppf3 gi", 1, true, false, Some(&block), Vec::new());
+
+    let parsed = parse_ppf_bytes(&bytes).expect("parse");
+    assert_eq!(
+        parsed.blockcheck.expect("blockcheck").input_offset,
+        super::PPF3_GI_BLOCKCHECK_OFFSET
+    );
+    assert!(parsed.records.is_empty());
+}
+
+#[test]
+fn parse_bytes_rejects_ppf3_headers_that_stop_before_the_flags() {
+    let bytes = build_header(PpfHeaderVersion::V3, "short ppf3", 2);
+    let error = parse_ppf_bytes(&bytes).expect_err("short v3 header");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 patch is too small to contain a valid header")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_ppf3_blockcheck_without_the_validation_block() {
+    let mut bytes = build_header(PpfHeaderVersion::V3, "no block", 2);
+    bytes.extend_from_slice(&[0, 1, 0, 0]);
+    let error = parse_ppf_bytes(&bytes).expect_err("missing validation block");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 patch enabled blockcheck but omitted the validation block")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_ppf3_whose_file_id_swallows_the_payload() {
+    let block = sample_block();
+    let mut bytes = build_ppf3_patch("ppf3 file_id", 0, true, false, Some(&block), Vec::new());
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&0u16.to_le_bytes());
+
+    let error = parse_ppf_bytes(&bytes).expect_err("file_id swallows payload");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 payload ended before record data started")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_a_ppf1_record_header_that_runs_past_the_patch() {
+    let mut bytes = build_ppf1_patch("ppf1 trunc", Vec::new());
+    bytes.extend_from_slice(&[0u8; 3]);
+    let error = parse_ppf_bytes(&bytes).expect_err("truncated record header");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF record header exceeded patch bounds")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_ppf1_record_data_that_runs_past_the_patch() {
+    let mut bytes = build_ppf1_patch("ppf1 oob", Vec::new());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.push(8);
+    bytes.extend_from_slice(b"AB");
+    let error = parse_ppf_bytes(&bytes).expect_err("record data out of bounds");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF record data exceeded patch bounds")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_a_ppf3_record_header_that_runs_past_the_patch() {
+    let mut bytes = build_ppf3_patch("ppf3 trunc", 0, false, false, None, Vec::new());
+    bytes.extend_from_slice(&[0u8; 5]);
+    let error = parse_ppf_bytes(&bytes).expect_err("truncated record header");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 record header exceeded patch bounds")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_a_ppf3_record_offset_past_i64_max() {
+    let mut bytes = build_ppf3_patch("ppf3 offset", 0, false, false, None, Vec::new());
+    bytes.extend_from_slice(&u64::MAX.to_le_bytes());
+    bytes.push(0);
+    let error = parse_ppf_bytes(&bytes).expect_err("offset past i64::MAX");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 record offset exceeded supported range")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_ppf3_record_data_that_runs_past_the_patch() {
+    let mut bytes = build_ppf3_patch("ppf3 data oob", 0, false, false, None, Vec::new());
+    bytes.extend_from_slice(&0u64.to_le_bytes());
+    bytes.push(8);
+    bytes.extend_from_slice(b"AB");
+    let error = parse_ppf_bytes(&bytes).expect_err("record data out of bounds");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 record data exceeded patch bounds")
+    );
+}
+
+#[test]
+fn parse_bytes_rejects_ppf3_undo_data_that_runs_past_the_patch() {
+    let mut bytes = build_ppf3_patch("ppf3 undo oob", 0, false, true, None, Vec::new());
+    bytes.extend_from_slice(&0u64.to_le_bytes());
+    bytes.push(2);
+    bytes.extend_from_slice(b"AB");
+    bytes.push(b'C');
+    let error = parse_ppf_bytes(&bytes).expect_err("undo data out of bounds");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 undo data exceeded patch bounds")
+    );
+}
+
+#[test]
+fn file_id_marker_scan_ignores_patches_without_markers() {
+    assert_eq!(
+        super::detect_file_id_len_from_markers(b"no markers at all", 0, FileIdTrailerKind::V3)
+            .expect("scan"),
+        None
+    );
+}
+
+#[test]
+fn file_id_marker_scan_ignores_markers_before_the_payload() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(FILE_ID_BEGIN_MARKER);
+    bytes.extend_from_slice(b"note");
+    bytes.extend_from_slice(FILE_ID_END_MARKER);
+    bytes.extend_from_slice(&4u16.to_le_bytes());
+
+    assert_eq!(
+        super::detect_file_id_len_from_markers(&bytes, 8, FileIdTrailerKind::V3).expect("scan"),
+        None
+    );
+}
+
+#[test]
+fn file_id_marker_scan_ignores_a_begin_marker_without_an_end_marker() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(FILE_ID_BEGIN_MARKER);
+    bytes.extend_from_slice(b"note");
+
+    assert_eq!(
+        super::detect_file_id_len_from_markers(&bytes, 0, FileIdTrailerKind::V3).expect("scan"),
+        None
+    );
+}
+
+#[test]
+fn file_id_marker_scan_accepts_a_two_byte_trailer_length() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(FILE_ID_BEGIN_MARKER);
+    bytes.extend_from_slice(b"note");
+    bytes.extend_from_slice(FILE_ID_END_MARKER);
+    bytes.extend_from_slice(&4u16.to_le_bytes());
+
+    assert_eq!(
+        super::detect_file_id_len_from_markers(&bytes, 0, FileIdTrailerKind::V3).expect("scan"),
+        Some(bytes.len())
+    );
+}
+
+#[test]
+fn file_id_marker_scan_accepts_a_four_byte_trailer_length_for_ppf2() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(FILE_ID_BEGIN_MARKER);
+    bytes.extend_from_slice(b"note");
+    bytes.extend_from_slice(FILE_ID_END_MARKER);
+    bytes.extend_from_slice(&4u32.to_le_bytes());
+
+    assert_eq!(
+        super::detect_file_id_len_from_markers(&bytes, 0, FileIdTrailerKind::V2).expect("scan"),
+        Some(bytes.len())
+    );
+}
+
+#[test]
+fn file_id_marker_scan_rejects_a_trailer_length_that_disagrees_with_the_payload() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(FILE_ID_BEGIN_MARKER);
+    bytes.extend_from_slice(b"note");
+    bytes.extend_from_slice(FILE_ID_END_MARKER);
+    bytes.extend_from_slice(&99u16.to_le_bytes());
+
+    assert_eq!(
+        super::detect_file_id_len_from_markers(&bytes, 0, FileIdTrailerKind::V3).expect("scan"),
+        None
+    );
+}
+
+#[test]
+fn file_id_marker_scan_rejects_a_trailer_of_an_unexpected_width() {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(FILE_ID_BEGIN_MARKER);
+    bytes.extend_from_slice(b"note");
+    bytes.extend_from_slice(FILE_ID_END_MARKER);
+    bytes.extend_from_slice(&[4, 0, 0]);
+
+    assert_eq!(
+        super::detect_file_id_len_from_markers(&bytes, 0, FileIdTrailerKind::V3).expect("scan"),
+        None
+    );
+}
+
+#[test]
+fn file_id_length_falls_back_to_the_ppf2_footer_magic() {
+    let mut bytes = vec![0u8; 64];
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&6u32.to_le_bytes());
+
+    assert_eq!(
+        super::detect_file_id_len_v2(&bytes, 0).expect("scan"),
+        6 + super::PPF2_FILE_ID_OVERHEAD
+    );
+}
+
+#[test]
+fn file_id_length_falls_back_to_the_unpadded_ppf3_footer_magic() {
+    let mut bytes = vec![0u8; 64];
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&6u16.to_le_bytes());
+
+    assert_eq!(
+        super::detect_file_id_len_v3(&bytes, 0).expect("scan"),
+        6 + super::PPF3_FILE_ID_OVERHEAD
+    );
+}
+
+#[test]
+fn file_id_length_falls_back_to_the_padded_ppf3_footer_magic() {
+    let mut bytes = vec![0u8; 64];
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&6u32.to_le_bytes());
+
+    assert_eq!(
+        super::detect_file_id_len_v3(&bytes, 0).expect("scan"),
+        6 + super::PPF3_FILE_ID_PADDED_OVERHEAD
+    );
+}
+
+#[test]
+fn footer_magic_scan_reports_no_file_id_for_short_or_unmarked_patches() {
+    assert_eq!(
+        super::detect_file_id_len_from_footer_magic(b"ab", 4, 38, "PPF2").expect("short"),
+        0
+    );
+    assert_eq!(
+        super::detect_file_id_len_from_footer_magic(&[0u8; 32], 4, 38, "PPF2").expect("no magic"),
+        0
+    );
+}
+
+#[test]
+fn footer_magic_scan_rejects_an_unsupported_length_field_width() {
+    let mut bytes = vec![0u8; 32];
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&[0u8; 3]);
+
+    let error = super::detect_file_id_len_from_footer_magic(&bytes, 3, 10, "PPF3")
+        .expect_err("unsupported width");
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported file_id length field width")
+    );
+}
+
+#[test]
+fn footer_magic_scan_rejects_a_file_id_larger_than_the_patch() {
+    let mut bytes = vec![0u8; 16];
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&9000u32.to_le_bytes());
+
+    let error = super::detect_file_id_len_from_footer_magic(&bytes, 4, 38, "PPF2")
+        .expect_err("file_id larger than patch");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF2 file_id length exceeded patch size")
+    );
+}
+
+#[test]
+fn footer_magic_path_scan_reports_no_file_id_for_files_shorter_than_the_footer() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("tiny.ppf");
+    fs::write(&patch_path, b"ab").expect("fixture");
+
+    assert_eq!(
+        super::detect_file_id_len_from_footer_magic_path(&patch_path, 2, 4, 38, "PPF2")
+            .expect("short"),
+        0
+    );
+}
+
+#[test]
+fn footer_magic_path_scan_rejects_an_unsupported_length_field_width() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("width.ppf");
+    let mut bytes = vec![0u8; 32];
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&[0u8; 3]);
+    fs::write(&patch_path, &bytes).expect("fixture");
+
+    let error = super::detect_file_id_len_from_footer_magic_path(
+        &patch_path,
+        bytes.len() as u64,
+        3,
+        10,
+        "PPF3",
+    )
+    .expect_err("unsupported width");
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported file_id length field width")
+    );
+}
+
+#[test]
+fn parse_file_rejects_a_file_id_length_larger_than_the_patch() {
+    let mut bytes = build_ppf3_patch("huge file_id", 0, false, false, None, Vec::new());
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&60_000u16.to_le_bytes());
+
+    let error = parse_file_err(&bytes);
+    assert!(
+        error.contains("PPF3 file_id length exceeded patch size"),
+        "{error}"
+    );
+}
+
+#[test]
+fn parse_file_rejects_ppf2_whose_file_id_swallows_the_payload() {
+    let block = sample_block();
+    let mut bytes = build_ppf2_patch("ppf2 file_id", 16, &block, Vec::new());
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+
+    let error = parse_file_err(&bytes);
+    assert!(
+        error.contains("PPF2 payload ended before record data started"),
+        "{error}"
+    );
+}
+
+#[test]
+fn parse_file_rejects_ppf3_whose_file_id_swallows_the_payload() {
+    let block = sample_block();
+    let mut bytes = build_ppf3_patch("ppf3 file_id", 0, true, false, Some(&block), Vec::new());
+    bytes.extend_from_slice(b".DIZ");
+    bytes.extend_from_slice(&0u16.to_le_bytes());
+
+    let error = parse_file_err(&bytes);
+    assert!(
+        error.contains("PPF3 payload ended before record data started"),
+        "{error}"
+    );
+}
+
+#[test]
+fn subslice_searches_treat_an_empty_needle_as_a_match_at_each_end() {
+    assert_eq!(super::find_subslice(b"abc", b""), Some(0));
+    assert_eq!(super::rfind_subslice(b"abc", b""), Some(3));
+    assert_eq!(super::find_subslice(b"abcabc", b"bc"), Some(1));
+    assert_eq!(super::rfind_subslice(b"abcabc", b"bc"), Some(4));
+    assert_eq!(super::find_subslice(b"abc", b"zz"), None);
+}
+
+#[test]
+fn little_endian_reads_reject_offsets_past_the_buffer() {
+    assert_eq!(super::read_u16_le(&[0x34, 0x12], 0).expect("u16"), 0x1234);
+    assert_eq!(
+        super::read_u64_le(&[1, 0, 0, 0, 0, 0, 0, 0], 0).expect("u64"),
+        1
+    );
+    assert!(
+        super::read_u16_le(&[0u8; 1], 0)
+            .expect_err("u16 past end")
+            .to_string()
+            .contains("u16 read exceeded patch bounds")
+    );
+    assert!(
+        super::read_u64_le(&[0u8; 4], 0)
+            .expect_err("u64 past end")
+            .to_string()
+            .contains("u64 read exceeded patch bounds")
+    );
+}
+
+#[test]
+fn ppf3_record_writer_skips_empty_payloads_and_rejects_oversized_ones() {
+    let mut output = Vec::new();
+    super::write_ppf3_record(&mut output, 0, &[]).expect("empty record");
+    assert!(output.is_empty());
+
+    let error =
+        super::write_ppf3_record(&mut output, 0, &vec![0u8; 256]).expect_err("oversized record");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF3 record length exceeded 255 bytes")
+    );
+
+    super::write_ppf3_record(&mut output, 7, b"AB").expect("record");
+    assert_eq!(output, [7, 0, 0, 0, 0, 0, 0, 0, 2, b'A', b'B']);
+}
+
+#[test]
+fn in_memory_apply_rejects_a_record_past_the_output_end() {
+    let records = vec![PpfRecord {
+        offset: 2,
+        data: vec![1, 2, 3],
+        undo_data: None,
+    }];
+    let mut output = vec![0u8; 4];
+
+    let error = super::apply_records_in_memory(&records, &mut output).expect_err("past output end");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF record exceeded output size")
+    );
+}
+
+#[test]
+fn streaming_and_parallel_apply_paths_produce_the_same_writes() {
+    let temp = TestDir::new();
+    let output_path = temp.child("streamed.bin");
+    fs::write(&output_path, b"........").expect("fixture");
+
+    let records = vec![
+        PpfRecord {
+            offset: 1,
+            data: b"AB".to_vec(),
+            undo_data: None,
+        },
+        PpfRecord {
+            offset: 5,
+            data: b"YZ".to_vec(),
+            undo_data: None,
+        },
+    ];
+
+    let mut output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&output_path)
+        .expect("open output");
+    super::apply_records(&mut output, &records).expect("streaming apply");
+    drop(output);
+    assert_eq!(fs::read(&output_path).expect("output"), b".AB..YZ.");
+
+    let context = test_context_with_threads(&temp, 2);
+    let (_, pool) = context
+        .build_pool(ThreadCapability::parallel(Some(2)))
+        .expect("pool");
+    let prepared =
+        super::prepare_ppf_writes_parallel(&records, &pool, &context).expect("parallel prepare");
+    assert_eq!(prepared.len(), 2);
+    assert_eq!(prepared[0].offset, 1);
+    assert_eq!(prepared[0].data, b"AB");
+    assert_eq!(prepared[1].offset, 5);
+    assert_eq!(prepared[1].data, b"YZ");
+}
+
+#[test]
+fn undo_rejects_undo_data_that_runs_past_the_rom() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("undo.ppf");
+    let input_path = temp.child("input.bin");
+    let output_path = temp.child("output.bin");
+
+    let bytes = build_ppf3_patch(
+        "undo out of bounds",
+        0,
+        false,
+        true,
+        None,
+        vec![V3Record {
+            offset: 100,
+            data: b"NN".to_vec(),
+            undo: b"OO".to_vec(),
+        }],
+    );
+    fs::write(&patch_path, bytes).expect("patch fixture");
+    fs::write(&input_path, b"ABCD").expect("input fixture");
+
+    let error = undo_ppf(&input_path, &patch_path, &output_path).expect_err("undo past rom end");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF undo data exceeds ROM bounds")
+    );
+}
+
+#[test]
+fn parallel_create_rejects_shrinking_outputs() {
+    let temp = TestDir::new();
+    let original_path = temp.child("orig.bin");
+    let modified_path = temp.child("mod.bin");
+    fs::write(&original_path, b"ABCDEFGH").expect("fixture");
+    fs::write(&modified_path, b"ABCD").expect("fixture");
+
+    let context = test_context_with_threads(&temp, 2);
+    let (_, pool) = context
+        .build_pool(ThreadCapability::parallel(Some(2)))
+        .expect("pool");
+    let mut output = Vec::new();
+    let error =
+        super::create_ppf3_patch_parallel(&original_path, 8, &modified_path, 4, &pool, &mut output)
+            .expect_err("shrinking output");
+    assert!(
+        error
+            .to_string()
+            .contains("PPF create does not support shrinking outputs")
+    );
+}
+
+#[test]
+fn chunk_diff_scan_seeks_into_the_middle_of_both_inputs() {
+    let temp = TestDir::new();
+    let original_path = temp.child("orig.bin");
+    let modified_path = temp.child("mod.bin");
+    fs::write(&original_path, b"ABCDEFGH").expect("fixture");
+    fs::write(&modified_path, b"ABCXEFGH").expect("fixture");
+
+    let runs =
+        collect_ppf_chunk_diff_runs(&original_path, 8, &modified_path, 2, 8).expect("chunk scan");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].offset, 3);
+    assert_eq!(runs[0].len, 1);
 }

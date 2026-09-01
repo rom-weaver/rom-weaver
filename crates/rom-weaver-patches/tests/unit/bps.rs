@@ -6,11 +6,17 @@ use rom_weaver_core::{
 };
 
 use super::{
-    BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC, BpsAction, BpsCombinedSuffixMatcher, BpsCreateData,
-    BpsCreateProgress, BpsPatchHandler, BpsSuffixIndexMode, bps_create_copy_match_is_worth,
-    bps_create_estimated_low_memory_suffix_bytes, bps_create_estimated_suffix_memory_bytes,
-    bps_create_suffix_index_mode, crc32_bytes, encode_signed_offset, initial_bps_sorted_target_len,
-    next_bps_sorted_target_len, parse_bps_bytes, push_varint,
+    BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC, BpsAction, BpsApplyProgress,
+    BpsCombinedSuffixMatcher, BpsCreateData, BpsCreateMode, BpsCreateProgress, BpsPatchHandler,
+    BpsSuffixIndexMode, ParsedBpsPatch, PreparedBpsWrite, adjust_relative_offset,
+    apply_patch_actions, apply_patch_actions_in_memory, apply_prepared_bps_writes,
+    bps_create_copy_match_is_worth, bps_create_estimated_low_memory_suffix_bytes,
+    bps_create_estimated_suffix_memory_bytes, bps_create_match_is_worth,
+    bps_create_suffix_index_mode, bps_create_usize_len, collect_parallel_bps_write_plans,
+    common_prefix_len_limited, copy_target_range, crc32_bytes, encode_action_header,
+    encode_signed_offset, initial_bps_sorted_target_len, next_bps_sorted_target_len,
+    parse_bps_bytes, parse_bps_bytes_with_checksum_validation, push_varint, read_bps_create_data,
+    repeated_byte_run_len, validate_output_file,
 };
 use crate::{
     BPS,
@@ -1043,4 +1049,897 @@ fn describe_metadata_rejects_invalid_header_magic() {
         .describe_metadata(&patch_path, &test_context_with_threads(&temp, 1))
         .expect_err("bad magic should fail");
     assert!(error.to_string().contains("Patch header invalid"));
+}
+
+/// A hand-built parsed patch, used to reach the apply-time and plan-time range
+/// checks that the file parser rejects before an apply can ever see them. The
+/// checksums are not exercised by these paths.
+fn parsed_patch(source_size: u64, target_size: u64, actions: Vec<BpsAction>) -> ParsedBpsPatch {
+    ParsedBpsPatch {
+        source_size,
+        target_size,
+        source_checksum: 0,
+        target_checksum: 0,
+        patch_checksum: 0,
+        actions,
+    }
+}
+
+/// Source `abcdefgh` rewritten as `abcdZZefghabcd`: one action of every kind,
+/// in an order that leaves each relative offset non-zero.
+fn every_action_patch() -> Vec<u8> {
+    build_bps_patch(
+        b"abcdefgh",
+        b"abcdZZefghabcd",
+        vec![
+            TestAction::SourceRead(4),
+            TestAction::TargetRead(b"ZZ".to_vec()),
+            TestAction::SourceCopy {
+                length: 4,
+                relative_offset: 4,
+            },
+            TestAction::TargetCopy {
+                length: 4,
+                relative_offset: 0,
+            },
+        ],
+    )
+}
+
+fn open_output(path: &std::path::Path) -> fs::File {
+    fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .expect("open output")
+}
+
+#[test]
+fn header_magic_and_probe_describe_the_bps_container() {
+    let temp = TestDir::new();
+    let patch = temp.child("probe.bps");
+    fs::write(&patch, BPS_MAGIC).expect("fixture");
+
+    let handler = BpsPatchHandler::new(&BPS);
+    assert_eq!(handler.header_magic(), Some(&BPS_MAGIC[..]));
+    assert_eq!(
+        handler.probe(&patch),
+        rom_weaver_core::ProbeConfidence::Extension
+    );
+}
+
+#[test]
+fn apply_runs_every_action_kind_on_the_serial_streaming_path() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.bps");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, b"abcdefgh").expect("fixture");
+    fs::write(&patch_path, every_action_patch()).expect("fixture");
+
+    let report = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    // The TargetCopy action forces the sequential writer, so no pool is built.
+    let execution = report.thread_execution.expect("thread execution");
+    assert!(!execution.used_parallelism);
+    assert_eq!(fs::read(&output_path).expect("output"), b"abcdZZefghabcd");
+}
+
+#[test]
+fn apply_runs_every_action_kind_on_the_in_memory_path() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.bps");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, b"abcdefgh").expect("fixture");
+    fs::write(&patch_path, every_action_patch()).expect("fixture");
+
+    let report = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 4).with_patch_apply_in_memory_limit(1 << 20),
+        )
+        .expect("apply");
+
+    // The in-memory path always reports serial execution, whatever was planned.
+    let execution = report.thread_execution.expect("thread execution");
+    assert!(!execution.used_parallelism);
+    assert_eq!(fs::read(&output_path).expect("output"), b"abcdZZefghabcd");
+}
+
+#[test]
+fn in_memory_apply_expands_an_overlapping_target_copy_run() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.bps");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, []).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_bps_patch(
+            b"",
+            b"AAAAAA",
+            vec![
+                TestAction::TargetRead(vec![b'A']),
+                TestAction::TargetCopy {
+                    length: 5,
+                    relative_offset: 0,
+                },
+            ],
+        ),
+    )
+    .expect("fixture");
+
+    BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(1 << 20),
+        )
+        .expect("apply");
+    assert_eq!(fs::read(&output_path).expect("output"), b"AAAAAA");
+}
+
+#[test]
+fn in_memory_apply_reports_actions_that_read_past_the_source() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+    let source = b"abcd";
+
+    let read_patch = parsed_patch(8, 8, vec![BpsAction::SourceRead { length: 8 }]);
+    let mut output = vec![0u8; 8];
+    let read_error =
+        apply_patch_actions_in_memory(&read_patch, source, &mut output, &context, "BPS")
+            .expect_err("a SourceRead past the source should fail");
+    assert!(
+        read_error
+            .to_string()
+            .contains("SourceRead exceeded input size"),
+        "unexpected error: {read_error}"
+    );
+
+    let copy_patch = parsed_patch(
+        8,
+        4,
+        vec![BpsAction::SourceCopy {
+            length: 4,
+            relative_offset: 2,
+        }],
+    );
+    let mut output = vec![0u8; 4];
+    let copy_error =
+        apply_patch_actions_in_memory(&copy_patch, source, &mut output, &context, "BPS")
+            .expect_err("a SourceCopy past the source should fail");
+    assert!(
+        copy_error
+            .to_string()
+            .contains("SourceCopy exceeded input size"),
+        "unexpected error: {copy_error}"
+    );
+}
+
+#[test]
+fn in_memory_apply_reports_a_short_action_stream() {
+    let temp = TestDir::new();
+    let context = test_context_with_threads(&temp, 1);
+    let patch = parsed_patch(
+        0,
+        4,
+        vec![BpsAction::TargetRead {
+            data: b"AB".to_vec(),
+        }],
+    );
+    let mut output = vec![0u8; 4];
+
+    let error = apply_patch_actions_in_memory(&patch, b"", &mut output, &context, "BPS")
+        .expect_err("actions that stop short of the target size should fail");
+    assert!(
+        error.to_string().contains("Output size invalid"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn streaming_apply_reports_actions_that_read_past_the_source() {
+    let temp = TestDir::new();
+    let output_path = temp.child("streamed.bin");
+    fs::write(&output_path, [0u8; 8]).expect("fixture");
+    let context = test_context_with_threads(&temp, 1);
+
+    let read_patch = parsed_patch(4, 8, vec![BpsAction::SourceRead { length: 8 }]);
+    let mut source = std::io::Cursor::new(b"abcd".to_vec());
+    let mut output = open_output(&output_path);
+    let read_error = apply_patch_actions(&read_patch, &mut source, &mut output, &context, "BPS")
+        .expect_err("a SourceRead past the source should fail");
+    assert!(
+        read_error
+            .to_string()
+            .contains("SourceRead exceeded input size"),
+        "unexpected error: {read_error}"
+    );
+
+    let copy_patch = parsed_patch(
+        4,
+        4,
+        vec![BpsAction::SourceCopy {
+            length: 4,
+            relative_offset: 2,
+        }],
+    );
+    let mut source = std::io::Cursor::new(b"abcd".to_vec());
+    let copy_error = apply_patch_actions(&copy_patch, &mut source, &mut output, &context, "BPS")
+        .expect_err("a SourceCopy past the source should fail");
+    assert!(
+        copy_error
+            .to_string()
+            .contains("SourceCopy exceeded input size"),
+        "unexpected error: {copy_error}"
+    );
+}
+
+#[test]
+fn streaming_apply_reports_an_action_stream_that_does_not_fill_the_target() {
+    let temp = TestDir::new();
+    let output_path = temp.child("short.bin");
+    fs::write(&output_path, [0u8; 8]).expect("fixture");
+    let context = test_context_with_threads(&temp, 1);
+
+    let long_patch = parsed_patch(
+        8,
+        2,
+        vec![BpsAction::TargetRead {
+            data: b"ABCD".to_vec(),
+        }],
+    );
+    let mut source = std::io::Cursor::new(b"abcdefgh".to_vec());
+    let mut output = open_output(&output_path);
+    let long_error = apply_patch_actions(&long_patch, &mut source, &mut output, &context, "BPS")
+        .expect_err("writing past the target size should fail");
+    assert!(
+        long_error.to_string().contains("Output size invalid"),
+        "unexpected error: {long_error}"
+    );
+
+    let short_patch = parsed_patch(
+        8,
+        8,
+        vec![BpsAction::TargetRead {
+            data: b"ABCD".to_vec(),
+        }],
+    );
+    let mut source = std::io::Cursor::new(b"abcdefgh".to_vec());
+    let short_error = apply_patch_actions(&short_patch, &mut source, &mut output, &context, "BPS")
+        .expect_err("stopping short of the target size should fail");
+    assert!(
+        short_error.to_string().contains("Output size invalid"),
+        "unexpected error: {short_error}"
+    );
+}
+
+#[test]
+fn apply_copies_a_target_run_whose_period_exceeds_the_copy_buffer() {
+    let temp = TestDir::new();
+    let input_path = temp.child("large-input.bin");
+    let patch_path = temp.child("large.bps");
+    let output_path = temp.child("large-output.bin");
+    // The period is the whole 40000-byte prefix, which is larger than the
+    // 32 KiB copy buffer, so `copy_target_range` takes its chunked branch.
+    let source = patterned_tail(40000);
+    let mut target = source.clone();
+    target.extend_from_slice(&source[..100]);
+    fs::write(&input_path, &source).expect("fixture");
+    fs::write(
+        &patch_path,
+        build_bps_patch(
+            &source,
+            &target,
+            vec![
+                TestAction::SourceRead(40000),
+                TestAction::TargetCopy {
+                    length: 100,
+                    relative_offset: 0,
+                },
+            ],
+        ),
+    )
+    .expect("fixture");
+
+    BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+    assert_eq!(fs::read(&output_path).expect("output"), target);
+}
+
+#[test]
+fn target_range_copies_are_range_checked() {
+    let temp = TestDir::new();
+    let output_path = temp.child("range.bin");
+    fs::write(&output_path, b"abcd").expect("fixture");
+    let context = test_context_with_threads(&temp, 1);
+    let mut progress = BpsApplyProgress::new(&context, "BPS", 8);
+    let mut output = open_output(&output_path);
+
+    let mut output_offset = 4u64;
+    copy_target_range(&mut output, &mut output_offset, 0, 0, &mut progress)
+        .expect("a zero-length copy is a no-op");
+    assert_eq!(output_offset, 4);
+
+    let error = copy_target_range(&mut output, &mut output_offset, 4, 2, &mut progress)
+        .expect_err("a copy from unwritten output should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("TargetCopy referenced unavailable output"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn ordered_writes_skip_empty_records_and_seek_over_gaps() {
+    let temp = TestDir::new();
+    let output_path = temp.child("ordered.bin");
+    fs::write(&output_path, [0u8; 8]).expect("fixture");
+    let context = test_context_with_threads(&temp, 1);
+    let mut progress = BpsApplyProgress::new(&context, "BPS", 8);
+    let mut output = open_output(&output_path);
+
+    apply_prepared_bps_writes(
+        &mut output,
+        &[
+            PreparedBpsWrite {
+                output_offset: 0,
+                data: Vec::new(),
+            },
+            PreparedBpsWrite {
+                output_offset: 4,
+                data: b"WXYZ".to_vec(),
+            },
+        ],
+        &mut progress,
+    )
+    .expect("ordered writes");
+    drop(output);
+
+    assert_eq!(fs::read(&output_path).expect("output"), b"\0\0\0\0WXYZ");
+}
+
+#[test]
+fn apply_progress_stays_silent_for_a_zero_length_target() {
+    let temp = TestDir::new();
+    let progress_sink = Arc::new(RecordingProgressSink::default());
+    let context = OperationContext::new(
+        ThreadBudget::Fixed(1),
+        temp.child("progress-temp"),
+        progress_sink.clone(),
+        CancellationToken::new(),
+    );
+
+    BpsApplyProgress::new(&context, "BPS", 0).report(16);
+    assert!(progress_sink.snapshot().is_empty());
+}
+
+#[test]
+fn create_progress_reports_fixed_percentages_for_a_zero_length_target() {
+    let temp = TestDir::new();
+    let progress_sink = Arc::new(RecordingProgressSink::default());
+    let context = OperationContext::new(
+        ThreadBudget::Fixed(1),
+        temp.child("progress-temp"),
+        progress_sink.clone(),
+        CancellationToken::new(),
+    );
+
+    let mut progress = BpsCreateProgress::new(&context, "BPS", 0);
+    progress.report_indexed(0);
+    progress.report_output(0);
+
+    let events = progress_sink.snapshot();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].percent, Some(40.0));
+    assert_eq!(events[0].label, "indexing BPS copy candidates");
+    // `report` clamps to 99, so the 100% output report lands at 99.
+    assert_eq!(events[1].percent, Some(99.0));
+    assert_eq!(events[1].label, "creating BPS patch");
+}
+
+#[test]
+fn parallel_write_plans_reject_actions_that_leave_the_declared_ranges() {
+    let source_read = parsed_patch(4, 8, vec![BpsAction::SourceRead { length: 8 }]);
+    let Err(error) = collect_parallel_bps_write_plans(&source_read) else {
+        panic!("a SourceRead past the source should fail");
+    };
+    assert!(
+        error.to_string().contains("SourceRead exceeded input size"),
+        "unexpected error: {error}"
+    );
+
+    let source_copy = parsed_patch(
+        4,
+        4,
+        vec![BpsAction::SourceCopy {
+            length: 4,
+            relative_offset: 2,
+        }],
+    );
+    let Err(error) = collect_parallel_bps_write_plans(&source_copy) else {
+        panic!("a SourceCopy past the source should fail");
+    };
+    assert!(
+        error.to_string().contains("SourceCopy exceeded input size"),
+        "unexpected error: {error}"
+    );
+
+    let target_copy = parsed_patch(
+        4,
+        4,
+        vec![BpsAction::TargetCopy {
+            length: 4,
+            relative_offset: 0,
+        }],
+    );
+    let Err(error) = collect_parallel_bps_write_plans(&target_copy) else {
+        panic!("TargetCopy cannot be planned in parallel");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("TargetCopy actions require sequential apply"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parallel_write_plans_reject_a_stream_that_misses_the_target_size() {
+    let too_long = parsed_patch(
+        8,
+        2,
+        vec![BpsAction::TargetRead {
+            data: b"ABCD".to_vec(),
+        }],
+    );
+    let Err(error) = collect_parallel_bps_write_plans(&too_long) else {
+        panic!("writing past the target size should fail");
+    };
+    assert!(
+        error.to_string().contains("Output size invalid"),
+        "unexpected error: {error}"
+    );
+
+    let too_short = parsed_patch(
+        8,
+        8,
+        vec![BpsAction::TargetRead {
+            data: b"ABCD".to_vec(),
+        }],
+    );
+    let Err(error) = collect_parallel_bps_write_plans(&too_short) else {
+        panic!("stopping short of the target size should fail");
+    };
+    assert!(
+        error.to_string().contains("Output size invalid"),
+        "unexpected error: {error}"
+    );
+
+    let exact = parsed_patch(
+        8,
+        4,
+        vec![BpsAction::TargetRead {
+            data: b"ABCD".to_vec(),
+        }],
+    );
+    assert_eq!(
+        collect_parallel_bps_write_plans(&exact)
+            .map(|plans| plans.len())
+            .expect("an exact stream plans one write"),
+        1
+    );
+}
+
+#[test]
+fn parse_rejects_action_ranges_that_leave_the_declared_sizes() {
+    let temp = TestDir::new();
+    let handler = BpsPatchHandler::new(&BPS);
+    let context = test_context_with_threads(&temp, 1);
+
+    let source_read = temp.child("source-read.bps");
+    fs::write(
+        &source_read,
+        build_bps_patch(b"ab", b"abcd", vec![TestAction::SourceRead(4)]),
+    )
+    .expect("fixture");
+    let error = handler
+        .parse(&source_read, &context)
+        .expect_err("a SourceRead past the source should fail");
+    assert!(
+        error.to_string().contains("SourceRead exceeded input size"),
+        "unexpected error: {error}"
+    );
+
+    let source_copy = temp.child("source-copy.bps");
+    fs::write(
+        &source_copy,
+        build_bps_patch(
+            b"abcd",
+            b"cdef",
+            vec![TestAction::SourceCopy {
+                length: 4,
+                relative_offset: 2,
+            }],
+        ),
+    )
+    .expect("fixture");
+    let error = handler
+        .parse(&source_copy, &context)
+        .expect_err("a SourceCopy past the source should fail");
+    assert!(
+        error.to_string().contains("SourceCopy exceeded input size"),
+        "unexpected error: {error}"
+    );
+
+    let short_stream = temp.child("short-stream.bps");
+    fs::write(
+        &short_stream,
+        build_bps_patch(b"abcd", b"abcdefgh", vec![TestAction::SourceRead(4)]),
+    )
+    .expect("fixture");
+    let error = handler
+        .parse(&short_stream, &context)
+        .expect_err("an action stream shorter than the target should fail");
+    assert!(
+        error.to_string().contains("Output size invalid"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn parse_rejects_an_undersized_file_and_a_bad_magic() {
+    let temp = TestDir::new();
+    let handler = BpsPatchHandler::new(&BPS);
+    let context = test_context_with_threads(&temp, 1);
+
+    let tiny = temp.child("tiny.bps");
+    fs::write(&tiny, b"BPS1").expect("fixture");
+    let tiny_error = handler
+        .parse(&tiny, &context)
+        .expect_err("a file shorter than magic plus footer should fail");
+    assert!(
+        tiny_error
+            .to_string()
+            .contains("too small to contain a valid header and footer"),
+        "unexpected error: {tiny_error}"
+    );
+
+    let bad_magic = temp.child("bad-magic.bps");
+    fs::write(&bad_magic, vec![0u8; 16]).expect("fixture");
+    let magic_error = handler
+        .parse(&bad_magic, &context)
+        .expect_err("a wrong magic should fail");
+    assert!(
+        magic_error.to_string().contains("Patch header invalid"),
+        "unexpected error: {magic_error}"
+    );
+}
+
+#[test]
+fn byte_parser_rejects_undersized_input_bad_magic_and_a_short_stream() {
+    let tiny = parse_bps_bytes(&[0u8; 8]).expect_err("an undersized patch should fail");
+    assert!(
+        tiny.to_string()
+            .contains("too small to contain a valid header and footer"),
+        "unexpected error: {tiny}"
+    );
+
+    let magic = parse_bps_bytes(&[0u8; 32]).expect_err("a wrong magic should fail");
+    assert!(
+        magic.to_string().contains("Patch header invalid"),
+        "unexpected error: {magic}"
+    );
+
+    let short = parse_bps_bytes(&build_bps_patch(
+        b"abcd",
+        b"abcdefgh",
+        vec![TestAction::SourceRead(4)],
+    ))
+    .expect_err("an action stream shorter than the target should fail");
+    assert!(
+        short.to_string().contains("Output size invalid"),
+        "unexpected error: {short}"
+    );
+}
+
+#[test]
+fn byte_parser_checks_the_patch_checksum_unless_it_is_told_not_to() {
+    let mut bytes = build_bps_patch(b"abc", b"abc", vec![TestAction::SourceRead(3)]);
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0x01;
+
+    let error = parse_bps_bytes(&bytes).expect_err("a corrupt patch checksum should fail");
+    assert!(
+        error.to_string().contains("Patch checksum invalid"),
+        "unexpected error: {error}"
+    );
+
+    let parsed = parse_bps_bytes_with_checksum_validation(&bytes, false)
+        .expect("the checksum check is skipped");
+    assert_eq!(parsed.actions.len(), 1);
+}
+
+#[test]
+fn output_validation_reports_a_size_that_does_not_match_the_patch() {
+    let temp = TestDir::new();
+    let output_path = temp.child("validated.bin");
+    fs::write(&output_path, b"abcd").expect("fixture");
+    let context = test_context_with_threads(&temp, 1);
+    let mut output = open_output(&output_path);
+
+    let error = validate_output_file(&output_path, &mut output, 8, 0, false, &context)
+        .expect_err("a short output should fail");
+    assert!(
+        error.to_string().contains("Output size invalid"),
+        "unexpected error: {error}"
+    );
+
+    validate_output_file(&output_path, &mut output, 4, 0, false, &context)
+        .expect("the size matches and the checksum check is skipped");
+}
+
+#[test]
+fn relative_offsets_stay_inside_the_file() {
+    let error =
+        adjust_relative_offset(0, -1, 10, "source").expect_err("a negative offset should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("source relative offset moved before the start of the file"),
+        "unexpected error: {error}"
+    );
+
+    let beyond = adjust_relative_offset(8, 4, 10, "target")
+        .expect_err("an offset at or past the limit should fail");
+    assert!(
+        beyond
+            .to_string()
+            .contains("target relative offset exceeded available data"),
+        "unexpected error: {beyond}"
+    );
+
+    let past_u64 = adjust_relative_offset(i128::from(u64::MAX), 1, 10, "source")
+        .expect_err("an offset past u64 should fail");
+    assert!(
+        past_u64
+            .to_string()
+            .contains("source relative offset exceeded u64"),
+        "unexpected error: {past_u64}"
+    );
+
+    assert_eq!(
+        adjust_relative_offset(4, -2, 10, "source").expect("an in-range offset"),
+        2
+    );
+}
+
+#[test]
+fn signed_offsets_and_action_headers_reject_unencodable_values() {
+    let magnitude =
+        encode_signed_offset(i128::MIN).expect_err("the most negative delta has no magnitude");
+    assert!(
+        magnitude
+            .to_string()
+            .contains("relative offset magnitude overflowed"),
+        "unexpected error: {magnitude}"
+    );
+
+    let zero_length =
+        encode_action_header(0, 1).expect_err("a zero-length action is not encodable");
+    assert!(
+        zero_length
+            .to_string()
+            .contains("cannot encode a zero-length action"),
+        "unexpected error: {zero_length}"
+    );
+
+    assert_eq!(
+        encode_action_header(4, 3).expect("a four-byte TargetCopy header"),
+        (3 << 2) | 3
+    );
+}
+
+#[test]
+fn create_input_lengths_are_rejected_before_any_file_is_read() {
+    let too_large = bps_create_usize_len(u64::from(u32::MAX), "source")
+        .expect_err("a 4 GiB source cannot be indexed");
+    assert!(
+        too_large
+            .to_string()
+            .contains("BPS create source file is too large for copy-aware indexing"),
+        "unexpected error: {too_large}"
+    );
+    assert_eq!(
+        bps_create_usize_len(16, "target").expect("a small length"),
+        16
+    );
+
+    let temp = TestDir::new();
+    let missing = temp.child("never-opened.bin");
+    // `BpsCreateData` is not `Debug`, so the success arm cannot use `expect_err`.
+    let Err(combined) = read_bps_create_data(&missing, 0x8000_0000, &missing, 0x8000_0000) else {
+        panic!("a combined size past the 32-bit index should fail");
+    };
+    assert!(
+        combined
+            .to_string()
+            .contains("BPS create files are too large for copy-aware indexing"),
+        "unexpected error: {combined}"
+    );
+}
+
+#[test]
+fn create_input_reads_report_a_file_that_changed_size() {
+    let temp = TestDir::new();
+    let original_path = temp.child("original.bin");
+    let modified_path = temp.child("modified.bin");
+    fs::write(&original_path, b"abcd").expect("fixture");
+    fs::write(&modified_path, b"abcdef").expect("fixture");
+
+    let Err(target_error) = read_bps_create_data(&original_path, 4, &modified_path, 8) else {
+        panic!("a modified file shorter than its declared length should fail");
+    };
+    assert!(
+        target_error
+            .to_string()
+            .contains("BPS create target size changed during processing"),
+        "unexpected error: {target_error}"
+    );
+
+    let Err(source_error) = read_bps_create_data(&original_path, 8, &modified_path, 6) else {
+        panic!("an original file shorter than its declared length should fail");
+    };
+    assert!(
+        source_error
+            .to_string()
+            .contains("BPS create source size changed during processing"),
+        "unexpected error: {source_error}"
+    );
+
+    let Ok(data) = read_bps_create_data(&original_path, 4, &modified_path, 6) else {
+        panic!("matching sizes should read both files");
+    };
+    assert_eq!(data.target(), b"abcdef");
+    assert_eq!(data.source(), b"abcd");
+}
+
+#[test]
+fn match_scoring_declines_target_reads_and_displaced_source_reads() {
+    assert!(
+        !bps_create_match_is_worth(BpsCreateMode::TargetRead, 8, 0, 0, 0, 0, 0)
+            .expect("a target read is never a match")
+    );
+    assert!(
+        !bps_create_match_is_worth(BpsCreateMode::SourceCopy, 0, 0, 0, 0, 0, 0)
+            .expect("a zero-length match is never worth it")
+    );
+    // A SourceRead only pays off at the offset it already sits at.
+    assert!(
+        !bps_create_match_is_worth(BpsCreateMode::SourceRead, 64, 4, 0, 0, 0, 0)
+            .expect("a displaced source read is not encodable")
+    );
+    assert!(
+        bps_create_match_is_worth(BpsCreateMode::SourceRead, 4, 0, 0, 0, 0, 0)
+            .expect("an aligned source read is worth it")
+    );
+}
+
+#[test]
+fn prefix_scans_stop_at_out_of_range_offsets() {
+    assert_eq!(common_prefix_len_limited(b"abcabc", 9, 0, 3), 0);
+    assert_eq!(common_prefix_len_limited(b"abcabc", 0, 9, 3), 0);
+    assert_eq!(common_prefix_len_limited(b"abcabc", 0, 3, 0), 0);
+    assert_eq!(common_prefix_len_limited(b"abcabc", 0, 3, 3), 3);
+
+    assert_eq!(repeated_byte_run_len(b"abc", 9), 0);
+    assert_eq!(repeated_byte_run_len(b"aaab", 0), 3);
+}
+
+#[test]
+fn streaming_apply_seeks_when_the_source_and_output_positions_diverge() {
+    let temp = TestDir::new();
+    let input_path = temp.child("seek-input.bin");
+    let patch_path = temp.child("seek.bps");
+    let output_path = temp.child("seek-output.bin");
+    fs::write(&input_path, b"abcdefgh").expect("fixture");
+    // The SourceCopy jumps the read head forward to offset 4, so the following
+    // SourceRead has to seek back to the output offset it reads from.
+    fs::write(
+        &patch_path,
+        build_bps_patch(
+            b"abcdefgh",
+            b"Zefdef",
+            vec![
+                TestAction::TargetRead(vec![b'Z']),
+                TestAction::SourceCopy {
+                    length: 2,
+                    relative_offset: 4,
+                },
+                TestAction::SourceRead(3),
+            ],
+        ),
+    )
+    .expect("fixture");
+
+    let report = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert!(
+        !report
+            .thread_execution
+            .expect("thread execution")
+            .used_parallelism
+    );
+    assert_eq!(fs::read(&output_path).expect("output"), b"Zefdef");
+}
+
+#[test]
+fn create_rejects_inputs_larger_than_the_in_memory_encoder_limit() {
+    let temp = TestDir::new();
+    let original_path = temp.child("huge-original.bin");
+    let modified_path = temp.child("huge-modified.bin");
+    let patch_path = temp.child("huge.bps");
+    // Sparse files one byte over the in-memory cap: create refuses them on the
+    // declared lengths alone, so nothing is ever read.
+    let sparse_len = crate::IN_MEMORY_APPLY_LIMIT_BYTES + 1;
+    for path in [&original_path, &modified_path] {
+        fs::File::create(path)
+            .expect("sparse file")
+            .set_len(sparse_len)
+            .expect("sparse len");
+    }
+
+    let error = BpsPatchHandler::new(&BPS)
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: patch_path,
+                format: "BPS".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("inputs over the in-memory cap should fail");
+    assert!(
+        error
+            .to_string()
+            .contains("BPS create requires copy-aware in-memory encoding"),
+        "unexpected error: {error}"
+    );
 }

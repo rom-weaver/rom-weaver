@@ -3,7 +3,8 @@ use std::{fs, path::Path};
 use rom_weaver_core::{PatchCreateRequest, PatchHandler};
 
 use super::{
-    N64_ORDER_CANDIDATES, N64MagicEvidence, N64OrderCandidate, decide_n64_order, probe_n64_order,
+    N64_ORDER_CANDIDATES, N64MagicEvidence, N64OrderCandidate, N64OrderEvidence, N64OrderProbe,
+    decide_n64_order, probe_n64_order,
 };
 use crate::{
     IPS,
@@ -449,5 +450,69 @@ fn a_truncated_result_that_stays_whole_words_still_decides() {
     assert_eq!(
         decide_paths(&patch_path, &rom_path, 0),
         Some("little-endian")
+    );
+}
+
+/// A probe whose three orders carry identical edge counts and no magic
+/// evidence, so no rule fires unless a test changes one of the fields.
+fn alike_probe(records: usize, untrimmed: usize) -> N64OrderProbe {
+    let evidence = N64OrderEvidence {
+        comparable_records: records,
+        untrimmed_records: untrimmed,
+        magic: N64MagicEvidence::default(),
+    };
+    N64OrderProbe {
+        candidates: candidates(0),
+        evidence: [evidence; N64_ORDER_CANDIDATES],
+        overlapping_records: false,
+        records,
+        stored_checksum_writes: 0,
+    }
+}
+
+#[test]
+fn a_patch_with_no_records_decides_nothing() {
+    let decision = decide_n64_order(&alike_probe(0, 0));
+
+    assert_eq!(decision.candidate(), None);
+    assert_eq!(decision.reason(), "patch has no records");
+}
+
+#[test]
+fn a_first_word_that_is_a_valid_magic_in_two_orders_decides_nothing() {
+    let mut probe = alike_probe(12, 0);
+    probe.evidence[0].magic = N64MagicEvidence::Matches;
+    probe.evidence[1].magic = N64MagicEvidence::Matches;
+    // Every order is edge-clean too, so the edge rule cannot break the tie.
+
+    let decision = decide_n64_order(&probe);
+    assert_eq!(decision.candidate(), None);
+    assert_eq!(
+        decision.reason(),
+        "record edges look alike across the orders (0/0/0 untrimmed)"
+    );
+}
+
+#[test]
+fn a_decided_order_reports_the_rule_that_fired() {
+    let mut probe = alike_probe(12, 0);
+    probe.evidence[1].magic = N64MagicEvidence::Matches;
+
+    let decision = decide_n64_order(&probe);
+    assert_eq!(decision.candidate(), Some(1));
+    assert_eq!(
+        decision.reason(),
+        "the patch writes the little-endian N64 magic at offset 0"
+    );
+}
+
+#[test]
+fn too_few_comparable_records_leaves_the_edge_rule_silent() {
+    let decision = decide_n64_order(&alike_probe(4, 0));
+
+    assert_eq!(decision.candidate(), None);
+    assert_eq!(
+        decision.reason(),
+        "too few records lie inside the input to compare edges"
     );
 }

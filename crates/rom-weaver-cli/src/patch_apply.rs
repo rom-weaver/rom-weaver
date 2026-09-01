@@ -3839,3 +3839,7 @@ impl CliApp {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/patch_apply.rs"]
+mod tests;

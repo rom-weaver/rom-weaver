@@ -68,3 +68,7 @@ impl PatchHandler for Ninja1PatchHandler {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/ninja1.rs"]
+mod tests;

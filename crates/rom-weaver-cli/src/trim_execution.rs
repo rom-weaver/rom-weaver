@@ -720,3 +720,7 @@ impl CliApp {
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/trim_execution.rs"]
+mod tests;

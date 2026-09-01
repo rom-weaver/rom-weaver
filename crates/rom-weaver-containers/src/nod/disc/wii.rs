@@ -583,3 +583,7 @@ impl PartitionReader for PartitionReaderWii {
         Ok(meta)
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_wii.rs"]
+mod tests;

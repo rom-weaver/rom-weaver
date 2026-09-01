@@ -1,6 +1,8 @@
 use std::fs;
 
-use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
+use rom_weaver_core::{
+    PatchApplyRequest, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+};
 
 use super::{ApsGbaPatchHandler, create_apsgba_patch_bytes, parse_apsgba_bytes};
 use crate::{
@@ -301,4 +303,430 @@ fn build_source_bytes(size: usize) -> Vec<u8> {
         *byte = ((index * 17 + (index >> 5)) & 0xff) as u8;
     }
     bytes
+}
+
+/// Fixture pair whose target differs from the source in three blocks, so the
+/// created patch carries more than one record.
+fn multi_record_fixture() -> (Vec<u8>, Vec<u8>) {
+    let source = build_source_bytes(super::APS_GBA_BLOCK_SIZE + 8192);
+    let mut target = source.clone();
+    target[0x1234] ^= 0xff;
+    target[0x8000] = 0x5a;
+    target[super::APS_GBA_BLOCK_SIZE + 127] ^= 0x11;
+    (source, target)
+}
+
+#[test]
+fn probe_reports_extension_confidence() {
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    assert!(matches!(
+        handler.probe(std::path::Path::new("update.aps")),
+        ProbeConfidence::Extension
+    ));
+}
+
+#[test]
+fn capabilities_report_a_threaded_create() {
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let capabilities = handler.capabilities();
+    assert!(capabilities.create);
+}
+
+#[test]
+fn apply_in_memory_matches_the_streaming_output() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+    let streamed_path = temp.child("streamed.gba");
+    let in_memory_path = temp.child("in-memory.gba");
+
+    let (source, target) = multi_record_fixture();
+    fs::write(&source_path, &source).expect("fixture");
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    fs::write(&patch_path, &created.bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path.clone(),
+                patches: vec![patch_path.clone()],
+                output: streamed_path.clone(),
+            },
+            &test_context_with_threads(&temp, 4),
+        )
+        .expect("streaming apply");
+
+    let report = handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: in_memory_path.clone(),
+            },
+            &test_context_with_threads(&temp, 4).with_patch_apply_in_memory_limit(1 << 24),
+        )
+        .expect("in-memory apply");
+
+    // The in-memory path writes the whole output at once, so it always reports
+    // serial execution however many threads the budget offered.
+    let execution = report.thread_execution.expect("thread execution");
+    assert!(!execution.used_parallelism);
+    assert_eq!(execution.effective_threads, 1);
+
+    let streamed = fs::read(streamed_path).expect("streamed output");
+    assert_eq!(streamed, target);
+    assert_eq!(
+        fs::read(in_memory_path).expect("in-memory output"),
+        streamed
+    );
+}
+
+#[test]
+fn apply_in_memory_rejects_a_source_checksum_mismatch() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+    let output_path = temp.child("output.gba");
+
+    let source = build_source_bytes(super::APS_GBA_BLOCK_SIZE);
+    let mut target = source.clone();
+    target[0x101] ^= 0x55;
+    fs::write(&source_path, &source).expect("fixture");
+
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    let mut patch_bytes = created.bytes;
+    patch_bytes[super::APS_GBA_HEADER_SIZE + 4] ^= 0x01;
+    fs::write(&patch_path, patch_bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let error = handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path,
+            },
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(1 << 24),
+        )
+        .expect_err("in-memory apply must reject a bad source crc16");
+    assert!(error.to_string().contains("Source checksum invalid"));
+}
+
+#[test]
+fn apply_in_memory_rejects_a_target_checksum_mismatch() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+    let output_path = temp.child("output.gba");
+
+    let source = build_source_bytes(super::APS_GBA_BLOCK_SIZE);
+    let mut target = source.clone();
+    target[0x101] ^= 0x55;
+    fs::write(&source_path, &source).expect("fixture");
+
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    let mut patch_bytes = created.bytes;
+    // The target crc16 sits two bytes past the source crc16 in the record header.
+    patch_bytes[super::APS_GBA_HEADER_SIZE + 6] ^= 0x01;
+    fs::write(&patch_path, patch_bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let error = handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path,
+            },
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(1 << 24),
+        )
+        .expect_err("in-memory apply must reject a bad target crc16");
+    assert!(error.to_string().contains("Target checksum invalid"));
+}
+
+#[test]
+fn apply_rejects_an_input_size_mismatch() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+    let output_path = temp.child("output.gba");
+
+    let (source, target) = multi_record_fixture();
+    // One byte short of the size the patch header declares.
+    fs::write(&source_path, &source[..source.len() - 1]).expect("fixture");
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    fs::write(&patch_path, &created.bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let error = handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path,
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("a short input must be rejected");
+    assert!(error.to_string().contains("APSGBA input size invalid"));
+}
+
+#[test]
+fn validate_accepts_a_matching_source() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+
+    let (source, target) = multi_record_fixture();
+    fs::write(&source_path, &source).expect("fixture");
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    fs::write(&patch_path, &created.bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let report = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+    assert_eq!(report.stage, "validate");
+    assert!(report.label.contains("validated APSGBA patch source"));
+    assert!(report.label.contains("record(s)"));
+}
+
+#[test]
+fn validate_rejects_a_source_checksum_mismatch() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+
+    let source = build_source_bytes(super::APS_GBA_BLOCK_SIZE);
+    let mut target = source.clone();
+    target[0x101] ^= 0x55;
+    fs::write(&source_path, &source).expect("fixture");
+
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    let mut patch_bytes = created.bytes;
+    patch_bytes[super::APS_GBA_HEADER_SIZE + 4] ^= 0x01;
+    fs::write(&patch_path, patch_bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let error = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("validate must reject a bad source crc16");
+    assert!(error.to_string().contains("Source checksum invalid"));
+}
+
+#[test]
+fn validate_rejects_an_input_size_mismatch() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+
+    let (source, target) = multi_record_fixture();
+    fs::write(&source_path, &source[..source.len() - 1]).expect("fixture");
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    fs::write(&patch_path, &created.bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let error = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("a short input must be rejected");
+    assert!(error.to_string().contains("APSGBA input size invalid"));
+}
+
+#[test]
+fn parse_apsgba_bytes_round_trips_a_created_patch() {
+    let (source, target) = multi_record_fixture();
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    let parsed = parse_apsgba_bytes(&created.bytes).expect("parse bytes");
+
+    assert_eq!(parsed.source_size as usize, source.len());
+    assert_eq!(parsed.target_size as usize, target.len());
+    assert_eq!(parsed.records.len(), created.record_count);
+    assert!(
+        parsed
+            .records
+            .iter()
+            .all(|record| record.xor_bytes.len() == super::APS_GBA_BLOCK_SIZE)
+    );
+}
+
+#[test]
+fn parse_apsgba_bytes_rejects_truncated_and_misaligned_input() {
+    let short_header = parse_apsgba_bytes(&[0u8; 4]).expect_err("a short header must be rejected");
+    assert!(
+        short_header
+            .to_string()
+            .contains("too small to contain a valid header")
+    );
+
+    let mut no_record = vec![0u8; super::APS_GBA_HEADER_SIZE];
+    no_record[..4].copy_from_slice(b"APS1");
+    let error = parse_apsgba_bytes(&no_record).expect_err("a record-free patch must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("too small to contain at least one record")
+    );
+
+    let mut misaligned = vec![0u8; super::APS_GBA_HEADER_SIZE + super::APS_GBA_RECORD_SIZE + 1];
+    misaligned[..4].copy_from_slice(b"APS1");
+    let error =
+        parse_apsgba_bytes(&misaligned).expect_err("a partial trailing record must be rejected");
+    assert!(error.to_string().contains("invalid record payload length"));
+}
+
+#[test]
+fn parse_apsgba_file_rejects_truncated_misaligned_and_unlabelled_patches() {
+    let temp = TestDir::new();
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    let context = test_context_with_threads(&temp, 1);
+
+    let short_header = temp.child("short-header.aps");
+    fs::write(&short_header, [0u8; 4]).expect("fixture");
+    let error = handler
+        .parse(&short_header, &context)
+        .expect_err("a short header must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("too small to contain a valid header")
+    );
+
+    let no_record = temp.child("no-record.aps");
+    fs::write(&no_record, [0u8; super::APS_GBA_HEADER_SIZE]).expect("fixture");
+    let error = handler
+        .parse(&no_record, &context)
+        .expect_err("a record-free patch must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("too small to contain at least one record")
+    );
+
+    let misaligned = temp.child("misaligned.aps");
+    fs::write(
+        &misaligned,
+        vec![0u8; super::APS_GBA_HEADER_SIZE + super::APS_GBA_RECORD_SIZE + 1],
+    )
+    .expect("fixture");
+    let error = handler
+        .parse(&misaligned, &context)
+        .expect_err("a partial trailing record must be rejected");
+    assert!(error.to_string().contains("invalid record payload length"));
+
+    let bad_magic = temp.child("bad-magic.aps");
+    let mut bytes = vec![0u8; super::APS_GBA_HEADER_SIZE + super::APS_GBA_RECORD_SIZE];
+    bytes[..4].copy_from_slice(b"BAD!");
+    fs::write(&bad_magic, bytes).expect("fixture");
+    let error = handler
+        .parse(&bad_magic, &context)
+        .expect_err("a bad magic must be rejected");
+    assert!(error.to_string().contains("Patch header invalid"));
+}
+
+#[test]
+fn create_emits_one_empty_record_when_the_files_match() {
+    let source = build_source_bytes(1024);
+    let created = create_apsgba_patch_bytes(&source, &source).expect("create bytes");
+    assert_eq!(created.record_count, 1);
+
+    let parsed = parse_apsgba_bytes(&created.bytes).expect("parse bytes");
+    assert_eq!(parsed.records.len(), 1);
+    assert_eq!(parsed.records[0].offset, 0);
+    assert!(
+        parsed.records[0].xor_bytes.iter().all(|byte| *byte == 0),
+        "an unchanged file must produce an all-zero xor record"
+    );
+}
+
+#[test]
+fn apply_streaming_rejects_a_target_checksum_mismatch() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.gba");
+    let patch_path = temp.child("update.apsgba");
+    let output_path = temp.child("output.gba");
+
+    let source = build_source_bytes(super::APS_GBA_BLOCK_SIZE);
+    let mut target = source.clone();
+    target[0x101] ^= 0x55;
+    fs::write(&source_path, &source).expect("fixture");
+
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    let mut patch_bytes = created.bytes;
+    // The target crc16 sits two bytes past the source crc16 in the record header.
+    patch_bytes[super::APS_GBA_HEADER_SIZE + 6] ^= 0x01;
+    fs::write(&patch_path, patch_bytes).expect("patch");
+
+    let handler = ApsGbaPatchHandler::new(&APSGBA);
+    for threads in [1usize, 4] {
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, threads),
+            )
+            .expect_err("a bad target crc16 must be rejected");
+        assert!(
+            error.to_string().contains("Target checksum invalid"),
+            "unexpected error at {threads} thread(s): {error}"
+        );
+    }
+}
+
+#[test]
+fn apply_in_memory_zero_fills_output_past_the_end_of_the_source() {
+    let temp = TestDir::new();
+    let source_path = temp.child("grow-source.gba");
+    let patch_path = temp.child("grow.apsgba");
+    let output_path = temp.child("grow-output.gba");
+
+    // The target adds a second block, so the trailing record has no source
+    // bytes to xor against past the end of the first.
+    let source = build_source_bytes(super::APS_GBA_BLOCK_SIZE + 4096);
+    let mut target = source.clone();
+    target.resize(2 * super::APS_GBA_BLOCK_SIZE, 0);
+    for (index, byte) in target
+        .iter_mut()
+        .enumerate()
+        .skip(super::APS_GBA_BLOCK_SIZE + 4096)
+    {
+        *byte = (index % 211) as u8;
+    }
+
+    fs::write(&source_path, &source).expect("fixture");
+    let created = create_apsgba_patch_bytes(&source, &target).expect("create bytes");
+    fs::write(&patch_path, &created.bytes).expect("patch");
+
+    ApsGbaPatchHandler::new(&APSGBA)
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1).with_patch_apply_in_memory_limit(1 << 24),
+        )
+        .expect("in-memory apply");
+    assert_eq!(fs::read(output_path).expect("output"), target);
 }

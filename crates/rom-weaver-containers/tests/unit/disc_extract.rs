@@ -407,3 +407,1044 @@ fn track_output_name_formats_with_track_number() {
     let handler = ChdContainerHandler;
     assert_eq!(handler.track_output_name("Sonic", 3), "Sonic (Track 3).bin");
 }
+
+// --- Cue / gdi sheet parsing ------------------------------------------------
+
+/// Per-test scratch directory. The label keeps parallel tests from sharing a
+/// path; the caller removes the tree when the test ends.
+fn scratch_dir(label: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "rw-chd-disc-extract-{}-{label}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create scratch dir");
+    dir
+}
+
+fn write_file(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+    let path = dir.join(name);
+    fs::write(&path, bytes).expect("write fixture file");
+    path
+}
+
+/// `frames` raw 2352-byte CD frames with a per-frame marker byte so track
+/// offsets are distinguishable in round-trip assertions.
+fn raw_frames(frames: usize) -> Vec<u8> {
+    let mut bytes = vec![0_u8; frames * 2352];
+    for (index, chunk) in bytes.chunks_mut(2352).enumerate() {
+        chunk[0] = (index % 251) as u8;
+    }
+    bytes
+}
+
+#[test]
+fn parse_cue_file_resolves_track_offsets_and_applies_cd_padding() {
+    let dir = scratch_dir("cue-basic");
+    write_file(&dir, "game.bin", &raw_frames(15));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "REM GENRE Action\n",
+            "TITLE \"Some Game\"\n",
+            "PERFORMER \"Nobody\"\n",
+            "CATALOG 0000000000000\n",
+            "FILE \"game.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "  TRACK 02 AUDIO\n",
+            "    ISRC ABCDE0000000\n",
+            "    INDEX 01 00:00:10\n",
+        )
+        .as_bytes(),
+    );
+
+    let handler = ChdContainerHandler;
+    let layout = handler.parse_cue_file(&cue).expect("parse cue");
+    assert_eq!(layout.kind, DiscKind::CdRom);
+    assert_eq!(layout.tracks.len(), 2);
+
+    let first = &layout.tracks[0];
+    assert_eq!(first.number, 1);
+    assert_eq!(first.mode, DiscTrackMode::Mode1Raw);
+    assert_eq!(first.file_offset_bytes, 0);
+    // 10 data frames rounded up to the 4-frame CD boundary.
+    assert_eq!((first.frames, first.pad_frames), (12, 2));
+    assert!(first.swap_audio_on_read, "BINARY cue files store audio LE");
+
+    let second = &layout.tracks[1];
+    assert_eq!(second.number, 2);
+    assert_eq!(second.mode, DiscTrackMode::Audio);
+    assert_eq!(second.file_offset_bytes, 10 * 2352);
+    assert_eq!((second.frames, second.pad_frames), (8, 3));
+    assert_eq!(second.pregap_frames, 0);
+    assert!(!second.pregap_has_data);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_reads_motorola_files_without_audio_swapping() {
+    let dir = scratch_dir("cue-motorola");
+    write_file(&dir, "game.bin", &raw_frames(4));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        b"FILE \"game.bin\" MOTOROLA\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n",
+    );
+
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("parse cue");
+    assert!(
+        !layout.tracks[0].swap_audio_on_read,
+        "MOTOROLA cue files already store audio big-endian"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_keeps_pregap_and_postgap_directives() {
+    let dir = scratch_dir("cue-gaps");
+    write_file(&dir, "game.bin", &raw_frames(15));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "FILE \"game.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "  TRACK 02 AUDIO\n",
+            "    PREGAP 00:00:02\n",
+            "    INDEX 01 00:00:10\n",
+            "    POSTGAP 00:00:03\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("parse cue");
+    let second = &layout.tracks[1];
+    assert_eq!(second.pregap_frames, 2);
+    assert_eq!(second.postgap_frames, 3);
+    assert!(
+        !second.pregap_has_data,
+        "a PREGAP directive declares silence, not stored frames"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_treats_index_00_as_a_pregap_with_data() {
+    let dir = scratch_dir("cue-index00");
+    write_file(&dir, "game.bin", &raw_frames(12));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "FILE \"game.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 00 00:00:08\n",
+            "    INDEX 01 00:00:10\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("parse cue");
+    // Track 1 ends where track 2's INDEX 00 begins, not at its INDEX 01.
+    assert_eq!(layout.tracks[0].frames, 8);
+    let second = &layout.tracks[1];
+    assert_eq!(second.file_offset_bytes, 8 * 2352);
+    assert_eq!(second.pregap_frames, 2);
+    assert!(second.pregap_has_data);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_accepts_a_wave_audio_track() {
+    let dir = scratch_dir("cue-wave");
+    write_file(&dir, "game.bin", &raw_frames(4));
+    write_file(&dir, "track02.wav", &pcm_wave_bytes(3));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "FILE \"game.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "FILE \"track02.wav\" WAVE\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 01 00:00:00\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler.parse_cue_file(&cue).expect("parse cue");
+    let second = &layout.tracks[1];
+    assert_eq!(second.mode, DiscTrackMode::Audio);
+    // The WAVE data chunk starts after the 12-byte RIFF header, the 24-byte
+    // fmt chunk, and the 8-byte data chunk header.
+    assert_eq!(second.file_offset_bytes, 44);
+    assert_eq!(second.frames, 4, "3 data frames padded to the CD boundary");
+    assert_eq!(second.pad_frames, 1);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// A minimal 44.1 kHz 16-bit stereo PCM WAVE file holding `frames` CD frames.
+fn pcm_wave_bytes(frames: usize) -> Vec<u8> {
+    let data_len = frames * 2352;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_len as u32).to_le_bytes());
+    bytes.extend_from_slice(b"WAVE");
+    bytes.extend_from_slice(b"fmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes()); // PCM
+    bytes.extend_from_slice(&2_u16.to_le_bytes()); // stereo
+    bytes.extend_from_slice(&44_100_u32.to_le_bytes());
+    bytes.extend_from_slice(&176_400_u32.to_le_bytes());
+    bytes.extend_from_slice(&4_u16.to_le_bytes()); // block align
+    bytes.extend_from_slice(&16_u16.to_le_bytes()); // bits per sample
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&(data_len as u32).to_le_bytes());
+    bytes.resize(bytes.len() + data_len, 0);
+    bytes
+}
+
+#[test]
+fn parse_cue_file_rejects_a_wave_file_backing_a_data_track() {
+    let dir = scratch_dir("cue-wave-data");
+    write_file(&dir, "track01.wav", &pcm_wave_bytes(2));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        b"FILE \"track01.wav\" WAVE\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+
+    let err = ChdContainerHandler
+        .parse_cue_file(&cue)
+        .expect_err("a WAVE file cannot back a data track");
+    assert!(
+        err.to_string().contains("WAVE file for non-audio track"),
+        "unexpected error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_rejects_malformed_sheets() {
+    let dir = scratch_dir("cue-errors");
+    write_file(&dir, "game.bin", &raw_frames(4));
+    write_file(&dir, "odd.bin", &[0_u8; 2353]);
+    let handler = ChdContainerHandler;
+    let cue = dir.join("game.cue");
+
+    let cases: [(&str, &str); 18] = [
+        ("FILE\n", "invalid FILE entry"),
+        ("FILE \"game.bin\"\n", "missing FILE type"),
+        (
+            "FILE \"game.bin\" AIFF\n",
+            "accepts BINARY, MOTOROLA, and WAVE files",
+        ),
+        (
+            "  TRACK 01 MODE1/2352\n",
+            "TRACK entry appeared before FILE",
+        ),
+        ("FILE \"game.bin\" BINARY\n  TRACK\n", "invalid TRACK entry"),
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK 01\n",
+            "missing TRACK type",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK xx MODE1/2352\n",
+            "invalid TRACK number `xx`",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK 01 MODE9\n",
+            "unsupported disc track type",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n    INDEX 01 00:00:00\n",
+            "INDEX entry appeared before TRACK",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX\n",
+            "invalid INDEX entry",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01\n",
+            "missing INDEX time",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 02 00:00:00\n",
+            "accepts INDEX 00 and INDEX 01",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n    PREGAP 00:00:02\n",
+            "PREGAP entry appeared before TRACK",
+        ),
+        (
+            "FILE \"game.bin\" BINARY\n    POSTGAP 00:00:02\n",
+            "POSTGAP entry appeared before TRACK",
+        ),
+        ("WOMBAT 1\n", "unsupported directive `WOMBAT`"),
+        ("REM nothing at all\n\n", "did not define any tracks"),
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n",
+            "is missing INDEX 01",
+        ),
+        (
+            concat!(
+                "FILE \"game.bin\" BINARY\n",
+                "  TRACK 01 MODE1/2352\n",
+                "    PREGAP 00:00:01\n",
+                "    INDEX 00 00:00:00\n",
+                "    INDEX 01 00:00:01\n",
+            ),
+            "uses both INDEX 00 and PREGAP",
+        ),
+    ];
+
+    for (body, expected) in cases {
+        fs::write(&cue, body).expect("write cue");
+        let err = match handler.parse_cue_file(&cue) {
+            Ok(_) => panic!("expected an error for cue body {body:?}"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains(expected),
+            "cue body {body:?} produced {err}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_cue_file_rejects_inconsistent_track_geometry() {
+    let dir = scratch_dir("cue-geometry");
+    write_file(&dir, "game.bin", &raw_frames(4));
+    write_file(&dir, "odd.bin", &[0_u8; 2353]);
+    let handler = ChdContainerHandler;
+    let cue = dir.join("game.cue");
+
+    let cases: [(&str, &str); 4] = [
+        (
+            "FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:10\n",
+            "starts past the end of",
+        ),
+        (
+            concat!(
+                "FILE \"game.bin\" BINARY\n",
+                "  TRACK 01 MODE1/2352\n",
+                "    INDEX 01 00:00:00\n",
+                "  TRACK 02 MODE1/2048\n",
+                "    INDEX 01 00:00:01\n",
+            ),
+            "across tracks with different sector sizes",
+        ),
+        (
+            concat!(
+                "FILE \"game.bin\" BINARY\n",
+                "  TRACK 01 MODE1/2352\n",
+                "    INDEX 01 00:00:02\n",
+                "  TRACK 02 MODE1/2352\n",
+                "    INDEX 01 00:00:00\n",
+            ),
+            "descending frame offsets",
+        ),
+        (
+            "FILE \"odd.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+            "is not divisible by 2352 bytes",
+        ),
+    ];
+
+    for (body, expected) in cases {
+        fs::write(&cue, body).expect("write cue");
+        let err = match handler.parse_cue_file(&cue) {
+            Ok(_) => panic!("expected an error for cue body {body:?}"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains(expected),
+            "cue body {body:?} produced {err}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// --- Disc-input auto-detection ---------------------------------------------
+
+#[test]
+fn parse_disc_input_synthesizes_a_gd_rom_from_high_density_markers() {
+    let dir = scratch_dir("cue-high-density");
+    write_file(&dir, "game.bin", &raw_frames(15));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        concat!(
+            "FILE \"game.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "REM HIGH-DENSITY AREA\n",
+            "  TRACK 02 MODE1/2352\n",
+            "    INDEX 01 00:00:10\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler
+        .parse_disc_input(&cue)
+        .expect("parse disc input");
+    assert_eq!(layout.kind, DiscKind::GdRom);
+    // The high-density area is anchored at LBA 45000, so track 1's gap to it
+    // becomes padding rather than stored frames.
+    assert_eq!(layout.tracks[0].pad_frames, 45000 - 10);
+    assert_eq!(layout.tracks[0].frames, 45000);
+    assert_eq!(layout.tracks[1].frames, 5);
+    assert_eq!(layout.tracks[1].pad_frames, 0);
+    assert_eq!(layout.tracks[1].pregap_frames, 0);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_disc_input_falls_back_to_cd_rom_without_markers() {
+    let dir = scratch_dir("cue-plain-disc-input");
+    write_file(&dir, "game.bin", &raw_frames(10));
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        b"FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+
+    let layout = ChdContainerHandler
+        .parse_disc_input(&cue)
+        .expect("parse disc input");
+    assert_eq!(layout.kind, DiscKind::CdRom);
+    assert_eq!(layout.tracks[0].frames, 12);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_disc_input_prefers_a_sibling_gdi_over_the_cue() {
+    let dir = scratch_dir("cue-sibling-gdi");
+    write_file(&dir, "game.bin", &raw_frames(10));
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    write_file(&dir, "game.gdi", b"1\n1 0 4 2352 \"track01.bin\" 0\n");
+    let cue = write_file(
+        &dir,
+        "game.cue",
+        b"FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+
+    let layout = ChdContainerHandler
+        .parse_disc_input(&cue)
+        .expect("parse disc input");
+    assert_eq!(layout.kind, DiscKind::GdRom);
+    assert_eq!(layout.tracks.len(), 1);
+    assert_eq!(
+        layout.tracks[0].file_path,
+        dir.join("track01.bin"),
+        "the sibling .gdi's own track file is authoritative"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_disc_input_ignores_a_gdi_next_to_a_non_cue_sheet() {
+    let dir = scratch_dir("cue-non-cue-extension");
+    write_file(&dir, "game.bin", &raw_frames(10));
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    write_file(&dir, "game.gdi", b"1\n1 0 4 2352 \"track01.bin\" 0\n");
+    // A sheet whose extension is not `.cue` never looks for a sibling `.gdi`.
+    let sheet = write_file(
+        &dir,
+        "game.txt",
+        b"FILE \"game.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    );
+
+    let layout = ChdContainerHandler
+        .parse_disc_input(&sheet)
+        .expect("parse disc input");
+    assert_eq!(layout.kind, DiscKind::CdRom);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// --- gdi sheet parsing ------------------------------------------------------
+
+#[test]
+fn parse_gdi_file_resolves_physical_offsets_into_pad_frames() {
+    let dir = scratch_dir("gdi-basic");
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    write_file(&dir, "track02.raw", &raw_frames(2));
+    write_file(&dir, "track03.bin", &raw_frames(4));
+    let gdi = write_file(
+        &dir,
+        "game.gdi",
+        concat!(
+            "3\n",
+            "1 0 4 2352 \"track01.bin\" 0\n",
+            "2 10 0 2352 \"track02.raw\" 0\n",
+            "3 45000 4 2352 \"track03.bin\" 0\n",
+        )
+        .as_bytes(),
+    );
+
+    let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
+    assert_eq!(layout.kind, DiscKind::GdRom);
+    assert_eq!(layout.tracks.len(), 3);
+
+    assert_eq!(layout.tracks[0].mode, DiscTrackMode::Mode1Raw);
+    assert!(!layout.tracks[0].swap_audio_on_read);
+    assert_eq!(
+        (layout.tracks[0].frames, layout.tracks[0].pad_frames),
+        (10, 6)
+    );
+
+    assert_eq!(layout.tracks[1].mode, DiscTrackMode::Audio);
+    assert!(layout.tracks[1].swap_audio_on_read);
+    assert_eq!(
+        (layout.tracks[1].frames, layout.tracks[1].pad_frames),
+        (45000 - 10, 45000 - 12)
+    );
+
+    assert_eq!(layout.tracks[2].frames, 4);
+    assert_eq!(layout.tracks[2].pad_frames, 0, "the last track never pads");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_gdi_file_accepts_cooked_sectors_and_a_file_offset() {
+    let dir = scratch_dir("gdi-cooked");
+    // 2048-byte sectors with a 2048-byte prefix skipped by the file offset.
+    write_file(&dir, "track01.bin", &[0_u8; 2048 * 4]);
+    let gdi = write_file(&dir, "game.gdi", b"1\n1 0 4 2048 \"track01.bin\" 2048\n");
+
+    let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
+    assert_eq!(layout.tracks[0].mode, DiscTrackMode::Mode1);
+    assert_eq!(layout.tracks[0].file_offset_bytes, 2048);
+    assert_eq!(layout.tracks[0].frames, 3);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_gdi_file_sorts_out_of_order_track_entries() {
+    let dir = scratch_dir("gdi-sorted");
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    write_file(&dir, "track02.bin", &raw_frames(4));
+    let gdi = write_file(
+        &dir,
+        "game.gdi",
+        b"2\n2 4 4 2352 \"track02.bin\" 0\n1 0 4 2352 \"track01.bin\" 0\n",
+    );
+
+    let layout = ChdContainerHandler.parse_gdi_file(&gdi).expect("parse gdi");
+    assert_eq!(
+        layout.tracks.iter().map(|t| t.number).collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_gdi_file_rejects_malformed_sheets() {
+    let dir = scratch_dir("gdi-errors");
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    write_file(&dir, "odd.bin", &[0_u8; 2353]);
+    let handler = ChdContainerHandler;
+    let gdi = dir.join("game.gdi");
+
+    let cases: [(&str, &str); 16] = [
+        ("abc\n", "invalid track count header"),
+        ("0\n", "does not define any tracks"),
+        ("\n   \n", "missing its track count header"),
+        ("1\n\"unterminated\n", "invalid gdi track entry"),
+        ("1\n1\n", "missing its physical offset"),
+        ("1\n1 0\n", "missing its track type"),
+        ("1\n1 0 4\n", "missing its sector size"),
+        ("1\n1 0 4 2352\n", "missing its filename"),
+        ("1\n1 0 4 2352 \"track01.bin\"\n", "missing its file offset"),
+        (
+            "1\nx 0 4 2352 \"track01.bin\" 0\n",
+            "invalid track number `x`",
+        ),
+        (
+            "1\n1 x 4 2352 \"track01.bin\" 0\n",
+            "invalid physical offset `x`",
+        ),
+        (
+            "1\n1 0 x 2352 \"track01.bin\" 0\n",
+            "invalid track type `x`",
+        ),
+        ("1\n1 0 4 x \"track01.bin\" 0\n", "invalid sector size `x`"),
+        (
+            "1\n1 0 4 2352 \"track01.bin\" x\n",
+            "invalid file offset `x`",
+        ),
+        (
+            "1\n1 0 7 1234 \"track01.bin\" 0\n",
+            "unsupported track type/sector-size pair `7/1234`",
+        ),
+        (
+            "1\n1 0 4 2352 \"odd.bin\" 0\n",
+            "is not divisible by 2352 bytes",
+        ),
+    ];
+
+    for (body, expected) in cases {
+        fs::write(&gdi, body).expect("write gdi");
+        let err = match handler.parse_gdi_file(&gdi) {
+            Ok(_) => panic!("expected an error for gdi body {body:?}"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains(expected),
+            "gdi body {body:?} produced {err}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn parse_gdi_file_rejects_inconsistent_track_tables() {
+    let dir = scratch_dir("gdi-tables");
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    write_file(&dir, "track02.bin", &raw_frames(4));
+    let handler = ChdContainerHandler;
+    let gdi = dir.join("game.gdi");
+
+    let cases: [(&str, &str); 4] = [
+        (
+            "1\n1 0 4 2352 \"track01.bin\" 99999\n",
+            "starts past the end of",
+        ),
+        (
+            "2\n1 0 4 2352 \"track01.bin\" 0\n",
+            "declared 2 tracks but defined 1",
+        ),
+        (
+            concat!(
+                "2\n",
+                "1 0 4 2352 \"track01.bin\" 0\n",
+                "3 4 4 2352 \"track02.bin\" 0\n",
+            ),
+            "is missing track 2",
+        ),
+        (
+            concat!(
+                "2\n",
+                "1 0 4 2352 \"track01.bin\" 0\n",
+                "2 2 4 2352 \"track02.bin\" 0\n",
+            ),
+            "overlaps the next track",
+        ),
+    ];
+
+    for (body, expected) in cases {
+        fs::write(&gdi, body).expect("write gdi");
+        let err = match handler.parse_gdi_file(&gdi) {
+            Ok(_) => panic!("expected an error for gdi body {body:?}"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains(expected),
+            "gdi body {body:?} produced {err}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// --- Multi-track create/extract round trips ---------------------------------
+
+fn test_context(temp_root: &Path) -> OperationContext {
+    OperationContext::new(
+        rom_weaver_core::ThreadBudget::Fixed(2),
+        temp_root.to_path_buf(),
+        Arc::new(rom_weaver_core::NoopProgressSink),
+        rom_weaver_core::CancellationToken::new(),
+    )
+}
+
+fn create_request(input: &Path, output: &Path) -> ContainerCreateRequest {
+    ContainerCreateRequest {
+        inputs: vec![input.to_path_buf()],
+        output: output.to_path_buf(),
+        format: "chd".to_string(),
+        codec: None,
+        level: None,
+        parent: None,
+    }
+}
+
+fn extract_request_for(
+    source: &Path,
+    out_dir: &Path,
+    selections: Vec<String>,
+    split_bin: bool,
+) -> ContainerExtractRequest {
+    ContainerExtractRequest {
+        source: source.to_path_buf(),
+        out_dir: out_dir.to_path_buf(),
+        selections,
+        kind_filter: ArchiveEntryKindFilter::default(),
+        containing_archive: None,
+        split_bin,
+        ignore_common_files: false,
+        overwrite: true,
+        parent: None,
+    }
+}
+
+/// A two-track CD fixture (one data track, one audio track) sharing one `.bin`,
+/// with both tracks already aligned to the 4-frame CD boundary so extraction
+/// output equals the source payload byte for byte.
+fn write_two_track_cd_fixture(dir: &Path) -> (PathBuf, Vec<u8>) {
+    let payload = raw_frames(16);
+    write_file(dir, "disc.bin", &payload);
+    let cue = write_file(
+        dir,
+        "disc.cue",
+        concat!(
+            "FILE \"disc.bin\" BINARY\n",
+            "  TRACK 01 MODE1/2352\n",
+            "    INDEX 01 00:00:00\n",
+            "  TRACK 02 AUDIO\n",
+            "    INDEX 01 00:00:08\n",
+        )
+        .as_bytes(),
+    );
+    (cue, payload)
+}
+
+#[test]
+fn extract_cd_writes_a_single_bin_and_a_multi_track_cue() {
+    let dir = scratch_dir("extract-cd-single-bin");
+    let (cue, payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    let report = handler
+        .extract(
+            &extract_request_for(&chd_path, &out_dir, Vec::new(), false),
+            &test_context(&dir),
+        )
+        .expect("extract cd chd");
+
+    assert_eq!(report.status, OperationStatus::Succeeded);
+    assert_eq!(
+        fs::read(out_dir.join("disc.bin")).expect("read extracted bin"),
+        payload,
+        "a merged single-bin extract must reproduce the source payload"
+    );
+    let extracted_cue = fs::read_to_string(out_dir.join("disc.cue")).expect("read cue");
+    assert!(extracted_cue.contains("FILE \"disc.bin\" BINARY"));
+    assert!(extracted_cue.contains("TRACK 01 MODE1/2352"));
+    assert!(extracted_cue.contains("TRACK 02 AUDIO"));
+    // Track 2 starts 8 frames into the merged bin.
+    assert!(
+        extracted_cue.contains("INDEX 01 00:00:08"),
+        "cue offsets must advance with output frames: {extracted_cue}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_split_bin_writes_one_file_per_track() {
+    let dir = scratch_dir("extract-cd-split-bin");
+    let (cue, payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    handler
+        .extract(
+            &extract_request_for(&chd_path, &out_dir, Vec::new(), true),
+            &test_context(&dir),
+        )
+        .expect("extract cd chd split");
+
+    let first = fs::read(out_dir.join("disc (Track 1).bin")).expect("read track 1");
+    let second = fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2");
+    assert_eq!(first.len(), 8 * 2352);
+    assert_eq!(second.len(), 8 * 2352);
+    assert_eq!(
+        [first, second].concat(),
+        payload,
+        "the per-track bins concatenate back into the source payload"
+    );
+
+    let extracted_cue = fs::read_to_string(out_dir.join("disc.cue")).expect("read cue");
+    assert!(extracted_cue.contains("FILE \"disc (Track 1).bin\" BINARY"));
+    assert!(extracted_cue.contains("FILE \"disc (Track 2).bin\" BINARY"));
+    // Each split track restarts its own file, so every INDEX 01 is at zero.
+    assert_eq!(extracted_cue.matches("INDEX 01 00:00:00").count(), 2);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_honors_a_single_track_selection() {
+    let dir = scratch_dir("extract-cd-selection");
+    let (cue, payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    handler
+        .extract(
+            &extract_request_for(
+                &chd_path,
+                &out_dir,
+                vec!["disc (Track 2).bin".to_string()],
+                true,
+            ),
+            &test_context(&dir),
+        )
+        .expect("extract selected cd track");
+
+    assert!(
+        !out_dir.join("disc (Track 1).bin").exists(),
+        "an unselected track must not be written"
+    );
+    assert!(
+        !out_dir.join("disc.cue").exists(),
+        "the cue was not selected"
+    );
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2"),
+        payload[8 * 2352..],
+        "the selected track must hold exactly its own frames"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_rejects_a_selection_that_matches_nothing() {
+    let dir = scratch_dir("extract-cd-bad-selection");
+    let (cue, _payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+    let err = match handler.extract(
+        &extract_request_for(
+            &chd_path,
+            &dir.join("out"),
+            vec!["disc (Track 9).bin".to_string()],
+            true,
+        ),
+        &test_context(&dir),
+    ) {
+        Ok(_) => panic!("expected an unmatched-selection error"),
+        Err(err) => err,
+    };
+    assert!(matches!(err, RomWeaverError::Validation(_)), "{err}");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_gd_writes_a_gdi_and_per_track_bins() {
+    let dir = scratch_dir("extract-gd");
+    let first_payload = raw_frames(4);
+    let second_payload = raw_frames(6);
+    write_file(&dir, "track01.bin", &first_payload);
+    write_file(&dir, "track02.raw", &second_payload);
+    let gdi = write_file(
+        &dir,
+        "disc.gdi",
+        concat!(
+            "2\n",
+            "1 0 4 2352 \"track01.bin\" 0\n",
+            "2 4 0 2352 \"track02.raw\" 0\n",
+        )
+        .as_bytes(),
+    );
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&gdi, &chd_path), &test_context(&dir))
+        .expect("create gd chd");
+    handler
+        .extract(
+            &extract_request_for(&chd_path, &out_dir, Vec::new(), false),
+            &test_context(&dir),
+        )
+        .expect("extract gd chd");
+
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 1).bin")).expect("read track 1"),
+        first_payload
+    );
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2"),
+        second_payload,
+        "the audio track must round-trip through CHD's big-endian storage"
+    );
+    let extracted_gdi = fs::read_to_string(out_dir.join("disc.gdi")).expect("read gdi");
+    let lines = extracted_gdi.lines().collect::<Vec<_>>();
+    assert_eq!(lines[0], "2", "the gdi header counts its track lines");
+    assert_eq!(lines[1], "1 0 4 2352 \"disc (Track 1).bin\" 0");
+    assert_eq!(lines[2], "2 4 0 2352 \"disc (Track 2).bin\" 0");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_gd_honors_a_single_track_selection() {
+    let dir = scratch_dir("extract-gd-selection");
+    write_file(&dir, "track01.bin", &raw_frames(4));
+    let second_payload = raw_frames(6);
+    write_file(&dir, "track02.bin", &second_payload);
+    let gdi = write_file(
+        &dir,
+        "disc.gdi",
+        concat!(
+            "2\n",
+            "1 0 4 2352 \"track01.bin\" 0\n",
+            "2 4 4 2352 \"track02.bin\" 0\n",
+        )
+        .as_bytes(),
+    );
+    let chd_path = dir.join("disc.chd");
+    let out_dir = dir.join("out");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&gdi, &chd_path), &test_context(&dir))
+        .expect("create gd chd");
+    handler
+        .extract(
+            &extract_request_for(
+                &chd_path,
+                &out_dir,
+                vec!["disc (Track 2).bin".to_string()],
+                false,
+            ),
+            &test_context(&dir),
+        )
+        .expect("extract selected gd track");
+
+    assert!(!out_dir.join("disc (Track 1).bin").exists());
+    assert!(!out_dir.join("disc.gdi").exists());
+    assert_eq!(
+        fs::read(out_dir.join("disc (Track 2).bin")).expect("read track 2"),
+        second_payload
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn read_disc_tracks_recovers_the_cd_layout_written_at_create_time() {
+    let dir = scratch_dir("read-disc-tracks");
+    let (cue, _payload) = write_two_track_cd_fixture(&dir);
+    let chd_path = dir.join("disc.chd");
+    let handler = ChdContainerHandler;
+
+    handler
+        .create(&create_request(&cue, &chd_path), &test_context(&dir))
+        .expect("create cd chd");
+
+    let session = ChdReadSession::open(&chd_path, None).expect("open chd");
+    let layout = handler
+        .read_disc_tracks(&session, DiscKind::CdRom)
+        .expect("read cd track metadata");
+    assert_eq!(layout.kind, DiscKind::CdRom);
+    assert_eq!(
+        layout
+            .tracks
+            .iter()
+            .map(|track| (track.number, track.mode, track.frames, track.pad_frames))
+            .collect::<Vec<_>>(),
+        vec![
+            (1, DiscTrackMode::Mode1Raw, 8, 0),
+            (2, DiscTrackMode::Audio, 8, 0),
+        ]
+    );
+
+    // A CD image carries no GD-ROM track metadata at all.
+    let err = match handler.read_disc_tracks(&session, DiscKind::GdRom) {
+        Ok(_) => panic!("expected missing gd metadata"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("missing GD track metadata"),
+        "unexpected error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn extract_cd_rejects_a_chd_whose_units_are_not_cd_frames() {
+    let dir = scratch_dir("extract-cd-wrong-units");
+    // A DVD image uses 2048-byte units, so the CD extract path must refuse it
+    // rather than mis-framing the payload.
+    let iso = write_file(&dir, "movie.iso", &[0_u8; 2048 * 64]);
+    let chd_path = dir.join("movie.chd");
+    let handler = ChdContainerHandler;
+    handler
+        .create(
+            &ContainerCreateRequest {
+                inputs: vec![iso],
+                output: chd_path.clone(),
+                format: "chd-dvd".to_string(),
+                codec: None,
+                level: None,
+                parent: None,
+            },
+            &test_context(&dir),
+        )
+        .expect("create dvd chd");
+
+    let session = ChdReadSession::open(&chd_path, None).expect("open chd");
+    let context = test_context(&dir);
+    let execution = context.plan_threads(ThreadCapability::parallel(None));
+    let err = match handler.extract_cd(
+        session,
+        &extract_request_for(&chd_path, &dir.join("out"), Vec::new(), false),
+        &context,
+        execution,
+    ) {
+        Ok(_) => panic!("expected a unit-size rejection"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("current extract expects"),
+        "unexpected error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

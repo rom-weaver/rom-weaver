@@ -2466,6 +2466,8 @@ mod tests {
     use super::*;
     use std::time::UNIX_EPOCH;
 
+    use rom_weaver_core::{CancellationToken, NoopProgressSink, ThreadBudget};
+
     fn unique_temp_dir(tag: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -3183,5 +3185,454 @@ mod tests {
             vec![vec![0, 1], vec![2, 3]],
             "a header without sizes must still split rather than collapse to one worker"
         );
+    }
+
+    fn test_operation_context(temp_root: &Path, threads: usize) -> OperationContext {
+        OperationContext::new(
+            ThreadBudget::Fixed(threads),
+            temp_root.to_path_buf(),
+            Arc::new(NoopProgressSink),
+            CancellationToken::new(),
+        )
+    }
+
+    fn zip_create_config() -> LibarchiveCreateConfig {
+        LibarchiveCreateConfig {
+            format_name: "zip",
+            format: LibarchiveCreateFormat::Zip,
+            filter: LibarchiveCreateFilter::None,
+            format_compression: Some("store"),
+            compression_level: None,
+            format_threads: None,
+            filter_threads: None,
+            io_buffer_bytes: LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES,
+        }
+    }
+
+    /// Stages `entries` under `dir/inputs` and packs them into `dir/archive.zip` through the
+    /// create path under test. `None` payload bytes stage a directory entry.
+    fn create_test_zip(dir: &Path, entries: &[(&str, Option<&[u8]>)]) -> PathBuf {
+        let inputs_dir = dir.join("inputs");
+        let archive_entries = entries
+            .iter()
+            .map(|(name, bytes)| {
+                let source = inputs_dir.join(name);
+                match bytes {
+                    Some(bytes) => write_file(&source, bytes),
+                    None => fs::create_dir_all(&source).expect("create test input directory"),
+                }
+                ArchiveInputEntry {
+                    source,
+                    archive_name: (*name).to_string(),
+                    is_dir: bytes.is_none(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let output = dir.join("archive.zip");
+        let request = ContainerCreateRequest {
+            inputs: archive_entries
+                .iter()
+                .map(|entry| entry.source.clone())
+                .collect(),
+            output: output.clone(),
+            format: "zip".to_string(),
+            codec: Some("store".to_string()),
+            level: None,
+            parent: None,
+        };
+        let context = test_operation_context(dir, 1);
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        write_archive_with_libarchive(
+            &request,
+            &archive_entries,
+            &context,
+            &execution,
+            zip_create_config(),
+        )
+        .expect("create the test zip");
+        output
+    }
+
+    fn extract_test_request(source: &Path, out_dir: &Path) -> ContainerExtractRequest {
+        ContainerExtractRequest {
+            source: source.to_path_buf(),
+            selections: Vec::new(),
+            kind_filter: ArchiveEntryKindFilter::default(),
+            out_dir: out_dir.to_path_buf(),
+            split_bin: false,
+            ignore_common_files: false,
+            overwrite: true,
+            parent: None,
+            containing_archive: None,
+        }
+    }
+
+    fn task_names(tasks: &[LibarchiveExtractTask]) -> Vec<String> {
+        tasks.iter().map(|task| task.archive_name.clone()).collect()
+    }
+
+    #[test]
+    fn every_read_filter_reports_its_libarchive_module_name() {
+        assert_eq!(
+            [
+                LibarchiveReadFilter::Gzip,
+                LibarchiveReadFilter::Bzip2,
+                LibarchiveReadFilter::Xz,
+                LibarchiveReadFilter::Zstd,
+            ]
+            .map(libarchive_read_filter_name),
+            ["gzip", "bzip2", "xz", "zstd"]
+        );
+    }
+
+    #[test]
+    fn a_stream_probe_reports_the_decoded_size_of_a_gzip_payload() {
+        let dir = unique_temp_dir("gzip-probe");
+        let payload = (0..2048_u32)
+            .flat_map(|value| value.to_le_bytes())
+            .collect::<Vec<u8>>();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(6));
+        encoder.write_all(&payload).expect("gzip encode");
+        let path = dir.join("payload.gz");
+        write_file(&path, &encoder.finish().expect("gzip finish"));
+
+        let decoded = probe_stream_with_libarchive(&path, "gz", LibarchiveReadFilter::Gzip)
+            .expect("probe a gzip stream");
+
+        assert_eq!(decoded, payload.len() as u64);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_stream_probe_reports_a_truncated_gzip_payload() {
+        let dir = unique_temp_dir("gzip-truncated");
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(6));
+        encoder
+            .write_all(&vec![0x5A_u8; 512 * 1024])
+            .expect("gzip encode");
+        let mut bytes = encoder.finish().expect("gzip finish");
+        bytes.truncate(bytes.len() / 2);
+        let path = dir.join("payload.gz");
+        write_file(&path, &bytes);
+
+        let error = probe_stream_with_libarchive(&path, "gz", LibarchiveReadFilter::Gzip)
+            .expect_err("a truncated gzip stream must be rejected");
+
+        assert!(
+            error.to_string().contains("gz probe failed"),
+            "unexpected error: {error}"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn entry_records_carry_file_sizes_and_leave_directories_sizeless() {
+        let dir = unique_temp_dir("entry-records");
+        let archive = create_test_zip(
+            &dir,
+            &[
+                ("sub", None),
+                ("a.bin", Some(b"abc".as_slice())),
+                ("b.bin", Some(b"".as_slice())),
+            ],
+        );
+
+        let records = list_regular_archive_entry_records_with_libarchive(&archive, "zip")
+            .expect("list zip entry records");
+
+        assert_eq!(
+            records,
+            vec![
+                ContainerListEntry {
+                    path: "sub".to_string(),
+                    size: None,
+                },
+                ContainerListEntry {
+                    path: "a.bin".to_string(),
+                    size: Some(3),
+                },
+                ContainerListEntry {
+                    path: "b.bin".to_string(),
+                    size: Some(0),
+                },
+            ]
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn extracting_an_archive_without_entries_produces_no_outputs() {
+        let dir = unique_temp_dir("empty-archive");
+        let archive = create_test_zip(&dir, &[]);
+        let out_dir = dir.join("out");
+        let context = test_operation_context(&dir, 1);
+
+        let report = extract_regular_archive_with_libarchive(
+            &extract_test_request(&archive, &out_dir),
+            &context,
+            "zip",
+        )
+        .expect("extract an entry-less zip");
+
+        assert!(
+            report.label.contains("(0 file(s), 0 bytes written)"),
+            "unexpected report label: {}",
+            report.label
+        );
+        assert!(
+            fs::read_dir(&out_dir)
+                .expect("read output directory")
+                .next()
+                .is_none(),
+            "an entry-less archive must leave the output directory empty"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn zero_byte_entries_extract_on_the_step_progress_path() {
+        let dir = unique_temp_dir("zero-byte-entries");
+        // Without any payload bytes the extract has no byte total to weigh
+        // progress against, so it reports per-entry steps instead.
+        let archive = create_test_zip(
+            &dir,
+            &[
+                ("a.bin", Some(b"".as_slice())),
+                ("b.bin", Some(b"".as_slice())),
+            ],
+        );
+        let out_dir = dir.join("out");
+        let context = test_operation_context(&dir, 1);
+
+        let report = extract_regular_archive_with_libarchive(
+            &extract_test_request(&archive, &out_dir),
+            &context,
+            "zip",
+        )
+        .expect("extract zero-byte entries");
+
+        assert!(
+            report.label.contains("(2 file(s), 0 bytes written)"),
+            "unexpected report label: {}",
+            report.label
+        );
+        for name in ["a.bin", "b.bin"] {
+            assert_eq!(
+                fs::metadata(out_dir.join(name))
+                    .expect("output metadata")
+                    .len(),
+                0
+            );
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn kind_filtered_tasks_prefer_payloads_and_fall_back_to_nested_containers() {
+        let dir = unique_temp_dir("kind-filter");
+        let archive = create_test_zip(
+            &dir,
+            &[
+                ("game.bin", Some(b"rom".as_slice())),
+                ("notes.txt", Some(b"text".as_slice())),
+                ("nested.zip", Some(b"zip".as_slice())),
+            ],
+        );
+        let out_dir = dir.join("out");
+        let rom_filter = ArchiveEntryKindFilter::new(true, false);
+        let patch_filter = ArchiveEntryKindFilter::new(false, true);
+
+        let payload_only = build_libarchive_extract_tasks(
+            &archive,
+            &out_dir,
+            &[],
+            rom_filter,
+            false,
+            false,
+            "zip",
+        )
+        .expect("plan a rom-filtered extract");
+        assert_eq!(task_names(&payload_only), vec!["game.bin".to_string()]);
+
+        let nested =
+            build_libarchive_extract_tasks(&archive, &out_dir, &[], rom_filter, false, true, "zip")
+                .expect("plan a nested rom-filtered extract");
+        assert_eq!(
+            task_names(&nested),
+            vec!["game.bin".to_string(), "nested.zip".to_string()]
+        );
+
+        let fallback = build_libarchive_extract_tasks(
+            &archive,
+            &out_dir,
+            &[],
+            patch_filter,
+            false,
+            false,
+            "zip",
+        )
+        .expect("plan a patch-filtered extract");
+        assert_eq!(
+            task_names(&fallback),
+            vec!["nested.zip".to_string()],
+            "with no matching payload the nested container must carry the descent"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_kind_filter_that_matches_no_entry_is_reported() {
+        let dir = unique_temp_dir("kind-filter-empty");
+        let archive = create_test_zip(&dir, &[("notes.txt", Some(b"text".as_slice()))]);
+
+        let error = build_libarchive_extract_tasks(
+            &archive,
+            &dir.join("out"),
+            &[],
+            ArchiveEntryKindFilter::new(false, true),
+            false,
+            false,
+            "zip",
+        )
+        .expect_err("a filter matching no entry must be reported");
+
+        assert!(
+            error.to_string().contains("matched --filter patch"),
+            "unexpected error: {error}"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_archive_of_only_ignored_files_is_reported() {
+        let dir = unique_temp_dir("ignored-only");
+        let archive = create_test_zip(&dir, &[(".DS_Store", Some(b"junk".as_slice()))]);
+
+        let error = build_libarchive_extract_tasks(
+            &archive,
+            &dir.join("out"),
+            &[],
+            ArchiveEntryKindFilter::default(),
+            true,
+            false,
+            "zip",
+        )
+        .expect_err("an archive of ignored files must be reported");
+
+        assert!(
+            error
+                .to_string()
+                .contains("were ignored by default filters"),
+            "unexpected error: {error}"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn extract_paths_outside_the_output_directory_are_rejected() {
+        let dir = unique_temp_dir("outside-root");
+
+        let error = ensure_extract_path_has_no_links(&dir, Path::new("/elsewhere/file.bin"))
+            .expect_err("a path outside the root must be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("is outside extraction directory"),
+            "unexpected error: {error}"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_paths_through_an_existing_link_are_rejected() {
+        let dir = unique_temp_dir("link-below-root");
+        let target = dir.join("target");
+        fs::create_dir_all(&target).expect("create link target");
+        std::os::unix::fs::symlink(&target, dir.join("link")).expect("create symlink");
+
+        let error = ensure_extract_path_has_no_links(&dir, &dir.join("link").join("file.bin"))
+            .expect_err("a link below the root must be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to extract through existing link"),
+            "unexpected error: {error}"
+        );
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn confined_root_normalization_drops_current_dir_and_resolves_parents() {
+        assert_eq!(
+            normalize_confined_extract_root(Path::new("out/./nested/../final"))
+                .expect("normalize a confined root"),
+            PathBuf::from("out/final")
+        );
+        assert_eq!(
+            normalize_confined_extract_root(Path::new("."))
+                .expect("normalize the current directory"),
+            PathBuf::from(".")
+        );
+    }
+
+    #[test]
+    fn a_directory_task_whose_parent_is_a_file_fails_the_commit() {
+        let dir = unique_temp_dir("dir-parent-is-file");
+        write_file(&dir.join("sub"), b"not a directory");
+        let mut transaction = LibarchiveExtractTransaction::new(&dir, false, "zip")
+            .expect("open an extract transaction");
+        let mut task = extract_task(&dir, 0, "sub/inner");
+        task.is_dir = true;
+
+        let error = transaction
+            .commit(std::slice::from_ref(&task))
+            .expect_err("a file in the destination path must fail the commit");
+
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to replace non-directory extraction parent"),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            fs::read(dir.join("sub")).expect("read the blocking file"),
+            b"not a directory"
+        );
+        drop(transaction);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_failed_install_rolls_back_the_directory_it_created() {
+        let dir = unique_temp_dir("rollback-created-dir");
+        let mut transaction = LibarchiveExtractTransaction::new(&dir, false, "zip")
+            .expect("open an extract transaction");
+        let task = extract_task(&dir, 0, "nested/leaf.bin");
+        // The staged payload is never written, so the install finds nothing to
+        // publish and the commit must undo the directory it just created.
+        let staged = transaction
+            .stage_tasks(std::slice::from_ref(&task))
+            .expect("stage the task");
+
+        let error = transaction
+            .commit(&staged)
+            .expect_err("installing a missing staged file must fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("extract failed while installing"),
+            "unexpected error: {error}"
+        );
+        assert!(
+            !dir.join("nested").exists(),
+            "the directory created for the commit must be rolled back"
+        );
+        drop(transaction);
+        fs::remove_dir_all(&dir).ok();
     }
 }

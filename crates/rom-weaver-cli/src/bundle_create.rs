@@ -822,3 +822,7 @@ fn write_bundle_bytes(output: &Path, bytes: &[u8]) -> Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/bundle_create.rs"]
+mod tests;

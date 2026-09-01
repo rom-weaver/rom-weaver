@@ -9,10 +9,17 @@ use rom_weaver_core::{
 };
 
 use super::{
-    CREATE_SCAN_CHUNK_BYTES, DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC,
-    IPS_RESERVED_EOF_OFFSET, IPS32_EOF, IPS32_MAGIC, IpsFlavor, IpsPatchHandler, IpsRecordData,
-    JsonValue, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE, parse_ips_bytes,
-    parse_ips_bytes_with_validation,
+    CREATE_SCAN_CHUNK_BYTES, DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, IPS_PROBE_PREFIX_BYTES,
+    IPS_RESERVED_EOF_OFFSET, IPS32_EOF, IPS32_MAGIC, IPS32_RESERVED_EOF_OFFSET, IpsCreateResult,
+    IpsDiffRun, IpsFileParser, IpsFlavor, IpsPatchHandler, IpsProbeRecord, IpsRecordData,
+    JsonValue, MAX_IPS_OFFSET, MAX_IPS_RECORD_LEN, MAX_IPS32_OFFSET, OUTPUT_CHUNK_SIZE,
+    adjust_record_len_for_reserved_offset, checked_add, coalesce_ips_diff_runs,
+    collect_ips_diff_runs_from_bytes, find_next_rle_split, flavor_name, ips_create_chunk_count,
+    ips_create_thread_capability, max_parallel_chunks, parse_ebp_metadata, parse_ips_bytes,
+    parse_ips_bytes_with_validation, probe_ips_records, read_u24 as decode_u24,
+    read_u32 as decode_u32, records_overlap, repeated_prefix_len, truncate_size_required,
+    validate_ips_create_flips_limits, write_ips_runs_to_output, write_literal_record, write_offset,
+    write_rle_record,
 };
 use crate::{
     EBP, IPS, IPS32,
@@ -1306,4 +1313,626 @@ fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext
 fn ignore_validation_context(temp: &TestDir, threads: usize) -> OperationContext {
     test_context_with_threads(temp, threads)
         .with_patch_checksum_validation(PatchChecksumValidation::Ignore)
+}
+
+fn ips_probe_record(offset: u64, len: u64) -> IpsProbeRecord {
+    IpsProbeRecord {
+        offset,
+        len,
+        first: 0,
+        last: 0,
+    }
+}
+
+#[test]
+fn header_magic_is_reported_for_classic_ips_only() {
+    assert_eq!(
+        IpsPatchHandler::new(&IPS).header_magic(),
+        Some(&IPS_MAGIC[..])
+    );
+    assert_eq!(IpsPatchHandler::new_ebp(&EBP).header_magic(), None);
+    assert_eq!(IpsPatchHandler::new_ips32(&IPS32).header_magic(), None);
+}
+
+#[test]
+fn probe_reports_extension_confidence_for_every_flavor() {
+    let temp = TestDir::new();
+    let patch = temp.child("probe.ips");
+    fs::write(&patch, IPS_MAGIC).expect("fixture");
+
+    for handler in [
+        IpsPatchHandler::new(&IPS),
+        IpsPatchHandler::new_ebp(&EBP),
+        IpsPatchHandler::new_ips32(&IPS32),
+    ] {
+        assert_eq!(
+            handler.probe(&patch),
+            rom_weaver_core::ProbeConfidence::Extension
+        );
+    }
+}
+
+#[test]
+fn parse_rejects_trailing_data_after_the_ips32_footer() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("trailing.ips32");
+    let mut bytes = build_ips32_patch(vec![TestIpsRecord::Literal {
+        offset: 0,
+        data: b"AB".to_vec(),
+    }]);
+    bytes.extend_from_slice(b"junk");
+    fs::write(&patch_path, &bytes).expect("fixture");
+
+    let bytes_error = parse_ips_bytes(&bytes, IpsFlavor::Ips32)
+        .expect_err("bytes parser should reject trailing data");
+    assert!(
+        bytes_error.to_string().contains("after EEOF"),
+        "unexpected error: {bytes_error}"
+    );
+
+    let file_error = IpsPatchHandler::new_ips32(&IPS32)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect_err("file parser should reject trailing data");
+    assert!(
+        file_error.to_string().contains("after EEOF"),
+        "unexpected error: {file_error}"
+    );
+}
+
+#[test]
+fn parse_accepts_an_ebp_patch_without_a_metadata_block() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("bare.ebp");
+    fs::write(
+        &patch_path,
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 1,
+                data: b"Z".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let report = IpsPatchHandler::new_ebp(&EBP)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    assert!(report.label.contains("1 record(s)"), "{}", report.label);
+    assert!(!report.label.contains("and metadata"), "{}", report.label);
+}
+
+#[test]
+fn parse_report_mentions_metadata_for_an_ebp_patch_that_carries_it() {
+    let temp = TestDir::new();
+    let patch_path = temp.child("meta.ebp");
+    fs::write(
+        &patch_path,
+        build_ebp_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: b"Z".to_vec(),
+            }],
+            DEFAULT_EBP_METADATA_JSON,
+        ),
+    )
+    .expect("fixture");
+
+    let report = IpsPatchHandler::new_ebp(&EBP)
+        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    assert!(report.label.contains("and metadata"), "{}", report.label);
+}
+
+#[test]
+fn ebp_metadata_must_be_a_utf8_json_object_of_strings() {
+    let not_utf8 = parse_ebp_metadata(&[0xff, 0xfe]).expect_err("invalid UTF-8 should fail");
+    assert!(
+        not_utf8.to_string().contains("not valid UTF-8 JSON"),
+        "unexpected error: {not_utf8}"
+    );
+
+    let not_object = parse_ebp_metadata(b"[1,2]").expect_err("a JSON array should fail");
+    assert!(
+        not_object.to_string().contains("must be a JSON object"),
+        "unexpected error: {not_object}"
+    );
+
+    let not_string =
+        parse_ebp_metadata(br#"{"Title":3}"#).expect_err("a non-string value should fail");
+    assert!(
+        not_string.to_string().contains("`Title` must be a string"),
+        "unexpected error: {not_string}"
+    );
+
+    let metadata = parse_ebp_metadata(DEFAULT_EBP_METADATA_JSON.as_bytes()).expect("default");
+    assert_eq!(
+        metadata.get("patcher"),
+        Some(&JsonValue::String("EBPatcher".into()))
+    );
+}
+
+#[test]
+fn flips_limits_reject_an_exact_limit_output_that_needs_a_truncate_footer() {
+    let limit = MAX_IPS_OFFSET + 1;
+    let error = validate_ips_create_flips_limits(
+        limit + 1,
+        limit,
+        IpsFlavor::Ips,
+        PatchChecksumValidation::Strict,
+    )
+    .expect_err("a truncate footer at the limit is not encodable");
+    assert!(
+        error
+            .to_string()
+            .contains("cannot encode a truncate footer"),
+        "unexpected error: {error}"
+    );
+
+    validate_ips_create_flips_limits(
+        limit + 1,
+        limit,
+        IpsFlavor::Ips,
+        PatchChecksumValidation::Ignore,
+    )
+    .expect("ignored validation skips the Flips limits");
+    validate_ips_create_flips_limits(
+        limit + 1,
+        limit,
+        IpsFlavor::Ips32,
+        PatchChecksumValidation::Strict,
+    )
+    .expect("IPS32 has no Flips limit");
+    validate_ips_create_flips_limits(
+        limit,
+        limit,
+        IpsFlavor::Ips,
+        PatchChecksumValidation::Strict,
+    )
+    .expect("an equal-sized output needs no truncate footer");
+}
+
+#[test]
+fn coalescing_merges_short_gaps_and_splits_long_ones() {
+    let temp = TestDir::new();
+    let modified = temp.child("coalesce.bin");
+    fs::write(&modified, b"ABCDEFGHIJ").expect("fixture");
+
+    let merged = coalesce_ips_diff_runs(
+        vec![
+            IpsDiffRun {
+                offset: 0,
+                bytes: b"AB".to_vec(),
+            },
+            IpsDiffRun {
+                offset: 4,
+                bytes: b"EF".to_vec(),
+            },
+        ],
+        &modified,
+        IpsFlavor::Ips,
+    )
+    .expect("short gap merges");
+    assert_eq!(merged.len(), 1);
+    assert_eq!(merged[0].offset, 0);
+    assert_eq!(merged[0].bytes, b"ABCDEF");
+
+    let split = coalesce_ips_diff_runs(
+        vec![
+            IpsDiffRun {
+                offset: 0,
+                bytes: b"AB".to_vec(),
+            },
+            IpsDiffRun {
+                offset: 9,
+                bytes: b"J".to_vec(),
+            },
+        ],
+        &modified,
+        IpsFlavor::Ips,
+    )
+    .expect("long gap splits");
+    assert_eq!(split.len(), 2);
+    assert_eq!(split[1].offset, 9);
+}
+
+#[test]
+fn coalescing_rejects_overlapping_diff_runs() {
+    let temp = TestDir::new();
+    let modified = temp.child("overlap.bin");
+    fs::write(&modified, b"ABCDEFGH").expect("fixture");
+
+    let error = coalesce_ips_diff_runs(
+        vec![
+            IpsDiffRun {
+                offset: 0,
+                bytes: b"ABC".to_vec(),
+            },
+            IpsDiffRun {
+                offset: 2,
+                bytes: b"C".to_vec(),
+            },
+        ],
+        &modified,
+        IpsFlavor::Ips,
+    )
+    .expect_err("overlapping runs should fail");
+    assert!(
+        error.to_string().contains("overlapping diff runs"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn diff_run_scan_reports_runs_and_treats_bytes_past_the_source_as_changed() {
+    let runs = collect_ips_diff_runs_from_bytes(10, b"ABCD", b"AXCD", 14).expect("scan");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].offset, 11);
+    assert_eq!(runs[0].bytes, b"X");
+
+    // `original_len` stops before the last two bytes, so they count as changed
+    // even though the padded source bytes match.
+    let grown = collect_ips_diff_runs_from_bytes(0, b"AB\0\0", b"AB\0\0", 2).expect("scan");
+    assert_eq!(grown.len(), 1);
+    assert_eq!(grown[0].offset, 2);
+    assert_eq!(grown[0].bytes, b"\0\0");
+}
+
+#[test]
+fn record_length_adjustment_avoids_landing_on_the_eof_marker_offset() {
+    let reserved = IPS_RESERVED_EOF_OFFSET;
+
+    assert_eq!(
+        adjust_record_len_for_reserved_offset(reserved, 0, 0, false, IpsFlavor::Ips)
+            .expect("zero length is untouched"),
+        0
+    );
+
+    let at_marker = adjust_record_len_for_reserved_offset(reserved, 4, 4, false, IpsFlavor::Ips)
+        .expect_err("a record starting on the marker cannot be encoded");
+    assert!(
+        at_marker.to_string().contains("IPS record offset matched"),
+        "unexpected error: {at_marker}"
+    );
+
+    assert_eq!(
+        adjust_record_len_for_reserved_offset(reserved - 4, 4, 10, true, IpsFlavor::Ips)
+            .expect("shortens so the next record misses the marker"),
+        3
+    );
+    assert_eq!(
+        adjust_record_len_for_reserved_offset(reserved - 1, 1, 5, true, IpsFlavor::Ips)
+            .expect("grows past the marker when it cannot shrink"),
+        2
+    );
+
+    let stuck = adjust_record_len_for_reserved_offset(
+        IPS32_RESERVED_EOF_OFFSET - 1,
+        1,
+        1,
+        true,
+        IpsFlavor::Ips32,
+    )
+    .expect_err("a one-byte record with nothing after it cannot move");
+    assert!(
+        stuck.to_string().contains("IPS32 record split"),
+        "unexpected error: {stuck}"
+    );
+}
+
+#[test]
+fn flavor_names_match_their_formats() {
+    assert_eq!(flavor_name(IpsFlavor::Ips), "IPS");
+    assert_eq!(flavor_name(IpsFlavor::Ips32), "IPS32");
+    assert_eq!(flavor_name(IpsFlavor::Ebp), "EBP");
+}
+
+#[test]
+fn rle_split_search_only_splits_runs_that_pay_for_a_record() {
+    assert_eq!(repeated_prefix_len(b""), 0);
+    assert_eq!(repeated_prefix_len(b"aaab"), 3);
+
+    assert_eq!(find_next_rle_split(b"abcdefgh"), None);
+    // A short interior run costs more as its own record than it saves.
+    assert_eq!(find_next_rle_split(b"ab\x05\x05\x05\x05\x05cd"), None);
+    assert_eq!(
+        find_next_rle_split(b"\x07\x07\x07\x07\x07\x07\x07\x07\x07abc"),
+        Some((0, 9))
+    );
+    assert_eq!(
+        find_next_rle_split(b"ab\x09\x09\x09\x09\x09\x09\x09\x09\x09\x09\x09\x09\x09\x09cd"),
+        Some((2, 14))
+    );
+}
+
+#[test]
+fn run_writer_emits_the_footer_and_trailer_for_every_flavor() {
+    let run = || IpsDiffRun {
+        offset: 0,
+        bytes: b"AB".to_vec(),
+    };
+
+    let mut ebp = Vec::new();
+    let created: IpsCreateResult =
+        write_ips_runs_to_output(vec![run()], 2, 2, &mut ebp, IpsFlavor::Ebp).expect("ebp");
+    assert_eq!(created.record_count, 1);
+    assert!(ebp.starts_with(IPS_MAGIC));
+    assert!(ebp.ends_with(DEFAULT_EBP_METADATA_JSON.as_bytes()));
+
+    let mut ips32 = Vec::new();
+    write_ips_runs_to_output(vec![run()], 2, 2, &mut ips32, IpsFlavor::Ips32).expect("ips32");
+    assert!(ips32.starts_with(IPS32_MAGIC));
+    assert!(ips32.ends_with(IPS32_EOF));
+
+    let mut shrinking = Vec::new();
+    write_ips_runs_to_output(vec![run()], 8, 4, &mut shrinking, IpsFlavor::Ips).expect("ips");
+    assert_eq!(&shrinking[shrinking.len() - 3..], &[0x00, 0x00, 0x04]);
+
+    let mut growing = Vec::new();
+    write_ips_runs_to_output(vec![run()], 4, 8, &mut growing, IpsFlavor::Ips).expect("ips");
+    assert!(growing.ends_with(IPS_EOF));
+}
+
+#[test]
+fn truncate_footer_is_only_required_when_the_output_shrinks() {
+    assert!(truncate_size_required(8, 4));
+    assert!(!truncate_size_required(4, 8));
+    assert!(!truncate_size_required(4, 4));
+}
+
+#[test]
+fn chunk_planning_counts_output_and_scan_chunks() {
+    assert_eq!(max_parallel_chunks(0).expect("empty output"), 1);
+    assert_eq!(
+        max_parallel_chunks(OUTPUT_CHUNK_SIZE).expect("one chunk"),
+        1
+    );
+    assert_eq!(
+        max_parallel_chunks(OUTPUT_CHUNK_SIZE + 1).expect("two chunks"),
+        2
+    );
+
+    assert_eq!(ips_create_chunk_count(0).expect("empty input"), 1);
+    assert_eq!(
+        ips_create_chunk_count(CREATE_SCAN_CHUNK_BYTES as u64 + 1).expect("two chunks"),
+        2
+    );
+    assert!(matches!(
+        ips_create_thread_capability(CREATE_SCAN_CHUNK_BYTES as u64 + 1).expect("capability"),
+        rom_weaver_core::ThreadCapability::Parallel {
+            max_threads: Some(2)
+        }
+    ));
+}
+
+#[test]
+fn record_offsets_are_range_checked_per_flavor() {
+    let mut output = Vec::new();
+    let over_24_bit = super::write_u24(&mut output, MAX_IPS_OFFSET + 1, "probe")
+        .expect_err("a 25-bit offset should fail");
+    assert!(
+        over_24_bit.to_string().contains("IPS 24-bit limit"),
+        "unexpected error: {over_24_bit}"
+    );
+
+    let over_32_bit = super::write_u32(&mut output, MAX_IPS32_OFFSET + 1, "probe")
+        .expect_err("a 33-bit offset should fail");
+    assert!(
+        over_32_bit.to_string().contains("IPS32 32-bit limit"),
+        "unexpected error: {over_32_bit}"
+    );
+
+    for (flavor, offset) in [
+        (IpsFlavor::Ips, IPS_RESERVED_EOF_OFFSET),
+        (IpsFlavor::Ebp, IPS_RESERVED_EOF_OFFSET),
+        (IpsFlavor::Ips32, IPS32_RESERVED_EOF_OFFSET),
+    ] {
+        let error = write_offset(&mut output, offset, flavor)
+            .expect_err("the reserved offset is not encodable");
+        assert!(
+            error.to_string().contains("matched its EOF marker"),
+            "unexpected error: {error}"
+        );
+    }
+
+    super::write_u24(&mut output, MAX_IPS_OFFSET, "probe").expect("the 24-bit maximum encodes");
+    assert_eq!(
+        decode_u24(&output[output.len() - 3..]),
+        MAX_IPS_OFFSET as u32
+    );
+    super::write_u32(&mut output, MAX_IPS32_OFFSET, "probe").expect("the 32-bit maximum encodes");
+    assert_eq!(
+        decode_u32(&output[output.len() - 4..]),
+        MAX_IPS32_OFFSET as u32
+    );
+}
+
+#[test]
+fn record_writers_skip_empty_payloads_and_reject_over_long_ones() {
+    let mut output = Vec::new();
+    let mut created = IpsCreateResult::default();
+
+    write_literal_record(&mut output, 0, &[], &mut created, IpsFlavor::Ips).expect("empty literal");
+    write_rle_record(&mut output, 0, 0, 0x5A, &mut created, IpsFlavor::Ips).expect("empty rle");
+    assert!(output.is_empty());
+    assert_eq!(created.record_count, 0);
+
+    let over_long = vec![0u8; MAX_IPS_RECORD_LEN + 1];
+    let literal_error =
+        write_literal_record(&mut output, 0, &over_long, &mut created, IpsFlavor::Ips)
+            .expect_err("an over-long literal should fail");
+    assert!(
+        literal_error
+            .to_string()
+            .contains("maximum encodable length"),
+        "unexpected error: {literal_error}"
+    );
+
+    let rle_error = write_rle_record(
+        &mut output,
+        0,
+        MAX_IPS_RECORD_LEN + 1,
+        0x5A,
+        &mut created,
+        IpsFlavor::Ips,
+    )
+    .expect_err("an over-long RLE run should fail");
+    assert!(
+        rle_error.to_string().contains("maximum encodable length"),
+        "unexpected error: {rle_error}"
+    );
+}
+
+#[test]
+fn checked_add_reports_the_label_that_overflowed() {
+    let error = checked_add(u64::MAX, 1, "probe offset").expect_err("overflow should fail");
+    assert!(
+        error.to_string().contains("probe offset overflowed"),
+        "unexpected error: {error}"
+    );
+    assert_eq!(checked_add(2, 3, "probe offset").expect("no overflow"), 5);
+}
+
+#[test]
+fn file_parser_rejects_reads_past_the_end_of_the_patch() {
+    let mut parser = IpsFileParser::new(std::io::Cursor::new(vec![0u8; 8]), 4);
+    let error = parser
+        .read_exact(5)
+        .expect_err("reading past the file length should fail");
+    assert!(
+        error.to_string().contains("ended unexpectedly"),
+        "unexpected error: {error}"
+    );
+    assert_eq!(parser.remaining().expect("remaining"), 4);
+}
+
+#[test]
+fn record_overlap_detection_ignores_empty_records() {
+    assert!(!records_overlap(&[
+        ips_probe_record(0, 4),
+        ips_probe_record(4, 4)
+    ]));
+    assert!(records_overlap(&[
+        ips_probe_record(0, 5),
+        ips_probe_record(4, 4)
+    ]));
+    assert!(!records_overlap(&[
+        ips_probe_record(0, 4),
+        ips_probe_record(2, 0)
+    ]));
+}
+
+#[test]
+fn probing_a_file_that_is_not_ips_reports_no_records() {
+    let temp = TestDir::new();
+    let too_short = temp.child("short.ips");
+    let wrong_magic = temp.child("other.bin");
+    fs::write(&too_short, b"PA").expect("short fixture");
+    fs::write(&wrong_magic, b"NOTAPATCHFILE").expect("wrong-magic fixture");
+
+    assert!(
+        probe_ips_records(&too_short)
+            .expect("short probe")
+            .is_none()
+    );
+    assert!(
+        probe_ips_records(&wrong_magic)
+            .expect("wrong-magic probe")
+            .is_none()
+    );
+}
+
+#[test]
+fn probing_reports_record_geometry_prefix_writes_and_truncate_size() {
+    let temp = TestDir::new();
+    let patch = temp.child("probe-geometry.ips");
+    fs::write(
+        &patch,
+        build_ips_patch(
+            vec![
+                TestIpsRecord::Rle {
+                    offset: 0,
+                    len: 3,
+                    value: 0x11,
+                },
+                TestIpsRecord::Literal {
+                    offset: 1,
+                    data: b"AB".to_vec(),
+                },
+                TestIpsRecord::Literal {
+                    offset: 64,
+                    data: b"Z".to_vec(),
+                },
+            ],
+            Some(128),
+        ),
+    )
+    .expect("fixture");
+
+    let probed = probe_ips_records(&patch)
+        .expect("probe")
+        .expect("IPS patch");
+    assert_eq!(probed.records.len(), 3);
+    assert_eq!(probed.truncate_size, Some(128));
+    assert_eq!(probed.records[0].first, 0x11);
+    assert_eq!(probed.records[0].last, 0x11);
+    assert_eq!(probed.records[1].first, b'A');
+    assert_eq!(probed.records[1].last, b'B');
+    // The later literal overwrites the RLE run at offsets 1 and 2, and no
+    // record reaches offset 3.
+    assert_eq!(
+        probed.prefix_writes,
+        [Some(0x11), Some(b'A'), Some(b'B'), None]
+    );
+    assert_eq!(IPS_PROBE_PREFIX_BYTES, 4);
+}
+
+#[test]
+fn probing_selects_the_ebp_flavor_from_the_file_extension() {
+    let temp = TestDir::new();
+    let as_ebp = temp.child("flavored.ebp");
+    let as_ips = temp.child("flavored.ips");
+    let bytes = build_ebp_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 0,
+            data: b"A".to_vec(),
+        }],
+        "{not json",
+    );
+    fs::write(&as_ebp, &bytes).expect("ebp fixture");
+    fs::write(&as_ips, &bytes).expect("ips fixture");
+
+    let error = probe_ips_records(&as_ebp).expect_err("EBP metadata is parsed for a .ebp file");
+    assert!(
+        error.to_string().contains("not valid JSON"),
+        "unexpected error: {error}"
+    );
+
+    // The same bytes under a .ips name are classic IPS, whose probe ignores the
+    // trailing block instead of decoding it as metadata.
+    let probed = probe_ips_records(&as_ips)
+        .expect("ips probe")
+        .expect("IPS patch");
+    assert_eq!(probed.records.len(), 1);
+}
+
+#[test]
+fn probing_reads_ips32_offsets_past_the_24_bit_limit() {
+    let temp = TestDir::new();
+    let patch = temp.child("wide.ips32");
+    fs::write(
+        &patch,
+        build_ips32_patch(vec![TestIpsRecord::Literal {
+            offset: 0x0100_0000,
+            data: b"QR".to_vec(),
+        }]),
+    )
+    .expect("fixture");
+
+    let probed = probe_ips_records(&patch)
+        .expect("probe")
+        .expect("IPS32 patch");
+    assert_eq!(probed.records.len(), 1);
+    assert_eq!(probed.records[0].offset, 0x0100_0000);
+    assert_eq!(probed.prefix_writes, [None; IPS_PROBE_PREFIX_BYTES]);
 }

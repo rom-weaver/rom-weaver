@@ -360,3 +360,7 @@ impl Seek for ReadAdapter<'_> {
         Ok(self.pos)
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/nod_nkit.rs"]
+mod tests;
