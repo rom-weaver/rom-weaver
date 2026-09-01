@@ -75,6 +75,7 @@ import {
   preloadWorkflowRoute,
   PpfUndoRouteForm,
   TrimPatchRoute,
+  WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
@@ -138,6 +139,10 @@ const logger = createLogger("webapp-root");
 
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
+  if (view === "whats-new") {
+    document.title = "rom-weaver - What's new";
+    return;
+  }
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
@@ -368,7 +373,9 @@ function WebappRoot({
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
     if (notFound) return;
-    setActiveSelectionForm(state.currentView === "docs" ? undefined : state.currentView);
+    setActiveSelectionForm(
+      state.currentView === "docs" || state.currentView === "whats-new" ? undefined : state.currentView,
+    );
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
@@ -485,26 +492,24 @@ function WebappRoot({
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
   }, []);
-  // Every changelog affordance - the version chip, the update notification, and
-  // the runtime chip while it is amber - lands on the one tab that holds every
-  // view of the changelog.
-  const openChangelogTab = useCallback(() => {
-    preloadLogDialog();
-    setLogTab("changelog");
-    setLogOpen(true);
-  }, [preloadLogDialog]);
+  // Every What's new affordance - the version chip, the update notification,
+  // and the runtime chip while it is amber - lands on the What's new route.
+  const openWhatsNew = useCallback(() => {
+    pendingViewRef.current = null;
+    selectViewWithTransition(() => actions.onSelectView("whats-new"));
+  }, [actions]);
   // The runtime chip reports a state, and Status is where that state is
   // explained - except in the one state that asks for an action. An amber chip
   // is an update waiting, so it goes where the update is described.
   const openStatusTab = useCallback(() => {
     if (pageUpdate.ready) {
-      openChangelogTab();
+      openWhatsNew();
       return;
     }
     preloadLogDialog();
     setLogTab("status");
     setLogOpen(true);
-  }, [openChangelogTab, pageUpdate.ready, preloadLogDialog]);
+  }, [openWhatsNew, pageUpdate.ready, preloadLogDialog]);
   const openStorageTab = useCallback(() => {
     preloadLogDialog();
     setLogTab("storage");
@@ -522,7 +527,9 @@ function WebappRoot({
   const handleSelectTab = useCallback(
     (id: string) => {
       if (notFound) {
-        const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
+        // Not-found's More menu can also reach a tab with no rail entry
+        // (What's new), so it falls back to the id itself as the slug.
+        const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
         if (href) window.location.assign(`/${href}`);
         return;
       }
@@ -596,7 +603,7 @@ function WebappRoot({
   // fires continuously, so a short debounce clears the flag once it stops (drag
   // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
   useEffect(() => {
-    if (notFound || state.currentView === "docs") {
+    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") {
       setPageDragging(false);
       return undefined;
     }
@@ -623,7 +630,7 @@ function WebappRoot({
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
-    if (notFound || state.currentView === "docs") return undefined;
+    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") return undefined;
     const handlePageDragOver = (event: DragEvent) => {
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
@@ -675,7 +682,7 @@ function WebappRoot({
         id={`panel-${view}`}
         role="tabpanel"
       >
-        {view === "docs" ? null : (
+        {view === "docs" || view === "whats-new" ? null : (
           <div className="workflow-panel-head">
             <PanelSettingsButton
               onOpenSettings={() => openSettingsTab()}
@@ -715,7 +722,7 @@ function WebappRoot({
             onAccentChange={actions.onAccentChange}
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
-            onOpenChangelog={openChangelogTab}
+            onOpenWhatsNew={openWhatsNew}
             onOpenLog={() => {
               setLogTab("logs");
               setLogOpen(true);
@@ -743,7 +750,7 @@ function WebappRoot({
               setUpdateDismissed(true);
               writeUpdateDismissed();
             }}
-            onOpenChangelog={openChangelogTab}
+            onOpenWhatsNew={openWhatsNew}
             onReload={actions.onReloadUpdate}
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
@@ -818,6 +825,14 @@ function WebappRoot({
                   <DocsPageRoute active={state.currentView === "docs"} onSelectTab={handleSelectTab} slug={docsSlug} />,
                 )}
                 {workflowPanel(
+                  "whats-new",
+                  <WhatsNewPageRoute
+                    active={state.currentView === "whats-new"}
+                    onReload={actions.onReloadUpdate}
+                    updateReady={pageUpdate.ready}
+                  />,
+                )}
+                {workflowPanel(
                   "identify",
                   <IdentifyRouteForm onSelectTab={handleSelectTab} pageDrop={pageDropFor("identify")} />,
                 )}
@@ -839,7 +854,7 @@ function WebappRoot({
                     pageDrop={pageDropFor("ppf-undo")}
                   />,
                 )}
-                {state.currentView === "docs" ? null : <DropVeil />}
+                {state.currentView === "docs" || state.currentView === "whats-new" ? null : <DropVeil />}
               </>
             )}
           </main>
@@ -861,7 +876,6 @@ function WebappRoot({
               level={state.settings.logLevel}
               onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}
-              onReload={actions.onReloadUpdate}
               onRestoreDefaults={actions.onRestoreDefaults}
               onSaveSettings={saveSettings}
               onTabChange={handleDialogTabChange}

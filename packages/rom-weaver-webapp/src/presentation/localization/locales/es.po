@@ -165,6 +165,11 @@ msgstr "Aplica un parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.bundleHint"
+msgstr "Apply Patch gestiona bundles y ejecuta su secuencia de parches guardada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.applyThisPatch"
 msgstr "Aplicar este parche"
 
@@ -172,11 +177,6 @@ msgstr "Aplicar este parche"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Herramienta Aplicar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.find.bundleHint"
-msgstr "Apply Patch gestiona bundles y ejecuta su secuencia de parches guardada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -270,11 +270,6 @@ msgstr "Cambia tu forma de jugar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.tabChangelog"
-msgstr "Cambios"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.channel"
 msgstr "Canal"
 
@@ -362,6 +357,11 @@ msgstr "Valores predeterminados"
 #: src/presentation/localization/messages.ts
 msgid "ui.channel.dev"
 msgstr "Compilación de desarrollo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.dialogLabel"
+msgstr "Diagnóstico"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -980,11 +980,6 @@ msgstr "Ajustes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.dialogLabel"
-msgstr "Ajustes y estado"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.share"
 msgstr "Compartir bundle"
 
@@ -1238,6 +1233,9 @@ msgstr "Activar todos"
 
 #~ msgid "ui.find.label"
 #~ msgstr "Buscar"
+
+#~ msgid "ui.log.tabChangelog"
+#~ msgstr "Cambios"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

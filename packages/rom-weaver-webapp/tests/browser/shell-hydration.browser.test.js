@@ -40,7 +40,7 @@ const shell = (threads, serviceWorkerStatus, betaToolsEnabled = false) =>
       null,
       createElement(Masthead, {
         currentTab: "patcher",
-        onOpenChangelog: () => undefined,
+        onOpenWhatsNew: () => undefined,
         onOpenLog: () => undefined,
         onOpenSettings: () => undefined,
         onOpenStatus: () => undefined,
