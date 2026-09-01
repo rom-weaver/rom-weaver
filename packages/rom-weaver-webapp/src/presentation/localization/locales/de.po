@@ -65,6 +65,11 @@ msgstr "{count, plural, one {# Patch ist aus - ankreuzen zum Einschließen} othe
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.resultCount"
+msgstr "{count} Treffer"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} Warnung(en)"
 

@@ -34,6 +34,39 @@ const props = {
 const findInput = (container: HTMLElement) => container.querySelector(".find-input") as HTMLInputElement;
 
 describe("Find", () => {
+  it("hides beta tools while the beta-tools setting is off, and ignores Ctrl+K behind a modal", () => {
+    const tabs = [
+      ...TABS,
+      {
+        beta: true,
+        group: "tools" as const,
+        href: "trim",
+        icon: <svg aria-hidden="true" />,
+        id: "trim",
+        label: "Trim",
+        placement: "more" as const,
+      },
+    ];
+    const { container, getByRole } = render(
+      <RomWeaverSettingsProvider settings={{ betaToolsEnabled: false }}>
+        <Masthead {...props} tabs={tabs} />
+      </RomWeaverSettingsProvider>,
+    );
+    fireEvent.click(container.querySelector(".desktop-find .mode-find") as HTMLButtonElement);
+    const labels = Array.from(getByRole("listbox", { name: "Find" }).querySelectorAll(".find-label")).map(
+      (label) => label.textContent,
+    );
+    expect(labels).not.toContain("Trim");
+    fireEvent.keyDown(findInput(container), { key: "Escape" });
+
+    const dialog = document.createElement("dialog");
+    dialog.setAttribute("open", "");
+    document.body.append(dialog);
+    fireEvent.keyDown(document, { ctrlKey: true, key: "k" });
+    expect(container.querySelector(".find-palette")).toBeNull();
+    dialog.remove();
+  });
+
   it("opens from the rail trigger with the browse list and focus in the box", () => {
     const { container, getByRole } = render(withSettings(<Masthead {...props} />));
     expect(container.querySelector(".find-palette")).toBeNull();

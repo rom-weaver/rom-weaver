@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   CloudCheck,
   CloudDownload,
   CloudOff,
@@ -530,7 +531,7 @@ const UtilityMenu = ({
 
   const menuItems = () =>
     Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []).filter(
-      (item) => !item.hidden,
+      (item) => !item.closest("[hidden]"),
     );
   const focusItem = (offset: number) => {
     const items = menuItems();
@@ -550,20 +551,25 @@ const UtilityMenu = ({
   const betaTabs = groupTabs("tools", true);
   const toolTabs = groupTabs("tools", false);
   const docsTabs = groupTabs("docs", false);
+  // A real link, so middle-click and "open in new tab" keep working; a plain
+  // activation routes through the same handler the rail uses.
   const workflowItem = (tab: WorkflowTab) => (
-    <button
+    <a
       data-more-workflow={tab.id}
+      href={tab.href}
       key={tab.id}
-      onClick={() => {
-        if (onOpenWorkflowTab) select(() => onOpenWorkflowTab(tab.id));
+      onClick={(event) => {
+        if (!onOpenWorkflowTab) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        select(() => onOpenWorkflowTab(tab.id));
       }}
       role="menuitem"
-      type="button"
     >
       {tab.icon}
       {tab.label}
       {tab.beta ? <span className="more-beta">{localizer.message("ui.tools.beta")}</span> : null}
-    </button>
+    </a>
   );
 
   return (
@@ -699,6 +705,7 @@ const UtilityMenu = ({
 const MoreMenu = ({
   buttonClassName,
   className,
+  current = false,
   menuId,
   moreLabel,
   onClose,
@@ -711,6 +718,8 @@ const MoreMenu = ({
 }: UtilityMenuProps & {
   buttonClassName: string;
   className: string;
+  /** True when the selected workflow lives inside this menu, so More is "you are here". */
+  current?: boolean;
   menuId: string;
   moreLabel: string;
   onClose: () => void;
@@ -731,7 +740,7 @@ const MoreMenu = ({
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={moreLabel}
-        className={buttonClassName}
+        className={join(buttonClassName, current && "is-current")}
         onBlur={() => {
           viaPointer.current = false;
         }}
@@ -1153,7 +1162,11 @@ const Masthead = ({
   const mobileFindRef = useRef<HTMLButtonElement | null>(null);
   const activeFindRef = findPlacement === "mobile" ? mobileFindRef : desktopFindRef;
   const findLabel = localizerFindLabel(localizer);
-  const findSources = useMemo(() => ({ donateHref, githubHref, tabs }), [donateHref, githubHref, tabs]);
+  // Find honours the beta-tools setting the way More does.
+  const findSources = useMemo(
+    () => ({ donateHref, githubHref, tabs: tabs.filter((tab) => betaToolsEnabled || !tab.beta) }),
+    [betaToolsEnabled, donateHref, githubHref, tabs],
+  );
   const closeFind = useCallback(() => setFindOpen(false), []);
   const toggleFind = (placement: "desktop" | "mobile") => {
     setFindPlacement(placement);
@@ -1177,6 +1190,9 @@ const Masthead = ({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.altKey || event.key.toLowerCase() !== "k") return;
       if (!(event.metaKey || event.ctrlKey)) return;
+      // A modal dialog makes the shell inert; the shortcut must not open a
+      // palette nobody can reach behind its backdrop.
+      if (document.querySelector("dialog[open]")) return;
       event.preventDefault();
       const desktopVisible = !!desktopFindRef.current?.offsetParent;
       setFindPlacement(desktopVisible ? "desktop" : "mobile");
@@ -1190,6 +1206,7 @@ const Masthead = ({
   const BrandHeading = currentTab === "docs" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
   const moreTabs = tabs.filter(isMoreMenuTab);
+  const currentInMore = moreTabs.some((tab) => tab.id === currentTab);
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
@@ -1339,6 +1356,7 @@ const Masthead = ({
               <MoreMenu
                 autoFocusFirst={utilityViaKeyboard}
                 buttonClassName="mode-more"
+                current={currentInMore}
                 className="desktop-more"
                 confirmExternalNavigation={confirmExternalNavigation}
                 donateHref={donateHref}
@@ -1471,6 +1489,7 @@ const Masthead = ({
             </button>
             <MoreMenu
               buttonClassName="dock-action"
+              current={currentInMore}
               className="mobile-more"
               confirmExternalNavigation={confirmExternalNavigation}
               donateHref={donateHref}
@@ -1519,10 +1538,13 @@ const openExternalFromFind = (href: string, confirmExternalNavigation?: (href: s
 
 const SiteFooter = ({
   confirmExternalNavigation,
+  docsHref,
   donateHref,
   githubHref,
 }: {
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  /** The guides, as a plain link: the one crawlable path to Docs now that the rail has none. */
+  docsHref?: string;
   donateHref?: string;
   githubHref?: string;
 }) => {
@@ -1532,6 +1554,12 @@ const SiteFooter = ({
   return (
     <footer className="site-footer">
       <div className="site-footer-actions">
+        {docsHref ? (
+          <a className="footer-link footer-docs" href={docsHref}>
+            <BookOpen aria-hidden="true" />
+            <span>{localizer.message("ui.nav.docs")}</span>
+          </a>
+        ) : null}
         {githubHref ? (
           <a
             className="footer-link"

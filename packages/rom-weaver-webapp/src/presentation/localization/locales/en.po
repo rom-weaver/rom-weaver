@@ -65,6 +65,11 @@ msgstr "{count, plural, one {# patch is off - tick it to include it} other {# pa
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.resultCount"
+msgstr "{count} results"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} warning(s)"
 

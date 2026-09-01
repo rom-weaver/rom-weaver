@@ -28,6 +28,7 @@
    width and locale. The brand's min-content floor is what keeps the wordmark
    whole. */
 .rw-app .masthead {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(min-content, max-content) minmax(0, 1fr) auto;
   column-gap: var(--sp-l);
@@ -584,6 +585,11 @@ html.vt-theme .mode-rail .mode {
 .rw-app .mode-more[aria-expanded="true"] {
   color: var(--ink);
   background: var(--well);
+}
+/* "you are here" when the selected workflow (Docs, a beta tool) lives inside More */
+.rw-app .mode-more.is-current,
+.rw-app .dock-action.is-current {
+  color: var(--thread-text);
 }
 .rw-app .mobile-more {
   position: relative;

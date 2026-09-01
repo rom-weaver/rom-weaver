@@ -65,6 +65,11 @@ msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirl
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.resultCount"
+msgstr "{count} resultados"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} aviso(s)"
 

@@ -1,5 +1,15 @@
 import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useMemo,
+} from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
@@ -474,6 +484,11 @@ function WebappRoot({
     setLogTab("storage");
     setLogOpen(true);
   }, [preloadLogDialog]);
+  // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
+  const mastheadTabs = useMemo(
+    () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
+    [notFound],
+  );
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -681,7 +696,7 @@ function WebappRoot({
               selectViewWithTransition(() => actions.onSelectView(view));
             }}
             settingsOpen={logOpen && logTab === "settings"}
-            tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
+            tabs={mastheadTabs}
             tabsControlPanels={!notFound}
           />
           <UpdateBanner
@@ -771,6 +786,7 @@ function WebappRoot({
           </main>
           <SiteFooter
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
+            docsHref={notFound ? "/docs" : "docs"}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
           />
