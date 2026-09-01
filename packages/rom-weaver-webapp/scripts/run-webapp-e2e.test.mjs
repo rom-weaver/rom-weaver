@@ -12,9 +12,25 @@ import {
   checkCssCoverage,
   computeDocsRouteSlugs,
   hasVisiblePrerenderedShell,
+  resolveE2EShard,
   sha256,
   shouldRejectUnauthorized,
 } from "./run-webapp-e2e.mjs";
+
+describe("resolveE2EShard", () => {
+  it("runs the complete suite when no shard is given", () => {
+    assert.equal(resolveE2EShard([]), "all");
+  });
+
+  it("selects each supported shard", () => {
+    assert.equal(resolveE2EShard(["--a11y"]), "a11y");
+    assert.equal(resolveE2EShard(["--journeys"]), "journeys");
+  });
+
+  it("rejects incompatible shard flags", () => {
+    assert.throws(() => resolveE2EShard(["--a11y", "--journeys"]), /Use only one E2E shard: --a11y or --journeys/);
+  });
+});
 
 describe("shouldRejectUnauthorized", () => {
   it("skips TLS verification for loopback hostnames", () => {

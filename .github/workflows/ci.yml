@@ -435,17 +435,29 @@ jobs:
         with:
           variant: prod
 
-      # A hit needs only Node/Rust to regenerate the cheap attribution files;
-      # the full toolchain exists only to compile on a miss.
-      - uses: ./.github/actions/setup-build-env
+      # Keep the hit and miss setup explicit. GitHub expressions cannot use
+      # an empty string as the true side of an &&/|| conditional because the
+      # empty value falls through to the miss-only input.
+      - name: Set up cached WASM environment
+        if: steps.wasm-cache.outputs.cache-hit == 'true'
+        uses: ./.github/actions/setup-build-env
         with:
-          tools: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'node rust' || 'node rust binaryen' }}
-          apt-packages: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'cmake ninja-build pkg-config clang libclang-dev' }}
-          cargo-cache: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
-          rust-targets: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && '' || 'wasm32-wasip1-threads' }}
-          wasi-sdk: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
-          ccache: ${{ steps.wasm-cache.outputs.cache-hit == 'true' && 'false' || 'true' }}
+          tools: node rust
+          cargo-cache: "false"
           webapp-deps: "true"
+          identify-data-cache: "true"
+
+      - name: Set up WASM build environment
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust binaryen
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+          ccache: "true"
+          webapp-deps: "true"
+          identify-data-cache: "true"
 
       # Never set RUSTFLAGS here: Cargo replaces configured target flags instead
       # of extending them, silently dropping shared-memory, LTO, and exports.
@@ -510,10 +522,10 @@ jobs:
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
         run: node scripts/ci/assert-job-groups.mjs
 
-  # Everything that needs a host-profile Rust build and nothing from wasm, so
-  # it runs concurrently with the wasm build instead of queueing behind it.
-  rust-host:
-    name: "Rust (Linux: lint + tests)"
+  # Host-profile Rust lint and metadata checks. The test suite has its own job
+  # below so both compile-heavy paths can run at the same time.
+  rust-lint:
+    name: "Rust (Linux: lint + metadata)"
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: changes
@@ -536,19 +548,12 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node rust cargo-deny cargo-machete nextest
+          tools: node rust cargo-deny cargo-machete
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
           ccache: "true"
           webapp-deps: "true"
-
-      # This runner is x86-64, so installing the assembler here is what puts the
-      # vendored LZMA SDK's x86-64 decode loop under the Rust test suite below -
-      # otherwise the only asm loop CI ever exercises is the arm64 one. build.rs
-      # falls back to the C loop without it, so a failure here cannot break the
-      # job, only reduce what it covers.
-      - name: Install the x86-64 LZMA assembler
-        run: sudo scripts/install-jwasm.sh
+          identify-data-cache: "true"
 
       - name: Rust format
         run: mise run fmt
@@ -570,9 +575,6 @@ jobs:
       - name: Thread guard regressions
         run: mise run thread-guards
 
-      - name: Rust tests
-        run: mise run test-rust
-
       - name: Third-party attribution bundle
         run: mise run licenses-check
 
@@ -583,6 +585,34 @@ jobs:
 
       - name: Unused Rust dependencies
         run: mise run machete
+
+  rust-host:
+    name: "Rust (Linux: tests + package)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: changes
+    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust nextest
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          ccache: "true"
+          identify-data-cache: "true"
+
+      # This runner is x86-64, so the test suite MUST compile the vendored LZMA
+      # SDK's x86-64 assembly decode loop as well as its portable C fallback.
+      - name: Install the x86-64 LZMA assembler
+        run: sudo scripts/install-jwasm.sh
+
+      - name: Rust tests
+        run: mise run test-rust
 
       - name: Prepare ROM identify data for package validation
         uses: ./.github/actions/identify-data
@@ -759,7 +789,7 @@ jobs:
   # The release fan-out builds the CLI for macOS, but until here nothing ever
   # *tested* on it - a platform-specific regression surfaced at publish time or
   # from a user report. fmt, clippy, typegen, and the policy checks are
-  # platform-independent and already gate in `rust-host`.
+  # platform-independent and already gate in `rust-lint`.
   #
   # Uses the same mise/setup-build-env path as the Linux jobs: mise is the
   # toolchain manager the repo's macOS development already runs on. This leg
@@ -774,7 +804,7 @@ jobs:
       && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
-      # Same trade as rust-host above: test backtraces keep file:line while
+      # Same trade as the Linux Rust jobs above: test backtraces keep file:line while
       # the cache entry and compile shed the bulk of the debuginfo.
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
@@ -922,7 +952,7 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, rust-host, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
+    needs: [changes, rust-host, rust-lint, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -934,6 +964,7 @@ jobs:
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.rust }}'
           'rust-host=${{ needs.rust-host.result }}'
+          'rust-lint=${{ needs.rust-lint.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
 
       # Same `!cancelled()` as the job above, for the same reason: this has to
@@ -1210,11 +1241,15 @@ jobs:
   # This stays selected for every webapp change: it has caught regressions in
   # rendered documentation as well as application code.
   webapp-e2e:
-    name: Webapp (E2E)
+    name: Webapp (E2E, ${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [a11y, journeys]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1237,10 +1272,11 @@ jobs:
       # colours. Re-renders them in memory and diffs. Needs the playwright
       # chromium this job already installs.
       - name: Channel icons up to date
+        if: matrix.shard == 'journeys'
         run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
 
       - name: Webapp E2E
-        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
+        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp -- --${{ matrix.shard }}
 
   webapp-webkit-e2e:
     name: Webapp (WebKit E2E)

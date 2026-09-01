@@ -30,7 +30,8 @@ node --test scripts/ci/classify-changes.test.mjs             # change boundaries
 node --test scripts/ci/docker-matrix.test.mjs                # image/arch leg planning
 node --test scripts/ci/wasm-runtime-coverage.test.mjs        # wasm_runtime vs. the suite
 mise run fmt ::: clippy ::: typegen-check ::: whitespace ::: thread-guards
-mise run test-rust ::: licenses-check ::: deny-policy ::: machete # rust-host
+mise run test-rust # rust-host
+mise run licenses-check ::: deny-policy ::: machete # rust-lint
 mise run identify-data
 cargo publish --workspace --locked --dry-run --no-verify --allow-dirty # rust-host
 mise run wasm-check                                          # local threaded-target check

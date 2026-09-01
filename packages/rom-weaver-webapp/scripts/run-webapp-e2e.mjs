@@ -35,7 +35,14 @@ const ARCHIVE_STRESS_TIMEOUT_MS = 240_000;
 const MANY_ENTRIES_COUNT = 2048;
 const MANY_ENTRY_SIZE = 4096;
 const E2E_ATTEMPTS = 2;
-const A11Y_ONLY = process.argv.includes("--a11y");
+export const resolveE2EShard = (args) => {
+  const requested = args.filter((arg) => arg === "--a11y" || arg === "--journeys");
+  if (requested.length > 1) throw new Error("Use only one E2E shard: --a11y or --journeys");
+  return requested[0]?.slice(2) || "all";
+};
+const E2E_SHARD = resolveE2EShard(process.argv.slice(2));
+const RUN_AUDITS = E2E_SHARD !== "journeys";
+const RUN_JOURNEYS = E2E_SHARD !== "a11y";
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
@@ -1034,7 +1041,9 @@ const main = async () => {
   const previewBaseUrl = `https://${host}:${previewPort}/`;
   const devBaseUrl = `https://${host}:${devPort}/`;
   const temporaryCorpusDir =
-    browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR ? createWorkerReuseCorpus() : null;
+    RUN_JOURNEYS && browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR
+      ? createWorkerReuseCorpus()
+      : null;
   const corpusDir = process.env.ROM_WEAVER_E2E_CORPUS_DIR || temporaryCorpusDir;
   const preview = startServer("preview", previewPort);
   const dev = startServer("dev", devPort, corpusDir);
@@ -1052,18 +1061,21 @@ const main = async () => {
       browserName,
     );
     try {
-      await runHydrationAudit(createContext, previewBaseUrl);
-      await runAccessibilityAudit(createContext, previewBaseUrl);
-      if (A11Y_ONLY) return;
-      await runApplyJourney(createContext, devBaseUrl, "raw apply/download", [
-        "archive_sources/game.bin",
-        "archive_sources/change.ips",
-      ]);
-      await runApplyJourney(createContext, devBaseUrl, "archive routing/apply/download", [
-        "archives/one-rom.zip",
-        "archives/one-patch.7z",
-      ]);
-      if (browserName === "chromium" && corpusDir) await runArchiveStressSmoke(createContext, devBaseUrl);
+      if (RUN_AUDITS) {
+        await runHydrationAudit(createContext, previewBaseUrl);
+        await runAccessibilityAudit(createContext, previewBaseUrl);
+      }
+      if (RUN_JOURNEYS) {
+        await runApplyJourney(createContext, devBaseUrl, "raw apply/download", [
+          "archive_sources/game.bin",
+          "archive_sources/change.ips",
+        ]);
+        await runApplyJourney(createContext, devBaseUrl, "archive routing/apply/download", [
+          "archives/one-rom.zip",
+          "archives/one-patch.7z",
+        ]);
+        if (browserName === "chromium" && corpusDir) await runArchiveStressSmoke(createContext, devBaseUrl);
+      }
     } finally {
       await browser?.close();
       for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
