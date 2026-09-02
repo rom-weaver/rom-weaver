@@ -460,7 +460,6 @@ type UtilityMenuProps = {
   menuClassName?: string;
   mobile?: boolean;
   onAccentChange?: (accent: string) => void;
-  onOpenChangelog: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
   onOpenSettings?: () => void;
@@ -483,7 +482,6 @@ const UtilityMenu = ({
   mobile = false,
   onClose,
   onAccentChange,
-  onOpenChangelog,
   onOpenLog,
   onOpenSettings,
   onOpenStatus,
@@ -662,9 +660,15 @@ const UtilityMenu = ({
       ) : null}
       <fieldset className="more-group">
         <legend className="more-group-label">{localizer.message("ui.tools.project")}</legend>
-        <button onClick={() => select(onOpenChangelog)} role="menuitem" type="button">
+        <button
+          onClick={() => {
+            if (onOpenWorkflowTab) select(() => onOpenWorkflowTab("whats-new"));
+          }}
+          role="menuitem"
+          type="button"
+        >
           <Newspaper aria-hidden="true" />
-          {localizer.message("ui.log.tabChangelog")}
+          {localizer.message("ui.update.whatsNew")}
         </button>
         {githubHref ? (
           <a
@@ -1003,7 +1007,7 @@ const BuildTag = ({
   dirty,
   githubBaseHref,
   localizer,
-  onOpenChangelog,
+  onOpenWhatsNew,
   version,
   versionTitle,
 }: {
@@ -1013,7 +1017,7 @@ const BuildTag = ({
   dirty?: boolean;
   githubBaseHref?: string;
   localizer: Localizer;
-  onOpenChangelog: () => void;
+  onOpenWhatsNew: () => void;
   version: string;
   versionTitle?: string;
 }) => {
@@ -1057,7 +1061,7 @@ const BuildTag = ({
           aria-label={`${name}, ${versionText}`}
           className="sub-chip channel-badge"
           data-channel={key}
-          onClick={onOpenChangelog}
+          onClick={onOpenWhatsNew}
           type="button"
         >
           {prefix ? <span className="tag-channel">{prefix}</span> : <b className="tag-letter">{letter}</b>}
@@ -1074,7 +1078,7 @@ const BuildTag = ({
       <button
         aria-haspopup="dialog"
         className="sub-chip sub-link"
-        onClick={onOpenChangelog}
+        onClick={onOpenWhatsNew}
         title={versionTitle}
         type="button"
       >
@@ -1093,7 +1097,7 @@ const Masthead = ({
   dirty,
   homeHref,
   onSelectTab,
-  onOpenChangelog,
+  onOpenWhatsNew,
   onOpenLog,
   onOpenStatus,
   onOpenStorage,
@@ -1124,7 +1128,7 @@ const Masthead = ({
   /** The workbench, as a route: a bare "/" maps to no route and so hard-reloads. */
   homeHref: string;
   onSelectTab: (id: string) => void;
-  onOpenChangelog: () => void;
+  onOpenWhatsNew: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
@@ -1181,7 +1185,7 @@ const Masthead = ({
     } else if (action.type === "status") onOpenStatus();
     else if (action.type === "storage") (onOpenStorage ?? onOpenLog)();
     else if (action.type === "logs") onOpenLog();
-    else if (action.type === "changelog") onOpenChangelog();
+    else if (action.type === "changelog") onSelectTab("whats-new");
     else if (action.type === "external") openExternalFromFind(action.href, confirmExternalNavigation);
   };
   // ⌘K / Ctrl+K from anywhere; the trigger that owns focus return is the one
@@ -1296,7 +1300,7 @@ const Masthead = ({
                     dirty={dirty}
                     githubBaseHref={githubBaseHref}
                     localizer={localizer}
-                    onOpenChangelog={onOpenChangelog}
+                    onOpenWhatsNew={onOpenWhatsNew}
                     version={version}
                     versionTitle={versionTitle}
                   />
@@ -1365,7 +1369,6 @@ const Masthead = ({
                 menuId="more-menu"
                 moreLabel={moreLabel}
                 onClose={closeUtility}
-                onOpenChangelog={onOpenChangelog}
                 onOpenLog={onOpenLog}
                 onOpenSettings={onOpenSettings}
                 onOpenStatus={onOpenStatus}
@@ -1450,7 +1453,6 @@ const Masthead = ({
               mobile
               onClose={closeUtility}
               onAccentChange={onAccentChange}
-              onOpenChangelog={onOpenChangelog}
               onOpenLog={onOpenLog}
               onOpenSettings={onOpenSettings}
               onOpenStatus={onOpenStatus}
@@ -1498,7 +1500,6 @@ const Masthead = ({
               menuId="more-menu"
               moreLabel={moreLabel}
               onClose={closeUtility}
-              onOpenChangelog={onOpenChangelog}
               onOpenLog={onOpenLog}
               onOpenStatus={onOpenStatus}
               onOpenStorage={onOpenStorage ?? onOpenLog}
@@ -1595,13 +1596,13 @@ const UpdateBanner = ({
   title,
   onReload,
   onDismiss,
-  onOpenChangelog,
+  onOpenWhatsNew,
 }: {
   open: boolean;
   title: string;
   onReload: () => void;
   onDismiss: () => void;
-  onOpenChangelog: () => void;
+  onOpenWhatsNew: () => void;
 }) => {
   const localizer = useUiLocalizer();
   return (
@@ -1613,7 +1614,7 @@ const UpdateBanner = ({
           <button
             aria-label={`${localizer.message("ui.update.whatsNew")}: ${title}`}
             className="updates-ver mono"
-            onClick={onOpenChangelog}
+            onClick={onOpenWhatsNew}
             type="button"
           >
             {localizer.message("ui.update.whatsNew")}

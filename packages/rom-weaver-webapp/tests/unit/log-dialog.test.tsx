@@ -15,8 +15,6 @@ vi.mock("../../src/platform/browser/browser-download.ts", () => ({ triggerBrowse
 vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({ listBrowserOpfs: vi.fn(async () => []) }));
 vi.mock("../../src/workers/protocol/browser-virtual-files.ts", () => ({ getActiveBrowserVirtualFiles: () => [] }));
 vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", () => ({ queryOfflineCachedFiles: vi.fn(async () => []) }));
-// The changelog tab fetches its release notes over the network; the rail tests only need it to mount.
-vi.mock("../../src/webapp/components/changelog-panel.tsx", () => ({ ChangelogPanel: () => null }));
 vi.mock("../../src/webapp/log-store.ts", () => ({
   getLastSessionEntries: vi.fn(() => []),
   getLogEntries: vi.fn(() => []),
@@ -414,7 +412,7 @@ describe("tab rail keyboard movement", () => {
     const rail = container.querySelector(".dialog-subrail") as HTMLElement;
 
     fireEvent.keyDown(rail, { key: "End" });
-    expect(onTabChange).toHaveBeenLastCalledWith("changelog");
+    expect(onTabChange).toHaveBeenLastCalledWith("storage");
 
     fireEvent.keyDown(rail, { key: "Home" });
     expect(onTabChange).toHaveBeenLastCalledWith("settings");

@@ -516,7 +516,7 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
 
   const rail = document.querySelector(".log-dlg .dialog-subrail");
   const tabs = Array.from(document.querySelectorAll(".log-dlg .dialog-subrail .subtab"));
-  expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Changelog"]);
+  expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage"]);
   expect(new Set(tabs.map((tab) => tab.getBoundingClientRect().top)).size).toBe(1);
   expect(rail?.scrollHeight).toBe(rail?.clientHeight);
   expect(document.querySelector('[data-logtab="test"]')).toBeNull();

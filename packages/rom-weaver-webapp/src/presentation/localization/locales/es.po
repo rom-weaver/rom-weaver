@@ -45,6 +45,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.log.tabChangelog"
+#~ msgstr "Cambios"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
@@ -240,11 +245,6 @@ msgstr "Códecs CD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.tabChangelog"
-msgstr "Cambios"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.channel"
 msgstr "Canal"
 
@@ -312,6 +312,11 @@ msgstr "Valores predeterminados"
 #: src/presentation/localization/messages.ts
 msgid "ui.channel.dev"
 msgstr "Compilación de desarrollo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.dialogLabel"
+msgstr "Diagnóstico"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -847,11 +852,6 @@ msgstr "Ajuste"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Ajustes"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.log.dialogLabel"
-msgstr "Ajustes y estado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
