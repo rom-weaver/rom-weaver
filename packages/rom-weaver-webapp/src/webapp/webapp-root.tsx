@@ -48,6 +48,7 @@ import {
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  HomePageRoute,
   IdentifyRouteForm,
   preloadWorkflowRoute,
   PpfUndoRouteForm,
@@ -86,6 +87,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
+  else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
   else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
   else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
   else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
@@ -605,9 +607,7 @@ function WebappRoot({
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
-            // "/" maps to no route, so the brand has to name one or the browser
-            // hard-reloads and every staged file goes with it.
-            homeHref="/apply"
+            homeHref={readAppBaseUrl()}
             channelBadge={CHANNEL_BADGE}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}
@@ -699,6 +699,16 @@ function WebappRoot({
               </section>
             ) : (
               <>
+                {isViewMounted("home") ? (
+                  // `panel` is what puts this in the workbench's shared grid cell
+                  // (banners.css); without it the drop veil takes row 1 and the
+                  // landing page starts a veil's height down the page.
+                  <div className="panel" hidden={state.currentView !== "home"}>
+                    <Suspense fallback={null}>
+                      <HomePageRoute baseUrl={readAppBaseUrl()} />
+                    </Suspense>
+                  </div>
+                ) : null}
                 {workflowPanel(
                   "patcher",
                   <ApplyPatchRoute

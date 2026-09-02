@@ -46,6 +46,10 @@
   --ink-3: #9aa3b1;
   --ink-4: #939cab;
   --weft: #e7d3a8; /* hash readouts */
+  /* Loom warp threads on the landing page: two tones so the plain weave's
+     over/under reads without an outline. */
+  --warp-a: #2c333c;
+  --warp-b: #4a5563;
   --thread-text: #ef8534; /* contrast-safe accent text */
   --verified: #69aa84;
   --fault: #e0606a;
@@ -68,6 +72,8 @@
   --ink-3: #62686f;
   --ink-4: #686d76;
   --weft: #92400e; /* cream goes rich amber on paper */
+  --warp-a: #43505f;
+  --warp-b: #6b7684;
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
   --thread-text: #b03a0a;
   --verified: #04684e;

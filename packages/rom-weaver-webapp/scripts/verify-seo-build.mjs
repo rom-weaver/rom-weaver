@@ -50,7 +50,9 @@ const countVisibleWords = (source) =>
     .trim()
     .split(/\s+/).length;
 
-const applyHtml = read("index.html");
+// index.html is the apex landing page; the patcher lives at apply.html.
+const homeHtml = read("index.html");
+const applyHtml = read("apply.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create.html");
 const identifyHtml = read("identify.html");
@@ -60,7 +62,7 @@ const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
-for (const route of ["apply", "create", "identify", "test", "trim", "ppf-undo", "tools"]) {
+for (const route of ["apply", "create", "identify", "test", "trim", "ppf-undo", "tools", "weave"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
@@ -142,12 +144,21 @@ assertIncludes(
   "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8",
   "attribution text content type",
 );
+assertIncludes(homeHtml, 'href="https://rom-weaver.com/"', "home canonical");
+assertIncludes(homeHtml, WORKFLOW_SEO_ROUTES.home.description, "home description");
+assertIncludes(homeHtml, 'id="panel-home"', "home prerendered landing page");
+assertIncludes(homeHtml, "Patch, pack, and prove your ROMs.", "home headline");
+// The masthead brand steps down to a span here so the landing headline is the
+// document's only h1.
+if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
+assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply"', "home Apply card");
+assertIncludes(homeHtml, 'href="/create"', "home Create card");
+assertIncludes(homeHtml, 'href="/docs/supported-formats"', "home formats reference link");
+// The landing page is the one route with no workflow form, so no tab is current.
+if (homeHtml.includes('aria-selected="true" class="mode"')) {
+  throw new Error("the home page marks a workflow tab as selected");
+}
 assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
-assertIncludes(
-  read("apply.html"),
-  `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`,
-  "slashless apply route",
-);
 assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
@@ -169,10 +180,10 @@ assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "s
 assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
 assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
 assertIncludes(identifyHtml, 'id="panel-identify" role="tabpanel"', "identify prerendered workflow");
-assertHasClass(applyHtml, "build-tag", "preloaded build tag");
-assertHasClass(applyHtml, "masthead-threads-count", "preloaded thread count");
-assertHasClass(applyHtml, "sub-status", "preloaded runtime status control");
-assertIncludes(applyHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
+assertHasClass(homeHtml, "build-tag", "preloaded build tag");
+assertHasClass(homeHtml, "masthead-threads-count", "preloaded thread count");
+assertHasClass(homeHtml, "sub-status", "preloaded runtime status control");
+assertIncludes(homeHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
 const runtimeResolver =
   '<span class="shell-identity" hidden=""></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
 for (const route of [
@@ -198,11 +209,11 @@ assertIncludes(
   "static-host create prerendered workflow",
 );
 assertIncludes(
-  applyHtml,
+  homeHtml,
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
-  "weave robots metadata",
+  "home robots metadata",
 );
-assertIncludes(applyHtml, 'data-mode="docs"', "apply guides tab");
+assertIncludes(homeHtml, 'data-mode="docs"', "home guides tab");
 assertIncludes(createHtml, 'data-mode="docs"', "create guides tab");
 
 for (const name of DOCS_SCREENSHOT_NAMES) {
@@ -224,10 +235,12 @@ for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
   }
 }
 
+assertIncludes(homeHtml, '"@type":"SoftwareApplication"', "home SoftwareApplication JSON-LD");
+assertIncludes(homeHtml, '"@type":"WebSite"', "home WebSite JSON-LD");
+assertIncludes(homeHtml, `"name":"${SITE_NAME}"`, "canonical site name");
+assertIncludes(homeHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES)}`, "site alternate names");
 assertIncludes(applyHtml, '"@type":"SoftwareApplication"', "apply SoftwareApplication JSON-LD");
-assertIncludes(applyHtml, '"@type":"WebSite"', "apply WebSite JSON-LD");
-assertIncludes(applyHtml, `"name":"${SITE_NAME}"`, "canonical site name");
-assertIncludes(applyHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES)}`, "site alternate names");
+if (applyHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
 assertIncludes(createHtml, '"url":"https://rom-weaver.com/create"', "create JSON-LD canonical url");
 if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
@@ -324,6 +337,13 @@ for (const beta of ["trim", "ppf-undo"]) {
     `${beta} self canonical`,
   );
 }
+// The retired /weave/ slug serves the patcher, whose shell it must hydrate as.
+// index.html is the landing page, so a host that applies neither the redirect
+// nor this document would serve landing markup to a patcher route.
+for (const weave of ["weave/index.html", "weave.html"]) {
+  assertIncludes(read(weave), 'aria-selected="true" class="mode" data-mode="patcher"', `${weave} patcher shell`);
+  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply"', `${weave} canonical`);
+}
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");
 assertIncludes(
@@ -333,9 +353,10 @@ assertIncludes(
 );
 
 if (production) {
-  if (applyHtml.includes("<html data-accent=")) throw new Error("production must use the default madder accent");
+  if (homeHtml.includes("<html data-accent=")) throw new Error("production must use the default madder accent");
   assertIncludes(robots, "Allow: /", "production robots.txt");
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
+  assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/</loc>", "home sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create", "sitemap");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify", "sitemap");
   for (const route of DOC_ROUTES) {
@@ -350,7 +371,7 @@ if (production) {
     preview: "plum",
   }[channel];
   if (expectedAccent && expectedAccent !== "madder")
-    assertIncludes(applyHtml, `<html data-accent="${expectedAccent}"`, `${channel} channel accent`);
+    assertIncludes(homeHtml, `<html data-accent="${expectedAccent}"`, `${channel} channel accent`);
   assertIncludes(robots, "Disallow: /", `${channel} robots.txt`);
   assertIncludes(headers, "X-Robots-Tag: noindex, nofollow", `${channel} headers`);
   if (fs.existsSync(path.join(distDir, "sitemap.xml"))) throw new Error(`${channel} must not publish a sitemap`);

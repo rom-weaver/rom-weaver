@@ -1103,7 +1103,9 @@ const Masthead = ({
   const desktopMoreRef = useRef<HTMLButtonElement | null>(null);
   const mobileMoreRef = useRef<HTMLButtonElement | null>(null);
   const toolsRef = useRef<HTMLDivElement | null>(null);
-  const BrandHeading = currentTab === "docs" ? "span" : "h1";
+  // Docs and the landing page bring their own h1, so the brand steps down to a
+  // span there rather than giving the document two.
+  const BrandHeading = currentTab === "docs" || currentTab === "home" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
   const moreTabs = tabs.filter(isMoreMenuTab);
   const settingsLabel = localizer.message("ui.settings.title");

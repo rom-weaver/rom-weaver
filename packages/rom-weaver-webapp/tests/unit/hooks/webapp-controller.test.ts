@@ -31,15 +31,15 @@ beforeEach(() => {
 });
 
 describe("createWebappRootController over the vanilla store", () => {
-  it("starts on the default workflow view with seeded session state", () => {
+  it("starts on the landing page with seeded session state", () => {
     const state = createController().getState();
-    expect(state.currentView).toBe("patcher");
+    expect(state.currentView).toBe("home");
     expect(state.settingsDialogOpen).toBe(false);
     expect(state.patcherSession.romFilePresent).toBe(false);
-    expect(window.location.pathname).toBe("/apply");
+    expect(window.location.pathname).toBe("/");
   });
 
-  it("starts at Apply from the site root instead of restoring a saved Test tab", () => {
+  it("starts on the landing page from the site root instead of restoring a saved Test tab", () => {
     const storage = createStorage();
     storage.setItem("rom-weaver-active-view", "test");
 
@@ -51,8 +51,8 @@ describe("createWebappRootController over the vanilla store", () => {
       storage,
     });
 
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply");
+    expect(controller.getState().currentView).toBe("home");
+    expect(window.location.pathname).toBe("/");
   });
 
   it("can preserve a non-workflow path for an alternate app shell", () => {
@@ -176,8 +176,8 @@ describe("createWebappRootController over the vanilla store", () => {
   it("does not preserve legacy hash routes", () => {
     window.history.replaceState({}, "", "/#/create");
     const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply");
+    expect(controller.getState().currentView).toBe("home");
+    expect(window.location.pathname).toBe("/");
     expect(window.location.hash).toBe("");
   });
 
