@@ -161,6 +161,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "patcher", path: "trim/" },
+      { finalView: "patcher", initialView: "patcher", path: "weave?guide=bundle" },
     ]) {
       const page = await context.newPage();
       const failures = [];
