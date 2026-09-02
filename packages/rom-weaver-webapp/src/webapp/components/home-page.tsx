@@ -159,7 +159,7 @@ const HomePage = ({ baseUrl, betaToolsEnabled }: HomePageProps): React.ReactElem
               <span className="row">
                 <i style={{ background: "var(--warp-b)" }} />
                 <span>
-                  <span className="k">warp </span>Original ROM
+                  <span className="k">source </span>Original ROM
                   <span className="sum">
                     {" · "}
                     <code>sha1 ✓</code>
@@ -169,19 +169,19 @@ const HomePage = ({ baseUrl, betaToolsEnabled }: HomePageProps): React.ReactElem
               <span className="row">
                 <i style={{ background: "#d9690f" }} />
                 <span>
-                  <span className="k">weft 1 </span>translation.bps
+                  <span className="k">patch 1 </span>translation.bps
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "#4a6d63" }} />
                 <span>
-                  <span className="k">weft 2 </span>bugfix.ips
+                  <span className="k">patch 2 </span>bugfix.ips
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "#fccb90" }} />
                 <span>
-                  <span className="k">weft 3 </span>undub.xdelta
+                  <span className="k">patch 3 </span>undub.xdelta
                 </span>
               </span>
             </div>

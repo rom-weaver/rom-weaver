@@ -187,7 +187,7 @@ const HomeLoom = (): React.ReactElement => {
 
   return (
     <canvas
-      aria-label="Vertical warp threads represent the original ROM; three colored weft threads, one per patch, are woven across it in order."
+      aria-label="The original ROM drawn as vertical threads, with three patches woven across it in order, one colored band per patch."
       className="home-loom-canvas"
       height={400}
       ref={canvasRef}
