@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatIdentifyTitle,
   identifiedOutputBaseName,
+  identifyGoodToolsRevisionLabels,
   uniqueIdentifyDisplayNames,
   uniqueIdentifyTitles,
 } from "../../src/presentation/identify-title.ts";
@@ -52,6 +53,13 @@ describe("formatIdentifyTitle", () => {
       "Pokemon - Emerald Version (U) [!]",
       "Pokemon - Emerald Version (USA, Europe)",
       "Pokemon - Emerald Version (E) [!]",
+    ]);
+  });
+
+  it("explains GoodTools program revision markers", () => {
+    expect(identifyGoodToolsRevisionLabels(["Game (U) (PRG0) [!]", "Game (U) (PRG1) [!]"])).toEqual([
+      "PRG0: Program revision 0",
+      "PRG1: Program revision 1",
     ]);
   });
 });

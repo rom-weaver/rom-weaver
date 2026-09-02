@@ -92,6 +92,19 @@ const identifyOutputBaseName = (name: string): string =>
     .replace(/\s{2,}/gu, " ")
     .trim();
 
+/** Explain GoodTools's parenthesized program revision markers without changing source names. */
+const identifyGoodToolsRevisionLabels = (names: readonly string[]): string[] => {
+  const labels = new Set<string>();
+  for (const name of names) {
+    for (const match of name.matchAll(/\((PRG(\d+))\)/giu)) {
+      const code = match[1]?.toUpperCase();
+      const revision = match[2];
+      if (code && revision) labels.add(`${code}: Program revision ${revision}`);
+    }
+  }
+  return [...labels];
+};
+
 const uniqueIdentifyTitles = (names: readonly string[]): string[] => [
   ...new Set(names.map(formatIdentifyTitle).filter(Boolean)),
 ];
@@ -117,4 +130,10 @@ const identifiedOutputBaseName = (identification: ParsedIdentifyResolution | und
   return identifyOutputBaseName(titles[0] || "") || null;
 };
 
-export { formatIdentifyTitle, identifiedOutputBaseName, uniqueIdentifyDisplayNames, uniqueIdentifyTitles };
+export {
+  formatIdentifyTitle,
+  identifiedOutputBaseName,
+  identifyGoodToolsRevisionLabels,
+  uniqueIdentifyDisplayNames,
+  uniqueIdentifyTitles,
+};

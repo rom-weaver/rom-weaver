@@ -1,5 +1,5 @@
 import { ScanSearch } from "lucide-react";
-import { uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
+import { identifyGoodToolsRevisionLabels, uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import {
   IDENTIFY_CONDITION_LABEL,
@@ -71,7 +71,11 @@ const IdentifyDrawer = ({
   const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? [])).map(identifyDumpTagLabel);
   const regions = unique(matches.map((match) => match.region ?? ""));
   const languages = unique(matches.map((match) => match.language ?? ""));
-  const revisions = unique(matches.map((match) => match.revision ?? ""));
+  const sourceNames = matches.flatMap((match) => [match.name, ...(match.alternateNames ?? [])]);
+  const revisions = unique([
+    ...matches.map((match) => match.revision ?? ""),
+    ...identifyGoodToolsRevisionLabels(sourceNames),
+  ]);
   const discs = unique(
     matches.map((match) => (typeof match.discNumber === "number" ? `Disc ${match.discNumber}` : "")),
   );

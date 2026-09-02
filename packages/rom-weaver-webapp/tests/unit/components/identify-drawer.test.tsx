@@ -81,6 +81,7 @@ describe("IdentifyDrawer", () => {
       expect.stringContaining("Legend of Zelda, The (USA)"),
       expect.stringContaining("Legend of Zelda, The (U) (PRG0) [!]"),
     ]);
+    expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("PRG0: Program revision 0");
   });
 
   it("pairs a short name with its neighbour", () => {
