@@ -9,8 +9,9 @@ import { RelatedStrip } from "../../../src/webapp/components/related-strip.tsx";
  * RelatedStrip contract: up to two tool rows plus one guide row, each kind
  * styled distinctly ("Tool" filled/thread-colored, "Guide" outlined), tool
  * rows resolving through the caller's own `onSelectTab` (never a real link),
- * guide rows as plain `<a href>` links, and a beta tool row hidden while the
- * beta-tools setting is off.
+ * guide rows as plain `<a href>` links, and a beta tool row always present in
+ * the markup, marked `data-beta` for the CSS gate rather than filtered out -
+ * the prerendered document cannot branch on a per-user setting.
  */
 
 afterEach(cleanup);
@@ -36,18 +37,22 @@ describe("RelatedStrip", () => {
     expect(container.querySelectorAll(".related-row-guide")).toHaveLength(1);
   });
 
-  it("hides a beta tool row when the beta-tools setting is off", () => {
-    const { container } = render(
-      withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />, { betaToolsEnabled: false }),
-    );
-    const labels = [...container.querySelectorAll(".related-row-tool .related-label")].map((el) => el.textContent);
-    expect(labels).toEqual(["Test this ROM"]);
+  it("renders the same rows whatever the beta-tools setting says", () => {
+    const readLabels = (settings: Record<string, unknown>) => {
+      const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />, settings));
+      return [...container.querySelectorAll(".related-row-tool .related-label")].map((el) => el.textContent);
+    };
+    expect(readLabels({ betaToolsEnabled: false })).toEqual(["Test this ROM", "Identify this file"]);
+    cleanup();
+    expect(readLabels({})).toEqual(["Test this ROM", "Identify this file"]);
   });
 
-  it("shows a beta tool row when the beta-tools setting is left unset", () => {
+  it("marks only the beta tool row for the CSS gate", () => {
     const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />));
-    const labels = [...container.querySelectorAll(".related-row-tool .related-label")].map((el) => el.textContent);
-    expect(labels).toEqual(["Test this ROM", "Identify this file"]);
+    const betaLabels = [...container.querySelectorAll('li[data-beta="true"] .related-label')].map(
+      (el) => el.textContent,
+    );
+    expect(betaLabels).toEqual(["Identify this file"]);
   });
 
   it("resolves a tool row through onSelectTab with the target view id, not a link", () => {
@@ -73,10 +78,13 @@ describe("RelatedStrip", () => {
     expect(labels).toEqual(["Trim tool"]);
   });
 
-  it("hides the docs-page tool row entirely (and the strip) when its beta view is off", () => {
+  it("keeps a beta-only strip in the markup for the CSS gate to hide", () => {
     const { container } = render(
       withSettings(<RelatedStrip entryKey="docs/cli-trim" onSelectTab={vi.fn()} />, { betaToolsEnabled: false }),
     );
-    expect(container.querySelector("nav.related-strip")).toBeNull();
+    // The strip stays; `:root[data-beta-tools-enabled="false"]` hides the row
+    // and, having no unmarked sibling, the whole nav (see result.css).
+    expect(container.querySelector("nav.related-strip")).not.toBeNull();
+    expect(container.querySelectorAll("li:not([data-beta])")).toHaveLength(0);
   });
 });
