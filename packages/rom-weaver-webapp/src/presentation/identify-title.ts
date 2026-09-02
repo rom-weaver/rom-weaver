@@ -96,13 +96,13 @@ const uniqueIdentifyTitles = (names: readonly string[]): string[] => [
   ...new Set(names.map(formatIdentifyTitle).filter(Boolean)),
 ];
 
-/** Every title a lookup provides, with standard names first and raw aliases preserved. */
+/** Every title a lookup provides, with source names first and readable forms preserved. */
 const uniqueIdentifyDisplayNames = (
   matches: readonly Pick<ParsedIdentifyTitleMatch, "name" | "alternateNames">[],
 ): string[] => {
-  const standardNames = matches.map((match) => formatIdentifyTitle(match.name));
-  const aliasNames = matches.flatMap((match) => [match.name, ...(match.alternateNames ?? [])]);
-  return [...new Set([...standardNames, ...aliasNames].map((name) => name.trim()).filter(Boolean))];
+  const sourceNames = matches.flatMap((match) => [match.name, ...(match.alternateNames ?? [])]);
+  const readableNames = matches.map((match) => formatIdentifyTitle(match.name));
+  return [...new Set([...sourceNames, ...readableNames].map((name) => name.trim()).filter(Boolean))];
 };
 
 /**

@@ -197,21 +197,25 @@ game ( name "CD Game" rom ( name "CD Game.bin" size 16 crc DDCCBBAA ) )`;
   assert.equal(cd.track, 1);
 });
 
-test("merge dedupes identical scoped hashes and retains legacy GoodTools data", () => {
+test("merge prefers the OpenGood name and retains every other name", () => {
   const primary = parseLibretroGames(
     LIBRETRO_DAT,
     NES,
     "Nintendo - Nintendo Entertainment System.dat",
   );
   const fallback = parseOpenGoodGames(OPENGOOD_DAT, NES, "OpenNES.dat");
-  const games = mergeLegacyFallbackGames(primary.games, fallback.games);
+  const additionalFallback = parseOpenGoodGames(
+    `<?xml version="1.0"?><datafile><game name="Alpha Quest (J) [!]"><rom name="alpha.nes" size="16" crc="aabbccdd"/></game></datafile>`,
+    NES,
+    "OpenNES-duplicates.dat",
+  );
+  const games = mergeLegacyFallbackGames(primary.games, [...fallback.games, ...additionalFallback.games]);
   assert.equal(games.length, 3);
   assert.equal(games[0].components.length, 1);
   assert.deepEqual(games[0].dumpTags, ["!"]);
-  assert.equal(games[0].provenance.length, 2);
-  // The Libretro name wins, so the GoodTools one - the only place a revision
-  // tag such as "(PRG0)" survives - is kept beside it.
-  assert.deepEqual(games[0].alternateNames, ["Alpha Quest (U) [!]"]);
+  assert.equal(games[0].provenance.length, 3);
+  assert.equal(games[0].name, "Alpha Quest (U) [!]");
+  assert.deepEqual(games[0].alternateNames, ["Alpha Quest (J) [!]", "Alpha Quest (USA)"]);
   const legacy = games.find((game) => game.name.startsWith("Legacy Quest"));
   assert.equal(legacy.legacyVariant, true);
   assert.deepEqual(legacy.dumpTags, ["b1", "T-Eng"]);

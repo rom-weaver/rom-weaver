@@ -8,7 +8,7 @@ import {
 import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
 
 describe("formatIdentifyTitle", () => {
-  it("expands GoodTools regions and keeps the source name available as an alias", () => {
+  it("expands GoodTools regions and keeps the source name available", () => {
     const source = "Pokemon - Emerald Version (UE) [!]";
 
     expect(formatIdentifyTitle(source)).toBe("Pokemon - Emerald Version (USA, Europe)");
@@ -35,7 +35,7 @@ describe("formatIdentifyTitle", () => {
     expect(formatIdentifyTitle("Game (4) [!]")).toBe("Game (USA, Brazil)");
   });
 
-  it("keeps every standard and alias name available for display", () => {
+  it("keeps every source and readable name available for display", () => {
     expect(
       uniqueIdentifyDisplayNames([
         {
@@ -48,9 +48,9 @@ describe("formatIdentifyTitle", () => {
         },
       ]),
     ).toEqual([
-      "Pokemon - Emerald Version (USA, Europe)",
       "Pokemon - Emerald Version (UE) [!]",
       "Pokemon - Emerald Version (U) [!]",
+      "Pokemon - Emerald Version (USA, Europe)",
       "Pokemon - Emerald Version (E) [!]",
     ]);
   });
