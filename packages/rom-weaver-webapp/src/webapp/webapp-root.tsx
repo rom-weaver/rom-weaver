@@ -700,7 +700,10 @@ function WebappRoot({
             ) : (
               <>
                 {isViewMounted("home") ? (
-                  <div hidden={state.currentView !== "home"}>
+                  // `panel` is what puts this in the workbench's shared grid cell
+                  // (banners.css); without it the drop veil takes row 1 and the
+                  // landing page starts a veil's height down the page.
+                  <div className="panel" hidden={state.currentView !== "home"}>
                     <Suspense fallback={null}>
                       <HomePageRoute baseUrl={readAppBaseUrl()} betaToolsEnabled={state.settings.betaToolsEnabled} />
                     </Suspense>
