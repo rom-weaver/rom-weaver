@@ -195,7 +195,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.identify.hashInvalidChars",
     message: "Checksums use only the hex characters 0-9 and a-f.",
   }),
-  "ui.identify.hashLabel": msg({ id: "ui.identify.hashLabel", message: "Identify by checksum" }),
+  "ui.identify.hashLabel": msg({
+    id: "ui.identify.hashLabel",
+    message: "Looking for a specific ROM checksum?",
+  }),
   "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search by checksum" }),
   "ui.identify.hashSearching": msg({ id: "ui.identify.hashSearching", message: "Searching…" }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
