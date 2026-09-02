@@ -119,16 +119,22 @@
   box-shadow: 0 0 8px color-mix(in oklab, var(--thread) 55%, transparent);
   transition: width var(--prog-tween);
 }
+/* The segment ping-pongs between the card's two edges and never leaves them:
+   the card does not clip, and patch cards pair into two columns above 1100px,
+   so a segment that travelled past the card's own width painted itself over the
+   neighbouring card's staging bar. `alternate` is what keeps the travel bounded
+   - a one-way slide needs off-card room to hide its restart. */
 .rw-app .card .stage-bar.is-indeterminate {
   width: 30%;
-  animation: stage-bar-indeterminate 1.1s ease-in-out infinite;
+  animation: stage-bar-indeterminate 0.9s ease-in-out infinite alternate;
 }
 @keyframes stage-bar-indeterminate {
   from {
-    transform: translateX(-100%);
+    transform: translateX(0);
   }
   to {
-    transform: translateX(360%);
+    /* 30% wide, so 233.33% of its own width lands its right edge on the card's. */
+    transform: translateX(233.33%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
