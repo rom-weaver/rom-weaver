@@ -1,25 +1,20 @@
 import { ScanSearch } from "lucide-react";
-import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
+import { identifyGoodToolsRevisionLabels, uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import {
   IDENTIFY_CONDITION_LABEL,
   IDENTIFY_QUALITY_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyComponentEvidenceLabel,
+  identifyDumpTagLabel,
   identifyMatchCountLabel,
   identifySourceLabel,
 } from "../../presentation/identify-status.ts";
 import { ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
-import type { ParsedIdentifyLookupResult, ParsedIdentifyTitleMatch } from "../../types/identify.ts";
+import type { ParsedIdentifyLookupResult } from "../../types/identify.ts";
 import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
 
 const unique = (values: Iterable<string>) => [...new Set([...values].map((value) => value.trim()).filter(Boolean))];
-
-/** Raw dump names that differ from the derived standard names. */
-const collectAliases = (matches: readonly ParsedIdentifyTitleMatch[], canonical: readonly string[]) =>
-  unique([...matches.map((match) => match.name), ...matches.flatMap((match) => match.alternateNames ?? [])]).filter(
-    (name) => !canonical.includes(name),
-  );
 
 /* A value shorter than this pairs two rows per line (ck-half); a longer one
    keeps the full row so it never collides with its neighbour. */
@@ -64,20 +59,23 @@ const IdentifyDrawer = ({
     typeof evidence.requiredComponentsTotal === "number"
       ? identifyComponentEvidenceLabel(evidence.requiredComponentsMatched, evidence.requiredComponentsTotal)
       : "";
-  const canonicalNames = unique(matches.map((match) => formatIdentifyTitle(match.name)));
-  const aliases = collectAliases(matches, canonicalNames);
+  const names = uniqueIdentifyDisplayNames(matches);
   const platforms = unique(matches.map((match) => match.platform));
   const algorithms = unique(matches.map((match) => match.algorithm.toUpperCase()));
   const variants = unique(matches.map((match) => match.variant));
-  const provenance = unique(
+  const sources = unique(
     matches.flatMap(
       (match) => match.provenance?.map((item) => identifySourceLabel(item.sourceName || item.source)) ?? [],
     ),
   );
-  const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? []));
+  const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? [])).map(identifyDumpTagLabel);
   const regions = unique(matches.map((match) => match.region ?? ""));
   const languages = unique(matches.map((match) => match.language ?? ""));
-  const revisions = unique(matches.map((match) => match.revision ?? ""));
+  const sourceNames = matches.flatMap((match) => [match.name, ...(match.alternateNames ?? [])]);
+  const revisions = unique([
+    ...matches.map((match) => match.revision ?? ""),
+    ...identifyGoodToolsRevisionLabels(sourceNames),
+  ]);
   const discs = unique(
     matches.map((match) => (typeof match.discNumber === "number" ? `Disc ${match.discNumber}` : "")),
   );
@@ -114,27 +112,16 @@ const IdentifyDrawer = ({
             {hint || "The identification data does not support this input."}
           </p>
         ) : null}
-        {canonicalNames.length || aliases.length ? (
+        {names.length ? (
           <div className="ck-group identify-drawer-group">
             <div className="ck-group-head">Names</div>
-            <div className="ckrows identify-drawer-aliases">
-              {canonicalNames.map((name) => (
+            <div className="ckrows identify-drawer-names">
+              {names.map((name) => (
                 <ChecksumRow
-                  ariaLabel={`Copy standard name ${name}`}
-                  className={["identify-alias-row", halfRowClass(name)].filter(Boolean).join(" ")}
+                  ariaLabel={`Copy name ${name}`}
+                  className={["identify-name-row", halfRowClass(name)].filter(Boolean).join(" ")}
                   copyValue={name}
                   key={name}
-                  label="Standard"
-                  value={name}
-                />
-              ))}
-              {aliases.map((name) => (
-                <ChecksumRow
-                  ariaLabel={`Copy alias name ${name}`}
-                  className={["identify-alias-row", halfRowClass(name)].filter(Boolean).join(" ")}
-                  copyValue={name}
-                  key={name}
-                  label="Alias"
                   value={name}
                 />
               ))}
@@ -175,7 +162,7 @@ const IdentifyDrawer = ({
               {languages.length ? <EvidenceRow label="Language" values={languages} /> : null}
               {revisions.length ? <EvidenceRow label="Revision" values={revisions} /> : null}
               {discs.length ? <EvidenceRow label="Disc" values={discs} /> : null}
-              {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
+              {sources.length ? <EvidenceRow label="Source" values={sources} /> : null}
               {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
               {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
               {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}

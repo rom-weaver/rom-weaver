@@ -8,7 +8,7 @@ import {
   IDENTIFY_STATUS_MARK,
   identifyMatchCountLabel,
 } from "../../presentation/identify-status.ts";
-import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
+import { uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ChecksumList, ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -96,8 +96,8 @@ const CandidateCard = ({
   candidate: ParsedIdentifyCandidate;
   showMemberPath: boolean;
 }) => {
-  const names = [...new Set(candidate.matches.map((match) => formatIdentifyTitle(match.name)).filter(Boolean))];
-  const heading = names[0] || candidate.path;
+  const names = uniqueIdentifyDisplayNames(candidate.matches);
+  const heading = names.join(" · ") || candidate.path;
   const mark = IDENTIFY_STATUS_MARK[candidate.status];
   return (
     <FileCard
@@ -123,7 +123,7 @@ const CandidateCard = ({
         <ul className="identify-candidate-list">
           {candidate.matches.map((match) => (
             <li key={matchKey(candidate.path, match)}>
-              <span className="identify-result-title">{formatIdentifyTitle(match.name)}</span>
+              <span className="identify-result-title">{uniqueIdentifyDisplayNames([match]).join(" · ")}</span>
               <span className="rb mono muted">
                 {[match.platform, match.algorithm.toUpperCase(), match.variant].filter(Boolean).join(" · ")}
               </span>

@@ -167,7 +167,7 @@ fn render_candidates(surface: &Surface, event: &ProgressEvent) {
 }
 
 /// Fallback: render a recognized `details` object as flattened key/values, else the plain label.
-/// Identify: the matched title first, then the rest of the identify object.
+/// Identify: all names first, then the rest of the identify object.
 /// The generic renderer drops arrays of objects, so without this the one field
 /// the user asked for - the game's name - never reaches the terminal.
 fn render_identify(surface: &Surface, event: &ProgressEvent) {
@@ -179,44 +179,39 @@ fn render_identify(surface: &Surface, event: &ProgressEvent) {
     else {
         return render_details_or_label(surface, event);
     };
-    let names: Vec<String> = identify
-        .get("matches")
-        .and_then(Value::as_array)
-        .map(|matches| {
-            matches
-                .iter()
-                .filter_map(|entry| entry.get("name").and_then(Value::as_str))
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
+    let names = identify_names(identify);
     let mut pairs = Vec::new();
     if !names.is_empty() {
-        let key = if names.len() == 1 { "Match" } else { "Matches" };
-        pairs.push((key.to_string(), names.join(", ")));
-    }
-    let alternates: Vec<String> = identify
-        .get("matches")
-        .and_then(Value::as_array)
-        .map(|matches| {
-            matches
-                .iter()
-                .filter_map(|entry| entry.get("alternate_names").and_then(Value::as_array))
-                .flatten()
-                .filter_map(Value::as_str)
-                .filter(|name| !names.iter().any(|primary| primary == name))
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    if !alternates.is_empty() {
-        pairs.push(("Also known as".to_string(), alternates.join(", ")));
+        pairs.push(("Names".to_string(), names.join(", ")));
     }
     collect_pairs("", identify, &mut pairs);
     if pairs.is_empty() {
         return label_line(surface, event);
     }
     surface.key_values(&pairs);
+}
+
+fn identify_names(identify: &Map<String, Value>) -> Vec<String> {
+    let mut names = Vec::new();
+    let Some(matches) = identify.get("matches").and_then(Value::as_array) else {
+        return names;
+    };
+    for entry in matches {
+        if let Some(name) = entry.get("name").and_then(Value::as_str)
+            && !names.iter().any(|known| known == name)
+        {
+            names.push(name.to_string());
+        }
+        let Some(alternate_names) = entry.get("alternate_names").and_then(Value::as_array) else {
+            continue;
+        };
+        for name in alternate_names.iter().filter_map(Value::as_str) {
+            if !names.iter().any(|known| known == name) {
+                names.push(name.to_string());
+            }
+        }
+    }
+    names
 }
 
 fn render_details_or_label(surface: &Surface, event: &ProgressEvent) {

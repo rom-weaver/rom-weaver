@@ -43,6 +43,7 @@ describe("apply workflow staging model", () => {
             algorithm: "sha1",
             database: "gba.rwfp1",
             name: "Advance Wars (USA)",
+            alternateNames: ["Advance Wars (U) [!]"],
             platform: "Game Boy Advance",
             variant: "raw",
           },

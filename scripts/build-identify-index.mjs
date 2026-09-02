@@ -1032,6 +1032,7 @@ function mergeProvenance(left, right) {
 export function mergeLegacyFallbackGames(libretroGames, openGoodGames) {
   const merged = libretroGames.map((game) => ({ ...game, components: [...game.components] }));
   const owners = new Map();
+  const preferredNameOwners = new Set();
   const addOwner = (game, component) => {
     for (const key of componentKeys(component)) owners.set(key, game);
   };
@@ -1050,14 +1051,18 @@ export function mergeLegacyFallbackGames(libretroGames, openGoodGames) {
     }
     owner.provenance = mergeProvenance(owner.provenance, fallback.provenance);
     owner.dumpTags = [...new Set([...owner.dumpTags, ...fallback.dumpTags])].sort();
-    // The Libretro record keeps the canonical name, so the GoodTools name -
-    // the one carrying a revision tag such as "(PRG0)" - would otherwise be
-    // lost for every dump both sources describe.
-    if (fallback.name !== owner.name) {
-      owner.alternateNames = [
-        ...new Set([...(owner.alternateNames ?? []), ...(fallback.alternateNames ?? []), fallback.name]),
-      ].sort();
+    // OpenGood retains the filename-style name, which can carry revision and
+    // dump tags that the Libretro record omits. Prefer it when both sources
+    // describe the same dump, and keep every other name available.
+    const names = [...(owner.alternateNames ?? []), ...(fallback.alternateNames ?? [])];
+    if (!preferredNameOwners.has(owner)) {
+      names.push(owner.name);
+      owner.name = fallback.name;
+      preferredNameOwners.add(owner);
+    } else if (fallback.name !== owner.name) {
+      names.push(fallback.name);
     }
+    owner.alternateNames = [...new Set(names.filter((name) => name !== owner.name))].sort();
     for (const component of fallback.components) {
       if (componentKeys(component).some((key) => owners.has(key))) continue;
       owner.components.push({ ...component, ordinal: owner.components.length });

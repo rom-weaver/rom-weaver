@@ -166,6 +166,24 @@ fn collect_pairs_prefixes_nested_keys_for_uniqueness() {
 }
 
 #[test]
+fn identify_names_combine_primary_and_alternate_names() {
+    let identify = json!({
+        "matches": [
+            { "name": "OpenGood name", "alternate_names": ["Libretro name", "OpenGood name"] },
+            { "name": "Second name", "alternate_names": ["Libretro name"] },
+        ]
+    });
+    assert_eq!(
+        identify_names(identify.as_object().expect("identify object")),
+        vec![
+            "OpenGood name".to_string(),
+            "Libretro name".to_string(),
+            "Second name".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn every_success_shape_renders_without_the_expected_details() {
     // These renderers consume a details value the app builds elsewhere; each
     // one MUST degrade to the plain label rather than panicking when the shape

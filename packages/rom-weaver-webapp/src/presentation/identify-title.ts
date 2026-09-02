@@ -1,4 +1,4 @@
-import type { ParsedIdentifyResolution } from "../types/identify.ts";
+import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../types/identify.ts";
 
 const ATOMIC_REGION_LABELS: Readonly<Record<string, string>> = {
   A: "Australia",
@@ -92,9 +92,31 @@ const identifyOutputBaseName = (name: string): string =>
     .replace(/\s{2,}/gu, " ")
     .trim();
 
+/** Explain GoodTools's parenthesized program revision markers without changing source names. */
+const identifyGoodToolsRevisionLabels = (names: readonly string[]): string[] => {
+  const labels = new Set<string>();
+  for (const name of names) {
+    for (const match of name.matchAll(/\((PRG(\d+))\)/giu)) {
+      const code = match[1]?.toUpperCase();
+      const revision = match[2];
+      if (code && revision) labels.add(`${code}: Program revision ${revision}`);
+    }
+  }
+  return [...labels];
+};
+
 const uniqueIdentifyTitles = (names: readonly string[]): string[] => [
   ...new Set(names.map(formatIdentifyTitle).filter(Boolean)),
 ];
+
+/** Every title a lookup provides, with source names first and readable forms preserved. */
+const uniqueIdentifyDisplayNames = (
+  matches: readonly Pick<ParsedIdentifyTitleMatch, "name" | "alternateNames">[],
+): string[] => {
+  const sourceNames = matches.flatMap((match) => [match.name, ...(match.alternateNames ?? [])]);
+  const readableNames = matches.map((match) => formatIdentifyTitle(match.name));
+  return [...new Set([...sourceNames, ...readableNames].map((name) => name.trim()).filter(Boolean))];
+};
 
 /**
  * The base name automatic output names use when the ROM was identified, or
@@ -108,4 +130,10 @@ const identifiedOutputBaseName = (identification: ParsedIdentifyResolution | und
   return identifyOutputBaseName(titles[0] || "") || null;
 };
 
-export { formatIdentifyTitle, identifiedOutputBaseName, uniqueIdentifyTitles };
+export {
+  formatIdentifyTitle,
+  identifiedOutputBaseName,
+  identifyGoodToolsRevisionLabels,
+  uniqueIdentifyDisplayNames,
+  uniqueIdentifyTitles,
+};

@@ -42,7 +42,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
-import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
+import { formatIdentifyTitle, uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
@@ -528,10 +528,14 @@ const RomExpectationCard = ({
   const identified = identification?.status === "matched" ? identification.matches[0] : undefined;
   const database = databaseOnlyChecks(expectation.checks, identification);
   const own = expectation.checks?.checksums || {};
-  const title = (identified ? formatIdentifyTitle(identified.name) : "") || expectation.name || "Expected ROM";
+  const title =
+    (identification ? uniqueIdentifyDisplayNames(identification.matches)[0] || "" : "") ||
+    expectation.name ||
+    "Expected ROM";
+  const extractName = identification ? { displayName: title, fileName: "Expected ROM" } : { fileName: title };
   return (
     <div className="cards bundle-rom-expectation" id="rom-weaver-bundle-rom-expectation">
-      <FileCard meta={<span>{ROM_EXPECTATION_META[expectation.source]}</span>} name={<ExtractName fileName={title} />}>
+      <FileCard meta={<span>{ROM_EXPECTATION_META[expectation.source]}</span>} name={<ExtractName {...extractName} />}>
         {identification ? <IdentifyDrawer defaultOpen={false} identification={identification} /> : null}
         <ChecksumList defaultOpen label="Checks" sublabel="expected">
           {database ? (

@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   formatIdentifyTitle,
   identifiedOutputBaseName,
+  identifyGoodToolsRevisionLabels,
+  uniqueIdentifyDisplayNames,
   uniqueIdentifyTitles,
 } from "../../src/presentation/identify-title.ts";
 import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
 
 describe("formatIdentifyTitle", () => {
-  it("expands GoodTools regions and keeps the source name available as an alias", () => {
+  it("expands GoodTools regions and keeps the source name available", () => {
     const source = "Pokemon - Emerald Version (UE) [!]";
 
     expect(formatIdentifyTitle(source)).toBe("Pokemon - Emerald Version (USA, Europe)");
@@ -32,6 +34,33 @@ describe("formatIdentifyTitle", () => {
     expect(formatIdentifyTitle("Game (T) [!]")).toBe("Game (Taiwan)");
     expect(formatIdentifyTitle("Game (1) [!]")).toBe("Game (Japan, Korea)");
     expect(formatIdentifyTitle("Game (4) [!]")).toBe("Game (USA, Brazil)");
+  });
+
+  it("keeps every source and readable name available for display", () => {
+    expect(
+      uniqueIdentifyDisplayNames([
+        {
+          name: "Pokemon - Emerald Version (UE) [!]",
+          alternateNames: ["Pokemon - Emerald Version (U) [!]"],
+        },
+        {
+          name: "Pokemon - Emerald Version (USA, Europe)",
+          alternateNames: ["Pokemon - Emerald Version (E) [!]"],
+        },
+      ]),
+    ).toEqual([
+      "Pokemon - Emerald Version (UE) [!]",
+      "Pokemon - Emerald Version (U) [!]",
+      "Pokemon - Emerald Version (USA, Europe)",
+      "Pokemon - Emerald Version (E) [!]",
+    ]);
+  });
+
+  it("explains GoodTools program revision markers", () => {
+    expect(identifyGoodToolsRevisionLabels(["Game (U) (PRG0) [!]", "Game (U) (PRG1) [!]"])).toEqual([
+      "PRG0: Program revision 0",
+      "PRG1: Program revision 1",
+    ]);
   });
 });
 

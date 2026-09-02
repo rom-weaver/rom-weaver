@@ -494,7 +494,7 @@ describe("apply workflow view - staged bench", () => {
     );
     expect(romCard?.querySelector(".card-name .nm-identified")).not.toBeNull();
     expect(romCard?.querySelector(".identify-drawer .rb")?.textContent).toBe("Identified");
-    expect(romCard?.querySelector('.identify-drawer [aria-label^="Copy standard name "]')?.textContent).toContain(
+    expect(romCard?.querySelector('.identify-drawer [aria-label^="Copy name "]')?.textContent).toContain(
       "Advance Wars (USA)",
     );
     expect(romCard?.querySelector(".cks:not(.identify-drawer)")?.textContent).not.toContain("Advance Wars (USA)");
