@@ -1313,6 +1313,8 @@ jobs:
     timeout-minutes: 60
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    env:
+      ROM_WEAVER_SYSTEM_CHROME: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -1335,17 +1337,13 @@ jobs:
 
       # The per-channel app icons are committed, not built, so nothing else would
       # notice them going stale against logo.svg / the icon masters / an accent's
-      # colours. Re-renders them in memory and diffs. Needs the playwright
-      # chromium this job already installs.
+      # colours. Re-renders them in memory and diffs. Uses the same system
+      # Chrome as the E2E suite.
       - name: Channel icons up to date
         if: matrix.shard == 'journeys'
         run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
 
       - name: Webapp E2E
-        env:
-          # ubuntu-24.04 already ships Chrome, so this job does not need to
-          # download Playwright's Chromium or install its system dependencies.
-          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp -- --${{ matrix.shard }}
 
   webapp-webkit-e2e:
