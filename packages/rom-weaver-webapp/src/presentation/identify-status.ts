@@ -75,6 +75,84 @@ const identifySourceLabel = (source: string): string => {
   return SOURCE_LABELS[name.toLowerCase()] ?? trimmed;
 };
 
+const DUMP_TAG_LABELS: Readonly<Record<string, string>> = {
+  "!": "Verified dump",
+  "!p": "Pending dump",
+  a: "Alternative version",
+  b: "Bad dump",
+  c: "Faulty checksum routine",
+  f: "Fixed dump",
+  h: "Hacked ROM",
+  o: "Overdumped ROM",
+  p: "Pirated version",
+  t: "Trained version",
+  x: "Bad checksum",
+};
+
+const DUMP_LANGUAGE_LABELS: Readonly<Record<string, string>> = {
+  alb: "Albanian",
+  ara: "Arabic",
+  bra: "Brazilian Portuguese",
+  can: "Canadian French",
+  chi: "Chinese",
+  chs: "Simplified Chinese",
+  cht: "Traditional Chinese",
+  cro: "Croatian",
+  dan: "Danish",
+  dut: "Dutch",
+  eng: "English",
+  esp: "Esperanto",
+  fil: "Filipino",
+  fin: "Finnish",
+  fre: "French",
+  ger: "German",
+  gre: "Greek",
+  heb: "Hebrew",
+  ita: "Italian",
+  jap: "Japanese",
+  kor: "Korean",
+  lat: "Latvian",
+  lee: "Leetspeak",
+  lit: "Lithuanian",
+  nor: "Norwegian",
+  pol: "Polish",
+  por: "Portuguese",
+  rom: "Romanian",
+  rum: "Romanian",
+  rus: "Russian",
+  ser: "Serbian",
+  spa: "Spanish",
+  swe: "Swedish",
+  tai: "Thai",
+  tur: "Turkish",
+  uru: "Uruguay Spanish",
+};
+
+const identifyDumpTagLabel = (tag: string): string => {
+  const trimmed = tag.trim();
+  const normalized = trimmed.toLowerCase();
+  const direct = DUMP_TAG_LABELS[normalized];
+  if (direct) return direct;
+
+  const numbered = normalized.match(/^([abcfhoptx])(\d+)$/u);
+  const numberedCode = numbered?.[1];
+  const numberedIndex = numbered?.[2];
+  if (numberedCode && numberedIndex) {
+    const label = DUMP_TAG_LABELS[numberedCode];
+    if (label) return `${label} ${numberedIndex}`;
+  }
+
+  const translation = trimmed.match(/^T([+-])(.+)$/iu);
+  const translationDirection = translation?.[1];
+  const translationCode = translation?.[2];
+  if (translationDirection && translationCode) {
+    const language = DUMP_LANGUAGE_LABELS[translationCode.toLowerCase()] ?? translationCode;
+    return `${language} translation${translationDirection === "-" ? " (obsolete)" : ""}`;
+  }
+
+  return `Other tag: ${trimmed}`;
+};
+
 /** "3 of 4 required components matched" - the denominator must stay visible. */
 const identifyComponentEvidenceLabel = (matched: number, total: number): string =>
   `${matched} of ${total} required component${total === 1 ? "" : "s"} matched`;
@@ -89,6 +167,7 @@ export {
   IDENTIFY_STATUS_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyComponentEvidenceLabel,
+  identifyDumpTagLabel,
   identifyMatchCountLabel,
   identifySourceLabel,
 };

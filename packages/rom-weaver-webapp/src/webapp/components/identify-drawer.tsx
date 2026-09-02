@@ -6,6 +6,7 @@ import {
   IDENTIFY_QUALITY_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyComponentEvidenceLabel,
+  identifyDumpTagLabel,
   identifyMatchCountLabel,
   identifySourceLabel,
 } from "../../presentation/identify-status.ts";
@@ -62,12 +63,12 @@ const IdentifyDrawer = ({
   const platforms = unique(matches.map((match) => match.platform));
   const algorithms = unique(matches.map((match) => match.algorithm.toUpperCase()));
   const variants = unique(matches.map((match) => match.variant));
-  const provenance = unique(
+  const sources = unique(
     matches.flatMap(
       (match) => match.provenance?.map((item) => identifySourceLabel(item.sourceName || item.source)) ?? [],
     ),
   );
-  const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? []));
+  const dumpTags = unique(matches.flatMap((match) => match.dumpTags ?? [])).map(identifyDumpTagLabel);
   const regions = unique(matches.map((match) => match.region ?? ""));
   const languages = unique(matches.map((match) => match.language ?? ""));
   const revisions = unique(matches.map((match) => match.revision ?? ""));
@@ -117,7 +118,6 @@ const IdentifyDrawer = ({
                   className={["identify-name-row", halfRowClass(name)].filter(Boolean).join(" ")}
                   copyValue={name}
                   key={name}
-                  label="Name"
                   value={name}
                 />
               ))}
@@ -158,7 +158,7 @@ const IdentifyDrawer = ({
               {languages.length ? <EvidenceRow label="Language" values={languages} /> : null}
               {revisions.length ? <EvidenceRow label="Revision" values={revisions} /> : null}
               {discs.length ? <EvidenceRow label="Disc" values={discs} /> : null}
-              {provenance.length ? <EvidenceRow label="Provenance" values={provenance} /> : null}
+              {sources.length ? <EvidenceRow label="Source" values={sources} /> : null}
               {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
               {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
               {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}

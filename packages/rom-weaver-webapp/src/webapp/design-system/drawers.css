@@ -517,6 +517,9 @@
   text-transform: lowercase;
   letter-spacing: 0.02em;
 }
+.rw-app .ck.ck-value-only {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 /* Scale all values together so a 40-character SHA-1 stays on one line.
    --ck-v-span is the slice of the container the row spans: a full row reads the
    whole width, a paired row only half of it. */

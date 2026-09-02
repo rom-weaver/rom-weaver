@@ -27,8 +27,9 @@ const pairMarkerClass = (label: ReactNode): string | false => {
   return false;
 };
 
-/** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`.
- * `mark` renders a per-row verified/mismatch verdict (expected-vs-computed rows). */
+/** A single value row. Click (or Enter/Space) copies `copyValue`.
+ * `label` is optional for value-only rows. `mark` renders a per-row
+ * verified/mismatch verdict (expected-vs-computed rows). */
 const ChecksumRow = ({
   ariaLabel,
   className,
@@ -40,7 +41,7 @@ const ChecksumRow = ({
 }: {
   ariaLabel?: string;
   className?: string;
-  label: ReactNode;
+  label?: ReactNode;
   value: ReactNode;
   copyValue?: string;
   bad?: boolean;
@@ -49,15 +50,22 @@ const ChecksumRow = ({
   const text = copyValue ?? (typeof value === "string" ? value : "");
   const { copied, copy } = useClipboardCopy(text);
   const fit = typeof value === "string" && value.length >= FIT_VALUE_MIN_CHARS;
+  const hasLabel = label !== undefined && label !== null;
 
   return (
     <button
       aria-label={ariaLabel ?? `Copy ${typeof label === "string" ? label : "value"}`}
-      className={join("ck mono", className, (bad || mark === "bad") && "bad", pairMarkerClass(label))}
+      className={join(
+        "ck mono",
+        className,
+        !hasLabel && "ck-value-only",
+        (bad || mark === "bad") && "bad",
+        pairMarkerClass(label),
+      )}
       onClick={copy}
       type="button"
     >
-      <span className="ck-k">{label}</span>
+      {hasLabel ? <span className="ck-k">{label}</span> : null}
       <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>
       {mark ? (
         <span className={join("ck-mark", mark)} title={mark === "ok" ? "Matches the ROM" : "Does not match the ROM"}>

@@ -38,7 +38,7 @@ describe("IdentifyDrawer", () => {
 
     // All three records remain available in the Names group. There is no
     // separate label for the source or readable form.
-    expect(container.querySelector(".identify-drawer-label")).toBeNull();
+    expect(container.querySelectorAll(".identify-name-row .ck-k")).toHaveLength(0);
     const nameRows = container.querySelectorAll('button[aria-label^="Copy name "]');
     expect(nameRows).toHaveLength(3);
     expect(nameRows[0]?.textContent).toContain("Pokemon - Emerald Version (UE) [!]");
@@ -85,12 +85,39 @@ describe("IdentifyDrawer", () => {
 
   it("pairs a short name with its neighbour", () => {
     const { container } = render(
-      <IdentifyDrawer identification={{ matches: [gbaMatch("Tetris")], status: "matched" }} />,
+      <IdentifyDrawer
+        identification={{
+          matches: [gbaMatch("Tetris"), gbaMatch("Mario")],
+          status: "matched",
+        }}
+      />,
     );
 
     const rows = container.querySelectorAll(".identify-name-row");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.className).toContain("ck-half");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.className).toContain("ck-half");
+  });
+
+  it("translates dump tags and labels their source", () => {
+    const { container } = render(
+      <IdentifyDrawer
+        identification={{
+          matches: [{ ...gbaMatch("Legacy Game"), dumpTags: ["!", "b1", "T-Eng", "c", "x"] }],
+          status: "matched",
+        }}
+      />,
+    );
+
+    const evidence = container.querySelector(".identify-drawer-evidence");
+    expect(evidence?.textContent).toContain("Source");
+    expect(evidence?.textContent).not.toContain("Provenance");
+    expect(evidence?.textContent).toContain("Verified dump");
+    expect(evidence?.textContent).toContain("Bad dump 1");
+    expect(evidence?.textContent).toContain("English translation (obsolete)");
+    expect(evidence?.textContent).toContain("Faulty checksum routine");
+    expect(evidence?.textContent).toContain("Bad checksum");
+    expect(evidence?.textContent).not.toContain("b1");
+    expect(evidence?.textContent).not.toContain("T-Eng");
   });
 
   it("lists every candidate name and states the candidate count", () => {
