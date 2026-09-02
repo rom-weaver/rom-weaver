@@ -574,6 +574,8 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         WORKFLOW_SEO_ROUTES.patcher,
       );
       fs.writeFileSync(path.join(distDir, "apply.html"), applyHtml);
+      // The extensionless twin of the /weave/ alias below, for the same reason.
+      fs.writeFileSync(path.join(distDir, "weave.html"), makeBetaRouteNoindex(patcherHtml, "apply"));
       fs.writeFileSync(
         path.join(distDir, "404.html"),
         createNotFoundHtml(withShell("notFound"), channel, channelLabel),
@@ -629,6 +631,12 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
           "tools",
           withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
         ],
+        // Same for the old /weave/ URL, which canonicalizes to /apply. It needs a
+        // real document, not just the `_redirects` rule and the slug mapping: a
+        // host that applies neither serves index.html, and index.html is the
+        // landing page. The app still resolves /weave to the patcher, so the
+        // shell it hydrates has to be the patcher's or React drops it.
+        ["weave", withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "apply"), routePreloadLinks.get("patcher"))],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });

@@ -62,7 +62,7 @@ const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
-for (const route of ["apply", "create", "identify", "test", "trim", "ppf-undo", "tools"]) {
+for (const route of ["apply", "create", "identify", "test", "trim", "ppf-undo", "tools", "weave"]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
@@ -336,6 +336,13 @@ for (const beta of ["trim", "ppf-undo"]) {
     `rel="canonical" href="https://rom-weaver.com/${beta}"`,
     `${beta} self canonical`,
   );
+}
+// The retired /weave/ slug serves the patcher, whose shell it must hydrate as.
+// index.html is the landing page, so a host that applies neither the redirect
+// nor this document would serve landing markup to a patcher route.
+for (const weave of ["weave/index.html", "weave.html"]) {
+  assertIncludes(read(weave), 'aria-selected="true" class="mode" data-mode="patcher"', `${weave} patcher shell`);
+  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply"', `${weave} canonical`);
 }
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");
