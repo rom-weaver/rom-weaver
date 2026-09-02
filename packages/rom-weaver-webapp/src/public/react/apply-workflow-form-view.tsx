@@ -529,7 +529,7 @@ const RomExpectationCard = ({
   const database = databaseOnlyChecks(expectation.checks, identification);
   const own = expectation.checks?.checksums || {};
   const title =
-    (identification ? uniqueIdentifyDisplayNames(identification.matches).join(" · ") : "") ||
+    (identification ? uniqueIdentifyDisplayNames(identification.matches)[0] || "" : "") ||
     expectation.name ||
     "Expected ROM";
   const extractName = identification ? { displayName: title, fileName: "Expected ROM" } : { fileName: title };

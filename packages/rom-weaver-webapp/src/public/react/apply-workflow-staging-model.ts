@@ -151,7 +151,7 @@ const formatPatchValidationValue = (label: string, value: number | string | unde
 const formatRomIdentification = (identification: ParsedIdentifyResolution | undefined): string => {
   if (!identification?.matches.length) return "";
   const names = uniqueIdentifyDisplayNames(identification.matches);
-  if (identification.status === "matched") return names.join(" · ");
+  if (identification.status === "matched") return names[0] || "";
   return `Possible titles: ${names.join("; ")}`;
 };
 

@@ -56,7 +56,7 @@ describe("apply workflow staging model", () => {
     };
 
     expect(toStagedInputInfos(input, [])[0]?.identificationStatus).toBe("matched");
-    expect(toStagedInputInfos(input, [])[0]?.romInfo).toBe("Advance Wars (USA) · Advance Wars (U) [!]");
+    expect(toStagedInputInfos(input, [])[0]?.romInfo).toBe("Advance Wars (USA)");
   });
 
   it("shows an expected ROM title in patch validation details", () => {
