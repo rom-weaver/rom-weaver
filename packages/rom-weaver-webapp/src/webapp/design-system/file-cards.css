@@ -643,24 +643,15 @@
 .rw-app .identify-hash--compact {
   padding: var(--sp-xs) 0 var(--sp-m);
 }
-.rw-app .identify-hash-ask {
-  display: flex;
-  flex: 1 1 18rem;
-  flex-wrap: wrap;
-  gap: 2px var(--sp-s);
-  align-items: baseline;
-  min-width: 0;
-}
 .rw-app .identify-hash-label {
+  flex: 1 1 14rem;
+  min-width: 0;
   font-weight: 650;
 }
 .rw-app .identify-hash--compact .identify-hash-label {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--ink-3);
-}
-.rw-app .identify-hash-hint {
-  margin: 0;
 }
 /* Input and button stay on one line: a SHA-1 is 40 characters, so the input
    MUST get every pixel the short button leaves. */

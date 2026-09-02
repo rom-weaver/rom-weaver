@@ -45,6 +45,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashHint"
+#~ msgstr "No hace falta un archivo: pega una suma de verificación CRC32, MD5 o SHA-1 en hexadecimal."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
@@ -555,11 +560,6 @@ msgstr "No se encontró un parche compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashHint"
-msgstr "No hace falta un archivo: pega una suma de verificación CRC32, MD5 o SHA-1 en hexadecimal."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Ninguna línea coincide con «{q}»"
 
@@ -657,6 +657,11 @@ msgstr "La salida no se verificará: los parches están desordenados."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Registro mostrado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashPlaceholder"
+msgstr "Pegue una suma CRC32, MD5 o SHA-1"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

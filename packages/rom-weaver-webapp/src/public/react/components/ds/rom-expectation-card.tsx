@@ -224,12 +224,9 @@ const RomHashSearch = ({
         void lookup.search();
       }}
     >
-      <div className="identify-hash-ask">
-        <label className="identify-hash-label" htmlFor={inputId}>
-          {localizer.message(compact ? "ui.identify.hashRefine" : "ui.identify.hashLabel")}
-        </label>
-        {compact ? null : <p className="pdesc identify-hash-hint">{localizer.message("ui.identify.hashHint")}</p>}
-      </div>
+      <label className="identify-hash-label" htmlFor={inputId}>
+        {localizer.message(compact ? "ui.identify.hashRefine" : "ui.identify.hashLabel")}
+      </label>
       <div className="identify-hash-row">
         <input
           aria-invalid={lookup.error ? "true" : undefined}
@@ -238,7 +235,7 @@ const RomHashSearch = ({
           disabled={lookup.busy}
           id={inputId}
           onChange={(event) => lookup.setText(event.currentTarget.value)}
-          placeholder="crc32 / md5 / sha1"
+          placeholder={localizer.message("ui.identify.hashPlaceholder")}
           spellCheck={false}
           type="text"
           value={lookup.text}

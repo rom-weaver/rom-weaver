@@ -7,7 +7,7 @@
        occupies one phone viewport. */
     --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
     /* The footer wraps its button under the input on a phone. */
-    --hero-search-h: 150px;
+    --hero-search-h: 110px;
   }
 
   /* Enough scroll room below the form that the last card (the run/progress/

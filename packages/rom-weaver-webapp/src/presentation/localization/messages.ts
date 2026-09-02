@@ -183,10 +183,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Strip padding and junk blocks from ROM dumps,",
   }),
   "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "and shrink them for storage —" }),
-  "ui.identify.hashHint": msg({
-    id: "ui.identify.hashHint",
-    message: "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex.",
-  }),
   "ui.identify.hashInvalid": msg({
     id: "ui.identify.hashInvalid",
     message: "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters.",
@@ -194,6 +190,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identify.hashInvalidChars": msg({
     id: "ui.identify.hashInvalidChars",
     message: "Checksums use only the hex characters 0-9 and a-f.",
+  }),
+  "ui.identify.hashPlaceholder": msg({
+    id: "ui.identify.hashPlaceholder",
+    message: "Paste a CRC32, MD5, or SHA-1 checksum",
   }),
   "ui.identify.hashLabel": msg({
     id: "ui.identify.hashLabel",

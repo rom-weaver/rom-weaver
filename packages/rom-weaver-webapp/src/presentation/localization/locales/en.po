@@ -45,6 +45,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashHint"
+#~ msgstr "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -555,11 +560,6 @@ msgstr "No compatible patch was found."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashHint"
-msgstr "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "No lines match “{q}”"
 
@@ -657,6 +657,11 @@ msgstr "Output won't be verified - the patches are out of order."
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Page Logs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashPlaceholder"
+msgstr "Paste a CRC32, MD5, or SHA-1 checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

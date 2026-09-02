@@ -45,6 +45,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashHint"
+#~ msgstr "Keine Datei nötig - fügen Sie eine CRC32-, MD5- oder SHA-1-Prüfsumme in Hex ein."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
 
@@ -555,11 +560,6 @@ msgstr "Kein kompatibler Patch gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashHint"
-msgstr "Keine Datei nötig - fügen Sie eine CRC32-, MD5- oder SHA-1-Prüfsumme in Hex ein."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.log.emptyFilter"
 msgstr "Keine Zeile passt zu „{q}“"
 
@@ -657,6 +657,11 @@ msgstr "Die Ausgabe wird nicht überprüft - die Patches sind in falscher Reihen
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Angezeigtes Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashPlaceholder"
+msgstr "CRC32-, MD5- oder SHA-1-Prüfsumme einfügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
