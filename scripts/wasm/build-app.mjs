@@ -47,7 +47,7 @@ const existsExecutable = (file) => {
 // (createSharedThreadMemory in browser-opfs-runner.ts). Reusing a memory
 // across runs would break this flag's assumption.
 export const WASM_OPT_ARGS = [
-  "-O4",
+  "-O3",
   "--strip-debug",
   "--strip-dwarf",
   "--zero-filled-memory",

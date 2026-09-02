@@ -92,7 +92,7 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 # sccache instead of breaking every Cargo invocation. The larger cache avoids
 # churn across worktrees.
 RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
-CARGO_INCREMENTAL = "0"
+CARGO_INCREMENTAL = "{{ exec(command='command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}"
 SCCACHE_CACHE_SIZE = "35G"
 
 # cc-rs falls back to RUSTC_WRAPPER above, so without CC below every cc-built C
