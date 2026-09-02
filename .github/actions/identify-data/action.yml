@@ -12,13 +12,24 @@ runs:
   steps:
     # The packs are byte-identical on every OS (node builds them and the index
     # records their sha256), so one cross-OS cache entry serves all runners.
-    - name: Cache identify packs
-      uses: actions/cache@v6
+    - name: Restore identify packs
+      id: cache
+      uses: actions/cache/restore@v6
       with:
-        path: crates/rom-weaver-cli/data/identify
+        path: crates/rom-weaver-cli/data/identify/v1
         key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs') }}
         enableCrossOsArchive: true
 
     - name: Prepare ROM identify data
       shell: bash
       run: node scripts/ensure-identify-data.mjs
+
+    # Pull requests can restore main's cache but cannot share caches with other
+    # pull requests. Only main saves this large, byte-identical data set.
+    - name: Save identify packs
+      if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: crates/rom-weaver-cli/data/identify/v1
+        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs') }}
+        enableCrossOsArchive: true
