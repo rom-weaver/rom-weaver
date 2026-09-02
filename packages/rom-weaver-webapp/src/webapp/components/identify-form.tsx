@@ -266,10 +266,12 @@ const IdentifyForm = ({
     hadExpectationRef.current = false;
     logger.debug("expected ROM cleared");
   }, [expectationChecks]);
-  /* A search in flight replaces the last answer, so the step stays open with
-     the busy label instead of collapsing back to the hero for a moment. */
-  const expectationPending = romHashLookup.busy && !file;
-  const showExpectationStep = !file && !!(expectation || expectationPending);
+  /* Touching the search is the visitor's choice of the file-free path, so the
+     hero gives way to the ROM step at the first character - not only when a
+     lookup succeeds. A search in flight or a failed one keeps the step open
+     too, so the layout never flips back to the hero mid-answer. */
+  const searchEngaged =
+    !file && (romHashLookup.busy || !!romHashLookup.result || !!romHashLookup.error || !!romHashLookup.text.trim());
 
   /* One pasted checksum describes one ROM, so an archive that yields several
      candidates is never compared: nobody knows which member it was meant for. */
@@ -313,7 +315,7 @@ const IdentifyForm = ({
   return (
     <section className="panel" id={containerId}>
       <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
-      {showExpectationStep ? null : (
+      {searchEngaged ? null : (
         <UnifiedDropZone
           addLabel="Replace the ROM"
           big={!file}
@@ -401,15 +403,17 @@ const IdentifyForm = ({
           title={localizer.message("ui.step.rom")}
           woven={romStepWoven}
         />
-      ) : showExpectationStep ? (
+      ) : searchEngaged ? (
         /* A checksum match is an answer on its own; the ROM step still opens so
-           the file can be added and verified against it. */
+           the file can be added and verified against it. Before an answer the
+           same step holds the drop zone, so the page never returns to the hero
+           once the search is in use. */
         <WorkflowRomInputStep
           afterItems={errorBlock}
           dropZone={{
-            hint: "Optional - the match above stands on its own",
+            ...(expectation ? { hint: "Optional - the match above stands on its own" } : {}),
             inputId: `${containerId}-expected-picker`,
-            label: "Add the ROM to verify it",
+            label: expectation ? "Add the ROM to verify it" : "Add a ROM to identify it",
             multiple: false,
             onFiles: (files) => {
               const selected = files.at(-1);
@@ -428,9 +432,8 @@ const IdentifyForm = ({
             ) : null
           }
           items={
-            expectation
-              ? []
-              : [
+            romHashLookup.busy
+              ? [
                   {
                     id: "identify-expected-rom",
                     progress: {
@@ -441,6 +444,7 @@ const IdentifyForm = ({
                     },
                   },
                 ]
+              : []
           }
           num="0x02"
           title={localizer.message("ui.step.rom")}
