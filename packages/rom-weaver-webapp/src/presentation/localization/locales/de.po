@@ -800,13 +800,13 @@ msgstr "Speichern"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearchAgain"
-msgstr "Erneut suchen"
+msgid "ui.identify.hashSearch"
+msgstr "Suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearch"
-msgstr "Nach Prüfsumme suchen"
+msgid "ui.identify.hashSearchAgain"
+msgstr "Erneut suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

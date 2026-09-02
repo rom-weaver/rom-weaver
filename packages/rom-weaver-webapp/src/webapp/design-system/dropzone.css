@@ -590,6 +590,15 @@
      margin that keeps the headline off the seam instead of flush against it. */
   padding-block: clamp(12px, 2.4svh, 28px);
 }
+/* The checksum footer is part of the hero's frame, so the hero gives up the
+   footer's height to keep the thesis and the ghost steps above the fold. */
+.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
+  gap: clamp(16px, min(4vw, 5.2svh), 48px);
+  min-height: clamp(300px, calc(100svh - var(--hero-chrome) - var(--hero-search-h)), 920px);
+}
+.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero .drop-base {
+  gap: clamp(10px, min(2.2vw, 2.8svh), 26px);
+}
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;
 }

@@ -200,7 +200,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Looking for a specific ROM?",
   }),
   "ui.identify.hashRefine": msg({ id: "ui.identify.hashRefine", message: "Not the ROM you meant?" }),
-  "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search by checksum" }),
+  "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search" }),
   "ui.identify.hashSearchAgain": msg({ id: "ui.identify.hashSearchAgain", message: "Search again" }),
   "ui.identify.hashSearching": msg({ id: "ui.identify.hashSearching", message: "Searching…" }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),

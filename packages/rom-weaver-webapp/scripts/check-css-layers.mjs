@@ -34,7 +34,26 @@ const IOS_FONT_FLOOR =
 // These are the fields the floor is still meant to reach. The self-sizing dropdown
 // families (`.meta-target-select`, `.ck-add-select`) need no entry: the floor's bare
 // `select` selector skips them by class, and its `.select` selector never matched them.
+// The desktop hero gives up the checksum footer's height (dropzone.css). On a
+// phone the responsive and phone-dock rules are the intended values: they size
+// the hero from the stable 100vh and their own gap scale, and the footer's
+// charge is carried through `--hero-search-h` there instead.
+const HERO_FOOTER_PHONE =
+  "phone-dock.css and responsive.css own the phone hero; the desktop footer charge must not reach a phone";
+
 const EXEMPT = new Map([
+  [
+    ".rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero >>> .rw-app .drop.hero",
+    HERO_FOOTER_PHONE,
+  ],
+  [
+    ".rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero >>> .rw-app .step.is-input.is-empty .drop.hero",
+    HERO_FOOTER_PHONE,
+  ],
+  [
+    ".rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero .drop-base >>> .rw-app .drop.hero .drop-base",
+    HERO_FOOTER_PHONE,
+  ],
   [".rw-app .ofld .input >>> .rw-app .input", IOS_FONT_FLOOR],
   [".rw-app .ofld .select >>> .rw-app .select", IOS_FONT_FLOOR],
   [".rw-app .setrow .input >>> .rw-app .input", IOS_FONT_FLOOR],

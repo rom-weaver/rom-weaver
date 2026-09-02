@@ -48,6 +48,8 @@
      the chrome around it (masthead + banner slack + step head + the ghost-next
      line + margins) */
   --hero-chrome: calc(242px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+  /* The checksum footer joined to the empty hero; only charged when present. */
+  --hero-search-h: 120px;
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
      slots): solid seam + thread-tinted fill strung with warp, lighting up on
      hover. Composed from theme-switched vars, so no per-theme overrides are

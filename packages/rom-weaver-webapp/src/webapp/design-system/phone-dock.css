@@ -6,6 +6,8 @@
     /* Includes the first-weave action below the hero so the empty bench still
        occupies one phone viewport. */
     --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+    /* The footer wraps its button under the input on a phone. */
+    --hero-search-h: 150px;
   }
 
   /* Enough scroll room below the form that the last card (the run/progress/
@@ -78,6 +80,9 @@
        visible chrome expands and contracts. The hero MUST not resize during
        that scroll-driven chrome change. */
     min-height: max(300px, calc(100vh - var(--hero-chrome)));
+  }
+  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
+    min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
   }
 
   .rw-app .info-btn::after {

@@ -800,13 +800,13 @@ msgstr "Guardar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearchAgain"
-msgstr "Buscar de nuevo"
+msgid "ui.identify.hashSearch"
+msgstr "Buscar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearch"
-msgstr "Buscar por suma de verificación"
+msgid "ui.identify.hashSearchAgain"
+msgstr "Buscar de nuevo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

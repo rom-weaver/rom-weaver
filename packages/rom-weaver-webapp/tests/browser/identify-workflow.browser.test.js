@@ -293,7 +293,7 @@ test("a pasted checksum raises the expected-ROM card without a file", async () =
   lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Metroid Fusion (USA)")], status: "matched" });
   await mountIdentifyForm();
   setHashInput("3610A686");
-  buttonMatching(/Search by checksum/).click();
+  buttonMatching(/^\s*Search\s*$/).click();
   await waitForText("Metroid Fusion (USA)");
 
   expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "3610a686" } }, expect.anything());
@@ -310,7 +310,7 @@ test("a pasted checksum raises the expected-ROM card without a file", async () =
 test("an invalid checksum shows the inline error and never runs", async () => {
   await mountIdentifyForm();
   setHashInput("not-a-hash");
-  buttonMatching(/Search by checksum/).click();
+  buttonMatching(/^\s*Search\s*$/).click();
   await waitForText("hex characters");
 
   expect(lookupExpectedRom).not.toHaveBeenCalled();
@@ -323,7 +323,7 @@ test("an invalid checksum shows the inline error and never runs", async () => {
 test("a wrong-length checksum names the accepted lengths", async () => {
   await mountIdentifyForm();
   setHashInput("abc123");
-  buttonMatching(/Search by checksum/).click();
+  buttonMatching(/^\s*Search\s*$/).click();
   await waitForText("40 (SHA-1)");
 
   expect(lookupExpectedRom).not.toHaveBeenCalled();
@@ -340,7 +340,7 @@ test("staging a file keeps the expectation and verifies the ROM against it", asy
   await mountIdentifyForm();
   // The staged candidate carries crc32 abcd1234, so this is the matching paste.
   setHashInput("abcd1234");
-  buttonMatching(/Search by checksum/).click();
+  buttonMatching(/^\s*Search\s*$/).click();
   await waitForText("Metroid Fusion (USA)");
 
   await selectRom("other.gba");
@@ -362,7 +362,7 @@ test("a staged ROM that misses the pasted checksum faults the step", async () =>
   });
   await mountIdentifyForm();
   setHashInput("deadbeef");
-  buttonMatching(/Search by checksum/).click();
+  buttonMatching(/^\s*Search\s*$/).click();
   await waitForText("Metroid Fusion (USA)");
 
   await selectRom("other.gba");

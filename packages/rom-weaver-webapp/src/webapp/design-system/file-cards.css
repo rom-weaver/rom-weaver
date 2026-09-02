@@ -627,7 +627,7 @@
   padding: var(--sp-m);
 }
 .rw-app .identify-hash--hero {
-  padding: var(--sp-m) var(--sp-l);
+  padding: var(--sp-m);
   margin-block-start: -1px;
   background: var(--warp-lines) var(--empty-fill);
   border: 1px solid var(--seam);
@@ -644,9 +644,11 @@
   padding: var(--sp-xs) 0 var(--sp-m);
 }
 .rw-app .identify-hash-ask {
-  display: grid;
+  display: flex;
   flex: 1 1 18rem;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-s);
+  align-items: baseline;
   min-width: 0;
 }
 .rw-app .identify-hash-label {
@@ -660,21 +662,20 @@
 .rw-app .identify-hash-hint {
   margin: 0;
 }
+/* Input and button stay on one line: a SHA-1 is 40 characters, so the input
+   MUST get every pixel the short button leaves. */
 .rw-app .identify-hash-row {
   display: flex;
-  flex: 1 1 22rem;
-  flex-wrap: wrap;
+  flex: 1 1 20rem;
   gap: var(--sp-s);
   align-items: center;
 }
 .rw-app .identify-hash-input {
-  flex: 1 1 12rem;
+  flex: 1 1 8rem;
   min-width: 0;
 }
-/* One control in a row: the input takes the slack, the button keeps its size
-   and spans the row only once it has wrapped under the input. */
 .rw-app .identify-hash-submit {
-  flex: 1 0 auto;
+  flex: none;
 }
 .rw-app .identify-hash-error {
   flex-basis: 100%;
