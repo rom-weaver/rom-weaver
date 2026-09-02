@@ -74,7 +74,10 @@
   }
 
   .rw-app .step.is-input.is-empty .drop.hero {
-    min-height: max(300px, calc(100svh - var(--hero-chrome)));
+    /* Mobile browsers keep 100vh on the stable layout viewport while their
+       visible chrome expands and contracts. The hero MUST not resize during
+       that scroll-driven chrome change. */
+    min-height: max(300px, calc(100vh - var(--hero-chrome)));
   }
 
   .rw-app .info-btn::after {
