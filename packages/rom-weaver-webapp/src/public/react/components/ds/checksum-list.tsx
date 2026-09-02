@@ -225,4 +225,4 @@ const PendingChecks = ({
   </ChecksumList>
 );
 
-export { ChecksumList, type ChecksumPendingGroup, ChecksumRow, FIT_VALUE_MIN_CHARS, PendingChecks };
+export { ChecksumList, type ChecksumPendingGroup, ChecksumRow, FIT_VALUE_MIN_CHARS, PendingChecks, PendingChecksumRow };

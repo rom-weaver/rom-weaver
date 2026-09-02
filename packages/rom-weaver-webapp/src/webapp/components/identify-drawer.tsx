@@ -10,7 +10,7 @@ import {
   identifyMatchCountLabel,
   identifySourceLabel,
 } from "../../presentation/identify-status.ts";
-import { ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
+import { ChecksumRow, PendingChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import type { ParsedIdentifyLookupResult } from "../../types/identify.ts";
 import { Drawer, DrawerReadout } from "../../public/react/components/ds/drawer.tsx";
 
@@ -46,10 +46,14 @@ const IdentifyDrawer = ({
 }) => {
   const matches = identification?.matches ?? [];
   const { condition, database, evidence, hint, platformCandidates, quality, status } = identification ?? {};
-  // The system tag alone is worth a drawer; without it, a structured condition
-  // (database required / unsupported media profile) or matches are, while a
-  // plain empty lookup is not.
-  if (!(matches.length || condition || platformTag)) return null;
+  // The system tag alone is worth a drawer, as is a structured condition
+  // (database required / unsupported media profile) or a match. A database that
+  // answered and held no record still renders, as "Unidentified": the staging
+  // card holds this slot with a placeholder, so a drawer that vanished on
+  // arrival would shift the card exactly as a late one does. `unavailable` is
+  // the exception - the packs never loaded, so there is no lookup to report and
+  // the card's own "Title lookup unavailable" note carries it instead.
+  if (!(matches.length || condition || platformTag || (status && status !== "unavailable"))) return null;
   const sourceParts = [database?.source ? identifySourceLabel(database.source) : "", database?.packFormat || ""].filter(
     Boolean,
   );
@@ -81,8 +85,22 @@ const IdentifyDrawer = ({
   );
   const legacyVariant = matches.some((match) => match.legacyVariant);
   const mark = status ? IDENTIFY_STATUS_MARK[status] : undefined;
+  // A finished lookup that matched nothing still opens the drawer, so the body
+  // must say so rather than show an "Evidence" head over no rows.
+  const hasEvidence = !!(
+    matches.length ||
+    quality ||
+    sourceParts.length ||
+    platformCandidates?.length ||
+    componentEvidence ||
+    evidence?.missing?.length ||
+    evidence?.unexpected?.length ||
+    memberPath ||
+    status === "ambiguous"
+  );
   // The matched title's own platform outranks the probe's tag.
   const systemTag = platforms.length ? platforms.map(abbreviatePlatform).join(" · ") : platformTag?.trim();
+  const hasDetail = !!(condition || names.length || hasEvidence || systemTag);
 
   return (
     <Drawer
@@ -106,6 +124,7 @@ const IdentifyDrawer = ({
       }
     >
       <div className="identify-drawer-body">
+        {hasDetail ? null : <p className="pdesc">No database title matched this ROM.</p>}
         {condition ? (
           <p className="pdesc identify-drawer-condition">
             <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
@@ -133,7 +152,7 @@ const IdentifyDrawer = ({
             <EvidenceRow label="System" values={[systemTag]} />
           </div>
         ) : null}
-        {identification ? (
+        {identification && hasEvidence ? (
           <div className="ck-group identify-drawer-group">
             <div className="ck-group-head">Evidence</div>
             <div className="ckrows identify-drawer-evidence">
@@ -177,4 +196,31 @@ const IdentifyDrawer = ({
   );
 };
 
-export { IdentifyDrawer };
+/* Staging form of the Identify drawer. A ROM's title lookup only starts once
+   its checksums land, so without this the drawer is simply absent while the
+   card stages and then pushes the Checks drawer down when it arrives. The
+   placeholder holds that slot, in the same position and with the same head
+   height as the resolved drawer. */
+const PendingIdentifyDrawer = ({ platformTag }: { platformTag?: string }) => (
+  <Drawer
+    className="identify-drawer"
+    label="Identify"
+    labelIcon={<ScanSearch aria-hidden="true" />}
+    readouts={
+      <>
+        {platformTag ? <DrawerReadout>{platformTag}</DrawerReadout> : null}
+        <DrawerReadout muted>Identifying…</DrawerReadout>
+      </>
+    }
+  >
+    <div className="identify-drawer-body">
+      <div className="ckrows identify-drawer-evidence">
+        <PendingChecksumRow label="Standard" length={24} />
+        <PendingChecksumRow label="Matched by" length={5} />
+        <PendingChecksumRow label="Platform" length={5} />
+      </div>
+    </div>
+  </Drawer>
+);
+
+export { IdentifyDrawer, PendingIdentifyDrawer };

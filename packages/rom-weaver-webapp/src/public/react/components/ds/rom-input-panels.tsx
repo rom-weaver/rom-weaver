@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import type { ParsedIdentifyLookupResult } from "../../../../types/identify.ts";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
-import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
+import { IdentifyDrawer, PendingIdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import {
   type ChecksumPendingGroup,
   type DiscTrackPanelInfo,
@@ -37,6 +37,9 @@ type RomInputPanelsProps = {
   identification?: ParsedIdentifyLookupResult;
   /** Open the Identify drawer on arrival (the identify page's product view). */
   identifyDefaultOpen?: boolean;
+  /** The file is still staging, so no lookup result exists yet: hold the Identify
+   * slot with a placeholder instead of letting the drawer appear late. */
+  identifyPending?: boolean;
   /** Detected system tag (e.g. "PSX · CD") for the Identify drawer; shown even without a lookup result. */
   platformTag?: string;
   /**
@@ -55,6 +58,7 @@ const RomInputPanels = ({
   info = {},
   identification,
   identifyDefaultOpen,
+  identifyPending,
   platformTag,
   tracks,
   cue,
@@ -73,7 +77,9 @@ const RomInputPanels = ({
   return (
     <>
       {showCue ? <DiscSheetsPanel cueText={cue?.cueText} gdiText={gdi?.gdiText} /> : null}
-      {identification || platformTag ? (
+      {identifyPending ? (
+        <PendingIdentifyDrawer platformTag={platformTag} />
+      ) : identification || platformTag ? (
         <IdentifyDrawer defaultOpen={identifyDefaultOpen} identification={identification} platformTag={platformTag} />
       ) : null}
       {renderInfo()}
