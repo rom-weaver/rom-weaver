@@ -342,7 +342,7 @@ jobs:
     # runner.
     runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 20
-    needs: [changes, webapp-static]
+    needs: [changes, webapp-build]
     if: github.ref_type != 'tag' && needs.changes.outputs.docker_prebuilt == 'true'
     permissions:
       contents: read
@@ -1012,12 +1012,11 @@ jobs:
           'rust-macos=${{ needs.rust-macos.result }}'
           'rust-windows=${{ needs.rust-windows.result }}'
 
-  # The webapp work consumes the prebuilt wasm module and compiles no Rust of
-  # its own. Independent suites run in separate jobs so they do not serialize,
-  # and the node-only work skips the Playwright install entirely. The `webapp`
-  # aggregate below gives branch protection one stable name for all of it.
-  webapp-static:
-    name: Webapp (static)
+  # Build and upload the deployable bundle before the static quality gates. The
+  # Docker and deploy paths can then consume it while lint, unit, and Lighthouse
+  # checks still run as required Webapp dependencies below.
+  webapp-build:
+    name: Webapp (build)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
@@ -1045,6 +1044,57 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
+      # The build's ensure-emulatorjs step hash-checks every vendored file
+      # against the lock, so a restored cache skips the CDN fetch - the only
+      # non-GitHub download in the build.
+      - name: Cache EmulatorJS vendor drop
+        uses: actions/cache@v6
+        with:
+          path: packages/rom-weaver-webapp/vendor/emulatorjs/data
+          key: emulatorjs-${{ hashFiles('packages/rom-weaver-webapp/vendor/emulatorjs.lock.json') }}
+
+      - name: Build
+        run: npm --prefix packages/rom-weaver-webapp run build
+
+      # Consumed by `docker-prebuilt`, `webapp-size`, and the static audit job,
+      # so each validates the exact bundle produced here.
+      - name: Upload webapp bundle
+        id: webapp-bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: webapp-dist
+          path: packages/rom-weaver-webapp/dist
+          if-no-files-found: error
+          include-hidden-files: true
+
+  # The webapp work consumes the prebuilt wasm module and compiles no Rust of
+  # its own. This job keeps the former static gates required without holding
+  # back the deployable artifact. The node-only work skips Playwright setup.
+  webapp-static:
+    name: Webapp (static)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: [changes, wasm, webapp-build]
+    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wasm-prod
+          path: packages/rom-weaver-webapp/src/wasm
+
       # Lives here rather than in the `rust` job because
       # scripts/wasm/rom-weaver-runtime-utils.test.mjs asserts the built module
       # imports only env functions the runtime provides - it reads the real
@@ -1061,29 +1111,11 @@ jobs:
       - name: Unit tests
         run: npm --prefix packages/rom-weaver-webapp run test:unit
 
-      # The build's ensure-emulatorjs step hash-checks every vendored file
-      # against the lock, so a restored cache skips the CDN fetch - the only
-      # non-GitHub download in the build.
-      - name: Cache EmulatorJS vendor drop
-        uses: actions/cache@v6
-        with:
-          path: packages/rom-weaver-webapp/vendor/emulatorjs/data
-          key: emulatorjs-${{ hashFiles('packages/rom-weaver-webapp/vendor/emulatorjs.lock.json') }}
-
-      - name: Build
-        run: npm --prefix packages/rom-weaver-webapp run build
-
-      # Consumed by `docker-prebuilt` and `webapp-size`, so both validate the
-      # exact bundle produced here. Upload before the audits so a Lighthouse
-      # failure cannot hide the artifact from the size job.
-      - name: Upload webapp bundle
-        id: webapp-bundle
-        uses: actions/upload-artifact@v7
+      - name: Download webapp bundle
+        uses: actions/download-artifact@v8
         with:
           name: webapp-dist
           path: packages/rom-weaver-webapp/dist
-          if-no-files-found: error
-          include-hidden-files: true
 
       # Audits the bundle built above, served by the repository's own preview
       # server (HTTP/2, brotli sidecars, production cache headers), never the
@@ -1157,14 +1189,14 @@ jobs:
             --field description="$description" \
             --field target_url="$LIGHTHOUSE_REPORT_URL"
 
-  # Check the exact bundle uploaded by `webapp-static`. This is separate from
+  # Check the exact bundle uploaded by `webapp-build`. This is separate from
   # Lighthouse so a size failure cannot stop the audit or any of the browser
   # jobs; the `webapp` aggregate still makes the failure required.
   webapp-size:
     name: Webapp (size)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: [changes, webapp-static]
+    needs: [changes, webapp-build]
     if: >-
       ${{ !cancelled() && github.ref_type != 'tag'
       && needs.changes.outputs.webapp == 'true' }}
@@ -1173,25 +1205,25 @@ jobs:
         uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-build-env
-        if: needs.webapp-static.outputs.bundle == 'success'
+        if: needs.webapp-build.outputs.bundle == 'success'
         with:
           tools: node
           cargo-cache: "false"
 
       - name: Download webapp bundle
-        if: needs.webapp-static.outputs.bundle == 'success'
+        if: needs.webapp-build.outputs.bundle == 'success'
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
           path: packages/rom-weaver-webapp/dist
 
       - name: Asset size gates
-        if: needs.webapp-static.outputs.bundle == 'success'
+        if: needs.webapp-build.outputs.bundle == 'success'
         run: npm --prefix packages/rom-weaver-webapp run check:size
 
       - name: Report skipped size gate
-        if: needs.webapp-static.outputs.bundle != 'success'
-        run: echo "Asset size gates skipped because webapp-static did not upload webapp-dist"
+        if: needs.webapp-build.outputs.bundle != 'success'
+        run: echo "Asset size gates skipped because webapp-build did not upload webapp-dist"
 
   # The longest webapp suite, split across two runners. The runner script gives
   # each test file its own Vitest process and caps in-process concurrency at
@@ -1258,7 +1290,6 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
-          playwright: "true"
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -1267,6 +1298,10 @@ jobs:
           path: packages/rom-weaver-webapp/src/wasm
 
       - name: Browser tests (wasm)
+        env:
+          # ubuntu-24.04 already ships Chrome, so this job does not need to
+          # download Playwright's Chromium or install its system dependencies.
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm
 
   # Chromium journeys, accessibility states, and the channel-icon drift check.
@@ -1291,7 +1326,6 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
-          playwright: "true"
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -1308,6 +1342,10 @@ jobs:
         run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
 
       - name: Webapp E2E
+        env:
+          # ubuntu-24.04 already ships Chrome, so this job does not need to
+          # download Playwright's Chromium or install its system dependencies.
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp -- --${{ matrix.shard }}
 
   webapp-webkit-e2e:
@@ -1353,7 +1391,7 @@ jobs:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, webapp-static, webapp-size, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
+    needs: [changes, webapp-build, webapp-static, webapp-size, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -1364,6 +1402,7 @@ jobs:
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp }}'
+          'webapp-build=${{ needs.webapp-build.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
           'webapp-size=${{ needs.webapp-size.result }}'
           'webapp-browser=${{ needs.webapp-browser.result }}'
