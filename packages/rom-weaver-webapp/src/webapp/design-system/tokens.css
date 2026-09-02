@@ -5,7 +5,19 @@
   --thread-hi: #fccb90; /* specular tint in the logo mark */
   /* Reusable 20px plain-weave alpha mask. */
   --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
-  --shuttle: #f6ead0;
+  /* The shuttle head riding the progress fill. It takes the accent's specular
+     tint so the meter reads as one colour family with the mark, lightened
+     halfway to white: the tint alone sits at 2.0-2.4:1 against the --thread
+     fill it rides, where the cream this replaces held 2.4-3.2:1. The mix
+     restores that range for every dye lot. */
+  --shuttle: color-mix(in srgb, var(--thread-hi) 50%, #fff);
+  /* The hero loom's three patch bands (home-loom.tsx). The bands must stay
+     apart at a glance, so they are the accent at three weights against the warp
+     rather than three hues. */
+  --loom-weft-1: var(--thread);
+  --loom-weft-2: color-mix(in srgb, var(--thread) 62%, var(--warp-b));
+  --loom-weft-3: var(--thread-hi);
+  --weft: var(--thread-text); /* hash readouts, dyed by the accent */
   --font: system-ui, sans-serif;
   --dropdown-fs: 0.72rem;
   --ctl: 40px;
@@ -45,7 +57,6 @@
   --ink-2: #b3bbc8;
   --ink-3: #9aa3b1;
   --ink-4: #939cab;
-  --weft: #e7d3a8; /* hash readouts */
   /* Loom warp threads on the landing page: two tones so the plain weave's
      over/under reads without an outline. */
   --warp-a: #2c333c;
@@ -71,11 +82,14 @@
   --ink-2: #4b5159;
   --ink-3: #62686f;
   --ink-4: #686d76;
-  --weft: #92400e; /* cream goes rich amber on paper */
   --warp-a: #43505f;
   --warp-b: #6b7684;
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
   --thread-text: #b03a0a;
+  /* Readouts also sit on the fault-tinted checksum row, which is lighter than
+     any plate --thread-text is verified against; on paper the bare accent text
+     lands at 4.49:1 there. Deepening it keeps the accent and clears 4.5:1. */
+  --weft: color-mix(in oklab, var(--thread-text) 85%, #000);
   --verified: #04684e;
   --fault: #b91c1c;
   --care: #c4870f;
@@ -85,4 +99,34 @@
   --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / 0.35), 0 4px 14px rgb(35 30 18 / 0.14);
   --scrim: rgb(40 36 28 / 0.42);
   color-scheme: light;
+}
+
+/* ── canvas-readable dyes ──
+   home-loom.tsx paints these on a <canvas>, and canvas needs a real colour. An
+   unregistered custom property computes to its own text, so a color-mix() would
+   reach fillStyle unparsed and paint nothing. Registering them as <color> makes
+   the browser compute the mix, so getComputedStyle hands back a colour.
+
+   Registration also makes them follow the --thread crossfade in accents.css
+   instead of snapping: their computed values are substituted from --thread and
+   --thread-hi, which are themselves registered and interpolated. */
+@property --shuttle {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fee5c8;
+}
+@property --loom-weft-1 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d9690f;
+}
+@property --loom-weft-2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a3612f;
+}
+@property --loom-weft-3 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fccb90;
 }

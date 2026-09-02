@@ -3,6 +3,12 @@
    Chassis, plate and ink stay put, so an accent reads as the same app in a
    different dye lot rather than a different theme.
 
+   Only --thread, --thread-ink, --thread-hi and --thread-text are set per dye
+   lot. The tokens in tokens.css that carry an accent - --shuttle, --weft and
+   the --loom-weft-* bands - are all derived from those four, so the progress
+   meter's shuttle, the readouts and the hero loom follow an accent without a
+   per-accent value of their own.
+
    Each build channel picks a default accent (see build-channel.ts) so nightly
    and beta are visually distinct out of the box, but the accent is a user
    setting - whatever they pick wins.
