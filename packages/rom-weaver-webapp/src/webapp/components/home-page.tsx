@@ -147,19 +147,19 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                 </span>
               </span>
               <span className="row">
-                <i style={{ background: "#d9690f" }} />
+                <i style={{ background: "var(--loom-weft-1)" }} />
                 <span>
                   <span className="k">patch 1 </span>translation.bps
                 </span>
               </span>
               <span className="row">
-                <i style={{ background: "#4a6d63" }} />
+                <i style={{ background: "var(--loom-weft-2)" }} />
                 <span>
                   <span className="k">patch 2 </span>bugfix.ips
                 </span>
               </span>
               <span className="row">
-                <i style={{ background: "#fccb90" }} />
+                <i style={{ background: "var(--loom-weft-3)" }} />
                 <span>
                   <span className="k">patch 3 </span>undub.xdelta
                 </span>

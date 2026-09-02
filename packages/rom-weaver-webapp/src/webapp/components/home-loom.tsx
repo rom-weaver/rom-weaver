@@ -7,14 +7,14 @@ import { useEffect, useRef } from "react";
  * patches apply in the order given, in a single pass.
  *
  * Canvas rather than SVG because the weave is ~70 rounded rects redrawn per
- * frame during the intro and on every theme change; as markup that is a DOM
- * subtree the prerendered shell would have to carry and hydrate.
+ * frame during the intro and on every theme or accent change; as markup that is
+ * a DOM subtree the prerendered shell would have to carry and hydrate.
  */
 
 const WARP_COLUMNS = 22;
 const WEFT_ROWS = 3;
 /** One per patch in the legend: translation.bps, bugfix.ips, undub.xdelta. */
-const WEFT_COLORS = ["#d9690f", "#4a6d63", "#fccb90"];
+const WEFT_TOKENS = ["--loom-weft-1", "--loom-weft-2", "--loom-weft-3"];
 /** Keep in step with the aspect-ratio pair in home.css, which reserves the box. */
 const NARROW_ASPECT = 2.4;
 const WIDE_ASPECT = 1.4;
@@ -22,6 +22,20 @@ const NARROW_MAX_WIDTH = 880;
 const DRAW_MS = 900;
 const STAGGER_MS = 520;
 const START_DELAY_MS = 300;
+/**
+ * Outlasts the .45s --thread crossfade accents.css arms on an accent change.
+ * accent.ts sets data-accent as the crossfade starts, so the dyes are still the
+ * old ones when the observer fires and have to be sampled until they settle.
+ */
+const REDYE_MS = 600;
+
+type LoomPalette = {
+  shuttle: string;
+  warpA: string;
+  warpB: string;
+  well: string;
+  wefts: string[];
+};
 
 type LoomLayout = {
   cellWidth: number;
@@ -34,6 +48,21 @@ type LoomLayout = {
 };
 
 const readToken = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/**
+ * Read every dye once per theme or accent change. Reading them inside draw()
+ * would force a style recalculation on each of the intro's frames.
+ *
+ * The weft and shuttle tokens are registered as <color> in tokens.css, which is
+ * what makes their color-mix() values compute to a colour canvas can paint.
+ */
+const readPalette = (): LoomPalette => ({
+  shuttle: readToken("--shuttle"),
+  warpA: readToken("--warp-a"),
+  warpB: readToken("--warp-b"),
+  well: readToken("--well"),
+  wefts: WEFT_TOKENS.map(readToken),
+});
 
 const measure = (canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): LoomLayout => {
   const cssWidth = canvas.clientWidth || 560;
@@ -56,7 +85,7 @@ const measure = (canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): 
     pad,
     warpWidth: ((width - pad * 2) / WARP_COLUMNS) * 0.62,
     weftHeight,
-    weftTops: WEFT_COLORS.map((_, row) => pad + gap * (row + 1) + weftHeight * row),
+    weftTops: WEFT_TOKENS.map((_, row) => pad + gap * (row + 1) + weftHeight * row),
     width,
   };
 };
@@ -82,12 +111,16 @@ const roundedRect = (
   context.closePath();
 };
 
-const draw = (context: CanvasRenderingContext2D, layout: LoomLayout, progress: number[]): void => {
+const draw = (
+  context: CanvasRenderingContext2D,
+  layout: LoomLayout,
+  palette: LoomPalette,
+  progress: number[],
+): void => {
   const { cellWidth, height, pad, warpWidth, weftHeight, weftTops, width } = layout;
-  const warpA = readToken("--warp-a");
-  const warpB = readToken("--warp-b");
+  const { warpA, warpB } = palette;
   context.clearRect(0, 0, width, height);
-  context.fillStyle = readToken("--well");
+  context.fillStyle = palette.well;
   roundedRect(context, 0, 0, width, height, 8);
   context.fill();
   // The warp: the original ROM. Alternating tones so the over/under reads.
@@ -112,7 +145,7 @@ const draw = (context: CanvasRenderingContext2D, layout: LoomLayout, progress: n
     context.beginPath();
     context.rect(0, top - 2, reach, weftHeight + 4);
     context.clip();
-    context.fillStyle = WEFT_COLORS[row] ?? "";
+    context.fillStyle = palette.wefts[row] ?? "";
     roundedRect(context, pad - 8, top, width - pad * 2 + 16, weftHeight, 4);
     context.fill();
     // Plain weave: every other warp thread passes back over the weft.
@@ -132,7 +165,7 @@ const draw = (context: CanvasRenderingContext2D, layout: LoomLayout, progress: n
     context.restore();
     if (reached < 1) {
       // The shuttle carrying the row that is still in flight.
-      context.fillStyle = readToken("--shuttle");
+      context.fillStyle = palette.shuttle;
       const shuttle = Math.min(14, weftHeight * 0.6);
       roundedRect(context, reach - 6, top + weftHeight / 2 - shuttle / 2, shuttle * 1.6, shuttle, shuttle / 2);
       context.fill();
@@ -148,12 +181,24 @@ const HomeLoom = (): React.ReactElement => {
     const context = canvas?.getContext("2d");
     if (!(canvas && context)) return undefined;
     let layout = measure(canvas, context);
+    let palette = readPalette();
     const progress = [0, 0, 0];
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const redraw = () => draw(context, layout, progress);
+    const redraw = () => draw(context, layout, palette, progress);
     const remeasure = () => {
       layout = measure(canvas, context);
       redraw();
+    };
+    let redyeFrame = 0;
+    const redye = () => {
+      const started = performance.now();
+      const sample = (now: number) => {
+        palette = readPalette();
+        redraw();
+        if (now - started < REDYE_MS) redyeFrame = requestAnimationFrame(sample);
+      };
+      cancelAnimationFrame(redyeFrame);
+      sample(started);
     };
 
     let frame = 0;
@@ -178,12 +223,16 @@ const HomeLoom = (): React.ReactElement => {
     }
 
     // The weave is painted from CSS custom properties, so it has to be redrawn
-    // whenever the theme that defines them changes.
-    const themeObserver = new MutationObserver(redraw);
-    themeObserver.observe(document.documentElement, { attributeFilter: ["data-theme"], attributes: true });
+    // whenever the theme or the accent that defines them changes.
+    const themeObserver = new MutationObserver(redye);
+    themeObserver.observe(document.documentElement, {
+      attributeFilter: ["data-accent", "data-theme"],
+      attributes: true,
+    });
     window.addEventListener("resize", remeasure);
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(redyeFrame);
       themeObserver.disconnect();
       window.removeEventListener("resize", remeasure);
     };
