@@ -123,7 +123,7 @@ const HomePage = ({ baseUrl, betaToolsEnabled }: HomePageProps): React.ReactElem
   const flows = buildFlows(route, betaToolsEnabled);
 
   return (
-    <section aria-labelledby="home-title" className="panel home-page" id="panel-home">
+    <section aria-labelledby="home-title" className="home-page" id="panel-home">
       <div className="home-wrap home-hero">
         <div className="home-hero-head">
           <p className="home-eyebrow">Local-first ROM and disc image toolkit</p>
@@ -245,10 +245,13 @@ const HomePage = ({ baseUrl, betaToolsEnabled }: HomePageProps): React.ReactElem
                 <b>https://</b>rom-weaver.com/apply
               </pre>
             </div>
-            <p className="foot">
-              Want your own copy? <a href={`${route("docs")}/self-hosting`}>Self-host it</a> from static files or a
-              Docker image.
-            </p>
+            <p className="foot">Want your own copy? Host it yourself from static files or a Docker image.</p>
+            <div className="home-actions">
+              <a className="btn ghost" href={`${route("docs")}/self-hosting`}>
+                Self-hosting guide
+                <ArrowIcon />
+              </a>
+            </div>
           </div>
           <div className="home-front">
             <h3>Command line</h3>
@@ -264,10 +267,16 @@ npm install --global rom-weaver
 cargo install rom-weaver-cli
 docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
             </div>
-            <p className="foot">
-              Then <code>rom-weaver --help</code>, or start with the{" "}
-              <a href={`${route("docs")}/cli-get-started`}>CLI guide</a>.
-            </p>
+            <p className="foot">Every install method, with checksums and shell completions, is in the install guide.</p>
+            <div className="home-actions">
+              <a className="btn ghost" href={`${route("docs")}/install`}>
+                Full install guide
+                <ArrowIcon />
+              </a>
+              <a className="btn ghost" href={`${route("docs")}/cli-get-started`}>
+                CLI walkthrough
+              </a>
+            </div>
           </div>
         </div>
       </div>

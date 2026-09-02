@@ -35,7 +35,7 @@
   grid-template-areas: "head" "loom" "body";
   gap: var(--sp-xl);
   align-items: center;
-  padding-block: clamp(14px, 6vw, 72px) clamp(40px, 6vw, 72px);
+  padding-block: clamp(6px, 1.6vw, 20px) clamp(40px, 6vw, 72px);
 }
 .rw-app .home-hero-head {
   grid-area: head;
@@ -83,8 +83,13 @@
   font-size: 0.85rem;
   color: var(--ink-3);
 }
-.rw-app .home-try a {
+/* Prose links carry an underline: a colour shift alone reads as emphasis, not
+   as something to click. */
+.rw-app .home-try a,
+.rw-app .home-chips .more a {
   color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 @media (min-width: 880px) {
   .rw-app .home-hero {
@@ -399,8 +404,12 @@
   font-size: 0.8rem;
   color: var(--ink-3);
 }
-.rw-app .home-front .foot a {
-  color: var(--ink-2);
+/* The guides each card points at are the card's real next step, so they get a
+   control rather than a sentence to find a link inside. */
+.rw-app .home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
 }
 
 /* ─── formats ─── */
@@ -462,9 +471,6 @@
 .rw-app .home-chips .more {
   font-size: 0.8rem;
   color: var(--ink-3);
-}
-.rw-app .home-chips .more a {
-  color: var(--ink-2);
 }
 
 /* ─── local-first promises ─── */
