@@ -91,17 +91,30 @@
     .rw-app
     .step.is-input.is-empty:has(> .step-body > .identify-hash--hero):has(> .step-body > .first-weave-demo)
     .drop.hero {
-    padding-block-end: 30px;
+    padding-block-end: 24px;
   }
   html:not([data-onboarding-enabled="false"])
     .rw-app
     .step.is-input.is-empty:has(> .step-body > .first-weave-demo)
     > .step-body
     > .identify-hash--hero {
-    padding-block-start: 26px;
+    padding-block-start: 20px;
   }
   .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .sample-tutorial-start-chip {
-    bottom: -19px;
+    bottom: -14px;
+  }
+  /* A phone gives the chip a whole corner of a 390px hero, so it shrinks to
+     the size of the hint it is - the seam offsets above are half of this
+     28px height. */
+  .rw-app .sample-tutorial-start-chip {
+    gap: 5px;
+    padding: 4px 10px 4px 5px;
+    font-size: 0.74rem;
+  }
+  .rw-app .sample-tutorial-start-beacon {
+    width: 18px;
+    height: 18px;
+    font-size: 0.76rem;
   }
   /* The checksum footer joined to the hero: the phone's 48px control size would
      make the row the tallest thing on the page, so both controls sit at 40px
