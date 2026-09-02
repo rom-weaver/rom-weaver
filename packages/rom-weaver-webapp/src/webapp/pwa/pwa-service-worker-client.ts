@@ -416,6 +416,7 @@ const createPwaServiceWorkerClient = ({
   };
   const startServiceWorkerUpdateChecks = () => {
     if (!window || updateIntervalId !== null) return;
+    runServiceWorkerUpdateCheck();
     updateIntervalId = window.setInterval(runServiceWorkerUpdateCheck, updateIntervalMs);
   };
   const stopServiceWorkerUpdateChecks = () => {
@@ -627,11 +628,6 @@ const createPwaServiceWorkerClient = ({
           return;
         }
         setVersion(controllerVersion || "unknown", "Service worker is registered and ready to take control", "ready");
-        void registration.update?.().catch((err) => {
-          logServiceWorkerClient("initial service worker update check failed", {
-            error: formatError(err),
-          });
-        });
         if (!serviceWorker.controller) {
           if (pendingReloadReason === COI_RELOAD_REASON_NOT_CONTROLLING) {
             logServiceWorkerClient("uncontrolled reload skipped; page already reloaded for control");
@@ -641,6 +637,7 @@ const createPwaServiceWorkerClient = ({
             logServiceWorkerClient("uncontrolled reload skipped; page is already cross-origin isolated");
             startServiceWorkerUpdateChecks();
           } else {
+            runServiceWorkerUpdateCheck();
             reloadWhenReadyForControl();
             return;
           }

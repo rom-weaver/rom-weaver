@@ -374,14 +374,21 @@ describe("initialize", () => {
     ]);
   });
 
-  it("starts periodic update checks once an isolated page is registered", () => {
+  it("checks for an update before starting periodic checks", async () => {
     const harness = createHarness({ controller: createController(), crossOriginIsolated: true });
     harness.client.initialize();
 
     registered(harness);
+    await flush();
 
+    expect(harness.registration.update).toHaveBeenCalledTimes(1);
     expect(harness.intervals).toHaveLength(1);
     expect(harness.intervals[0]?.ms).toBe(5000);
+
+    harness.intervals[0]?.handler();
+    await flush();
+
+    expect(harness.registration.update).toHaveBeenCalledTimes(2);
   });
 
   it("logs but swallows a failing update check and stops the interval on unload", async () => {
