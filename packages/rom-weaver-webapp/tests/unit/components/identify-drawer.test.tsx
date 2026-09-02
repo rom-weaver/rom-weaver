@@ -137,8 +137,16 @@ describe("IdentifyDrawer", () => {
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("Games/twin.gba");
   });
 
-  it("renders nothing when there is no match to describe", () => {
+  it("reports a database that answered with no record, so the staged slot resolves", () => {
     const { container } = render(<IdentifyDrawer identification={{ matches: [], status: "unknown" }} />);
+    expect(container.querySelector(".identify-drawer .rb")?.textContent).toBe("Unidentified");
+    // The readout is the whole answer: no body sub-text, no "Evidence" head.
+    expect(container.querySelector(".ck-group-head")).toBeNull();
+    expect(container.querySelector(".identify-drawer-body")?.textContent).toBe("");
+  });
+
+  it("renders nothing when the packs never loaded", () => {
+    const { container } = render(<IdentifyDrawer identification={{ matches: [], status: "unavailable" }} />);
     expect(container.innerHTML).toBe("");
   });
 });

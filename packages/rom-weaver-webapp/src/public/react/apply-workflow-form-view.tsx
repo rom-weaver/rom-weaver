@@ -13,7 +13,7 @@ import { type ProgressViewModel } from "../../presentation/workflow-presentation
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
-import { IdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
+import { IdentifyDrawer, PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
@@ -265,6 +265,8 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
         <span />
       </Drawer>
     ) : null}
+    {/* Same drawer order the resolved ROM card uses: sheets, Identify, Checks. */}
+    {drop.kind === "rom" ? <PendingIdentifyDrawer /> : null}
     {drop.kind === "rom" ? (
       <Drawer bodyClassName="ckrows" label="Checks" labelIcon={<ListChecks aria-hidden="true" />}>
         <span />
@@ -1125,6 +1127,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
       },
       panels: {
         ...(identificationLookup ? { identification: identificationLookup } : {}),
+        identifyPending: staging,
         ...(romTypeTag ? { platformTag: romTypeTag } : {}),
         info: {
           bytes: romBytes,
@@ -1325,6 +1328,7 @@ const renderDiscGroup = (
       onRemove: removeDisc,
       panels: {
         ...(discIdentification ? { identification: discIdentification } : {}),
+        identifyPending: staging,
         ...(discRomTypeTag ? { platformTag: discRomTypeTag } : {}),
         info: { timing: CHECKSUM_TIMING_LABEL(trackRows[0]?.info.checksumTiming) },
         tracks,

@@ -159,6 +159,7 @@ const buildTrimSourceItems = ({
         onRemove,
         panels: {
           ...(sourceState?.identification ? { identification: sourceState.identification } : {}),
+          identifyPending: staging,
           info: {
             bytes: stageBytes,
             checksums: sourceState?.checksums,

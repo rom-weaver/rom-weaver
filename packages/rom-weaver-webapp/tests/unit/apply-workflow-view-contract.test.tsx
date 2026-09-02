@@ -290,7 +290,9 @@ describe("apply workflow view - empty bench", () => {
       ui: createEmptyPatcherUiState(),
     });
     const labels = Array.from(container.querySelectorAll(".rw-pending .cks-head .lab")).map((el) => el.textContent);
-    expect(labels).toEqual(["Files", "CUE", "Checks"]);
+    // Identify sits between the sheet and Checks, exactly where the resolved
+    // ROM card puts it, so the ghost card does not reorder on arrival.
+    expect(labels).toEqual(["Files", "CUE", "Identify", "Checks"]);
   });
 });
 
@@ -384,7 +386,14 @@ describe("apply workflow view - staged bench", () => {
     const romLabels = Array.from(container.querySelectorAll("#rom-weaver-list-input-stack .cks-head .lab")).map(
       (el) => el.textContent,
     );
-    expect(romLabels).toEqual(["Files", "Checks"]);
+    // The ROM's Identify drawer is reserved through staging too: the title
+    // lookup only runs once the checksums land, and a drawer that appeared then
+    // pushed Checks down mid-stage.
+    expect(romLabels).toEqual(["Files", "Identify", "Checks"]);
+    const identify = container.querySelector("#rom-weaver-list-input-stack .identify-drawer");
+    // The placeholder says why it is empty; the resolved drawer carries no such line.
+    expect(identify?.textContent).toContain("Identifying");
+    expect(identify?.textContent).toContain("Looking this ROM up in the title database.");
 
     const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
       (el) => el.textContent,

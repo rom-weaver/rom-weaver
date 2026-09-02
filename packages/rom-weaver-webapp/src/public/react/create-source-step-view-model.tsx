@@ -120,6 +120,7 @@ const buildCreateSourceStep = ({
               onRemove: onClear,
               panels: {
                 ...(identification ? { identification } : {}),
+                identifyPending: staging,
                 info: {
                   bytes: stageBytes,
                   checksums: getDisplaySourceChecksums(sourceState),
