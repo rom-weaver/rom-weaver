@@ -137,11 +137,20 @@
   border-radius: var(--r-l);
   box-shadow: 0 30px 60px -40px rgb(0 0 0 / 0.55);
 }
+/* The ratios here MUST match the ones home-loom.tsx measures with. The canvas
+   attributes describe a 1.4 box, so without this the phone layout reserves the
+   wrong height and the script's first resize shifts the page under the reader. */
 .rw-app .home-loom-frame canvas {
   display: block;
   width: 100%;
   height: auto;
+  aspect-ratio: 2.4;
   border-radius: var(--r-s);
+}
+@media (min-width: 880px) {
+  .rw-app .home-loom-frame canvas {
+    aspect-ratio: 1.4;
+  }
 }
 .rw-app .home-loom-tag {
   position: absolute;

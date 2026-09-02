@@ -15,6 +15,10 @@ const WARP_COLUMNS = 22;
 const WEFT_ROWS = 3;
 /** One per patch in the legend: translation.bps, bugfix.ips, undub.xdelta. */
 const WEFT_COLORS = ["#d9690f", "#4a6d63", "#fccb90"];
+/** Keep in step with the aspect-ratio pair in home.css, which reserves the box. */
+const NARROW_ASPECT = 2.4;
+const WIDE_ASPECT = 1.4;
+const NARROW_MAX_WIDTH = 880;
 const DRAW_MS = 900;
 const STAGGER_MS = 520;
 const START_DELAY_MS = 300;
@@ -35,7 +39,7 @@ const measure = (canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): 
   const cssWidth = canvas.clientWidth || 560;
   // A tall swatch beside the headline on desktop, a short band under it on
   // phones so the hero still clears the fixed dock.
-  const aspect = window.innerWidth < 880 ? 2.4 : 1.4;
+  const aspect = window.innerWidth < NARROW_MAX_WIDTH ? NARROW_ASPECT : WIDE_ASPECT;
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   const width = cssWidth;
   const height = Math.round(cssWidth / aspect);
