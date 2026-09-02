@@ -1397,16 +1397,23 @@ const SharedPatchMetaEditor = ({
 }: {
   bundleMeta: readonly (BundlePatchMeta | undefined)[];
   onCancel: () => void;
-  onApply: (updates: Partial<BundlePatchMeta>) => void;
+  onApply: (updates: Partial<BundlePatchMeta>, enabled?: boolean) => void;
 }) => {
   const [author, setAuthor] = useState(commonPatchMetaValue(bundleMeta, "author") || "");
+  const [authorChanged, setAuthorChanged] = useState(false);
+  const [enabled, setEnabled] = useState<"all" | "none" | "unchanged">("unchanged");
   const [version, setVersion] = useState(commonPatchMetaValue(bundleMeta, "version") || "");
+  const [versionChanged, setVersionChanged] = useState(false);
   const versionInputRef = useRef<HTMLInputElement>(null);
+  const localizer = useUiLocalizer();
 
   useEffect(() => versionInputRef.current?.focus(), []);
 
   const apply = () => {
-    onApply({ author: author.trim() || undefined, version: version.trim() || undefined });
+    const updates: Partial<BundlePatchMeta> = {};
+    if (authorChanged) updates.author = author.trim() || undefined;
+    if (versionChanged) updates.version = version.trim() || undefined;
+    onApply(updates, enabled === "unchanged" ? undefined : enabled === "all");
   };
 
   return (
@@ -1433,7 +1440,10 @@ const SharedPatchMetaEditor = ({
         <input
           className="input popt-input"
           id="rom-weaver-shared-patch-version"
-          onChange={(event) => setVersion(event.currentTarget.value)}
+          onChange={(event) => {
+            setVersion(event.currentTarget.value);
+            setVersionChanged(true);
+          }}
           placeholder={commonPatchMetaValue(bundleMeta, "version") === undefined ? "Multiple values" : "Version"}
           ref={versionInputRef}
           type="text"
@@ -1445,11 +1455,27 @@ const SharedPatchMetaEditor = ({
         <input
           className="input popt-input"
           id="rom-weaver-shared-patch-author"
-          onChange={(event) => setAuthor(event.currentTarget.value)}
+          onChange={(event) => {
+            setAuthor(event.currentTarget.value);
+            setAuthorChanged(true);
+          }}
           placeholder={commonPatchMetaValue(bundleMeta, "author") === undefined ? "Multiple values" : "Author"}
           type="text"
           value={author}
         />
+      </div>
+      <div className="patch-shared-meta-field">
+        <label htmlFor="rom-weaver-shared-patch-enablement">{localizer.message("ui.patch.bulkSelection")}</label>
+        <DropdownSelect
+          className="input popt-input"
+          id="rom-weaver-shared-patch-enablement"
+          onChange={(event) => setEnabled(event.currentTarget.value as typeof enabled)}
+          value={enabled}
+        >
+          <option value="unchanged">{localizer.message("ui.patch.bulkSelectionUnchanged")}</option>
+          <option value="all">{localizer.message("ui.patch.bulkSelectionAll")}</option>
+          <option value="none">{localizer.message("ui.patch.bulkSelectionOptional")}</option>
+        </DropdownSelect>
       </div>
       <div className="patch-shared-meta-actions">
         <button className="btn ghost" onClick={onCancel} type="button">
@@ -1583,8 +1609,13 @@ const ApplyPatchListStep = ({
         <SharedPatchMetaEditor
           key="bulk-patch-meta-editor"
           bundleMeta={bundleMeta || patches.map(() => undefined)}
-          onApply={(updates) => {
+          onApply={(updates, enabled) => {
             onBundleMetaBulkChange(updates);
+            if (enabled !== undefined && onTogglePatch) {
+              disabledFlags?.forEach((disabled, index) => {
+                if (disabled === enabled) onTogglePatch(index);
+              });
+            }
             closeBulkEditor();
           }}
           onCancel={closeBulkEditor}

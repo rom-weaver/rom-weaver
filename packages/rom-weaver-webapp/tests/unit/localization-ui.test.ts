@@ -33,6 +33,10 @@ const LOAD_BEARING_UI_IDS = [
   "ui.env.threads",
   "ui.log.filter",
   "ui.log.filterLabel",
+  "ui.patch.bulkSelection",
+  "ui.patch.bulkSelectionAll",
+  "ui.patch.bulkSelectionOptional",
+  "ui.patch.bulkSelectionUnchanged",
   "ui.step.apply",
   "settings.byteUnits",
 ] as const;

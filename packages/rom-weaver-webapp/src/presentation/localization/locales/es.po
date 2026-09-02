@@ -595,6 +595,26 @@ msgstr "opcional"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelection"
+msgstr "Selección predeterminada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionAll"
+msgstr "Activar todos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionOptional"
+msgstr "Hacer todos opcionales"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionUnchanged"
+msgstr "Dejar sin cambios"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacks"
 msgstr "Bases de datos de ROM opcionales"
 

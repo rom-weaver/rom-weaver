@@ -297,6 +297,7 @@ describe("apply workflow view - empty bench", () => {
 describe("apply workflow view - staged bench", () => {
   it("edits shared patch details from the patches header", async () => {
     const onBundleMetaBulkChange = vi.fn();
+    const onToggle = vi.fn();
     const { container, getByLabelText, getByRole } = renderView({
       bundleMetaById: new Map([
         ["patch-a", { author: "Author", version: "1.0" }],
@@ -304,9 +305,9 @@ describe("apply workflow view - staged bench", () => {
       ]),
       onBundleMetaBulkChange,
       patchEnablement: {
-        disabledIds: new Set(),
+        disabledIds: new Set(["patch-b"]),
         getPatchIds: () => ["patch-a", "patch-b"],
-        onToggle: () => undefined,
+        onToggle,
       },
       patches: [patchItem("first.ips"), patchItem("second.ips")],
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
@@ -321,13 +322,23 @@ describe("apply workflow view - staged bench", () => {
     const versionInput = getByLabelText("Version");
     fireEvent.change(versionInput, { target: { value: "2.0" } });
     fireEvent.change(getByLabelText("Author"), { target: { value: "New author" } });
+    fireEvent.change(getByLabelText("Default selection"), { target: { value: "none" } });
     fireEvent.submit(versionInput.closest("form") as HTMLFormElement);
 
     expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
       author: "New author",
       version: "2.0",
     });
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(onToggle).toHaveBeenCalledWith(0);
     await vi.waitFor(() => expect(document.activeElement).toBe(button));
+
+    fireEvent.click(button);
+    fireEvent.change(getByLabelText("Default selection"), { target: { value: "all" } });
+    fireEvent.submit(getByLabelText("Version").closest("form") as HTMLFormElement);
+    expect(onToggle).toHaveBeenCalledTimes(2);
+    expect(onToggle).toHaveBeenNthCalledWith(2, 1);
+    expect(onBundleMetaBulkChange).toHaveBeenNthCalledWith(2, ["patch-a", "patch-b"], {});
 
     fireEvent.click(button);
     fireEvent.keyDown(getByLabelText("Version"), { key: "Escape" });
