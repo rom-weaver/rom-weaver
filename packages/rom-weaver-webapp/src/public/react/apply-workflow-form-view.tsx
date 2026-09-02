@@ -2086,12 +2086,13 @@ function ApplyWorkflowFormView({
               sampleLoading={sampleLoading}
               workflowEmpty={workflowEmpty}
             />
-            {/* The search is an input, so it lives in the step that owns
-                inputs. It follows the sample chip, whose zero-height wrapper
-                MUST stay against the drop zone to reach the hero's corner. */}
-            {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
           </>
         }
+        /* The search is an input, so it leads the step that owns inputs. It
+           MUST stay above the drop zone: the sample chip's zero-height wrapper
+           follows the drop zone to reach the hero's corner, so anything between
+           the two pushes the chip out of the hero. */
+        beforeDropZone={canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
         big={workflowEmpty && !searchEngaged}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
         heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"

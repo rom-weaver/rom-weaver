@@ -165,9 +165,12 @@ describe("apply workflow view - empty bench", () => {
 
   it("opens 0x02 from the checksum search and drops the hero", async () => {
     const { container } = renderView({ ui: createEmptyPatcherUiState() });
-    // The search is an input, so it sits in 0x01 with the drop zone it replaces.
+    // The search is an input, so it leads 0x01, above the drop zone it replaces.
     const step = container.querySelector("section.step.unified-drop-step") as HTMLElement;
-    expect(step.querySelector("#rom-weaver-rom-hash-search")).toBeTruthy();
+    const search = step.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
+    const drop = step.querySelector("#rom-weaver-row-unified-drop") as HTMLElement;
+    expect(search).toBeTruthy();
+    expect(search.compareDocumentPosition(drop) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelector(".drop.hero")).toBeTruthy();
 
     const input = container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;

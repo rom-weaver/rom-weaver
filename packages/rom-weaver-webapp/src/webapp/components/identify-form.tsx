@@ -316,8 +316,8 @@ const IdentifyForm = ({
     <section className="panel" id={containerId}>
       <UnifiedDropZone
         addLabel={file ? "Replace the ROM" : expectation ? "Add the ROM to verify it" : "Add a ROM to identify it"}
-        /* The search is an input, so it lives in the step that owns inputs. */
-        afterDropZone={
+        /* The search is an input, so it leads the step that owns inputs. */
+        beforeDropZone={
           file ? null : <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
         }
         big={!(file || searchEngaged)}
