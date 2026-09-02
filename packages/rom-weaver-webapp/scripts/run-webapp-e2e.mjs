@@ -490,6 +490,14 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     watchPageErrors();
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.locator(".home-page").waitFor({ state: "visible" });
+    if ((await page.locator('.mode[aria-selected="true"]').count()) !== 0) {
+      throw new Error("the landing page marks a workflow tab as selected");
+    }
+    await installAuditTools();
+    await scanVariants("landing");
+
+    await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
 
     // On a mobile Docs reload the trail is already in the prerendered shell.
@@ -557,7 +565,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       const docsChunkReleased = new Promise((resolve) => {
         releaseDocsChunk = resolve;
       });
-      await docsNavigationPage.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await docsNavigationPage.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
       await docsNavigationPage.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
       await docsNavigationPage.route(docsChunkPattern, async (route) => {
         docsChunkRequest();
@@ -581,7 +589,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await docsNavigationContext.close();
     }
     await page.setViewportSize(A11Y_VIEWPORTS.find((viewport) => viewport.label === "desktop"));
-    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
 
@@ -897,7 +905,7 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
   const failures = [];
   page.on("pageerror", (error) => failures.push(error.stack || error.message));
   try {
-    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await configureUncompressedOutput(page);
     await page
