@@ -152,18 +152,21 @@ const RomExpectationCard = ({
   const database = databaseOnlyChecks(expectation.checks, identification);
   const own = expectation.checks?.checksums || {};
   const title =
-    (identified ? uniqueIdentifyDisplayNames([identified])[0] || "" : "") ||
+    (identification ? uniqueIdentifyDisplayNames(identification.matches)[0] || "" : "") ||
     expectation.name ||
     (ambiguous ? identifyMatchCountLabel(identification?.matches.length ?? 0) : "Expected ROM");
   // The check's own values win over the database's: only one of the two was
   // authored as an expectation, and it is the one the run will verify against.
   const merged = { ...database?.checksums, ...own };
   const mergedSize = expectation.checks?.size ?? database?.size;
+  // An identified title is a display name over the placeholder file name, so
+  // the card reads like the ROM card it becomes once the file lands.
+  const extractName = identification ? { displayName: title, fileName: "Expected ROM" } : { fileName: title };
   return (
     <div className="cards bundle-rom-expectation" id={id}>
       <FileCard
         meta={<span>{ROM_EXPECTATION_META[expectation.source]}</span>}
-        name={<ExtractName fileName={title} />}
+        name={<ExtractName {...extractName} />}
         {...(onRemove ? { onRemove } : {})}
         {...(removeLabel ? { removeLabel } : {})}
       >
