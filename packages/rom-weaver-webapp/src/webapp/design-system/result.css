@@ -447,6 +447,16 @@
   margin-block-start: var(--sp-m);
   list-style: none;
 }
+/* Beta rows ship in the markup on every build and hide from the root
+   attribute the boot script sets, so the prerendered document and a client
+   with either setting hydrate the same tree. A strip whose only rows are
+   hidden takes the whole nav with it. */
+:root[data-beta-tools-enabled="false"] .rw-app .related-strip li[data-beta="true"] {
+  display: none;
+}
+:root[data-beta-tools-enabled="false"] .rw-app .related-strip:not(:has(li:not([data-beta="true"]))) {
+  display: none;
+}
 .rw-app .related-row {
   display: flex;
   gap: var(--sp-m);
