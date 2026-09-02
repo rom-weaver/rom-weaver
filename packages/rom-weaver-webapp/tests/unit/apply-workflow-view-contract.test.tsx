@@ -390,6 +390,10 @@ describe("apply workflow view - staged bench", () => {
     // lookup only runs once the checksums land, and a drawer that appeared then
     // pushed Checks down mid-stage.
     expect(romLabels).toEqual(["Files", "Identify", "Checks"]);
+    const identify = container.querySelector("#rom-weaver-list-input-stack .identify-drawer");
+    // The placeholder says why it is empty; the resolved drawer carries no such line.
+    expect(identify?.textContent).toContain("Identifying");
+    expect(identify?.textContent).toContain("Looking this ROM up in the title database.");
 
     const patchLabels = Array.from(container.querySelectorAll("#rom-weaver-list-patch-stack .cks-head .lab")).map(
       (el) => el.textContent,

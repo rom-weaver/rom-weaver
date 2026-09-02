@@ -85,8 +85,8 @@ const IdentifyDrawer = ({
   );
   const legacyVariant = matches.some((match) => match.legacyVariant);
   const mark = status ? IDENTIFY_STATUS_MARK[status] : undefined;
-  // A finished lookup that matched nothing still opens the drawer, so the body
-  // must say so rather than show an "Evidence" head over no rows.
+  // A finished lookup that matched nothing still opens the drawer, on the
+  // "Unidentified" readout alone - no "Evidence" head over no rows.
   const hasEvidence = !!(
     matches.length ||
     quality ||
@@ -100,7 +100,6 @@ const IdentifyDrawer = ({
   );
   // The matched title's own platform outranks the probe's tag.
   const systemTag = platforms.length ? platforms.map(abbreviatePlatform).join(" · ") : platformTag?.trim();
-  const hasDetail = !!(condition || names.length || hasEvidence || systemTag);
 
   return (
     <Drawer
@@ -124,7 +123,6 @@ const IdentifyDrawer = ({
       }
     >
       <div className="identify-drawer-body">
-        {hasDetail ? null : <p className="pdesc">No database title matched this ROM.</p>}
         {condition ? (
           <p className="pdesc identify-drawer-condition">
             <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
@@ -214,6 +212,9 @@ const PendingIdentifyDrawer = ({ platformTag }: { platformTag?: string }) => (
     }
   >
     <div className="identify-drawer-body">
+      <p className="pdesc">
+        Looking this ROM up in the title database. The rows below fill in once its checksums land.
+      </p>
       <div className="ckrows identify-drawer-evidence">
         <PendingChecksumRow label="Standard" length={24} />
         <PendingChecksumRow label="Matched by" length={5} />
