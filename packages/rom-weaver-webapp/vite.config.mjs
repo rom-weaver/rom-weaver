@@ -470,6 +470,7 @@ const createNotFoundHtml = (html, channel, channelLabel) => {
 
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://rom-weaver.com/</loc></url>
   <url><loc>https://rom-weaver.com/apply</loc></url>
   <url><loc>https://rom-weaver.com/create</loc></url>
   <url><loc>https://rom-weaver.com/identify</loc></url>
@@ -547,26 +548,37 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         copyFile(sourcePath, path.join(distDir, assetPath));
       }
       const indexHtml = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
-      const patcherRoot = PRERENDER_ROOT(prerenderedShells.get("patcher"));
-      if (!indexHtml.includes(patcherRoot))
-        throw new Error("rom-weaver-static-assets: prerendered patcher shell not found in dist/index.html");
-      // dist/index.html is served at the apex (the patcher); give it the same
-      // structured data the /apply route gets.
-      const applyHtml = injectLdJson(indexHtml, WORKFLOW_SEO_ROUTES.patcher, true);
-      fs.writeFileSync(path.join(distDir, "index.html"), applyHtml);
+      const homeRoot = PRERENDER_ROOT(prerenderedShells.get("home"));
+      if (!indexHtml.includes(homeRoot))
+        throw new Error("rom-weaver-static-assets: prerendered home shell not found in dist/index.html");
+      // index.html is the landing page at the apex. Every other route page is
+      // this same document with the landing shell swapped for its own, so each
+      // one hydrates onto the view its markup was rendered as.
+      const withShell = (view) => {
+        const shell = prerenderedShells.get(view);
+        if (!shell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${view}`);
+        return indexHtml.replace(homeRoot, PRERENDER_ROOT(shell));
+      };
+      // Only the apex carries the site-level WebSite entity.
+      fs.writeFileSync(
+        path.join(distDir, "index.html"),
+        injectLdJson(
+          createWorkflowRouteHtml(indexHtml, WORKFLOW_SEO_ROUTES.home, channel, channelLabel),
+          WORKFLOW_SEO_ROUTES.home,
+          true,
+        ),
+      );
+      const patcherHtml = withRoutePreloadLinks(withShell("patcher"), routePreloadLinks.get("patcher"));
+      const applyHtml = injectLdJson(
+        createWorkflowRouteHtml(patcherHtml, WORKFLOW_SEO_ROUTES.patcher, channel, channelLabel),
+        WORKFLOW_SEO_ROUTES.patcher,
+      );
       fs.writeFileSync(path.join(distDir, "apply.html"), applyHtml);
       fs.writeFileSync(
         path.join(distDir, "404.html"),
-        createNotFoundHtml(
-          indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("notFound"))),
-          channel,
-          channelLabel,
-        ),
+        createNotFoundHtml(withShell("notFound"), channel, channelLabel),
       );
-      const creatorHtml = withRoutePreloadLinks(
-        indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("creator"))),
-        routePreloadLinks.get("creator"),
-      );
+      const creatorHtml = withRoutePreloadLinks(withShell("creator"), routePreloadLinks.get("creator"));
       const createHtml = injectLdJson(
         createWorkflowRouteHtml(creatorHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.creator,
@@ -574,10 +586,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
       const identifyHtml = injectLdJson(
         createWorkflowRouteHtml(
-          withRoutePreloadLinks(
-            indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("identify"))),
-            routePreloadLinks.get("identify"),
-          ),
+          withRoutePreloadLinks(withShell("identify"), routePreloadLinks.get("identify")),
           WORKFLOW_SEO_ROUTES.identify,
           channel,
           channelLabel,
@@ -587,10 +596,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       fs.writeFileSync(path.join(distDir, "identify.html"), identifyHtml);
       const testHtml = injectLdJson(
         createWorkflowRouteHtml(
-          withRoutePreloadLinks(
-            indexHtml.replace(patcherRoot, PRERENDER_ROOT(prerenderedShells.get("test"))),
-            routePreloadLinks.get("test"),
-          ),
+          withRoutePreloadLinks(withShell("test"), routePreloadLinks.get("test")),
           WORKFLOW_SEO_ROUTES.test,
           channel,
           channelLabel,
@@ -599,12 +605,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       );
       fs.writeFileSync(path.join(distDir, "test.html"), testHtml);
       for (const route of DOC_ROUTES) {
-        const docsShell = prerenderedShells.get(route.slug);
-        if (!docsShell) throw new Error(`rom-weaver-static-assets: no prerendered shell for ${route.slug}`);
-        const routeShellHtml = withRoutePreloadLinks(
-          indexHtml.replace(patcherRoot, PRERENDER_ROOT(docsShell)),
-          routePreloadLinks.get("docs"),
-        );
+        const routeShellHtml = withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get("docs"));
         const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
         const extensionlessPath = path.join(distDir, `${route.slug}.html`);
         const directoryIndexPath = path.join(distDir, route.slug, "index.html");
@@ -618,15 +619,15 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ["create", createHtml],
         ["identify", identifyHtml],
         ["test", testHtml],
-        ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "trim"), routePreloadLinks.get("trim"))],
+        ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "trim"), routePreloadLinks.get("trim"))],
         [
           "ppf-undo",
-          withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
+          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
         ],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
         [
           "tools",
-          withRoutePreloadLinks(makeBetaRouteNoindex(indexHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
+          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
         ],
       ]) {
         const routeDir = path.join(distDir, slug);
@@ -884,6 +885,8 @@ const devPrerenderRoute = (url) => {
   if (segments.at(-1) === "index.html") segments.pop();
   const slug = segments.at(-1) || "";
   if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname), view: "docs" };
+  // No route segment is the app base itself, which serves the landing page.
+  if (!slug) return { docsSlug: "docs", view: "home" };
   return {
     docsSlug: "docs",
     view:
@@ -944,9 +947,10 @@ const prerenderWebappShell = (prerenderedShells) => ({
       }
       // One SSR server renders every shell the build needs; spinning one up per
       // shell would cost more than the rendering does.
-      const patcherShell = await prerender.withPrerenderServer(async (server) => {
+      const homeShell = await prerender.withPrerenderServer(async (server) => {
         const render = (view, notFound, docsSlug) =>
           prerender.renderLandingShellWithServer(server, view, notFound, docsSlug);
+        prerenderedShells.set("home", await render("home"));
         prerenderedShells.set("patcher", await render("patcher"));
         prerenderedShells.set("creator", await render("creator"));
         prerenderedShells.set("identify", await render("identify"));
@@ -955,9 +959,11 @@ const prerenderWebappShell = (prerenderedShells) => ({
         for (const route of DOC_ROUTES) {
           prerenderedShells.set(route.slug, await render("docs", false, route.slug));
         }
-        return prerenderedShells.get("patcher");
+        return prerenderedShells.get("home");
       });
-      return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(patcherShell));
+      // index.html is served at the apex, so it carries the landing shell; every
+      // other route page is derived from it by swapping that root out.
+      return html.replace(PRERENDER_MOUNT_POINT, PRERENDER_ROOT(homeShell));
     },
     order: "post",
   },
@@ -980,6 +986,7 @@ const WORKFLOW_ROUTE_MODULES = {
   creator: "src/public/react/create-patch-form.tsx",
   docs: "src/webapp/docs-page.tsx",
   identify: "src/webapp/components/identify-form.tsx",
+  home: "src/webapp/components/home-page.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",
   test: "src/public/react/emulator-test-view.tsx",
   "ppf-undo": "src/webapp/components/ppf-undo-form.tsx",
@@ -1172,7 +1179,7 @@ const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
       }
       return html.replace(
         "</head>",
-        `${ROUTE_PRELOAD_MARKER_START}\n${routePreloadLinks.get("patcher")}\n  ${ROUTE_PRELOAD_MARKER_END}\n  </head>`,
+        `${ROUTE_PRELOAD_MARKER_START}\n${routePreloadLinks.get("home")}\n  ${ROUTE_PRELOAD_MARKER_END}\n  </head>`,
       );
     },
     order: "post",

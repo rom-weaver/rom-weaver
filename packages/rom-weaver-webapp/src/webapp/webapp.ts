@@ -205,7 +205,7 @@ const applySettingsToRuntime = (settings: SettingsState) => {
 const isNotFoundPage = document.documentElement.dataset.page === "not-found";
 // Which static document the host actually served, captured before the
 // controller normalizes the app root to its canonical workflow route.
-const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "patcher";
+const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "home";
 const webappController = createWebappRootController({
   initialHistoryMode: isNotFoundPage ? "none" : "replace",
   onApplySettings: applySettingsToRuntime,
@@ -350,7 +350,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // Views the build emits a prerendered shell for. Trim and Tools deliberately
 // inherit the patcher's markup, so they hydrate as "patcher" - that is what is
 // actually in the document.
-const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs", "identify", "test"]);
+const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs", "home", "identify", "test"]);
 
 // Hydration has to start from the view the *served document* was rendered as,
 // or React discards the whole shell - never from controller state, which may

@@ -31,6 +31,7 @@ import {
 
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
 const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
+  "home",
   "patcher",
   "creator",
   "docs",
@@ -52,6 +53,9 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   creator: "create",
+  // The landing page is the app base itself, so its slug is empty and
+  // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
+  home: "",
   docs: "docs",
   identify: "identify",
   patcher: "apply",
@@ -89,6 +93,11 @@ const readWorkflowViewFromPath = (pathname?: string): WebappView | null => {
   const segments = readRouteSegments(pathname);
   if (segments.includes("docs")) return "docs";
   const slug = segments.at(-1) || "";
+  // No route segment left means the app base itself, which is the landing page.
+  // This only resolves at the apex: a sub-path deployment's own base
+  // ("/rom-weaver/") is indistinguishable from a missing page by pathname
+  // alone, so it stays unresolved and callers fall back to DEFAULT_WORKFLOW_VIEW.
+  if (!slug) return "home";
   return ROUTE_SLUG_TO_VIEW[slug] || null;
 };
 

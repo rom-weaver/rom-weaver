@@ -3,6 +3,7 @@ import { createLogger } from "../lib/logging.ts";
 import type { ApplyPatchFormProps, CreatePatchFormProps, TrimPatchFormProps } from "../public/react/public-types.ts";
 import type { PpfUndoFormProps } from "./components/ppf-undo-form.tsx";
 import type { IdentifyFormProps } from "./components/identify-form.tsx";
+import type { HomePageProps } from "./components/home-page.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
@@ -27,6 +28,7 @@ type WorkflowRouteProps = {
     active: boolean;
     slug: string;
   };
+  home: HomePageProps;
   identify: IdentifyFormProps;
   patcher: ApplyPatchFormProps;
   test: {
@@ -96,6 +98,9 @@ const DocsRoute = createWorkflowRoute("docs", () =>
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
+const HomeRoute = createWorkflowRoute("home", () =>
+  import("./components/home-page.tsx").then((module) => ({ default: module.HomePage })),
+);
 const IdentifyRoute = createWorkflowRoute("identify", () =>
   import("./components/identify-form.tsx").then((module) => ({ default: module.IdentifyForm })),
 );
@@ -112,6 +117,7 @@ const TrimRoute = createWorkflowRoute("trim", () =>
 const WORKFLOW_ROUTES = {
   creator: CreatorRoute,
   docs: DocsRoute,
+  home: HomeRoute,
   identify: IdentifyRoute,
   patcher: PatcherRoute,
   test: TestRoute,
@@ -123,6 +129,7 @@ const CreatePatchRoute = CreatorRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
 const EmulatorTestRoute = TestRoute.Component;
+const HomePageRoute = HomeRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
 const PpfUndoRouteForm = PpfUndoRoute.Component;
 const TrimPatchRoute = TrimRoute.Component;
@@ -143,6 +150,7 @@ export {
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  HomePageRoute,
   IdentifyRouteForm,
   preloadDocsRouteHtml,
   preloadWorkflowRoute,

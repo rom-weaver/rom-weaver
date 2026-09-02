@@ -6,7 +6,7 @@ import {
   serializeSettingsForStorage,
   type SettingsState,
 } from "../../src/webapp/settings/settings-state.ts";
-import { createWebappRootController } from "../../src/webapp/webapp-controller.ts";
+import { createWebappRootController, readWorkflowViewFromPath } from "../../src/webapp/webapp-controller.ts";
 
 const createStorage = () => {
   const entries = new Map<string, string>();
@@ -115,6 +115,7 @@ describe("reloadPersistedSettings", () => {
 
 describe("selectView with a leave guard", () => {
   it("keeps the current view when the guard refuses", () => {
+    window.history.replaceState({}, "", "/apply");
     const onConfirmViewLeave = vi.fn(() => false);
     const controller = createController({ onConfirmViewLeave });
 
@@ -135,6 +136,7 @@ describe("selectView with a leave guard", () => {
   });
 
   it("does not ask the guard when the view is unchanged", () => {
+    window.history.replaceState({}, "", "/apply");
     const onConfirmViewLeave = vi.fn(() => false);
     const controller = createController({ onConfirmViewLeave });
 
@@ -148,5 +150,31 @@ describe("selectView with a leave guard", () => {
 
     expect(controller.selectView("creator")).toBe("patcher");
     expect(onCreatorViewRequested).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the landing route at the app base", () => {
+  it("resolves a bare app base to the landing page, and every workflow slug to its own view", () => {
+    expect(readWorkflowViewFromPath("/")).toBe("home");
+    expect(readWorkflowViewFromPath("/index.html")).toBe("home");
+    expect(readWorkflowViewFromPath("/apply")).toBe("patcher");
+    expect(readWorkflowViewFromPath("/create")).toBe("creator");
+    // A sub-path deployment's own base is indistinguishable from a missing page
+    // by pathname alone, so it stays unresolved and falls back to Apply.
+    expect(readWorkflowViewFromPath("/rom-weaver/")).toBeNull();
+    expect(readWorkflowViewFromPath("/missing")).toBeNull();
+  });
+
+  it("writes the app base back to the address bar when the landing page is selected", () => {
+    window.history.replaceState({}, "", "/rom-weaver/create");
+    const controller = createController();
+    expect(controller.getState().currentView).toBe("creator");
+
+    controller.selectView("home");
+    expect(controller.getState().currentView).toBe("home");
+    expect(window.location.pathname).toBe("/rom-weaver/");
+
+    controller.selectView("patcher");
+    expect(window.location.pathname).toBe("/rom-weaver/apply");
   });
 });
