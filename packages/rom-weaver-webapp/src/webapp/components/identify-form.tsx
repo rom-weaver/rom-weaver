@@ -1,31 +1,34 @@
-import { RotateCcw, Search } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
+import { createLogger } from "../../lib/logging.ts";
 import {
-  IDENTIFY_CONDITION_LABEL,
-  IDENTIFY_QUALITY_MARK,
   IDENTIFY_STATUS_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyMatchCountLabel,
 } from "../../presentation/identify-status.ts";
-import { uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
-import { ChecksumList, ChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
-import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
-import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import { RomInputPanels } from "../../public/react/components/ds/rom-input-panels.tsx";
+import {
+  compareRomExpectation,
+  ROM_HASH_LOOKUP_MESSAGES,
+  RomExpectationCard,
+  RomHashSearch,
+  type RomExpectation,
+} from "../../public/react/components/ds/rom-expectation-card.tsx";
 import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { identifyHashAlgorithm } from "../../types/identify.ts";
+import { useRomHashLookup } from "../../public/react/use-rom-hash-lookup.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
-import { IdentifyDrawer } from "./identify-drawer.tsx";
 
 const IDENTIFY_ACTIVITY_KEY = "identify";
+
+const logger = createLogger("identify-form");
 
 /* Derived from the real ingest filters, so a format rom-weaver can actually
    read is never missing from the ticker and never blocked by an accept rule. */
@@ -40,10 +43,6 @@ type IdentifyFormProps = {
   pageDrop?: PageFileDrop | null;
 };
 
-/** Stable identity for a match row: two records can share platform and name. */
-const matchKey = (candidatePath: string, match: ParsedIdentifyResult["candidates"][number]["matches"][number]) =>
-  [candidatePath, match.database, match.platform, match.name, match.algorithm, match.variant].join("|");
-
 const CandidateStatusChip = ({ status }: { status: ParsedIdentifyCandidate["status"] }) => {
   const mark = IDENTIFY_STATUS_MARK[status];
   return (
@@ -56,112 +55,6 @@ const CandidateStatusChip = ({ status }: { status: ParsedIdentifyCandidate["stat
   );
 };
 
-/** Match-quality chip; renders only for set-aware results that carry one. */
-const CandidateQualityChip = ({ quality }: { quality: NonNullable<ParsedIdentifyCandidate["quality"]> }) => {
-  const mark = IDENTIFY_QUALITY_MARK[quality];
-  return (
-    <span className="rb mono identify-state identify-quality">
-      <span aria-hidden="true" className="identify-state-glyph">
-        {mark.glyph}
-      </span>
-      <span>{mark.label}</span>
-    </span>
-  );
-};
-
-/**
- * A structured non-match condition is an actionable state, not a plain "no
- * match": name the cause and show the hint.
- */
-const CandidateConditionNotice = ({
-  condition,
-  hint,
-}: {
-  condition: NonNullable<ParsedIdentifyCandidate["condition"]>;
-  hint?: string;
-}) => (
-  <Notice level="warn">
-    <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
-    {hint ||
-      (condition === "database_required"
-        ? "The identification database for this platform is not downloaded."
-        : "This media layout has no supported identification profile yet.")}
-  </Notice>
-);
-
-const CandidateCard = ({
-  candidate,
-  showMemberPath,
-}: {
-  candidate: ParsedIdentifyCandidate;
-  showMemberPath: boolean;
-}) => {
-  const names = uniqueIdentifyDisplayNames(candidate.matches);
-  const heading = names.join(" · ") || candidate.path;
-  const mark = IDENTIFY_STATUS_MARK[candidate.status];
-  return (
-    <FileCard
-      description={
-        showMemberPath ? <span className="pdesc mono identify-member">ROM: {candidate.path}</span> : undefined
-      }
-      meta={
-        <>
-          {candidate.quality ? <CandidateQualityChip quality={candidate.quality} /> : null}
-          <CandidateStatusChip status={candidate.status} />
-        </>
-      }
-      name={<span className="identify-result-title">{heading}</span>}
-      state={mark.tone}
-    >
-      {candidate.status === "ambiguous" ? (
-        <p className="pdesc identify-ambiguous-lead">
-          {identifyMatchCountLabel(candidate.matches.length)} share this ROM&rsquo;s checksums. Every candidate is
-          listed below.
-        </p>
-      ) : null}
-      {candidate.status === "ambiguous" ? (
-        <ul className="identify-candidate-list">
-          {candidate.matches.map((match) => (
-            <li key={matchKey(candidate.path, match)}>
-              <span className="identify-result-title">{uniqueIdentifyDisplayNames([match]).join(" · ")}</span>
-              <span className="rb mono muted">
-                {[match.platform, match.algorithm.toUpperCase(), match.variant].filter(Boolean).join(" · ")}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {candidate.condition ? <CandidateConditionNotice condition={candidate.condition} hint={candidate.hint} /> : null}
-      {candidate.status === "unknown" && !candidate.condition ? (
-        <p className="pdesc identify-unknown-lead">
-          No matching checksum found in the identification data. The ROM may be modified, an unlisted revision, or from
-          a system that is not in the local data.
-        </p>
-      ) : null}
-      <IdentifyDrawer
-        defaultOpen
-        identification={{
-          matches: candidate.matches,
-          status: candidate.status,
-          ...(candidate.condition ? { condition: candidate.condition } : {}),
-          ...(candidate.hint ? { hint: candidate.hint } : {}),
-          ...(candidate.quality ? { quality: candidate.quality } : {}),
-          ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
-          ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
-          ...(candidate.database ? { database: candidate.database } : {}),
-        }}
-        memberPath={showMemberPath ? candidate.path : undefined}
-      />
-      {/* The evidence is the page's product, so both drawers open on arrival. */}
-      <ChecksumList defaultOpen label="Checksums">
-        {Object.entries(candidate.checksums).map(([algorithm, checksum]) => (
-          <ChecksumRow key={algorithm} label={algorithm.toUpperCase()} value={checksum} />
-        ))}
-      </ChecksumList>
-    </FileCard>
-  );
-};
-
 /**
  * One candidate's verdict rendered inside the staged ROM card, apply-style:
  * the Identify and Checks drawers attach to the card instead of separate
@@ -169,9 +62,12 @@ const CandidateCard = ({
  */
 const CandidateResult = ({
   candidate,
+  expected,
   showMemberPath,
 }: {
   candidate: ParsedIdentifyCandidate;
+  /** A pasted-checksum expectation, so the staged card carries its match marks. */
+  expected?: { checksums?: Record<string, string>; size?: number };
   showMemberPath: boolean;
 }) => (
   <>
@@ -201,6 +97,7 @@ const CandidateResult = ({
         checksums: candidate.checksums,
         checksumVariants: candidate.checksumVariants,
         defaultOpen: true,
+        ...(expected ? { expected } : {}),
       }}
     />
   </>
@@ -213,8 +110,7 @@ const IdentifyForm = ({
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
   const [file, setFile] = useState<File | null>(null);
-  const [hashText, setHashText] = useState("");
-  const [hashError, setHashError] = useState("");
+  const romHashLookup = useRomHashLookup(ROM_HASH_LOOKUP_MESSAGES(localizer));
   const [result, setResult] = useState<ParsedIdentifyResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -291,14 +187,13 @@ const IdentifyForm = ({
     [runOperation],
   );
 
-  /* Adding a ROM identifies it right away - no separate run click. The staged
-     file also overrides any checksum typed before the drop. */
+  /* Adding a ROM identifies it right away - no separate run click. A checksum
+     expectation found before the drop is kept: the staged ROM is then checked
+     against it. */
   const selectFile = useCallback(
     (next: File) => {
       cancelRun();
       setFile(next);
-      setHashText("");
-      setHashError("");
       setResult(null);
       setError("");
       void runFile(next);
@@ -334,32 +229,11 @@ const IdentifyForm = ({
     [],
   );
 
-  const runHash = async (value: string) => {
-    if (busy) return;
-    const normalized = value.trim().toLowerCase();
-    if (!identifyHashAlgorithm(normalized)) {
-      const invalidChars = /[^0-9a-f]/.test(normalized);
-      setHashError(localizer.message(invalidChars ? "ui.identify.hashInvalidChars" : "ui.identify.hashInvalid"));
-      return;
-    }
-    setHashError("");
-    cancelRun();
-    setFile(null);
-    await runOperation(async ({ onProgress, signal }) => {
-      const { identifyHash } = await import("../../platform/browser/browser-api.ts");
-      return identifyHash(normalized, {
-        onProgress: (progress) => onProgress(progress.message || progress.label || "", progress.percent ?? null),
-        signal,
-      });
-    });
-  };
-
-  /* Hash search and file identify are alternatives; the retry replays whichever
-     one produced the current (unavailable) result. */
+  /* The unavailable notice only renders for a staged file; the checksum search
+     reports its own failures inline. */
   const retry = () => {
-    if (busy) return;
-    if (file) void runFile(file);
-    else if (hashText) void runHash(hashText);
+    if (busy || !file) return;
+    void runFile(file);
   };
 
   const removeFile = () => {
@@ -373,74 +247,43 @@ const IdentifyForm = ({
   const archiveName = result?.archiveName;
   const candidates = result?.candidates || [];
   const showMemberPaths = !!archiveName;
-  const hashMode = !file && (busy || !!result || !!error);
 
-  const hashInputId = `${containerId}-hash`;
-  const hashSearchBlock = (
-    <form
-      className="identify-hash"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void runHash(hashText);
-      }}
-    >
-      <label className="identify-hash-label" htmlFor={hashInputId}>
-        {localizer.message("ui.identify.hashLabel")}
-      </label>
-      <p className="pdesc identify-hash-hint">{localizer.message("ui.identify.hashHint")}</p>
-      <div className="identify-hash-row">
-        <input
-          aria-invalid={hashError ? "true" : undefined}
-          autoComplete="off"
-          className="input mono identify-hash-input"
-          disabled={busy}
-          id={hashInputId}
-          onChange={(event) => {
-            setHashText(event.currentTarget.value);
-            setHashError("");
-          }}
-          placeholder="crc32 / md5 / sha1"
-          spellCheck={false}
-          type="text"
-          value={hashText}
-        />
-        <RunButton disabled={busy || !hashText.trim()} icon={<Search aria-hidden="true" />} type="submit">
-          {busy && hashMode
-            ? stage || localizer.message("ui.identify.hashSearching")
-            : localizer.message("ui.identify.hashSearch")}
-        </RunButton>
-      </div>
-      {hashError ? (
-        <p className="identify-hash-error" role="alert">
-          {hashError}
-        </p>
-      ) : null}
-    </form>
-  );
+  /* A pasted checksum that the local data recognized is an expectation: it says
+     which ROM this run is about before any file exists, and the staged ROM is
+     then compared against it. */
+  const expectation: RomExpectation | undefined = romHashLookup.result
+    ? { checks: romHashLookup.result.checks, source: "manual" }
+    : undefined;
+  const expectationChecks = expectation?.checks;
+  const hadExpectationRef = useRef(false);
+  useEffect(() => {
+    if (expectationChecks) {
+      hadExpectationRef.current = true;
+      logger.debug("expected ROM set from a checksum lookup", { checks: expectationChecks });
+      return;
+    }
+    if (!hadExpectationRef.current) return;
+    hadExpectationRef.current = false;
+    logger.debug("expected ROM cleared");
+  }, [expectationChecks]);
+  /* The hero stands until something answers 0x02 - a file, or a checksum the
+     data recognized. Typing, a search in flight, or a failed one all leave it
+     in place: nothing flips for a non-answer. */
+  const heroShown = !(file || expectation);
 
-  const resultsBlock =
-    result && !unavailable ? (
-      <div className="cards">
-        {archiveName ? (
-          <p className="pdesc identify-archive-lead">
-            <span className="mono">Archive: {archiveName}</span>
-            {candidates.length > 1 ? (
-              <>
-                {" "}
-                <span>{candidates.length} ROMs found in this archive. Each one is identified on its own below.</span>
-              </>
-            ) : null}
-          </p>
-        ) : null}
-        {candidates.length ? (
-          candidates.map((candidate) => (
-            <CandidateCard candidate={candidate} key={candidate.path} showMemberPath={showMemberPaths} />
-          ))
-        ) : (
-          <Notice level="warn">No ROM was found in this input, so nothing could be identified.</Notice>
-        )}
-      </div>
-    ) : null;
+  /* One pasted checksum describes one ROM, so an archive that yields several
+     candidates is never compared: nobody knows which member it was meant for. */
+  const comparableChecks = file && result && !unavailable && candidates.length === 1 ? expectationChecks : undefined;
+  const expectationVerdict =
+    comparableChecks && file
+      ? compareRomExpectation(expectation, { checksums: candidates[0]?.checksums, size: file.size })
+      : undefined;
+  const identifyTone = result && !unavailable ? IDENTIFY_STATUS_MARK[result.status].tone : undefined;
+  const cardState = expectationVerdict ?? identifyTone;
+  const romStepFault = !!error || (expectationVerdict ? expectationVerdict === "bad" : result?.status === "unknown");
+  const romStepWoven = expectationVerdict
+    ? expectationVerdict === "ok"
+    : !!result && !unavailable && result.status !== "unknown";
 
   /* A database that never loaded is not a ROM verdict: say so, keep the
      technical cause in the log, and offer the retry. */
@@ -451,7 +294,11 @@ const IdentifyForm = ({
       </Notice>
       {/* Retry replays the file or the still-entered hash; with neither there is
           nothing to replay, so the button MUST NOT look actionable. */}
-      <RunButton disabled={busy || !(file || hashText.trim())} icon={<RotateCcw aria-hidden="true" />} onClick={retry}>
+      <RunButton
+        disabled={busy || !(file || romHashLookup.text.trim())}
+        icon={<RotateCcw aria-hidden="true" />}
+        onClick={retry}
+      >
         Retry identification
       </RunButton>
     </div>
@@ -465,11 +312,16 @@ const IdentifyForm = ({
 
   return (
     <section className="panel" id={containerId}>
-      {hashSearchBlock}
       <UnifiedDropZone
-        addLabel="Replace the ROM"
-        big={!file}
+        addLabel={file ? "Replace the ROM" : expectation ? "Add the ROM to verify it" : "Add a ROM to identify it"}
+        /* The search is the hero's quiet second door, after the drop target;
+           once a match fills 0x02 it moves there as the refine row. */
+        afterDropZone={
+          heroShown ? <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} /> : null
+        }
+        big={heroShown}
         disabled={busy}
+        {...(!file && expectation ? { hint: "Optional - the match above stands on its own" } : {})}
         heroLabel="Drop a ROM to identify it"
         heroLabelCoarse="Tap to add a ROM"
         info={<p>Identification runs locally. Your ROM never leaves this browser.</p>}
@@ -502,7 +354,7 @@ const IdentifyForm = ({
               ) : null}
             </>
           }
-          fault={!!error || result?.status === "unknown"}
+          fault={romStepFault}
           items={[
             busy
               ? {
@@ -524,6 +376,7 @@ const IdentifyForm = ({
                           {candidates.map((candidate) => (
                             <CandidateResult
                               candidate={candidate}
+                              {...(comparableChecks ? { expected: comparableChecks } : {})}
                               key={candidate.path}
                               showMemberPath={showMemberPaths}
                             />
@@ -542,26 +395,38 @@ const IdentifyForm = ({
                     ),
                     onRemove: removeFile,
                     removeLabel: "Remove ROM",
-                    state: result && !unavailable ? IDENTIFY_STATUS_MARK[result.status].tone : undefined,
+                    state: cardState,
                   },
                   id: "identify-rom",
                 },
           ]}
           num="0x02"
           title={localizer.message("ui.step.rom")}
-          woven={!!result && !unavailable && result.status !== "unknown"}
+          woven={romStepWoven}
         />
-      ) : hashMode ? (
-        <StepSection
-          fault={!!error}
+      ) : expectation ? (
+        /* A checksum match is an answer on its own, so the ROM step opens to
+           hold it; the ROM that verifies it is added in 0x01 like any other
+           input. The search stays under the card as the refine row until then. */
+        <WorkflowRomInputStep
+          afterItems={errorBlock}
+          emptyState={
+            <>
+              <RomExpectationCard
+                expectation={expectation}
+                id={`${containerId}-expected-rom`}
+                identification={romHashLookup.result?.identification}
+                onRemove={romHashLookup.clear}
+                removeLabel="Clear the expected ROM"
+              />
+              <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} variant="compact" />
+            </>
+          }
+          items={[]}
           num="0x02"
-          title={localizer.message("ui.step.identify")}
-          woven={!!result && !unavailable}
-        >
-          {errorBlock}
-          {unavailableBlock}
-          {resultsBlock}
-        </StepSection>
+          title={localizer.message("ui.step.rom")}
+          woven
+        />
       ) : (
         <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.step.rom") }]} />
       )}

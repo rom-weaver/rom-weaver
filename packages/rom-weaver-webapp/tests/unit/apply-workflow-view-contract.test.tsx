@@ -22,6 +22,11 @@ import {
 } from "../../src/public/react/use-apply-download-orchestration.ts";
 import type { PostApplyActionBehavior } from "../../src/types/settings.ts";
 
+// The checksum search is the shared expected-ROM lookup; stubbing it keeps
+// this contract on markup, not on the identify data.
+const { lookupExpectedRom } = vi.hoisted(() => ({ lookupExpectedRom: vi.fn() }));
+vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => ({ lookupExpectedRom }));
+
 const read = (relativePath: string) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 const BUNDLE_FIELDS_CSS = read("../../src/webapp/design-system/fields.css");
 const BUNDLE_RESPONSIVE_CSS = read("../../src/webapp/design-system/responsive.css");
@@ -162,6 +167,64 @@ describe("apply workflow view - empty bench", () => {
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
     expect(numbers).toEqual(["0x01"]);
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
+  });
+
+  it("keeps the hero while a checksum is typed, then fills the bench on a match", async () => {
+    lookupExpectedRom.mockResolvedValue({
+      matches: [
+        {
+          algorithm: "crc32",
+          database: "No-Intro",
+          name: "Metroid Fusion (USA)",
+          platform: "Nintendo - Game Boy Advance",
+          variant: "raw",
+        },
+      ],
+      status: "matched",
+    });
+    const { container } = renderView({ ui: createEmptyPatcherUiState() });
+    // The search is the hero's second door: it follows the drop target and
+    // the sample chip inside 0x01.
+    const step = container.querySelector("section.step.unified-drop-step") as HTMLElement;
+    const search = step.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
+    const drop = step.querySelector("#rom-weaver-row-unified-drop") as HTMLElement;
+    expect(search).toBeTruthy();
+    expect(search.compareDocumentPosition(drop) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(container.querySelector(".drop.hero")).toBeTruthy();
+
+    const input = container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "abcd" } });
+    });
+    // Typing is not an answer, so nothing flips.
+    expect(container.querySelector(".drop.hero")).toBeTruthy();
+    expect(container.querySelector(".ghost-steps")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "3610a686" } });
+      fireEvent.submit(search);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
+    // A match lays the whole run out, the way a patches-only bundle does.
+    expect(container.querySelector(".drop.hero")).toBeNull();
+    expect(container.querySelector(".ghost-steps")).toBeNull();
+    const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
+    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
+    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
+      "Metroid Fusion (USA)",
+    );
+    // The search moves into 0x02 as the refine row, keeping what was typed.
+    const romStep = container.querySelector("#rom-weaver-row-file-rom") as HTMLElement;
+    const refine = romStep.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
+    expect(refine.classList.contains("identify-hash--compact")).toBe(true);
+    expect((refine.querySelector("#rom-weaver-rom-hash") as HTMLInputElement).value).toBe("3610a686");
+    expect(step.querySelector("#rom-weaver-rom-hash-search")).toBeNull();
+    expect(step.textContent).toContain("Add the ROM or patches");
+
+    // Clearing the card restores the hero with an empty search.
+    fireEvent.click(romStep.querySelector('button[aria-label="Clear the expected ROM"]') as HTMLButtonElement);
+    await vi.waitFor(() => expect(container.querySelector(".drop.hero")).toBeTruthy());
+    expect((container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement).value).toBe("");
   });
 
   it("loads the sample into the existing drop pipeline without navigating", async () => {

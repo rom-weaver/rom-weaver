@@ -183,10 +183,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Strip padding and junk blocks from ROM dumps,",
   }),
   "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "and shrink them for storage —" }),
-  "ui.identify.hashHint": msg({
-    id: "ui.identify.hashHint",
-    message: "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex.",
-  }),
   "ui.identify.hashInvalid": msg({
     id: "ui.identify.hashInvalid",
     message: "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters.",
@@ -195,8 +191,17 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.identify.hashInvalidChars",
     message: "Checksums use only the hex characters 0-9 and a-f.",
   }),
-  "ui.identify.hashLabel": msg({ id: "ui.identify.hashLabel", message: "Identify by checksum" }),
-  "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search by checksum" }),
+  "ui.identify.hashPlaceholder": msg({
+    id: "ui.identify.hashPlaceholder",
+    message: "CRC32, MD5, or SHA-1",
+  }),
+  "ui.identify.hashLabel": msg({
+    id: "ui.identify.hashLabel",
+    message: "Looking for a specific ROM?",
+  }),
+  "ui.identify.hashRefine": msg({ id: "ui.identify.hashRefine", message: "Not the ROM you meant?" }),
+  "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search" }),
+  "ui.identify.hashSearchAgain": msg({ id: "ui.identify.hashSearchAgain", message: "Search again" }),
   "ui.identify.hashSearching": msg({ id: "ui.identify.hashSearching", message: "Searching…" }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
   "ui.log.filter": msg({ id: "ui.log.filter", message: "Filter" }),

@@ -58,7 +58,9 @@ const useRomHashLookup = (messages: { invalid: string; invalidChars: string }) =
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setState((current) => ({ ...current, busy: true, error: "", result: undefined, stage: "" }));
+    // The previous answer stays up while the next one is looked up: a card the
+    // user is refining MUST NOT vanish and flip the bench back to the hero.
+    setState((current) => ({ ...current, busy: true, error: "", stage: "" }));
     try {
       const checks = { checksums: { [algorithm]: hash } };
       const found = await lookupExpectedRom(checks, {
