@@ -271,12 +271,21 @@ describe("apply workflow view - empty bench", () => {
 
   it("shapes an identifying archive like the patch card it will most likely become", () => {
     const { container } = renderView({
-      pendingDrops: [{ extracting: true, id: "pending-1", kind: "patch", name: "bundle.zip" }],
+      pendingDrops: [
+        {
+          extracting: true,
+          id: "pending-1",
+          identifyStartedAtMs: performance.now(),
+          kind: "patch",
+          name: "bundle.zip",
+        },
+      ],
       ui: createEmptyPatcherUiState(),
     });
     const card = container.querySelector(".rw-pending .card.pending-card");
     expect(card?.textContent).toContain("bundle");
     expect(card?.textContent).toContain("Identifying");
+    expect(card?.querySelector(".extract-d .rb.time")?.textContent).toContain("Identify");
     expect(card?.textContent).toContain("Files");
     // A still-identifying archive has no parsed requirements, so the skeleton
     // reserves no Options/Checks drawer that would then vanish or move.
@@ -286,7 +295,16 @@ describe("apply workflow view - empty bench", () => {
 
   it("previews the disc sheet drawer when archive listing finds one", () => {
     const { container } = renderView({
-      pendingDrops: [{ extracting: true, id: "pending-1", kind: "rom", name: "disc.zip", sheet: "CUE" }],
+      pendingDrops: [
+        {
+          extracting: true,
+          id: "pending-1",
+          identifyStartedAtMs: performance.now(),
+          kind: "rom",
+          name: "disc.zip",
+          sheet: "CUE",
+        },
+      ],
       ui: createEmptyPatcherUiState(),
     });
     const labels = Array.from(container.querySelectorAll(".rw-pending .cks-head .lab")).map((el) => el.textContent);

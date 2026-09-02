@@ -230,48 +230,64 @@ const usePendingCardMorph = (pendingCount: number, _resolvedCount: number) => {
   }, [pendingCount]);
 };
 
-const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
-  <FileCard
-    className="pending-card"
-    meta={
-      <StageStatus
-        id={`rom-weaver-progress-identify-${drop.id}`}
-        label={drop.bundle ? "Reading bundle" : drop.entryCount === undefined ? "Identifying" : "Identified"}
-        percent={null}
-      />
-    }
-    name={<ExtractName fileName={drop.name} />}
-    stageBar="indeterminate"
-  >
-    {drop.extracting ? (
-      <Drawer
-        bodyClassName="taskbody"
-        className="extract-d"
-        label="Files"
-        labelIcon={<Archive aria-hidden="true" />}
-        readouts={
-          drop.entryCount === undefined ? undefined : (
-            <DrawerReadout>
-              {drop.entryCount} {drop.entryCount === 1 ? "item" : "items"}
-            </DrawerReadout>
-          )
-        }
-      >
-        <span />
-      </Drawer>
-    ) : null}
-    {drop.kind === "rom" && drop.sheet ? (
-      <Drawer className="cue rw-cue-section" label={drop.sheet} labelIcon={<Disc3 aria-hidden="true" />}>
-        <span />
-      </Drawer>
-    ) : null}
-    {drop.kind === "rom" ? (
-      <Drawer bodyClassName="ckrows" label="Checks" labelIcon={<ListChecks aria-hidden="true" />}>
-        <span />
-      </Drawer>
-    ) : null}
-  </FileCard>
-);
+const usePendingIdentifyTiming = (startedAtMs: number) => {
+  const [elapsedMs, setElapsedMs] = useState(() => Math.max(0, performance.now() - startedAtMs));
+  useEffect(() => {
+    const update = () => setElapsedMs(Math.max(0, performance.now() - startedAtMs));
+    const timer = window.setInterval(update, 100);
+    return () => window.clearInterval(timer);
+  }, [startedAtMs]);
+  return `Identify ${formatTiming(createTiming(elapsedMs))}`;
+};
+
+const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
+  const identifyTiming = usePendingIdentifyTiming(drop.identifyStartedAtMs);
+  return (
+    <FileCard
+      className="pending-card"
+      meta={
+        <StageStatus
+          id={`rom-weaver-progress-identify-${drop.id}`}
+          label={drop.bundle ? "Reading bundle" : drop.entryCount === undefined ? "Identifying" : "Identified"}
+          percent={null}
+        />
+      }
+      name={<ExtractName fileName={drop.name} />}
+      stageBar="indeterminate"
+    >
+      {drop.extracting ? (
+        <Drawer
+          bodyClassName="taskbody"
+          className="extract-d"
+          label="Files"
+          labelIcon={<Archive aria-hidden="true" />}
+          readouts={
+            <>
+              {drop.entryCount === undefined ? null : (
+                <DrawerReadout>
+                  {drop.entryCount} {drop.entryCount === 1 ? "item" : "items"}
+                </DrawerReadout>
+              )}
+              <DrawerReadout time>{identifyTiming}</DrawerReadout>
+            </>
+          }
+        >
+          <span />
+        </Drawer>
+      ) : null}
+      {drop.kind === "rom" && drop.sheet ? (
+        <Drawer className="cue rw-cue-section" label={drop.sheet} labelIcon={<Disc3 aria-hidden="true" />}>
+          <span />
+        </Drawer>
+      ) : null}
+      {drop.kind === "rom" ? (
+        <Drawer bodyClassName="ckrows" label="Checks" labelIcon={<ListChecks aria-hidden="true" />}>
+          <span />
+        </Drawer>
+      ) : null}
+    </FileCard>
+  );
+};
 
 const ApplyDropAfter = ({
   downloadHref,

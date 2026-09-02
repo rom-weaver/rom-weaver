@@ -22,6 +22,7 @@ type PendingDrop = {
   entryCount?: number;
   extracting: boolean;
   id: string;
+  identifyStartedAtMs: number;
   kind: "patch" | "rom";
   bundle?: boolean;
   name: string;
@@ -316,6 +317,7 @@ const useUnifiedApplyDrop = (
         return {
           extracting: isArchiveFileName(file.name),
           id: `pending-${nextIdRef.current}`,
+          identifyStartedAtMs: performance.now(),
           kind: isRomFileName(file.name) ? "rom" : "patch",
           name: file.name,
         };
