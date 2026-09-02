@@ -17,6 +17,7 @@ import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import { RomInputPanels } from "../../public/react/components/ds/rom-input-panels.tsx";
+import { StageStatus } from "../../public/react/components/ds/staging-meta.tsx";
 import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
@@ -220,6 +221,8 @@ const IdentifyForm = ({
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
   const [percent, setPercent] = useState<number | null>(null);
+  const [identifyStartedAtMs, setIdentifyStartedAtMs] = useState<number | null>(null);
+  const [identifyElapsedMs, setIdentifyElapsedMs] = useState(0);
   const handledDropRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   /* Every state write is gated on this token. A run that was replaced, removed,
@@ -233,6 +236,8 @@ const IdentifyForm = ({
     setBusy(false);
     setStage("");
     setPercent(null);
+    setIdentifyStartedAtMs(null);
+    setIdentifyElapsedMs(0);
   }, []);
 
   /** Run one identify operation, gated on the run token like every state write. */
@@ -250,6 +255,8 @@ const IdentifyForm = ({
       setBusy(true);
       setStage("");
       setPercent(null);
+      setIdentifyStartedAtMs(performance.now());
+      setIdentifyElapsedMs(0);
       setError("");
       setResult(null);
       try {
@@ -272,11 +279,20 @@ const IdentifyForm = ({
           setBusy(false);
           setStage("");
           setPercent(null);
+          setIdentifyStartedAtMs(null);
         }
       }
     },
     [],
   );
+
+  useEffect(() => {
+    if (!(busy && identifyStartedAtMs !== null)) return;
+    const update = () => setIdentifyElapsedMs(Math.max(0, performance.now() - identifyStartedAtMs));
+    update();
+    const timer = window.setInterval(update, 100);
+    return () => window.clearInterval(timer);
+  }, [busy, identifyStartedAtMs]);
 
   const runFile = useCallback(
     async (next: File) => {
@@ -506,15 +522,24 @@ const IdentifyForm = ({
           items={[
             busy
               ? {
-                  id: "identify-rom",
-                  progress: {
-                    cancelLabel: "Cancel identification",
-                    indeterminate: percent == null,
-                    label: stage || `Identifying ${file.name}…`,
-                    onCancel: cancelRun,
-                    percent: percent ?? undefined,
-                    value: percent == null ? undefined : `${Math.round(percent)}%`,
+                  card: {
+                    extract: {
+                      fileName: file.name,
+                      fileSize: file.size,
+                      identifyTimeMs: identifyElapsedMs,
+                    },
+                    meta: (
+                      <StageStatus
+                        id="rom-weaver-progress-identify-rom"
+                        label={stage || `Identifying ${file.name}…`}
+                        percent={percent}
+                      />
+                    ),
+                    onRemove: removeFile,
+                    removeLabel: "Cancel identification and remove ROM",
+                    stageBar: percent ?? "indeterminate",
                   },
+                  id: "identify-rom",
                 }
               : {
                   card: {
