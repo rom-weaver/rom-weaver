@@ -6,10 +6,14 @@ import test from "node:test";
 
 import {
   DEFAULT_PACK_PLATFORMS,
+  GOODTOOLS_DAT_PATH,
+  GOODTOOLS_ARCHIVE_SHA256,
+  GOODTOOLS_RELEASE,
   IDENTIFY_GENERATION_DATE,
   LIBRETRO_DAT_PATHS,
   LIBRETRO_PLATFORM_PATHS,
   LIBRETRO_REVISION,
+  OPENGOOD_HEADERED_REVISION,
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
   buildCatalogPlatforms,
@@ -20,6 +24,7 @@ import {
   mergeLegacyFallbackGames,
   packGroupFor,
   parseClrMameProDat,
+  parseGoodToolsHeaderedGames,
   parseLibretroGames,
   parseOpenGoodGames,
 } from "./build-identify-index.mjs";
@@ -74,6 +79,17 @@ game (
 const OPENGOOD_DAT = `<?xml version="1.0"?><datafile><header><date>2021-12-27</date></header>
 <game name="Alpha Quest (U) [!]"><rom name="alpha.nes" size="16" crc="aabbccdd" md5="00112233445566778899aabbccddeeff" sha1="00112233445566778899aabbccddeeff00112233"/></game>
 <game name="Legacy Quest (U) [b1][T-Eng]"><rom name="legacy.nes" size="32" crc="deadbeef"/></game></datafile>`;
+const OPENGOOD_HEADERED_DAT = OPENGOOD_DAT.replace(
+  'size="16" crc="aabbccdd" md5="00112233445566778899aabbccddeeff" sha1="00112233445566778899aabbccddeeff00112233"',
+  'size="32" crc="cafebabe"',
+);
+const GOODTOOLS_HEADERED_DAT = `<?xml version="1.0"?><datafile>
+<header><date>2025-04-01</date></header>
+<game name="GoodSNES v3.27">
+<rom name="SNESRen/Alpha Quest (U) [!].smc" size="1536" crc="cafebabe"/>
+<rom name="SNESRen/Gamma Quest (U) [b1].smc" size="1536" crc="feedface"/>
+<rom name="GoodSNES.db" size="12" crc="12345678"/>
+</game></datafile>`;
 const REDUMP_DAT = `clrmamepro ( name "Sony - PlayStation" )
 game ( name "Disc" rom ( name "Disc (Track 1).bin" size 16 crc AABBCCDD ) )`;
 
@@ -88,6 +104,24 @@ function writeCachedDat(cacheDir, source, revision, datFile, bytes) {
       ? `dat/${datFile}`
       : `dats/${datFile}`;
   const target = join(cacheDir, source, revision, relativePath);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, bytes);
+}
+
+function writeCachedGoodToolsDat(cacheDir, bytes) {
+  const target = join(
+    cacheDir,
+    "goodtools",
+    `${GOODTOOLS_RELEASE}-${GOODTOOLS_ARCHIVE_SHA256}`,
+    GOODTOOLS_RELEASE,
+    GOODTOOLS_DAT_PATH,
+  );
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, bytes);
+}
+
+function writeLegacyCachedGoodToolsDat(cacheDir, bytes) {
+  const target = join(cacheDir, "goodtools", GOODTOOLS_RELEASE, GOODTOOLS_DAT_PATH);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, bytes);
 }
@@ -209,7 +243,10 @@ test("merge prefers the OpenGood name and retains every other name", () => {
     NES,
     "OpenNES-duplicates.dat",
   );
-  const games = mergeLegacyFallbackGames(primary.games, [...fallback.games, ...additionalFallback.games]);
+  const games = mergeLegacyFallbackGames(primary.games, [
+    ...fallback.games,
+    ...additionalFallback.games,
+  ]);
   assert.equal(games.length, 3);
   assert.equal(games[0].components.length, 1);
   assert.deepEqual(games[0].dumpTags, ["!"]);
@@ -220,6 +257,91 @@ test("merge prefers the OpenGood name and retains every other name", () => {
   assert.equal(legacy.legacyVariant, true);
   assert.deepEqual(legacy.dumpTags, ["b1", "T-Eng"]);
   assert.deepEqual(extractGoodToolsDumpTags("Title [!][b1]"), ["!", "b1"]);
+});
+
+test("merge joins headered and headerless OpenGood records without a duplicate game", () => {
+  const primary = parseLibretroGames(
+    LIBRETRO_DAT,
+    NES,
+    "Nintendo - Nintendo Entertainment System.dat",
+  );
+  const current = parseOpenGoodGames(OPENGOOD_DAT, NES, "OpenNES.dat", {
+    sourceVariant: "current",
+  });
+  const headered = parseOpenGoodGames(OPENGOOD_HEADERED_DAT, NES, "OpenNES.Headered.dat", {
+    revision: OPENGOOD_HEADERED_REVISION,
+    sourceVariant: "headered",
+  });
+  const games = mergeLegacyFallbackGames(primary.games, [...current.games, ...headered.games]);
+  const alpha = games.find((game) => game.name === "Alpha Quest (U) [!]");
+  assert.equal(games.length, 3);
+  assert.equal(alpha.components.length, 2);
+  assert.ok(alpha.components.some((component) => component.crc32 === "cafebabe"));
+  assert.equal(alpha.provenance.length, 3);
+  assert.ok(alpha.alternateNames.includes("Alpha Quest (USA)"));
+});
+
+test("GoodSNES dir2dat keeps only exact full-file copier-header hashes", () => {
+  const parsed = parseGoodToolsHeaderedGames(
+    GOODTOOLS_HEADERED_DAT,
+    "Nintendo - Super Nintendo Entertainment System",
+  );
+  assert.equal(parsed.header.date, "2025-04-01");
+  assert.equal(parsed.games.length, 2);
+  assert.equal(parsed.games[0].name, "Alpha Quest (U) [!]");
+  assert.equal(parsed.games[0].components[0].size, 1536);
+  assert.equal(parsed.games[0].components[0].crc32, "cafebabe");
+  assert.equal(parsed.games[0].components[0].filename, "Alpha Quest (U) [!].smc");
+  assert.equal(parsed.games[0].provenance[0].source, "Eggmansworld/Datfiles");
+  assert.equal(parsed.games[0].sourceVariant, "headered");
+});
+
+test("GoodSNES headered hashes merge into the existing SNES records", () => {
+  const platform = "Nintendo - Super Nintendo Entertainment System";
+  const current = parseOpenGoodGames(OPENGOOD_DAT, platform, "OpenSNES.SNES.dat", {
+    sourceVariant: "current",
+  });
+  const headered = parseGoodToolsHeaderedGames(GOODTOOLS_HEADERED_DAT, platform);
+  const games = mergeLegacyFallbackGames([], [...current.games, ...headered.games]);
+  const alpha = games.find((game) => game.name === "Alpha Quest (U) [!]");
+  assert.equal(games.length, 3);
+  assert.equal(alpha.components.length, 2);
+  assert.ok(alpha.components.some((component) => component.crc32 === "cafebabe"));
+  assert.ok(games.some((game) => game.name === "Gamma Quest (U) [b1]"));
+});
+
+test("the builder consumes a cached GoodSNES headered DAT", async () => {
+  const platform = "Nintendo - Super Nintendo Entertainment System";
+  const work = tempDir("goodsnes-headered");
+  const cacheDir = join(work, "cache");
+  const outDir = join(work, "out");
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "dat/Nintendo - Super Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "metadat/no-intro/Nintendo - Super Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenSNES.SNES.dat", OPENGOOD_DAT);
+  writeLegacyCachedGoodToolsDat(
+    cacheDir,
+    '<?xml version="1.0"?><datafile><header><date>stale</date></header></datafile>',
+  );
+  writeCachedGoodToolsDat(cacheDir, GOODTOOLS_HEADERED_DAT);
+  await main(["--cache-dir", cacheDir, "--out", outDir, "--no-brotli", "--only", platform]);
+  const pack = parsePack(
+    readFileSync(join(outDir, "nintendo-super-nintendo-entertainment-system.pack")),
+  );
+  const manifest = JSON.parse(pack.get("manifest.json").toString("utf8"));
+  assert.equal(manifest.counts.games, 1188);
+  assert.ok(manifest.provenance.some((entry) => entry.source === "Eggmansworld/Datfiles"));
 });
 
 test("family variants resolve to their shared pack", () => {
@@ -254,6 +376,13 @@ test("the builder emits deterministic mixed and fallback-only RWFP1 packs", asyn
   );
   writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenNES.dat", OPENGOOD_DAT);
   writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenCoCo.dat", OPENGOOD_DAT);
+  writeCachedDat(
+    cacheDir,
+    "opengood-headered",
+    OPENGOOD_HEADERED_REVISION,
+    "OpenNES.Headered.dat",
+    OPENGOOD_HEADERED_DAT,
+  );
   await main([
     "--cache-dir",
     cacheDir,
@@ -279,7 +408,11 @@ test("the builder emits deterministic mixed and fallback-only RWFP1 packs", asyn
     "sets.bin",
   ]) {
     assert.equal(nes.get(name).readUInt8(4), 1, name);
-    assert.equal(nes.get(name).subarray(0, 4).toString("ascii"), `${name === "strings.bin" ? "RWS" : name === "hashes.bin" ? "RWH" : name === "components.bin" ? "RWC" : name === "games.bin" ? "RWG" : name === "owners.bin" ? "RWO" : name === "routes.bin" ? "RWR" : "RWX"}5`, name);
+    assert.equal(
+      nes.get(name).subarray(0, 4).toString("ascii"),
+      `${name === "strings.bin" ? "RWS" : name === "hashes.bin" ? "RWH" : name === "components.bin" ? "RWC" : name === "games.bin" ? "RWG" : name === "owners.bin" ? "RWO" : name === "routes.bin" ? "RWR" : "RWX"}5`,
+      name,
+    );
   }
 
   const tandy = parsePack(readFileSync(join(outDir, "tandy-color-computer.pack")));
@@ -328,10 +461,7 @@ test("RWFP1 rejects games outside the scoped pack", () => {
     source: "libretro",
     components: [],
   };
-  assert.throws(
-    () => buildSystemPackV1("Other", [game]),
-    /game platform does not match pack/u,
-  );
+  assert.throws(() => buildSystemPackV1("Other", [game]), /game platform does not match pack/u);
   assert.throws(
     () => buildSystemPackV1(NES, [{ ...game, source: "opengood" }]),
     /game source does not match pack/u,

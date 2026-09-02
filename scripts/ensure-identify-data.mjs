@@ -6,6 +6,12 @@ import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   CATALOG_FORMAT,
+  GOODTOOLS_ARCHIVE,
+  GOODTOOLS_ARCHIVE_SHA256,
+  GOODTOOLS_DAT_PATH,
+  GOODTOOLS_LICENSE,
+  GOODTOOLS_RELEASE,
+  GOODTOOLS_REPOSITORY,
   INDEX_FORMAT,
   LIBRETRO_PLATFORM_PATHS,
   LIBRETRO_REPOSITORY,
@@ -13,6 +19,7 @@ import {
   main as buildIdentifyData,
   OPENGOOD_STANDALONE_PLATFORMS,
   OPENGOOD_REPOSITORY,
+  OPENGOOD_HEADERED_REVISION,
   OPENGOOD_REVISION,
   packGroupFor,
   slugifyPlatform,
@@ -47,7 +54,10 @@ const hasCurrentCatalog = (dataDir) => {
   if (catalog.format !== CATALOG_FORMAT) return false;
   if (
     catalog.generated?.libretroRevision !== LIBRETRO_REVISION ||
-    catalog.generated?.opengoodRevision !== OPENGOOD_REVISION
+    catalog.generated?.opengoodRevision !== OPENGOOD_REVISION ||
+    catalog.generated?.opengoodHeaderedRevision !== OPENGOOD_HEADERED_REVISION ||
+    catalog.generated?.goodToolsRelease !== GOODTOOLS_RELEASE ||
+    catalog.generated?.goodToolsArchiveSha256 !== GOODTOOLS_ARCHIVE_SHA256
   )
     return false;
   if (!Array.isArray(catalog.platforms)) return false;
@@ -70,7 +80,15 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
     index.sources?.libretro?.url !== LIBRETRO_REPOSITORY ||
     index.sources?.libretro?.revision !== LIBRETRO_REVISION ||
     index.sources?.opengood?.url !== OPENGOOD_REPOSITORY ||
-    index.sources?.opengood?.revision !== OPENGOOD_REVISION
+    index.sources?.opengood?.revision !== OPENGOOD_REVISION ||
+    index.sources?.opengoodHeadered?.url !== OPENGOOD_REPOSITORY ||
+    index.sources?.opengoodHeadered?.revision !== OPENGOOD_HEADERED_REVISION ||
+    index.sources?.goodToolsHeadered?.url !== GOODTOOLS_REPOSITORY ||
+    index.sources?.goodToolsHeadered?.license !== GOODTOOLS_LICENSE ||
+    index.sources?.goodToolsHeadered?.release !== GOODTOOLS_RELEASE ||
+    index.sources?.goodToolsHeadered?.archive !== GOODTOOLS_ARCHIVE ||
+    index.sources?.goodToolsHeadered?.archiveSha256 !== GOODTOOLS_ARCHIVE_SHA256 ||
+    index.sources?.goodToolsHeadered?.datPath !== GOODTOOLS_DAT_PATH
   ) {
     return false;
   }
@@ -112,12 +130,22 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
 
 export const main = async (argv = process.argv.slice(2), dataDir = defaultDataDir) => {
   if (!argv.includes("--force") && hasCurrentData(dataDir)) {
-    log("info", `Libretro ${LIBRETRO_REVISION} and OpenGood ${OPENGOOD_REVISION} identify data is ready`);
+    log(
+      "info",
+      `Libretro ${LIBRETRO_REVISION}, OpenGood ${OPENGOOD_REVISION}, and ` +
+        `headered OpenGood ${OPENGOOD_HEADERED_REVISION} and GoodSNES ${GOODTOOLS_RELEASE} ` +
+        `identify data is ready`,
+    );
     return;
   }
 
   rmSync(dataDir, { recursive: true, force: true });
-  log("info", `building Libretro ${LIBRETRO_REVISION} and OpenGood ${OPENGOOD_REVISION} identify data`);
+  log(
+    "info",
+    `building Libretro ${LIBRETRO_REVISION}, OpenGood ${OPENGOOD_REVISION}, and ` +
+      `headered OpenGood ${OPENGOOD_HEADERED_REVISION} and GoodSNES ${GOODTOOLS_RELEASE} ` +
+      `identify data`,
+  );
   await buildIdentifyData(["--out", dataDir]);
 };
 

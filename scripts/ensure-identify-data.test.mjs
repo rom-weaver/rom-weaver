@@ -7,9 +7,16 @@ import test from "node:test";
 
 import {
   INDEX_FORMAT,
+  GOODTOOLS_ARCHIVE,
+  GOODTOOLS_ARCHIVE_SHA256,
+  GOODTOOLS_DAT_PATH,
+  GOODTOOLS_LICENSE,
+  GOODTOOLS_RELEASE,
+  GOODTOOLS_REPOSITORY,
   LIBRETRO_PLATFORM_PATHS,
   LIBRETRO_REPOSITORY,
   LIBRETRO_REVISION,
+  OPENGOOD_HEADERED_REVISION,
   OPENGOOD_STANDALONE_PLATFORMS,
   OPENGOOD_REPOSITORY,
   OPENGOOD_REVISION,
@@ -47,7 +54,13 @@ function buildCurrentDataDir() {
   });
   const catalog = {
     format: "rom-weaver-identify-catalog-v1",
-    generated: { libretroRevision: LIBRETRO_REVISION, opengoodRevision: OPENGOOD_REVISION },
+    generated: {
+      libretroRevision: LIBRETRO_REVISION,
+      opengoodRevision: OPENGOOD_REVISION,
+      opengoodHeaderedRevision: OPENGOOD_HEADERED_REVISION,
+      goodToolsRelease: GOODTOOLS_RELEASE,
+      goodToolsArchiveSha256: GOODTOOLS_ARCHIVE_SHA256,
+    },
     platforms: platforms.map(([platform, source]) => ({
       canonicalPlatform: platform,
       packSlug: slugifyPlatform(platform),
@@ -63,6 +76,18 @@ function buildCurrentDataDir() {
       sources: {
         libretro: { revision: LIBRETRO_REVISION, url: LIBRETRO_REPOSITORY },
         opengood: { revision: OPENGOOD_REVISION, url: OPENGOOD_REPOSITORY },
+        opengoodHeadered: {
+          revision: OPENGOOD_HEADERED_REVISION,
+          url: OPENGOOD_REPOSITORY,
+        },
+        goodToolsHeadered: {
+          archive: GOODTOOLS_ARCHIVE,
+          archiveSha256: GOODTOOLS_ARCHIVE_SHA256,
+          datPath: GOODTOOLS_DAT_PATH,
+          license: GOODTOOLS_LICENSE,
+          release: GOODTOOLS_RELEASE,
+          url: GOODTOOLS_REPOSITORY,
+        },
       },
       systems,
     }),
@@ -135,6 +160,19 @@ test("hasCurrentData rejects a catalog from another OpenGood revision", async ()
     const catalogPath = join(dataDir, "catalog.json");
     const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
     catalog.generated.opengoodRevision = "0000000000000000000000000000000000000000";
+    writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects a catalog from another headered OpenGood revision", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const catalogPath = join(dataDir, "catalog.json");
+    const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+    catalog.generated.opengoodHeaderedRevision = "0000000000000000000000000000000000000000";
     writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
     assert.equal(hasCurrentData(dataDir), false);
   } finally {
