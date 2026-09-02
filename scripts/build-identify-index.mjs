@@ -26,7 +26,21 @@ export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
 // historical dump variants to matching Libretro packs and owns its standalone packs.
 export const OPENGOOD_REPOSITORY = "https://github.com/SnowflakePowered/opengood";
 export const OPENGOOD_REVISION = "5cbd95ef3f5904b9e067042ae8dd08a35c39c89a";
+// OpenGood moved NES records to headerless payloads in 2021-12-28, but kept
+// normalized iNES records in this separate DAT. Keep both revisions so a
+// pasted checksum can match either representation.
+export const OPENGOOD_HEADERED_REVISION = "269d8c32b46a20049f187e2ee02a666cc47c27e1";
 export const OPENGOOD_LICENSE = "CC0-1.0";
+// Eggmansworld publishes a completed GoodSNES dir2dat export. Unlike the
+// normalized GoodTools database, this DAT contains hashes for the files as
+// stored, including recorded 512-byte copier headers.
+export const GOODTOOLS_REPOSITORY = "https://github.com/Eggmansworld/Datfiles";
+export const GOODTOOLS_RELEASE = "goodtools";
+export const GOODTOOLS_ARCHIVE = "GoodTools.Collection.2025-04-10_RomVault.zip";
+export const GOODTOOLS_ARCHIVE_SHA256 =
+  "44ff34d326bb9c3036dde746d7787dddeaa864373309983355a63c6929c1eeae";
+export const GOODTOOLS_DAT_PATH = "GoodSNES v3.27/GoodSNES v3.27.dat";
+export const GOODTOOLS_LICENSE = "MIT";
 export const LIBRETRO_REPOSITORY = "https://github.com/libretro/libretro-database";
 export const LIBRETRO_REVISION = "69ea62a2823823820d4f121c2b53bf20fd088ab4";
 export const LIBRETRO_LICENSE = "CC-BY-SA-4.0";
@@ -256,6 +270,14 @@ export const OPENGOOD_FALLBACKS = Object.freeze({
   "Amstrad - CPC": ["OpenCPC.dat"],
   "Nintendo - Nintendo Entertainment System": ["OpenNES.dat"],
   "Nintendo - Super Nintendo Entertainment System": ["OpenSNES.SNES.dat"],
+});
+
+export const OPENGOOD_HEADERED_FALLBACKS = Object.freeze({
+  "Nintendo - Nintendo Entertainment System": ["OpenNES.Headered.dat"],
+});
+
+export const GOODTOOLS_HEADERED_FALLBACKS = Object.freeze({
+  "Nintendo - Super Nintendo Entertainment System": GOODTOOLS_DAT_PATH,
 });
 
 // Original OpenGood aggregate DATs. Keep these separate from their split DATs
@@ -712,17 +734,62 @@ async function ensureLibretroDats(sourcePaths, cacheDir) {
   });
 }
 
-async function ensureOpenGoodDats(datFiles, cacheDir) {
+async function ensureOpenGoodDats(
+  datFiles,
+  cacheDir,
+  revision = OPENGOOD_REVISION,
+  label = "opengood",
+) {
   const sourcePaths = datFiles.map((datFile) => `dats/${datFile}`);
   const paths = await ensureArchiveFiles({
-    archiveUrl: `${OPENGOOD_REPOSITORY}/archive/${OPENGOOD_REVISION}.tar.gz`,
+    archiveUrl: `${OPENGOOD_REPOSITORY}/archive/${revision}.tar.gz`,
     cacheDir,
-    label: "opengood",
-    prefix: `opengood-${OPENGOOD_REVISION}`,
+    label,
+    prefix: `opengood-${revision}`,
     requestedPaths: sourcePaths,
-    revision: OPENGOOD_REVISION,
+    revision,
   });
   return new Map(datFiles.map((datFile) => [datFile, paths.get(`dats/${datFile}`)]));
+}
+
+async function ensureGoodToolsHeaderedDat(cacheDir) {
+  const cacheKey = `${GOODTOOLS_RELEASE}-${GOODTOOLS_ARCHIVE_SHA256}`;
+  const archiveDir = path.join(cacheDir, "goodtools", cacheKey);
+  const archive = path.join(archiveDir, GOODTOOLS_ARCHIVE);
+  const target = path.join(archiveDir, GOODTOOLS_RELEASE, GOODTOOLS_DAT_PATH);
+  const targetInfo = await fileStat(target);
+  if (!targetInfo?.isFile() || targetInfo.size === 0) {
+    await mkdir(archiveDir, { recursive: true });
+    const archiveInfo = await fileStat(archive);
+    if (archiveInfo?.isFile() && archiveInfo.size > 0) {
+      const actualSha256 = await sha256File(archive);
+      if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
+        throw new Error(
+          `GoodTools cache checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`,
+        );
+      }
+    } else {
+      const partial = `${archive}.part`;
+      await runCurl(
+        `${GOODTOOLS_REPOSITORY}/releases/download/${GOODTOOLS_RELEASE}/${encodeURIComponent(GOODTOOLS_ARCHIVE)}`,
+        partial,
+        undefined,
+      );
+      const actualSha256 = await sha256File(partial);
+      if (actualSha256 !== GOODTOOLS_ARCHIVE_SHA256) {
+        throw new Error(
+          `GoodTools download checksum mismatch: expected ${GOODTOOLS_ARCHIVE_SHA256}, got ${actualSha256}`,
+        );
+      }
+      await rename(partial, archive);
+    }
+    await mkdir(path.dirname(target), { recursive: true });
+    requireExecutable("unzip");
+    const dat = await runCommandText("unzip", ["-p", archive, GOODTOOLS_DAT_PATH]);
+    if (!dat.trim()) throw new Error(`GoodTools archive is missing ${GOODTOOLS_DAT_PATH}`);
+    await writeFile(target, dat);
+  }
+  return target;
 }
 
 export async function sha256File(filePath) {
@@ -966,7 +1033,12 @@ export function parseLibretroGames(text, platform, sourcePath) {
   };
 }
 
-export function parseOpenGoodGames(text, platform, datFile) {
+export function parseOpenGoodGames(
+  text,
+  platform,
+  datFile,
+  { revision = OPENGOOD_REVISION, sourceVariant } = {},
+) {
   const headerMatch = text.match(/<header>([\s\S]*?)<\/header>/u);
   const header = {};
   if (headerMatch) {
@@ -976,8 +1048,8 @@ export function parseOpenGoodGames(text, platform, datFile) {
   }
   const provenance = sourceProvenance(
     "SnowflakePowered/opengood",
-    `${OPENGOOD_REPOSITORY}/blob/${OPENGOOD_REVISION}/dats/${encodeURIComponent(datFile)}`,
-    OPENGOOD_REVISION,
+    `${OPENGOOD_REPOSITORY}/blob/${revision}/dats/${encodeURIComponent(datFile)}`,
+    revision,
     OPENGOOD_LICENSE,
     header.date,
   );
@@ -1002,9 +1074,51 @@ export function parseOpenGoodGames(text, platform, datFile) {
         platform,
         provenance: [provenance],
         source: "opengood",
+        sourceVariant,
         upstreamSource: "open-good",
       });
     }
+  }
+  return { games, header };
+}
+
+export function parseGoodToolsHeaderedGames(text, platform) {
+  const headerMatch = text.match(/<header>([\s\S]*?)<\/header>/u);
+  const header = {};
+  if (headerMatch) {
+    for (const match of headerMatch[1].matchAll(/<([\w-]+)>([^<]*)<\/\1>/gu)) {
+      header[match[1]] = xmlUnescape(match[2]).trim();
+    }
+  }
+  const provenance = sourceProvenance(
+    "Eggmansworld/Datfiles",
+    `${GOODTOOLS_REPOSITORY}/releases/tag/${GOODTOOLS_RELEASE}`,
+    GOODTOOLS_RELEASE,
+    GOODTOOLS_LICENSE,
+    header.date,
+  );
+  const games = [];
+  for (const match of text.matchAll(/<rom\b([^>]*?)\/?>(?:\r?\n)?/gu)) {
+    const rom = parseAttributes(match[1]);
+    const sourceName = String(rom.name ?? "").trim();
+    const size = /^\d+$/u.test(String(rom.size ?? "")) ? Number.parseInt(rom.size, 10) : 0;
+    if (!sourceName.startsWith("SNESRen/") || !sourceName.endsWith(".smc") || size % 1024 !== 512)
+      continue;
+    const filename = sourceName.slice("SNESRen/".length);
+    const name = filename.slice(0, -".smc".length);
+    const component = componentFromRom({ ...rom, name: filename }, 0, "open-good");
+    if (!component.crc32 && !component.md5 && !component.sha1) continue;
+    games.push({
+      components: [component],
+      dumpTags: extractGoodToolsDumpTags(name),
+      legacyVariant: true,
+      name,
+      platform,
+      provenance: [provenance],
+      source: "opengood",
+      sourceVariant: "headered",
+      upstreamSource: "open-good",
+    });
   }
   return { games, header };
 }
@@ -1029,26 +1143,50 @@ function mergeProvenance(left, right) {
 
 // A matching hash under the same algorithm, byte size, and hash scope proves
 // that an OpenGood component is already represented by the Libretro record.
+// The headered and headerless NES DATs use the same GoodTools dump name, so
+// that name links the two representations after exact matching is attempted.
 export function mergeLegacyFallbackGames(libretroGames, openGoodGames) {
   const merged = libretroGames.map((game) => ({ ...game, components: [...game.components] }));
   const owners = new Map();
   const preferredNameOwners = new Set();
+  const legacyNameOwners = new Map();
+  const registerLegacyName = (name, game) => {
+    if (!name) return;
+    const existing = legacyNameOwners.get(name);
+    if (existing !== undefined && existing !== game) {
+      legacyNameOwners.set(name, null);
+      return;
+    }
+    legacyNameOwners.set(name, game);
+  };
   const addOwner = (game, component) => {
     for (const key of componentKeys(component)) owners.set(key, game);
   };
   for (const game of merged) for (const component of game.components) addOwner(game, component);
 
-  for (const fallback of openGoodGames) {
-    const owner = fallback.components
+  // The current OpenGood record must register its name before the older
+  // headered record is merged. This also makes the result independent of the
+  // order in which callers collect the source files.
+  const orderedFallbacks = [...openGoodGames].sort(
+    (left, right) =>
+      Number(left.sourceVariant === "headered") - Number(right.sourceVariant === "headered"),
+  );
+  for (const fallback of orderedFallbacks) {
+    const exactOwner = fallback.components
       .flatMap(componentKeys)
       .map((key) => owners.get(key))
       .find(Boolean);
+    const namedOwner =
+      fallback.sourceVariant === "headered" ? legacyNameOwners.get(fallback.name) : undefined;
+    const owner = exactOwner ?? namedOwner ?? undefined;
     if (!owner) {
       const copy = { ...fallback, components: [...fallback.components] };
       merged.push(copy);
       for (const component of copy.components) addOwner(copy, component);
+      registerLegacyName(copy.name, copy);
       continue;
     }
+    registerLegacyName(fallback.name, owner);
     owner.provenance = mergeProvenance(owner.provenance, fallback.provenance);
     owner.dumpTags = [...new Set([...owner.dumpTags, ...fallback.dumpTags])].sort();
     // OpenGood retains the filename-style name, which can carry revision and
@@ -1893,21 +2031,48 @@ async function readPlatformGames(platform, options, paths) {
   }
   const fallback = [];
   const openGoodHeaders = [];
+  const goodToolsHeaders = [];
   for (const fallbackFile of fallbackFiles) {
     const parsed = parseOpenGoodGames(
       await readFile(paths.opengood.get(fallbackFile), "utf8"),
       platform,
       fallbackFile,
+      { sourceVariant: "current" },
     );
     fallback.push(...parsed.games);
-    openGoodHeaders.push({ datFile: fallbackFile, ...parsed.header });
+    openGoodHeaders.push({ datFile: fallbackFile, revision: OPENGOOD_REVISION, ...parsed.header });
+  }
+  for (const fallbackFile of OPENGOOD_HEADERED_FALLBACKS[platform] ?? []) {
+    const parsed = parseOpenGoodGames(
+      await readFile(paths.opengoodHeadered.get(fallbackFile), "utf8"),
+      platform,
+      fallbackFile,
+      { revision: OPENGOOD_HEADERED_REVISION, sourceVariant: "headered" },
+    );
+    fallback.push(...parsed.games);
+    openGoodHeaders.push({
+      datFile: fallbackFile,
+      revision: OPENGOOD_HEADERED_REVISION,
+      ...parsed.header,
+    });
+  }
+  if (GOODTOOLS_HEADERED_FALLBACKS[platform]) {
+    const parsed = parseGoodToolsHeaderedGames(
+      await readFile(paths.goodToolsHeadered, "utf8"),
+      platform,
+    );
+    fallback.push(...parsed.games);
+    goodToolsHeaders.push({
+      datFile: GOODTOOLS_DAT_PATH,
+      release: GOODTOOLS_RELEASE,
+      ...parsed.header,
+    });
   }
   const source = sourcePaths.length ? "libretro" : "opengood";
-  const games = sortGames(mergeLegacyFallbackGames(libretro, fallback)).map((game) => ({
-    ...game,
-    platform,
-    source,
-  }));
+  const games = sortGames(mergeLegacyFallbackGames(libretro, fallback)).map((game) => {
+    const { sourceVariant: _sourceVariant, ...withoutSourceVariant } = game;
+    return { ...withoutSourceVariant, platform, source };
+  });
   return {
     slug: slugifyPlatform(platform),
     games: options.maxObjects === undefined ? games : games.slice(0, options.maxObjects),
@@ -1923,12 +2088,20 @@ async function readPlatformGames(platform, options, paths) {
           }))
         : null,
       opengood: openGoodHeaders.map((header) => ({
-        commit: OPENGOOD_REVISION,
+        commit: header.revision,
         generationDate: header.date ?? null,
         license: OPENGOOD_LICENSE,
         name: "SnowflakePowered/opengood",
         path: `dats/${header.datFile}`,
-        url: `${OPENGOOD_REPOSITORY}/blob/${OPENGOOD_REVISION}/dats/${encodeURIComponent(header.datFile)}`,
+        url: `${OPENGOOD_REPOSITORY}/blob/${header.revision}/dats/${encodeURIComponent(header.datFile)}`,
+      })),
+      goodTools: goodToolsHeaders.map((header) => ({
+        commit: header.release,
+        generationDate: header.date ?? null,
+        license: GOODTOOLS_LICENSE,
+        name: "Eggmansworld/Datfiles",
+        path: GOODTOOLS_DAT_PATH,
+        url: `${GOODTOOLS_REPOSITORY}/releases/tag/${GOODTOOLS_RELEASE}`,
       })),
     },
     source,
@@ -2060,6 +2233,8 @@ export async function main(argv = process.argv.slice(2)) {
 
   const neededLibretro = new Set();
   const neededOpenGood = new Set();
+  const neededOpenGoodHeadered = new Set();
+  const neededGoodToolsHeadered = new Set();
   for (const platform of selected) {
     for (const sourcePath of LIBRETRO_PLATFORM_PATHS[platform] ?? [])
       neededLibretro.add(sourcePath);
@@ -2068,15 +2243,33 @@ export async function main(argv = process.argv.slice(2)) {
       []) {
       neededOpenGood.add(datFile);
     }
+    for (const datFile of OPENGOOD_HEADERED_FALLBACKS[platform] ?? []) {
+      neededOpenGoodHeadered.add(datFile);
+    }
+    if (GOODTOOLS_HEADERED_FALLBACKS[platform]) neededGoodToolsHeadered.add(platform);
   }
   const paths = {
     libretro: await ensureLibretroDats([...neededLibretro].sort(), options.cacheDir),
     opengood: await ensureOpenGoodDats([...neededOpenGood].sort(), options.cacheDir),
+    opengoodHeadered: await ensureOpenGoodDats(
+      [...neededOpenGoodHeadered].sort(),
+      options.cacheDir,
+      OPENGOOD_HEADERED_REVISION,
+      "opengood-headered",
+    ),
+    goodToolsHeadered: neededGoodToolsHeadered.size
+      ? await ensureGoodToolsHeaderedDat(options.cacheDir)
+      : undefined,
   };
   if (options.downloadOnly) {
     console.log(
       JSON.stringify(
-        { libretro: [...neededLibretro].sort(), opengood: [...neededOpenGood].sort() },
+        {
+          libretro: [...neededLibretro].sort(),
+          opengood: [...neededOpenGood].sort(),
+          opengoodHeadered: [...neededOpenGoodHeadered].sort(),
+          goodToolsHeadered: [...neededGoodToolsHeadered].sort(),
+        },
         null,
         2,
       ),
@@ -2115,6 +2308,9 @@ export async function main(argv = process.argv.slice(2)) {
     format: CATALOG_FORMAT,
     generated: {
       opengoodRevision: OPENGOOD_REVISION,
+      opengoodHeaderedRevision: OPENGOOD_HEADERED_REVISION,
+      goodToolsRelease: GOODTOOLS_RELEASE,
+      goodToolsArchiveSha256: GOODTOOLS_ARCHIVE_SHA256,
       libretroRevision: LIBRETRO_REVISION,
     },
     platforms: buildCatalogPlatforms(catalogSystems),
@@ -2133,6 +2329,19 @@ export async function main(argv = process.argv.slice(2)) {
         url: OPENGOOD_REPOSITORY,
         license: OPENGOOD_LICENSE,
         revision: OPENGOOD_REVISION,
+      },
+      opengoodHeadered: {
+        url: OPENGOOD_REPOSITORY,
+        license: OPENGOOD_LICENSE,
+        revision: OPENGOOD_HEADERED_REVISION,
+      },
+      goodToolsHeadered: {
+        url: GOODTOOLS_REPOSITORY,
+        license: GOODTOOLS_LICENSE,
+        release: GOODTOOLS_RELEASE,
+        archive: GOODTOOLS_ARCHIVE,
+        archiveSha256: GOODTOOLS_ARCHIVE_SHA256,
+        datPath: GOODTOOLS_DAT_PATH,
       },
       libretro: {
         url: LIBRETRO_REPOSITORY,
