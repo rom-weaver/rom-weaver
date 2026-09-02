@@ -32,6 +32,7 @@ const BENCH_PROFILE_DIR = fileURLToPath(new URL("../../target/browser-bench-prof
 const PERSISTENT_CONTEXT = STRESS_1GB ? true : BENCH_MODE ? BENCH_PROFILE_DIR : false;
 
 const stressLaunchArgs = STRESS_1GB || BENCH_MODE ? ["--unlimited-storage"] : [];
+const systemChromeLaunchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : undefined;
 
 export default defineConfig({
   // The webapp package root contains index.html, so Vite's default SPA fallback would answer any
@@ -73,6 +74,7 @@ export default defineConfig({
       provider: playwright({
         launchOptions: {
           args: stressLaunchArgs,
+          ...systemChromeLaunchOptions,
         },
         persistentContext: PERSISTENT_CONTEXT,
       }),

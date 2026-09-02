@@ -90,7 +90,8 @@ const rasterize = async (page, svg, size) => {
 
 const main = async () => {
   const checkOnly = process.argv.includes("--check");
-  const browser = await chromium.launch();
+  const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
+  const browser = await chromium.launch(launchOptions);
   const page = await browser.newPage({ deviceScaleFactor: 1 });
   const drift = [];
   let written = 0;

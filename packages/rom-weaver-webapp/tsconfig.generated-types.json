@@ -1,9 +1,11 @@
 {
   "compilerOptions": {
+    "incremental": true,
     "lib": ["esnext"],
     "noEmit": true,
     "skipLibCheck": false,
     "strict": true,
+    "tsBuildInfoFile": "./dist/types/tsconfig.generated-types.tsbuildinfo",
     "types": []
   },
   "files": ["src/wasm/generated/rom-weaver-rust-types.d.ts"]

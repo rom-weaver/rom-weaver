@@ -46,6 +46,8 @@ const RUN_JOURNEYS = E2E_SHARD !== "a11y";
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
+const systemChromeLaunchOptions =
+  browserName === "chromium" && process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
 const HYDRATION_SETTINGS = JSON.stringify({
   apply: { compression: { threads: 3 } },
   common: { betaToolsEnabled: true },
@@ -1024,7 +1026,10 @@ const createBrowserContextFactory = async (browserType, browserName) => {
       persistentContextDirs,
     };
   }
-  const browser = await browserType.launch({ headless: true });
+  const browser = await browserType.launch({
+    headless: true,
+    ...systemChromeLaunchOptions,
+  });
   return {
     browser,
     createContext: (options) => browser.newContext(createContextOptions(options)),

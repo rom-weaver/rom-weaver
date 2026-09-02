@@ -95,7 +95,9 @@ runs:
     - name: Install Linux build dependencies
       if: runner.os == 'Linux'
       shell: bash
-      run: sudo apt-get update && sudo apt-get install --yes cmake ninja-build pkg-config
+      env:
+        APT_PACKAGES: cmake ninja-build pkg-config
+      run: node scripts/ci/install-system-dependencies.mjs
 
     # The vendored LZMA SDK's x86-64 decode loop is MASM assembly with no distro
     # package to install it from, and without an assembler build.rs falls back to

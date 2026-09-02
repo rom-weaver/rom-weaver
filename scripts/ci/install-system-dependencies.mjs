@@ -19,17 +19,49 @@ export function findLibclangDir(roots = ["/usr/lib", "/usr/lib64"]) {
   return first ? dirname(first) : "";
 }
 
-const packages = (process.env.APT_PACKAGES || "").split(/\s+/).filter(Boolean);
-if (!packages.length) process.exit(0);
-
-try {
-  execFileSync("sudo", ["apt-get", "update"], { stdio: "inherit" });
-  execFileSync("sudo", ["apt-get", "install", "--yes", ...packages], { stdio: "inherit" });
-} catch (error) {
-  process.stderr.write(`installing apt packages failed: ${error.message}\n`);
-  process.exit(1);
+export function areAptPackagesInstalled(packages, run = execFileSync) {
+  return packages.every((packageName) => {
+    try {
+      const status = run("dpkg-query", ["-W", "-f=${Status}", packageName], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return status.trim() === "install ok installed";
+    } catch {
+      return false;
+    }
+  });
 }
 
-const libclang = findLibclangDir();
-if (libclang && process.env.GITHUB_ENV) appendFileSync(process.env.GITHUB_ENV, `LIBCLANG_PATH=${libclang}\n`);
-process.stdout.write(libclang ? `LIBCLANG_PATH=${libclang}\n` : "no libclang found; leaving LIBCLANG_PATH unset\n");
+export function installAptPackages(packages, run = execFileSync) {
+  if (!packages.length || areAptPackagesInstalled(packages, run)) return false;
+  run("sudo", ["apt-get", "update"], { stdio: "inherit" });
+  run("sudo", ["apt-get", "install", "--yes", ...packages], { stdio: "inherit" });
+  return true;
+}
+
+export function main(env = process.env, run = execFileSync) {
+  const packages = (env.APT_PACKAGES || "").split(/\s+/).filter(Boolean);
+  if (!packages.length) return;
+
+  try {
+    const installed = !installAptPackages(packages, run);
+    process.stdout.write(
+      installed
+        ? `apt packages already installed: ${packages.join(" ")}\n`
+        : "apt packages installed\n",
+    );
+  } catch (error) {
+    process.stderr.write(`installing apt packages failed: ${error.message}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const libclang = findLibclangDir();
+  if (libclang && env.GITHUB_ENV) appendFileSync(env.GITHUB_ENV, `LIBCLANG_PATH=${libclang}\n`);
+  process.stdout.write(
+    libclang ? `LIBCLANG_PATH=${libclang}\n` : "no libclang found; leaving LIBCLANG_PATH unset\n",
+  );
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) main();
