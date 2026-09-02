@@ -941,6 +941,63 @@ describe("apply workflow view - bundle controls", () => {
     expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
   });
+
+  const nextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+  it("opens and focuses the bundle step when the URL targets it on mount", async () => {
+    window.location.hash = "#bundle";
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const job = container.querySelector("#rom-weaver-bundle-job");
+    const toggle = job?.querySelector(".cks-head");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(job?.querySelector(".bundle-job")?.classList).toContain("is-open");
+    await act(() => nextFrame());
+    expect(document.activeElement).toBe(toggle);
+    window.location.hash = "";
+  });
+
+  it("opens the bundle step on a hash change after mount", () => {
+    window.location.hash = "";
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const job = container.querySelector("#rom-weaver-bundle-job");
+    expect(job?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("false");
+
+    act(() => {
+      window.location.hash = "#bundle";
+      window.dispatchEvent(new Event("hashchange"));
+    });
+
+    expect(job?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("true");
+    window.location.hash = "";
+  });
 });
 
 /**

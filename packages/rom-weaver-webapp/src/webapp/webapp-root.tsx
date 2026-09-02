@@ -1,14 +1,24 @@
-import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings } from "lucide-react";
+import {
+  BookOpen,
+  Gamepad2,
+  GitCompare,
+  House,
+  Package,
+  RotateCcw,
+  ScanSearch,
+  Scissors,
+  Settings,
+} from "lucide-react";
 import {
   lazy,
   Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
-  useMemo,
 } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
@@ -65,6 +75,12 @@ import {
 } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
+// The More-menu "Bundles" entry has no view of its own: it opens Apply (the
+// "patcher" view) and asks it to reveal the bundle export step via the URL
+// hash, so a direct visit to `/apply#bundle` lands on the same step.
+const BUNDLE_TAB_ID = "bundle";
+const BUNDLE_STEP_HASH = "bundle";
+
 const WORKFLOW_TABS: WorkflowTab[] = [
   // "Apply": the tab both applies patch chains and edits/exports them as bundles.
   { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
@@ -72,6 +88,16 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
   // Reference rather than a workflow: filed under Docs in More on both layouts.
   { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  // Bundle editing/export already lives inside Apply; this entry just opens
+  // Apply and reveals that step (see BUNDLE_TAB_ID handling in onSelectTab).
+  {
+    group: "tools",
+    href: `apply#${BUNDLE_STEP_HASH}`,
+    icon: <Package aria-hidden="true" />,
+    id: BUNDLE_TAB_ID,
+    label: "Bundles",
+    placement: "more",
+  },
   // Beta utility routes. They stay behind the beta-tools setting and show up
   // under Tools in More once it is on.
   {
@@ -676,6 +702,15 @@ function WebappRoot({
               if (notFound) {
                 const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
                 if (href) window.location.assign(`/${href}`);
+                return;
+              }
+              if (id === BUNDLE_TAB_ID) {
+                // Not a view of its own: reuse "patcher" and let the hash tell
+                // Apply which step to reveal, on both a fresh mount and a
+                // same-view re-click.
+                window.location.hash = BUNDLE_STEP_HASH;
+                pendingViewRef.current = null;
+                selectViewWithTransition(() => actions.onSelectView("patcher"));
                 return;
               }
               const view = id as WebappRootProps["state"]["currentView"];

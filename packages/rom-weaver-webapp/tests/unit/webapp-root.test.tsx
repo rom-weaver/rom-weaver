@@ -174,6 +174,16 @@ describe("the workbench shell", () => {
 
     expect(assign).toHaveBeenCalledWith("/create");
   });
+
+  it("routes a not-found Bundles click to the Apply bundle-step page", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ notFound: true });
+
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-more-workflow="bundle"]') as HTMLButtonElement);
+
+    expect(assign).toHaveBeenCalledWith("/apply#bundle");
+  });
 });
 
 describe("tab selection", () => {
@@ -191,6 +201,17 @@ describe("tab selection", () => {
     fireEvent.click(container.querySelector('.dock-tab[data-mode="test"]') as HTMLAnchorElement);
 
     expect(mocks.requestEmulatorStartFromUserAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens Apply and targets the bundle step from the More menu's Bundles entry", async () => {
+    window.location.hash = "";
+    const { called, container } = await renderRoot();
+
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-more-workflow="bundle"]') as HTMLButtonElement);
+
+    expect(window.location.hash).toBe("#bundle");
+    expect(called("onSelectView")).toHaveBeenCalledWith("patcher");
   });
 
   it("waits for the lazy Docs route before switching to it", async () => {
