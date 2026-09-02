@@ -286,7 +286,7 @@ test("an empty form shows the ghost steps next to the checksum search", async ()
   await mountIdentifyForm();
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
   expect(host.querySelector(".identify-hash-input")).not.toBeNull();
-  expect(host.textContent).toContain("Looking for a specific ROM checksum?");
+  expect(host.textContent).toContain("Looking for a specific ROM?");
 });
 
 test("a pasted checksum raises the expected-ROM card without a file", async () => {

@@ -396,7 +396,7 @@ msgstr "Identificar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashLabel"
-msgstr "¿Busca una suma de verificación de ROM concreta?"
+msgstr "¿Busca una ROM concreta?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

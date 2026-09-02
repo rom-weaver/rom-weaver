@@ -416,7 +416,7 @@ msgstr "Identify"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashLabel"
-msgstr "Looking for a specific ROM checksum?"
+msgstr "Looking for a specific ROM?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

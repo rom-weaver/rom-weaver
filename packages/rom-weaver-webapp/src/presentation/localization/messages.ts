@@ -197,7 +197,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.identify.hashLabel": msg({
     id: "ui.identify.hashLabel",
-    message: "Looking for a specific ROM checksum?",
+    message: "Looking for a specific ROM?",
   }),
   "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search by checksum" }),
   "ui.identify.hashSearching": msg({ id: "ui.identify.hashSearching", message: "Searching…" }),
