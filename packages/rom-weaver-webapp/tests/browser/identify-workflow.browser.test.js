@@ -315,8 +315,10 @@ test("an invalid checksum shows the inline error and never runs", async () => {
 
   expect(lookupExpectedRom).not.toHaveBeenCalled();
   expect(host.querySelector(".identify-hash-error")).not.toBeNull();
-  // The ghost steps stay: nothing ran, so nothing is staged.
-  expect(host.querySelector(".ghost-steps")).not.toBeNull();
+  // Typing already opened the ROM step, so the error lands under an open 0x02
+  // instead of flipping the page back to the hero.
+  expect(host.querySelector(".ghost-steps")).toBeNull();
+  expect(host.textContent).toContain("Add a ROM to identify it");
 });
 
 test("a wrong-length checksum names the accepted lengths", async () => {

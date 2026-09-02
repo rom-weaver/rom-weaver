@@ -1916,6 +1916,13 @@ function ApplyWorkflowFormView({
     if (staleRomHash) clearRomHashLookup();
   }, [clearRomHashLookup, staleRomHash]);
   const manualRomLookup = canSearchRomHash ? romHashLookup.result : undefined;
+  /* Touching the search is the visitor's choice of the file-free path, so the
+     hero gives way to the ROM step at the first character - the same opening
+     the identify page makes. A search in flight or a failed one keeps the step
+     open, so the layout never flips back to the hero mid-answer. */
+  const searchEngaged =
+    canSearchRomHash &&
+    (romHashLookup.busy || !!romHashLookup.result || !!romHashLookup.error || !!romHashLookup.text.trim());
   const romExpectation: RomExpectation | undefined =
     romInputs.length === 0 && hasExpectedChecks
       ? {
@@ -2065,6 +2072,7 @@ function ApplyWorkflowFormView({
 
   return (
     <section className={formReady ? "panel form-ready" : "panel"} id="rom-weaver-container">
+      {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
         addLabel="Replace the ROM or add patches"
@@ -2079,7 +2087,7 @@ function ApplyWorkflowFormView({
             workflowEmpty={workflowEmpty}
           />
         }
-        big={workflowEmpty}
+        big={workflowEmpty && !searchEngaged}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
         heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"
         id="rom-weaver-row-unified-drop"
@@ -2101,20 +2109,45 @@ function ApplyWorkflowFormView({
       />
       {workflowEmpty ? (
         <>
+          {/* Using the search opens the real 0x02 so its answer lands in the
+              step that owns the ROM, instead of beside a ghosted one. */}
+          {searchEngaged ? (
+            <WorkflowRomInputStep
+              emptyState={
+                romExpectation ? (
+                  <RomExpectationCard expectation={romExpectation} identification={manualRomLookup?.identification} />
+                ) : (
+                  romNeedsInput
+                )
+              }
+              id="rom-weaver-row-file-rom"
+              items={
+                romHashLookup.busy
+                  ? [
+                      {
+                        id: "rom-weaver-expected-rom-search",
+                        progress: {
+                          cancelLabel: "Cancel the checksum search",
+                          indeterminate: true,
+                          label: romHashLookup.stage || localizer.message("ui.identify.hashSearching"),
+                          onCancel: romHashLookup.clear,
+                        },
+                      },
+                    ]
+                  : []
+              }
+              num="0x02"
+              title={localizer.message("ui.step.rom")}
+              woven={!!romExpectation}
+            />
+          ) : null}
           <GhostSteps
             steps={[
-              { num: "0x02", title: localizer.message("ui.step.rom") },
+              ...(searchEngaged ? [] : [{ num: "0x02", title: localizer.message("ui.step.rom") }]),
               { num: "0x03", title: localizer.message("ui.step.patches") },
               { num: "0x04", title: localizer.message("ui.step.apply") },
             ]}
           />
-          {/* The empty bench has no 0x02 to hang these on, so the search and the
-              ROM it finds sit beside the ghost steps - the same pairing the
-              identify page uses for its own file-free start. */}
-          {romExpectation ? (
-            <RomExpectationCard expectation={romExpectation} identification={manualRomLookup?.identification} />
-          ) : null}
-          {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
         </>
       ) : (
         <>
@@ -2168,7 +2201,6 @@ function ApplyWorkflowFormView({
             listId="rom-weaver-list-input-stack"
             notice={
               <>
-                {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
                 {baseConflict ? (
                   <Notice id="rom-weaver-rom-expected-conflict" level="warn">
                     {localizer.message("ui.rom.baseConflict")}

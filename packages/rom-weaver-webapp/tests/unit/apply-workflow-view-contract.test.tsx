@@ -163,6 +163,24 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
   });
 
+  it("opens 0x02 from the checksum search and drops the hero", async () => {
+    const { container } = renderView({ ui: createEmptyPatcherUiState() });
+    const panel = container.querySelector("#rom-weaver-container") as HTMLElement;
+    // The search leads the page: it is the file-free way in, so it sits above
+    // the drop zone it replaces.
+    expect(panel.firstElementChild?.id).toBe("rom-weaver-rom-hash-search");
+    expect(container.querySelector(".drop.hero")).toBeTruthy();
+
+    const input = container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "abcd" } });
+    });
+
+    expect(container.querySelector(".drop.hero")).toBeNull();
+    const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
+    expect(numbers).toEqual(["0x01", "0x02"]);
+  });
+
   it("loads the sample into the existing drop pipeline without navigating", async () => {
     const onUnifiedDrop = vi.fn();
     const fetchMock = vi.fn().mockResolvedValue({
