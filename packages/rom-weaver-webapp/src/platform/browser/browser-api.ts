@@ -74,11 +74,30 @@ const identifyRom = async (
   fileName: string,
   options: BrowserIdentifyRomOptions = {},
 ): Promise<ParsedIdentifyResult> => {
+  let extractTimeMs: number | undefined;
   const { identifyUnavailable, outputs, patchOutputs, result } = await ingestRom(source, fileName, {
     ...options,
     checksumAlgorithms: ["crc32", "md5", "sha1"],
     identify: true,
     identifyAllRomEntries: true,
+    onProgress: (progress) => {
+      const details = progress.details;
+      const extractStep =
+        details && typeof details === "object" && "extract_step" in details ? details.extract_step : undefined;
+      if (
+        extractStep &&
+        typeof extractStep === "object" &&
+        "status" in extractStep &&
+        extractStep.status === "succeeded" &&
+        "extract_time_ms" in extractStep
+      ) {
+        const elapsed = extractStep.extract_time_ms;
+        if (typeof elapsed === "number" && Number.isFinite(elapsed) && elapsed >= 0) {
+          extractTimeMs = (extractTimeMs ?? 0) + elapsed;
+        }
+      }
+      options.onProgress?.(progress);
+    },
   });
   try {
     const candidates: ParsedIdentifyCandidate[] = result.assets.map((asset) => {
@@ -105,6 +124,8 @@ const identifyRom = async (
     return {
       ...(archiveName ? { archiveName } : {}),
       candidates,
+      ...(extractTimeMs === undefined ? {} : { extractTimeMs }),
+      ...(result.identifyTimeMs === undefined ? {} : { identifyTimeMs: result.identifyTimeMs }),
       input: fileName,
       status: identifyUnavailable ? "unavailable" : aggregateIdentifyStatus(candidates.map((entry) => entry.status)),
       ...(identifyUnavailable ? { unavailableReason: identifyUnavailable } : {}),

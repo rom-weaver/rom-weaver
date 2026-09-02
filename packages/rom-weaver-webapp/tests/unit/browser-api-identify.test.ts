@@ -19,7 +19,17 @@ const match = (name: string) => ({
   variant: "raw",
 });
 
-const archiveAssets = () => [
+const archiveAssets = (): Array<{
+  checksums: { crc32: string };
+  checksumVariants: never[];
+  copiedInPlace: boolean;
+  extractTimeMs?: number;
+  fileName: string;
+  identification: { matches: ReturnType<typeof match>[]; status: string };
+  memberPath: string;
+  path: string;
+  platform?: string;
+}> => [
   {
     checksums: { crc32: "11111111" },
     checksumVariants: [],
@@ -48,7 +58,19 @@ beforeEach(() => {
 
 describe("identifyRom", () => {
   it("reports one candidate per archive member instead of picking a winner", async () => {
-    ingest.mockResolvedValue({ outputs: [{ dispose }], patchOutputs: [], result: { assets: archiveAssets() } });
+    ingest.mockImplementation(async (options) => {
+      options.onProgress({
+        details: { extract_step: { extract_time_ms: 80, status: "succeeded" } },
+      });
+      options.onProgress({
+        details: { extract_step: { extract_time_ms: 40, status: "succeeded" } },
+      });
+      return {
+        outputs: [{ dispose }],
+        patchOutputs: [],
+        result: { assets: archiveAssets(), identifyTimeMs: 45 },
+      };
+    });
 
     const result = await identifyRom(new Blob(["archive"]), "games.zip");
 
@@ -60,6 +82,8 @@ describe("identifyRom", () => {
     expect(result.candidates[1]?.matches).toEqual([match("Known Game (USA)")]);
     // One matched member plus one unmatched member is not "ambiguous": each is reported on its own.
     expect(result.status).toBe("matched");
+    expect(result.extractTimeMs).toBe(120);
+    expect(result.identifyTimeMs).toBe(45);
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 

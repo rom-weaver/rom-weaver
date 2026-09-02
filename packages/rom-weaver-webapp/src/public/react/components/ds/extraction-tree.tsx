@@ -36,6 +36,7 @@ type ExtractionFileEntry = {
 
 type ExtractPanelProps = {
   decompressionTimeMs?: number;
+  identifyTimeMs?: number;
   fileName: string;
   fileSize?: number;
   /** Short file type shown in the Files drawer header. */
@@ -225,6 +226,7 @@ const ExtractName = ({ displayName, fileName, folderPath, identified }: ExtractN
 /** Just the Files drawer (no name line) - for cards that render the name separately. */
 const ExtractDrawer = ({
   decompressionTimeMs,
+  identifyTimeMs,
   fileName,
   fileSize,
   fileEntries,
@@ -236,6 +238,7 @@ const ExtractDrawer = ({
   const levels = buildExtractionLevels(fileName, fileSize, fileEntries, parentCompressions, localizer.formatBytes);
   const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
   const timingLabel = formatExtractionTimingLabel(resolvedTiming);
+  const identifyTiming = formatExtractionElapsedMs(identifyTimeMs);
   const first = levels[0];
   const last = levels.at(-1);
   if (!last) return null;
@@ -289,6 +292,7 @@ const ExtractDrawer = ({
           {sizeReadout}
           {typeText ? <DrawerReadout>{typeText}</DrawerReadout> : null}
           {timingLabel ? <DrawerReadout time>{timingLabel}</DrawerReadout> : null}
+          {identifyTiming ? <DrawerReadout time>Identify {identifyTiming}</DrawerReadout> : null}
         </>
       }
     >

@@ -36,6 +36,11 @@ pub struct IngestResult {
     /// Patch descriptors. Non-empty for a patch source, and for a ROM source that also bundled
     /// sidecar patches.
     pub patches: Vec<PatchDescriptor>,
+    /// Wall-clock milliseconds spent resolving ROM and patch checksums against the loaded
+    /// identification database. Absent when no identification database was configured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub identify_time_ms: Option<u32>,
 }
 
 /// One checksummed ROM payload the ingest produced: a bare ROM checksummed in place, or an
@@ -1526,6 +1531,7 @@ impl CliApp {
                 asset
             })
             .collect::<Vec<_>>();
+        let identify_started = identify_database.map(|_| std::time::Instant::now());
         if let Some(identify_database) = identify_database {
             for asset in &mut assets {
                 if !asset.checksum_variants.is_empty() {
@@ -1547,12 +1553,21 @@ impl CliApp {
                 )?;
             }
         }
+        let identify_time_ms = identify_started
+            .map(|started| started.elapsed().as_millis().min(u32::MAX as u128) as u32);
+        trace!(
+            identify_time_ms,
+            asset_count = assets.len(),
+            patch_count = patches.len(),
+            "completed ingest identification lookups"
+        );
         let result = IngestResult {
             kind: outcome.kind,
             source_file_name,
             is_rom: outcome.is_rom,
             assets,
             patches,
+            identify_time_ms,
         };
         let mut report = OperationReport::succeeded(
             OperationFamily::Command,

@@ -64,4 +64,6 @@ export interface ParsedIngestResult {
   isRom: boolean;
   assets: ParsedIngestRomAsset[];
   patches: ParsedPatchDescriptor[];
+  /** Rust-reported wall time for all identification database lookups in this ingest. */
+  identifyTimeMs?: number;
 }

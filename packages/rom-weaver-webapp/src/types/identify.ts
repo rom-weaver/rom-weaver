@@ -142,6 +142,10 @@ type ParsedIdentifyResult = {
   condition?: IdentifyCondition;
   hint?: string;
   input: string;
+  /** Total extraction wall time reported for the identified archive leaves. */
+  extractTimeMs?: number;
+  /** Wall time spent resolving checksums against identification data. */
+  identifyTimeMs?: number;
   /** Aggregate over `candidates`; `unavailable` whenever the packs never loaded. */
   status: IdentifyStatus;
   unavailableReason?: string;

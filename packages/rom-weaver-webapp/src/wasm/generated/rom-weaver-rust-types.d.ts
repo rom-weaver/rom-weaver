@@ -274,7 +274,12 @@ assets: Array<IngestRomAsset>,
  * Patch descriptors. Non-empty for a patch source, and for a ROM source that also bundled
  * sidecar patches.
  */
-patches: Array<PatchDescriptor>, };
+patches: Array<PatchDescriptor>,
+/**
+ * Wall-clock milliseconds spent resolving ROM and patch checksums against the loaded
+ * identification database. Absent when no identification database was configured.
+ */
+identify_time_ms?: number | null, };
 
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 

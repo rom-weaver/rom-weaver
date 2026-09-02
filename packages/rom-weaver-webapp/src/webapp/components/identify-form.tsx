@@ -531,7 +531,12 @@ const IdentifyForm = ({
                         </>
                       ) : undefined,
                     displayName: file.name,
-                    extract: { fileName: file.name, fileSize: file.size },
+                    extract: {
+                      decompressionTimeMs: result?.extractTimeMs,
+                      fileName: file.name,
+                      fileSize: file.size,
+                      identifyTimeMs: result?.identifyTimeMs,
+                    },
                     meta: (
                       <>
                         <span className="fsize mono">{formatByteSize(file.size)}</span>

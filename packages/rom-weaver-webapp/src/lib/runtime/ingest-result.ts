@@ -329,6 +329,9 @@ export const parseIngestResult = (details: unknown): ParsedIngestResult | undefi
     : [];
   return {
     assets,
+    ...(toNumberValue(ingest.identify_time_ms) === undefined
+      ? {}
+      : { identifyTimeMs: toNumberValue(ingest.identify_time_ms) }),
     isRom: ingest.is_rom === true,
     kind,
     patches,
