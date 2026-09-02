@@ -1,6 +1,13 @@
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
-import type { ParsedBundle, ParsedBundlePatchEntry, ParsedBundleSourceRef } from "../../types/bundle.ts";
+import type {
+  ParsedBundle,
+  ParsedBundlePatchEntry,
+  ParsedBundlePatchSource,
+  ParsedBundleSourceRef,
+} from "../../types/bundle.ts";
+import { attachIngestPatchRequirements, patchProbeRequirementsFromDescriptor } from "../apply/patch-apply-service.ts";
 import { setBundleRomProvenance } from "../input/bundle-rom-provenance.ts";
+import { inheritSourceIdentificationPolicy } from "../input/input-identification-policy.ts";
 import type { InputParentCompression } from "../input/input-assets.ts";
 import { fetchRemoteFiles } from "../remote/remote-file-fetch.ts";
 import type { BundleApplySession, BundleApplySessionEntry } from "./bundle-session-model.ts";
@@ -132,6 +139,7 @@ function markExtractedRomProvenance(romFile: File, bundleFile: File, parseElapse
       sourceSize: bundleFile.size,
     },
   ]);
+  inheritSourceIdentificationPolicy(bundleFile, romFile);
 }
 
 /** Only the fields the manifest declared reach the session; the rest stay absent. */
@@ -170,11 +178,12 @@ function buildBundleApplySession(
  */
 function markExtractedPatchProvenance(
   patchFiles: File[],
-  patchSources: Array<{ source: { kind: string } }>,
+  patchSources: ParsedBundlePatchSource[],
   bundleFileName: string,
   parseElapsedMs: number,
 ) {
   patchFiles.forEach((file, index) => {
+    attachIngestPatchRequirements(file, patchProbeRequirementsFromDescriptor(patchSources[index]?.descriptor));
     if (patchSources[index]?.source.kind !== "extracted") return;
     (file as File & NestedPatchSourceMetadata).__nestedParentCompressions = [
       { decompressionTimeMs: parseElapsedMs, depth: 0, fileName: bundleFileName, kind: "archive" },

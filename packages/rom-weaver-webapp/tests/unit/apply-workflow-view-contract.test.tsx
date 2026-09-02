@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
+import { shouldIdentifySource } from "../../src/lib/input/input-identification-policy.ts";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
 import type {
   PatcherOutputController,
@@ -180,6 +181,7 @@ describe("apply workflow view - empty bench", () => {
     const [files] = onUnifiedDrop.mock.calls[0] as [File[]];
     expect(fetchMock).toHaveBeenCalledWith("/first-weave.zip");
     expect(files[0]?.name).toBe("first-weave.zip");
+    expect(shouldIdentifySource(files[0])).toBe(false);
   });
 
   it("starts the sample tutorial from a guided Apply URL", async () => {
