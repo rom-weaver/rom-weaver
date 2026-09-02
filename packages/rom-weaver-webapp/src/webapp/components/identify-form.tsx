@@ -266,12 +266,10 @@ const IdentifyForm = ({
     hadExpectationRef.current = false;
     logger.debug("expected ROM cleared");
   }, [expectationChecks]);
-  /* Touching the search is the visitor's choice of the file-free path, so the
-     hero gives way to the ROM step at the first character - not only when a
-     lookup succeeds. A search in flight or a failed one keeps the step open
-     too, so the layout never flips back to the hero mid-answer. */
-  const searchEngaged =
-    !file && (romHashLookup.busy || !!romHashLookup.result || !!romHashLookup.error || !!romHashLookup.text.trim());
+  /* The hero stands until something answers 0x02 - a file, or a checksum the
+     data recognized. Typing, a search in flight, or a failed one all leave it
+     in place: nothing flips for a non-answer. */
+  const heroShown = !(file || expectation);
 
   /* One pasted checksum describes one ROM, so an archive that yields several
      candidates is never compared: nobody knows which member it was meant for. */
@@ -316,11 +314,12 @@ const IdentifyForm = ({
     <section className="panel" id={containerId}>
       <UnifiedDropZone
         addLabel={file ? "Replace the ROM" : expectation ? "Add the ROM to verify it" : "Add a ROM to identify it"}
-        /* The search is an input, so it leads the step that owns inputs. */
-        beforeDropZone={
-          file ? null : <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
+        /* The search is the hero's quiet second door, after the drop target;
+           once a match fills 0x02 it moves there as the refine row. */
+        afterDropZone={
+          heroShown ? <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} /> : null
         }
-        big={!(file || searchEngaged)}
+        big={heroShown}
         disabled={busy}
         {...(!file && expectation ? { hint: "Optional - the match above stands on its own" } : {})}
         heroLabel="Drop a ROM to identify it"
@@ -405,14 +404,14 @@ const IdentifyForm = ({
           title={localizer.message("ui.step.rom")}
           woven={romStepWoven}
         />
-      ) : searchEngaged ? (
+      ) : expectation ? (
         /* A checksum match is an answer on its own, so the ROM step opens to
            hold it; the ROM that verifies it is added in 0x01 like any other
-           input. */
+           input. The search stays under the card as the refine row until then. */
         <WorkflowRomInputStep
           afterItems={errorBlock}
           emptyState={
-            expectation ? (
+            <>
               <RomExpectationCard
                 expectation={expectation}
                 id={`${containerId}-expected-rom`}
@@ -420,26 +419,13 @@ const IdentifyForm = ({
                 onRemove={romHashLookup.clear}
                 removeLabel="Clear the expected ROM"
               />
-            ) : null
+              <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} variant="compact" />
+            </>
           }
-          items={
-            romHashLookup.busy
-              ? [
-                  {
-                    id: "identify-expected-rom",
-                    progress: {
-                      cancelLabel: "Cancel the checksum search",
-                      indeterminate: true,
-                      label: romHashLookup.stage || localizer.message("ui.identify.hashSearching"),
-                      onCancel: romHashLookup.clear,
-                    },
-                  },
-                ]
-              : []
-          }
+          items={[]}
           num="0x02"
           title={localizer.message("ui.step.rom")}
-          woven={!!expectation}
+          woven
         />
       ) : (
         <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.step.rom") }]} />

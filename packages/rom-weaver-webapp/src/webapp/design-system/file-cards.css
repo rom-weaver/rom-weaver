@@ -614,29 +614,55 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-/* Manual checksum search: the file-free alternative to the drop zone. */
+/* Manual checksum search: the file-free alternative to the drop zone. In the
+   hero it is the quiet second door after the drop target, a dashed seam apart
+   from it; in 0x02 it is the one-line refine row under an expectation card. */
 .rw-app .identify-hash {
-  display: grid;
-  gap: var(--sp-xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s) var(--sp-l);
+  align-items: center;
+  justify-content: center;
   padding: var(--sp-m);
+}
+.rw-app .identify-hash--hero {
+  padding-block-start: var(--sp-l);
+  margin-block-start: var(--sp-s);
+  border-block-start: 1px dashed var(--seam-soft);
+}
+.rw-app .identify-hash--compact {
+  padding: var(--sp-xs) 0 0;
+}
+.rw-app .identify-hash-ask {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 .rw-app .identify-hash-label {
   font-weight: 650;
+}
+.rw-app .identify-hash--compact .identify-hash-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-3);
 }
 .rw-app .identify-hash-hint {
   margin: 0;
 }
 .rw-app .identify-hash-row {
   display: flex;
-  flex-wrap: wrap;
+  flex: 1 1 20rem;
   gap: var(--sp-s);
   align-items: center;
+  max-width: 34rem;
 }
 .rw-app .identify-hash-input {
-  flex: 1 1 16rem;
+  flex: 1 1 10rem;
   min-width: 0;
 }
 .rw-app .identify-hash-error {
+  flex-basis: 100%;
   margin: 0;
   color: var(--fault);
+  text-align: center;
 }

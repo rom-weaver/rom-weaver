@@ -195,32 +195,39 @@ const RomExpectationCard = ({
 /**
  * Paste a checksum to find the ROM this run needs, without having the file.
  * Shared by the apply and identify pages - one lookup, one wording - so the
- * only difference is where its answer lands.
+ * only difference is where its answer lands. The `hero` variant is the quiet
+ * second door of the empty 0x01 hero; `compact` is the refine row 0x02 keeps
+ * under an expectation card until a real ROM makes it concrete.
  */
 const RomHashSearch = ({
   idPrefix = "rom-weaver-rom",
   lookup,
   localizer,
+  variant = "hero",
 }: {
   /** Owner-scoped id prefix: the apply and identify panels stay mounted side by side. */
   idPrefix?: string;
   lookup: ReturnType<typeof useRomHashLookup>;
   localizer: ReturnType<typeof useUiLocalizer>;
+  variant?: "compact" | "hero";
 }) => {
   const inputId = `${idPrefix}-hash`;
+  const compact = variant === "compact";
   return (
     <form
-      className="identify-hash"
+      className={compact ? "identify-hash identify-hash--compact" : "identify-hash identify-hash--hero"}
       id={`${inputId}-search`}
       onSubmit={(event) => {
         event.preventDefault();
         void lookup.search();
       }}
     >
-      <label className="identify-hash-label" htmlFor={inputId}>
-        {localizer.message("ui.identify.hashLabel")}
-      </label>
-      <p className="pdesc identify-hash-hint">{localizer.message("ui.identify.hashHint")}</p>
+      <div className="identify-hash-ask">
+        <label className="identify-hash-label" htmlFor={inputId}>
+          {localizer.message(compact ? "ui.identify.hashRefine" : "ui.identify.hashLabel")}
+        </label>
+        {compact ? null : <p className="pdesc identify-hash-hint">{localizer.message("ui.identify.hashHint")}</p>}
+      </div>
       <div className="identify-hash-row">
         <input
           aria-invalid={lookup.error ? "true" : undefined}
@@ -237,7 +244,7 @@ const RomHashSearch = ({
         <RunButton disabled={lookup.busy || !lookup.text.trim()} icon={<Search aria-hidden="true" />} type="submit">
           {lookup.busy
             ? lookup.stage || localizer.message("ui.identify.hashSearching")
-            : localizer.message("ui.identify.hashSearch")}
+            : localizer.message(compact ? "ui.identify.hashSearchAgain" : "ui.identify.hashSearch")}
         </RunButton>
       </div>
       {lookup.error ? (

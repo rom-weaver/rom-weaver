@@ -99,7 +99,7 @@ it("clearing the expectation clears the lookup", async () => {
   expect(container.querySelector(".ghost-steps")).not.toBeNull();
 });
 
-it("typing in the search opens the ROM step and hides the hero", async () => {
+it("keeps the hero while a checksum is typed and moves the search into 0x02 on a match", async () => {
   const { container } = render(<IdentifyForm />);
   expect(container.querySelector(".unified-drop-step--hero")).not.toBeNull();
 
@@ -107,7 +107,14 @@ it("typing in the search opens the ROM step and hides the hero", async () => {
   if (!input) throw new Error("the checksum search input is missing");
   fireEvent.change(input, { target: { value: "abcd" } });
 
-  await waitFor(() => expect(container.querySelector(".unified-drop-step--hero")).toBeNull());
-  expect(container.querySelector(".ghost-steps")).toBeNull();
-  expect(container.textContent).toContain("Add a ROM to identify it");
+  // Typing is not an answer, so nothing flips.
+  expect(container.querySelector(".unified-drop-step--hero")).not.toBeNull();
+  expect(container.querySelector(".ghost-steps")).not.toBeNull();
+
+  await searchChecksum(container, "abcd1234");
+  expect(container.querySelector(".unified-drop-step--hero")).toBeNull();
+  const refine = container.querySelector(".identify-hash--compact");
+  expect(refine).not.toBeNull();
+  expect(refine?.textContent).toContain("Not the ROM you meant?");
+  expect(container.querySelector<HTMLInputElement>(".identify-hash-input")?.value).toBe("abcd1234");
 });

@@ -285,6 +285,11 @@ msgstr "Dunkel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelection"
+msgstr "Standardauswahl"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.defaults"
 msgstr "Standardwerte"
 
@@ -395,11 +400,6 @@ msgstr "Identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Suchen Sie ein bestimmtes ROM?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "ROM in Bundle einschließen"
 
@@ -460,6 +460,11 @@ msgstr "Später"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionUnchanged"
+msgstr "Unverändert lassen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.compressionProfile"
 msgstr "Stufe"
 
@@ -497,6 +502,16 @@ msgstr "Protokollstufe"
 #: src/presentation/localization/messages.ts
 msgid "ui.log.tabLogs"
 msgstr "Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashLabel"
+msgstr "Suchen Sie ein bestimmtes ROM?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionOptional"
+msgstr "Alle optional machen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -560,6 +575,11 @@ msgstr "Keine wählbare Datei gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashRefine"
+msgstr "Nicht das gemeinte ROM?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Aktuell"
 
@@ -592,26 +612,6 @@ msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen ur
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.optional"
 msgstr "optional"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.bulkSelection"
-msgstr "Standardauswahl"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.bulkSelectionAll"
-msgstr "Alle einschalten"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.bulkSelectionOptional"
-msgstr "Alle optional machen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.bulkSelectionUnchanged"
-msgstr "Unverändert lassen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -797,6 +797,11 @@ msgstr "RVZ-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.save"
 msgstr "Speichern"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashSearchAgain"
+msgstr "Erneut suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -992,6 +997,11 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Übertragen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.bulkSelectionAll"
+msgstr "Alle einschalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

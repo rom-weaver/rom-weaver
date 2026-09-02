@@ -1916,13 +1916,6 @@ function ApplyWorkflowFormView({
     if (staleRomHash) clearRomHashLookup();
   }, [clearRomHashLookup, staleRomHash]);
   const manualRomLookup = canSearchRomHash ? romHashLookup.result : undefined;
-  /* Touching the search is the visitor's choice of the file-free path, so the
-     hero gives way to the ROM step at the first character - the same opening
-     the identify page makes. A search in flight or a failed one keeps the step
-     open, so the layout never flips back to the hero mid-answer. */
-  const searchEngaged =
-    canSearchRomHash &&
-    (romHashLookup.busy || !!romHashLookup.result || !!romHashLookup.error || !!romHashLookup.text.trim());
   const romExpectation: RomExpectation | undefined =
     romInputs.length === 0 && hasExpectedChecks
       ? {
@@ -2007,7 +2000,9 @@ function ApplyWorkflowFormView({
   // The empty bench fills (or clears) inside a flat crossfade - the 0x01 hero
   // shrinking into the add-row otherwise snaps. A drop-start signal makes that
   // crossfade begin before input staging publishes its first row.
-  const workflowActuallyEmpty = !(workflowHasContent || dropStarted);
+  // A checksum match fills the bench the way a patches-only bundle does: 0x02
+  // already knows which ROM it wants, so the whole run is laid out around it.
+  const workflowActuallyEmpty = !(workflowHasContent || dropStarted || manualRomLookup);
   const workflowEmpty = useFlatTransitionFlag(workflowActuallyEmpty);
   usePendingCardMorph(pendingDrops.length, romInputs.length + patches.length);
   // "Needs input" directives forward to the 0x01 unified picker.
@@ -2074,7 +2069,7 @@ function ApplyWorkflowFormView({
     <section className={formReady ? "panel form-ready" : "panel"} id="rom-weaver-container">
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
-        addLabel="Replace the ROM or add patches"
+        addLabel={romInputs.length ? "Replace the ROM or add patches" : "Add the ROM or patches"}
         afterDropZone={
           <>
             <ApplyDropAfter
@@ -2086,14 +2081,15 @@ function ApplyWorkflowFormView({
               sampleLoading={sampleLoading}
               workflowEmpty={workflowEmpty}
             />
+            {/* The search is the hero's quiet second door, after the drop
+                target. It MUST follow the sample chip: the chip's zero-height
+                wrapper reaches the hero's corner from right after the drop
+                zone, and anything between the two pushes it out. Once a match
+                fills the bench the search moves to 0x02. */}
+            {canSearchRomHash && workflowEmpty ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
           </>
         }
-        /* The search is an input, so it leads the step that owns inputs. It
-           MUST stay above the drop zone: the sample chip's zero-height wrapper
-           follows the drop zone to reach the hero's corner, so anything between
-           the two pushes the chip out of the hero. */
-        beforeDropZone={canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
-        big={workflowEmpty && !searchEngaged}
+        big={workflowEmpty}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
         heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"
         id="rom-weaver-row-unified-drop"
@@ -2114,56 +2110,34 @@ function ApplyWorkflowFormView({
         supported={APPLY_SUPPORTED_FILES}
       />
       {workflowEmpty ? (
-        <>
-          {/* Using the search opens the real 0x02 so its answer lands in the
-              step that owns the ROM, instead of beside a ghosted one. */}
-          {searchEngaged ? (
-            <WorkflowRomInputStep
-              emptyState={
-                romExpectation ? (
-                  <RomExpectationCard expectation={romExpectation} identification={manualRomLookup?.identification} />
-                ) : (
-                  romNeedsInput
-                )
-              }
-              id="rom-weaver-row-file-rom"
-              items={
-                romHashLookup.busy
-                  ? [
-                      {
-                        id: "rom-weaver-expected-rom-search",
-                        progress: {
-                          cancelLabel: "Cancel the checksum search",
-                          indeterminate: true,
-                          label: romHashLookup.stage || localizer.message("ui.identify.hashSearching"),
-                          onCancel: romHashLookup.clear,
-                        },
-                      },
-                    ]
-                  : []
-              }
-              num="0x02"
-              title={localizer.message("ui.step.rom")}
-              woven={!!romExpectation}
-            />
-          ) : null}
-          <GhostSteps
-            steps={[
-              ...(searchEngaged ? [] : [{ num: "0x02", title: localizer.message("ui.step.rom") }]),
-              { num: "0x03", title: localizer.message("ui.step.patches") },
-              { num: "0x04", title: localizer.message("ui.step.apply") },
-            ]}
-          />
-        </>
+        <GhostSteps
+          steps={[
+            { num: "0x02", title: localizer.message("ui.step.rom") },
+            { num: "0x03", title: localizer.message("ui.step.patches") },
+            { num: "0x04", title: localizer.message("ui.step.apply") },
+          ]}
+        />
       ) : (
         <>
           <WorkflowRomInputStep
             beforeItems={
               romExpectation ? (
-                <RomExpectationCard
-                  expectation={romExpectation}
-                  identification={manualRomLookup?.identification ?? expectedRomIdentification}
-                />
+                <>
+                  <RomExpectationCard
+                    expectation={romExpectation}
+                    identification={manualRomLookup?.identification ?? expectedRomIdentification}
+                    {...(manualRomLookup
+                      ? { onRemove: romHashLookup.clear, removeLabel: "Clear the expected ROM" }
+                      : {})}
+                  />
+                  {/* A pasted checksum is the user's guess, so the search stays
+                      one line away until a real ROM makes the expectation
+                      concrete. A bundle's or patch's check is not up for
+                      revision, so those get no refine row. */}
+                  {manualRomLookup ? (
+                    <RomHashSearch localizer={localizer} lookup={romHashLookup} variant="compact" />
+                  ) : null}
+                </>
               ) : null
             }
             emptyState={romNeedsInput}
