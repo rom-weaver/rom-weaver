@@ -82,20 +82,30 @@
     min-height: max(300px, calc(100vh - var(--hero-chrome)));
   }
   .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
-    /* The New here? chip rides the seam below, so the ticker keeps clear of it. */
     min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
-    /* The New here? chip rides the seam below, so the ticker keeps clear of it. */
+  }
+  /* On the apply page the New here? chip rides the seam between hero and
+     footer: half above, half below. Both sides pad for it only while the chip
+     is there - the identify page has no chip and keeps the plain seam. */
+  html:not([data-onboarding-enabled="false"])
+    .rw-app
+    .step.is-input.is-empty:has(> .step-body > .identify-hash--hero):has(> .step-body > .first-weave-demo)
+    .drop.hero {
     padding-block-end: 30px;
   }
-  /* The checksum footer joined to the hero: the phone's 48px control size would
-     make the row the tallest thing on the page, so both controls sit at 40px
-     and the button keeps only its glyph - its name stays in the aria-label. */
-  .rw-app .identify-hash--hero {
+  html:not([data-onboarding-enabled="false"])
+    .rw-app
+    .step.is-input.is-empty:has(> .step-body > .first-weave-demo)
+    > .step-body
+    > .identify-hash--hero {
     padding-block-start: 26px;
   }
   .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .sample-tutorial-start-chip {
     bottom: -19px;
   }
+  /* The checksum footer joined to the hero: the phone's 48px control size would
+     make the row the tallest thing on the page, so both controls sit at 40px
+     and the button keeps only its glyph - its name stays in the aria-label. */
   /* 16px is the iOS floor: a smaller focused input makes Safari zoom the page
      and leave it clipped on the right. */
   .rw-app .identify-hash-input {
