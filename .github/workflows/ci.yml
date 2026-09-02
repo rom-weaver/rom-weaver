@@ -578,7 +578,9 @@ jobs:
           tools: node rust cargo-deny cargo-machete
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-components: clippy rustfmt
+          cargo-cache: "false"
           ccache: "true"
+          sccache: "true"
           webapp-deps: "true"
           identify-data-cache: "true"
 
@@ -613,6 +615,9 @@ jobs:
       - name: Unused Rust dependencies
         run: mise run machete
 
+      - name: Rust compiler cache statistics
+        run: sccache --show-stats
+
   rust-host:
     name: "Rust (Linux: tests + package)"
     runs-on: ubuntu-24.04
@@ -630,7 +635,9 @@ jobs:
         with:
           tools: node rust nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          cargo-cache: "false"
           ccache: "true"
+          sccache: "true"
           identify-data-cache: "true"
 
       # This runner is x86-64, so the test suite MUST compile the vendored LZMA
@@ -650,6 +657,9 @@ jobs:
         # per-package verification here because it resolves same-version workspace
         # dependencies from crates.io, which may still contain the pre-change graph.
         run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
+
+      - name: Rust compiler cache statistics
+        run: sccache --show-stats
 
   identify-release-data:
     name: Package identify data

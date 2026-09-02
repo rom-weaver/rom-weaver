@@ -38,6 +38,11 @@ inputs:
       measures 60-120 MB, so the default leaves room for a few toolchain
       generations without crowding the 10 GiB Actions budget.
     default: 300M
+  sccache:
+    description: >-
+      Install sccache and cache Rust compiler outputs. Keep ccache enabled for
+      vendored C and C++ sources.
+    default: "false"
   cache-save:
     description: Save restored caches. Set to false for workflow_run jobs, which are restore-only.
     default: "true"
@@ -161,6 +166,30 @@ runs:
       shell: bash
       run: ccache --zero-stats
 
+    - name: Install sccache
+      if: inputs.sccache == 'true'
+      shell: bash
+      env:
+        APT_PACKAGES: sccache
+      run: |
+        set -euo pipefail
+        node scripts/ci/install-system-dependencies.mjs
+        echo "SCCACHE_DIR=$RUNNER_TEMP/sccache" >> "$GITHUB_ENV"
+
+    - name: Cache sccache objects
+      if: inputs.sccache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-experiment-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', '.config/mise.toml') }}-${{ github.sha }}
+        restore-keys: |
+          sccache-experiment-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', '.config/mise.toml') }}-
+
+    - name: Zero sccache statistics
+      if: inputs.sccache == 'true'
+      shell: bash
+      run: sccache --zero-stats
+
     # Written to GITHUB_ENV rather than passed to mise-action, so every later
     # `mise run` step in the job sees the same restriction the install did.
     - name: Select mise tools
@@ -188,16 +217,8 @@ runs:
       shell: bash
       run: mise exec -- rustup target add ${{ inputs.rust-targets }}
 
-    # sccache is deliberately absent: .config/mise.toml resolves RUSTC_WRAPPER to
-    # whatever is on PATH and leaves it empty otherwise, and nothing here
-    # persists ~/.cache/sccache between runs. Installing it would reintroduce
-    # the wrapper overhead for a cache that starts empty every time;
-    # Swatinem/rust-cache does the caching that actually survives for Rust
-    # units, and the ccache concern above covers the C ones it cannot help -
-    # a Cargo.lock or toolchain bump invalidates this whole cache and takes
-    # every vendored C object with it. The cache is
-    # keyed per job, so the wasm job's wasm-release artifacts and the rust
-    # job's host-profile artifacts no longer evict each other.
+    # Select one Rust cache per job. Storing the same compilation in rust-cache
+    # and sccache wastes the repository cache budget.
     - name: Cache cargo artifacts
       if: inputs.cargo-cache == 'true'
       uses: Swatinem/rust-cache@v2
