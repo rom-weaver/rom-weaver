@@ -661,7 +661,7 @@ msgstr "Angezeigtes Protokoll"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashPlaceholder"
-msgstr "CRC32-, MD5- oder SHA-1-Prüfsumme einfügen"
+msgstr "CRC32-, MD5- oder SHA-1-Prüfsumme"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

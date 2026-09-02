@@ -193,7 +193,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.identify.hashPlaceholder": msg({
     id: "ui.identify.hashPlaceholder",
-    message: "Paste a CRC32, MD5, or SHA-1 checksum",
+    message: "CRC32, MD5, or SHA-1 checksum",
   }),
   "ui.identify.hashLabel": msg({
     id: "ui.identify.hashLabel",

@@ -215,6 +215,9 @@ const RomHashSearch = ({
 }) => {
   const inputId = `${idPrefix}-hash`;
   const compact = variant === "compact";
+  const submitLabel = lookup.busy
+    ? lookup.stage || localizer.message("ui.identify.hashSearching")
+    : localizer.message(compact ? "ui.identify.hashSearchAgain" : "ui.identify.hashSearch");
   return (
     <form
       className={compact ? "identify-hash identify-hash--compact" : "identify-hash identify-hash--hero"}
@@ -243,14 +246,14 @@ const RomHashSearch = ({
         {/* A plain primary button, not the run button: this is one control in
             a row, not the step's action, so it MUST NOT take the row's width. */}
         <button
+          aria-label={submitLabel}
           className={compact ? "btn identify-hash-submit" : "btn primary identify-hash-submit"}
           disabled={lookup.busy || !lookup.text.trim()}
           type="submit"
         >
           <Search aria-hidden="true" />
-          {lookup.busy
-            ? lookup.stage || localizer.message("ui.identify.hashSearching")
-            : localizer.message(compact ? "ui.identify.hashSearchAgain" : "ui.identify.hashSearch")}
+          {/* A phone keeps only the glyph (phone-dock.css); the name stays on the button. */}
+          <span className="identify-hash-submit-text">{submitLabel}</span>
         </button>
       </div>
       {lookup.error ? (
