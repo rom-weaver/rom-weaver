@@ -615,26 +615,37 @@
   overflow-wrap: anywhere;
 }
 /* Manual checksum search: the file-free alternative to the drop zone. In the
-   hero it is the quiet second door after the drop target, a dashed seam apart
-   from it; in 0x02 it is the one-line refine row under an expectation card. */
+   hero it is the quiet second door after the drop target: a footer joined to
+   the hero's frame across a dashed seam, so the two read as one surface. In
+   0x02 it is the one-line refine row under an expectation card. */
 .rw-app .identify-hash {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-s) var(--sp-l);
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   padding: var(--sp-m);
 }
 .rw-app .identify-hash--hero {
-  padding-block-start: var(--sp-l);
-  margin-block-start: var(--sp-s);
-  border-block-start: 1px dashed var(--seam-soft);
+  padding: var(--sp-m) var(--sp-l);
+  margin-block-start: -1px;
+  background: var(--warp-lines) var(--empty-fill);
+  border: 1px solid var(--seam);
+  border-block-start-style: dashed;
+  border-end-start-radius: var(--r-l);
+  border-end-end-radius: var(--r-l);
+}
+/* The hero hands its bottom corners to the footer it is joined to. */
+.rw-app .step.is-input:has(> .step-body > .identify-hash--hero) .drop.hero {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
 }
 .rw-app .identify-hash--compact {
   padding: var(--sp-xs) 0 0;
 }
 .rw-app .identify-hash-ask {
   display: grid;
+  flex: 1 1 18rem;
   gap: 2px;
   min-width: 0;
 }
@@ -651,18 +662,22 @@
 }
 .rw-app .identify-hash-row {
   display: flex;
-  flex: 1 1 20rem;
+  flex: 1 1 22rem;
+  flex-wrap: wrap;
   gap: var(--sp-s);
   align-items: center;
-  max-width: 34rem;
 }
 .rw-app .identify-hash-input {
-  flex: 1 1 10rem;
+  flex: 1 1 12rem;
   min-width: 0;
+}
+/* One control in a row: the input takes the slack, the button keeps its size
+   and spans the row only once it has wrapped under the input. */
+.rw-app .identify-hash-submit {
+  flex: 1 0 auto;
 }
 .rw-app .identify-hash-error {
   flex-basis: 100%;
   margin: 0;
   color: var(--fault);
-  text-align: center;
 }

@@ -9,7 +9,6 @@ import type { useUiLocalizer } from "../../settings-context.tsx";
 import type { useRomHashLookup } from "../../use-rom-hash-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
 import { ExtractName } from "./extraction-tree.tsx";
-import { RunButton } from "./feedback.tsx";
 import { FileCard } from "./file-card.tsx";
 
 const EXPECTED_ROM_CHECK_LABELS: Record<string, string> = {
@@ -241,11 +240,18 @@ const RomHashSearch = ({
           type="text"
           value={lookup.text}
         />
-        <RunButton disabled={lookup.busy || !lookup.text.trim()} icon={<Search aria-hidden="true" />} type="submit">
+        {/* A plain primary button, not the run button: this is one control in
+            a row, not the step's action, so it MUST NOT take the row's width. */}
+        <button
+          className="btn primary identify-hash-submit"
+          disabled={lookup.busy || !lookup.text.trim()}
+          type="submit"
+        >
+          <Search aria-hidden="true" />
           {lookup.busy
             ? lookup.stage || localizer.message("ui.identify.hashSearching")
             : localizer.message(compact ? "ui.identify.hashSearchAgain" : "ui.identify.hashSearch")}
-        </RunButton>
+        </button>
       </div>
       {lookup.error ? (
         <p className="identify-hash-error" role="alert">
