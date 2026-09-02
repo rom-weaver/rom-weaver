@@ -391,8 +391,10 @@ runs:
       shell: bash
       run: node scripts/ensure-identify-data.mjs
 
+    # Pull requests can restore main's cache but cannot share caches with other
+    # pull requests. Only main saves this large, byte-identical data set.
     - name: Save identify data cache
-      if: inputs.identify-data-cache == 'true' && inputs.cache-save == 'true' && steps.identify-data-cache.outputs.cache-hit != 'true'
+      if: inputs.identify-data-cache == 'true' && inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.identify-data-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
