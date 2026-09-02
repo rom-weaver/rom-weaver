@@ -11,8 +11,6 @@ import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.
 type HomePageProps = {
   /** Where the app is served. Route links resolve against it so a sub-path deployment keeps its prefix. */
   baseUrl: string;
-  /** Identify, Trim and Undo PPF are beta routes: linking to them while the setting is off would bounce the visitor to Apply. */
-  betaToolsEnabled: boolean;
 };
 
 type Flow = {
@@ -56,63 +54,45 @@ const CONTAINERS_WRITE = ["ZIP", "7z", "CHD", "RVZ", "Z3DS"];
 const PATCH_FORMATS = ["IPS", "BPS", "UPS", "xdelta", "PPF", "RUP", "BDF", "APS", "DPS", "BSP", "HDiffPatch"];
 const CHECKSUMS = ["CRC32", "MD5", "SHA-1", "SHA-256", "BLAKE3"];
 
-const buildFlows = (route: (slug: string) => string, betaToolsEnabled: boolean): Flow[] => {
-  const flows: Flow[] = [
-    {
-      bring: "A ROM and one or more patches, in any order you choose.",
-      get: "The patched ROM with checksums checked. Save the chain as a bundle to replay or share it.",
-      href: route("apply"),
-      primary: true,
-      title: "Apply",
-    },
-    {
-      bring: (
-        <>
-          A patch chain you have set up in Apply, or a <code>rom-weaver-bundle.json</code> someone sent you.
-        </>
-      ),
-      get: "One file that pins patch order, expected checksums, and output names. Open it and the workflow is ready to run.",
-      href: `${route("apply")}?guide=bundle`,
-      title: "Bundle",
-    },
-    {
-      bring: "An original file and your modified copy.",
-      get: "A patch in the format you choose, small enough to share.",
-      href: route("create"),
-      title: "Create",
-    },
-    {
-      bring: "A ROM you just patched, or one from disk.",
-      get: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
-      href: route("test"),
-      title: "Test",
-    },
-  ];
-  if (!betaToolsEnabled) return flows;
-  flows.push(
-    {
-      bring: "Any ROM, even inside an archive.",
-      get: "Its game, region, revision, and known dump name, matched by checksum.",
-      href: route("identify"),
-      title: "Identify",
-    },
-    {
-      bring: "An NDS, GBA, 3DS, or XISO image, or an RVZ to scrub.",
-      get: "A smaller file, with an opt-in footer that restores the original byte for byte.",
-      href: route("trim"),
-      title: "Trim",
-    },
-    {
-      bring: "A disc image that was patched with PPF, and that patch.",
-      get: "The unpatched image back.",
-      href: route("ppf-undo"),
-      title: "Undo PPF",
-    },
-  );
-  return flows;
-};
+/**
+ * The four stable workflows, and only those. This list MUST NOT depend on
+ * settings: the page is prerendered into index.html with defaults, so anything
+ * read from storage here renders a different tree on the client and fails
+ * hydration. Identify, Trim and Undo PPF are beta and reached from More.
+ */
+const buildFlows = (route: (slug: string) => string): Flow[] => [
+  {
+    bring: "A ROM and one or more patches, in any order you choose.",
+    get: "The patched ROM with checksums checked. Save the chain as a bundle to replay or share it.",
+    href: route("apply"),
+    primary: true,
+    title: "Apply",
+  },
+  {
+    bring: (
+      <>
+        A patch chain you have set up in Apply, or a <code>rom-weaver-bundle.json</code> someone sent you.
+      </>
+    ),
+    get: "One file that pins patch order, expected checksums, and output names. Open it and the workflow is ready to run.",
+    href: `${route("apply")}?guide=bundle`,
+    title: "Bundle",
+  },
+  {
+    bring: "An original file and your modified copy.",
+    get: "A patch in the format you choose, small enough to share.",
+    href: route("create"),
+    title: "Create",
+  },
+  {
+    bring: "A ROM you just patched, or one from disk.",
+    get: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
+    href: route("test"),
+    title: "Test",
+  },
+];
 
-const HomePage = ({ baseUrl, betaToolsEnabled }: HomePageProps): React.ReactElement => {
+const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
   const route = (slug: string) => {
     try {
       return new URL(slug, baseUrl).pathname;
@@ -120,7 +100,7 @@ const HomePage = ({ baseUrl, betaToolsEnabled }: HomePageProps): React.ReactElem
       return `/${slug}`;
     }
   };
-  const flows = buildFlows(route, betaToolsEnabled);
+  const flows = buildFlows(route);
 
   return (
     <section aria-labelledby="home-title" className="home-page" id="panel-home">

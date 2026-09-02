@@ -705,7 +705,7 @@ function WebappRoot({
                   // landing page starts a veil's height down the page.
                   <div className="panel" hidden={state.currentView !== "home"}>
                     <Suspense fallback={null}>
-                      <HomePageRoute baseUrl={readAppBaseUrl()} betaToolsEnabled={state.settings.betaToolsEnabled} />
+                      <HomePageRoute baseUrl={readAppBaseUrl()} />
                     </Suspense>
                   </div>
                 ) : null}
