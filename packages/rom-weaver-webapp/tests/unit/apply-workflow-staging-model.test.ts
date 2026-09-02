@@ -43,6 +43,7 @@ describe("apply workflow staging model", () => {
             algorithm: "sha1",
             database: "gba.rwfp1",
             name: "Advance Wars (USA)",
+            alternateNames: ["Advance Wars (U) [!]"],
             platform: "Game Boy Advance",
             variant: "raw",
           },
@@ -55,7 +56,7 @@ describe("apply workflow staging model", () => {
     };
 
     expect(toStagedInputInfos(input, [])[0]?.identificationStatus).toBe("matched");
-    expect(toStagedInputInfos(input, [])[0]?.romInfo).toBe("Advance Wars (USA)");
+    expect(toStagedInputInfos(input, [])[0]?.romInfo).toBe("Advance Wars (USA) · Advance Wars (U) [!]");
   });
 
   it("shows an expected ROM title in patch validation details", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatIdentifyTitle,
   identifiedOutputBaseName,
+  uniqueIdentifyDisplayNames,
   uniqueIdentifyTitles,
 } from "../../src/presentation/identify-title.ts";
 import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
@@ -32,6 +33,26 @@ describe("formatIdentifyTitle", () => {
     expect(formatIdentifyTitle("Game (T) [!]")).toBe("Game (Taiwan)");
     expect(formatIdentifyTitle("Game (1) [!]")).toBe("Game (Japan, Korea)");
     expect(formatIdentifyTitle("Game (4) [!]")).toBe("Game (USA, Brazil)");
+  });
+
+  it("keeps every standard and alias name available for display", () => {
+    expect(
+      uniqueIdentifyDisplayNames([
+        {
+          name: "Pokemon - Emerald Version (UE) [!]",
+          alternateNames: ["Pokemon - Emerald Version (U) [!]"],
+        },
+        {
+          name: "Pokemon - Emerald Version (USA, Europe)",
+          alternateNames: ["Pokemon - Emerald Version (E) [!]"],
+        },
+      ]),
+    ).toEqual([
+      "Pokemon - Emerald Version (USA, Europe)",
+      "Pokemon - Emerald Version (UE) [!]",
+      "Pokemon - Emerald Version (U) [!]",
+      "Pokemon - Emerald Version (E) [!]",
+    ]);
   });
 });
 

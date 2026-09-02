@@ -1,4 +1,4 @@
-import type { ParsedIdentifyResolution } from "../types/identify.ts";
+import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../types/identify.ts";
 
 const ATOMIC_REGION_LABELS: Readonly<Record<string, string>> = {
   A: "Australia",
@@ -96,6 +96,15 @@ const uniqueIdentifyTitles = (names: readonly string[]): string[] => [
   ...new Set(names.map(formatIdentifyTitle).filter(Boolean)),
 ];
 
+/** Every title a lookup provides, with standard names first and raw aliases preserved. */
+const uniqueIdentifyDisplayNames = (
+  matches: readonly Pick<ParsedIdentifyTitleMatch, "name" | "alternateNames">[],
+): string[] => {
+  const standardNames = matches.map((match) => formatIdentifyTitle(match.name));
+  const aliasNames = matches.flatMap((match) => [match.name, ...(match.alternateNames ?? [])]);
+  return [...new Set([...standardNames, ...aliasNames].map((name) => name.trim()).filter(Boolean))];
+};
+
 /**
  * The base name automatic output names use when the ROM was identified, or
  * nothing. Only a single confident match qualifies: an ambiguous result has no
@@ -108,4 +117,4 @@ const identifiedOutputBaseName = (identification: ParsedIdentifyResolution | und
   return identifyOutputBaseName(titles[0] || "") || null;
 };
 
-export { formatIdentifyTitle, identifiedOutputBaseName, uniqueIdentifyTitles };
+export { formatIdentifyTitle, identifiedOutputBaseName, uniqueIdentifyDisplayNames, uniqueIdentifyTitles };
