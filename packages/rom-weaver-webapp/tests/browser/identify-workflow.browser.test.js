@@ -12,6 +12,10 @@ import "../../src/webapp/design-system/deferred.css";
    real DOM and the real stylesheets, which is where the reporting bugs were. */
 const { identifyHash, identifyRom } = vi.hoisted(() => ({ identifyHash: vi.fn(), identifyRom: vi.fn() }));
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({ identifyHash, identifyRom }));
+// The checksum search is the shared expected-ROM lookup, not a file identify
+// run, so it answers through the identify-data seam both pages use.
+const { lookupExpectedRom } = vi.hoisted(() => ({ lookupExpectedRom: vi.fn() }));
+vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => ({ lookupExpectedRom }));
 
 const { IdentifyForm } = await import("../../src/webapp/components/identify-form.tsx");
 
@@ -60,7 +64,8 @@ const mountIdentifyForm = async () => {
 };
 
 const selectRom = async (fileName = "game.gba") => {
-  const input = host.querySelector("#identify-input-picker");
+  // The expectation step mounts its own compact picker in place of the hero.
+  const input = host.querySelector("#identify-input-picker, #identify-container-expected-picker");
   const transfer = new DataTransfer();
   transfer.items.add(new File([new Uint8Array([1, 2, 3, 4])], fileName));
   input.files = transfer.files;
@@ -87,6 +92,7 @@ beforeEach(async () => {
   document.body.innerHTML = "";
   identifyHash.mockReset();
   identifyRom.mockReset();
+  lookupExpectedRom.mockReset();
 });
 
 afterEach(() => {
@@ -283,22 +289,22 @@ test("an empty form shows the ghost steps next to the checksum search", async ()
   expect(host.textContent).toContain("Identify by checksum");
 });
 
-test("a pasted checksum identifies without a file", async () => {
-  const hash = "3610A686";
-  identifyHash.mockResolvedValue({
-    candidates: [candidate(hash.toLowerCase(), "matched", [gbaMatch("Metroid Fusion (USA)")])],
-    input: hash.toLowerCase(),
-    status: "matched",
-  });
+test("a pasted checksum raises the expected-ROM card without a file", async () => {
+  lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Metroid Fusion (USA)")], status: "matched" });
   await mountIdentifyForm();
-  setHashInput(hash);
+  setHashInput("3610A686");
   buttonMatching(/Search by checksum/).click();
   await waitForText("Metroid Fusion (USA)");
 
-  expect(identifyHash).toHaveBeenCalledWith("3610a686", expect.anything());
-  expect(host.querySelector(".identify-state").textContent).toContain("Identified");
-  // The file steps stay out of the way: no ROM card and no ghost steps remain.
+  expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "3610a686" } }, expect.anything());
+  const card = host.querySelector("#identify-container-expected-rom");
+  expect(card).not.toBeNull();
+  expect(card.textContent).toContain("Found by checksum - add the ROM to verify it");
+  // The database fills the card out under ONE Expected head that names it.
+  expect(card.querySelector(".ck-head-note").textContent).toContain("your checksum");
+  // The step opens for the optional ROM, so the ghost steps step aside.
   expect(host.querySelector(".ghost-steps")).toBeNull();
+  expect(host.textContent).toContain("Add the ROM to verify it");
 });
 
 test("an invalid checksum shows the inline error and never runs", async () => {
@@ -307,7 +313,7 @@ test("an invalid checksum shows the inline error and never runs", async () => {
   buttonMatching(/Search by checksum/).click();
   await waitForText("hex characters");
 
-  expect(identifyHash).not.toHaveBeenCalled();
+  expect(lookupExpectedRom).not.toHaveBeenCalled();
   expect(host.querySelector(".identify-hash-error")).not.toBeNull();
   // The ghost steps stay: nothing ran, so nothing is staged.
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
@@ -319,26 +325,47 @@ test("a wrong-length checksum names the accepted lengths", async () => {
   buttonMatching(/Search by checksum/).click();
   await waitForText("40 (SHA-1)");
 
-  expect(identifyHash).not.toHaveBeenCalled();
+  expect(lookupExpectedRom).not.toHaveBeenCalled();
   expect(host.querySelector(".identify-hash-error")).not.toBeNull();
 });
 
-test("staging a file clears the checksum result", async () => {
-  identifyHash.mockResolvedValue({
-    candidates: [candidate("3610a686", "matched", [gbaMatch("Metroid Fusion (USA)")])],
-    input: "3610a686",
+test("staging a file keeps the expectation and verifies the ROM against it", async () => {
+  lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Metroid Fusion (USA)")], status: "matched" });
+  identifyRom.mockResolvedValue({
+    candidates: [candidate("other.gba", "matched", [gbaMatch("Metroid Fusion (USA)")])],
+    input: "other.gba",
     status: "matched",
   });
   await mountIdentifyForm();
-  setHashInput("3610a686");
+  // The staged candidate carries crc32 abcd1234, so this is the matching paste.
+  setHashInput("abcd1234");
   buttonMatching(/Search by checksum/).click();
   await waitForText("Metroid Fusion (USA)");
 
   await selectRom("other.gba");
-  expect(host.textContent).not.toContain("Metroid Fusion (USA)");
-  // The checksum search stays on the page; the staged file only overrides its input.
+  await runIdentify();
+  await openDrawers();
+  // The expectation survives the drop and lands as Expected rows on the card.
   const hashInput = host.querySelector(".identify-hash-input");
-  expect(hashInput).not.toBeNull();
-  expect(hashInput.value).toBe("");
-  expect(host.textContent).toContain("other.gba");
+  expect(hashInput.value).toBe("abcd1234");
+  await waitFor(() => host.querySelector("#rom-weaver-rom-expected-checks"));
+  expect(host.querySelector(".card.ok")).not.toBeNull();
+});
+
+test("a staged ROM that misses the pasted checksum faults the step", async () => {
+  lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Metroid Fusion (USA)")], status: "matched" });
+  identifyRom.mockResolvedValue({
+    candidates: [candidate("other.gba", "matched", [gbaMatch("Metroid Fusion (USA)")])],
+    input: "other.gba",
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  setHashInput("deadbeef");
+  buttonMatching(/Search by checksum/).click();
+  await waitForText("Metroid Fusion (USA)");
+
+  await selectRom("other.gba");
+  await runIdentify();
+  await waitFor(() => host.querySelector(".card.bad"));
+  expect(host.querySelector(".card.bad")).not.toBeNull();
 });

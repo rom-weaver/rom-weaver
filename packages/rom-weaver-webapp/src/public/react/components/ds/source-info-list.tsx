@@ -118,8 +118,8 @@ const ExpectedMismatchInfo = () => (
     title="Not the expected ROM"
   >
     <strong>Not the expected ROM</strong>
-    <p>This ROM's name or checks do not match what the bundle was authored against - see the Expected rows below.</p>
-    <p>You can still apply the patches, but the result may differ from what the bundle's author intended.</p>
+    <p>This ROM's name or checks do not match what this run expects - see the Expected rows below.</p>
+    <p>You can still continue, but the result may differ from what the expectation's author intended.</p>
   </InfoToggle>
 );
 
@@ -167,7 +167,7 @@ const MatchedExpectedGroup = ({
     <div className="ck-group" id="rom-weaver-rom-expected-checks">
       <div className="ck-group-head">
         {matched.label}
-        <span className="ck-mark ok" title="The staged ROM matches the bundle's expectation">
+        <span className="ck-mark ok" title="The staged ROM matches what this run expects">
           <Check aria-hidden="true" />
           <span className="sr-only">matches</span>
         </span>
@@ -269,7 +269,7 @@ const ExpectedChecksGroup = ({
         Expected
         {mismatch ? (
           <>
-            <span className="ck-mark bad" title="This ROM does not match the bundle's expectation">
+            <span className="ck-mark bad" title="This ROM does not match what this run expects">
               <X aria-hidden="true" />
             </span>
             <span className="ck-head-note">No match</span>

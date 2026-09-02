@@ -41,12 +41,6 @@ const IDENTIFY_QUALITY_LABEL: Readonly<Record<IdentifyQuality, string>> = {
   partial: "Partial match",
 };
 
-const IDENTIFY_QUALITY_MARK: Readonly<Record<IdentifyQuality, IdentifyStatusMark>> = {
-  exact: { glyph: "✓", label: "Exact match", tone: "ok" },
-  metadata_only: { glyph: "≈", label: "Metadata only", tone: "warn" },
-  partial: { glyph: "◐", label: "Partial match", tone: "warn" },
-};
-
 /**
  * Structured non-match causes. Both are actionable states, distinct from a
  * plain "no match": the database is missing, or the media shape has no
@@ -163,7 +157,6 @@ const identifyMatchCountLabel = (count: number): string => `${count} possible ${
 export {
   IDENTIFY_CONDITION_LABEL,
   IDENTIFY_QUALITY_LABEL,
-  IDENTIFY_QUALITY_MARK,
   IDENTIFY_STATUS_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyComponentEvidenceLabel,

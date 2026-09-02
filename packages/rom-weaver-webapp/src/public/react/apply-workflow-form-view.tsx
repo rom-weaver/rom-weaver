@@ -1,5 +1,5 @@
-import { Archive, Disc3, Download, Gamepad2, ListChecks, Search, Share2, TriangleAlert } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Archive, Disc3, Download, Gamepad2, ListChecks, Share2, TriangleAlert } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
   postApplyDownloadBehaviorOption,
@@ -12,10 +12,8 @@ import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
-import type { ParsedIdentifyResolution } from "../../types/identify.ts";
-import { IdentifyDrawer, PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
+import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
-import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import {
@@ -25,8 +23,15 @@ import {
 } from "./components/ds/compress-panel.tsx";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractName } from "./components/ds/extraction-tree.tsx";
-import { Notice, RunButton } from "./components/ds/feedback.tsx";
+import { Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
+import {
+  databaseOnlyChecks,
+  ROM_HASH_LOOKUP_MESSAGES,
+  RomExpectationCard,
+  RomHashSearch,
+  type RomExpectation,
+} from "./components/ds/rom-expectation-card.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
@@ -42,7 +47,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
-import { formatIdentifyTitle, uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
+import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
@@ -433,200 +438,6 @@ const formatRomTypeTag = (romType: { platform?: string; discFormat?: string } | 
   const platform = romType.platform ? abbreviatePlatform(romType.platform) : "";
   return [platform, romType.discFormat].filter(Boolean).join(" · ");
 };
-
-const EXPECTED_ROM_CHECK_LABELS: Record<string, string> = {
-  crc32: "CRC32",
-  md5: "MD5",
-  sha1: "SHA-1",
-  sha256: "SHA-256",
-};
-
-const EXPECTED_ROM_CHECK_ORDER = ["crc32", "md5", "sha1", "sha256"] as const;
-
-const expectedCheckLabel = (algorithm: string) => EXPECTED_ROM_CHECK_LABELS[algorithm] || algorithm.toUpperCase();
-
-const orderExpectedAlgorithms = (checksums: Record<string, string>) =>
-  [...EXPECTED_ROM_CHECK_ORDER, ...Object.keys(checksums).sort()].filter(
-    (algorithm, index, all) => checksums[algorithm] && all.indexOf(algorithm) === index,
-  );
-
-/* Rows for one checksum set. BYTES rides directly after CRC32: the two short
-   ck-half rows must sit adjacent for the ckrows grid to pair them, matching the
-   resolved ROM card. */
-const ExpectedCheckRows = ({ checksums, size }: { checksums: Record<string, string>; size?: number }) => {
-  const byteValue = typeof size === "number" && Number.isFinite(size) ? String(Math.floor(size)) : "";
-  const algorithms = orderExpectedAlgorithms(checksums);
-  const bytesRow = byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null;
-  return (
-    <>
-      {algorithms.map((algorithm) => (
-        <Fragment key={algorithm}>
-          <ChecksumRow label={expectedCheckLabel(algorithm)} value={checksums[algorithm] || ""} />
-          {algorithm === "crc32" ? bytesRow : null}
-        </Fragment>
-      ))}
-      {checksums.crc32 ? null : bytesRow}
-    </>
-  );
-};
-
-/** The database's single-component record for a match, when it has exactly one. */
-const soleExpectedComponent = (identification: ParsedIdentifyResolution | undefined) => {
-  if (identification?.status !== "matched") return undefined;
-  const components = identification.matches[0]?.expectedComponents;
-  return components?.length === 1 ? components[0] : undefined;
-};
-
-/* What the identify data adds beyond the check itself. A multi-track disc
-   record has no single expected file, so it contributes nothing here. */
-const databaseOnlyChecks = (
-  checks: ParsedBundleChecks | undefined,
-  identification: ParsedIdentifyResolution | undefined,
-): { checksums: Record<string, string>; size?: number } | undefined => {
-  const component = soleExpectedComponent(identification);
-  if (!component) return undefined;
-  const own = checks?.checksums || {};
-  const checksums: Record<string, string> = {};
-  for (const algorithm of EXPECTED_ROM_CHECK_ORDER) {
-    const value = component[algorithm];
-    if (value && !own[algorithm]) checksums[algorithm] = value;
-  }
-  const size = typeof checks?.size === "number" || !component.size ? undefined : component.size;
-  if (!(Object.keys(checksums).length || size !== undefined)) return undefined;
-  return { checksums, ...(size === undefined ? {} : { size }) };
-};
-
-/** Where an expected-ROM check came from; it decides the card's meta line. */
-type RomExpectationSource = "bundle" | "manual" | "patch";
-
-const ROM_EXPECTATION_META: Record<RomExpectationSource, string> = {
-  bundle: "ROM not included - provide it yourself",
-  manual: "Found by checksum - provide this ROM",
-  patch: "Expected by a patch - provide this ROM",
-};
-
-/** What the workflow expects the ROM to be, and where that expectation came from. */
-type RomExpectation = {
-  checks?: ParsedBundleChecks;
-  /** Advisory file name; only a bundle rom entry carries one. */
-  name?: string;
-  source: RomExpectationSource;
-};
-
-/**
- * "Provide this ROM" card for a rom check with no ROM behind it yet - a
- * patches-only bundle, or a patch that declares its source ROM. Styled like the
- * ROM card it becomes once the input lands; only the meta note marks it
- * expected. When the check identifies against the local data the card is titled
- * with that ROM and carries the checksums and size the check itself omitted.
- */
-const RomExpectationCard = ({
-  expectation,
-  identification,
-}: {
-  expectation: RomExpectation;
-  identification?: ParsedIdentifyResolution;
-}) => {
-  const identified = identification?.status === "matched" ? identification.matches[0] : undefined;
-  const database = databaseOnlyChecks(expectation.checks, identification);
-  const own = expectation.checks?.checksums || {};
-  const title =
-    (identification ? uniqueIdentifyDisplayNames(identification.matches)[0] || "" : "") ||
-    expectation.name ||
-    "Expected ROM";
-  const extractName = identification ? { displayName: title, fileName: "Expected ROM" } : { fileName: title };
-  return (
-    <div className="cards bundle-rom-expectation" id="rom-weaver-bundle-rom-expectation">
-      <FileCard meta={<span>{ROM_EXPECTATION_META[expectation.source]}</span>} name={<ExtractName {...extractName} />}>
-        {identification ? <IdentifyDrawer defaultOpen={false} identification={identification} /> : null}
-        <ChecksumList defaultOpen label="Checks" sublabel="expected">
-          {database ? (
-            <div className="ck-group">
-              <div className="ck-group-head">Expected</div>
-              <ExpectedCheckRows checksums={own} size={expectation.checks?.size} />
-            </div>
-          ) : (
-            <ExpectedCheckRows checksums={own} size={expectation.checks?.size} />
-          )}
-          {database ? (
-            <div className="ck-group">
-              {/* Read from the identify data, not asserted by the bundle or patch -
-                  the head keeps the two apart so nobody reads a hint as a check. */}
-              <div className="ck-group-head">
-                From the database
-                <span className="ck-head-note">{identified?.database || "identify data"}</span>
-              </div>
-              <ExpectedCheckRows checksums={database.checksums} size={database.size} />
-            </div>
-          ) : null}
-        </ChecksumList>
-      </FileCard>
-    </div>
-  );
-};
-
-/**
- * Paste a checksum to find the ROM this run needs, without having the file.
- * Styled and worded as the identify page's own checksum search (its
- * `identify-hash` classes and `ui.identify.hash*` strings), because it is the
- * same lookup - only its answer lands as an expected-ROM card instead of a
- * result page.
- */
-const RomHashSearch = ({
-  lookup,
-  localizer,
-}: {
-  lookup: ReturnType<typeof useRomHashLookup>;
-  localizer: ReturnType<typeof useUiLocalizer>;
-}) => {
-  const inputId = "rom-weaver-rom-hash";
-  return (
-    <form
-      className="identify-hash"
-      id="rom-weaver-rom-hash-search"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void lookup.search();
-      }}
-    >
-      <label className="identify-hash-label" htmlFor={inputId}>
-        {localizer.message("ui.identify.hashLabel")}
-      </label>
-      <p className="pdesc identify-hash-hint">{localizer.message("ui.identify.hashHint")}</p>
-      <div className="identify-hash-row">
-        <input
-          aria-invalid={lookup.error ? "true" : undefined}
-          autoComplete="off"
-          className="input mono identify-hash-input"
-          disabled={lookup.busy}
-          id={inputId}
-          onChange={(event) => lookup.setText(event.currentTarget.value)}
-          placeholder="crc32 / md5 / sha1"
-          spellCheck={false}
-          type="text"
-          value={lookup.text}
-        />
-        <RunButton disabled={lookup.busy || !lookup.text.trim()} icon={<Search aria-hidden="true" />} type="submit">
-          {lookup.busy
-            ? lookup.stage || localizer.message("ui.identify.hashSearching")
-            : localizer.message("ui.identify.hashSearch")}
-        </RunButton>
-      </div>
-      {lookup.error ? (
-        <p className="identify-hash-error" role="alert">
-          {lookup.error}
-        </p>
-      ) : null}
-    </form>
-  );
-};
-
-/* The two validation messages the search shares with the identify page - one
-   catalog entry, one wording, wherever a checksum is pasted. */
-const ROM_HASH_LOOKUP_MESSAGES = (localizer: ReturnType<typeof useUiLocalizer>) => ({
-  invalid: localizer.message("ui.identify.hashInvalid"),
-  invalidChars: localizer.message("ui.identify.hashInvalidChars"),
-});
 
 /** Bundle-related notices and export reveal state, threaded from the form. */
 type BundleToolsState = {
@@ -2308,6 +2119,14 @@ function ApplyWorkflowFormView({
       ) : (
         <>
           <WorkflowRomInputStep
+            beforeItems={
+              romExpectation ? (
+                <RomExpectationCard
+                  expectation={romExpectation}
+                  identification={manualRomLookup?.identification ?? expectedRomIdentification}
+                />
+              ) : null
+            }
             emptyState={romNeedsInput}
             fault={applyFailed}
             id="rom-weaver-row-file-rom"
@@ -2349,12 +2168,6 @@ function ApplyWorkflowFormView({
             listId="rom-weaver-list-input-stack"
             notice={
               <>
-                {romExpectation ? (
-                  <RomExpectationCard
-                    expectation={romExpectation}
-                    identification={manualRomLookup?.identification ?? expectedRomIdentification}
-                  />
-                ) : null}
                 {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
                 {baseConflict ? (
                   <Notice id="rom-weaver-rom-expected-conflict" level="warn">

@@ -594,30 +594,6 @@
   text-align: end;
 }
 
-/* Identify results. Dump names carry the region and revision at the very end,
-   so the generic one-line `.nm` ellipsis would hide the part that decides which
-   ROM this is. Desktop clamps to three lines; a phone shows the whole title. */
-.rw-app .identify-result-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  font-size: clamp(0.8rem, 1.1vw + 0.55rem, 1.06rem);
-  font-weight: 650;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-@media (width <= 640px) {
-  .rw-app .identify-result-title {
-    display: block;
-    overflow: visible;
-    -webkit-line-clamp: none;
-    line-clamp: none;
-  }
-}
 /* State reads without colour: the glyph and the word carry it (WCAG 1.4.1). */
 .rw-app .identify-state {
   display: inline-flex;
@@ -628,8 +604,7 @@
 .rw-app .identify-state-glyph {
   font-weight: 700;
 }
-.rw-app .identify-member,
-.rw-app .identify-archive-lead {
+.rw-app .identify-member {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -638,18 +613,6 @@
   padding: 0 var(--sp-m) var(--sp-s);
   margin: 0;
   overflow-wrap: anywhere;
-}
-.rw-app .identify-candidate-list {
-  display: grid;
-  gap: var(--sp-xs);
-  padding: 0 var(--sp-m) var(--sp-s);
-  margin: 0;
-  list-style: none;
-}
-.rw-app .identify-candidate-list li {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
 }
 /* Manual checksum search: the file-free alternative to the drop zone. */
 .rw-app .identify-hash {
