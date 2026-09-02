@@ -23,9 +23,11 @@
     padding: 1px 7px;
     font-size: 0.65rem;
   }
+  /* The lead keeps only its side padding here: the hero's own row gap sets the
+     distance to the bead, so the headline sits as far above the bead as the
+     drop instruction sits below it. */
   .rw-app .drop.hero > .hero-lead {
-    padding: 0 8px 10px;
-    margin-block-end: 8px;
+    padding: 0 8px;
   }
   :root:has(.rw-app) {
     scrollbar-gutter: auto;
