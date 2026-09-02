@@ -167,6 +167,7 @@ const prepareIngestIdentify = async ({
 }> => {
   const trace = { logLevel, namespace: "runtime:browser-workflow", onLog };
   let entryNames: string[] = [];
+  let resumePausedWarmup: (() => void) | undefined;
   try {
     const { identifyGroupIdsForHints, loadIdentifyPackSelection, selectIdentifySlugs } =
       await import("./identify-packs.ts");
@@ -185,6 +186,7 @@ const prepareIngestIdentify = async ({
     // A well-named ROM can fetch its likely pack while the byte probe verifies
     // that routing. A mislabeled ROM discards this result and uses the probe.
     pauseOfflineWarmup();
+    resumePausedWarmup = resumeOfflineWarmup;
     const extensionSelection = extensionSlugs.length
       ? loadIdentifyPackSelection(hints, reportSelectedPlatforms).then(
           (selection) => ({ selection }),
@@ -217,21 +219,17 @@ const prepareIngestIdentify = async ({
       if (groupIds.length) bumpOfflineWarmupPriority({ groupIds, kind: "identify-groups" });
     });
     let selection: Awaited<ReturnType<typeof loadIdentifyPackSelection>>;
-    try {
-      const selectedSlugs = selectIdentifySlugs(hints);
-      const extensionSelectionStillApplies =
-        extensionSelection &&
-        extensionSlugs.length === selectedSlugs.length &&
-        extensionSlugs.every((slug) => selectedSlugs.includes(slug));
-      if (extensionSelectionStillApplies) {
-        const settled = await extensionSelection;
-        if ("error" in settled) throw settled.error;
-        selection = settled.selection;
-      } else {
-        selection = await loadIdentifyPackSelection(hints, reportSelectedPlatforms);
-      }
-    } finally {
-      resumeOfflineWarmup();
+    const selectedSlugs = selectIdentifySlugs(hints);
+    const extensionSelectionStillApplies =
+      extensionSelection &&
+      extensionSlugs.length === selectedSlugs.length &&
+      extensionSlugs.every((slug) => selectedSlugs.includes(slug));
+    if (extensionSelectionStillApplies) {
+      const settled = await extensionSelection;
+      if ("error" in settled) throw settled.error;
+      selection = settled.selection;
+    } else {
+      selection = await loadIdentifyPackSelection(hints, reportSelectedPlatforms);
     }
     return {
       entryNames,
@@ -241,6 +239,8 @@ const prepareIngestIdentify = async ({
     const reason = error instanceof Error ? error.message : String(error);
     emitTraceLog(trace, "ROM identify data unavailable; continuing without title lookup", { error: reason, fileName });
     return { entryNames, packs: [], unavailable: reason };
+  } finally {
+    resumePausedWarmup?.();
   }
 };
 
