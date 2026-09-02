@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolvePatchTargets } from "../../src/lib/apply/patch-apply-service.ts";
+import {
+  attachIngestPatchRequirements,
+  getPatchProbeRequirements,
+  inheritIngestPatchRequirements,
+  parsePatchForApply,
+  patchProbeRequirementsFromDescriptor,
+  resolvePatchTargets,
+} from "../../src/lib/apply/patch-apply-service.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
+import { createLazyExternalPatchFile } from "../../src/lib/input/binary-service.ts";
 
 const asset = (id: string, fileName: string): InputAsset =>
   ({
@@ -38,5 +46,37 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
     await expect(resolvePatchTargets([first, second], [patch([])], undefined)).rejects.toThrow(
       "does not match exactly one input",
     );
+  });
+});
+
+describe("bundle patch requirements", () => {
+  it("reuses requirements after a bundle file is wrapped", async () => {
+    const source = {};
+    const wrapped = createLazyExternalPatchFile("patch.ips", { filePath: "/work/patch.ips", size: 18 });
+    attachIngestPatchRequirements(
+      source,
+      patchProbeRequirementsFromDescriptor({ fileName: "patch.ips", format: "ips", sizeBytes: 18 }),
+    );
+    inheritIngestPatchRequirements(source, wrapped);
+    const ingest = vi.fn();
+
+    const parsed = await parsePatchForApply(wrapped as never, { ingest: { run: ingest } } as never);
+
+    expect(getPatchProbeRequirements(parsed)).toMatchObject({ format: "IPS" });
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it("parses a bare patch without loading ROM identify data", async () => {
+    const ingest = vi.fn().mockResolvedValue({
+      result: {
+        patches: [{ fileName: "patch.ips", format: "ips", sizeBytes: 18 }],
+      },
+    });
+
+    const patchFile = createLazyExternalPatchFile("patch.ips", { filePath: "/work/patch.ips", size: 18 });
+
+    await parsePatchForApply(patchFile, { ingest: { run: ingest } } as never);
+
+    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({ identify: false }));
   });
 });

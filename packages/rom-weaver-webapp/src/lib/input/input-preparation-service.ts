@@ -11,6 +11,7 @@ import { ROM_WEAVER_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-fo
 import { getArchiveMagicType, getArchiveType, MAGIC_SIGNATURES } from "../../workers/protocol/archive-shared-utils.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../compression/rom-specific-format-support.ts";
+import { inheritIngestPatchRequirements } from "../apply/patch-apply-service.ts";
 import { emitTraceLog } from "../logging.ts";
 import { getFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
 import { isCueEntryFileName, isGdiEntryFileName, parseCueFileReferences, parseGdiFileReferences } from "./archive.ts";
@@ -243,13 +244,15 @@ const createInputPreparationPatchFile = async (
       role,
       size: lazyBrowserSource.blob.size,
     });
-    return createBlobBackedPatchFile(
+    const file = await createBlobBackedPatchFile(
       lazyBrowserSource.blob,
       lazyBrowserSource.fileName,
       undefined,
       lazyBrowserSource.fileHandle,
       { materialize: false },
     );
+    inheritIngestPatchRequirements(source, file);
+    return file;
   }
 
   const sourcePath =
@@ -261,10 +264,12 @@ const createInputPreparationPatchFile = async (
       size: sourceAccess.size ?? undefined,
       sourcePath,
     });
-    return createLazyExternalPatchFile(sourceFileName, {
+    const file = createLazyExternalPatchFile(sourceFileName, {
       filePath: sourcePath,
       size: sourceAccess.size ?? undefined,
     });
+    inheritIngestPatchRequirements(source, file);
+    return file;
   }
 
   emitInputPreparationTrace(options, "create patch file failed", {

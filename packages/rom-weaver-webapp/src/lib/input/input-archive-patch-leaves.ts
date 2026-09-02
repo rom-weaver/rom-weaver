@@ -100,6 +100,7 @@ const enumeratePatchLeaves = async (
   let extractElapsedMs: number | undefined;
   const { result, patchOutputs } = await resolvedRuntime.ingest.run({
     fileName: archiveFile.fileName,
+    identify: false,
     // Unpack EVERY patch leaf without Rust prompting for a subset: the flat multi-select below is the
     // single place the user chooses patches. Without this, an ambiguous patch archive prompts twice -
     // once in ingest's extract selection, then again here.

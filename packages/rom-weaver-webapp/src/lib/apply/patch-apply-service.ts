@@ -125,16 +125,18 @@ const INGEST_PATCH_REQUIREMENTS_KEY = "__romWeaverIngestPatchRequirements";
 
 // A staging step that already ran `ingest` over a patch leaf (the archive patch enumeration) stashes
 // the mapped requirements on the leaf file so the later parse reuses them instead of re-ingesting.
-const attachIngestPatchRequirements = (
-  patchFile: PatchFileInstance,
-  requirements: PatchProbeRequirements | undefined,
-): void => {
+const attachIngestPatchRequirements = (patchFile: object, requirements: PatchProbeRequirements | undefined): void => {
   if (requirements) (patchFile as Record<string, unknown>)[INGEST_PATCH_REQUIREMENTS_KEY] = requirements;
 };
 
-const getAttachedIngestPatchRequirements = (patchFile: PatchFileInstance): PatchProbeRequirements | undefined => {
+const getAttachedIngestPatchRequirements = (patchFile: object): PatchProbeRequirements | undefined => {
   const requirements = (patchFile as Record<string, unknown>)[INGEST_PATCH_REQUIREMENTS_KEY];
   return requirements && typeof requirements === "object" ? { ...(requirements as PatchProbeRequirements) } : undefined;
+};
+
+const inheritIngestPatchRequirements = (source: unknown, patchFile: PatchFileInstance): void => {
+  if (!(source && typeof source === "object")) return;
+  attachIngestPatchRequirements(patchFile, getAttachedIngestPatchRequirements(source));
 };
 
 // Map an ingest `PatchDescriptor`'s embedded fields onto the apply-preflight requirements shape. The
@@ -200,6 +202,7 @@ const resolvePatchRequirementsForApply = async (
   try {
     const { result } = await ingestRun({
       fileName: patchFile.fileName || "patch.bin",
+      identify: false,
       source: externalSource.source,
     });
     return patchProbeRequirementsFromDescriptor(result.patches[0]);
@@ -281,6 +284,7 @@ const resolvePatchTargets = async (
 
 export {
   attachIngestPatchRequirements,
+  inheritIngestPatchRequirements,
   getPatchProbeRequirements,
   parsePatchForApply,
   patchProbeRequirementsFromDescriptor,
