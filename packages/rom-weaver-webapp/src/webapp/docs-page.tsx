@@ -6,6 +6,7 @@ import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import type { DocSearchEntry } from "virtual:rom-weaver-docs-search";
 import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
+import { RelatedStrip } from "./components/related-strip.tsx";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { findSearchToken, searchDocs } from "./docs-search.mjs";
@@ -681,7 +682,7 @@ const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; rout
  * that closes on a hand-written onward link still keeps it - that link says why
  * to go somewhere, and these two say where you are in the sequence.
  */
-const ArticleEnd = ({ slug }: { slug: string }) => {
+const ArticleEnd = ({ onSelectTab, slug }: { onSelectTab?: (id: string) => void; slug: string }) => {
   const route = findDocsRoute(slug);
   const previous = docsNeighbour(slug, -1);
   const next = docsNeighbour(slug, 1);
@@ -706,6 +707,7 @@ const ArticleEnd = ({ slug }: { slug: string }) => {
       >
         Suggest changes on GitHub
       </a>
+      {onSelectTab ? <RelatedStrip entryKey={route.slug} onSelectTab={onSelectTab} /> : null}
     </footer>
   );
 };
@@ -772,7 +774,15 @@ const highlightDocsTerm = (article: HTMLElement, query: string, sectionId: strin
   return null;
 };
 
-const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
+const DocsPage = ({
+  active,
+  onSelectTab,
+  slug,
+}: {
+  active: boolean;
+  onSelectTab?: (id: string) => void;
+  slug: string;
+}) => {
   const targetRoute = findDocsRoute(slug);
   const targetHtml = useDocsHtml(targetRoute.slug, active);
   // The reader stays on the guide they can see: a navigation to a page whose
@@ -896,7 +906,7 @@ const DocsPage = ({ active, slug }: { active: boolean; slug: string }) => {
           />
           {hub ? <DocsFaqPreview /> : null}
           {hub ? <DocsIndex currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} /> : null}
-          <ArticleEnd slug={route.slug} />
+          <ArticleEnd onSelectTab={onSelectTab} slug={route.slug} />
         </section>
       </div>
     </div>

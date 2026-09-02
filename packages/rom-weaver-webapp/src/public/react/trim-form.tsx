@@ -1182,6 +1182,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   });
 
   const createModel = (): TrimPatchFormViewModel => ({
+    done: !!completedOutput,
+    onSelectTab: props.onSelectTab,
     confirm: {
       body: `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`,
       cancelLabel: "Cancel",

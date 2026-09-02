@@ -435,3 +435,91 @@
   color: var(--ink-4);
   content: "-";
 }
+
+/* Related strip: rows, not pills, so tool (thread-tinted) and guide
+   (plain outline) links never read as one list. Used at the foot of a
+   finished workflow result, a docs article, and the not-found page. */
+.rw-app .related-strip ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: 0;
+  margin-block-start: var(--sp-m);
+  list-style: none;
+}
+/* Beta rows ship in the markup on every build and hide from the root
+   attribute the boot script sets, so the prerendered document and a client
+   with either setting hydrate the same tree. A strip whose only rows are
+   hidden takes the whole nav with it. */
+:root[data-beta-tools-enabled="false"] .rw-app .related-strip li[data-beta="true"] {
+  display: none;
+}
+:root[data-beta-tools-enabled="false"] .rw-app .related-strip:not(:has(li:not([data-beta="true"]))) {
+  display: none;
+}
+.rw-app .related-row {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  width: 100%;
+  padding: 10px 14px;
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: var(--r-s);
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    transform 0.15s var(--ease);
+}
+.rw-app .related-row-tool {
+  /* The row is a 16% thread tint over the page surface, not a solid thread
+     fill, so its text MUST use --thread-text (the per-theme readable accent)
+     and never --thread-ink, which is only legible on solid --thread. */
+  color: var(--thread-text);
+  background: color-mix(in oklab, var(--thread) 16%, transparent);
+  border: 1px solid var(--thread);
+}
+.rw-app .related-row-guide {
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--seam-strong);
+}
+@media (hover: hover) {
+  .rw-app .related-row-tool:hover {
+    background: color-mix(in oklab, var(--thread) 26%, transparent);
+    transform: translateY(-1px);
+  }
+  .rw-app .related-row-guide:hover {
+    border-color: var(--ink-4);
+    transform: translateY(-1px);
+  }
+}
+.rw-app .related-row-tool:active,
+.rw-app .related-row-guide:active {
+  transform: translateY(0) scale(0.99);
+}
+.rw-app .related-kind {
+  flex: none;
+  width: 6ch;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.rw-app .related-row-tool .related-kind {
+  color: var(--thread-text);
+}
+.rw-app .related-row-guide .related-kind {
+  color: var(--ink-3);
+}
+.rw-app .related-label {
+  flex: 1;
+  font-weight: 600;
+}
+.rw-app .related-hint {
+  flex: none;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}

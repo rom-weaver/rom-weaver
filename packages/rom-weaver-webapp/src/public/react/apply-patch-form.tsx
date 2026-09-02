@@ -1609,6 +1609,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         }}
         onBundleMetaChange={updateBundleMeta}
         onBundleMetaBulkChange={updateBundleMetaForIds}
+        onSelectTab={props.onSelectTab}
         onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
         onUnifiedDrop={handleUnifiedDrop}
