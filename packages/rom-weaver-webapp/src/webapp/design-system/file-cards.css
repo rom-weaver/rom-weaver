@@ -641,7 +641,7 @@
   border-end-end-radius: 0;
 }
 .rw-app .identify-hash--compact {
-  padding: var(--sp-xs) 0 0;
+  padding: var(--sp-xs) 0 var(--sp-m);
 }
 .rw-app .identify-hash-ask {
   display: grid;

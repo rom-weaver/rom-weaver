@@ -243,7 +243,7 @@ const RomHashSearch = ({
         {/* A plain primary button, not the run button: this is one control in
             a row, not the step's action, so it MUST NOT take the row's width. */}
         <button
-          className="btn primary identify-hash-submit"
+          className={compact ? "btn identify-hash-submit" : "btn primary identify-hash-submit"}
           disabled={lookup.busy || !lookup.text.trim()}
           type="submit"
         >
