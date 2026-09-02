@@ -425,7 +425,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   let page = await context.newPage();
   const cssCoverageEntries = [];
   const failures = [];
-  const watchPageErrors = () => page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  // Bind the page this call is watching: `page` is reassigned as the audit moves
+  // on, and a failure reported without the document it happened on sends the
+  // reader through every navigation in the audit to find it.
+  const watchPageErrors = () => {
+    const watched = page;
+    watched.on("pageerror", (error) => failures.push(`[${watched.url()}] ${error.stack || error.message}`));
+  };
   watchPageErrors();
   const setTheme = async (theme) => {
     if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
