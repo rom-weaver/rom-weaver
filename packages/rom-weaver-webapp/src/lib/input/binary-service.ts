@@ -7,6 +7,7 @@ import {
 } from "../../storage/shared/binary/source-file-utils.ts";
 import { createCleanupOnce as createStorageCleanupOnce } from "../../storage/shared/disposal.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import { inheritSourceIdentificationPolicy } from "./input-identification-policy.ts";
 import type { DirectSource, SourceRef } from "../../types/source.ts";
 import type {
   PatchFileInstance,
@@ -63,9 +64,11 @@ const createPatchFile = async (
   source: Parameters<typeof createPatchFileFromSource>[0],
   fallbackFileName: string,
 ): Promise<PatchFileInstance> => {
-  return createPatchFileFromSource(source, PatchFile, {
+  const file = (await createPatchFileFromSource(source, PatchFile, {
     fallback: fallbackFileName,
-  }) as Promise<PatchFileInstance>;
+  })) as PatchFileInstance;
+  inheritSourceIdentificationPolicy(source, file);
+  return file;
 };
 
 const getDefaultCreatePatchOutputFileName = (fileName: string | undefined, format: string) => {
@@ -370,6 +373,7 @@ const createLazyBlobBackedPatchFile = (
     size: blob.size,
     source: blob,
   });
+  inheritSourceIdentificationPolicy(blob, file);
   return file;
 };
 

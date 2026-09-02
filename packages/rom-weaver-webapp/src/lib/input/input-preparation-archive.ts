@@ -36,6 +36,7 @@ import {
   makeRomAsset,
   makeTrackAsset,
 } from "./input-assets.ts";
+import { shouldIdentifySource } from "./input-identification-policy.ts";
 import { classifyPatcherInput } from "./input-classification.ts";
 import {
   DEFAULT_INPUT_PREPARATION_RUNTIME,
@@ -449,6 +450,7 @@ const resolveArchiveInputAssetsByDescent = async (
     patchOutputs,
   } = await resolvedRuntime.ingest.run({
     fileName: archiveFile.fileName,
+    identify: shouldIdentifySource(archiveFile),
     source: getCompressionRuntimeSource(archiveFile),
     ...(select.length ? { select } : {}),
     logLevel: options?.logging?.level,
@@ -642,6 +644,7 @@ const attachBareRomIngestMetadata = async (
     const startedAt = Date.now();
     const { result } = await resolvedRuntime.ingest.run({
       fileName: file.fileName,
+      identify: shouldIdentifySource(file),
       logLevel: options?.logging?.level,
       onLog: options?.onLog,
       onProgress: (progress) => {

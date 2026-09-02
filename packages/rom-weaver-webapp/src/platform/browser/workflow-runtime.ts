@@ -173,6 +173,24 @@ const prepareIngestIdentify = async ({
     const { bumpOfflineWarmupPriority, pauseOfflineWarmup, resumeOfflineWarmup } =
       await import("../../webapp/pwa/offline-warmup-client.ts");
     let hints: Parameters<typeof loadIdentifyPackSelection>[0] = { fileName };
+    const extensionSlugs = selectIdentifySlugs(hints);
+    const reportSelectedPlatforms = (platforms: string[]) => {
+      onProgress?.({
+        message:
+          platforms.length === 1
+            ? `Loading ${platforms[0]} identification data…`
+            : `Loading identification data for ${platforms.length} systems…`,
+      });
+    };
+    // A well-named ROM can fetch its likely pack while the byte probe verifies
+    // that routing. A mislabeled ROM discards this result and uses the probe.
+    pauseOfflineWarmup();
+    const extensionSelection = extensionSlugs.length
+      ? loadIdentifyPackSelection(hints, reportSelectedPlatforms).then(
+          (selection) => ({ selection }),
+          (error: unknown) => ({ error }),
+        )
+      : undefined;
     // Always probe: the platform the probe reports (decoded from the actual
     // bytes) outranks the file extension for routing, and a mislabeled or
     // unknown extension must not silently fall back to the cartridge packs.
@@ -198,17 +216,20 @@ const prepareIngestIdentify = async ({
     void identifyGroupIdsForHints(hints).then((groupIds) => {
       if (groupIds.length) bumpOfflineWarmupPriority({ groupIds, kind: "identify-groups" });
     });
-    pauseOfflineWarmup();
     let selection: Awaited<ReturnType<typeof loadIdentifyPackSelection>>;
     try {
-      selection = await loadIdentifyPackSelection(hints, (platforms) => {
-        onProgress?.({
-          message:
-            platforms.length === 1
-              ? `Loading ${platforms[0]} identification data…`
-              : `Loading identification data for ${platforms.length} systems…`,
-        });
-      });
+      const selectedSlugs = selectIdentifySlugs(hints);
+      const extensionSelectionStillApplies =
+        extensionSelection &&
+        extensionSlugs.length === selectedSlugs.length &&
+        extensionSlugs.every((slug) => selectedSlugs.includes(slug));
+      if (extensionSelectionStillApplies) {
+        const settled = await extensionSelection;
+        if ("error" in settled) throw settled.error;
+        selection = settled.selection;
+      } else {
+        selection = await loadIdentifyPackSelection(hints, reportSelectedPlatforms);
+      }
     } finally {
       resumeOfflineWarmup();
     }

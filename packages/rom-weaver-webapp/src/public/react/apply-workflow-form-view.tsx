@@ -38,6 +38,7 @@ import {
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
+import { skipSourceIdentification } from "../../lib/input/input-identification-policy.ts";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -1878,7 +1879,11 @@ const useGuidedSampleLoader = (input: {
       const response = await fetch(resolveAssetUrl(input.assetBaseUrl, FIRST_WEAVE_ASSET));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
-      input.onDrop([new File([blob], "first-weave.zip", { type: "application/zip" })]);
+      const sample = new File([blob], "first-weave.zip", { type: "application/zip" });
+      // The generated homebrew ROM is not in the public identify database. The
+      // tutorial MUST become ready without downloading and staging that data.
+      skipSourceIdentification(sample);
+      input.onDrop([sample]);
     } catch {
       setSampleTutorial(null);
       setSampleError("Could not load the sample. Try again.");
