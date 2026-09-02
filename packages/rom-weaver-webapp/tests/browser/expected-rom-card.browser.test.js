@@ -71,7 +71,7 @@ test("the empty apply page offers a checksum search that validates before lookin
 
   await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
   expect(getHashForm().textContent).toContain("Looking for a specific ROM?");
-  expect(getHashInput().placeholder).toBe("CRC32, MD5, or SHA-1 checksum");
+  expect(getHashInput().placeholder).toBe("CRC32, MD5, or SHA-1");
   expect(document.querySelector(".ghost-steps")).not.toBeNull();
 
   submitHash("zzzz");

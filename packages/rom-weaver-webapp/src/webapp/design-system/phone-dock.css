@@ -6,7 +6,7 @@
     /* Includes the first-weave action below the hero so the empty bench still
        occupies one phone viewport. */
     --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
-    /* The footer wraps its button under the input on a phone. */
+    /* The joined checksum footer: label, then a 40px input row. */
     --hero-search-h: 116px;
   }
 
@@ -96,9 +96,11 @@
   .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .sample-tutorial-start-chip {
     bottom: -19px;
   }
+  /* 16px is the iOS floor: a smaller focused input makes Safari zoom the page
+     and leave it clipped on the right. */
   .rw-app .identify-hash-input {
     height: 40px;
-    font-size: 0.82rem;
+    font-size: 16px;
   }
   .rw-app .identify-hash-submit {
     width: 44px;

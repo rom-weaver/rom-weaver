@@ -661,7 +661,7 @@ msgstr "Registro mostrado"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashPlaceholder"
-msgstr "Suma CRC32, MD5 o SHA-1"
+msgstr "CRC32, MD5 o SHA-1"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
