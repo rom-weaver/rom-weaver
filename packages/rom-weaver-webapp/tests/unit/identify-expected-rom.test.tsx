@@ -44,7 +44,7 @@ const searchChecksum = async (container: HTMLElement, hash: string) => {
 };
 
 const stageRom = async (container: HTMLElement) => {
-  const picker = container.querySelector<HTMLInputElement>("#identify-container-expected-picker");
+  const picker = container.querySelector<HTMLInputElement>("#identify-input-picker");
   if (!picker) throw new Error("the expected-ROM picker is missing");
   fireEvent.change(picker, { target: { files: [new File([new Uint8Array([1, 2, 3, 4])], "game.gba")] } });
   await waitFor(() => expect(container.querySelector(".card")).not.toBeNull());
@@ -56,6 +56,7 @@ it("offers the optional ROM drop zone beside a checksum match", async () => {
   await searchChecksum(container, "abcd1234");
 
   expect(container.textContent).toContain("Metroid Fusion (USA)");
+  // 0x01 owns every input, so the match turns its add row into the verify path.
   expect(container.textContent).toContain("Add the ROM to verify it");
   expect(container.textContent).toContain("Optional - the match above stands on its own");
   expect(container.querySelector(".ghost-steps")).toBeNull();

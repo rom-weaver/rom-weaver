@@ -347,9 +347,9 @@ test("staging a file keeps the expectation and verifies the ROM against it", asy
   await selectRom("other.gba");
   await runIdentify();
   await openDrawers();
-  // The expectation survives the drop and lands as Expected rows on the card.
-  const hashInput = host.querySelector(".identify-hash-input");
-  expect(hashInput.value).toBe("abcd1234");
+  // A staged ROM answers 0x01, so the search steps aside the way it does on
+  // apply; the expectation it found survives as Expected rows on the card.
+  expect(host.querySelector(".identify-hash-input")).toBeNull();
   await waitFor(() => host.querySelector("#rom-weaver-rom-expected-checks"));
   expect(host.querySelector(".card.ok")).not.toBeNull();
 });

@@ -2072,20 +2072,25 @@ function ApplyWorkflowFormView({
 
   return (
     <section className={formReady ? "panel form-ready" : "panel"} id="rom-weaver-container">
-      {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
         addLabel="Replace the ROM or add patches"
         afterDropZone={
-          <ApplyDropAfter
-            downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
-            onLoadApplySample={startApplySample}
-            onLoadBundleSample={startBundleSample}
-            pendingDrops={pendingDrops}
-            sampleError={sampleError}
-            sampleLoading={sampleLoading}
-            workflowEmpty={workflowEmpty}
-          />
+          <>
+            <ApplyDropAfter
+              downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
+              onLoadApplySample={startApplySample}
+              onLoadBundleSample={startBundleSample}
+              pendingDrops={pendingDrops}
+              sampleError={sampleError}
+              sampleLoading={sampleLoading}
+              workflowEmpty={workflowEmpty}
+            />
+            {/* The search is an input, so it lives in the step that owns
+                inputs. It follows the sample chip, whose zero-height wrapper
+                MUST stay against the drop zone to reach the hero's corner. */}
+            {canSearchRomHash ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
+          </>
         }
         big={workflowEmpty && !searchEngaged}
         heroLabel="Drop or click to add ROMs, patches, bundles, or archives"

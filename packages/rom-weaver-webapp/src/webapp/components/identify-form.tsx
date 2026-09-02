@@ -314,25 +314,27 @@ const IdentifyForm = ({
 
   return (
     <section className="panel" id={containerId}>
-      <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
-      {searchEngaged ? null : (
-        <UnifiedDropZone
-          addLabel="Replace the ROM"
-          big={!file}
-          disabled={busy}
-          heroLabel="Drop a ROM to identify it"
-          heroLabelCoarse="Tap to add a ROM"
-          info={<p>Identification runs locally. Your ROM never leaves this browser.</p>}
-          inputId={inputId}
-          lead={{ line1: "ui.hero.identifyThesis", line2: "ui.hero.identifyThesis2" }}
-          multiple={false}
-          onFiles={(files) => {
-            const selected = files.at(-1);
-            if (selected) selectFile(selected);
-          }}
-          supported={IDENTIFY_SUPPORTED_FILES}
-        />
-      )}
+      <UnifiedDropZone
+        addLabel={file ? "Replace the ROM" : expectation ? "Add the ROM to verify it" : "Add a ROM to identify it"}
+        /* The search is an input, so it lives in the step that owns inputs. */
+        afterDropZone={
+          file ? null : <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
+        }
+        big={!(file || searchEngaged)}
+        disabled={busy}
+        {...(!file && expectation ? { hint: "Optional - the match above stands on its own" } : {})}
+        heroLabel="Drop a ROM to identify it"
+        heroLabelCoarse="Tap to add a ROM"
+        info={<p>Identification runs locally. Your ROM never leaves this browser.</p>}
+        inputId={inputId}
+        lead={{ line1: "ui.hero.identifyThesis", line2: "ui.hero.identifyThesis2" }}
+        multiple={false}
+        onFiles={(files) => {
+          const selected = files.at(-1);
+          if (selected) selectFile(selected);
+        }}
+        supported={IDENTIFY_SUPPORTED_FILES}
+      />
       {file ? (
         <WorkflowRomInputStep
           beforeItems={
@@ -404,22 +406,11 @@ const IdentifyForm = ({
           woven={romStepWoven}
         />
       ) : searchEngaged ? (
-        /* A checksum match is an answer on its own; the ROM step still opens so
-           the file can be added and verified against it. Before an answer the
-           same step holds the drop zone, so the page never returns to the hero
-           once the search is in use. */
+        /* A checksum match is an answer on its own, so the ROM step opens to
+           hold it; the ROM that verifies it is added in 0x01 like any other
+           input. */
         <WorkflowRomInputStep
           afterItems={errorBlock}
-          dropZone={{
-            ...(expectation ? { hint: "Optional - the match above stands on its own" } : {}),
-            inputId: `${containerId}-expected-picker`,
-            label: expectation ? "Add the ROM to verify it" : "Add a ROM to identify it",
-            multiple: false,
-            onFiles: (files) => {
-              const selected = files.at(-1);
-              if (selected) selectFile(selected);
-            },
-          }}
           emptyState={
             expectation ? (
               <RomExpectationCard
