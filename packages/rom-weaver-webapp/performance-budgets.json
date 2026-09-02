@@ -5,19 +5,19 @@
       {
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 37700,
-        "maxRawBytes": 39600,
-        "expectedBrotliBytes": 7400,
-        "maxBrotliBytes": 7800
+        "expectedRawBytes": 32900,
+        "maxRawBytes": 34500,
+        "expectedBrotliBytes": 7900,
+        "maxBrotliBytes": 8300
       },
       {
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2085000,
+        "expectedRawBytes": 2125000,
         "maxRawBytes": 2190000,
-        "expectedBrotliBytes": 545000,
+        "expectedBrotliBytes": 556000,
         "maxBrotliBytes": 570000
       },
       {
@@ -25,9 +25,9 @@
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 211000,
+        "expectedRawBytes": 212000,
         "maxRawBytes": 221000,
-        "expectedBrotliBytes": 32700,
+        "expectedBrotliBytes": 34000,
         "maxBrotliBytes": 34400
       },
       {
@@ -49,8 +49,12 @@
     "runs": 3,
     "routes": [
       {
-        "name": "Weave",
+        "name": "Home",
         "path": "/"
+      },
+      {
+        "name": "Apply",
+        "path": "/apply/"
       },
       {
         "name": "Create",
