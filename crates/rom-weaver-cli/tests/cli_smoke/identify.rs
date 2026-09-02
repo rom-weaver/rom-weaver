@@ -219,10 +219,12 @@ fn identify_matches_an_external_pack() {
 }
 
 #[test]
-fn identify_prints_the_matched_title_in_the_human_output() {
+fn identify_prints_all_names_in_the_human_output() {
     let temp = setup_temp_dir();
     fs::write(temp.child("hello.bin").path(), b"hello").expect("ROM fixture");
-    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+    let mut games = rwfp1_games(&[([0x36, 0x10, 0xa6, 0x86], "Hello World (Test) [!]")], 5);
+    games[0].alternate_names = vec!["Hello World (U) [!]".to_string()];
+    fs::write(temp.child("test.pack").path(), encode_rwfp1(games)).expect("identify pack");
 
     let output = command_stdout(
         &[
@@ -237,8 +239,10 @@ fn identify_prints_the_matched_title_in_the_human_output() {
     let text = String::from_utf8(output).expect("utf8 stdout");
 
     assert!(
-        text.contains("Match") && text.contains("Hello World (Test) [!]"),
-        "expected the matched title in the human output, got: {text}"
+        text.contains("Names")
+            && text.contains("Hello World (Test) [!]")
+            && text.contains("Hello World (U) [!]"),
+        "expected all names in the human output, got: {text}"
     );
 }
 
