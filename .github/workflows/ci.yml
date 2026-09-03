@@ -1306,7 +1306,9 @@ jobs:
 
   # Chromium journeys, accessibility states, and the channel-icon drift check.
   # This stays selected for every webapp change: it has caught regressions in
-  # rendered documentation as well as application code.
+  # rendered documentation as well as application code. The a11y shard stays
+  # whole for its CSS-coverage union; the two journey shards split the raw and
+  # archive workflows.
   webapp-e2e:
     name: Webapp (E2E, ${{ matrix.shard }})
     runs-on: ubuntu-24.04
@@ -1318,7 +1320,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [a11y, journeys]
+        shard: [a11y, journeys-raw, journeys-archive]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1340,7 +1342,7 @@ jobs:
       # colours. Re-renders them in memory and diffs. Uses the same system
       # Chrome as the E2E suite.
       - name: Channel icons up to date
-        if: matrix.shard == 'journeys'
+        if: matrix.shard == 'journeys-archive'
         run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
 
       - name: Webapp E2E
