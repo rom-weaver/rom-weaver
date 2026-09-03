@@ -1,7 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MESSAGE_CATALOGS } from "../../src/presentation/localization/catalog.ts";
-import { createLocalizer, LOCALE_OPTIONS } from "../../src/presentation/localization/index.ts";
+import {
+  createBrowserLocalizer,
+  createLocalizer,
+  getBrowserLocaleCandidates,
+  LOCALE_OPTIONS,
+  negotiateLocale,
+} from "../../src/presentation/localization/index.ts";
 import { SETTINGS_FIELD_METADATA } from "../../src/webapp/settings/settings-metadata.ts";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 /**
  * Loom UI catalog contract: the chrome reads `ui.*` ids through
@@ -115,5 +125,34 @@ describe("LOCALE_OPTIONS", () => {
 
   it("is the settings language field's option list", () => {
     expect(SETTINGS_FIELD_METADATA.language.options).toEqual([...LOCALE_OPTIONS]);
+  });
+});
+
+describe("locale negotiation", () => {
+  it("selects exact and regional catalog locales", () => {
+    expect(negotiateLocale(["fr", "DE-de"])).toBe("de-de");
+    expect(negotiateLocale(["not a locale", "fr"])).toBe("en");
+    expect(negotiateLocale()).toBe("en");
+  });
+
+  it("reads browser language preferences and their fallback", () => {
+    vi.stubGlobal("navigator", { language: "es-MX", languages: ["", "de-DE"] });
+    expect(getBrowserLocaleCandidates()).toEqual(["de-DE"]);
+    expect(createBrowserLocalizer().locale).toBe("de-de");
+
+    vi.stubGlobal("navigator", { language: "es-MX", languages: [] });
+    expect(getBrowserLocaleCandidates()).toEqual(["es-MX"]);
+    expect(createBrowserLocalizer().locale).toBe("es-mx");
+
+    vi.stubGlobal("navigator", undefined);
+    expect(getBrowserLocaleCandidates()).toEqual([]);
+  });
+
+  it("exposes localized number helpers", () => {
+    const localizer = createLocalizer("en", "binary");
+    expect(localizer.formatBytes(1024)).toBe("1.0 KiB");
+    expect(localizer.formatCount(2, "file")).toBe("2 files");
+    expect(localizer.formatDuration(1500)).toBe("1.50s");
+    expect(localizer.formatList(["IPS", "BPS"])).toBe("IPS and BPS");
   });
 });
