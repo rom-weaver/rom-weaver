@@ -12,6 +12,7 @@ import { emitTraceLog } from "../logging.ts";
 import { COMPRESSION_DEFAULTS } from "../compression/compression-metadata.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
 import {
+  getCompressionOutputExtension,
   isArchiveCompressionFormat,
   isRomSpecificCompressionFormat,
   type RomSpecificCompressionFormat,
@@ -113,6 +114,46 @@ const getRvzOptions = (
   setCompressionOption(options, "rvzBlockSize", archiveSettings.rvzBlockSize as CompressionOptionValue | undefined);
   setCompressionOption(options, "rvzScrub", archiveSettings.rvzScrub as CompressionOptionValue | undefined);
   return options;
+};
+
+const createOutputPlan = ({
+  compression,
+  options,
+  patchedFileName,
+  romFile,
+  chdAutoModeFile = romFile,
+}: {
+  compression: string;
+  options: OutputWorkflowOptions | undefined;
+  patchedFileName: string;
+  romFile: PatchFileInstance;
+  chdAutoModeFile?: PatchFileInstance;
+}): PatchedOutputPlan => {
+  const archiveSettings = getContainerSettings(options);
+  const levels = resolveCompressionLevels({
+    compressionProfile: String(getCompressionProfile(options)),
+    rvzCodec: archiveSettings.rvzCodec as string | null | undefined,
+    rvzCompressionLevel: archiveSettings.rvzCompressionLevel as string | number | null | undefined,
+    sevenZipCodec: archiveSettings.sevenZipCodec as string | null | undefined,
+    sevenZipLevel: archiveSettings.sevenZipLevel as string | number | null | undefined,
+    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel as string | number | "default" | null | undefined,
+    zipCodec: archiveSettings.zipCodec as string | null | undefined,
+    zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
+  });
+  return createPatchedOutputPlan({
+    chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
+    compressionFormat: compression,
+    compressionSettings: levels,
+    patchedFileName,
+    resolveChdCodecMode: (_fileName: string, mode: string | null) =>
+      mode === "auto" ? getChdAutoCreateMode(chdAutoModeFile) : mode,
+    resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
+    romFile,
+    rvzOptions: getRvzOptions(archiveSettings, levels),
+    z3dsOptions: {
+      compressionLevel: levels.z3dsCompressionLevel,
+    },
+  });
 };
 
 const collectPatchFileCleanups = (files: PatchFileInstance[]): Array<() => Promise<void> | void> => {
@@ -253,30 +294,11 @@ const createSingleFileRomSpecificOutput = async ({
   options: OutputWorkflowOptions | undefined;
   runtime?: WorkflowRuntime;
 }): Promise<PatchFileInstance | null> => {
-  const archiveSettings = getContainerSettings(options);
-  const levels = resolveCompressionLevels({
-    compressionProfile: String(getCompressionProfile(options)),
-    rvzCodec: archiveSettings.rvzCodec as string | null | undefined,
-    rvzCompressionLevel: archiveSettings.rvzCompressionLevel as string | number | null | undefined,
-    sevenZipCodec: archiveSettings.sevenZipCodec as string | null | undefined,
-    sevenZipLevel: archiveSettings.sevenZipLevel as string | number | null | undefined,
-    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel as string | number | "default" | null | undefined,
-    zipCodec: archiveSettings.zipCodec as string | null | undefined,
-    zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
-  });
-  const outputPlan = createPatchedOutputPlan({
-    chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
-    compressionFormat: compression,
-    compressionSettings: levels,
+  const outputPlan = createOutputPlan({
+    compression,
+    options,
     patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
-    resolveChdCodecMode: (_fileName: string, mode: string | null) =>
-      mode === "auto" ? getChdAutoCreateMode(outputFile) : mode,
-    resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
     romFile: outputFile,
-    rvzOptions: getRvzOptions(archiveSettings, levels),
-    z3dsOptions: {
-      compressionLevel: levels.z3dsCompressionLevel,
-    },
   });
   const outputs = await createRuntimeRomSpecificOutputFiles(compression, outputFile, outputPlan, options, runtime);
   if (!outputs?.[0]) return null;
@@ -296,30 +318,12 @@ const buildOutputFiles = async (
   });
   if (compression === "none") return [patchedRom];
 
-  const archiveSettings = getContainerSettings(options);
-  const levels = resolveCompressionLevels({
-    compressionProfile: String(getCompressionProfile(options)),
-    rvzCodec: archiveSettings.rvzCodec as string | null | undefined,
-    rvzCompressionLevel: archiveSettings.rvzCompressionLevel as string | number | null | undefined,
-    sevenZipCodec: archiveSettings.sevenZipCodec as string | null | undefined,
-    sevenZipLevel: archiveSettings.sevenZipLevel as string | number | null | undefined,
-    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel as string | number | "default" | null | undefined,
-    zipCodec: archiveSettings.zipCodec as string | null | undefined,
-    zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
-  });
-  const outputPlan = createPatchedOutputPlan({
-    chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
-    compressionFormat: compression,
-    compressionSettings: levels,
+  const outputPlan = createOutputPlan({
+    compression,
+    options,
     patchedFileName: patchedRom.fileName,
-    resolveChdCodecMode: (_fileName: string, mode: string | null) =>
-      mode === "auto" ? getChdAutoCreateMode(patchedRom) : mode,
-    resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
     romFile,
-    rvzOptions: getRvzOptions(archiveSettings, levels),
-    z3dsOptions: {
-      compressionLevel: levels.z3dsCompressionLevel,
-    },
+    chdAutoModeFile: patchedRom,
   });
   if (isArchiveCompressionFormat(compression)) {
     const archiveEntryFileName =
@@ -496,32 +500,14 @@ const buildSessionOutputFiles = async (
   if (archiveCompression === "rvz") throw new Error("RVZ output is not supported for CD disc groups");
   if (archiveCompression === "z3ds") throw new Error("Z3DS output is not supported for CD disc groups");
 
-  if (archiveCompression === "zip") {
+  if (isArchiveCompressionFormat(archiveCompression)) {
     const files = [
       await createArchivePatchFileOutput({
-        compression: "zip",
+        compression: archiveCompression,
         entries: entries.map((entry) => entry.entry),
         options,
-        outputName: `${baseName}.zip`,
-        overrides: archiveOverrides,
-        runtime,
-        trace: (message, details) => traceOutputName(options, message, details),
-      }),
-    ];
-    await runPatchFileCleanups(outputAssetCleanups);
-    return {
-      compressionTimeMs: getPatchFilesRuntimeTimingMs(files),
-      files,
-      rawOutputSize,
-    };
-  }
-  if (archiveCompression === "7z") {
-    const files = [
-      await createArchivePatchFileOutput({
-        compression: "7z",
-        entries: entries.map((entry) => entry.entry),
-        options,
-        outputName: `${baseName}.7z`,
+        outputName: `${baseName}.${getCompressionOutputExtension(archiveCompression)}`,
+        ...(archiveOverrides ? { overrides: archiveOverrides } : {}),
         runtime,
         trace: (message, details) => traceOutputName(options, message, details),
       }),
@@ -587,22 +573,7 @@ const buildSessionOutputFiles = async (
       rawOutputSize,
     };
   }
-  const files = [
-    await createArchivePatchFileOutput({
-      compression: "7z",
-      entries: entries.map((entry) => entry.entry),
-      options,
-      outputName: `${baseName}.7z`,
-      runtime,
-      trace: (message, details) => traceOutputName(options, message, details),
-    }),
-  ];
-  await runPatchFileCleanups(outputAssetCleanups);
-  return {
-    compressionTimeMs: getPatchFilesRuntimeTimingMs(files),
-    files,
-    rawOutputSize,
-  };
+  throw new Error(`Unsupported multi-file output compression: ${String(archiveCompression)}`);
 };
 
 export { buildSessionOutputFiles, createSingleFileRomSpecificOutput };

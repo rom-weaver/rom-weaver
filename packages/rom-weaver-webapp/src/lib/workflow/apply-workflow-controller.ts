@@ -30,7 +30,6 @@ import {
   getPatchLeafParentCompressionsForSelection,
   prepareInputFile,
 } from "../input/input-preparation-service.ts";
-import { selectionToArchiveEntry } from "../input/selection.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { startStageSpan } from "../runtime/perf-latency.ts";
 import { finalizeApplyInputChecksums } from "./apply-input-checksums.ts";
@@ -69,7 +68,6 @@ import {
 } from "./apply-state-cloning.ts";
 import type {
   InputSession,
-  InternalCandidate,
   InternalPatchChecksumPreflight,
   InternalSourceState,
   SourceRole,
@@ -82,6 +80,7 @@ import {
   type WorkflowProgressEvent,
 } from "./base-workflow-controller.ts";
 import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
+import { projectSelectionCandidates } from "./selection-candidate-projection.ts";
 import type { StagedRomSourceController } from "./staged-rom-source.ts";
 import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
 
@@ -1227,39 +1226,13 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   private addCandidateRequest(stage: StagedSource<TSource>, request: CandidateSelectionRequest) {
     stage.state.multiSelect = !!request.multiSelect;
-    const publicIdByCandidateId = new Map(
-      request.candidates.map((candidate) => [
-        candidate.id,
-        `${this.id}:${stage.state.role}:${++this.nextCandidateSequence}`,
-      ]),
-    );
-    const candidates = request.candidates.map((candidate) => {
-      const publicId = publicIdByCandidateId.get(candidate.id) as string;
-      const publicCandidate = cloneCandidate(candidate);
-      const internal = {
-        archiveEntry: candidate.selectable ? selectionToArchiveEntry(request, { id: candidate.id }) : undefined,
-        candidate,
-        owner: stage,
-        request,
-      } satisfies InternalCandidate<TSource>;
-      stage.internalCandidates.set(publicId, internal);
-      return {
-        ...publicCandidate,
-        id: publicId,
-        ...(publicCandidate.type === "group"
-          ? {
-              candidateIds: (publicCandidate.candidateIds || []).map(
-                (candidateId) => publicIdByCandidateId.get(candidateId) || candidateId,
-              ),
-            }
-          : publicCandidate.parentCandidateId
-            ? {
-                parentCandidateId: publicIdByCandidateId.get(publicCandidate.parentCandidateId),
-              }
-            : {}),
-      } as SelectionCandidate;
+    const projected = projectSelectionCandidates({
+      createPublicId: () => `${this.id}:${stage.state.role}:${++this.nextCandidateSequence}`,
+      owner: stage,
+      request,
     });
-    stage.state.candidates = candidates;
+    for (const [id, candidate] of projected.internalCandidates) stage.internalCandidates.set(id, candidate);
+    stage.state.candidates = projected.candidates;
   }
 
   private addDirectCandidate(stage: StagedSource<TSource>, role: SourceRole, index: number, internalId: string) {

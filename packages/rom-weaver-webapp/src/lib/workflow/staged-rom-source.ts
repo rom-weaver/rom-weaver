@@ -11,7 +11,7 @@ import {
 } from "../input/input-preparation-service.ts";
 import { getBaseFileName } from "../input/path-utils.ts";
 import { chdModeFromMetadata } from "../input/rom-specific-file-utils.ts";
-import { resolveAutomaticSelection, selectionToArchiveEntry } from "../input/selection.ts";
+import { resolveAutomaticSelection } from "../input/selection.ts";
 import {
   cloneCandidate,
   cloneWarning,
@@ -31,6 +31,7 @@ import {
   createSelectionSkippedError,
   isInteractiveSelectionCancelledError,
 } from "./staged-source-selection.ts";
+import { projectSelectionCandidates } from "./selection-candidate-projection.ts";
 import type {
   PreparationProgress,
   SessionIdFactory,
@@ -643,38 +644,13 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
   }
 
   private addCandidateRequest(stage: SharedRomStagedSource<TSource, TState>, request: CandidateSelectionRequest) {
-    const publicIdByCandidateId = new Map(
-      request.candidates.map((candidate) => [
-        candidate.id,
-        `${this.id}:${stage.state.role}:${++this.nextCandidateSequence}`,
-      ]),
-    );
-    const candidates = request.candidates.map((candidate) => {
-      const publicId = publicIdByCandidateId.get(candidate.id) as string;
-      const publicCandidate = cloneCandidate(candidate);
-      stage.internalCandidates.set(publicId, {
-        archiveEntry: candidate.selectable ? selectionToArchiveEntry(request, { id: candidate.id }) : undefined,
-        candidate,
-        owner: stage,
-        request,
-      });
-      return {
-        ...publicCandidate,
-        id: publicId,
-        ...(publicCandidate.type === "group"
-          ? {
-              candidateIds: (publicCandidate.candidateIds || []).map(
-                (candidateId) => publicIdByCandidateId.get(candidateId) || candidateId,
-              ),
-            }
-          : publicCandidate.parentCandidateId
-            ? {
-                parentCandidateId: publicIdByCandidateId.get(publicCandidate.parentCandidateId),
-              }
-            : {}),
-      } as SelectionCandidate;
+    const projected = projectSelectionCandidates({
+      createPublicId: () => `${this.id}:${stage.state.role}:${++this.nextCandidateSequence}`,
+      owner: stage,
+      request,
     });
-    stage.state.candidates = candidates;
+    for (const [id, candidate] of projected.internalCandidates) stage.internalCandidates.set(id, candidate);
+    stage.state.candidates = projected.candidates;
   }
 
   private addDirectCandidate(stage: SharedRomStagedSource<TSource, TState>, index: number, internalId: string) {
@@ -720,5 +696,5 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
   }
 }
 
-export type { SharedInternalCandidate, SharedRomSourceSession, SharedRomStagedSource } from "./staged-source-types.ts";
+export type { SharedRomSourceSession, SharedRomStagedSource } from "./staged-source-types.ts";
 export { StagedRomSourceController };
