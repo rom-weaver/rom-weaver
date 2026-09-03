@@ -215,23 +215,47 @@ const resetIdentifyPackCache = () => {
   packPromises.clear();
 };
 
+// The index is the first thing a lookup touches, so a failure here is a lookup
+// that never reaches a pack and logs nothing else. Every exit logs what the
+// response actually was: a served index and a cached one that disagree are the
+// difference between an origin problem and this device's stored copy.
+const describeIndexResponse = (response: Response) => ({
+  contentType: response.headers.get("content-type") || "none",
+  redirected: response.redirected,
+  status: response.status,
+  url: response.url,
+});
+
 const loadIndex = async (): Promise<IdentifyIndex> => {
+  const requestUrl = assetUrl("index.json");
   let response: Response;
   try {
-    response = await fetch(assetUrl("index.json"), { cache: "no-cache" });
+    response = await fetch(requestUrl, { cache: "no-cache" });
   } catch (cause) {
+    logger.error("identify index request failed", { error: describe(cause), url: requestUrl.href });
     throw new IdentifyDataUnavailableError(`ROM identify index request failed: ${describe(cause)}`, { cause });
   }
   if (!response.ok) {
+    logger.error("identify index request failed", describeIndexResponse(response));
     throw new IdentifyDataUnavailableError(`ROM identify index request failed with HTTP ${response.status}`);
   }
   let index: Partial<IdentifyIndex>;
   try {
     index = (await response.json()) as Partial<IdentifyIndex>;
   } catch (cause) {
+    logger.error("identify index is not valid JSON", { error: describe(cause), ...describeIndexResponse(response) });
     throw new IdentifyDataUnavailableError(`ROM identify index is not valid JSON: ${describe(cause)}`, { cause });
   }
   if (index.format !== "rom-weaver-identify-system-pack-v1" || !Array.isArray(index.systems)) {
+    // The shape says which document arrived. Valid JSON of the wrong shape is a
+    // different file, not a corrupt one - a catalog, an app manifest, or an
+    // index from a build that predates this format.
+    logger.error("identify index is invalid", {
+      format: typeof index.format === "string" ? index.format : `[${typeof index.format}]`,
+      keys: Object.keys(index).join(" ") || "none",
+      systems: Array.isArray(index.systems) ? index.systems.length : `[${typeof index.systems}]`,
+      ...describeIndexResponse(response),
+    });
     throw new IdentifyDataUnavailableError("ROM identify index is invalid");
   }
   logger.debug("identify index loaded", {
@@ -251,9 +275,15 @@ const loadIndex = async (): Promise<IdentifyIndex> => {
 const loadCatalog = async (): Promise<IdentifyCatalog | undefined> => {
   try {
     const response = await fetch(assetUrl("catalog.json"), { cache: "no-cache" });
-    if (!response.ok) return undefined;
+    if (!response.ok) {
+      logger.debug("identify catalog unavailable", describeIndexResponse(response));
+      return undefined;
+    }
     return parseIdentifyCatalog(await response.json());
-  } catch {
+  } catch (cause) {
+    // Index-only routing still answers, so this stays a degraded path, not a
+    // failure - but it MUST leave a trace, or the narrowing silently changes.
+    logger.debug("identify catalog unavailable", { error: describe(cause) });
     return undefined;
   }
 };
@@ -487,6 +517,10 @@ const loadIdentifyPackSelection = async (
     });
   }
   if (!systems.length) {
+    logger.error("identify index lists no usable database", {
+      indexSystems: index.systems.length,
+      selected: selected.join(" ") || "none",
+    });
     throw new IdentifyDataUnavailableError("The ROM identify index lists no usable database");
   }
   onSelected?.(systems.map((system) => system.platform));
