@@ -1,4 +1,17 @@
 use super::*;
+
+fn preserve_output_format_flag(flag: &str) -> String {
+    flag.to_string()
+}
+
+pub(super) struct OutputFormatResolutionMessages<'a> {
+    pub(super) flag_label: &'a str,
+    pub(super) format_noun: &'a str,
+    pub(super) missing_extension_label: &'a str,
+    pub(super) raw_output_hint: &'a str,
+    pub(super) supported_formats: Option<&'a str>,
+}
+
 /// Identifies the operation a progress event belongs to: the command name, its family, and the
 /// optional format. Grouped so `emit_running` takes one label instead of three positional values.
 #[derive(Clone, Copy)]
@@ -372,6 +385,76 @@ impl CliApp {
         )))
     }
 
+    /// Resolve an output format from an explicit flag and/or the output extension. The caller
+    /// supplies registry-specific normalization and descriptor lookups; capability checks stay
+    /// outside this shared precedence and warning logic.
+    pub(super) fn resolve_output_format_core(
+        flag: Option<&str>,
+        output: &Path,
+        normalize_flag: fn(&str) -> String,
+        flag_canonical_name: Option<&str>,
+        extension_name: Option<&str>,
+        messages: OutputFormatResolutionMessages<'_>,
+    ) -> Result<FormatResolution> {
+        let OutputFormatResolutionMessages {
+            flag_label,
+            format_noun,
+            missing_extension_label,
+            raw_output_hint,
+            supported_formats,
+        } = messages;
+        let extension_display = output
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| format!(".{value}"));
+
+        if let Some(flag) = flag {
+            let normalized = normalize_flag(flag);
+            let warning = match &extension_display {
+                None => None,
+                Some(extension) => {
+                    let matches = match (flag_canonical_name, extension_name) {
+                        (Some(flag_name), Some(extension_name)) => {
+                            flag_name.eq_ignore_ascii_case(extension_name)
+                        }
+                        _ => false,
+                    };
+                    if matches {
+                        None
+                    } else {
+                        Some(format!(
+                            "output extension `{extension}` does not match {flag_label} `{flag}`; writing `{normalized}`"
+                        ))
+                    }
+                }
+            };
+            return Ok(FormatResolution {
+                format: normalized.clone(),
+                note: format!("explicit format={normalized}"),
+                warning,
+            });
+        }
+
+        let Some(extension_display) = extension_display else {
+            return Err(RomWeaverError::Validation(format!(
+                "output has no file extension; pass {flag_label} <name> or use {missing_extension_label}{raw_output_hint}"
+            )));
+        };
+        match extension_name {
+            Some(resolved) => Ok(FormatResolution {
+                note: format!("format={resolved} from output extension"),
+                format: resolved.to_string(),
+                warning: None,
+            }),
+            None => Err(RomWeaverError::Validation(format!(
+                "output extension `{extension_display}` is not a supported {format_noun}; pass {flag_label} <name> or use a supported extension{raw_output_hint}{}",
+                supported_formats
+                    .map(|formats| format!(". Supported output formats: {formats}"))
+                    .unwrap_or_default()
+            ))),
+        }
+    }
+
     /// Resolve a container output format from an explicit format flag and/or the output path's
     /// extension, per the precedence in the plan: the extension is authoritative when no flag is
     /// given; an explicit flag wins (with a warning) when it disagrees with the extension; and an
@@ -384,64 +467,31 @@ impl CliApp {
         flag_label: &str,
         raw_output_hint: &str,
     ) -> Result<FormatResolution> {
-        let extension_display = output
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(|value| format!(".{value}"));
-        let extension_handler = self.containers.find_by_output_extension(output);
-
-        if let Some(flag) = flag {
-            let flag_canonical = self
-                .containers
+        let flag_canonical_name = flag.and_then(|flag| {
+            self.containers
                 .find_by_name(flag)
-                .map(|handler| handler.descriptor().name.to_string());
-            let warning = match &extension_display {
-                None => None,
-                Some(extension) => {
-                    let extension_name = extension_handler
-                        .as_ref()
-                        .map(|handler| handler.descriptor().name);
-                    let matches = match (&flag_canonical, extension_name) {
-                        (Some(flag_name), Some(extension_name)) => {
-                            flag_name.eq_ignore_ascii_case(extension_name)
-                        }
-                        _ => false,
-                    };
-                    if matches {
-                        None
-                    } else {
-                        Some(format!(
-                            "output extension `{extension}` does not match {flag_label} `{flag}`; writing `{flag}`"
-                        ))
-                    }
-                }
-            };
-            return Ok(FormatResolution {
-                format: flag.to_string(),
-                note: format!("explicit format={flag}"),
-                warning,
-            });
-        }
+                .map(|handler| handler.descriptor().name.to_string())
+        });
+        let extension_name = self
+            .containers
+            .find_by_output_extension(output)
+            .map(|handler| handler.descriptor().name);
+        let supported_formats = rom_weaver_containers::supported_create_formats_text();
 
-        let Some(extension_display) = extension_display else {
-            return Err(RomWeaverError::Validation(format!(
-                "output has no file extension; pass {flag_label} <name> or use a supported extension{raw_output_hint}"
-            )));
-        };
-        match extension_handler {
-            Some(handler) => {
-                let resolved = handler.descriptor().name.to_string();
-                Ok(FormatResolution {
-                    note: format!("format={resolved} from output extension"),
-                    format: resolved,
-                    warning: None,
-                })
-            }
-            None => Err(RomWeaverError::Validation(format!(
-                "output extension `{extension_display}` is not a supported format; pass {flag_label} <name> or use a supported extension{raw_output_hint}. Supported output formats: {}",
-                rom_weaver_containers::supported_create_formats_text()
-            ))),
-        }
+        Self::resolve_output_format_core(
+            flag,
+            output,
+            preserve_output_format_flag,
+            flag_canonical_name.as_deref(),
+            extension_name,
+            OutputFormatResolutionMessages {
+                flag_label,
+                format_noun: "format",
+                missing_extension_label: "a supported extension",
+                raw_output_hint,
+                supported_formats: Some(&supported_formats),
+            },
+        )
     }
 
     pub(super) fn resolve_patch_apply_compression_plan(

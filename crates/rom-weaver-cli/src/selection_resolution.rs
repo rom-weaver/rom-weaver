@@ -303,7 +303,7 @@ impl CliApp {
         let mut candidate_names: Vec<String> = Vec::new();
         let mut seen = HashSet::new();
         for entry in payload.iter().chain(containers.iter()) {
-            let name = Self::normalize_selection_entry_name(&entry.path);
+            let name = normalize_archive_name(&entry.path);
             if name.is_empty() {
                 continue;
             }
@@ -320,7 +320,7 @@ impl CliApp {
                 let lower = entry.path.to_ascii_lowercase();
                 lower.ends_with(".cue") || lower.ends_with(".gdi")
             })
-            .map(|entry| Self::normalize_selection_entry_name(&entry.path))
+            .map(|entry| normalize_archive_name(&entry.path))
             .filter(|name| !name.is_empty())
             .collect();
         for sheet in &sheet_names {
@@ -328,8 +328,7 @@ impl CliApp {
                 entries
                     .iter()
                     .find_map(|entry| {
-                        (Self::normalize_selection_entry_name(&entry.path) == *sheet)
-                            .then_some(entry.size)
+                        (normalize_archive_name(&entry.path) == *sheet).then_some(entry.size)
                     })
                     .flatten()
             });
@@ -435,7 +434,7 @@ impl CliApp {
         let mut unique_entries = Vec::new();
         let mut seen = HashSet::new();
         for entry in entries {
-            let normalized = Self::normalize_selection_entry_name(&entry);
+            let normalized = normalize_archive_name(&entry);
             if normalized.is_empty() || !seen.insert(normalized.clone()) {
                 continue;
             }
@@ -542,14 +541,6 @@ impl CliApp {
             .map(|candidate| format!("`{}`", candidate.display_name))
             .collect::<Vec<_>>()
             .join(", ")
-    }
-
-    pub(super) fn normalize_selection_entry_name(name: &str) -> String {
-        name.trim()
-            .replace('\\', "/")
-            .trim_start_matches("./")
-            .trim_matches('/')
-            .to_string()
     }
 
     #[cfg(test)]
