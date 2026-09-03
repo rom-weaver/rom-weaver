@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 class FakeWorker {
   static instances: FakeWorker[] = [];
   readonly listeners = new Map<string, Set<(event: unknown) => void>>();
-  readonly posted: unknown[] = [];
+  readonly posted: Array<{ message: unknown; transfer: readonly Transferable[] }> = [];
   terminated = false;
 
   constructor(
@@ -23,8 +23,8 @@ class FakeWorker {
     this.listeners.get(type)?.delete(listener);
   }
 
-  postMessage(message: unknown) {
-    this.posted.push(message);
+  postMessage(message: unknown, transfer: readonly Transferable[] = []) {
+    this.posted.push({ message, transfer });
   }
 
   terminate() {
@@ -53,7 +53,7 @@ describe("browser OPFS storage worker client", () => {
   it("posts requests, ignores unrelated messages, and resolves matching replies", async () => {
     const pending = requestBrowserOpfsStorage({ action: "list", requestId: "list-1" });
     const worker = FakeWorker.instances[0];
-    expect(worker?.posted[0]).toEqual({ action: "list", requestId: "list-1" });
+    expect(worker?.posted[0]).toEqual({ message: { action: "list", requestId: "list-1" }, transfer: [] });
     worker?.emit("message", { data: { requestId: "other", success: true } });
     worker?.emit("message", { data: { entries: [], requestId: "list-1", success: true } });
     await expect(pending).resolves.toEqual({ entries: [], requestId: "list-1", success: true });
@@ -64,7 +64,8 @@ describe("browser OPFS storage worker client", () => {
     const bytes = new Uint8Array([1, 2]);
     const pending = requestBrowserOpfsStorage({ action: "write", bytes, filePath: "/work/file.bin", position: 4 });
     const worker = FakeWorker.instances[0];
-    expect(worker?.posted[0]).toMatchObject({ action: "write", filePath: "/work/file.bin", position: 4 });
+    expect(worker?.posted[0]?.message).toMatchObject({ action: "write", filePath: "/work/file.bin", position: 4 });
+    expect(worker?.posted[0]?.transfer).toEqual([bytes.buffer]);
     worker?.emit("error", { message: "worker crashed" });
     await expect(pending).rejects.toThrow("worker crashed");
     expect(worker?.terminated).toBe(true);

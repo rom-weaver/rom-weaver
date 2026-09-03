@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   attachIngestPatchRequirements: vi.fn(),
@@ -59,6 +59,10 @@ const materializedFile = (fileName: string, cleanup?: () => Promise<void>) =>
     fileSize: 2,
   }) as never;
 
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("nested patch archive leaf resolution", () => {
   it("builds, caches, and describes materialized leaves with archive breadcrumbs", async () => {
     const archive = archiveFile();
@@ -118,7 +122,6 @@ describe("nested patch archive leaf resolution", () => {
   });
 
   it("skips missing outputs and nested compression leaves, cleaning rejected files", async () => {
-    mocks.attachIngestPatchRequirements.mockClear();
     const rejectedCleanup = vi.fn(async () => undefined);
     const rejected = materializedFile("nested.zip", rejectedCleanup);
     mocks.createPatchFileFromPublicOutput.mockReset();

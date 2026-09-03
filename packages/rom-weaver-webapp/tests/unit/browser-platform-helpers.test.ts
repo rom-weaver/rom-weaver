@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const trace = vi.hoisted(() => vi.fn());
 
@@ -35,16 +35,32 @@ const {
   withCodecLevel,
 } = await import("../../src/platform/browser/workflow-runtime-helpers.ts");
 
+const activeReleases: Array<() => void> = [];
+
+const releaseAll = () => {
+  for (const release of activeReleases.splice(0)) release();
+};
+
+beforeEach(() => {
+  trace.mockClear();
+});
+
+afterEach(() => {
+  releaseAll();
+});
+
 describe("browser virtual file registry", () => {
   it("registers source metadata, updates it, and removes only the original registration", () => {
     const source = new Uint8Array([1, 2, 3]);
     const release = registerBrowserVirtualFile({ path: "/work/game.bin", source, useProxyHandle: true });
+    activeReleases.push(release);
     expect(getBrowserVirtualFileSource("/work/game.bin")).toBe(source);
     expect(getActiveBrowserVirtualFiles()).toEqual([{ path: "/work/game.bin", source, useProxyHandle: true }]);
     const replacement = new Blob(["new"]);
     expect(updateBrowserVirtualFileSource("/work/game.bin", replacement)).toBe(true);
     expect(getBrowserVirtualFileSource("/work/game.bin")).toBe(replacement);
     const replacementRelease = registerBrowserVirtualFile({ path: "/work/game.bin", source: "invalid" as never });
+    activeReleases.push(replacementRelease);
     release();
     expect(getBrowserVirtualFileSource("/work/game.bin")).toBe("invalid");
     replacementRelease();
@@ -62,10 +78,28 @@ describe("browser virtual file registry", () => {
       { path: "/work/array", source: new Uint8Array([1, 2]) },
       { path: "/work/buffer", source: new ArrayBuffer(4), useProxyHandle: true },
     ];
-    const releases = entries.map((entry) => registerBrowserVirtualFile({ ...entry, trace: traceContext }));
+    activeReleases.push(...entries.map((entry) => registerBrowserVirtualFile({ ...entry, trace: traceContext })));
     expect(getActiveBrowserVirtualFiles()).toHaveLength(4);
+    expect(trace.mock.calls.map(([, message, details]) => ({ details, message }))).toEqual([
+      {
+        details: { path: "/work/file", sourceKind: "file", sourceSize: 4 },
+        message: "registered direct virtual file",
+      },
+      {
+        details: { path: "/work/blob", sourceKind: "blob", sourceSize: 4 },
+        message: "registered direct virtual file",
+      },
+      {
+        details: { path: "/work/array", sourceKind: "uint8array", sourceSize: 2 },
+        message: "registered direct virtual file",
+      },
+      {
+        details: { path: "/work/buffer", sourceKind: "arraybuffer", sourceSize: 4 },
+        message: "registered proxy-handle virtual file",
+      },
+    ]);
+    releaseAll();
     expect(trace).toHaveBeenCalledTimes(8);
-    for (const release of releases) release();
     expect(getActiveBrowserVirtualFiles()).toEqual([]);
   });
 });
