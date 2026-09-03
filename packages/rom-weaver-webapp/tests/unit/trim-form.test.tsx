@@ -169,4 +169,50 @@ describe("TrimPatchForm", () => {
     await act(async () => fireEvent.click(document.querySelector(".seltree button") as HTMLButtonElement));
     await vi.waitFor(() => expect(container.textContent).toContain("Patches belong in Apply"));
   });
+
+  it("downloads a completed trim again and reports a download failure", async () => {
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const { container } = renderForm();
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-button-run")).toBeTruthy());
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    await act(async () =>
+      fireEvent.click(
+        Array.from(document.querySelectorAll("button")).find((button) =>
+          button.textContent?.includes("Trim ROM"),
+        ) as HTMLButtonElement,
+      ),
+    );
+    await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
+
+    latest?.output.saveAs.mockRejectedValueOnce(new Error("download failed"));
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    await vi.waitFor(() => expect(container.textContent).toContain("download failed"));
+    expect(latest?.output.saveAs).toHaveBeenCalledWith({ interactive: true });
+  });
+
+  it("updates the trim output name and format controls", async () => {
+    const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
+    const onSettingsChange = vi.fn();
+    const { container } = renderForm({ onSettingsChange });
+    const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#trim-builder-output-file")).toBeTruthy());
+    const outputName = container.querySelector("#trim-builder-output-file") as HTMLInputElement;
+    fireEvent.change(outputName, { target: { value: "trimmed-copy" } });
+    fireEvent.change(container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement, {
+      target: { value: "zip" },
+    });
+
+    expect(onSettingsChange).toHaveBeenCalled();
+    expect(outputName.value).toBe("trimmed-copy");
+    expect(latest?.workflow.setOutputFormat).not.toHaveBeenCalled();
+  });
 });

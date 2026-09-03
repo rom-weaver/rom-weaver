@@ -224,4 +224,65 @@ describe("ApplyPatchListStep", () => {
     fireEvent.click(container.querySelector("#rom-weaver-button-fix-patch-order") as HTMLButtonElement);
     expect(patchStack.reorder).toHaveBeenCalledWith(1, 1);
   });
+
+  it("edits N64 order and both sides of user verification checks", async () => {
+    const patchStack = stack();
+    const onBundleMetaChange = vi.fn();
+    const n64 = item(0, {
+      fileName: "game.bps",
+      format: "BPS",
+      n64AutoMode: "big-endian",
+      n64ByteOrderChoice: "auto",
+      n64SourceOrder: "byte-swapped",
+      showHeaderOption: false,
+      showN64ByteOrderOption: true,
+      validationValues: [
+        "preflight passed",
+        "in min size=10",
+        "out size=20",
+        "out sha1=0123456789abcdef0123456789abcdef01234567",
+      ],
+    });
+    const { container } = renderList({
+      bundleMeta: [{}, undefined],
+      onBundleMetaChange,
+      patches: [n64, item(1)],
+      patchStack,
+      romActuals: { bytes: 2048, crc32: "1234abcd", md5: "0".repeat(32) },
+    });
+
+    const order = container.querySelector("#rom-weaver-patch-n64-byte-order-0") as HTMLSelectElement;
+    expect(order.options[0]?.textContent).toContain("big endian");
+    fireEvent.change(order, { target: { value: "little-endian" } });
+    expect(patchStack.setPatchOption).toHaveBeenCalledWith(0, {
+      n64ByteOrder: "little-endian",
+      revalidate: true,
+    });
+
+    const addInputCheck = container.querySelector("#rom-weaver-patch-input-add-check-0") as HTMLSelectElement;
+    fireEvent.change(addInputCheck, { target: { value: "md5" } });
+    const inputCheck = container.querySelector("#rom-weaver-patch-input-md5-0") as HTMLInputElement;
+    fireEvent.change(inputCheck, { target: { value: "0".repeat(32) } });
+    fireEvent.keyDown(inputCheck, { key: "Enter" });
+    await waitFor(() => expect(container.querySelector("#rom-weaver-patch-input-md5-0")).toBeNull());
+    expect(container.querySelector("#rom-weaver-patch-input-md5-0-open")).toBeTruthy();
+    expect(onBundleMetaChange).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ inputChecks: expect.objectContaining({ checksums: { md5: "0".repeat(32) } }) }),
+    );
+
+    const addOutputCheck = container.querySelector("#rom-weaver-patch-output-add-check-1") as HTMLSelectElement;
+    fireEvent.change(addOutputCheck, { target: { value: "bytes" } });
+    const outputSize = container.querySelector("#rom-weaver-patch-output-bytes-1") as HTMLInputElement;
+    fireEvent.change(outputSize, { target: { value: "not bytes" } });
+    fireEvent.blur(outputSize);
+    expect(container.querySelector("#rom-weaver-patch-output-bytes-1-err")?.textContent).toContain("whole number");
+    fireEvent.change(outputSize, { target: { value: "2048" } });
+    fireEvent.blur(outputSize);
+    expect(onBundleMetaChange).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ outputChecks: expect.objectContaining({ size: 2048 }) }),
+    );
+    fireEvent.click(container.querySelector('[aria-label="Remove BYTES check"]') as HTMLButtonElement);
+  });
 });

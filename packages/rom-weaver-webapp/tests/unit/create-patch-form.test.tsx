@@ -82,10 +82,20 @@ const makeFakeWorkflow = () => {
       type: "bps",
     })),
     setModified: vi.fn(async (source: BinarySource) => {
+      if (nextModifiedError) {
+        const error = nextModifiedError;
+        nextModifiedError = null;
+        throw error;
+      }
       modified =
         source instanceof File ? sourceState(source.name, "modified") : sourceState("modified.nes", "modified");
     }),
     setOriginal: vi.fn(async (source: BinarySource) => {
+      if (nextOriginalError) {
+        const error = nextOriginalError;
+        nextOriginalError = null;
+        throw error;
+      }
       original =
         source instanceof File ? sourceState(source.name, "original") : sourceState("original.nes", "original");
     }),
@@ -102,6 +112,8 @@ const makeFakeWorkflow = () => {
 };
 
 let latest: ReturnType<typeof makeFakeWorkflow> | null = null;
+let nextOriginalError: Error | null = null;
+let nextModifiedError: Error | null = null;
 
 class FakeCreateWorkflow {
   constructor() {
@@ -134,12 +146,16 @@ beforeEach(async () => {
   createPatchFormModule = await import("../../src/public/react/create-patch-form.tsx");
   window.history.replaceState(null, "", "/create");
   latest = null;
+  nextOriginalError = null;
+  nextModifiedError = null;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   latest = null;
   createPatchFormModule = null;
+  nextOriginalError = null;
+  nextModifiedError = null;
 });
 
 const withSeams = (props: Record<string, unknown> = {}) => ({
@@ -237,5 +253,79 @@ describe("CreatePatchForm", () => {
       fireEvent.click(confirm as HTMLButtonElement);
     });
     await vi.waitFor(() => expect(latest?.workflow.setOriginal).toHaveBeenCalled());
+  });
+
+  it("reports a source staging error and keeps the failed source visible", async () => {
+    nextOriginalError = new Error("original staging failed");
+    const onError = vi.fn();
+    const file = new File(["original"], "original.nes", { type: "application/octet-stream" });
+    const { container } = renderForm(withSeams({ onError }));
+    const input = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [file] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("original staging failed"));
+
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "original staging failed" }));
+    expect(latest?.workflow.getOriginal()).toBeNull();
+  });
+
+  it("reports a modified-ROM staging error after the original is ready", async () => {
+    nextModifiedError = new Error("modified staging failed");
+    const onError = vi.fn();
+    const original = new File(["original"], "original.nes", { type: "application/octet-stream" });
+    const modified = new File(["modified"], "modified.nes", { type: "application/octet-stream" });
+    const { container } = renderForm(withSeams({ onError }));
+    const input = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [original, modified] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("modified staging failed"));
+
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "modified staging failed" }));
+  });
+
+  it("clears a completed create output and reports a second-download failure", async () => {
+    const fileA = new File(["a"], "original.nes", { type: "application/octet-stream" });
+    const fileB = new File(["b"], "modified.nes", { type: "application/octet-stream" });
+    const { container } = renderForm(withSeams());
+    const input = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [fileA, fileB] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#patch-builder-button-create")).toBeTruthy());
+    await act(async () =>
+      fireEvent.click(container.querySelector("#patch-builder-button-create") as HTMLButtonElement),
+    );
+    await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
+
+    latest?.output.saveAs.mockRejectedValueOnce(new Error("patch download failed"));
+    await act(async () =>
+      fireEvent.click(container.querySelector("#patch-builder-button-create") as HTMLButtonElement),
+    );
+    await vi.waitFor(() => expect(container.textContent).toContain("patch download failed"));
+    expect(latest?.output.saveAs).toHaveBeenCalledWith({ interactive: true });
+  });
+
+  it("clears candidate format results when format probing fails", async () => {
+    const getCandidates = vi.fn().mockRejectedValue(new Error("format probe failed"));
+    const fileA = new File(["a"], "original.nes", { type: "application/octet-stream" });
+    const fileB = new File(["b"], "modified.nes", { type: "application/octet-stream" });
+    const seams = withSeams();
+    seams.getCreatePatchFormatCandidates = getCandidates;
+    const { container } = renderForm(seams);
+    const input = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [fileA, fileB] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(getCandidates).toHaveBeenCalled());
+    expect(container.querySelector("#patch-builder-button-create")).toBeTruthy();
+    expect(container.textContent).not.toContain("format probe failed");
   });
 });

@@ -371,6 +371,129 @@ describe("useInputStaging syncRomInput", () => {
     expect(onError).not.toHaveBeenCalled();
     expect(setSectionErrorMessage).not.toHaveBeenCalled();
   });
+
+  it("merges progress metadata and ignores progress without a source id", () => {
+    const rom = source("game.zip");
+    let handlersRef: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stageInput"]>>[1] | undefined;
+    const stageInput = vi.fn((_snapshot, handlers) => {
+      handlersRef = handlers;
+      return new Promise<StagedInputInfo[]>(() => undefined);
+    });
+    const { emitSessionTrace, mergeRomInput, result } = createHarness({ stageInput });
+
+    act(() => result.current.staging.syncRomInput(snapshotOf([rom])));
+    act(() => {
+      handlersRef?.onProgress?.({
+        details: { fileName: "game.zip", order: 0, stage: "extract" },
+        label: "Extracting",
+        percent: 20,
+        stage: "input",
+      });
+      handlersRef?.onProgress?.({
+        details: {
+          fileName: "game.bin",
+          is_rom: true,
+          order: 0,
+          probe_manifest: {
+            disc_format: "CD",
+            is_rom: true,
+            platform: "Sony PlayStation",
+            recommended_format: "chd",
+          },
+          sourceId: "game.zip",
+          stage: "probe-manifest",
+        },
+        label: "Extracting game.bin",
+        percent: 42,
+        stage: "input",
+      });
+    });
+
+    expect(mergeRomInput).toHaveBeenCalledTimes(1);
+    expect(mergeRomInput.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ fileName: "game.bin", id: "game.zip", isRom: true, romType: expect.any(Object) }),
+    );
+    expect(mergeRomInput.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ progress: expect.objectContaining({ label: "Extracting game.bin" }) }),
+    );
+    expect(emitSessionTrace).toHaveBeenCalledWith(
+      "stageInput progress ignored",
+      expect.objectContaining({ reason: "missing-sourceId" }),
+    );
+  });
+
+  it("reclassifies patch-only archives once and treats their teardown as expected", async () => {
+    const archive = source("patches.zip");
+    let handlersRef: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stageInput"]>>[1] | undefined;
+    const stageInput = vi.fn((_snapshot, handlers) => {
+      handlersRef = handlers;
+      const error = new Error("archive moved") as Error & { details: { reclassifiedToPatch: boolean } };
+      error.details = { reclassifiedToPatch: true };
+      return Promise.reject(error);
+    });
+    const { emitSessionTrace, onError, reclassifyArchiveToPatch, result, setSectionErrorMessage } = createHarness({
+      stageInput,
+    });
+
+    act(() => result.current.staging.syncRomInput(snapshotOf([archive])));
+    act(() => {
+      const progress = {
+        details: {
+          fileName: "patches.zip",
+          order: 0,
+          probe_manifest: { is_rom: false },
+          sourceId: "patches.zip",
+          stage: "probe-manifest",
+        },
+        label: "Inspecting patches.zip",
+        percent: 10,
+        stage: "input",
+      } as const;
+      handlersRef?.onProgress?.(progress);
+      handlersRef?.onProgress?.(progress);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(reclassifyArchiveToPatch).toHaveBeenCalledOnce();
+    expect(reclassifyArchiveToPatch).toHaveBeenCalledWith(archive);
+    expect(onError).not.toHaveBeenCalled();
+    expect(setSectionErrorMessage).not.toHaveBeenCalled();
+    expect(emitSessionTrace).toHaveBeenCalledWith("stageInput reclassified to patch bucket", expect.any(Object));
+  });
+
+  it("updates rows from checksum and state callbacks and ignores stale callbacks", () => {
+    const first = source("first.bin");
+    const second = source("second.bin");
+    const handlers: Array<Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stageInput"]>>[1]> = [];
+    const stageInput = vi.fn((_snapshot, callbackHandlers) => {
+      handlers.push(callbackHandlers);
+      return new Promise<StagedInputInfo[]>(() => undefined);
+    });
+    const { emitSessionTrace, mergeRomInput, result } = createHarness({ stageInput });
+
+    act(() => result.current.staging.syncRomInput(snapshotOf([first])));
+    act(() => result.current.staging.syncRomInput(snapshotOf([second])));
+    act(() => {
+      handlers[0]?.onChecksum?.(infoFor(first, 0));
+      handlers[0]?.onState?.(infoFor(first, 0));
+      handlers[1]?.onChecksum?.(infoFor(second, 0));
+      handlers[1]?.onState?.(infoFor(second, 0));
+    });
+
+    expect(mergeRomInput).toHaveBeenCalledTimes(2);
+    expect(mergeRomInput.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ fileName: "second.bin" }));
+    expect(emitSessionTrace).toHaveBeenCalledWith(
+      "stageInput checksum ignored",
+      expect.objectContaining({ reason: "stale-generation" }),
+    );
+    expect(emitSessionTrace).toHaveBeenCalledWith(
+      "stageInput state ignored",
+      expect.objectContaining({ reason: "stale-generation" }),
+    );
+  });
 });
 
 describe("useInputStaging syncPatchFiles", () => {
@@ -436,6 +559,69 @@ describe("useInputStaging syncPatchFiles", () => {
 
     expect(onError).not.toHaveBeenCalled();
     expect(setSectionErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it("stages patch callbacks, preserves selected progress slots, and skips deferred validation after expansion", async () => {
+    const patchA = source("a.ips");
+    const patchB = source("b.ips");
+    let handlersRef: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stagePatches"]>>[1] | undefined;
+    const stagePatches = vi.fn((_snapshot, handlers) => {
+      handlersRef = handlers;
+      handlers.onImplicitPatches?.([patchA, patchB], [infoFor(patchA, 0), infoFor(patchB, 1)]);
+      handlers.onPatchStaged?.(infoFor(patchA, 0), 0);
+      handlers.onProgress?.({
+        details: { order: 1 },
+        label: "Reading b.ips",
+        percent: 30,
+        stage: "input",
+      });
+      return Promise.resolve([infoFor(patchA, 0), infoFor(patchB, 1)]);
+    });
+    const { patchInfoByKeySetter, patchProgressByKeySetter, patchStagingSetter, result } = createPatchHarness({
+      stagePatches,
+      validatePatches: vi.fn(),
+    });
+
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [patchA, patchB]), { freshIndices: new Set([1]) }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(patchStagingSetter.value).toBe(false);
+    expect(patchInfoByKeySetter.value).toEqual(
+      expect.objectContaining({ "a.ips": expect.objectContaining({ fileName: "a.ips" }) }),
+    );
+    expect(patchInfoByKeySetter.value["b.ips"]).toEqual(expect.objectContaining({ fileName: "b.ips" }));
+    expect(patchProgressByKeySetter.value).toEqual({});
+    expect(handlersRef).toBeTruthy();
+  });
+
+  it("reports non-disposed patch staging failures and supports silent staging", async () => {
+    const patch = source("broken.ips");
+    const stagePatches = vi.fn().mockRejectedValue(new Error("patch staging failed"));
+    const { onError, setSectionErrorMessage, result } = createPatchHarness({ stagePatches });
+
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [patch])));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "patch staging failed" }));
+    expect(setSectionErrorMessage).toHaveBeenCalledWith(
+      "patch",
+      expect.objectContaining({ message: "patch staging failed" }),
+    );
+
+    const silentStage = vi.fn().mockResolvedValue([infoFor(patch, 0)]);
+    const silentHarness = createPatchHarness({ stagePatches: silentStage });
+    act(() => silentHarness.result.current.staging.syncPatchFiles(snapshotOf([], [patch]), { silent: true }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(silentHarness.patchStagingSetter.value).toBe(false);
+    expect(silentHarness.patchProgressSetter.value).toBeNull();
   });
 });
 
@@ -514,5 +700,27 @@ describe("useInputStaging validatePatchesDeferred", () => {
     });
 
     expect(patchInfoByKeySetter.value).toEqual({});
+  });
+
+  it("marks verifying patches invalid when deep validation fails", async () => {
+    const patch = source("a.ips");
+    const validatePatches = vi.fn().mockRejectedValue(new Error("validation failed"));
+    const harness = createPatchHarness({ validatePatches });
+    act(() => {
+      harness.patchInfoByKeySetter.spy({
+        "a.ips": { fileName: "a.ips", validationState: "verifying" } as StagedInputInfo,
+      });
+      harness.result.current.staging.validatePatchesDeferred(snapshotOf([], [patch]));
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(harness.patchInfoByKeySetter.value["a.ips"]).toEqual(
+      expect.objectContaining({ validationMessage: "validation failed", validationState: "invalid" }),
+    );
+    expect(harness.onError).not.toHaveBeenCalled();
+    expect(harness.setSectionErrorMessage).not.toHaveBeenCalled();
   });
 });
