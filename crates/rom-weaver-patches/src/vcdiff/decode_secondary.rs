@@ -1560,7 +1560,16 @@ pub(super) fn decode_xdelta_fgk_section_if_flag(
 
 #[cfg(test)]
 mod audit_alloc_guard_tests {
-    use super::{decode_djw_secondary, decode_fgk_secondary};
+    use super::*;
+
+    #[test]
+    fn djw_rejects_zero_declared_output() {
+        let error = decode_djw_secondary(&[0], 0).expect_err("zero output must be rejected");
+        assert!(
+            error.to_string().contains("invalid output size"),
+            "unexpected error: {error}"
+        );
+    }
 
     #[test]
     fn djw_rejects_output_larger_than_input_can_yield() {
@@ -1580,6 +1589,93 @@ mod audit_alloc_guard_tests {
             .expect_err("oversized fgk output must be rejected");
         assert!(
             error.to_string().contains("yield at most"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn djw_rejects_a_code_length_table_without_symbols() {
+        let error = decode_djw_secondary(&[0; 5], 1)
+            .expect_err("a code-length table without symbols must be rejected");
+        assert!(
+            error.to_string().contains("decoder table has no symbols"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn fgk_rejects_truncated_payload() {
+        let error = decode_fgk_secondary(&[0], 8).expect_err("truncated payload must be rejected");
+        assert!(
+            error.to_string().contains("reached end of input"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn fgk_rejects_packed_data_when_no_output_is_declared() {
+        let error = decode_fgk_secondary(&[0], 0)
+            .expect_err("packed data without declared output must be rejected");
+        assert!(
+            error.to_string().contains("unused input byte"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn djw_rejects_a_repeat_that_runs_past_the_output() {
+        let table = build_djw_decoder_table(&[1, 1], 2, 1).expect("simple code table");
+        let mut state = DjwBitState::decode_init();
+        let input = [1u8];
+        let mut input_pos = 0;
+        let mut mtf_values = [0, 1];
+        let mut output = [0];
+
+        let error = decode_djw_1_2(
+            &mut state,
+            &input,
+            &mut input_pos,
+            &table,
+            &mut mtf_values,
+            DjwDecodeOutput {
+                elements: output.len(),
+                skip_offset: 0,
+                output: &mut output,
+            },
+        )
+        .expect_err("an incomplete repeat must be rejected");
+        assert!(
+            error.to_string().contains("invalid repeat code"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn djw_prefix_builder_handles_a_single_used_symbol() {
+        let (lengths, total_bits) =
+            djw_build_prefix_lengths(&[7, 0], DJW_MAX_CODELEN).expect("prefix lengths");
+        assert_eq!(lengths.len(), 2);
+        assert!(lengths.iter().all(|length| *length > 0));
+        assert!(total_bits > 0);
+    }
+
+    #[test]
+    fn djw_prefix_rejects_a_symbol_hidden_by_a_zero_length_code() {
+        let mut prefix = DjwPrefix::with_skip_offset(vec![0, 1], 1);
+        let mut mtf_values = vec![0, 1];
+        let mut frequencies = vec![0; DJW_MAX_CODELEN + 2];
+
+        let error = djw_compute_mtf_1_2(
+            &mut prefix,
+            &mut mtf_values,
+            &mut frequencies,
+            DJW_MAX_CODELEN,
+        )
+        .expect_err("a symbol behind a zero-length code must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("unreachable behind a zero-length code"),
             "unexpected error: {error}"
         );
     }

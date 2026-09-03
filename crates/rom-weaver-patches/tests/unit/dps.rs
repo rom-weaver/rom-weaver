@@ -195,6 +195,90 @@ fn apply_ignores_source_size_validation_when_requested() {
     assert_eq!(fs::read(output_path).expect("output"), b"abXYefgh");
 }
 
+#[cfg(all(target_pointer_width = "64", unix))]
+#[test]
+fn entrypoints_reject_sources_larger_than_u32_max() {
+    let temp = TestDir::new();
+    let source_path = temp.child("oversized-source.bin");
+    let modified_path = temp.child("modified.bin");
+    let create_output = temp.child("created.dps");
+    let patch_path = temp.child("update.dps");
+    let apply_output = temp.child("output.bin");
+
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&source_path)
+        .expect("source")
+        .set_len(u64::from(u32::MAX) + 1)
+        .expect("sparse source");
+    fs::write(&modified_path, []).expect("modified");
+
+    let handler = DpsPatchHandler::new(&DPS);
+    let create_error = handler
+        .create(
+            &PatchCreateRequest {
+                original: source_path.clone(),
+                modified: modified_path,
+                output: create_output.clone(),
+                format: "dps".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("create must reject an oversized source");
+    assert!(
+        create_error
+            .to_string()
+            .contains("DPS_CREATE_SOURCE_EXCEEDED_U32_MAX")
+    );
+    assert!(
+        !create_output.exists(),
+        "rejected create must not write a patch"
+    );
+
+    fs::write(
+        &patch_path,
+        encode_dps_patch(&[], dps_metadata("empty.dps"), 0).expect("patch"),
+    )
+    .expect("patch");
+
+    let validate_error = handler
+        .validate(
+            &PatchValidateRequest {
+                input: source_path.clone(),
+                patches: vec![patch_path.clone()],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("validate must reject an oversized source");
+    assert!(
+        validate_error
+            .to_string()
+            .contains("DPS_SOURCE_INPUT_EXCEEDED_U32_MAX")
+    );
+
+    let apply_error = handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: apply_output.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("apply must reject an oversized source");
+    assert!(
+        apply_error
+            .to_string()
+            .contains("DPS_SOURCE_INPUT_EXCEEDED_U32_MAX")
+    );
+    assert!(
+        !apply_output.exists(),
+        "rejected apply must not write output"
+    );
+}
+
 #[test]
 fn apply_warns_and_stops_on_malformed_records_when_ignore_requested() {
     let temp = TestDir::new();

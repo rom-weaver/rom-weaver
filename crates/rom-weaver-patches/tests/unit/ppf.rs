@@ -422,6 +422,39 @@ fn undo_ppf_restores_the_original_rom() {
 }
 
 #[test]
+fn undo_rejects_a_patch_without_complete_undo_data() {
+    let temp = TestDir::new();
+    let input_path = temp.child("patched.bin");
+    let patch_path = temp.child("update.ppf");
+    let output_path = temp.child("restored.bin");
+    fs::write(&input_path, b"patched").expect("input");
+    fs::write(
+        &patch_path,
+        build_ppf1_patch(
+            "PPF1 has no undo data",
+            vec![V1V2Record {
+                offset: 0,
+                data: b"original".to_vec(),
+            }],
+        ),
+    )
+    .expect("patch");
+
+    let error =
+        undo_ppf(&input_path, &patch_path, &output_path).expect_err("PPF1 cannot be undone");
+
+    assert!(
+        error
+            .to_string()
+            .contains("does not contain complete undo data")
+    );
+    assert!(
+        !output_path.exists(),
+        "rejected undo must not create output"
+    );
+}
+
+#[test]
 fn parse_rejects_truncated_ppf3_record() {
     let mut patch = build_ppf3_patch(
         "bad",

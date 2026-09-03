@@ -6,8 +6,8 @@ use std::{
 
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, PatchApplyRequest,
-    PatchCreateRequest, PatchHandler, ProbeConfidence, RomWeaverError, SharedBlockCacheReader,
-    UnsupportedOp,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, RomWeaverError,
+    SharedBlockCacheReader, UnsupportedOp,
 };
 
 use super::{
@@ -91,6 +91,34 @@ fn apply_rejects_source_size_mismatch() {
         .expect_err("mismatch");
 
     assert!(error.to_string().contains("source size mismatch"));
+}
+
+#[test]
+fn validate_checks_the_patch_without_writing_output() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.hdiff");
+
+    let source = b"source bytes";
+    fs::write(&input_path, source).expect("input");
+    fs::write(
+        &patch_path,
+        build_uncompressed_hdiff13_patch(source, b"patched bytes").expect("patch bytes"),
+    )
+    .expect("patch");
+
+    let report = HdiffPatchHandler::new(&HDIFFPATCH)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+
+    assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+    assert!(report.label.contains("validated HDiffPatch/HPatchZ patch"));
 }
 
 #[test]
