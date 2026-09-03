@@ -21,6 +21,8 @@
 /crates/rom-weaver-cli/data/identify/v1/*.pack.br
 /crates/rom-weaver-cli/data/identify/v1/catalog.json
 /crates/rom-weaver-cli/data/identify/v1/index.json
+/crates/rom-weaver-cli/data/identify/v1/checksum-routes.bin
+/crates/rom-weaver-cli/data/identify/v1/checksum-routes.bin.br
 
 # Generated wasm artifacts
 /dist/wasm/

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join } from "node:path";
@@ -28,6 +29,11 @@ import {
   parseLibretroGames,
   parseOpenGoodGames,
 } from "./build-identify-index.mjs";
+import {
+  CHECKSUM_ROUTER_FORMAT,
+  parseChecksumRouter,
+  routeChecksums,
+} from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
 
 const NES = "Nintendo - Nintendo Entertainment System";
 
@@ -449,6 +455,7 @@ test("the builder emits deterministic mixed and fallback-only RWFP1 packs", asyn
     "tandy-color-computer.pack",
     "catalog.json",
     "index.json",
+    "checksum-routes.bin",
   ]) {
     assert.deepEqual(readFileSync(join(outDir, file)), readFileSync(join(outDir2, file)), file);
   }
@@ -466,4 +473,87 @@ test("RWFP1 rejects games outside the scoped pack", () => {
     () => buildSystemPackV1(NES, [{ ...game, source: "opengood" }]),
     /game source does not match pack/u,
   );
+});
+
+test("the builder emits a checksum router that routes every pack key", async () => {
+  const work = tempDir("router");
+  const cacheDir = join(work, "cache");
+  const outDir = join(work, "out");
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "dat/Nintendo - Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "metadat/no-intro/Nintendo - Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenNES.dat", OPENGOOD_DAT);
+  writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenCoCo.dat", OPENGOOD_DAT);
+  writeCachedDat(
+    cacheDir,
+    "opengood-headered",
+    OPENGOOD_HEADERED_REVISION,
+    "OpenNES.Headered.dat",
+    OPENGOOD_HEADERED_DAT,
+  );
+  const args = [
+    "--cache-dir",
+    cacheDir,
+    "--out",
+    outDir,
+    "--only",
+    `${NES},Tandy - Color Computer`,
+  ];
+  await main(args);
+
+  const index = JSON.parse(readFileSync(join(outDir, "index.json"), "utf8"));
+  const entry = index.checksumRoutes;
+  assert.equal(entry.format, CHECKSUM_ROUTER_FORMAT);
+  assert.equal(entry.file, "checksum-routes.bin");
+  assert.equal(entry.packs, index.systems.length);
+  const bytes = readFileSync(join(outDir, entry.file));
+  assert.equal(bytes.length, entry.rawBytes);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), entry.sha256);
+  assert.equal(entry.brotliFile, "checksum-routes.bin.br");
+  assert.equal(readFileSync(join(outDir, entry.brotliFile)).length, entry.brotliBytes);
+
+  const router = parseChecksumRouter(bytes);
+  assert.deepEqual(
+    router.packs.map(({ slug }) => slug),
+    index.systems.map(({ slug }) => slug),
+  );
+
+  // Every digest the fixture DATs carry must route to the pack that holds it.
+  const nesSlug = "nintendo-nintendo-entertainment-system";
+  const tandySlug = "tandy-color-computer";
+  for (const digest of ["aabbccdd", "11223344", "deadbeef", "cafebabe"]) {
+    assert.ok(routeChecksums(router, [digest]).includes(nesSlug), digest);
+  }
+  for (const digest of ["aabbccdd", "deadbeef"]) {
+    assert.ok(routeChecksums(router, [digest]).includes(tandySlug), digest);
+  }
+  // The fixture repeats this digest across both packs, so it routes to both.
+  assert.deepEqual(routeChecksums(router, ["aabbccdd"]).sort(), [nesSlug, tandySlug].sort());
+  assert.ok(routeChecksums(router, ["00112233445566778899aabbccddeeff"]).includes(nesSlug), "md5");
+  assert.ok(
+    routeChecksums(router, ["00112233445566778899aabbccddeeff00112233"]).includes(nesSlug),
+    "sha1",
+  );
+
+  const outDir2 = join(work, "out2");
+  await main([
+    "--cache-dir",
+    cacheDir,
+    "--out",
+    outDir2,
+    "--only",
+    `${NES},Tandy - Color Computer`,
+  ]);
+  assert.deepEqual(readFileSync(join(outDir2, "checksum-routes.bin")), bytes);
 });

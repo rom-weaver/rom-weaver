@@ -44,10 +44,15 @@ const identifyPackEntry = (system) => ({
 // they are three quarters of what a first visit would otherwise pull down, and
 // an identify run fetches whatever it needs on demand long before the warm-up
 // reaches it. `required` marks the group as never opt-out.
+// The checksum router rides with the default packs: cached by the same warm-up,
+// fetched on demand before that, and never part of the install-time precache.
+const identifyChecksumRouterEntries = identifyDataIndex.checksumRoutes
+  ? [identifyPackEntry(identifyDataIndex.checksumRoutes)]
+  : [];
 const identifyDefaultPackGroup = {
   id: "default",
   label: "Built-in systems",
-  packs: identifyPackGroups.defaultSystems.map(identifyPackEntry),
+  packs: [...identifyPackGroups.defaultSystems.map(identifyPackEntry), ...identifyChecksumRouterEntries],
   required: true,
 };
 const identifyOptionalPackGroups = [
@@ -162,7 +167,8 @@ const setEmulatorJsContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".css")) res.setHeader("Content-Type", "text/css; charset=utf-8");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
-  else if (requestPath.endsWith(".pack")) res.setHeader("Content-Type", "application/octet-stream");
+  else if (requestPath.endsWith(".pack") || requestPath.endsWith(".bin"))
+    res.setHeader("Content-Type", "application/octet-stream");
   else if (requestPath.endsWith(".wasm.data")) res.setHeader("Content-Type", "application/octet-stream");
 };
 
@@ -818,7 +824,10 @@ const writeBrotliSidecars = () => {
           continue;
         }
         assertSidecarTypeIsKnown(`/assets/${name}`);
-        const route = name.startsWith("identify-") && name.endsWith(".pack") ? "/assets/identify-*" : `/assets/${name}`;
+        const route =
+          name.startsWith("identify-") && (name.endsWith(".pack") || name.endsWith(".bin"))
+            ? "/assets/identify-*"
+            : `/assets/${name}`;
         if (!sidecarUrls.includes(route)) sidecarUrls.push(route);
       }
       if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
@@ -1324,7 +1333,9 @@ export default defineConfig(({ command, mode }) => {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.
           manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
-          globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
+          // The checksum router is warm-up data like the packs, so neither
+          // the raw file nor its brotli sidecar joins the precache.
+          globIgnores: ["**/*.map", "assets/identify-*.pack.br", "assets/identify-*.bin", "assets/identify-*.bin.br"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
             // offline, a route the user has not visited yet has nothing in the runtime

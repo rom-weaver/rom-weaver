@@ -130,9 +130,10 @@ const identifyCheckHashes = (check: BrowserIdentifyCheck): string[] =>
 /**
  * Identify from checks alone - a bare crc32/md5/sha1 digest, or the whole rom
  * check a bundle entry or a patch's source requirement carries - through the
- * `identify --hash` command. A checksum narrows to no platform, so the FULL
- * pack set is loaded; an unloadable database reports `unavailable`, never a
- * false "no match".
+ * `identify --hash` command. The checksum router picks the packs a digest can
+ * be in, so only those load; a router that names none is a definitive
+ * `unknown`. An unloadable database reports `unavailable`, never a false
+ * "no match".
  */
 const identifyChecks = async (
   check: BrowserIdentifyCheck,
@@ -146,7 +147,7 @@ const identifyChecks = async (
   const { IdentifyDataUnavailableError, loadIdentifyPacks } = await import("./identify-packs.ts");
   let packs: Awaited<ReturnType<typeof loadIdentifyPacks>>;
   try {
-    packs = await loadIdentifyPacks({}, (platforms) => {
+    packs = await loadIdentifyPacks({ checksums: check.checksums }, (platforms) => {
       options.onProgress?.({ message: `Loading identification data for ${platforms.length} systems…` });
     });
   } catch (error) {
@@ -156,6 +157,13 @@ const identifyChecks = async (
       input: normalized,
       status: "unavailable",
       unavailableReason: error.message,
+    };
+  }
+  if (!packs.length) {
+    return {
+      candidates: [{ checksumVariants: [], checksums: {}, matches: [], path: normalized, status: "unknown" }],
+      input: normalized,
+      status: "unknown",
     };
   }
   const { invokeRomWeaverIdentifyHashWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");

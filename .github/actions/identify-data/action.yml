@@ -17,7 +17,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs') }}
+        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs') }}
         enableCrossOsArchive: true
 
     - name: Prepare ROM identify data
@@ -31,5 +31,5 @@ runs:
       uses: actions/cache/save@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs') }}
+        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs') }}
         enableCrossOsArchive: true

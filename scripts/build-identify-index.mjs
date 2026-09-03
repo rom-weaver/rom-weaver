@@ -10,6 +10,13 @@ import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
+import {
+  buildPackFilter,
+  CHECKSUM_ROUTER_FORMAT,
+  encodeChecksumRouter,
+  parseChecksumRouter,
+  routeChecksums,
+} from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
@@ -2108,6 +2115,74 @@ async function readPlatformGames(platform, options, paths) {
   };
 }
 
+const CHECKSUM_ROUTER_FILE = "checksum-routes.bin";
+const CHECKSUM_ROUTER_ALGORITHMS = ["crc32", "md5", "sha1"];
+// Self-test sample per pack. A miss on a key the pack owns means the filter is
+// wrong, so the build MUST fail instead of shipping a router that hides games.
+const CHECKSUM_ROUTER_SAMPLE = 64;
+
+/** Evenly strided keys across the pack, so the self-test is not just the first rows. */
+function sampleRouterKeys(keys) {
+  if (keys.length <= CHECKSUM_ROUTER_SAMPLE) return keys.slice();
+  const stride = keys.length / CHECKSUM_ROUTER_SAMPLE;
+  return Array.from({ length: CHECKSUM_ROUTER_SAMPLE }, (_, i) => keys[Math.floor(i * stride)]);
+}
+
+// Every routable digest in a pack, deduplicated. sha256 is skipped: the router
+// only answers the algorithms a user can paste.
+function collectRouterKeys(games) {
+  const keys = new Map();
+  for (const game of games) {
+    for (const component of game.components) {
+      for (const algorithm of CHECKSUM_ROUTER_ALGORITHMS) {
+        const value = component[algorithm];
+        if (!value) continue;
+        const hex = value.toLowerCase();
+        keys.set(`${algorithm}:${hex}`, { algorithm, hex });
+      }
+    }
+  }
+  return [...keys.values()];
+}
+
+async function writeChecksumRouter(filters, samples, options) {
+  const bytes = Buffer.from(encodeChecksumRouter(filters));
+  const router = parseChecksumRouter(bytes);
+  for (const { slug, keys } of samples) {
+    for (const key of keys) {
+      if (!routeChecksums(router, [key.hex]).includes(slug)) {
+        throw new Error(
+          `checksum router self-test failed: ${key.algorithm} ${key.hex} does not route to ${slug}`,
+        );
+      }
+    }
+  }
+  const outPath = path.join(options.outPath, CHECKSUM_ROUTER_FILE);
+  await writeFile(outPath, bytes);
+  const entry = {
+    format: CHECKSUM_ROUTER_FORMAT,
+    file: CHECKSUM_ROUTER_FILE,
+    rawBytes: bytes.length,
+    sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+    packs: filters.length,
+  };
+  if (options.brotli) {
+    const compressed = brotliCompressBuffer(bytes, {
+      parameterProfile: "default",
+      quality: options.brotliQuality,
+    });
+    await writeFile(`${outPath}.br`, compressed);
+    entry.brotliFile = `${CHECKSUM_ROUTER_FILE}.br`;
+    entry.brotliBytes = compressed.length;
+  }
+  console.error(
+    `[identify] wrote ${CHECKSUM_ROUTER_FILE} (${formatBytes(entry.rawBytes)}` +
+      `${entry.brotliBytes ? `, br ${formatBytes(entry.brotliBytes)}` : ""}` +
+      `, ${filters.length} pack(s))`,
+  );
+  return entry;
+}
+
 async function writeSystemPackV1(platform, gamesInfo, options) {
   console.error(`[identify] ${platform}: building RWFP1 pack`);
   const games = gamesInfo.games;
@@ -2279,10 +2354,17 @@ export async function main(argv = process.argv.slice(2)) {
 
   await mkdir(options.outPath, { recursive: true });
   const systems = [];
+  const routerFilters = [];
+  const routerSamples = [];
   for (const platform of selected) {
     const games = await readPlatformGames(platform, options, paths);
-    systems.push(await writeSystemPackV1(platform, games, options));
+    const system = await writeSystemPackV1(platform, games, options);
+    systems.push(system);
+    const keys = collectRouterKeys(games.games);
+    routerFilters.push(buildPackFilter(system.slug, keys));
+    routerSamples.push({ slug: system.slug, keys: sampleRouterKeys(keys) });
   }
+  const checksumRoutes = await writeChecksumRouter(routerFilters, routerSamples, options);
 
   // The catalog always lists every configured platform. The pack itself may be
   // absent when this invocation built a subset, so clients can still resolve a
@@ -2322,6 +2404,7 @@ export async function main(argv = process.argv.slice(2)) {
 
   const index = {
     format: INDEX_FORMAT,
+    checksumRoutes,
     hashStrategy: "crc-primary-md5-sha1-fallback-per-system",
     catalog: "catalog.json",
     sources: {
@@ -2390,6 +2473,9 @@ export async function main(argv = process.argv.slice(2)) {
         totalRawHuman: formatBytes(totals.raw),
         totalBrotliBytes: totals.brotli,
         totalBrotliHuman: formatBytes(totals.brotli),
+        checksumRouterBytes: checksumRoutes.rawBytes,
+        checksumRouterHuman: formatBytes(checksumRoutes.rawBytes),
+        checksumRouterBrotliBytes: checksumRoutes.brotliBytes ?? 0,
       },
       null,
       2,

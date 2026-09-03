@@ -12,6 +12,7 @@
 // answering with different types is a difference with no cause. `text/javascript` is also
 // the form RFC 9239 settles on - `application/javascript` is obsolete.
 export const SIDECAR_CONTENT_TYPES = {
+  ".bin": "application/octet-stream",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",

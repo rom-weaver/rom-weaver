@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { brotliCompressSync } from "node:zlib";
 import { join } from "node:path";
@@ -43,8 +43,10 @@ const fixture = ({ grouped = false } = {}) => {
     : undefined;
   writeFileSync(
     join(input, "index.json"),
-    `${JSON.stringify({ format: "fixture", groups, systems })}\n`,
+    `${JSON.stringify({ checksumRoutes: { file: "checksum-routes.bin" }, format: "fixture", groups, systems })}\n`,
   );
+  writeFileSync(join(input, "checksum-routes.bin"), Buffer.from("RWCR1 fixture router"));
+  writeFileSync(join(input, "checksum-routes.bin.br"), Buffer.from("RWCR1 fixture router br"));
   writeFileSync(
     join(input, "catalog.json"),
     `${JSON.stringify({ format: "fixture-catalog", platforms: systems.map((entry) => ({ packSlug: entry.slug })) })}\n`,
@@ -145,4 +147,22 @@ test("rejects a Brotli sidecar that does not match its raw pack", () => {
       }),
     /does not match alpha\.pack/u,
   );
+});
+
+test("release indexes drop the browser-only checksum router", () => {
+  const { input, root } = fixture({ grouped: true });
+  const built = buildIdentifyReleaseData({
+    archive: join(root, "default.tar.br"),
+    input,
+    out: join(root, "out"),
+  });
+  const index = JSON.parse(readFileSync(join(built.dataDir, "index.json"), "utf8"));
+  assert.ok(!("checksumRoutes" in index));
+  assert.ok(built.optional.length > 0);
+  for (const optional of built.optional) {
+    const optionalIndex = JSON.parse(readFileSync(join(optional.dataDir, "index.json"), "utf8"));
+    assert.ok(!("checksumRoutes" in optionalIndex), optional.group);
+    assert.ok(!existsSync(join(optional.dataDir, "checksum-routes.bin")), optional.group);
+  }
+  assert.ok(!existsSync(join(built.dataDir, "checksum-routes.bin")));
 });

@@ -455,9 +455,11 @@ registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serv
 
 /* Every pack now enters the same cache through the background warm-up, an
    explicit group install, or an on-demand single-pack fetch during an identify
-   run. Identify requests MUST stay local once cached. */
+   run. Identify requests MUST stay local once cached. The checksum router
+   (`identify-checksum-routes.bin`) is a member of the default group and takes
+   the same path. */
 const isIdentifyPackRequest = (url: URL) =>
-  url.origin === self.location.origin && /\/assets\/identify-.*\.pack$/u.test(url.pathname);
+  url.origin === self.location.origin && /\/assets\/identify-.*\.(?:pack|bin)$/u.test(url.pathname);
 
 // `priority: "low"` is a fetch priority hint (Chromium); other engines ignore
 // the field. It keeps warm-up traffic behind interactive requests.

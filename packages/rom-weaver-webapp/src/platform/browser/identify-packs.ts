@@ -10,6 +10,12 @@
  * 3. Libretro and OpenGood data ships with the app and uses same-origin URLs.
  */
 import {
+  algorithmForHex,
+  CHECKSUM_ROUTER_FORMAT,
+  parseChecksumRouter,
+  routeChecksums,
+} from "../../lib/identify/checksum-router.mjs";
+import {
   findCatalogPlatformBySlug,
   parseIdentifyCatalog,
   resolveCatalogPlatform,
@@ -19,6 +25,18 @@ import { sha256Hex } from "../../lib/identify/sha256-hex.ts";
 import { createLogger } from "../../lib/logging.ts";
 
 const logger = createLogger("identify-packs");
+
+/** One binary fuse filter per pack, so a bare checksum names the packs that may hold it. */
+type ChecksumRouter = ReturnType<typeof parseChecksumRouter>;
+
+/** `checksumRoutes` in index.json: the single router file and its verification data. */
+type ChecksumRoutesEntry = {
+  file: string;
+  format?: string;
+  packs?: number;
+  rawBytes: number;
+  sha256: string;
+};
 
 type IdentifySystem = {
   brotliBytes?: number;
@@ -52,6 +70,7 @@ type IdentifyPackGroup = {
 
 type IdentifyIndex = {
   catalog?: string;
+  checksumRoutes?: ChecksumRoutesEntry;
   format: string;
   /** Upstream database revisions, logged so a page and a worker can be compared. */
   sources?: Record<string, { revision?: string; release?: string }>;
@@ -69,6 +88,8 @@ type BrowserIdentifyPack = {
 
 /** Hints the caller can offer before the ROM is hashed. Any of them may be absent. */
 type IdentifyPackHints = {
+  /** Digests of the input, by algorithm. Routed through the checksum router. */
+  checksums?: Readonly<Record<string, string>>;
   /** Names of the archive members, when the input is a container. */
   entryNames?: readonly string[];
   fileName?: string;
@@ -171,6 +192,18 @@ const fileExtension = (name: string): string => {
   return dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
 };
 
+/** Usable digests from the hints, lowercased. Anything blank is dropped. */
+/**
+ * The supplied digests the router can answer for: crc32, md5, and sha1. Any
+ * other digest (a sha256, a malformed value) MUST NOT reach the router, or its
+ * silence would read as a definitive miss; such inputs fall through to the
+ * ordinary selection and the identify command reports on them itself.
+ */
+const checksumDigests = ({ checksums }: IdentifyPackHints): string[] =>
+  Object.values(checksums || {})
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => algorithmForHex(value) !== undefined);
+
 const withSiblings = (slugs: Iterable<string>): string[] => {
   const out = new Set<string>();
   for (const slug of slugs) {
@@ -187,9 +220,11 @@ const withSiblings = (slugs: Iterable<string>): string[] => {
  * media profile. A detected platform name also routes through catalog aliases.
  */
 const selectIdentifySlugs = (
-  { entryNames, fileName, platform }: IdentifyPackHints,
+  hints: IdentifyPackHints,
   catalog?: IdentifyCatalog,
+  router?: ChecksumRouter,
 ): string[] => {
+  const { entryNames, fileName, platform } = hints;
   const slugs = new Set<string>();
   if (platform?.trim()) {
     const catalogEntry = resolveCatalogPlatform(catalog, platform);
@@ -198,7 +233,12 @@ const selectIdentifySlugs = (
   for (const name of [fileName || "", ...(entryNames || [])]) {
     for (const slug of PLATFORM_BY_EXTENSION[fileExtension(name)] || []) slugs.add(slug);
   }
-  return withSiblings(slugs);
+  const selected = new Set(withSiblings(slugs));
+  const digests = checksumDigests(hints);
+  // Router results are never widened to siblings: every pack has its own
+  // filter, so a sibling that could hold the key already answered for itself.
+  if (router && digests.length) for (const slug of routeChecksums(router, digests)) selected.add(slug);
+  return [...selected];
 };
 
 const describe = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
@@ -206,12 +246,14 @@ const describe = (cause: unknown) => (cause instanceof Error ? cause.message : S
 const assetUrl = (name: string) => new URL(`${DATA_ROOT}${name}`, document.baseURI);
 let indexPromise: Promise<IdentifyIndex> | undefined;
 let catalogPromise: Promise<IdentifyCatalog | undefined> | undefined;
+let checksumRouterPromise: Promise<ChecksumRouter> | undefined;
 const packPromises = new Map<string, Promise<BrowserIdentifyPack>>();
 
 /** Drop every cached index, catalog, and pack promise so a retry rereads local assets. */
 const resetIdentifyPackCache = () => {
   indexPromise = undefined;
   catalogPromise = undefined;
+  checksumRouterPromise = undefined;
   packPromises.clear();
 };
 
@@ -324,8 +366,12 @@ const listOptionalIdentifyPackGroups = async (): Promise<IdentifyPackGroup[]> =>
  */
 const identifyGroupIdsForHints = async (hints: IdentifyPackHints): Promise<string[]> => {
   try {
-    const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
-    const selected = new Set(selectIdentifySlugs(hints, catalog));
+    const [index, catalog, router] = await Promise.all([
+      getIndex(),
+      getCatalog(),
+      checksumDigests(hints).length ? getChecksumRouter() : undefined,
+    ]);
+    const selected = new Set(selectIdentifySlugs(hints, catalog, router));
     if (!selected.size) return [];
     return identifyPackGroups(index)
       .filter((group) => !group.default && group.systems.some((slug) => selected.has(slug)))
@@ -474,6 +520,87 @@ const systemForSlug = (index: IdentifyIndex, catalog: IdentifyCatalog | undefine
 };
 
 /**
+ * Fetch, verify, and parse `checksum-routes.bin`. A checksum with no router is
+ * an UNAVAILABLE database, never a narrowed search: an index without
+ * `checksumRoutes` is an older deployment, and answering "no match" from it
+ * would be a lie. Every filter slug MUST name a loadable pack.
+ */
+const loadChecksumRouter = async (): Promise<ChecksumRouter> => {
+  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
+  const routes = index.checksumRoutes;
+  if (!routes?.file) {
+    logger.error("identify index has no checksum router", { systems: index.systems.length });
+    throw new IdentifyDataUnavailableError("The ROM identify index lists no checksum router");
+  }
+  if (routes.format !== CHECKSUM_ROUTER_FORMAT || !routes.sha256) {
+    logger.error("checksum router index entry is invalid", {
+      format: routes.format,
+      hasSha256: Boolean(routes.sha256),
+    });
+    throw new IdentifyDataUnavailableError("The ROM identify checksum router entry is invalid");
+  }
+  const url = assetUrl(routes.file);
+  if (routes.sha256) url.searchParams.set("sha256", routes.sha256);
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (cause) {
+    logger.error("checksum router request failed", { error: describe(cause), url: url.href });
+    throw new IdentifyDataUnavailableError(`ROM identify checksum router request failed: ${describe(cause)}`, {
+      cause,
+    });
+  }
+  if (!response.ok) {
+    logger.error("checksum router request failed", { status: response.status, url: url.href });
+    throw new IdentifyDataUnavailableError(`ROM identify checksum router request failed with HTTP ${response.status}`);
+  }
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength !== routes.rawBytes) {
+    logger.error("checksum router size mismatch", {
+      actualBytes: bytes.byteLength,
+      expectedBytes: routes.rawBytes,
+      file: routes.file,
+    });
+    throw new IdentifyDataUnavailableError(`ROM identify checksum router size is invalid: ${routes.file}`);
+  }
+  if (routes.sha256) {
+    const actualSha256 = await sha256Hex(bytes);
+    if (actualSha256 !== routes.sha256) {
+      logger.error("checksum router checksum mismatch", {
+        actualSha256,
+        expectedSha256: routes.sha256,
+        file: routes.file,
+      });
+      throw new IdentifyDataUnavailableError(`ROM identify checksum router checksum is invalid: ${routes.file}`);
+    }
+  }
+  let router: ChecksumRouter;
+  try {
+    router = parseChecksumRouter(new Uint8Array(bytes));
+  } catch (cause) {
+    logger.error("checksum router is invalid", { error: describe(cause), file: routes.file });
+    throw new IdentifyDataUnavailableError(`ROM identify checksum router is invalid: ${describe(cause)}`, { cause });
+  }
+  const unknown = router.packs.filter((pack) => !systemForSlug(index, catalog, pack.slug)).map((pack) => pack.slug);
+  if (unknown.length) {
+    logger.error("checksum router names unknown packs", { file: routes.file, unknown: unknown.join(" ") });
+    throw new IdentifyDataUnavailableError(`ROM identify checksum router names unknown packs: ${unknown.join(" ")}`);
+  }
+  logger.debug("checksum router loaded", { bytes: bytes.byteLength, packs: router.packs.length });
+  return router;
+};
+
+const getChecksumRouter = (): Promise<ChecksumRouter> => {
+  if (!checksumRouterPromise) {
+    checksumRouterPromise = loadChecksumRouter().catch((error) => {
+      checksumRouterPromise = undefined;
+      throw error;
+    });
+  }
+  return checksumRouterPromise;
+};
+
+/**
  * Load the packs an input could match. Throws {@link IdentifyDataUnavailableError}
  * when the database - not the ROM - is the problem.
  */
@@ -482,8 +609,19 @@ const loadIdentifyPackSelection = async (
   /** Reports the human platform names about to be fetched, for stage progress. */
   onSelected?: (platforms: string[]) => void,
 ): Promise<IdentifyPackSelection> => {
-  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
-  const selected = selectIdentifySlugs(hints, catalog);
+  const digests = checksumDigests(hints);
+  const [index, catalog, router] = await Promise.all([
+    getIndex(),
+    getCatalog(),
+    digests.length ? getChecksumRouter() : undefined,
+  ]);
+  const selected = selectIdentifySlugs(hints, catalog, router);
+  if (!selected.length && router) {
+    // The filters cover every pack, so no hit is a definitive miss - not a
+    // broken index, and not a reason to load the cartridge fallback.
+    logger.debug("checksum router selected no pack", { digests: digests.join(" ") });
+    return { packs: [] };
+  }
   let systems: IdentifySystem[];
   if (selected.length) {
     systems = [];
