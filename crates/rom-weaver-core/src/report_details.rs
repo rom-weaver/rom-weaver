@@ -182,4 +182,141 @@ mod tests {
         );
         assert_eq!(detail.get("size_bytes"), Some(&json!(42)));
     }
+
+    #[test]
+    fn operation_report_details_preserves_only_existing_objects() {
+        let mut report = OperationReport::succeeded(
+            crate::OperationFamily::Patch,
+            Some("test".to_string()),
+            "apply",
+            "done",
+            Some(100.0),
+            None,
+        );
+        report.details = Some(json!({"checksum": "abc123"}));
+        let details = operation_report_details(&mut report);
+        assert_eq!(details.get("checksum"), Some(&json!("abc123")));
+        assert!(report.details.is_none());
+
+        report.details = Some(json!(["not an object"]));
+        assert!(operation_report_details(&mut report).is_empty());
+    }
+
+    #[test]
+    fn thread_execution_details_include_an_optional_fallback_reason() {
+        let execution = ThreadExecution {
+            requested_threads: 8,
+            effective_threads: 2,
+            thread_mode: crate::ThreadMode::Fixed,
+            used_parallelism: false,
+            thread_fallback: true,
+            thread_fallback_reason: Some("pool unavailable".to_string()),
+        };
+        let mut details = Map::new();
+        insert_thread_execution_details(&mut details, &execution);
+        assert_eq!(details.get("requested_threads"), Some(&json!(8)));
+        assert_eq!(details.get("effective_threads"), Some(&json!(2)));
+        assert_eq!(details.get("thread_mode"), Some(&json!("fixed")));
+        assert_eq!(details.get("used_parallelism"), Some(&json!(false)));
+        assert_eq!(details.get("thread_fallback"), Some(&json!(true)));
+        assert_eq!(
+            details.get("thread_fallback_reason"),
+            Some(&json!("pool unavailable"))
+        );
+
+        let no_reason = ThreadExecution {
+            thread_fallback_reason: None,
+            ..execution
+        };
+        let mut details = Map::new();
+        insert_thread_execution_details(&mut details, &no_reason);
+        assert!(!details.contains_key("thread_fallback_reason"));
+    }
+
+    #[test]
+    fn attach_emitted_file_paths_deduplicates_and_skips_non_files() {
+        let temp = TempDir::new().expect("temp dir");
+        let existing = temp.child("existing.bin");
+        existing.write_binary(b"old").expect("existing fixture");
+        let added = temp.child("added.bin");
+        added.write_binary(b"new data").expect("added fixture");
+
+        let mut report = OperationReport::succeeded(
+            crate::OperationFamily::Container,
+            Some("test".to_string()),
+            "extract",
+            "done",
+            Some(100.0),
+            None,
+        );
+        report.details = Some(json!({
+            "checksum": {"sha1": "seeded"},
+            "emitted_files": [{"path": existing.path().to_string_lossy(), "kind": "rom"}]
+        }));
+        let missing = temp.child("missing.bin");
+        let report = attach_emitted_file_paths(
+            report,
+            &[existing.path(), added.path(), temp.path(), missing.path()],
+        );
+
+        let details = report.details.expect("details");
+        assert_eq!(details.get("checksum"), Some(&json!({"sha1": "seeded"})));
+        let emitted = details
+            .get("emitted_files")
+            .and_then(Value::as_array)
+            .expect("emitted files");
+        assert_eq!(emitted.len(), 2);
+        assert_eq!(emitted[0].get("kind"), Some(&json!("rom")));
+        assert_eq!(emitted[1].get("file_name"), Some(&json!("added.bin")));
+
+        let failed = OperationReport::failed(
+            crate::OperationFamily::Container,
+            Some("test".to_string()),
+            "extract",
+            "failed",
+            None,
+        );
+        assert!(
+            attach_emitted_file_paths(failed, &[added.path()])
+                .details
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn attach_extraction_details_preserves_existing_fields_and_thread_data() {
+        let mut report = OperationReport::succeeded(
+            crate::OperationFamily::Container,
+            Some("test".to_string()),
+            "extract",
+            "done",
+            Some(100.0),
+            None,
+        );
+        report.details = Some(json!({"checksum": {"crc32": "deadbeef"}}));
+        let execution = ThreadExecution {
+            requested_threads: 4,
+            effective_threads: 4,
+            thread_mode: crate::ThreadMode::Fixed,
+            used_parallelism: true,
+            thread_fallback: false,
+            thread_fallback_reason: None,
+        };
+        let report = attach_extraction_details(report, 7, 3, 4096, &execution);
+        let details = report.details.expect("details");
+        assert_eq!(details.get("checksum"), Some(&json!({"crc32": "deadbeef"})));
+        assert_eq!(
+            details.get("extraction"),
+            Some(&json!({
+                "entries": 7,
+                "files": 3,
+                "written_bytes": 4096,
+                "requested_threads": 4,
+                "effective_threads": 4,
+                "thread_mode": "fixed",
+                "used_parallelism": true,
+                "thread_fallback": false
+            }))
+        );
+    }
 }

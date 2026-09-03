@@ -3,6 +3,7 @@ import {
   type BrowserFormatMatrixStep,
   createExhaustiveContainerCases,
   getBrowserFormatMatrixMetadataCoverage,
+  runBrowserFullFormatMatrixCore,
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
 } from "../../src/wasm/browser-format-matrix.ts";
@@ -294,6 +295,101 @@ describe("runBrowserFullFormatMatrix", () => {
     expect(succeeded.filter((name) => name.includes("threads=auto")).length).toBeGreaterThan(0);
     expect(succeeded.some((name) => name.startsWith("ingest options "))).toBe(true);
     expect(mocks.removeFixtureDirectory).toHaveBeenCalledTimes(1);
+  });
+
+  it("completes the fast matrix with format-specific failures and patch fixtures", async () => {
+    const steps: BrowserFormatMatrixStep[] = [];
+    const coverage = getBrowserFormatMatrixMetadataCoverage();
+    const containerFailures = new Set(coverage.containerCompressFailureFormats);
+    let expectedFailures = 0;
+    const readBytes = (path: string) => {
+      if (
+        path.endsWith("fixture-applied-hdiffpatch.bin") ||
+        path.endsWith("hdiff-target.bin") ||
+        path.endsWith("hdiff.target")
+      ) {
+        return new Uint8Array([7, 8]);
+      }
+      if (path.endsWith("fixture-applied-bsp.bin")) return new Uint8Array([0xff, 2, 3]);
+      return new Uint8Array([1, 2, 3]);
+    };
+    mocks.readGuestFile.mockImplementation((_, path: string) => Promise.resolve(readBytes(path)));
+
+    const runJson = vi.fn(async (command: RomWeaverCommand, options?: { onEvent?: (event: unknown) => void }) => {
+      const commandName = getRomWeaverCommandLabel(command);
+      const args = command.type === "patch" ? command.args.args : command.args;
+      const format = String((args as { format?: unknown }).format || "");
+      const inputPath = String((args as { input?: unknown }).input || "");
+      let failureLabel: string | undefined;
+      if (commandName === "compress" && containerFailures.has(format)) {
+        failureLabel = format === "rvz" ? "failed to open input" : "extract-only format";
+      } else if (commandName === "ingest" && inputPath.includes("extract-")) {
+        const specialExtractFormat = ["gcz", "wbfs", "wia", "tgc", "nfs", "rvz"].find((name) =>
+          inputPath.includes(`extract-${name}.`),
+        );
+        if (specialExtractFormat) {
+          failureLabel = `failed to open ${specialExtractFormat} source`;
+        } else if (inputPath.includes("extract-pbp.")) {
+          failureLabel = "too small to be a pbp container";
+        } else if (inputPath.includes("extract-xiso.")) {
+          failureLabel = "not an Xbox XDVDFS image";
+        } else {
+          failureLabel = "archive is invalid";
+        }
+      } else if (commandName === "patch-create") {
+        if (format === "hdiffpatch") failureLabel = "creation is disabled";
+        if (format === "ninja1") failureLabel = "not currently supported";
+        if (format === "bsp") failureLabel = "creation is not implemented";
+        if (["aps", "bdf", "dldi"].includes(format)) failureLabel = "i/o error: unsupported";
+      }
+      if (failureLabel) expectedFailures += 1;
+      const status = failureLabel ? "failed" : "succeeded";
+      const event = {
+        command: commandName,
+        label: failureLabel || `running ${commandName}`,
+        percent: commandName === "patch-apply" ? 50 : undefined,
+        stage: commandName === "patch-apply" ? "apply" : undefined,
+        format: commandName === "patch-apply" ? "xdelta" : undefined,
+        status: "running",
+      };
+      options?.onEvent?.(event);
+      const terminal = {
+        command: commandName,
+        label: failureLabel || "done",
+        status: ["hdiffpatch", "ninja1", "bsp"].includes(format) ? "unsupported" : status,
+      };
+      return {
+        events: failureLabel ? [terminal] : [event, terminal],
+        exitCode: failureLabel ? 1 : 0,
+        ok: !failureLabel,
+        stderr: failureLabel || "",
+      };
+    });
+
+    const result = await runBrowserFullFormatMatrixCore({
+      dir: "/work/matrix",
+      fixtures: {
+        hdiffPatchPath: "/work/matrix/fixtures/hdiff.patch",
+        hdiffSourcePath: "/work/matrix/fixtures/hdiff.source",
+        hdiffTargetPath: "/work/matrix/fixtures/hdiff.target",
+        vcdiffPatchPath: "/work/matrix/fixtures/vcdiff.patch",
+        vcdiffSourcePath: "/work/matrix/fixtures/vcdiff.source",
+        vcdiffTargetPath: "/work/matrix/fixtures/vcdiff.target",
+      },
+      onEvent: (event) => steps.push({ ...(event as never) }),
+      onStep: (step) => steps.push(step),
+      opfsHandle: {} as FileSystemDirectoryHandle,
+      runJson,
+      sourcePath: "/work/matrix/input.bin",
+    });
+
+    expect(result.failedSteps).toBe(0);
+    expect(result.passedSteps).toBeGreaterThan(0);
+    expect(expectedFailures).toBeGreaterThan(0);
+    expect(runJson).toHaveBeenCalled();
+    expect(steps.some((step) => step.command === "patch-apply" && step.status === "running")).toBe(true);
+    expect(mocks.waitForGuestFile).toHaveBeenCalled();
+    expect(mocks.writeGuestFile).toHaveBeenCalled();
   });
 
   describe("fixture loading", () => {

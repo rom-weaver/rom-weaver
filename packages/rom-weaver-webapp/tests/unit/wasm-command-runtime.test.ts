@@ -1,9 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  invokeRomWeaverBundleCreateWorker,
+  invokeRomWeaverBundleParseWorker,
+  invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
+  invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverIdentifyHashWorker,
+  invokeRomWeaverIngestWorker,
+  invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
+  invokeRomWeaverPpfUndoWorker,
+  invokeRomWeaverTrimWorker,
+  normalizeChdCodecArgs,
+  normalizeCodecEntries,
+  runRomWeaverIngestSidecarsWorker,
+  runRomWeaverProbeWorker,
 } from "../../src/lib/runtime/wasm-command-runtime.ts";
 
 const mocks = vi.hoisted(() => ({ runRomWeaverJson: vi.fn() }));
@@ -128,6 +140,362 @@ describe("invokeRomWeaverExtractWorker", () => {
     await invokeRomWeaverExtractWorker({ inputPath: "/in.zip", outDirPath: "/out" }, onProgress);
 
     expect(onProgress).toHaveBeenCalled();
+  });
+});
+
+describe("runtime argument normalization", () => {
+  it("flattens, splits, trims, floors, and deduplicates codec values", () => {
+    expect(normalizeCodecEntries("lzma+zstd:3")).toEqual(["lzma", "zstd:3"]);
+    expect(
+      normalizeCodecEntries([
+        " lzma, zstd:3 ",
+        ["lzma", 7.9, Number.POSITIVE_INFINITY],
+        { " bzip2 ": true, zstd: " 5 ", disabled: false, empty: "0", invalid: {}, skip: null },
+      ]),
+    ).toEqual(["lzma", "zstd:3", "7", "bzip2", "zstd:5"]);
+  });
+
+  it("strips conflicting CHD codec levels while preserving a compatible list", () => {
+    expect(normalizeChdCodecArgs(["lzma:1", "zstd:2", "lzma:1"])).toEqual({
+      codecs: ["lzma", "zstd"],
+      stripped: true,
+    });
+    const compatible = ["lzma:3", "zstd:3"];
+    expect(normalizeChdCodecArgs(compatible)).toEqual({ codecs: compatible, stripped: false });
+  });
+});
+
+describe("runRomWeaverProbeWorker", () => {
+  it("probes both entry kinds and normalizes string and record entries", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        container: {
+          entry_records: ["folder/game.sfc", { file_name: "patch.ips", size_bytes: 42 }, { name: "ignored.bin" }],
+        },
+        platform: " Super Nintendo ",
+      }),
+    );
+    const onProgress = vi.fn();
+
+    await expect(
+      runRomWeaverProbeWorker({ patchFilter: true, romFilter: true, sourcePath: " /archive.zip " }, onProgress),
+    ).resolves.toEqual({
+      entries: [
+        { fileName: "folder/game.sfc", filename: "folder/game.sfc", name: "game.sfc" },
+        { fileName: "patch.ips", filename: "patch.ips", name: "patch.ips", size: 42 },
+        { fileName: "ignored.bin", filename: "ignored.bin", name: "ignored.bin" },
+      ],
+      platform: "Super Nintendo",
+    });
+    expect(lastCall()[0]).toEqual({
+      args: { filter: ["rom", "patch"], input: "/archive.zip", no_extract: true },
+      type: "probe",
+    });
+    expect(onProgress).not.toHaveBeenCalled();
+  });
+
+  it("rejects a probe with no source path", async () => {
+    await expect(runRomWeaverProbeWorker({ sourcePath: " " })).rejects.toThrow(
+      "Container probe source path is required",
+    );
+  });
+});
+
+describe("runRomWeaverIngestSidecarsWorker", () => {
+  it("returns no matches without a ROM or patch names", async () => {
+    await expect(runRomWeaverIngestSidecarsWorker({ patchNames: [], romName: "game.sfc" })).resolves.toEqual([]);
+    await expect(runRomWeaverIngestSidecarsWorker({ patchNames: ["game.ips"], romName: " " })).resolves.toEqual([]);
+    expect(mocks.runRomWeaverJson).not.toHaveBeenCalled();
+  });
+
+  it("filters malformed sidecar matches and defaults invalid order values", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        sidecar_matches: [{ name: "game.ips", order: 2 }, { name: "bad.ips", order: "nope" }, {}, null],
+      }),
+    );
+
+    await expect(
+      runRomWeaverIngestSidecarsWorker({ patchNames: [" game.ips "], romName: " game.sfc " }),
+    ).resolves.toEqual([
+      { name: "game.ips", order: 2 },
+      { name: "bad.ips", order: 0 },
+    ]);
+    expect(lastCall()[0]).toEqual({
+      args: {
+        input: "game.sfc",
+        output: "/work/sidecar-match",
+        sidecar_names: [" game.ips "],
+        sidecar_only: true,
+      },
+      type: "ingest",
+    });
+  });
+});
+
+describe("invokeRomWeaverIngestWorker", () => {
+  const ingestDetails = () => ({
+    ingest: {
+      assets: [{ checksums: { CRC32: "ABCDEF" }, copied_in_place: true, path: "/out/game.sfc", size_bytes: 12 }],
+      is_rom: true,
+      kind: "rom",
+      patches: [],
+      source_file_name: "game.zip",
+    },
+  });
+
+  it("dispatches the consolidated ingest options and parses the ROM result", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult(ingestDetails()));
+
+    await expect(
+      invokeRomWeaverIngestWorker({
+        checksumAlgorithms: ["CRC32", " sha1 "],
+        databasePaths: [" /db.rwfp1 ", ""],
+        interactiveSelectionEnabled: false,
+        noIgnore: true,
+        noNestedExtract: true,
+        outDirPath: " /out ",
+        select: [" game.sfc ", ""],
+        sourcePath: " game.zip ",
+        splitBin: false,
+        threads: 3,
+      }),
+    ).resolves.toMatchObject({
+      assets: [{ checksums: { crc32: "ABCDEF" }, path: "/out/game.sfc", sizeBytes: 12 }],
+      isRom: true,
+      kind: "rom",
+      sourceFileName: "game.zip",
+    });
+    expect(lastCall()[0]).toEqual({
+      args: {
+        checksum: ["crc32", "sha1"],
+        database: ["/db.rwfp1"],
+        input: "game.zip",
+        no_ignore: true,
+        no_nested_extract: true,
+        output: "/out",
+        select: ["game.sfc"],
+        split_bin: false,
+        threads: 3,
+      },
+      type: "ingest",
+    });
+    expect(lastCall()[1]).toHaveProperty("interactiveSelectionEnabled", false);
+  });
+
+  it("rejects malformed ingest output and missing paths", async () => {
+    await expect(invokeRomWeaverIngestWorker({ outDirPath: "/out", sourcePath: " " })).rejects.toThrow(
+      "Ingest source path is required",
+    );
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({}));
+    await expect(invokeRomWeaverIngestWorker({ outDirPath: "/out", sourcePath: "/input.bin" })).rejects.toThrow(
+      "Ingest result was missing or malformed",
+    );
+  });
+});
+
+describe("bundle runtime workers", () => {
+  it("parses a bundle and forwards an optional extraction directory", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ bundle: { bundle: { patches: [], version: 1 }, patch_sources: [], source_kind: "json" } }),
+    );
+
+    await expect(
+      invokeRomWeaverBundleParseWorker({ extractDirPath: " /out ", sourcePath: " bundle.json " }),
+    ).resolves.toMatchObject({ bundle: { version: 1 }, patchSources: [], sourceKind: "json" });
+    expect(lastCall()[0]).toEqual({
+      args: { args: { input: "bundle.json", output: "/out" }, type: "parse" },
+      type: "bundle",
+    });
+  });
+
+  it("creates a bundle with aligned metadata and expected checks", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        bundle_create: { bundle: { patches: [], version: 1 }, bundle_path: "/out/bundle.json", warnings: [] },
+      }),
+    );
+
+    await expect(
+      invokeRomWeaverBundleCreateWorker({
+        bundlePath: " /bundle.zip ",
+        bundleRomPath: " /rom.sfc ",
+        noBundleRom: true,
+        outputCheck: " sha1=abc ",
+        outputHeader: "strip",
+        outputName: "patched.sfc",
+        outputPath: " /out/bundle.json ",
+        patchAuthors: [" Author "],
+        patchBases: ["auto", "previous"],
+        patchHeaders: ["auto", "keep"],
+        patchNames: [" First "],
+        patchOptionals: [false, true],
+        patchPaths: [" /a.ips ", " /b.ips "],
+        patchVersions: ["1.0"],
+        romChecksums: "crc32=1234, sha1=abcd",
+        romName: " input.sfc ",
+        romPath: " /input.sfc ",
+        romSize: 100,
+      }),
+    ).resolves.toMatchObject({ bundlePath: "/out/bundle.json" });
+    expect(lastCall()[0]).toEqual({
+      args: {
+        args: {
+          assume_in: ["crc32=1234", "sha1=abcd", "size=100"],
+          bundle: "/bundle.zip",
+          bundle_rom: "/rom.sfc",
+          no_bundle_rom: true,
+          output: "/out/bundle.json",
+          output_check: ["sha1=abc"],
+          output_header: "strip",
+          output_name: "patched.sfc",
+          patch: ["/a.ips", "/b.ips"],
+          patch_author: ["Author", ""],
+          patch_basis: ["auto", "previous"],
+          patch_header: ["auto", "keep"],
+          patch_name: ["First", ""],
+          patch_optional: [false, true],
+          patch_version: ["1.0", ""],
+          rom: "/input.sfc",
+          rom_name: "input.sfc",
+        },
+        type: "create",
+      },
+      type: "bundle",
+    });
+  });
+});
+
+describe("output-producing runtime workers", () => {
+  it("creates a compressed output and strips conflicting CHD codec levels", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/game.chd", size_bytes: 99 }] }),
+    );
+
+    const output = await invokeRomWeaverCompressionCreateWorker({
+      codecs: ["lzma:1", "zstd:2"],
+      format: "chd",
+      inputPaths: ["/in/game.bin"],
+      outputFileName: "game.chd",
+      threads: 2,
+    });
+
+    expect(output).toMatchObject({ fileName: "game.chd", filePath: "/out/game.chd", size: 99 });
+    expect(lastCall()[0].args).toMatchObject({
+      codec: ["lzma", "zstd"],
+      format: "chd",
+      input: ["/in/game.bin"],
+      output: expect.any(String),
+    });
+  });
+
+  it("applies patches with per-patch headers and reports the apply summary", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/result.sfc", size_bytes: 321 }] }),
+    );
+
+    const output = await invokeRomWeaverPatchApplyWorker({
+      inputSize: 100,
+      options: {
+        appendOutputSuffix: false,
+        fixChecksum: true,
+        headerModes: ["keep", "unknown"],
+        n64ByteOrders: ["little-endian", "invalid"],
+        patchBasis: ["base"],
+        requireInputChecksumMatch: true,
+        validateWithChecksums: ["crc32=abc"],
+        validateWithOutputChecksums: ["sha1=def"],
+      },
+      patchFiles: [
+        { patchFileName: "first.bps", patchFilePath: "/first.bps", patchFormat: "bps" },
+        { patchFileName: "second.xdelta", patchFilePath: "/second.xdelta", patchFormat: "xdelta" },
+      ],
+      romFileName: "game.sfc",
+      romFilePath: "/game.sfc",
+    });
+
+    expect(output).toMatchObject({ fileName: "result.sfc", filePath: "/out/result.sfc", size: 321 });
+    expect(output.applySummary).toMatchObject({
+      outputSize: 321,
+      patches: [
+        { fileName: "first.bps", format: "PATCH" },
+        { fileName: "second.xdelta", format: "PATCH" },
+      ],
+      rom: { fileName: "game.sfc" },
+    });
+    expect(lastCall()[0].args).toMatchObject({
+      args: {
+        expect_in: ["crc32=abc"],
+        expect_out: ["sha1=def"],
+        filter: ["rom", "patch"],
+        ignore_checksum_validation: false,
+        input: "/game.sfc",
+        n64_byte_order: ["little-endian", "auto"],
+        no_compress: true,
+        output: expect.any(String),
+        output_header: "auto",
+        patch_basis: ["base"],
+        patch_header: ["keep", "auto"],
+        patches: ["/first.bps", "/second.xdelta"],
+        repair_checksum: true,
+      },
+      type: "apply",
+    });
+  });
+
+  it("creates a patch, trims a ROM, and undoes a PPF", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/custom.bin", size_bytes: 7 }] }),
+    );
+
+    await expect(
+      invokeRomWeaverCreatePatchWorker({
+        checksumName: true,
+        format: "ips",
+        modifiedFilePath: "/new.sfc",
+        originalFilePath: "/old.sfc",
+        outputName: "custom.ips",
+        sourceCrc32: "1234",
+      }),
+    ).resolves.toMatchObject({ fileName: "custom.bin", filePath: "/out/custom.bin", size: 7 });
+    expect(lastCall()[0].args).toMatchObject({
+      args: { assume_in: ["crc32=1234"], checksum_name: true, format: "ips" },
+      type: "create",
+    });
+
+    await expect(
+      invokeRomWeaverTrimWorker({ extension: " .trim ", outputName: "trimmed.bin", sourceFilePath: "/game.sfc" }),
+    ).resolves.toMatchObject({ fileName: "trimmed.bin", filePath: "/out/custom.bin" });
+    expect(lastCall()[0]).toEqual({
+      args: {
+        dry_run: false,
+        extension: ".trim",
+        in_place: false,
+        input: ["/game.sfc"],
+        output: expect.any(String),
+        revert: false,
+      },
+      type: "trim",
+    });
+
+    await expect(
+      invokeRomWeaverPpfUndoWorker({
+        outputName: "restored.sfc",
+        patchFilePath: "/patch.ppf",
+        romFilePath: "/game.sfc",
+      }),
+    ).resolves.toMatchObject({ fileName: "restored.sfc", filePath: "/out/custom.bin" });
+    expect(lastCall()[0]).toEqual({
+      args: {
+        args: {
+          output: expect.any(String),
+          patch: "/patch.ppf",
+          rom: "/game.sfc",
+        },
+        type: "ppf-undo",
+      },
+      type: "tools",
+    });
   });
 });
 

@@ -18,13 +18,16 @@ import {
   OPFS_PROXY_CONTROL_STATUS_INDEX,
   OPFS_PROXY_HANDLE_BY_PATH,
   OPFS_PROXY_OP_CLOSE,
+  OPFS_PROXY_OP_MKDIR,
   OPFS_PROXY_OP_OPEN,
+  OPFS_PROXY_OP_READ,
   OPFS_PROXY_OP_SIZE,
   OPFS_PROXY_OP_UNLINK,
   OPFS_PROXY_OP_WRITE,
   OPFS_PROXY_STATE_DONE,
   OPFS_PROXY_STATE_IDLE,
   OPFS_PROXY_STATE_REQUESTED,
+  OPFS_PROXY_STATUS_EIO,
   OPFS_PROXY_STATUS_OK,
 } from "../../src/wasm/browser-opfs-proxy-protocol.ts";
 import { type OpfsProxyServerHandle, startOpfsProxyServer } from "../../src/wasm/browser-opfs-proxy-server.ts";
@@ -44,6 +47,7 @@ class MockFile {
   fakeSize: number | null = null;
   liveHandles = 0;
   createdHandles = 0;
+  closeError: Error | null = null;
 }
 
 class MockSyncAccessHandle {
@@ -85,6 +89,7 @@ class MockSyncAccessHandle {
     if (!this.open) return;
     this.open = false;
     this.file.liveHandles -= 1;
+    if (this.file.closeError) throw this.file.closeError;
   }
 }
 
@@ -137,7 +142,9 @@ interface RequestFields {
   opcode: number;
   handle?: number;
   length?: number;
+  offset?: number;
   auxLow?: number;
+  auxHigh?: number;
   path?: string;
 }
 
@@ -155,11 +162,11 @@ async function request(channel: OpfsProxyChannel, fields: RequestFields): Promis
   }
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_OPCODE_INDEX, fields.opcode);
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_HANDLE_INDEX, fields.handle ?? OPFS_PROXY_HANDLE_BY_PATH);
-  Atomics.store(slot.control, OPFS_PROXY_CONTROL_OFFSET_LOW_INDEX, 0);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_OFFSET_LOW_INDEX, fields.offset ?? 0);
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_OFFSET_HIGH_INDEX, 0);
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_LENGTH_INDEX, length);
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_AUX_LOW_INDEX, fields.auxLow ?? 0);
-  Atomics.store(slot.control, OPFS_PROXY_CONTROL_AUX_HIGH_INDEX, 0);
+  Atomics.store(slot.control, OPFS_PROXY_CONTROL_AUX_HIGH_INDEX, fields.auxHigh ?? 0);
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_RESULT_INDEX, 0);
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATUS_INDEX, OPFS_PROXY_STATUS_OK);
   Atomics.store(slot.control, OPFS_PROXY_CONTROL_STATE_INDEX, OPFS_PROXY_STATE_REQUESTED);
@@ -180,11 +187,13 @@ async function request(channel: OpfsProxyChannel, fields: RequestFields): Promis
 function startServer(
   root: MockDirectoryHandle,
   writableRoots: string[],
+  trace?: (line: string) => void,
 ): { channel: OpfsProxyChannel; server: OpfsProxyServerHandle } {
   const channel = createOpfsProxyChannel(4);
   const server = startOpfsProxyServer({
     channel,
     mounts: [{ directoryHandle: root as never, mountPath: "/work", writableRoots }],
+    trace,
   });
   return { channel, server };
 }
@@ -289,6 +298,92 @@ describe("opfs proxy reattach mode", () => {
         path: "/work/ro.bin",
       });
       expect(writable.status).toBe(ERRNO_ACCES);
+    } finally {
+      server.stop();
+      await server.done;
+    }
+  });
+});
+
+describe("opfs proxy blob, directory, and errno paths", () => {
+  it("reads a registered Blob source and creates nested directories", async () => {
+    const root = new MockDirectoryHandle();
+    const { channel, server } = startServer(root, ["/work"]);
+    try {
+      server.registerBlobSource("/work/input.bin", new Blob(["hello blob"]));
+      const opened = await request(channel, { opcode: OPFS_PROXY_OP_OPEN, path: "/work/input.bin" });
+      expect(opened.status).toBe(OPFS_PROXY_STATUS_OK);
+      const size = await request(channel, { handle: opened.result, opcode: OPFS_PROXY_OP_SIZE });
+      expect(size.result).toBe(10);
+      const read = await request(channel, { handle: opened.result, length: 4, offset: 1, opcode: OPFS_PROXY_OP_READ });
+      expect(read).toMatchObject({ result: 4, status: OPFS_PROXY_STATUS_OK });
+      expect(new TextDecoder().decode(channel.slots[0]?.data.subarray(0, 4))).toBe("ello");
+      await request(channel, { handle: opened.result, opcode: OPFS_PROXY_OP_CLOSE });
+      await request(channel, { opcode: OPFS_PROXY_OP_MKDIR, path: "/work/new/nested" });
+      expect(root.dirs.get("new")?.dirs.has("nested")).toBe(true);
+    } finally {
+      server.stop();
+      await server.done;
+    }
+  });
+
+  it("maps filesystem errors and unknown operations to their WASI errno", async () => {
+    const typeMismatchRoot = new MockDirectoryHandle();
+    typeMismatchRoot.getDirectoryHandle = async () => {
+      throw namedError("TypeMismatchError");
+    };
+    const typeMismatch = startServer(typeMismatchRoot, ["/work"]);
+    expect((await request(typeMismatch.channel, { opcode: OPFS_PROXY_OP_OPEN, path: "/work/file/child" })).status).toBe(
+      54,
+    );
+    typeMismatch.server.stop();
+    await typeMismatch.server.done;
+
+    const existingRoot = new MockDirectoryHandle();
+    existingRoot.removeEntry = async () => {
+      throw namedError("InvalidModificationError");
+    };
+    const existing = startServer(existingRoot, ["/work"]);
+    expect((await request(existing.channel, { opcode: OPFS_PROXY_OP_UNLINK, path: "/work/missing.bin" })).status).toBe(
+      20,
+    );
+    existing.server.stop();
+    await existing.server.done;
+
+    const accessRoot = new MockDirectoryHandle();
+    accessRoot.getFileHandle = async () => {
+      throw namedError("NoModificationAllowedError");
+    };
+    const access = startServer(accessRoot, ["/work"]);
+    expect((await request(access.channel, { opcode: OPFS_PROXY_OP_OPEN, path: "/work/missing.bin" })).status).toBe(
+      ERRNO_ACCES,
+    );
+    expect((await request(access.channel, { opcode: 999 })).status).toBe(OPFS_PROXY_STATUS_EIO);
+    access.server.stop();
+    await access.server.done;
+  });
+
+  it("traces deferred unlink and close failures without losing the original operation", async () => {
+    const root = new MockDirectoryHandle();
+    const trace: string[] = [];
+    const { channel, server } = startServer(root, ["/work"], (line) => trace.push(line));
+    try {
+      const opened = await request(channel, {
+        auxLow: CREATE_FLAG | WRITABLE_FLAG,
+        opcode: OPFS_PROXY_OP_OPEN,
+        path: "/work/close.bin",
+      });
+      const file = root.files.get("close.bin")?.file;
+      if (!file) throw new Error("mock file was not created");
+      file.closeError = new Error("close failed");
+      await request(channel, { opcode: OPFS_PROXY_OP_UNLINK, path: "/work/close.bin" });
+      root.removeEntry = async () => {
+        throw namedError("NoModificationAllowedError");
+      };
+      await request(channel, { handle: opened.result, opcode: OPFS_PROXY_OP_CLOSE });
+      await tick();
+      expect(trace.some((line) => line.includes("deferred unlink failed"))).toBe(true);
+      expect(trace.some((line) => line.includes("handle close failed"))).toBe(true);
     } finally {
       server.stop();
       await server.done;

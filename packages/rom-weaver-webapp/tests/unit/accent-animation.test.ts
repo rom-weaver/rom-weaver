@@ -1,25 +1,20 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { applyAccent } from "../../src/webapp/accent.ts";
 
-/**
- * The `accent-anim` class arms the --thread crossfade in accents.css. It must
- * skip the boot apply (index.html already resolved data-accent pre-paint, so a
- * dissolve on load would fade from the wrong colour) and come off again after
- * the transition so later theme flips stay instant.
- *
- * Module state in accent.ts (current accent + first-apply flag) carries across
- * tests, so these run as one ordered sequence from the fresh-import state.
- */
+let applyAccent: typeof import("../../src/webapp/accent.ts").applyAccent;
 
 describe("accent switch animation class", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ applyAccent } = await import("../../src/webapp/accent.ts"));
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.runAllTimers();
     vi.useRealTimers();
+    document.documentElement.classList.remove("accent-anim");
+    document.documentElement.removeAttribute("data-accent");
   });
 
   test("the boot apply never animates, even when it changes the accent", () => {
@@ -29,6 +24,7 @@ describe("accent switch animation class", () => {
   });
 
   test("a later accent change animates, then the class comes off", () => {
+    applyAccent("woad");
     applyAccent("teal");
     expect(document.documentElement.getAttribute("data-accent")).toBe("teal");
     expect(document.documentElement.classList.contains("accent-anim")).toBe(true);
@@ -38,10 +34,12 @@ describe("accent switch animation class", () => {
 
   test("re-applying the current accent does not animate", () => {
     applyAccent("teal");
+    applyAccent("teal");
     expect(document.documentElement.classList.contains("accent-anim")).toBe(false);
   });
 
   test("back-to-back changes restart the removal timer instead of cutting the second fade short", () => {
+    applyAccent("teal");
     applyAccent("plum");
     vi.advanceTimersByTime(400);
     applyAccent("violet");

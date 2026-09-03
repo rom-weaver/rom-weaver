@@ -8,6 +8,7 @@ use crate::identify_catalog::IdentifySource;
 use crate::identify_pack_types::{
     PackComponent, PackComponentRole, PackGame, PackProvenance, UpstreamSource,
 };
+use crate::identify_pack_v1::{ArtifactPack, encode};
 
 fn pack_component(
     ordinal: u32,
@@ -178,6 +179,39 @@ fn a_single_blob_that_routes_and_verifies_is_an_exact_match() {
     assert_eq!(hit.evidence.required_components_total, 1);
     assert!(hit.evidence.missing.is_empty());
     assert!(hit.evidence.unexpected.is_empty());
+}
+
+#[test]
+fn real_pack_reader_routes_and_returns_games_through_the_matcher() {
+    let encoded = encode(
+        "Genesis",
+        IdentifySource::OpenGood,
+        "test-profile",
+        &serde_json::json!([{"source": "no-intro"}]),
+        vec![pack_game(
+            "Sonic",
+            "Genesis",
+            vec![pack_component(
+                0,
+                Some("sonic.md"),
+                1024,
+                Some("aabbccdd"),
+                true,
+                true,
+            )],
+        )],
+    )
+    .expect("encode pack");
+    let pack = ArtifactPack::parse(&encoded).expect("parse pack");
+
+    let outcome = match_artifact(
+        &pack,
+        &ArtifactFingerprint::from_single_blob(1024, Some("AABBCCDD"), None, None),
+    )
+    .expect("match");
+
+    assert_eq!(outcome.status, ArtifactMatchStatus::Matched);
+    assert_eq!(outcome.matches[0].name, "Sonic");
 }
 
 #[test]

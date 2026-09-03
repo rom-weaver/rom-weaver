@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { buildOutputCompressionPanel } from "../../../src/public/react/components/ds/compress-panel.tsx";
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  buildOutputCompressionPanel,
+  CompressPanelBody,
+} from "../../../src/public/react/components/ds/compress-panel.tsx";
 import { OutputCard } from "../../../src/public/react/components/ds/output-card.tsx";
 import { buildCompressPanel } from "../../../src/public/react/compress-options.ts";
 
@@ -70,5 +73,69 @@ describe("output options header chips", () => {
     const rendered = chips(container);
     expect(rendered.at(-1)).toEqual({ label: null, value: "1.2s" });
     expect(container.querySelector(".outopts .readouts > .rb.time")?.textContent).toBe("1.2s");
+  });
+
+  it("builds codec, block-size, and profile fields for every compressed format", () => {
+    const sevenZip = buildCompressPanel("7z", { sevenZipCodec: "lzma2", compressionProfile: "max" });
+    expect(sevenZip?.fields.map((field) => field.key)).toEqual(["sevenZipCodec", "compressionProfile"]);
+    expect(sevenZip?.fields[0]?.chip.value).toBe("lzma2:9");
+    expect(sevenZip?.fields[1]?.value).toBe("max");
+
+    const rvz = buildCompressPanel("rvz", { rvzCodec: "zstd", rvzBlockSize: 131072, compressionProfile: "small" });
+    expect(rvz?.fields.map((field) => field.key)).toEqual(["rvzCodec", "rvzBlockSize", "compressionProfile"]);
+    expect(rvz?.fields[1]?.chip.value).toBe("131072");
+    expect(rvz?.fields[1]?.value).toBe("131072");
+  });
+
+  it("selects CHD codec sets from explicit and detected disc modes", () => {
+    const cd = buildCompressPanel("chd", { chdOutputMode: "cd", chdCreateCdCodecs: "cdlz:8,cdfl" });
+    expect(cd?.fields[0]?.key).toBe("chdCreateCdCodecs");
+    expect(cd?.fields[0]?.value).toBe("cdlz:8,cdfl");
+    expect(cd?.note).toBeUndefined();
+
+    const dvd = buildCompressPanel("chd", { chdOutputMode: "dvd" }, { metadata: { format: "DVD" } });
+    expect(dvd?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+    expect(dvd?.fields[0]?.value).toBe("lzma,zlib,huff,flac");
+    expect(dvd?.note).toBe("DVD");
+
+    const auto = buildCompressPanel("chd", {}, { metadata: { format: "CD" } });
+    expect(auto?.fields[0]?.key).toBe("chdCreateCdCodecs");
+    expect(auto?.fields[0]?.value).toBe("cdlz,cdzl,cdfl");
+    expect(auto?.note).toBe("CD-ROM");
+  });
+
+  it("defaults unknown CHD media to no codec field and rejects uncompressed formats", () => {
+    const unknown = buildCompressPanel("chd", {}, { metadata: { format: "tape" } });
+    expect(unknown?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+    expect(unknown?.fields[0]?.value).toBe("lzma,zlib,huff,flac");
+    expect(unknown?.note).toBeUndefined();
+    expect(buildCompressPanel("none", {})).toBeNull();
+    expect(buildCompressPanel("", {})).toBeNull();
+  });
+
+  it("renders compression controls and forwards profile updates", () => {
+    const panel = buildCompressPanel("zip", { compressionProfile: "max", zipCodec: "zstd:12" });
+    const onChange = vi.fn();
+    const rendered = render(<CompressPanelBody disabled={false} fields={panel?.fields ?? []} onChange={onChange} />);
+    const codec = rendered.container.querySelector("input[role=combobox]") as HTMLInputElement;
+    const profile = rendered.container.querySelector("select[name=compressionProfile]") as HTMLSelectElement;
+
+    fireEvent.change(codec, { target: { value: "zstd:11" } });
+    expect(onChange).toHaveBeenLastCalledWith("zipCodec", "zstd:11", { zipCodec: "zstd:11" });
+
+    fireEvent.change(profile, { target: { value: "min" } });
+    expect(onChange).toHaveBeenLastCalledWith("compressionProfile", "min", {
+      compressionProfile: "min",
+      zipCodec: "zstd",
+    });
+
+    rendered.unmount();
+    const rvz = buildCompressPanel("rvz", { rvzBlockSize: 131072, rvzCodec: "zstd", compressionProfile: "max" });
+    const rvzChange = vi.fn();
+    const rvzRendered = render(<CompressPanelBody disabled fields={rvz?.fields ?? []} onChange={rvzChange} />);
+    const blockSize = rvzRendered.container.querySelector("input[name=rvzBlockSize]") as HTMLInputElement;
+    expect(blockSize.value).toBe("131072");
+    expect(blockSize.disabled).toBe(true);
+    rvzRendered.unmount();
   });
 });

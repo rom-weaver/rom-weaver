@@ -8,7 +8,8 @@ use std::{
 use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
     SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
-    create_extract_output_file, ordered_streaming_compress,
+    create_extract_output_file, ensure_output_available, file_starts_with,
+    ordered_streaming_compress,
 };
 use crate::RomWeaverError;
 
@@ -379,6 +380,56 @@ fn create_extract_output_file_separates_overwrite_refusal_from_other_failures() 
         create_extract_output_file(&unreachable, true).is_err(),
         "the overwrite path must fail on a missing parent too"
     );
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn ensure_output_available_handles_new_existing_and_forced_outputs() {
+    let root = io_temp_path("ensure-output");
+    fs::create_dir_all(&root).expect("create root");
+    let existing = root.join("existing.bin");
+    fs::write(&existing, b"old").expect("seed output");
+
+    let refusal = ensure_output_available(&existing, false)
+        .expect_err("an existing output must be refused without force");
+    assert!(
+        refusal
+            .to_string()
+            .starts_with("validation failed: refusing to overwrite existing output `"),
+        "{refusal}"
+    );
+    ensure_output_available(&existing, true).expect("force allows an existing output");
+
+    let new_output = root.join("new.bin");
+    ensure_output_available(&new_output, false).expect("a new output is available");
+    fs::write(&new_output, b"partial").expect("write partial output");
+    // Mark this output complete before cleaning the fixture. This removes only
+    // this test's registry entry and cannot delete a file another test owns.
+    crate::complete_in_progress_output(&new_output);
+    assert!(
+        new_output.exists(),
+        "completing an output must preserve the finished file"
+    );
+
+    fs::remove_dir_all(&root).expect("cleanup");
+}
+
+#[test]
+fn file_starts_with_distinguishes_matching_short_and_missing_sources() {
+    let root = io_temp_path("signature");
+    fs::create_dir_all(&root).expect("create root");
+    let source = root.join("source.bin");
+    fs::write(&source, b"RWFP1 payload").expect("write source");
+
+    assert!(file_starts_with(&source, b"RWFP1"));
+    assert!(file_starts_with(&source, b""));
+    assert!(!file_starts_with(&source, b"WRONG"));
+
+    let short = root.join("short.bin");
+    fs::write(&short, b"abc").expect("write short source");
+    assert!(!file_starts_with(&short, b"abcdef"));
+    assert!(!file_starts_with(&root.join("missing.bin"), b"abc"));
 
     fs::remove_dir_all(&root).expect("cleanup");
 }

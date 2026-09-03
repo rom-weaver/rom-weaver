@@ -19,6 +19,7 @@ const stubIosPwaNavigator = (overrides: Record<string, unknown> = {}) => {
 };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 

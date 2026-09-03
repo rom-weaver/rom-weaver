@@ -1,8 +1,9 @@
 use std::{fs, sync::Arc};
 
 use rom_weaver_core::{
-    CancellationToken, OperationContext, PatchApplyRequest, PatchChecksumValidation,
-    PatchCreateRequest, PatchHandler, PatchValidateRequest, RecordingProgressSink, ThreadBudget,
+    CancellationToken, OperationContext, OperationStatus, PatchApplyRequest,
+    PatchChecksumValidation, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    RecordingProgressSink, ThreadBudget,
 };
 
 use super::{
@@ -923,6 +924,38 @@ fn validate_rejects_invalid_action_ranges_without_rendering_output() {
             .to_string()
             .contains("target relative offset exceeded available data")
     );
+}
+
+#[test]
+fn validate_accepts_a_matching_source_and_defers_the_target_checksum() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.bps");
+    let source = b"source bytes";
+    let target = b"target bytes";
+    fs::write(&input_path, source).expect("input");
+    fs::write(
+        &patch_path,
+        build_bps_patch(
+            source,
+            target,
+            vec![TestAction::TargetRead(target.to_vec())],
+        ),
+    )
+    .expect("patch");
+
+    let report = BpsPatchHandler::new(&BPS)
+        .validate(
+            &PatchValidateRequest {
+                input: input_path,
+                patches: vec![patch_path],
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("validate");
+
+    assert_eq!(report.status, OperationStatus::Succeeded);
+    assert!(report.label.contains("target checksum deferred to apply"));
 }
 
 #[test]

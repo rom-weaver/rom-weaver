@@ -24,8 +24,41 @@ import type { PostApplyActionBehavior } from "../../src/types/settings.ts";
 
 // The checksum search is the shared expected-ROM lookup; stubbing it keeps
 // this contract on markup, not on the identify data.
-const { lookupExpectedRom } = vi.hoisted(() => ({ lookupExpectedRom: vi.fn() }));
+const {
+  addEntry,
+  getApplyEntry,
+  loadEmulatorRom,
+  prepareEmulatorAudioContext,
+  prepareEntry,
+  requestEmulatorStartFromUserAction,
+  setCurrentGame,
+  lookupExpectedRom,
+} = vi.hoisted(() => ({
+  addEntry: vi.fn(),
+  getApplyEntry: vi.fn().mockReturnValue(null),
+  loadEmulatorRom: vi.fn(),
+  lookupExpectedRom: vi.fn(),
+  prepareEmulatorAudioContext: vi.fn(),
+  prepareEntry: vi.fn(),
+  requestEmulatorStartFromUserAction: vi.fn(),
+  setCurrentGame: vi.fn(),
+}));
 vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => ({ lookupExpectedRom }));
+vi.mock("../../src/public/react/components/emulator-load-rom.ts", () => ({
+  loadEmulatorRom,
+  renameRomToOutput: (output: string, rom: string) =>
+    `${output.replace(/\.[^.]+$/, "")}${rom.match(/\.[^.]+$/)?.[0] || ""}`,
+}));
+vi.mock("../../src/public/react/emulator-session-store.ts", () => ({
+  addEntry,
+  getApplyEntry,
+  prepareEntry,
+  setCurrentGame,
+}));
+vi.mock("../../src/public/react/emulator-audio-context.ts", () => ({
+  prepareEmulatorAudioContext,
+  requestEmulatorStartFromUserAction,
+}));
 
 const read = (relativePath: string) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 const BUNDLE_FIELDS_CSS = read("../../src/webapp/design-system/fields.css");
@@ -102,46 +135,61 @@ const patchItem = (fileName: string): PatchStackItemState =>
 
 const renderView = ({
   bundleMetaById,
+  bundleExpectedRomChecks,
   emulatorOutput,
+  onBundleMetaChange,
   onBundleMetaBulkChange,
   onUnifiedDrop,
+  outputControllerOverrides,
   outputOverrides,
+  notice,
   patches = [] as PatchStackItemState[],
   patchEnablement,
   pendingDrops,
   settings = {},
+  startup,
   ui,
 }: {
   bundleMetaById?: Parameters<typeof ApplyWorkflowFormView>[0]["bundleMetaById"];
+  bundleExpectedRomChecks?: Parameters<typeof ApplyWorkflowFormView>[0]["bundleExpectedRomChecks"];
   emulatorOutput?: unknown;
+  onBundleMetaChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaChange"];
   onBundleMetaBulkChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaBulkChange"];
   onUnifiedDrop?: Parameters<typeof ApplyWorkflowFormView>[0]["onUnifiedDrop"];
   outputOverrides?: Partial<PatcherOutputState>;
+  outputControllerOverrides?: Partial<PatcherOutputController>;
+  notice?: Parameters<typeof ApplyWorkflowFormView>[0]["controllers"]["notice"];
   patches?: PatchStackItemState[];
   patchEnablement?: Parameters<typeof ApplyWorkflowFormView>[0]["patchEnablement"];
   pendingDrops?: Parameters<typeof ApplyWorkflowFormView>[0]["pendingDrops"];
   settings?: Parameters<typeof RomWeaverSettingsProvider>[0]["settings"];
+  startup?: Parameters<typeof ApplyWorkflowFormView>[0]["startup"];
   ui: PatcherUiState;
 }) => {
   const controllers = {
+    notice,
     output: storeOf(outputState(outputOverrides)) as unknown as PatcherOutputController,
     patchStack: {
       ...storeOf({ items: patches }),
       removeItem: () => undefined,
       reorder: () => undefined,
     } as unknown as PatcherStackController,
-    ui: storeOf(ui) as unknown as PatcherUiController,
+    ui: Object.assign(storeOf(ui), ui) as unknown as PatcherUiController,
   };
+  Object.assign(controllers.output, outputControllerOverrides);
   return render(
     <RomWeaverSettingsProvider settings={settings}>
       <ApplyWorkflowFormView
         bundleMetaById={bundleMetaById}
+        bundleExpectedRomChecks={bundleExpectedRomChecks}
         controllers={controllers}
         emulatorOutput={emulatorOutput as never}
         onBundleMetaBulkChange={onBundleMetaBulkChange}
+        onBundleMetaChange={onBundleMetaChange}
         onUnifiedDrop={onUnifiedDrop}
         patchEnablement={patchEnablement}
         pendingDrops={pendingDrops}
+        startup={startup}
       />
     </RomWeaverSettingsProvider>,
   );
@@ -726,6 +774,94 @@ describe("apply workflow view - post-apply behavior selects", () => {
   });
 });
 
+describe("apply workflow view - output and diagnostics notices", () => {
+  it("renders the startup failure without mounting the workflow steps", () => {
+    const { container } = renderView({
+      startup: { message: "WASM boot failed", status: "error" },
+      ui: createEmptyPatcherUiState(),
+    });
+
+    expect(container.querySelector("#rom-weaver-container")?.textContent).toContain("WASM boot failed");
+    expect(container.querySelector("#rom-weaver-row-unified-drop")).toBeNull();
+  });
+
+  it("shows and updates output-header choices for a strippable ROM", () => {
+    const setOutputHeader = vi.fn();
+    const rom = romRow("game.nes");
+    rom.info.checksumVariants = [
+      {
+        applyCompatibility: { removeHeader: true },
+        checksums: { crc32: "C6FB1252" },
+        id: "raw",
+        transforms: {
+          removeHeader: { headeredExtension: ".nes", headerlessExtension: ".bin", retainOnOutput: false },
+        },
+      },
+    ];
+    const { container } = renderView({
+      outputControllerOverrides: { setOutputHeader },
+      outputOverrides: { disabled: false },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [rom] },
+    });
+    const select = container.querySelector("#rom-weaver-select-output-header") as HTMLSelectElement;
+
+    expect(select.value).toBe("auto");
+    expect(Array.from(select.options, (option) => option.textContent)).toEqual(["auto (strip)", "keep", "strip"]);
+    fireEvent.change(select, { target: { value: "keep" } });
+    expect(setOutputHeader).toHaveBeenCalledWith("keep");
+  });
+
+  it("renders apply and compression timing chips after completion", () => {
+    const { container } = renderView({
+      outputOverrides: {
+        applyTiming: "1.2s",
+        compressTiming: "2.3s",
+        disabled: false,
+        pendingDownloadFileName: "game.bin",
+      },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+
+    expect(Array.from(container.querySelectorAll(".done-chip"), (chip) => chip.textContent)).toEqual([
+      "Apply1.2s",
+      "Compress2.3s",
+    ]);
+  });
+
+  it("shows a dismissible apply error notice", () => {
+    const dismiss = vi.fn();
+    const notice = {
+      ...storeOf({ dismissible: true, level: "error", message: "output failed", visible: true }),
+      dismiss,
+    } as unknown as Parameters<typeof ApplyWorkflowFormView>[0]["controllers"]["notice"];
+    const { container } = renderView({
+      notice,
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+
+    expect(container.textContent).toContain("output failed");
+    fireEvent.click(container.querySelector('[aria-label="Dismiss"]') as HTMLButtonElement);
+    expect(dismiss).toHaveBeenCalledOnce();
+  });
+
+  it("reports malformed bundle checksums before Apply can run", () => {
+    const patch = patchItem("change.ips");
+    const { container } = renderView({
+      bundleMetaById: new Map([["patch-1", { inputChecks: { checksums: { crc32: "not-hex" } } }]]),
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-1"],
+        onToggle: () => undefined,
+      },
+      patches: [patch],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+
+    expect(container.textContent).toContain("Patch 1 input CRC32 is malformed");
+    expect((container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe("apply workflow view - output options notice", () => {
   it("tells the user the options are not saved and Settings holds the defaults", () => {
     const { container } = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] } });
@@ -737,6 +873,11 @@ describe("apply workflow view - output options notice", () => {
 });
 
 describe("apply workflow view - completed output actions", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    getApplyEntry.mockReturnValue(null);
+  });
+
   afterEach(() => {
     setPostApplyDownloadBehaviorOverride(null);
     setPostApplyTestBehaviorOverride(null);
@@ -815,6 +956,57 @@ describe("apply workflow view - completed output actions", () => {
     const { container } = completedOutputView("show", "show");
     const label = container.querySelector("#rom-weaver-button-test-emulator .play-label");
     expect(label?.textContent).toBe("Open in the Test tab");
+  });
+
+  it("loads a finished output into the emulator session", async () => {
+    loadEmulatorRom.mockResolvedValue({
+      blob: new Blob(["loaded"]),
+      checksum: "a".repeat(40),
+      fileName: "inner.nes",
+    });
+    const { container } = completedOutputView("show", "show", "game.nes");
+
+    await act(async () => {
+      fireEvent.click(container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement);
+    });
+
+    await vi.waitFor(() => expect(addEntry).toHaveBeenCalledOnce());
+    expect(loadEmulatorRom).toHaveBeenCalledWith(expect.any(Blob), "game.nes");
+    expect(addEntry).toHaveBeenCalledWith(
+      expect.objectContaining({ checksum: "a".repeat(40), core: expect.any(String), fileName: "game.nes" }),
+    );
+    expect(setCurrentGame).toHaveBeenCalledWith("output-1");
+  });
+
+  it("prepares a retained emulator entry before opening it", async () => {
+    getApplyEntry
+      .mockReturnValueOnce({ fileName: "game.nes", id: "retained" })
+      .mockReturnValueOnce({ checksum: "b".repeat(40), fileName: "game.nes", id: "retained" });
+    prepareEntry.mockResolvedValue(new Blob(["retained"]));
+    const { container } = completedOutputView("show", "show", "game.nes");
+    const button = container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement;
+
+    await act(async () => fireEvent.click(button));
+    await vi.waitFor(() => expect(setCurrentGame).toHaveBeenCalledWith("retained"));
+    expect(prepareEntry).toHaveBeenCalledWith("retained");
+    expect(addEntry).not.toHaveBeenCalled();
+    expect(prepareEmulatorAudioContext).toHaveBeenCalled();
+  });
+
+  it("shows an emulator error when the finished output has no bytes", async () => {
+    const { container } = renderView({
+      emulatorOutput: { fileName: "game.nes", getBlob: async () => undefined, id: "output-1" },
+      outputOverrides: { disabled: false, pendingDownloadFileName: "game.nes" },
+      settings: { postApplyDownloadBehavior: "show", postApplyTestBehavior: "show" },
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] },
+    });
+    const outputButton = container.querySelector("#rom-weaver-button-test-emulator") as HTMLButtonElement;
+    // The output controller has a file name but no blob. This is a recoverable
+    // user-facing failure, not a reason to throw out of the click handler.
+    await act(async () => fireEvent.click(outputButton));
+    await vi.waitFor(() =>
+      expect(container.querySelector(".emulatorjs-error")?.textContent).toContain("finished output"),
+    );
   });
 });
 
@@ -1096,5 +1288,109 @@ describe("apply workflow view - staging checks reservation", () => {
     const expectedGroup = container.querySelector("#rom-weaver-rom-expected-checks");
     expect(expectedGroup?.querySelector(".ck-v")?.textContent).toBe("C6FB1252");
     expect(expectedGroup?.querySelector(".ck-mark")).toBeNull();
+  });
+
+  it("folds patch base checks into the ROM expectation and reports conflicts", () => {
+    const rom = romRow("game.bin");
+    const patch = patchItem("change.ips");
+    patch.chainVerdict = {
+      basis: "base",
+      basisSource: "inferred_base",
+      matched: { kind: "base", variant: "raw" },
+    };
+    patch.sourceChecksumState = "valid";
+    patch.targetValue = rom.id;
+    patch.validateInputChecksum = "deadbeef";
+    patch.validationValues = ["in crc32=deadbeef", "in size=13"];
+    const { container } = renderView({
+      bundleExpectedRomChecks: { checksums: { crc32: "C6FB1252" }, size: 13 },
+      patches: [patch],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [rom] },
+    });
+
+    expect(container.querySelector("#rom-weaver-rom-expected-conflict")?.textContent).toContain("different ROMs");
+    expect(container.querySelector("#rom-weaver-list-input-stack .card")?.classList).toContain("bad");
+  });
+
+  it("renders grouped disc sheets and removes every track when the disc is not alone", () => {
+    const first = romRow("disc (Track 1).bin");
+    first.groupId = "disc-1";
+    first.kind = "track";
+    first.cueText = 'FILE "disc (Track 1).bin" BINARY';
+    first.gdiText = "1\\n";
+    first.archivePathEntries = [{ fileName: "disc.zip" }];
+    first.info = { ...first.info, romType: { platform: "Sony PlayStation", discFormat: "CD" } };
+    const second = romRow("disc (Track 2).bin");
+    second.groupId = "disc-1";
+    second.kind = "track";
+    second.sourceSize = 200;
+    const removeRomInput = vi.fn();
+    const clearRomInput = vi.fn();
+    const { container } = renderView({
+      ui: {
+        ...createEmptyPatcherUiState(),
+        clearRomInput,
+        removeRomInput,
+        romInputs: [first, second, romRow("other.bin")],
+      },
+    });
+    const card = container.querySelector("#rom-weaver-list-input-stack .card.file");
+    expect(card?.textContent).toContain("disc");
+    expect(card?.textContent).toContain("disc (Track 1).cue");
+    expect(card?.textContent).toContain("disc (Track 1).gdi");
+    expect(card?.querySelector(".identify-drawer .rb")?.textContent).toContain("PSX");
+    fireEvent.click(card?.querySelector('button[aria-label="Remove disc"]') as HTMLButtonElement);
+    expect(removeRomInput).toHaveBeenCalledWith(first.id);
+    expect(removeRomInput).toHaveBeenCalledWith(second.id);
+    expect(clearRomInput).not.toHaveBeenCalled();
+  });
+
+  it("uses the clear action for a lone grouped track and exercises output callbacks", () => {
+    const track = romRow("disc (Track 1).bin");
+    track.groupId = "disc-1";
+    track.kind = "track";
+    const clearRomInput = vi.fn();
+    const setDisplayFileName = vi.fn();
+    const setOutputCompression = vi.fn();
+    const setOutputCompressOption = vi.fn();
+    const compress = {
+      fields: [
+        {
+          chip: { label: "Level", value: "Fast" },
+          key: "level",
+          kind: "select",
+          label: "Level",
+          options: [{ label: "Fast", value: "fast" }],
+          value: "fast",
+        },
+      ],
+      note: "Compression note",
+    };
+    const { container } = renderView({
+      outputControllerOverrides: { setDisplayFileName, setOutputCompression, setOutputCompressOption },
+      outputOverrides: {
+        compress: compress as never,
+        disabled: false,
+        options: [
+          { label: ".zip", value: "zip" },
+          { label: ".none", value: "none" },
+        ],
+      },
+      ui: { ...createEmptyPatcherUiState(), clearRomInput, romInputs: [track] },
+    });
+    fireEvent.click(container.querySelector('button[aria-label="Clear ROM input"]') as HTMLButtonElement);
+    expect(clearRomInput).toHaveBeenCalledOnce();
+    fireEvent.change(container.querySelector("#rom-weaver-input-output-file-name") as HTMLInputElement, {
+      target: { value: "renamed" },
+    });
+    fireEvent.change(container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement, {
+      target: { value: "none" },
+    });
+    fireEvent.change(container.querySelector('[aria-label="Level"]') as HTMLSelectElement, {
+      target: { value: "fast" },
+    });
+    expect(setDisplayFileName).toHaveBeenCalledWith("renamed");
+    expect(setOutputCompression).toHaveBeenCalledWith("none");
+    expect(setOutputCompressOption).toHaveBeenCalledWith("level", "fast", { level: "fast" });
   });
 });
