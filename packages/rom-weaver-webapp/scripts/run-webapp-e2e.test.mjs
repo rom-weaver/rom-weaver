@@ -25,10 +25,15 @@ describe("resolveE2EShard", () => {
   it("selects each supported shard", () => {
     assert.equal(resolveE2EShard(["--a11y"]), "a11y");
     assert.equal(resolveE2EShard(["--journeys"]), "journeys");
+    assert.equal(resolveE2EShard(["--journeys-raw"]), "journeys-raw");
+    assert.equal(resolveE2EShard(["--journeys-archive"]), "journeys-archive");
   });
 
   it("rejects incompatible shard flags", () => {
-    assert.throws(() => resolveE2EShard(["--a11y", "--journeys"]), /Use only one E2E shard: --a11y or --journeys/);
+    assert.throws(
+      () => resolveE2EShard(["--a11y", "--journeys-raw"]),
+      /Use only one E2E shard: --a11y, --journeys, --journeys-raw, or --journeys-archive/,
+    );
   });
 });
 

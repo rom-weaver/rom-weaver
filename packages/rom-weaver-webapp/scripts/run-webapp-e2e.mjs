@@ -35,14 +35,18 @@ const ARCHIVE_STRESS_TIMEOUT_MS = 240_000;
 const MANY_ENTRIES_COUNT = 2048;
 const MANY_ENTRY_SIZE = 4096;
 const E2E_ATTEMPTS = 2;
+const E2E_SHARD_FLAGS = ["--a11y", "--journeys", "--journeys-raw", "--journeys-archive"];
 export const resolveE2EShard = (args) => {
-  const requested = args.filter((arg) => arg === "--a11y" || arg === "--journeys");
-  if (requested.length > 1) throw new Error("Use only one E2E shard: --a11y or --journeys");
+  const requested = args.filter((arg) => E2E_SHARD_FLAGS.includes(arg));
+  if (requested.length > 1) {
+    throw new Error(`Use only one E2E shard: ${E2E_SHARD_FLAGS.slice(0, -1).join(", ")}, or ${E2E_SHARD_FLAGS.at(-1)}`);
+  }
   return requested[0]?.slice(2) || "all";
 };
 const E2E_SHARD = resolveE2EShard(process.argv.slice(2));
-const RUN_AUDITS = E2E_SHARD !== "journeys";
-const RUN_JOURNEYS = E2E_SHARD !== "a11y";
+const RUN_AUDITS = E2E_SHARD === "all" || E2E_SHARD === "a11y";
+const RUN_RAW_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-raw";
+const RUN_ARCHIVE_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-archive";
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
 const browserType = { chromium, webkit }[browserName];
 if (!browserType) throw new Error(`Unsupported ROM_WEAVER_BROWSER value: ${browserName}`);
@@ -1061,7 +1065,7 @@ const main = async () => {
   const previewBaseUrl = `https://${host}:${previewPort}/`;
   const devBaseUrl = `https://${host}:${devPort}/`;
   const temporaryCorpusDir =
-    RUN_JOURNEYS && browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR
+    RUN_ARCHIVE_JOURNEY && browserName === "chromium" && !process.env.ROM_WEAVER_E2E_CORPUS_DIR
       ? createWorkerReuseCorpus()
       : null;
   const corpusDir = process.env.ROM_WEAVER_E2E_CORPUS_DIR || temporaryCorpusDir;
@@ -1085,11 +1089,13 @@ const main = async () => {
         await runHydrationAudit(createContext, previewBaseUrl);
         await runAccessibilityAudit(createContext, previewBaseUrl);
       }
-      if (RUN_JOURNEYS) {
+      if (RUN_RAW_JOURNEY) {
         await runApplyJourney(createContext, devBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",
           "archive_sources/change.ips",
         ]);
+      }
+      if (RUN_ARCHIVE_JOURNEY) {
         await runApplyJourney(createContext, devBaseUrl, "archive routing/apply/download", [
           "archives/one-rom.zip",
           "archives/one-patch.7z",
