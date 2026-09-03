@@ -16,7 +16,7 @@ const MAX_FAILURE_DELAY_MS = 30_000;
 const logger = createLogger("offline-warmup");
 // Worker lines keep their own namespace so the page log shows which side of the
 // service-worker boundary each one came from.
-const workerLogger = createLogger("cache-service-worker");
+const workerLogger = createLogger("rom-weaver-service-worker");
 
 type OfflineWarmupProgress = WarmupProgress;
 

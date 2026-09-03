@@ -135,7 +135,7 @@ describe("offline warm-up client", () => {
         details: { url: "/assets/identify-x.pack" },
         level: "debug",
         message: "identify pack fetch",
-        namespace: "cache-service-worker",
+        namespace: "rom-weaver-service-worker",
       }),
     );
 
