@@ -13,6 +13,7 @@ import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
+import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
@@ -1322,7 +1323,7 @@ export default defineConfig(({ command, mode }) => {
         injectManifest: {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.
-          manifestTransforms: [writePrecacheSizes()],
+          manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
           globIgnores: ["**/*.map", "assets/identify-*.pack.br"],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
