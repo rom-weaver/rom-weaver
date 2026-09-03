@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
@@ -36,12 +36,17 @@ class FakeWorker {
   }
 }
 
-const { requestBrowserOpfsStorage } = await import("../../src/workers/protocol/browser-opfs-worker-client.ts");
+let requestBrowserOpfsStorage: typeof import("../../src/workers/protocol/browser-opfs-worker-client.ts").requestBrowserOpfsStorage;
 
-beforeEach(() => {
-  if (!FakeWorker.instances.length) {
-    Object.defineProperty(globalThis, "Worker", { configurable: true, value: FakeWorker });
-  }
+beforeEach(async () => {
+  vi.resetModules();
+  FakeWorker.instances.length = 0;
+  vi.stubGlobal("Worker", FakeWorker);
+  ({ requestBrowserOpfsStorage } = await import("../../src/workers/protocol/browser-opfs-worker-client.ts"));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("browser OPFS storage worker client", () => {
@@ -59,17 +64,16 @@ describe("browser OPFS storage worker client", () => {
     const bytes = new Uint8Array([1, 2]);
     const pending = requestBrowserOpfsStorage({ action: "write", bytes, filePath: "/work/file.bin", position: 4 });
     const worker = FakeWorker.instances[0];
-    expect(worker?.posted[1]).toMatchObject({ action: "write", filePath: "/work/file.bin", position: 4 });
+    expect(worker?.posted[0]).toMatchObject({ action: "write", filePath: "/work/file.bin", position: 4 });
     worker?.emit("error", { message: "worker crashed" });
     await expect(pending).rejects.toThrow("worker crashed");
     expect(worker?.terminated).toBe(true);
   });
 
   it("rejects when Worker support is unavailable", async () => {
-    Object.defineProperty(globalThis, "Worker", { configurable: true, value: undefined });
+    vi.stubGlobal("Worker", undefined);
     await expect(requestBrowserOpfsStorage({ action: "remove", filePath: "/work/file.bin" })).rejects.toThrow(
       "Browser OPFS storage requires Worker support",
     );
-    Object.defineProperty(globalThis, "Worker", { configurable: true, value: FakeWorker });
   });
 });
