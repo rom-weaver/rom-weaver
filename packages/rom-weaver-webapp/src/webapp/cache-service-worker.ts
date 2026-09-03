@@ -443,6 +443,27 @@ logServiceWorker("script initialized", {
   runtimeCacheName: RUNTIME_CACHE_NAME,
 });
 
+// The pack table is baked into this script, while the page reads a no-cache
+// identify index. A worker that outlived a data revision therefore verifies
+// packs against digests the origin no longer serves, and the only symptom is
+// an unavailable database. Print the table's revision next to the index
+// revision the page logs, so that skew is one comparison rather than a guess.
+const IDENTIFY_PACK_TABLE = __IDENTIFY_OPTIONAL_PACK_GROUPS__.flatMap((group) =>
+  group.packs.map((pack) => `${pack.url}:${pack.sha256}`),
+);
+crypto.subtle
+  .digest("SHA-256", new TextEncoder().encode(IDENTIFY_PACK_TABLE.join("\n")))
+  .then((digest) => {
+    logServiceWorker("identify pack table", {
+      packs: IDENTIFY_PACK_TABLE.length,
+      revision: [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+        .slice(0, 16),
+    });
+  })
+  .catch((error: unknown) => logServiceWorker("identify pack table digest failed", { error: formatError(error) }));
+
 keepResourceTimingsRecording(self);
 addPlugins([precachePlugin]);
 precacheAndRoute(PRECACHE_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });

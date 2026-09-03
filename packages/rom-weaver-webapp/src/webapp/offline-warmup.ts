@@ -209,10 +209,19 @@ const fetchVerifiedPack = async (
 ) => {
   const request = new Request(new URL(pack.url, scope));
   const response = await fetcher(request);
-  if (!response.ok) throw new Error(`ROM identify pack download failed with HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`ROM identify pack download failed with HTTP ${response.status}: ${pack.url}`);
+  }
   const buffer = await readWithByteProgress(response, onBytes);
   const actualSha256 = await sha256HexOf(buffer);
-  if (actualSha256 !== pack.sha256) throw new Error(`ROM identify pack checksum failed: ${pack.url}`);
+  // The digests go in the message because this error is only ever seen through
+  // a caller's log line: expected != actual means this worker's baked pack
+  // table is a different data revision than the bytes the origin now serves.
+  if (actualSha256 !== pack.sha256) {
+    throw new Error(
+      `ROM identify pack checksum failed: ${pack.url}: expected ${pack.sha256}, got ${actualSha256} (${buffer.byteLength} bytes)`,
+    );
+  }
   return { request, response: bufferedResponse(response, buffer, encodedSizeOf(request.url)) };
 };
 
@@ -789,11 +798,25 @@ const createOfflineWarmup = ({
     const requestUrl = new URL(request.url);
     const cache = await caches.open(identifyOptionalCacheName);
     const cached = await cache.match(request.url);
-    if (cached) return cached;
+    if (cached) {
+      log("identify pack served from cache", { url: requestUrl.pathname });
+      return cached;
+    }
     const pack = identifyOptionalGroups
       .flatMap((group) => group.packs)
       .find((candidate) => new URL(candidate.url, scope).pathname === requestUrl.pathname);
-    if (!pack) return Response.error();
+    if (!pack) {
+      log("identify pack is not in this worker's pack table", { url: requestUrl.pathname });
+      return Response.error();
+    }
+    // The table is matched by pathname alone, so the requested digest is the
+    // one piece of evidence that the page and this worker disagree on which
+    // data revision is current.
+    log("identify pack fetch", {
+      requestedSha256: requestUrl.searchParams.get("sha256") || "none",
+      tableSha256: pack.sha256,
+      url: requestUrl.pathname,
+    });
     // On-demand single-pack fetch: an identify run must never fail because the
     // group install has not happened yet. The group marker stays absent until
     // a full install, so settings semantics are unchanged. The user is waiting
