@@ -264,3 +264,139 @@ describe("retainUncompressedWorkerOutputs", () => {
     expect(retain).not.toHaveBeenCalled();
   });
 });
+
+describe("runApplyWorkflow recovery and multi-asset paths", () => {
+  it("re-prepares prepared input and patch files when their runtime paths are gone", async () => {
+    const runtime = makeRuntime();
+    runtime.vfs.stat.mockResolvedValue(null);
+    const input = asset("input", "game.bin", 9);
+    const patch = patchFile("fix.ips", 3);
+    const preparedInput = asset("reprepared", "game.bin", 9);
+    const repreparedPatch = patchFile("fix.ips", 3);
+    mocks.prepareInputAssets.mockResolvedValue([preparedInput]);
+    mocks.prepareInput.mockResolvedValue(repreparedPatch);
+    mocks.parsePatchForApply.mockResolvedValue(parsedPatch());
+    mocks.resolvePatchTargets.mockResolvedValue([preparedInput]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 0 });
+
+    await runApplyWorkflow(
+      {
+        inputs: sourceRef("game.bin", 9),
+        options: { output: { outputName: "result.bin" } },
+        patches: sourceRef("fix.ips", 3),
+        preparedInputAssets: [input],
+        preparedPatchFiles: [patch],
+      } as never,
+      runtime as never,
+    );
+
+    expect(mocks.prepareInputAssets).toHaveBeenCalledWith(
+      sourceRef("game.bin", 9),
+      expect.anything(),
+      0,
+      runtime,
+      undefined,
+    );
+    expect(mocks.prepareInput).toHaveBeenCalledWith(
+      sourceRef("fix.ips", 3),
+      "patch",
+      expect.anything(),
+      runtime,
+      undefined,
+      0,
+    );
+  });
+
+  it("discovers and labels sidecar patches from prepared input assets", async () => {
+    const runtime = makeRuntime();
+    const input = asset("input", "game.bin", 9);
+    const sidecar = patchFile("game [Hack].ips", 3);
+    input.sidecarPatches = [{ file: sidecar, parentCompressions: [], sidecarOrder: 1 }];
+    mocks.resolvePatchTargets.mockResolvedValue([input]);
+    mocks.parsePatchForApply.mockResolvedValue(parsedPatch("ips"));
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 0 });
+
+    const result = await runApplyWorkflow(
+      {
+        inputs: sourceRef("game.bin", 9),
+        options: { output: { outputName: "result.bin" } },
+        preparedInputAssets: [input],
+      } as never,
+      runtime as never,
+    );
+
+    expect(result.patches).toEqual([{ fileName: "game [Hack].ips", format: "ips", targetInputId: "input" }]);
+    expect(sidecar._generatedPatchName).toBe("Hack");
+  });
+
+  it("fails clearly when a patch cannot be parsed or the worker is unavailable", async () => {
+    const input = asset();
+    const patch = patchFile("broken.ips");
+    mocks.parsePatchForApply.mockResolvedValue(null);
+    await expect(
+      runApplyWorkflow(
+        {
+          inputs: sourceRef("game.bin", 20),
+          options: { output: { outputName: "result.bin" } },
+          patches: sourceRef("broken.ips", 4),
+          preparedInputAssets: [input],
+          preparedPatchFiles: [patch],
+        } as never,
+        makeRuntime() as never,
+      ),
+    ).rejects.toThrow("Invalid patch file: broken.ips");
+
+    mocks.parsePatchForApply.mockResolvedValue(parsedPatch());
+    const runtime = makeRuntime();
+    runtime.patch = undefined;
+    mocks.resolvePatchTargets.mockResolvedValue([input]);
+    await expect(
+      runApplyWorkflow(
+        {
+          inputs: sourceRef("game.bin", 20),
+          options: { output: { outputName: "result.bin" } },
+          patches: sourceRef("fix.ips", 4),
+          preparedInputAssets: [input],
+          preparedPatchFiles: [patch],
+        } as never,
+        runtime as never,
+      ),
+    ).rejects.toThrow("Patch worker support is required");
+  });
+
+  it("applies one patch to each resolved asset and preserves source extensions", async () => {
+    const runtime = makeRuntime();
+    const first = asset("one", "one.bin", 5);
+    const second = asset("two", "two.sfc", 6);
+    first.file.getExtension = () => "bin";
+    second.file.getExtension = () => "sfc";
+    const patch = patchFile("fix.ips");
+    const secondPatch = patchFile("fix-second.ips");
+    const parsed = parsedPatch("bps");
+    const output = { ...runtime.output, fileName: "patched.sfc", path: "/work/patched", vfs: runtime.vfs };
+    runtime.patch.applyPatch.mockResolvedValue(output);
+    mocks.resolvePatchTargets.mockResolvedValue([first, second]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 0 });
+    mocks.parsePatchForApply.mockResolvedValue(parsed);
+    const result = await runApplyWorkflow(
+      {
+        inputs: [sourceRef("one.bin", 5), sourceRef("two.sfc", 6)],
+        options: { output: { outputName: "patched" }, workers: { threads: 2 } },
+        patches: [sourceRef("fix.ips", 4), sourceRef("fix-second.ips", 4)],
+        preparedInputAssets: [first, second],
+        preparedPatchFiles: [patch, secondPatch],
+        parsedPatches: [parsed, parsed],
+      } as never,
+      runtime as never,
+    );
+
+    expect(runtime.patch.applyPatch).toHaveBeenCalledTimes(2);
+    expect(runtime.patch.applyPatch.mock.calls[0]?.[0]).toMatchObject({
+      options: expect.objectContaining({ outputName: "patched.bin" }),
+    });
+    expect(runtime.patch.applyPatch.mock.calls[1]?.[0]).toMatchObject({
+      options: expect.objectContaining({ outputName: "patched.sfc" }),
+    });
+    expect(result.inputs).toHaveLength(2);
+  });
+});

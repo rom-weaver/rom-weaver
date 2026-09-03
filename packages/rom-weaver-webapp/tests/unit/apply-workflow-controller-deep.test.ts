@@ -10,6 +10,7 @@ type Probe = {
   createExecutionOptions: (...args: unknown[]) => Record<string, unknown>;
   createInitialSource: (role: "input" | "patch", source: Source, index: number) => Stage;
   createPatchInput: (...args: unknown[]) => Record<string, unknown>;
+  dispose: () => Promise<void>;
   emitApplyWorkerProgress: (progress: Record<string, unknown>) => void;
   emitProgress: (event: Record<string, unknown>) => void;
   emitChange: () => void;
@@ -601,5 +602,63 @@ describe("apply controller ownership and lifecycle", () => {
     await (controller as unknown as { clearInput: () => Promise<void> }).clearInput();
     expect(controller.inputSession).toBeUndefined();
     expect(controller.refreshPatchReadiness).toHaveBeenCalled();
+  });
+
+  it("restores the previous patch when replacement staging fails", async () => {
+    const controller = makeController();
+    const previous = patchStage(controller, "old.ips");
+    controller.patches = [previous];
+    controller.stageSource = vi.fn(async () => {
+      throw new Error("replacement failed");
+    });
+
+    await expect(controller.replacePatchAt(0, source("new.ips"))).rejects.toThrow("replacement failed");
+    expect(controller.patches).toEqual([previous]);
+    await expect(controller.replacePatchAt(-1, source("new.ips"))).rejects.toMatchObject({
+      code: "WORKFLOW_INVALID_STATE",
+    });
+  });
+
+  it("rejects invalid option and target mutations with explicit errors", async () => {
+    const controller = makeController();
+    await expect(controller.setOutputFormat("unsupported" as never)).rejects.toThrow(
+      "Unsupported output format: unsupported",
+    );
+    await expect(controller.setPatchTarget(0, "auto")).rejects.toThrow("Patch 1 was not found");
+    await expect(
+      (
+        controller as unknown as { setPatchOption: (index: number, option: Record<string, unknown>) => Promise<void> }
+      ).setPatchOption(0, {}),
+    ).rejects.toThrow("Patch 1 was not found");
+  });
+
+  it("disposes input and patch ownership only once", async () => {
+    const releaseOwnedSources = vi.fn(async () => undefined);
+    const releaseSources = vi.fn(async () => undefined);
+    const controller = new ApplyWorkflowController<Source, unknown>(
+      { name: "browser", workerIo: { releaseOwnedSources, releaseSources } } as never,
+      { settings: { output: { outputName: "out.sfc" } } } as never,
+    ) as unknown as Probe;
+    const input = inputStage(controller, "rom.sfc");
+    input.preparedInputAssets = [
+      { file: patchFile("rom.sfc"), fileName: "rom.sfc", id: "input-choice", kind: "rom", patchable: true, size: 8 },
+    ];
+    const patch = patchStage(controller, "fix.ips");
+    controller.inputSession = {
+      role: "input",
+      sources: [input.source],
+      stages: [input],
+      synthetic: false,
+      view: input,
+    };
+    controller.patches = [patch];
+    controller.retainOwnedSources([input.source, patch.source]);
+
+    await controller.dispose();
+    await controller.dispose();
+
+    expect(controller.patches).toEqual([]);
+    expect(releaseSources).toHaveBeenCalled();
+    expect(releaseOwnedSources).toHaveBeenCalled();
   });
 });

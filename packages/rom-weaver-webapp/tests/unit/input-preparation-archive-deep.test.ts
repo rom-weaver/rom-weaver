@@ -113,6 +113,21 @@ describe("archive source primitives", () => {
       resolveArchiveInputAssets(archive("game.sfc") as never, undefined, 2, runtime as never),
     ).resolves.toEqual([]);
   });
+
+  it("uses a named blob or materialized bytes when no external path exists", () => {
+    const blobFile = archive("blob.zip") as Record<string, unknown>;
+    blobFile._file = new Blob(["archive"]);
+    delete blobFile._sourceRef;
+    const source = getCompressionRuntimeSource(blobFile as never);
+    expect(source).toMatchObject({ fileName: "blob.zip", size: 20, source: expect.any(Blob) });
+
+    const unnamed = archive("bytes.zip") as Record<string, unknown>;
+    delete unnamed._sourceRef;
+    const first = getCompressionRuntimeSource(unnamed as never);
+    const second = getCompressionRuntimeSource(unnamed as never);
+    expect(first.source).toBe(second.source);
+    expect(first).toMatchObject({ fileName: "bytes.zip", size: 20, source: expect.any(Blob) });
+  });
 });
 
 describe("resolveArchiveInput", () => {
@@ -143,6 +158,30 @@ describe("resolveArchiveInput", () => {
       preferExternalFilePath: true,
     });
     expect(result).toMatchObject({ fileName: "payload.sfc", _extractTimeMs: 3.2 });
+  });
+
+  it("uses the first output when the extractor omits its singular output field", async () => {
+    const extracted = { fileName: "payload.bin", fileSize: 8 };
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue(extracted);
+    runtime.compression.extract.mockResolvedValue({ outputs: [output("payload.bin", 8)] });
+    await expect(resolveArchiveInput(archive("bundle.zip") as never, "rom", undefined, runtime as never)).resolves.toBe(
+      extracted,
+    );
+    expect(extracted).toMatchObject({ fileName: "payload.bin", _extractTimeMs: 3.2 });
+  });
+
+  it("releases retained extraction ownership when materialization fails", async () => {
+    const cleanup = vi.fn(async () => undefined);
+    mocks.createPatchFileFromPublicOutput.mockRejectedValue(new Error("cannot materialize"));
+    const extractedOutput = { ...output("payload.bin"), dispose: cleanup };
+    runtime.compression.extract.mockResolvedValue({
+      output: extractedOutput,
+      outputs: [extractedOutput],
+    });
+    await expect(
+      resolveArchiveInput(archive("broken.zip") as never, "rom", undefined, runtime as never),
+    ).rejects.toThrow("cannot materialize");
+    expect(cleanup).toHaveBeenCalled();
   });
 
   it("uses the patch leaf resolver first and reports missing extraction outputs", async () => {
@@ -324,5 +363,24 @@ describe("attachBareRomIngestMetadata", () => {
     const failed = archive("failed.sfc") as Record<string, unknown>;
     await expect(attachBareRomIngestMetadata(failed as never, undefined, runtime as never)).resolves.toBeUndefined();
     expect(failed.checksums).toBeUndefined();
+
+    runtime.ingest.run.mockResolvedValueOnce({ result: { isRom: true, assets: [] } });
+    const empty = archive("empty.sfc") as Record<string, unknown>;
+    await expect(attachBareRomIngestMetadata(empty as never, undefined, runtime as never)).resolves.toBeUndefined();
+    expect(empty.checksums).toBeUndefined();
+
+    runtime.ingest.run.mockImplementationOnce(async ({ onProgress }) => {
+      onProgress?.({ percent: 10, label: "Hashing" });
+      return {
+        result: {
+          isRom: true,
+          assets: [{ checksums: { crc32: "abc", md5: "def", sha1: "ghi" }, platform: "snes" }],
+        },
+      };
+    });
+    const fallback = archive("fallback.sfc") as Record<string, unknown>;
+    await attachBareRomIngestMetadata(fallback as never, undefined, runtime as never);
+    expect(fallback).toMatchObject({ checksums: { crc32: "abc" }, romType: { platform: "snes" } });
+    expect(fallback._precomputedChecksumMs).toEqual(expect.any(Number));
   });
 });

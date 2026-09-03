@@ -227,6 +227,47 @@ describe("buildSessionOutputFiles", () => {
     expect(request.romSpecific.chd.imageFiles).toEqual([{ fileName: "t1.bin", source: expect.anything() }]);
     expect(result.files).toEqual([chdOutputFile]);
   });
+
+  it("renames a single BIN track and its CUE entry to the requested base name", async () => {
+    const cueText = 'FILE "disc.bin" BINARY\nTRACK 01 MODE1/2352\n';
+    const cueFile = await makeFile(cueText, "original.cue");
+    cueFile.metadata = { cueText };
+    const trackFile = await makeFile("track-bytes", "disc.bin");
+    const assets = [makeAsset("cue", "cue", cueFile, "group"), makeAsset("track", "track", trackFile, "group")];
+    const compressed = await makeFile("zip-bytes", "renamed.zip");
+    mockCreateArchivePatchFileOutput.mockResolvedValue(compressed);
+
+    await buildSessionOutputFiles(assets, new Map(), {
+      output: { compression: "zip", outputName: "renamed" },
+    } as never);
+
+    const entries = mockCreateArchivePatchFileOutput.mock.calls[0]?.[0].entries as Array<{
+      data?: Uint8Array;
+      filename?: string;
+    }>;
+    expect(entries.map((entry) => entry.filename)).toEqual(["renamed.cue", "renamed.bin"]);
+    expect(new TextDecoder().decode(entries[0]?.data)).toContain('FILE "renamed.bin" BINARY');
+  });
+
+  it("routes a seven-zip multi-asset output through the archive writer and cleans files once", async () => {
+    const first = await makeFile("first", "first.bin");
+    const second = await makeFile("second", "second.bin");
+    const cleanup = vi.fn();
+    (first as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
+    (second as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
+    const assets = [makeAsset("a", "rom", first), makeAsset("b", "rom", second)];
+    const compressed = await makeFile("7z-bytes", "bundle.7z");
+    mockCreateArchivePatchFileOutput.mockResolvedValue(compressed);
+
+    const result = await buildSessionOutputFiles(assets, new Map(), { output: { compression: "7z" } } as never);
+
+    expect(mockCreateArchivePatchFileOutput.mock.calls[0]?.[0]).toMatchObject({
+      compression: "7z",
+      outputName: "first.7z",
+    });
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(result.files).toEqual([compressed]);
+  });
 });
 
 describe("createSingleFileRomSpecificOutput", () => {
@@ -266,6 +307,46 @@ describe("createSingleFileRomSpecificOutput", () => {
     expect(request.fileName).toBe("game.bin");
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(result).toBe(compressed);
+  });
+
+  it("builds RVZ and Z3DS single-file requests with runtime-specific options", async () => {
+    const outputFile = await makeFile("rom-bytes", "game.iso");
+    (outputFile as PatchFileInstance & { _lazyExternalSource?: boolean })._lazyExternalSource = true;
+    (outputFile as PatchFileInstance & { _sourceRef?: unknown })._sourceRef = {
+      fileName: "game.iso",
+      size: outputFile.fileSize,
+      source: "/work/game.iso",
+    };
+    const compressed = await makeFile("compressed", "game.out");
+    const create = vi.fn(async (request: Record<string, unknown>) => ({ output: { fileName: request.outputName } }));
+    const runtime = { compression: { create } } as unknown as WorkflowRuntime;
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(compressed);
+
+    await createSingleFileRomSpecificOutput({
+      compression: "rvz",
+      options: { output: { outputName: "game.rvz" }, workers: { threads: 4 } } as never,
+      outputFile,
+      runtime,
+    });
+    await createSingleFileRomSpecificOutput({
+      compression: "z3ds",
+      options: { output: { outputName: "game.z3ds" } } as never,
+      outputFile,
+      runtime,
+    });
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[0]?.[0]).toMatchObject({
+      format: "rvz",
+      outputName: "game.rvz",
+      romSpecific: { rvz: { sourceFileName: undefined } },
+      source: "/work/game.iso",
+    });
+    expect(create.mock.calls[1]?.[0]).toMatchObject({
+      format: "z3ds",
+      outputName: "game.z3ds",
+      romSpecific: { z3ds: { sourceFileName: undefined } },
+    });
   });
 
   it("returns null when the runtime produced no output for the requested format", async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RomWeaverError } from "../../src/lib/errors.ts";
 import { StagedRomSourceController } from "../../src/lib/workflow/staged-rom-source.ts";
 import type { SharedRomSourceState, SharedRomSourceSession } from "../../src/lib/workflow/staged-source-types.ts";
 import type { InputAsset } from "../../src/lib/input/input-assets.ts";
@@ -322,5 +323,107 @@ describe("StagedRomSourceController sessions and metadata", () => {
       status: "needsSelection",
     });
     expect(stage.parentCompressions).toEqual([]);
+  });
+});
+
+describe("StagedRomSourceController selection recovery", () => {
+  it("keeps ambiguous direct multi-file assets pending for user selection", async () => {
+    const first = makeAsset("one.bin", 10);
+    const second = makeAsset("two.bin", 20);
+    const request = {
+      candidates: [
+        { fileName: "one.bin", id: "one", kind: "rom", patchable: true, selectable: true, type: "file" },
+        { fileName: "two.bin", id: "two", kind: "rom", patchable: true, selectable: true, type: "file" },
+      ],
+      role: "input",
+      sourceName: "drop",
+      warnings: [],
+    } as never;
+    prep.prepareMultipleDirectInputAssets.mockImplementation(async (_sources, options) => {
+      options.onCandidatesFound(request);
+      return [first, second];
+    });
+    const { controller } = makeController({ getSessionId: (role) => `${role}-session` });
+
+    const session = await controller.stageSession("input", [
+      { name: "one.bin", size: 10 },
+      { name: "two.bin", size: 20 },
+    ]);
+
+    expect(session.synthetic).toBe(false);
+    expect(session.view.state.status).toBe("needsSelection");
+    expect(session.view.state.candidates).toHaveLength(2);
+  });
+
+  it("auto-resolves a synthetic session when one candidate is available", () => {
+    const { controller } = makeController({ getSessionId: (role) => `${role}-session` });
+    const owner = controller.createInitialSource("input", { name: "game.bin", size: 4 }, 0);
+    const publicId = "deep:input:owner";
+    owner.state.candidates = [
+      { fileName: "game.bin", id: publicId, kind: "rom", patchable: true, selectable: true, type: "file" },
+    ] as never;
+    owner.state.selectedCandidateId = publicId;
+    owner.state.status = "ready";
+    owner.internalCandidates.set(publicId, { candidate: { id: "owner" }, owner });
+    const session = controller.buildSyntheticSession("input", [{ name: "game.bin", size: 4 }], [owner]);
+
+    expect(session.view.state.status).toBe("ready");
+    expect(session.view.state.selectedCandidateId).toBe(publicId);
+    expect(controller.getSelectedOwner(session)).toBe(owner);
+  });
+
+  it("retries a selected synthetic owner once and copies its identity to the view", async () => {
+    const selection = vi.fn(async () => ({ id: "deep:input:choice" }));
+    const { controller } = makeController({ selectFile: selection });
+    const owner = controller.createInitialSource("input", { name: "game.bin", size: 4 }, 0);
+    owner.state.candidates = [
+      { fileName: "game.bin", id: "deep:input:choice", kind: "rom", patchable: true, selectable: true, type: "file" },
+    ] as never;
+    owner.state.status = "needsSelection";
+    owner.internalCandidates.set("deep:input:choice", {
+      candidate: { fileName: "game.bin", id: "owner", selectable: true, type: "file" },
+      owner,
+    });
+    owner.preparedInputAssets = [makeAsset("game.bin", 4)];
+    const view = controller.createInitialSource("input", { name: "view.bin" }, 0, { id: "view" });
+    view.state.status = "needsSelection";
+    view.state.candidates = owner.state.candidates;
+    view.internalCandidates.set("deep:input:choice", { owner, candidate: { id: "owner" } });
+    const session = { role: "input", sources: [owner.source], stages: [owner], synthetic: true, view } as never;
+
+    await expect(controller.maybeResolveBlockingSessionSelection(session)).resolves.toBe(true);
+    expect(selection).toHaveBeenCalledOnce();
+    expect(view.state.status).toBe("ready");
+    expect(view.state.selectedCandidateId).toBe("deep:input:choice");
+    expect(controller.getSelectedOwner(session)).toBe(owner);
+  });
+
+  it("stops after repeated selection attempts and maps preparation failures", async () => {
+    const { controller } = makeController();
+    const repeated = controller.createInitialSource("input", { name: "repeat.zip" }, 0);
+    const retry = (
+      controller as unknown as {
+        maybeResolveBlockingSessionSelectionWithRetryGuard: (session: unknown, keys: Set<string>) => Promise<boolean>;
+      }
+    ).maybeResolveBlockingSessionSelectionWithRetryGuard;
+    repeated.state.fileName = "repeat.zip";
+    await expect(
+      retry({ view: repeated }, new Set(Array.from({ length: 12 }, (_, index) => `key-${index}`))),
+    ).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+
+    const failing = controller.createInitialSource("input", { name: "bad.bin" }, 0);
+    prep.prepareInputAssets.mockRejectedValueOnce(new RomWeaverError("INVALID_INPUT", "cannot prepare"));
+    await expect(controller.prepareSelectedSource(failing)).rejects.toThrow("cannot prepare");
+    expect(failing.state.status).toBe("loading");
+  });
+
+  it("converts a cancelled selection into a selection-skipped error", async () => {
+    const cancelled = new Error("Interactive selection was cancelled");
+    const { controller } = makeController();
+    const stage = controller.createInitialSource("input", { name: "cancelled.zip" }, 0);
+    prep.prepareInputAssets.mockRejectedValueOnce(cancelled);
+    await expect(controller.stageSource(stage)).rejects.toMatchObject({ code: "WORKFLOW_SELECTION_SKIPPED" });
   });
 });
