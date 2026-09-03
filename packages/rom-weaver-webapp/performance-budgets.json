@@ -46,7 +46,7 @@
     "maxUnusedBytes": 52000
   },
   "lighthouse": {
-    "runs": 3,
+    "runs": 1,
     "routes": [
       {
         "name": "Home",

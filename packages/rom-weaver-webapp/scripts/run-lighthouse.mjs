@@ -149,67 +149,14 @@ const clearReports = (outputBase) => {
   for (const extension of ["json", "html"]) fs.rmSync(`${outputBase}.report.${extension}`, { force: true });
 };
 
-const runLighthouseProcess = (url, outputBase) =>
-  new Promise((resolve) => {
-    const child = spawn(
-      process.execPath,
-      [fileURLToPath(import.meta.resolve("lighthouse/cli/index.js")), ...lighthouseArguments(url, outputBase)],
-      { cwd: PACKAGE_ROOT, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const settle = (result) => {
-      if (settled) return;
-      settled = true;
-      resolve({ ...result, stdout, stderr });
-    };
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.once("error", (error) => {
-      settle({ status: null, stderr: `${stderr}${error.message}` });
-    });
-    child.once("close", (status, signal) => {
-      settle({ status, signal });
-    });
-  });
-
-export const LIGHTHOUSE_CONCURRENCY = 2;
-
-export const runWithConcurrency = async (tasks, concurrency = LIGHTHOUSE_CONCURRENCY) => {
-  if (!Number.isInteger(concurrency) || concurrency < 1)
-    throw new Error("Lighthouse concurrency must be a positive integer");
-  const results = Array(tasks.length);
-  let nextIndex = 0;
-  let failure;
-  const worker = async () => {
-    while (failure === undefined) {
-      const index = nextIndex;
-      nextIndex += 1;
-      if (index >= tasks.length) return;
-      try {
-        results[index] = await tasks[index]();
-      } catch (error) {
-        if (failure === undefined || index < failure.index) failure = { error, index };
-        return;
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
-  if (failure !== undefined) throw failure.error;
-  return results;
-};
-
-const runAudit = async (url, outputBase) => {
+const runAudit = (url, outputBase) => {
   for (let attempt = 1; attempt <= LIGHTHOUSE_ATTEMPTS; attempt += 1) {
     clearReports(outputBase);
-    const result = await runLighthouseProcess(url, outputBase);
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(import.meta.resolve("lighthouse/cli/index.js")), ...lighthouseArguments(url, outputBase)],
+      { cwd: PACKAGE_ROOT, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
+    );
     const reportPath = `${outputBase}.report.json`;
     const report = fs.existsSync(reportPath) ? JSON.parse(fs.readFileSync(reportPath, "utf8")) : undefined;
     if (shouldRetryLighthouseAttempt(attempt, report)) {
@@ -331,21 +278,14 @@ export async function main() {
   const rows = [];
   let failures = 0;
   try {
-    const auditTasks = config.routes.flatMap((route, routeIndex) =>
-      Array.from({ length: config.runs }, (_, index) => {
-        const run = index + 1;
+    for (const route of config.routes) {
+      const reports = [];
+      for (let run = 1; run <= config.runs; run += 1) {
+        process.stdout.write(`Lighthouse ${route.name} run ${run}/${config.runs}\n`);
         const outputBase = path.join(REPORT_DIR, `${route.name.toLowerCase()}-${run}`);
-        return async () => {
-          process.stdout.write(`Lighthouse ${route.name} run ${run}/${config.runs}\n`);
-          return { report: await runAudit(`${origin}${route.path}`, outputBase), routeIndex, run };
-        };
-      }),
-    );
-    const auditResults = await runWithConcurrency(auditTasks);
-    const reportsByRoute = config.routes.map(() => []);
-    for (const { report, routeIndex, run } of auditResults) reportsByRoute[routeIndex][run - 1] = report;
-    for (const [routeIndex, route] of config.routes.entries()) {
-      const result = evaluateReports(route, reportsByRoute[routeIndex], config);
+        reports.push(runAudit(`${origin}${route.path}`, outputBase));
+      }
+      const result = evaluateReports(route, reports, config);
       rows.push(...result.rows);
       failures += result.failures;
     }
