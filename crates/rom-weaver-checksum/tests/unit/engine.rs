@@ -264,6 +264,11 @@ fn registry_contains_planned_algorithms() {
 }
 
 #[test]
+fn native_checksum_engine_reports_the_native_backend() {
+    assert_eq!(NativeChecksumEngine.name(), "native");
+}
+
+#[test]
 fn checksum_file_reports_expected_digests() {
     let temp = TestDir::new();
     let source = temp.path().join("sample.bin");
