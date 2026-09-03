@@ -8,6 +8,7 @@ ROMWeaver builds deterministic RWFP1 packs from pinned Libretro and OpenGood dat
 - [Build-time data](#build-time-data)
 - [Source policy](#source-policy)
 - [RWFP1 records](#rwfp1-records)
+- [Checksum router](#checksum-router)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Determinism and provenance](#determinism-and-provenance)
@@ -51,15 +52,25 @@ The pack manifest owns the platform and source. Game records do not repeat them.
 
 `manifest.json` stores the source, license, commit, URL, and generation metadata.
 
+## Checksum router
+
+`checksum-routes.bin` (format RWCR1) holds one binary fuse filter per pack, built in the same run as the packs from the same hash rows. A filter stores 8-bit fingerprints of each crc32, md5, and sha1 key in its pack. It stores no checksum value and no game record.
+
+The browser uses the router when it identifies a bare checksum. Each pack filter answers "maybe" or "definitely not" for the digest; the browser loads the union of the "maybe" packs, and the pack lookup gives the final answer. A key present in a pack always routes to that pack, so a key that is in several packs routes to all of them. A pack that does not hold the key answers "maybe" about once in 256 queries, which costs one extra pack fetch and a genuine no-match from that pack.
+
+`index.json` records the router under `checksumRoutes` with its size and SHA-256. Construction uses a fixed seed sequence, so a rebuild over the same keys is byte-identical. The shared builder and reader live in `packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs`.
+
+The router is browser data only. The native CLI searches every installed pack for a bare checksum, and `scripts/build-identify-release-data.mjs` removes `checksumRoutes` from every release index.
+
 ## Browser installation
 
-The web build emits each pack as a Brotli static asset. The service worker precaches only the default groups during installation.
+The web build emits each pack as a Brotli static asset. The service worker precaches `index.json`, `catalog.json`, and the checksum router with the app under one service-worker revision. Packs are not precached: the background warm-up downloads the default groups and the optional groups the user has ticked in Settings.
 
 The Settings page can install a complete optional group. The service worker checks every pack before it marks the group as installed.
 
 Computer systems and DOS use the `optional-computers` group. MicroW8, PICO-8, TIC-80, and WASM-4 use the `optional-fantasy` group. LowRes NX remains in the default group.
 
-Identify requests use the local caches only. A cache miss returns a local error. It does not fetch a pack in response to ROM data.
+An identify run that needs a pack outside the installed groups fetches that single pack on demand and caches it. The service worker verifies its SHA-256 before it stores it.
 
 ## Native installation
 
@@ -79,6 +90,6 @@ Each manifest records the source name, URL, commit, license, input path, and gen
 
 ## Pack integrity
 
-The browser and native CLI check each pack size and SHA-256 before use. The reader also checks every member, table length, offset, hash width, and reference.
+The browser and native CLI check each pack size and SHA-256 before use. The reader also checks every member, table length, offset, hash width, and reference. The browser applies the same size and SHA-256 checks to the checksum router, and the router reader checks every slug, segment layout, and table length.
 
 An invalid or absent pack reports identification as unavailable. It does not become a false no-match result.
