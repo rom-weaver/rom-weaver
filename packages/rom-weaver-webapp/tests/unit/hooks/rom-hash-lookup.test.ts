@@ -87,6 +87,19 @@ describe("useRomHashLookup", () => {
     expect(unavailable.result.current.result).toBeUndefined();
   });
 
+  it("appends the technical cause behind unavailable data", async () => {
+    mockedLookup.mockResolvedValue({
+      matches: [],
+      status: "unavailable",
+      unavailableReason: "ROM identify database request failed with HTTP 404",
+    });
+
+    const hook = await search("deadbeef");
+
+    expect(hook.result.current.error).toContain("not available");
+    expect(hook.result.current.error).toContain("HTTP 404");
+  });
+
   it("reports a thrown lookup instead of staying busy", async () => {
     mockedLookup.mockRejectedValue(new Error("pack read failed"));
 

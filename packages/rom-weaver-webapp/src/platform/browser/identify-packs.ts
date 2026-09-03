@@ -16,6 +16,9 @@ import {
 } from "../../lib/identify/identify-catalog.ts";
 import type { IdentifyCatalog } from "../../lib/identify/identify-catalog.ts";
 import { sha256Hex } from "../../lib/identify/sha256-hex.ts";
+import { createLogger } from "../../lib/logging.ts";
+
+const logger = createLogger("identify-packs");
 
 type IdentifySystem = {
   brotliBytes?: number;
@@ -50,6 +53,8 @@ type IdentifyPackGroup = {
 type IdentifyIndex = {
   catalog?: string;
   format: string;
+  /** Upstream database revisions, logged so a page and a worker can be compared. */
+  sources?: Record<string, { revision?: string; release?: string }>;
   groups?: IdentifyPackGroup[];
   packGroups?: IdentifyPackGroup[];
   systems: IdentifySystem[];
@@ -229,6 +234,12 @@ const loadIndex = async (): Promise<IdentifyIndex> => {
   if (index.format !== "rom-weaver-identify-system-pack-v1" || !Array.isArray(index.systems)) {
     throw new IdentifyDataUnavailableError("ROM identify index is invalid");
   }
+  logger.debug("identify index loaded", {
+    sources: Object.entries(index.sources || {})
+      .map(([name, source]) => `${name}@${source?.revision || source?.release || "unknown"}`)
+      .join(" "),
+    systems: index.systems.length,
+  });
   return index as IdentifyIndex;
 };
 
@@ -350,10 +361,27 @@ const toBrowserPack = (system: IdentifySystem, bytes: ArrayBuffer): BrowserIdent
 const verifyPackBytes = async (system: IdentifySystem, bytes: ArrayBuffer): Promise<void> => {
   // Size and SHA-256 both gate the pack. A truncated or substituted database
   // MUST NOT reach the parser. A catalog-only pack has no indexed size.
+  //
+  // Both failures log the expected and the actual value. Without them a stale
+  // service worker serving a previous data revision and a truncated body read
+  // identically, and the served bytes are the only evidence either way.
   if (system.rawBytes > 0 && bytes.byteLength !== system.rawBytes) {
+    logger.error("identify pack size mismatch", {
+      actualBytes: bytes.byteLength,
+      expectedBytes: system.rawBytes,
+      file: system.file,
+    });
     throw new IdentifyDataUnavailableError(`ROM identify database size is invalid: ${system.file}`);
   }
-  if (system.sha256 && (await sha256Hex(bytes)) !== system.sha256) {
+  if (!system.sha256) return;
+  const actualSha256 = await sha256Hex(bytes);
+  if (actualSha256 !== system.sha256) {
+    logger.error("identify pack checksum mismatch", {
+      actualSha256,
+      bytes: bytes.byteLength,
+      expectedSha256: system.sha256,
+      file: system.file,
+    });
     throw new IdentifyDataUnavailableError(`ROM identify database checksum is invalid: ${system.file}`);
   }
 };
@@ -365,15 +393,18 @@ const packUrl = (system: IdentifySystem): URL => {
 };
 
 const fetchPackBytes = async (system: IdentifySystem): Promise<ArrayBuffer> => {
+  const url = packUrl(system);
   let response: Response;
   try {
-    response = await fetch(packUrl(system));
+    response = await fetch(url);
   } catch (cause) {
+    logger.error("identify pack request failed", { error: describe(cause), file: system.file, url: url.href });
     throw new IdentifyDataUnavailableError(`ROM identify database request failed: ${system.file}: ${describe(cause)}`, {
       cause,
     });
   }
   if (!response.ok) {
+    logger.error("identify pack request failed", { file: system.file, status: response.status, url: url.href });
     throw new IdentifyDataUnavailableError(`ROM identify database request failed with HTTP ${response.status}`);
   }
   return response.arrayBuffer();
@@ -426,15 +457,34 @@ const loadIdentifyPackSelection = async (
   let systems: IdentifySystem[];
   if (selected.length) {
     systems = [];
+    const unmatched: string[] = [];
     for (const slug of selected) {
       const system = systemForSlug(index, catalog, slug);
-      if (!system) continue;
+      if (!system) {
+        unmatched.push(slug);
+        continue;
+      }
       systems.push(system);
     }
+    logger.debug("identify pack selection", {
+      hints: [hints.platform ? `platform=${hints.platform}` : "", hints.fileName ? `file=${hints.fileName}` : ""]
+        .filter(Boolean)
+        .join(" "),
+      selected: selected.join(" "),
+      source: "hints",
+      ...(unmatched.length ? { unmatched: unmatched.join(" ") } : {}),
+    });
   } else {
     // Generic cartridge files often have no useful extension or header. Keep
     // the bounded cartridge fallback, but do not load every optical pack.
     systems = index.systems.filter((system) => CARTRIDGE_FALLBACK_SLUGS.has(system.slug));
+    // The whole fallback set has to load for one answer, so any single pack
+    // failure fails the lookup. Name the set that is about to be fetched.
+    logger.debug("identify pack selection", {
+      packs: systems.length,
+      selected: systems.map((system) => system.slug).join(" "),
+      source: "cartridge-fallback",
+    });
   }
   if (!systems.length) {
     throw new IdentifyDataUnavailableError("The ROM identify index lists no usable database");

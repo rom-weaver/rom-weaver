@@ -76,7 +76,12 @@ const useRomHashLookup = (messages: { invalid: string; invalidChars: string }) =
           ...current,
           busy: false,
           error: found
-            ? "The identification data is not available on this device, so this checksum cannot be looked up."
+            ? [
+                "The identification data is not available on this device, so this checksum cannot be looked up.",
+                found.unavailableReason,
+              ]
+                .filter(Boolean)
+                .join(" ")
             : "No ROM in the identification data has this checksum.",
           stage: "",
         }));
