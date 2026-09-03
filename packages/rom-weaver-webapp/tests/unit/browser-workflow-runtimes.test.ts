@@ -184,6 +184,34 @@ beforeEach(() => {
 });
 
 describe("browser archive runtime", () => {
+  it("stages path, file, and array-buffer archive entry sources", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const entryFile = new File(["file contents"], "file.bin");
+    const result = await runtime.create?.({
+      entries: [
+        { fileName: "existing.bin", filePath: "/work/existing.bin" },
+        { fileName: "file.bin", file: entryFile },
+        { fileName: "buffer.bin", arrayBuffer: new ArrayBuffer(4) },
+      ],
+      format: "zip",
+      options: { outputName: "sources.zip" },
+    } as never);
+    expect(result?.output.fileName).toBe("output.bin");
+    expect(io.stageSource).toHaveBeenCalledTimes(3);
+    expect(io.stageSource).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ fallbackFileName: "existing.bin", source: "/work/existing.bin" }),
+    );
+    expect(io.stageSource).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ fallbackFileName: "file.bin", source: entryFile }),
+    );
+    expect(io.stageSource).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ fallbackFileName: "buffer.bin", source: expect.any(File) }),
+    );
+  });
+
   it("stages archive entries and creates a zip with codec and size metadata", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     const result = await runtime.create?.({
@@ -233,6 +261,16 @@ describe("browser archive runtime", () => {
     await expect(
       runtime.extract?.({ source: "bundle.zip", entries: ["a", "b"], options: { directExtract: true } } as never),
     ).rejects.toThrow("exactly one selected entry");
+
+    state.staged.push({
+      cleanup: vi.fn(async () => undefined),
+      fileName: "missing.zip",
+      filePath: "/work/missing.zip",
+    });
+    state.extract.mockResolvedValueOnce({ fileName: "missing.bin" });
+    await expect(
+      runtime.extract?.({ source: "missing.zip", entries: ["missing.bin"], options: { directExtract: true } } as never),
+    ).rejects.toThrow("no output path");
   });
 
   it("descends patch and ROM payloads, preserving disc metadata and track naming", async () => {
@@ -323,9 +361,137 @@ describe("browser archive runtime", () => {
       entries: [{ filename: "game.bin" }],
     });
   });
+
+  it("normalizes zip-like aliases and uses a VFS fallback output", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const epub = new File(["archive"], "bundle.epub");
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.probe.mockResolvedValueOnce({ entries: [] });
+    await expect(runtime.probe?.({ source: epub } as never)).resolves.toEqual({ entries: [] });
+    expect(io.stageSource).toHaveBeenCalledWith(expect.objectContaining({ source: expect.any(File) }));
+    const stagedAlias = io.stageSource.mock.calls[0]?.[0]?.source as File;
+    expect(stagedAlias.name).toBe("bundle.zip");
+
+    const wrapped = { source: new File(["wrapped"], "wrapped.epub") };
+    state.staged.push({
+      cleanup: vi.fn(async () => undefined),
+      fileName: "wrapped.zip",
+      filePath: "/work/wrapped.zip",
+    });
+    state.probe.mockResolvedValueOnce({ entries: [] });
+    await expect(runtime.probe?.({ source: wrapped } as never)).resolves.toEqual({ entries: [] });
+    expect(io.stageSource.mock.calls[1]?.[0]?.source).toMatchObject({
+      fileName: "wrapped.zip",
+      name: "wrapped.zip",
+      source: wrapped.source,
+    });
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.ingest.mockResolvedValueOnce({ assets: [], patches: [] });
+    await expect(
+      runtime.extract?.({ source: epub, entries: ["fallback.bin"], options: {} } as never),
+    ).resolves.toMatchObject({
+      outputs: [expect.objectContaining({ path: "/work/output-scope/fallback.bin" })],
+    });
+  });
+
+  it("reports staging, descend, and storage failures with emitted context", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    const stagedEntry = { cleanup: vi.fn(async () => undefined), fileName: "entry.bin", filePath: "/work/entry.bin" };
+    state.staged.push(stagedEntry);
+    await expect(
+      runtime.create?.({
+        entries: [{ fileName: "entry.bin", text: "ok" }, { fileName: "missing.bin" }],
+        format: "zip",
+        options: {},
+      } as never),
+    ).rejects.toThrow("Archive entry data was not provided: missing.bin");
+    expect(stagedEntry.cleanup).toHaveBeenCalledTimes(1);
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "disc.chd", filePath: "/work/disc.chd" });
+    state.probe.mockRejectedValueOnce(new Error("probe failed"));
+    state.ingest.mockResolvedValueOnce({
+      assets: [{ checksums: {}, checksumVariants: [], fileName: "game.bin", path: "/work/game.bin", sizeBytes: 8 }],
+      patches: [],
+    });
+    await expect(
+      runtime.extract?.({
+        source: "disc.chd",
+        entries: ["game.bin"],
+        descendSinglePayload: true,
+        options: { chdSplitBin: true, extractChecksumAlgorithms: [" MD5 ", "", "SHA1"] },
+      } as never),
+    ).resolves.toMatchObject({ outputs: [expect.objectContaining({ fileName: "game.bin" })] });
+    expect(state.ingest).toHaveBeenLastCalledWith(
+      expect.objectContaining({ checksumAlgorithms: ["md5", "sha1"], splitBin: false }),
+      expect.any(Function),
+      undefined,
+    );
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "broken.chd", filePath: "/work/broken.chd" });
+    state.ingest.mockRejectedValueOnce(new Error("descend failed"));
+    await expect(
+      runtime.extract?.({ source: "broken.chd", entries: [], descendSinglePayload: true, options: {} } as never),
+    ).rejects.toThrow("descend failed");
+  });
+
+  it("maps patch leaves and includes emitted names in a missing-output error", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    state.staged.push({
+      cleanup: vi.fn(async () => undefined),
+      fileName: "patches.zip",
+      filePath: "/work/patches.zip",
+    });
+    state.ingest.mockResolvedValueOnce({
+      assets: [],
+      patches: [{ leafPath: "/work/patch.ips", sizeBytes: 4 }],
+    });
+    await expect(
+      runtime.extract?.({
+        source: "patches.zip",
+        entries: ["patch.ips"],
+        options: { extractChecksumAlgorithms: [" CRC32 ", "", "MD5"] },
+      } as never),
+    ).resolves.toMatchObject({ outputs: [expect.objectContaining({ path: "/work/patch.ips" })] });
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "empty.zip", filePath: "/work/empty.zip" });
+    state.ingest.mockResolvedValueOnce({
+      assets: [],
+      patches: [{ leafPath: "/work/unlabeled.bin", sizeBytes: 3 }],
+    });
+    state.fallbackAvailable = false;
+    await expect(
+      runtime.extract?.({ source: "empty.zip", entries: ["missing.bin"], options: {} } as never),
+    ).rejects.toThrow("emitted: unlabeled.bin");
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "failed.zip", filePath: "/work/failed.zip" });
+    state.ingest.mockRejectedValueOnce(new Error("storage exhausted"));
+    await expect(
+      runtime.extract?.({ source: "failed.zip", entries: ["game.bin"], options: {} } as never),
+    ).rejects.toThrow("storage exhausted");
+  });
 });
 
 describe("browser CHD runtime", () => {
+  it("maps every supported CHD source mode to its Rust format", async () => {
+    const runtime = createBrowserChdRuntime(io as never);
+    for (const mode of ["cd", "gd", "dvd", "raw", "hd", "av", "ld", "unknown"]) {
+      await expect(
+        runtime.createChd({ source: `game-${mode}.bin`, fileName: `game-${mode}.bin`, mode } as never),
+      ).resolves.toMatchObject({ path: "/work/output.bin" });
+    }
+    expect(state.compressionCreate.mock.calls.map(([request]) => (request as { format: string }).format)).toEqual([
+      "chd-cd",
+      "chd-gd",
+      "chd-dvd",
+      "chd-raw",
+      "chd-hd",
+      "chd-av",
+      "chd-av",
+      "chd",
+    ]);
+  });
+
   it("rewrites a cue to a staged track and passes the selected CHD format", async () => {
     const runtime = createBrowserChdRuntime(io as never);
     const cue = { filePath: "/work/input.cue", fileName: "input.cue", cleanup: vi.fn(async () => undefined) };
@@ -347,6 +513,42 @@ describe("browser CHD runtime", () => {
       outputFileName: "game.chd",
     });
     expect(state.updatedVirtual).toHaveLength(1);
+  });
+
+  it("reads virtual and OPFS cue sources and hydrates their sidecars", async () => {
+    const runtime = createBrowserChdRuntime(io as never);
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "blob.cue", filePath: "/work/blob.cue" });
+    state.virtualSources.set("/work/blob.cue", new Blob(['FILE "track.bin" BINARY']));
+    await expect(
+      runtime.createChd({ source: "blob.cue", fileName: "blob.cue", mode: "cd" } as never),
+    ).resolves.toMatchObject({
+      path: "/work/output.bin",
+    });
+
+    state.staged.push(
+      { cleanup: vi.fn(async () => undefined), fileName: "opfs.cue", filePath: "/work/opfs.cue" },
+      { cleanup: vi.fn(async () => undefined), fileName: "track.bin", filePath: "/work/track.bin" },
+    );
+    state.virtualSources.delete("/work/opfs.cue");
+    await expect(
+      runtime.createChd({
+        source: "opfs.cue",
+        fileName: "opfs.cue",
+        imageFiles: [{ fileName: "track.bin", source: "track.bin" }],
+        mode: "cd",
+      } as never),
+    ).resolves.toMatchObject({ path: "/work/output.bin" });
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "track.bin", filePath: "/work/track.bin" });
+    state.virtualSources.set("/work/explicit.cue", new Uint8Array([70, 73, 76, 69]));
+    await expect(
+      runtime.createChd({
+        source: "track.bin",
+        fileName: "track.bin",
+        cueFilePath: "/work/explicit.cue",
+        mode: "cd",
+      } as never),
+    ).resolves.toMatchObject({ path: "/work/output.bin" });
   });
 
   it("extracts cue and split data outputs, and strips the primary track suffix", async () => {
@@ -375,6 +577,28 @@ describe("browser CHD runtime", () => {
     expect(result.outputs).toHaveLength(3);
     expect(result.outputs.map((output: { fileName: string }) => output.fileName)).toContain("selected.bin");
     expect(result.outputs[1]).toMatchObject({ chdCuePath: "/work/game.cue" });
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "disc.chd", filePath: "/work/disc.chd" });
+    state.ingest.mockResolvedValueOnce({
+      assets: [{ fileName: "disc (Track 01).bin", path: "/work/track1.bin", sizeBytes: 10 }],
+    });
+    await expect(
+      runtime.extractChd({ source: "disc.chd", fileName: "disc.chd", mode: "cd", splitBin: true } as never),
+    ).resolves.toMatchObject({ outputs: [expect.objectContaining({ fileName: "disc.bin" })] });
+
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "disc.chd", filePath: "/work/disc.chd" });
+    state.ingest.mockResolvedValueOnce({
+      assets: [{ fileName: "disc.bin", path: "/work/disc.bin", sizeBytes: 10 }],
+    });
+    await expect(
+      runtime.extractChd({
+        source: "disc.chd",
+        fileName: "disc.chd",
+        mode: "dvd",
+        outputName: "single.bin",
+        splitBin: false,
+      } as never),
+    ).resolves.toMatchObject({ outputs: [expect.objectContaining({ fileName: "single.bin" })] });
   });
 
   it("cleans up and reports a CHD extraction with no output files", async () => {
@@ -386,6 +610,33 @@ describe("browser CHD runtime", () => {
       runtime.extractChd({ source: "bad.chd", fileName: "bad.chd", mode: "cd", splitBin: false } as never),
     ).rejects.toThrow("did not emit any output files");
     expect(cleanup).toHaveBeenCalled();
+  });
+
+  it("rejects pathless CHD outputs and disposes earlier outputs on failure", async () => {
+    const runtime = createBrowserChdRuntime(io as never);
+    state.staged.push({
+      cleanup: vi.fn(async () => undefined),
+      fileName: "pathless.chd",
+      filePath: "/work/pathless.chd",
+    });
+    state.ingest.mockResolvedValueOnce({ assets: [{ fileName: "pathless.bin", path: "", sizeBytes: 4 }] });
+    await expect(
+      runtime.extractChd({ source: "pathless.chd", fileName: "pathless.chd", mode: "cd", splitBin: false } as never),
+    ).rejects.toThrow("without a browser VFS path");
+
+    const firstOutput = { dispose: vi.fn(async () => undefined) };
+    io.createWorkerOutput.mockResolvedValueOnce(firstOutput).mockRejectedValueOnce(new Error("output closed"));
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "broken.chd", filePath: "/work/broken.chd" });
+    state.ingest.mockResolvedValueOnce({
+      assets: [
+        { checksums: {}, fileName: "one.bin", path: "/work/one.bin", sizeBytes: 4 },
+        { checksums: {}, fileName: "two.bin", path: "/work/two.bin", sizeBytes: 5 },
+      ],
+    });
+    await expect(
+      runtime.extractChd({ source: "broken.chd", fileName: "broken.chd", mode: "cd", splitBin: false } as never),
+    ).rejects.toThrow("output closed");
+    expect(firstOutput.dispose).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -108,6 +108,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("RomWeaverWorkerClientCore requests", () => {
@@ -213,6 +214,38 @@ describe("RomWeaverWorkerClientCore requests", () => {
     expect(transport.toExitError).toHaveBeenCalledWith(18);
     worker.emit("message", response({ requestId: 4, type: "result", operation: "runJson", result: { ok: true } }));
     await expect(noExitRequest).resolves.toEqual({ ok: true });
+    core._onExit(19);
+  });
+
+  it("deserializes rich errors and normalizes non-Error rejections", async () => {
+    const pending = core.runJson(runRequest);
+    worker.emit(
+      "message",
+      response({
+        requestId: 1,
+        type: "error",
+        error: {
+          cause: { message: "root cause", name: "CauseError", stack: "cause stack" },
+          context: { command: "compress", format: "zip" },
+          kind: "io",
+          message: "disk failed",
+          name: "StorageError",
+          stack: "worker stack",
+        },
+      }),
+    );
+    await expect(pending).rejects.toMatchObject({
+      cause: { message: "root cause", name: "CauseError", stack: "cause stack" },
+      context: { command: "compress", format: "zip" },
+      kind: "io",
+      message: "disk failed",
+      name: "StorageError",
+      stack: "worker stack",
+    });
+
+    const raw = core.runJson(runRequest);
+    core._rejectAllPending({ context: { stage: "worker" } }, "raw rejection");
+    await expect(raw).rejects.toMatchObject({ context: { stage: "worker" }, kind: "worker" });
   });
 });
 
@@ -301,6 +334,7 @@ describe("browser worker transport", () => {
       message: "boom at worker.ts:7:3",
     });
     expect(browserTransport.toError({})).toMatchObject({ message: "worker error" });
+    expect(browserTransport.toError({ filename: "worker.ts" })).toMatchObject({ message: "at worker.ts" });
     expect(browserTransport.toMessageError({ message: " bad " })).toMatchObject({ message: "bad" });
     expect(browserTransport.toMessageError({})).toMatchObject({ message: "worker messageerror" });
 
@@ -308,5 +342,45 @@ describe("browser worker transport", () => {
     browserTransport.terminate(target as unknown as Worker);
     expect(target.posted).toEqual([{ ping: true }]);
     expect(target.terminated).toBe(true);
+  });
+
+  it("forwards BroadcastChannel stream messages and closes the channel", async () => {
+    class FakeBroadcastChannel {
+      static instances: FakeBroadcastChannel[] = [];
+      onmessage: ((event: { data: unknown }) => void) | null = null;
+      closed = false;
+      constructor(readonly name: string) {
+        FakeBroadcastChannel.instances.push(this);
+      }
+      close() {
+        this.closed = true;
+      }
+    }
+    vi.stubGlobal("BroadcastChannel", FakeBroadcastChannel);
+    const events: unknown[] = [];
+    const lines: string[] = [];
+    const traces: unknown[] = [];
+    const traceLines: string[] = [];
+    const pending = core.runJson(runRequest, {
+      onEvent: (event) => events.push(event),
+      onNonJsonLine: (line) => lines.push(line),
+      onTraceEvent: (event) => traces.push(event),
+      onTraceNonJsonLine: (line) => traceLines.push(line),
+    });
+    const channel = FakeBroadcastChannel.instances[0];
+    if (!channel?.onmessage) throw new Error("stream channel was not created");
+    channel.onmessage({ data: { requestId: 2, type: "event", event: { ignored: true } } });
+    channel.onmessage({ data: { requestId: 1, type: "event", event: { status: "running" } } });
+    channel.onmessage({ data: { requestId: 1, type: "nonJsonLine", line: "plain" } });
+    channel.onmessage({ data: { requestId: 1, type: "traceEvent", event: { span: "x" } } });
+    channel.onmessage({ data: { requestId: 1, type: "traceNonJsonLine", line: "trace" } });
+    channel.onmessage({ data: null });
+    expect(events).toEqual([{ status: "running" }]);
+    expect(lines).toEqual(["plain"]);
+    expect(traces).toEqual([{ span: "x" }]);
+    expect(traceLines).toHaveLength(3);
+    worker.emit("message", response({ requestId: 1, type: "result", result: { ok: true } }));
+    await expect(pending).resolves.toEqual({ ok: true });
+    expect(channel.closed).toBe(true);
   });
 });

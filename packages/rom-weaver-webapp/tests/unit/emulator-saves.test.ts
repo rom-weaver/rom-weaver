@@ -331,6 +331,43 @@ describe("emulator saves", () => {
     expect(await listEmulatorSaves()).toEqual([]);
   });
 
+  it("rejects malformed payloads and unsupported import parts", async () => {
+    const database = new FakeDatabase();
+    database.seed("invalid", { gameId: "invalid", gameName: "invalid", state: { nope: true } });
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database, { upgrade: false }));
+    expect(await listEmulatorSaves()).toEqual([]);
+    expect(() => parseSerializedEmulatorSave("not json")).toThrow("selected file is not valid JSON");
+    expect(() =>
+      parseSerializedEmulatorSave(JSON.stringify({ format: "wrong", version: 3, gameId: "id", gameName: "name" })),
+    ).toThrow("not a rom-weaver EmulatorJS save");
+    expect(() =>
+      parseSerializedEmulatorSave(
+        JSON.stringify({ format: "rom-weaver-emulator-save", version: 3, gameId: "id", gameName: "name" }),
+      ),
+    ).toThrow("contains no save-state or SRAM data");
+    expect(() =>
+      parseSerializedEmulatorSave(
+        JSON.stringify({
+          format: "rom-weaver-emulator-save",
+          version: 3,
+          gameId: "id",
+          gameName: "name",
+          state: "no!",
+        }),
+      ),
+    ).toThrow("Invalid save-state data");
+    await expect(importEmulatorSavePart({ data: new Uint8Array([1]), part: "other" as never, sha1 })).rejects.toThrow(
+      "save part is not supported",
+    );
+    await expect(importEmulatorSavePart({ data: {} as never, part: "state", sha1 })).rejects.toThrow(
+      "not valid byte data",
+    );
+    const oversized = { size: 128 * 1024 * 1024 + 1, text: vi.fn() } as never;
+    await expect(importEmulatorSave(oversized)).rejects.toThrow("save file is too large");
+    vi.stubGlobal("indexedDB", undefined);
+    await expect(listEmulatorSaves()).rejects.toThrow("save storage is unavailable");
+  });
+
   it("answers emulator save requests with the persisted SRAM", async () => {
     const source = { postMessage: vi.fn() };
     const listeners: Array<(event: MessageEvent<unknown>) => void> = [];
@@ -361,6 +398,45 @@ describe("emulator saves", () => {
       }),
       "*",
     );
+
+    source.postMessage.mockClear();
+    listeners[0]?.({
+      data: {
+        data: new Uint8Array([9, 8]),
+        gameId: record.gameId,
+        gameName: "Game",
+        kind: "save-state",
+        source: "rom-weaver-emulator",
+      },
+      source,
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(async () => expect((await listEmulatorSaves())[0]?.state).toEqual(new Uint8Array([9, 8])));
+    listeners[0]?.({
+      data: {
+        data: new Uint8Array([6, 7]),
+        gameId: record.gameId,
+        gameName: "Game",
+        kind: "save-sram",
+        source: "rom-weaver-emulator",
+      },
+      source,
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(async () => expect((await listEmulatorSaves())[0]?.sram).toEqual(new Uint8Array([6, 7])));
+    source.postMessage.mockClear();
+    listeners[0]?.({
+      data: {
+        gameId: record.gameId,
+        kind: "request-load-state",
+        source: "rom-weaver-emulator",
+      },
+      source,
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(() =>
+      expect(source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "load-state" }), "*"),
+    );
+    listeners[0]?.({ data: { source: "other", kind: "save-state", gameId: record.gameId } });
+    listeners[0]?.({ data: { source: "rom-weaver-emulator", kind: "save-state", gameId: record.gameId, data: null } });
+    listeners[0]?.({ data: { source: "rom-weaver-emulator", kind: "other", gameId: record.gameId } });
 
     source.postMessage.mockClear();
     configureEmulatorSaveStorage(false);
