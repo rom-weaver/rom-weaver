@@ -111,8 +111,9 @@ describe("offline warm-up client", () => {
 
   it("relays service worker log lines into the page log and cleans up", () => {
     const listeners: Array<(event: MessageEvent) => void> = [];
+    const posted: unknown[] = [];
     const serviceWorker = {
-      controller: null,
+      controller: { postMessage: (message: unknown) => posted.push(message) },
       addEventListener: (_type: string, listener: (event: MessageEvent) => void) => listeners.push(listener),
       removeEventListener: (_type: string, listener: (event: MessageEvent) => void) => {
         const index = listeners.indexOf(listener);
@@ -122,6 +123,7 @@ describe("offline warm-up client", () => {
     const sink = vi.fn();
     configureLogger({ level: "debug", sink });
     const stop = listenForServiceWorkerLog({ serviceWorker });
+    expect(posted).toEqual([{ action: "flush-service-worker-log" }]);
     const post = (data: unknown) => {
       for (const listener of listeners.slice()) listener({ data } as MessageEvent);
     };
@@ -143,6 +145,34 @@ describe("offline warm-up client", () => {
     sink.mockClear();
     post({ action: "service-worker-log", message: "after stop" });
     expect(sink).not.toHaveBeenCalled();
+    configureLogger({ level: "warn", sink: null });
+  });
+
+  it("stamps a replayed worker line with the time the worker wrote it", () => {
+    const listeners: Array<(event: MessageEvent) => void> = [];
+    const serviceWorker = {
+      controller: { postMessage: () => undefined },
+      addEventListener: (_type: string, listener: (event: MessageEvent) => void) => listeners.push(listener),
+      removeEventListener: () => undefined,
+    };
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
+    listenForServiceWorkerLog({ serviceWorker });
+
+    for (const listener of listeners.slice()) {
+      listener({
+        data: {
+          action: "service-worker-log",
+          message: "install event",
+          queued: true,
+          timestamp: "2026-09-03T17:00:00.000Z",
+        },
+      } as MessageEvent);
+    }
+
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({ details: { queuedAt: "2026-09-03T17:00:00.000Z" }, message: "install event" }),
+    );
     configureLogger({ level: "warn", sink: null });
   });
 

@@ -81,32 +81,67 @@ let coepModeHydrated = false;
 let coepModeHydration: Promise<boolean> | null = null;
 
 // A worker logs to its own console, which a bug report from a user never
-// contains: the page's exported log is the artifact that reaches us. Mirror
-// every worker line to the window clients so it lands there too. Failures are
-// swallowed - a log line MUST NOT be able to break the operation it describes.
-const broadcastServiceWorkerLog = (message: string, details?: Record<string, unknown>) => {
+// contains: the page's exported log is the artifact that reaches us. Every
+// line goes to both, and a line written while no window client exists (an
+// install, a warm-up or a fetch with every tab closed) is held until one
+// connects. Failures are swallowed: a log line MUST NOT be able to break the
+// operation it describes.
+type ServiceWorkerLogEntry = { details?: Record<string, unknown>; message: string; timestamp: string };
+
+// The backlog covers a page that is starting up, not a whole offline session,
+// so it drops its oldest entries rather than growing without bound.
+const LOG_BACKLOG_LIMIT = 200;
+const logBacklog: ServiceWorkerLogEntry[] = [];
+
+const writeServiceWorkerConsole = ({ details, message }: ServiceWorkerLogEntry) => {
+  if (details) console.info(SW_LOG_PREFIX, message, details);
+  else console.info(SW_LOG_PREFIX, message);
+};
+
+const postServiceWorkerLog = (client: Client, entry: ServiceWorkerLogEntry, queued: boolean) => {
   try {
-    void self.clients
-      ?.matchAll({ includeUncontrolled: true, type: "window" })
-      .then((clients) => {
-        for (const client of clients) {
-          try {
-            client.postMessage({ action: "service-worker-log", details, message });
-          } catch {
-            // A detail value that cannot be cloned costs this one line, nothing more.
-          }
-        }
-      })
-      .catch(() => undefined);
+    client.postMessage({
+      action: "service-worker-log",
+      details: entry.details,
+      message: entry.message,
+      queued,
+      timestamp: entry.timestamp,
+    });
+    return true;
+  } catch {
+    // A detail value that cannot be cloned costs this one delivery.
+    return false;
+  }
+};
+
+/**
+ * Send the backlog, plus `entry` when one is being logged now, to every window
+ * client. With no client to take them the entries go back on the backlog, in
+ * order, for the next page that connects.
+ */
+const flushServiceWorkerLogs = async (entry?: ServiceWorkerLogEntry) => {
+  const pending = [...logBacklog.splice(0), ...(entry ? [entry] : [])];
+  if (!pending.length) return;
+  let clients: readonly Client[] = [];
+  try {
+    clients = await (self.clients?.matchAll({ includeUncontrolled: true, type: "window" }) ?? []);
   } catch {
     // No client access at all (a test double, a context still starting up).
+  }
+  if (!clients.length) {
+    logBacklog.push(...pending);
+    if (logBacklog.length > LOG_BACKLOG_LIMIT) logBacklog.splice(0, logBacklog.length - LOG_BACKLOG_LIMIT);
+    return;
+  }
+  for (const client of clients) {
+    for (const queuedEntry of pending) postServiceWorkerLog(client, queuedEntry, queuedEntry !== entry);
   }
 };
 
 const logServiceWorker = (message: string, details?: Record<string, unknown>) => {
-  if (details) console.info(SW_LOG_PREFIX, message, details);
-  else console.info(SW_LOG_PREFIX, message);
-  broadcastServiceWorkerLog(message, details);
+  const entry: ServiceWorkerLogEntry = { details, message, timestamp: new Date().toISOString() };
+  writeServiceWorkerConsole(entry);
+  void flushServiceWorkerLogs(entry).catch(() => undefined);
 };
 
 const formatError = (error: unknown) => {
@@ -572,6 +607,13 @@ self.addEventListener("message", (event) => {
       .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
       .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));
     event.waitUntil(pump.then(replyTo));
+    return;
+  }
+
+  // A page subscribes to the worker's log after the worker may already have
+  // written lines nobody could take, so it asks for the backlog on connect.
+  if (event.data.action === "flush-service-worker-log") {
+    event.waitUntil(flushServiceWorkerLogs());
     return;
   }
 
