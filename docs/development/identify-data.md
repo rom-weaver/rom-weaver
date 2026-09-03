@@ -64,7 +64,7 @@ The router is browser data only. The native CLI searches every installed pack fo
 
 ## Browser installation
 
-The web build emits each pack as a Brotli static asset. The service worker precaches `index.json`, `catalog.json`, and the checksum router with the app under one service-worker revision. Packs are not precached: the background warm-up downloads the default groups and the optional groups the user has ticked in Settings.
+The web build emits each pack as a Brotli static asset. The service worker precaches `index.json` and `catalog.json` with the app under one service-worker revision. Packs and the checksum router are not precached: the background warm-up downloads the default group, which includes the router, and the optional groups the user has ticked in Settings.
 
 The Settings page can install a complete optional group. The service worker checks every pack before it marks the group as installed.
 
