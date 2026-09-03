@@ -701,6 +701,11 @@ describe("precache plugin", () => {
     expect(response?.headers.get("Cross-Origin-Opener-Policy")).toBeNull();
   });
 
+  // Every worker log line is broadcast to the window clients too (the page log
+  // relays them), so a precache assertion has to name the messages it means.
+  const precacheMessages = (scope: { clientMessages: unknown[] }) =>
+    scope.clientMessages.filter((message) => (message as { action?: string }).action === "offline-precache-progress");
+
   it("broadcasts throttled install progress to uncontrolled pages", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
@@ -709,13 +714,13 @@ describe("precache plugin", () => {
 
     await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
     await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
-    expect(harness.scope.clientMessages).toHaveLength(1);
+    expect(precacheMessages(harness.scope)).toHaveLength(1);
 
     vi.setSystemTime(1_000_500);
     await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
 
-    expect(harness.scope.clientMessages).toHaveLength(2);
-    expect(harness.scope.clientMessages[0]).toMatchObject({
+    expect(precacheMessages(harness.scope)).toHaveLength(2);
+    expect(precacheMessages(harness.scope)[0]).toMatchObject({
       action: "offline-precache-progress",
       cachedFiles: 2,
       phase: "precache",
@@ -731,7 +736,7 @@ describe("precache plugin", () => {
     await harness.plugin.handlerDidComplete?.({ event: { type: "fetch" } });
     await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
 
-    expect(harness.scope.clientMessages).toEqual([]);
+    expect(precacheMessages(harness.scope)).toEqual([]);
   });
 });
 

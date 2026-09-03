@@ -6,6 +6,7 @@
  * bumps (an identify run, the emulator test view) still download what they name.
  */
 import { createLogger } from "../../lib/logging.ts";
+import type { LogDetails } from "../../types/logging.ts";
 import type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress } from "../offline-warmup.ts";
 
 const IDLE_DELAY_MS = 250;
@@ -13,6 +14,9 @@ const PUMP_TIMEOUT_MS = 120_000;
 const CACHE_INVENTORY_TIMEOUT_MS = 2000;
 const MAX_FAILURE_DELAY_MS = 30_000;
 const logger = createLogger("offline-warmup");
+// Worker lines keep their own namespace so the page log shows which side of the
+// service-worker boundary each one came from.
+const workerLogger = createLogger("cache-service-worker");
 
 type OfflineWarmupProgress = WarmupProgress;
 
@@ -383,6 +387,28 @@ const listenForOfflinePrecacheProgress = (
   return () => container.removeEventListener?.("message", onMessage);
 };
 
+/**
+ * Mirror the service worker's own log lines into the page log. The worker
+ * console is a separate surface that an exported log and a user's bug report
+ * never carry, so cache serves, pack-table misses and digest skew were only
+ * ever visible to someone with the worker inspector already open. Relayed at
+ * debug, so they cost nothing until the log level asks for them.
+ *
+ * Returns a cleanup function.
+ */
+const listenForServiceWorkerLog = (nav?: NavigatorLike): (() => void) => {
+  const container = (nav ?? getGlobalNavigator())?.serviceWorker;
+  if (!container?.addEventListener) return () => undefined;
+  const onMessage = (event: MessageEvent) => {
+    const data = (event.data ?? {}) as Record<string, unknown>;
+    if (data.action !== "service-worker-log" || typeof data.message !== "string") return;
+    const details = data.details;
+    workerLogger.debug(data.message, details && typeof details === "object" ? (details as LogDetails) : undefined);
+  };
+  container.addEventListener("message", onMessage);
+  return () => container.removeEventListener?.("message", onMessage);
+};
+
 /** One-shot readiness query, for pages that load after the warm-up finished. */
 const queryOfflineReadyState = async (nav?: NavigatorLike): Promise<OfflineReadyState | null> => {
   const controller = (nav ?? getGlobalNavigator())?.serviceWorker?.controller;
@@ -412,6 +438,7 @@ export {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
   listenForOfflinePrecacheProgress,
+  listenForServiceWorkerLog,
   pauseOfflineWarmup,
   persistOfflineReady,
   queryOfflineCachedFiles,
