@@ -1081,9 +1081,17 @@ jobs:
 
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: node
+          tools: node rust
           cargo-cache: "false"
           webapp-deps: "true"
+
+      # The docs routes include the generated wasm attribution (notices.md,
+      # NOTICE, WEBAPP_NOTICE) which knip and the vitest config load; it is
+      # gitignored and normally produced beside the wasm artifact. Unless the
+      # module happens to be cached, webapp-fast has none, so generate it here.
+      # cargo metadata resolves the crate graph; no .wasm module is needed.
+      - name: Generate webapp attribution
+        run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
 
       - name: Webapp script tests
         run: npm --prefix packages/rom-weaver-webapp run test:scripts
