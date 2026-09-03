@@ -402,11 +402,21 @@ const listenForServiceWorkerLog = (nav?: NavigatorLike): (() => void) => {
   const onMessage = (event: MessageEvent) => {
     const data = (event.data ?? {}) as Record<string, unknown>;
     if (data.action !== "service-worker-log" || typeof data.message !== "string") return;
-    const details = data.details;
-    workerLogger.debug(data.message, details && typeof details === "object" ? (details as LogDetails) : undefined);
+    const details = data.details && typeof data.details === "object" ? { ...(data.details as LogDetails) } : {};
+    // A replayed line is stamped when it reaches the page, so it carries the
+    // time the worker actually wrote it.
+    if (data.queued && typeof data.timestamp === "string") details.queuedAt = data.timestamp;
+    workerLogger.debug(data.message, Object.keys(details).length ? details : undefined);
   };
   container.addEventListener("message", onMessage);
-  return () => container.removeEventListener?.("message", onMessage);
+  // Ask for whatever the worker logged before this page could listen.
+  const requestBacklog = () => container.controller?.postMessage?.({ action: "flush-service-worker-log" });
+  requestBacklog();
+  container.addEventListener("controllerchange", requestBacklog);
+  return () => {
+    container.removeEventListener?.("message", onMessage);
+    container.removeEventListener?.("controllerchange", requestBacklog);
+  };
 };
 
 /** One-shot readiness query, for pages that load after the warm-up finished. */

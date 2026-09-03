@@ -170,7 +170,10 @@ const createScope = ({
 } = {}) => {
   const listeners = new Map<string, Array<(event: SwEvent) => void>>();
   const clientMessages: unknown[] = [];
-  const clientList = [{ postMessage: (message: unknown) => clientMessages.push(message) }];
+  const client = { postMessage: (message: unknown) => clientMessages.push(message) };
+  // Mutable so a test can start with no window client and connect one later,
+  // which is what the worker's log backlog exists for.
+  const clientList: Array<typeof client> = [client];
   return {
     __WB_MANIFEST: manifest,
     addEventListener(type: string, listener: (event: SwEvent) => void) {
@@ -178,6 +181,8 @@ const createScope = ({
       if (existing) existing.push(listener);
       else listeners.set(type, [listener]);
     },
+    client,
+    clientList,
     clientMessages,
     clients: {
       claim: vi.fn(async () => undefined),
@@ -343,6 +348,66 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("worker log relay", () => {
+  const logMessages = (scope: { clientMessages: unknown[] }) =>
+    scope.clientMessages.filter((message) => (message as { action?: string }).action === "service-worker-log");
+
+  it("sends every log line to the window clients and to the console", async () => {
+    const harness = await loadWorker();
+
+    harness.scope.clientMessages.length = 0;
+    await dispatch(harness.scope, "install");
+    await Promise.resolve();
+
+    expect(logMessages(harness.scope)).toContainEqual(
+      expect.objectContaining({ action: "service-worker-log", message: "install event", queued: false }),
+    );
+    expect(console.info).toHaveBeenCalledWith(
+      expect.stringContaining("rom-weaver-sw"),
+      "install event",
+      expect.any(Object),
+    );
+  });
+
+  it("holds lines written with no window client and replays them when one asks", async () => {
+    const harness = await loadWorker();
+    await Promise.resolve();
+    harness.scope.clientList.length = 0;
+    harness.scope.clientMessages.length = 0;
+
+    await dispatch(harness.scope, "install");
+    await Promise.resolve();
+    expect(logMessages(harness.scope)).toEqual([]);
+
+    harness.scope.clientList.push(harness.scope.client);
+    await dispatch(harness.scope, "message", { data: { action: "flush-service-worker-log" } });
+    await Promise.resolve();
+
+    const replayed = logMessages(harness.scope) as Array<{ message: string; queued: boolean; timestamp: string }>;
+    expect(replayed.map((entry) => entry.message)).toContain("install event");
+    expect(replayed.every((entry) => entry.queued)).toBe(true);
+    expect(replayed[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
+  });
+
+  it("replays a held line before the line being logged now", async () => {
+    const harness = await loadWorker();
+    await Promise.resolve();
+    harness.scope.clientList.length = 0;
+    await dispatch(harness.scope, "install");
+    await Promise.resolve();
+
+    harness.scope.clientList.push(harness.scope.client);
+    harness.scope.clientMessages.length = 0;
+    await dispatch(harness.scope, "activate");
+    await Promise.resolve();
+
+    const relayed = logMessages(harness.scope) as Array<{ queued: boolean }>;
+    expect(relayed.length).toBeGreaterThan(1);
+    expect(relayed[0].queued).toBe(true);
+    expect(relayed.at(-1)?.queued).toBe(false);
+  });
 });
 
 describe("service worker bootstrap", () => {
