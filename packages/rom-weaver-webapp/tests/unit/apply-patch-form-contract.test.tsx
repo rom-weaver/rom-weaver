@@ -89,14 +89,20 @@ const createFakeApplyWorkflow = () => {
     run: vi.fn(async () => {
       if (runError) throw runError;
       return {
+        inputs: [{ fileName: input?.fileName || "game.bin", size: input?.size || 13 }],
         outputs: [
           {
             dispose: async () => undefined,
             fileName: "game-patched.bin",
+            getBlob: async () => new Blob(["patched"]),
+            id: "output-1",
+            prepareDownload: async () => undefined,
             saveAs: async () => undefined,
             size: 128,
           },
         ],
+        patches: patches.slice(),
+        sizeSummary: { applyTimeMs: 3, outputSize: 128 },
         timings: {},
       };
     }),
@@ -229,5 +235,35 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     await vi.waitFor(() => {
       expect(container.textContent).toContain("apply failed for the test");
     });
+  });
+
+  it("stages a ROM and patch together, applies them, and exposes output controls", async () => {
+    const onApplyComplete = vi.fn();
+    const { container } = renderForm({ onApplyComplete });
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
+    const romFile = new File(["rom-bytes"], "game.bin", { type: "application/octet-stream" });
+    const patchFile = new File(["patch-bytes"], "change.ips", { type: "application/octet-stream" });
+
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [romFile, patchFile] });
+      fireEvent.change(fileInput);
+    });
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalled());
+    await vi.waitFor(() => expect(latestFakeWorkflow?.addPatch).toHaveBeenCalled());
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy());
+
+    const outputName = container.querySelector("#rom-weaver-input-output-file-name") as HTMLInputElement;
+    fireEvent.change(outputName, { target: { value: "custom-output" } });
+    fireEvent.blur(outputName);
+    expect(outputName.value).toBe("custom-output");
+
+    const applyButton = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+    await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
+    await act(async () => fireEvent.click(applyButton));
+    await vi.waitFor(() => expect(latestFakeWorkflow?.run).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(onApplyComplete).toHaveBeenCalledOnce());
+    expect(latestFakeWorkflow?.setOutputName).toHaveBeenCalledWith("custom-output");
+    expect(container.textContent).toContain("Download Patched");
+    expect(container.textContent).toContain("custom-output.bin");
   });
 });

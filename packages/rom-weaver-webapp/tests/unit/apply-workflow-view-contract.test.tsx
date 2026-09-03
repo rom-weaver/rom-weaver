@@ -105,6 +105,7 @@ const renderView = ({
   emulatorOutput,
   onBundleMetaBulkChange,
   onUnifiedDrop,
+  outputControllerOverrides,
   outputOverrides,
   patches = [] as PatchStackItemState[],
   patchEnablement,
@@ -117,6 +118,7 @@ const renderView = ({
   onBundleMetaBulkChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaBulkChange"];
   onUnifiedDrop?: Parameters<typeof ApplyWorkflowFormView>[0]["onUnifiedDrop"];
   outputOverrides?: Partial<PatcherOutputState>;
+  outputControllerOverrides?: Partial<PatcherOutputController>;
   patches?: PatchStackItemState[];
   patchEnablement?: Parameters<typeof ApplyWorkflowFormView>[0]["patchEnablement"];
   pendingDrops?: Parameters<typeof ApplyWorkflowFormView>[0]["pendingDrops"];
@@ -132,6 +134,7 @@ const renderView = ({
     } as unknown as PatcherStackController,
     ui: storeOf(ui) as unknown as PatcherUiController,
   };
+  Object.assign(controllers.output, outputControllerOverrides);
   return render(
     <RomWeaverSettingsProvider settings={settings}>
       <ApplyWorkflowFormView
