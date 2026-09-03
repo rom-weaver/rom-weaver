@@ -24,6 +24,11 @@ import {
   slugifyPlatform,
 } from "./build-identify-index.mjs";
 import { hasCurrentData } from "./ensure-identify-data.mjs";
+import {
+  buildPackFilter,
+  CHECKSUM_ROUTER_FORMAT,
+  encodeChecksumRouter,
+} from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
 
 function buildCurrentDataDir() {
   const work = mkdtempSync(join(os.tmpdir(), "rw-ensure-identify-"));
@@ -68,10 +73,27 @@ function buildCurrentDataDir() {
     })),
   };
   writeFileSync(join(dataDir, "catalog.json"), JSON.stringify(catalog));
+  const routerBytes = Buffer.from(
+    encodeChecksumRouter(
+      systems.map((system) => buildPackFilter(system.file.slice(0, -".pack".length), [])),
+    ),
+  );
+  writeFileSync(join(dataDir, "checksum-routes.bin"), routerBytes);
+  writeFileSync(join(dataDir, "checksum-routes.bin.br"), routerBytes);
+  const checksumRoutes = {
+    brotliBytes: routerBytes.length,
+    brotliFile: "checksum-routes.bin.br",
+    file: "checksum-routes.bin",
+    format: CHECKSUM_ROUTER_FORMAT,
+    packs: systems.length,
+    rawBytes: routerBytes.length,
+    sha256: createHash("sha256").update(routerBytes).digest("hex"),
+  };
   writeFileSync(
     join(dataDir, "index.json"),
     JSON.stringify({
       catalog: "catalog.json",
+      checksumRoutes,
       format: INDEX_FORMAT,
       sources: {
         libretro: { revision: LIBRETRO_REVISION, url: LIBRETRO_REPOSITORY },
@@ -197,6 +219,42 @@ test("hasCurrentData rejects a catalog missing an OpenGood platform", async () =
     const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
     catalog.platforms = catalog.platforms.slice(1);
     writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects a data dir without the checksum router", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    rmSync(join(dataDir, "checksum-routes.bin"));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects a corrupt checksum router", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const routerPath = join(dataDir, "checksum-routes.bin");
+    const bytes = readFileSync(routerPath);
+    bytes[bytes.length - 1] ^= 0xff;
+    writeFileSync(routerPath, bytes);
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects an index that never recorded the checksum router", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const indexPath = join(dataDir, "index.json");
+    const index = JSON.parse(readFileSync(indexPath, "utf8"));
+    delete index.checksumRoutes;
+    writeFileSync(indexPath, JSON.stringify(index, null, 2));
     assert.equal(hasCurrentData(dataDir), false);
   } finally {
     rmSync(work, { recursive: true, force: true });

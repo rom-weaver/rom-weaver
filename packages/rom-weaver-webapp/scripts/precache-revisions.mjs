@@ -15,7 +15,15 @@ import path from "node:path";
 // So: any asset whose name carries no hash gets a real one, from its bytes.
 const HASHED_NAME = /-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/u;
 
-const isSelfVersioned = (url) => HASHED_NAME.test(path.basename(url));
+// Identify data files keep fixed names that can look hashed to the pattern
+// above (`identify-checksum-routes.bin`), so they MUST always get a content
+// revision. Bundles such as `identify-packs-<hash>.js` are still self-versioned.
+const IDENTIFY_DATA_NAME = /^identify-.*\.(?:json|bin|pack)$/u;
+
+const isSelfVersioned = (url) => {
+  const name = path.basename(url);
+  return !IDENTIFY_DATA_NAME.test(name) && HASHED_NAME.test(name);
+};
 
 /**
  * Workbox manifestTransform that stamps a content revision on every precached

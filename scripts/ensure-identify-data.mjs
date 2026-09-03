@@ -24,6 +24,7 @@ import {
   packGroupFor,
   slugifyPlatform,
 } from "./build-identify-index.mjs";
+import { CHECKSUM_ROUTER_FORMAT } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
 
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const rootDir = resolve(scriptDir, "..");
@@ -65,6 +66,22 @@ const hasCurrentCatalog = (dataDir) => {
   return expectedPackNames.every((name) => slugs.has(name.slice(0, -".pack".length)));
 };
 
+// The browser routes a bare checksum through this file, so data built before
+// the router existed - or with a router that no longer matches index.json - is
+// stale and MUST be rebuilt.
+const hasCurrentChecksumRouter = (dataDir, entry) => {
+  if (!entry || entry.format !== CHECKSUM_ROUTER_FORMAT || typeof entry.file !== "string")
+    return false;
+  if (!Number.isSafeInteger(entry.rawBytes) || typeof entry.sha256 !== "string") return false;
+  const routerPath = join(dataDir, entry.file);
+  if (!existsSync(routerPath)) return false;
+  const bytes = readFileSync(routerPath);
+  if (bytes.length !== entry.rawBytes || sha256(bytes) !== entry.sha256) return false;
+  if (!entry.brotliFile) return true;
+  const brotliPath = join(dataDir, entry.brotliFile);
+  return existsSync(brotliPath) && readFileSync(brotliPath).length === entry.brotliBytes;
+};
+
 export const hasCurrentData = (dataDir = defaultDataDir) => {
   const indexPath = join(dataDir, "index.json");
   if (!existsSync(indexPath)) return false;
@@ -93,6 +110,7 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
     return false;
   }
   if (!hasCurrentCatalog(dataDir)) return false;
+  if (!hasCurrentChecksumRouter(dataDir, index.checksumRoutes)) return false;
   if (!Array.isArray(index.systems)) return false;
   if (
     index.systems.some((system) => {

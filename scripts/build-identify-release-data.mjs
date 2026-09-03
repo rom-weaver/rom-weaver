@@ -139,7 +139,9 @@ export const buildIdentifyReleaseData = (options) => {
         };
       });
     const archiveGroups = group.default ? groups : [group];
-    const groupIndex = { ...index, groups: archiveGroups, systems };
+    // The checksum router is browser-only; a release archive never carries it.
+    const { checksumRoutes: _checksumRoutes, ...indexWithoutRouter } = index;
+    const groupIndex = { ...indexWithoutRouter, groups: archiveGroups, systems };
     const groupCatalog = Array.isArray(catalog.platforms)
       ? {
           ...catalog,

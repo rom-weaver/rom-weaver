@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  buildPackFilter,
+  encodeChecksumRouter,
+  parseChecksumRouter,
+  routeChecksums,
+} from "../../src/lib/identify/checksum-router.mjs";
+
 const SHA256_ABC = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
 const system = (slug: string, platform: string) => ({
@@ -22,9 +29,21 @@ const INDEX_SYSTEMS = [
   system("nintendo-game-boy-advance", "Nintendo Game Boy Advance"),
 ];
 
-const stubFetch = (options: { index?: unknown; indexStatus?: number; packStatus?: number; packBody?: string } = {}) => {
+const stubFetch = (
+  options: {
+    index?: unknown;
+    indexStatus?: number;
+    packStatus?: number;
+    packBody?: string;
+    routerBytes?: Uint8Array;
+  } = {},
+) => {
   const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input));
+    if (url.pathname.endsWith("checksum-routes.bin")) {
+      if (!options.routerBytes) return new Response("nope", { status: 404 });
+      return new Response(options.routerBytes);
+    }
     if (url.pathname.endsWith("identify-index.json")) {
       expect(init).toEqual({ cache: "no-cache" });
       if (options.indexStatus) return new Response("nope", { status: options.indexStatus });
@@ -38,6 +57,46 @@ const stubFetch = (options: { index?: unknown; indexStatus?: number; packStatus?
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 };
+
+const sha256 = async (bytes: Uint8Array) =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+
+const PS_CRC32 = "deadbeef";
+const routerBytes = (slugs: string[] = ["sony-playstation", "nintendo-game-boy"]) =>
+  encodeChecksumRouter(
+    slugs.map((slug) =>
+      buildPackFilter(
+        slug,
+        slug === "nintendo-game-boy"
+          ? [{ algorithm: "crc32", hex: "0000ffff" }]
+          : [{ algorithm: "crc32", hex: PS_CRC32 }],
+      ),
+    ),
+  );
+
+/** A crc32 no filter in `bytes` claims. The 1/256 false-positive rate rules out a fixed literal. */
+const missingCrc32 = (bytes: Uint8Array) => {
+  const router = parseChecksumRouter(bytes);
+  for (let seed = 1; seed < 10_000; seed += 1) {
+    const digest = seed.toString(16).padStart(8, "0");
+    if (!routeChecksums(router, [digest]).length) return digest;
+  }
+  throw new Error("no crc32 outside the test router");
+};
+
+const routerIndex = async (bytes: Uint8Array, overrides: Record<string, unknown> = {}) => ({
+  format: "rom-weaver-identify-system-pack-v1",
+  checksumRoutes: {
+    file: "checksum-routes.bin",
+    format: "rom-weaver-identify-checksum-router-v1",
+    rawBytes: bytes.length,
+    sha256: await sha256(bytes),
+    ...overrides,
+  },
+  systems: [...INDEX_SYSTEMS, system("sony-playstation", "Sony PlayStation")],
+});
 
 afterEach(() => {
   vi.resetModules();
@@ -181,5 +240,114 @@ describe("optional identify pack groups", () => {
       { action: "install-identify-pack-group", groupId: "optional-computers" },
       expect.any(Array),
     );
+  });
+});
+
+describe("checksum routing", () => {
+  it("routes a bare checksum to the disc pack that may hold it", async () => {
+    const bytes = routerBytes();
+    const fetchMock = stubFetch({ index: await routerIndex(bytes), routerBytes: bytes });
+    const { loadIdentifyPacks } = await import("../../src/platform/browser/identify-packs.ts");
+
+    const packs = await loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } });
+
+    expect(packs.map((pack) => pack.slug)).toEqual(["sony-playstation"]);
+    const routerUrl = new URL(String(fetchMock.mock.calls.find((call) => String(call[0]).includes(".bin"))?.[0]));
+    expect(routerUrl.pathname).toBe("/assets/identify-checksum-routes.bin");
+    expect(routerUrl.searchParams.get("sha256")).toBe(await sha256(bytes));
+  });
+
+  it("returns an empty selection when no filter claims the checksum", async () => {
+    const bytes = routerBytes();
+    stubFetch({ index: await routerIndex(bytes), routerBytes: bytes });
+    const { loadIdentifyPackSelection } = await import("../../src/platform/browser/identify-packs.ts");
+
+    expect(await loadIdentifyPackSelection({ checksums: { crc32: missingCrc32(bytes) } })).toEqual({ packs: [] });
+  });
+
+  it("keeps the cartridge fallback for a file with no hint and no checksum", async () => {
+    const bytes = routerBytes();
+    stubFetch({ index: await routerIndex(bytes), routerBytes: bytes });
+    const { loadIdentifyPacks } = await import("../../src/platform/browser/identify-packs.ts");
+
+    const packs = await loadIdentifyPacks({ fileName: "game.bin" });
+
+    expect(packs.length).toBe(INDEX_SYSTEMS.length);
+    expect(packs.map((pack) => pack.slug)).not.toContain("sony-playstation");
+  });
+
+  it("keeps the cartridge fallback for digests the router cannot answer for", async () => {
+    const bytes = routerBytes();
+    const fetchMock = stubFetch({ index: await routerIndex(bytes), routerBytes: bytes });
+    const { loadIdentifyPacks } = await import("../../src/platform/browser/identify-packs.ts");
+
+    const packs = await loadIdentifyPacks({ checksums: { crc32: "1234567", sha256: "ab".repeat(32) } });
+
+    expect(packs.length).toBe(INDEX_SYSTEMS.length);
+    const routerFetches = fetchMock.mock.calls.filter(([url]) => String(url).includes("checksum-routes.bin"));
+    expect(routerFetches).toHaveLength(0);
+  });
+
+  it("reports a router size mismatch as unavailable data", async () => {
+    const bytes = routerBytes();
+    stubFetch({ index: await routerIndex(bytes, { rawBytes: bytes.length + 1 }), routerBytes: bytes });
+    const { IdentifyDataUnavailableError, loadIdentifyPacks } =
+      await import("../../src/platform/browser/identify-packs.ts");
+
+    await expect(loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } })).rejects.toBeInstanceOf(
+      IdentifyDataUnavailableError,
+    );
+  });
+
+  it("reports a router with an unknown format as unavailable data", async () => {
+    const bytes = routerBytes();
+    stubFetch({
+      index: await routerIndex(bytes, { format: "rom-weaver-identify-checksum-router-v0" }),
+      routerBytes: bytes,
+    });
+    const { IdentifyDataUnavailableError, loadIdentifyPacks } =
+      await import("../../src/platform/browser/identify-packs.ts");
+
+    await expect(loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } })).rejects.toBeInstanceOf(
+      IdentifyDataUnavailableError,
+    );
+  });
+
+  it("reports a router SHA-256 mismatch as unavailable data", async () => {
+    const bytes = routerBytes();
+    stubFetch({ index: await routerIndex(bytes, { sha256: SHA256_ABC }), routerBytes: bytes });
+    const { loadIdentifyPacks } = await import("../../src/platform/browser/identify-packs.ts");
+
+    await expect(loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } })).rejects.toThrow(/checksum is invalid/u);
+  });
+
+  it("reports a router that names an unknown pack as unavailable data", async () => {
+    const bytes = routerBytes(["not-a-real-system"]);
+    stubFetch({ index: await routerIndex(bytes), routerBytes: bytes });
+    const { loadIdentifyPacks } = await import("../../src/platform/browser/identify-packs.ts");
+
+    await expect(loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } })).rejects.toThrow(/unknown packs/u);
+  });
+
+  it("reports an index without a checksum router as unavailable data", async () => {
+    stubFetch();
+    const { loadIdentifyPacks } = await import("../../src/platform/browser/identify-packs.ts");
+
+    await expect(loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } })).rejects.toThrow(/lists no checksum router/u);
+  });
+
+  it("refetches the router after resetIdentifyPackCache", async () => {
+    const bytes = routerBytes();
+    const index = await routerIndex(bytes);
+    const first = stubFetch({ index, routerBytes: bytes });
+    const { loadIdentifyPacks, resetIdentifyPackCache } = await import("../../src/platform/browser/identify-packs.ts");
+    await loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } });
+    expect(first.mock.calls.filter((call) => String(call[0]).includes(".bin"))).toHaveLength(1);
+
+    resetIdentifyPackCache();
+    const second = stubFetch({ index, routerBytes: bytes });
+    await loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } });
+
+    expect(second.mock.calls.filter((call) => String(call[0]).includes(".bin"))).toHaveLength(1);
   });
 });

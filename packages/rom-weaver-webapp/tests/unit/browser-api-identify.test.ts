@@ -2,14 +2,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ingest = vi.fn();
 const dispose = vi.fn();
+const stageSources = vi.fn();
+const loadIdentifyPacks = vi.fn();
+const invokeRomWeaverIdentifyHashWorker = vi.fn();
 
 vi.mock("../../src/platform/browser/workflow-runtime.ts", () => ({
   browserRuntime: {
     ingest: { run: ingest },
+    workerIo: { stageSources },
   },
 }));
 
-const { identifyRom } = await import("../../src/platform/browser/browser-api.ts");
+class IdentifyDataUnavailableError extends Error {}
+
+vi.mock("../../src/platform/browser/identify-packs.ts", () => ({
+  IdentifyDataUnavailableError,
+  loadIdentifyPacks,
+}));
+
+vi.mock("../../src/lib/runtime/wasm-command-runtime.ts", () => ({ invokeRomWeaverIdentifyHashWorker }));
+
+const { identifyChecks, identifyRom } = await import("../../src/platform/browser/browser-api.ts");
 
 const match = (name: string) => ({
   algorithm: "crc32",
@@ -142,5 +155,47 @@ describe("identifyRom", () => {
     expect(result.unavailableReason).toBe("ROM identify index request failed with HTTP 503");
     expect(result.candidates[0]?.status).toBe("unavailable");
     expect(result.candidates[0]?.checksums).toEqual({ crc32: "22222222" });
+  });
+});
+
+describe("identifyChecks", () => {
+  it("hands the checksums to the pack selection and stages only what it returns", async () => {
+    loadIdentifyPacks.mockResolvedValue([
+      { blob: new Blob(["pack"]), fileName: "sony-playstation.pack", platform: "Sony PlayStation" },
+    ]);
+    stageSources.mockResolvedValue([{ cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/db/1.pack" }]);
+    invokeRomWeaverIdentifyHashWorker.mockResolvedValue({
+      checksumVariants: [],
+      checksums: { crc32: "deadbeef" },
+      input: "deadbeef",
+      matches: [match("Known Game (USA)")],
+      status: "matched",
+    });
+
+    const result = await identifyChecks({ checksums: { crc32: "deadbeef" } });
+
+    expect(loadIdentifyPacks).toHaveBeenCalledWith({ checksums: { crc32: "deadbeef" } }, expect.any(Function));
+    expect(result.status).toBe("matched");
+  });
+
+  it("reports unknown, not unavailable, when the router claims no pack", async () => {
+    loadIdentifyPacks.mockResolvedValue([]);
+
+    const result = await identifyChecks({ checksums: { crc32: "deadbeef" } });
+
+    expect(result.status).toBe("unknown");
+    expect(result.candidates[0]?.status).toBe("unknown");
+    expect(result.input).toBe("deadbeef");
+    expect(stageSources).not.toHaveBeenCalled();
+    expect(invokeRomWeaverIdentifyHashWorker).not.toHaveBeenCalled();
+  });
+
+  it("reports unavailable when the identify database could not load", async () => {
+    loadIdentifyPacks.mockRejectedValue(new IdentifyDataUnavailableError("ROM identify index request failed"));
+
+    const result = await identifyChecks({ checksums: { crc32: "deadbeef" } });
+
+    expect(result.status).toBe("unavailable");
+    expect(result.unavailableReason).toBe("ROM identify index request failed");
   });
 });

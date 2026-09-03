@@ -36,6 +36,18 @@ test("revisionUnhashedAssets: a changed file gets a different revision, so the w
   assert.notEqual(before, after);
 });
 
+test("revisionUnhashedAssets: revisions the checksum router even though its name looks hashed", () => {
+  const distDir = buildDist({ "assets/identify-checksum-routes.bin": "RWCR1" });
+
+  const { manifest } = revisionUnhashedAssets()(
+    [{ revision: null, url: "assets/identify-checksum-routes.bin" }],
+    undefined,
+    distDir,
+  );
+
+  assert.match(manifest[0].revision, /^[0-9a-f]{16}$/u);
+});
+
 test("revisionUnhashedAssets: leaves self-versioned and already-revisioned entries alone", () => {
   const distDir = buildDist({
     "assets/identify-packs-DPmhN2ZO.js": "export {};",
