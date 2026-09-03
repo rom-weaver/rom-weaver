@@ -1,9 +1,5 @@
 use super::*;
 
-fn preserve_output_format_flag(flag: &str) -> String {
-    flag.to_string()
-}
-
 pub(super) struct OutputFormatResolutionMessages<'a> {
     pub(super) flag_label: &'a str,
     pub(super) format_noun: &'a str,
@@ -481,7 +477,7 @@ impl CliApp {
         Self::resolve_output_format_core(
             flag,
             output,
-            preserve_output_format_flag,
+            str::to_string,
             flag_canonical_name.as_deref(),
             extension_name,
             OutputFormatResolutionMessages {
