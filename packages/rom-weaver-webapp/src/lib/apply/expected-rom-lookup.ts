@@ -27,7 +27,15 @@ const lookupExpectedRom = async (
   );
   const candidate = result.candidates[0];
   if (!candidate) return undefined;
-  if (candidate.status === "unavailable") return { matches: [], status: "unavailable" };
+  if (candidate.status === "unavailable") {
+    // The reason names the pack, HTTP status, or digest mismatch behind the
+    // failure. Carry it so the caller can show a cause instead of a dead end.
+    return {
+      matches: [],
+      status: "unavailable",
+      ...(result.unavailableReason ? { unavailableReason: result.unavailableReason } : {}),
+    };
+  }
   if (!candidate.matches.length) return undefined;
   return { matches: candidate.matches, status: candidate.status };
 };
