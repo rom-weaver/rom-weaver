@@ -145,6 +145,7 @@ describe("invokeRomWeaverExtractWorker", () => {
 
 describe("runtime argument normalization", () => {
   it("flattens, splits, trims, floors, and deduplicates codec values", () => {
+    expect(normalizeCodecEntries("lzma+zstd:3")).toEqual(["lzma", "zstd:3"]);
     expect(
       normalizeCodecEntries([
         " lzma, zstd:3 ",
@@ -279,6 +280,7 @@ describe("invokeRomWeaverIngestWorker", () => {
       },
       type: "ingest",
     });
+    expect(lastCall()[1]).toHaveProperty("interactiveSelectionEnabled", false);
   });
 
   it("rejects malformed ingest output and missing paths", async () => {
@@ -425,11 +427,16 @@ describe("output-producing runtime workers", () => {
       args: {
         expect_in: ["crc32=abc"],
         expect_out: ["sha1=def"],
+        filter: ["rom", "patch"],
         ignore_checksum_validation: false,
+        input: "/game.sfc",
         n64_byte_order: ["little-endian", "auto"],
+        no_compress: true,
+        output: expect.any(String),
         output_header: "auto",
         patch_basis: ["base"],
         patch_header: ["keep", "auto"],
+        patches: ["/first.bps", "/second.xdelta"],
         repair_checksum: true,
       },
       type: "apply",
@@ -459,7 +466,17 @@ describe("output-producing runtime workers", () => {
     await expect(
       invokeRomWeaverTrimWorker({ extension: " .trim ", outputName: "trimmed.bin", sourceFilePath: "/game.sfc" }),
     ).resolves.toMatchObject({ fileName: "trimmed.bin", filePath: "/out/custom.bin" });
-    expect(lastCall()[0]).toMatchObject({ type: "trim" });
+    expect(lastCall()[0]).toEqual({
+      args: {
+        dry_run: false,
+        extension: ".trim",
+        in_place: false,
+        input: ["/game.sfc"],
+        output: expect.any(String),
+        revert: false,
+      },
+      type: "trim",
+    });
 
     await expect(
       invokeRomWeaverPpfUndoWorker({
@@ -468,7 +485,17 @@ describe("output-producing runtime workers", () => {
         romFilePath: "/game.sfc",
       }),
     ).resolves.toMatchObject({ fileName: "restored.sfc", filePath: "/out/custom.bin" });
-    expect(lastCall()[0]).toMatchObject({ type: "tools" });
+    expect(lastCall()[0]).toEqual({
+      args: {
+        args: {
+          output: expect.any(String),
+          patch: "/patch.ppf",
+          rom: "/game.sfc",
+        },
+        type: "ppf-undo",
+      },
+      type: "tools",
+    });
   });
 });
 
