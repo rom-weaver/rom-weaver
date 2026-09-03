@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { configureLogger } from "../../src/lib/logging.ts";
 import {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
   listenForOfflinePrecacheProgress,
+  listenForServiceWorkerLog,
   pauseOfflineWarmup,
   queryOfflineCachedFiles,
   resumeOfflineWarmup,
@@ -105,6 +107,43 @@ describe("offline warm-up client", () => {
     gate.acceptPrecache({ ...precache, cachedFiles: 4 });
     expect(onProgress).toHaveBeenCalledTimes(2);
     expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ totalBytes: 20 }));
+  });
+
+  it("relays service worker log lines into the page log and cleans up", () => {
+    const listeners: Array<(event: MessageEvent) => void> = [];
+    const serviceWorker = {
+      controller: null,
+      addEventListener: (_type: string, listener: (event: MessageEvent) => void) => listeners.push(listener),
+      removeEventListener: (_type: string, listener: (event: MessageEvent) => void) => {
+        const index = listeners.indexOf(listener);
+        if (index >= 0) listeners.splice(index, 1);
+      },
+    };
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
+    const stop = listenForServiceWorkerLog({ serviceWorker });
+    const post = (data: unknown) => {
+      for (const listener of listeners.slice()) listener({ data } as MessageEvent);
+    };
+
+    post({ action: "offline-precache-progress" });
+    expect(sink).not.toHaveBeenCalled();
+
+    post({ action: "service-worker-log", details: { url: "/assets/identify-x.pack" }, message: "identify pack fetch" });
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: { url: "/assets/identify-x.pack" },
+        level: "debug",
+        message: "identify pack fetch",
+        namespace: "cache-service-worker",
+      }),
+    );
+
+    stop();
+    sink.mockClear();
+    post({ action: "service-worker-log", message: "after stop" });
+    expect(sink).not.toHaveBeenCalled();
+    configureLogger({ level: "warn", sink: null });
   });
 
   it("listens for precache broadcasts and cleans the listener up", () => {

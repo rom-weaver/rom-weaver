@@ -80,9 +80,33 @@ const COEP_MODE_CREDENTIALLESS = "credentialless";
 let coepModeHydrated = false;
 let coepModeHydration: Promise<boolean> | null = null;
 
+// A worker logs to its own console, which a bug report from a user never
+// contains: the page's exported log is the artifact that reaches us. Mirror
+// every worker line to the window clients so it lands there too. Failures are
+// swallowed - a log line MUST NOT be able to break the operation it describes.
+const broadcastServiceWorkerLog = (message: string, details?: Record<string, unknown>) => {
+  try {
+    void self.clients
+      ?.matchAll({ includeUncontrolled: true, type: "window" })
+      .then((clients) => {
+        for (const client of clients) {
+          try {
+            client.postMessage({ action: "service-worker-log", details, message });
+          } catch {
+            // A detail value that cannot be cloned costs this one line, nothing more.
+          }
+        }
+      })
+      .catch(() => undefined);
+  } catch {
+    // No client access at all (a test double, a context still starting up).
+  }
+};
+
 const logServiceWorker = (message: string, details?: Record<string, unknown>) => {
   if (details) console.info(SW_LOG_PREFIX, message, details);
   else console.info(SW_LOG_PREFIX, message);
+  broadcastServiceWorkerLog(message, details);
 };
 
 const formatError = (error: unknown) => {

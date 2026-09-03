@@ -32,6 +32,7 @@ import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
 import {
   createOfflineWarmupProgressGate,
   listenForOfflinePrecacheProgress,
+  listenForServiceWorkerLog,
   persistOfflineReady,
   queryOfflineReadyState,
   readPersistedOfflineReady,
@@ -301,9 +302,13 @@ function WebappRoot({
     // First visit: the installing worker broadcasts precache progress before
     // it controls the page, long before the warm-up can pump.
     const stopPrecacheProgress = listenForOfflinePrecacheProgress(progressGate.acceptPrecache);
+    // The worker logs to a console the exported page log never sees, so relay
+    // its lines here for the whole life of the page.
+    const stopWorkerLog = listenForServiceWorkerLog();
     const cancelWarmup = scheduleOfflineWarmup({ onProgress: progressGate.acceptLive });
     return () => {
       stopPrecacheProgress();
+      stopWorkerLog();
       cancelWarmup();
     };
   }, [notFound, onWarmupProgress]);
