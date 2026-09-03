@@ -1013,8 +1013,8 @@ jobs:
           'rust-windows=${{ needs.rust-windows.result }}'
 
   # Build and upload the deployable bundle before the static quality gates. The
-  # Docker and deploy paths can then consume it while lint, unit, and Lighthouse
-  # checks still run as required Webapp dependencies below.
+  # Docker and deploy paths can then consume it while the node-only tests and
+  # Lighthouse checks still run as required Webapp dependencies below.
   webapp-build:
     name: Webapp (build)
     runs-on: ubuntu-24.04
@@ -1067,9 +1067,44 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-  # The webapp work consumes the prebuilt wasm module and compiles no Rust of
-  # its own. This job keeps the former static gates required without holding
-  # back the deployable artifact. The node-only work skips Playwright setup.
+  # Run the node-only webapp checks in parallel with the WASM-dependent build and
+  # static audit jobs. This job does not download the WASM or bundle artifacts.
+  webapp-fast:
+    name: Webapp (fast)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [changes]
+    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust
+          cargo-cache: "false"
+          webapp-deps: "true"
+
+      # The docs routes include the generated wasm attribution (notices.md,
+      # NOTICE, WEBAPP_NOTICE) which knip and the vitest config load; it is
+      # gitignored and normally produced beside the wasm artifact. Unless the
+      # module happens to be cached, webapp-fast has none, so generate it here.
+      # cargo metadata resolves the crate graph; no .wasm module is needed.
+      - name: Generate webapp attribution
+        run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
+
+      - name: Webapp script tests
+        run: npm --prefix packages/rom-weaver-webapp run test:scripts
+
+      - name: Lint
+        run: npm --prefix packages/rom-weaver-webapp run lint
+
+      - name: Unit tests
+        run: npm --prefix packages/rom-weaver-webapp run test:unit
+
+  # Consume the prebuilt WASM module for the build-script contract and the exact
+  # bundle uploaded by webapp-build for Lighthouse. The node-only script, lint,
+  # and unit checks run in webapp-fast without waiting on the WASM artifact.
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
@@ -1101,15 +1136,6 @@ jobs:
       # .wasm and needs the artifact downloaded above.
       - name: Build script tests
         run: npm test
-
-      - name: Webapp script tests
-        run: npm --prefix packages/rom-weaver-webapp run test:scripts
-
-      - name: Lint
-        run: npm --prefix packages/rom-weaver-webapp run lint
-
-      - name: Unit tests
-        run: npm --prefix packages/rom-weaver-webapp run test:unit
 
       - name: Download webapp bundle
         uses: actions/download-artifact@v8
@@ -1391,7 +1417,7 @@ jobs:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, webapp-build, webapp-static, webapp-size, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
+    needs: [changes, webapp-fast, webapp-build, webapp-static, webapp-size, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -1402,6 +1428,7 @@ jobs:
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp }}'
+          'webapp-fast=${{ needs.webapp-fast.result }}'
           'webapp-build=${{ needs.webapp-build.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
           'webapp-size=${{ needs.webapp-size.result }}'
