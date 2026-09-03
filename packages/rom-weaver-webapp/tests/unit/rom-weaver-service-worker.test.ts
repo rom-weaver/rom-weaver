@@ -87,7 +87,7 @@ vi.mock("../../src/webapp/offline-warmup.ts", () => ({
 const APP_ORIGIN = "https://app.test";
 const APP_SCOPE = `${APP_ORIGIN}/`;
 const BUILD_TOKEN = "build-token-1";
-const SW_HREF = `${APP_ORIGIN}/cache-service-worker.js?build=${BUILD_TOKEN}`;
+const SW_HREF = `${APP_ORIGIN}/rom-weaver-service-worker.js?build=${BUILD_TOKEN}`;
 const EMULATORJS_VERSION = "4.2.3";
 const PRECACHE_NAME = "precache-rom-weaver";
 const RUNTIME_CACHE_NAME = `precache-rom-weaver-runtime-${BUILD_TOKEN}`;
@@ -308,7 +308,7 @@ const loadWorker = async (
   ]);
 
   vi.resetModules();
-  await import("../../src/webapp/cache-service-worker.ts");
+  await import("../../src/webapp/rom-weaver-service-worker.ts");
 
   const plugin = hoisted.plugins[0];
   if (!plugin) throw new Error("The service worker registered no precache plugin");

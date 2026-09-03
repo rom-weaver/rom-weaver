@@ -13,7 +13,7 @@ const headersFile = `/*
 /assets/identify-index.json
   Cache-Control: no-cache
 
-/cache-service-worker.js
+/rom-weaver-service-worker.js
   Cache-Control: no-cache
 `;
 
@@ -38,7 +38,7 @@ describe("pages _headers matching", () => {
   });
 
   it("lets a later exact rule win over an earlier wildcard", () => {
-    expect(matchPagesHeaders(rules, "/cache-service-worker.js")["Cache-Control"]).toBe("no-cache");
+    expect(matchPagesHeaders(rules, "/rom-weaver-service-worker.js")["Cache-Control"]).toBe("no-cache");
   });
 
   it("revalidates the identify index and keeps content-addressed packs immutable", () => {

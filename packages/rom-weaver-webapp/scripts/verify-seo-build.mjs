@@ -78,7 +78,7 @@ assertIncludes(
 );
 assertIncludes(
   headers,
-  "/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache",
+  "/rom-weaver-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache",
   "service worker cache headers",
 );
 // Cloudflare caches 103 Early Hints separately from the document. Hashed URLs in a
@@ -380,7 +380,7 @@ if (production) {
 // A route missing from the precache is only visible offline, on a first visit to that
 // route - the one case no test navigates through. Assert it here instead, where the
 // generated manifest is on disk.
-const precacheManifest = read("cache-service-worker.js");
+const precacheManifest = read("rom-weaver-service-worker.js");
 const identifyPrecacheEntry = (system) =>
   `"revision":"${system.sha256}","url":"assets/identify-${system.file}?sha256=${system.sha256}"`;
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");

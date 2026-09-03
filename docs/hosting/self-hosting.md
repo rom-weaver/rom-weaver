@@ -174,9 +174,11 @@ The build includes directory-index pages for `/apply`, `/create`, `/trim`, and `
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, the equivalent cache policy is:
 
 ```text
-/assets/*                 Cache-Control: public, max-age=31536000, immutable
-/cache-service-worker.js  Cache-Control: no-cache
+/assets/*                     Cache-Control: public, max-age=31536000, immutable
+/rom-weaver-service-worker.js Cache-Control: no-cache
 ```
+
+Earlier releases served the service worker as `cache-service-worker.js`. If your host config still names that path, change it to `rom-weaver-service-worker.js`.
 
 Only `/assets/*` uses immutable caching because those filenames contain content hashes. Do not apply that policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
 
@@ -204,11 +206,11 @@ After deployment, open the browser console and confirm:
 crossOriginIsolated === true
 ```
 
-If it is false, check the document's COOP/COEP response headers, HTTPS trust, and whether `cache-service-worker.js` controls the page.
+If it is false, check the document's COOP/COEP response headers, HTTPS trust, and whether `rom-weaver-service-worker.js` controls the page.
 
 ## Service worker and subpaths
 
-Production builds register `cache-service-worker.js` using the app's relative asset base. When the app is served at `/rom-weaver/`, the service worker's default scope is `/rom-weaver/`; it does not control the origin root or sibling applications. Redirect `/rom-weaver` to `/rom-weaver/` so relative assets, registration, and scope resolve to the same directory.
+Production builds register `rom-weaver-service-worker.js` using the app's relative asset base. When the app is served at `/rom-weaver/`, the service worker's default scope is `/rom-weaver/`; it does not control the origin root or sibling applications. Redirect `/rom-weaver` to `/rom-weaver/` so relative assets, registration, and scope resolve to the same directory.
 
 The service worker precaches the build, checks for updates, and can serve same-origin navigation and manifest requests from its cache. It can also add the cross-origin isolation headers to responses inside its scope when the host cannot configure them. It cannot alter the first document response before it controls the page, so server or proxy headers remain the preferred setup.
 

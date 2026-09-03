@@ -717,7 +717,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/cache-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/rom-weaver-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
       );
     },
     configResolved(config) {
@@ -1318,7 +1318,7 @@ export default defineConfig(({ command, mode }) => {
           enabled: devServiceWorkerEnabled,
           type: "module",
         },
-        filename: "cache-service-worker.ts",
+        filename: "rom-weaver-service-worker.ts",
         injectManifest: {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.

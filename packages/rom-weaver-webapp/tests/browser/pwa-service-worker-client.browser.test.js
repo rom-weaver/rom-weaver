@@ -55,7 +55,7 @@ const createHarness = ({
     setInterval: vi.fn(() => 1),
   };
   const registration = {
-    active: { scriptURL: "https://example.com/cache-service-worker.js" },
+    active: { scriptURL: "https://example.com/rom-weaver-service-worker.js" },
     installing: null,
     scope: "https://example.com/webapp/",
     unregister: vi.fn(async () => true),
@@ -78,7 +78,7 @@ const createHarness = ({
   const registerServiceWorker = (options) => {
     registerOptions = options;
     queueMicrotask(() => {
-      options.onRegisteredSW?.("/cache-service-worker.js", registration);
+      options.onRegisteredSW?.("/rom-weaver-service-worker.js", registration);
     });
     return updateServiceWorker;
   };

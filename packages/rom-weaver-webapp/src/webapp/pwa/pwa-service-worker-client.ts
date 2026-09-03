@@ -57,7 +57,11 @@ type PwaServiceWorkerClient = {
   refreshCacheVersion: () => void;
 };
 
-const ROM_WEAVER_SERVICE_WORKER_URL_PATTERN = /\/(?:_cache_service_worker|cache-service-worker|dev-sw)\.js(?:$|\?)/;
+// `cache-service-worker` and `_cache_service_worker` are the pre-rename script names. A tab that a
+// previously deployed worker still controls reports one of them until the renamed worker activates,
+// so the pattern MUST keep matching them.
+const ROM_WEAVER_SERVICE_WORKER_URL_PATTERN =
+  /\/(?:rom-weaver-service-worker|_cache_service_worker|cache-service-worker|dev-sw)\.js(?:$|\?)/;
 const COI_COEP_CREDENTIALLESS_ACTION = "set-coep-credentialless";
 const COI_COEP_HAS_FAILED_KEY = "rom-weaver-coi-coep-has-failed";
 const COI_RELOADED_BY_SELF_KEY = "rom-weaver-coi-reloaded-by-self";
