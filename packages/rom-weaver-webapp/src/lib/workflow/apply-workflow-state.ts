@@ -8,7 +8,7 @@ import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import type { InputAsset } from "../input/input-assets.ts";
-import type { SharedInternalCandidate, SharedRomSourceSession, SharedRomStagedSource } from "./staged-rom-source.ts";
+import type { SharedRomSourceSession, SharedRomStagedSource } from "./staged-rom-source.ts";
 
 type SourceValidator<TSource> = (sources: TSource | TSource[] | undefined) => void;
 type SourceRole = "input" | "patch";
@@ -60,7 +60,6 @@ type InternalSourceState = {
   n64ByteOrderChoice?: ApplyWorkflowPatchState["n64ByteOrderChoice"];
   role: SourceRole;
 };
-type InternalCandidate<TSource> = SharedInternalCandidate<TSource, InternalSourceState>;
 type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState> & {
   preparedInputAssets?: InputAsset[];
   preparedPatchFile?: PatchFileInstance;
@@ -80,7 +79,6 @@ type InputSession<TSource> = SharedRomSourceSession<TSource, InternalSourceState
 
 export type {
   InputSession,
-  InternalCandidate,
   InternalPatchChecksumPreflight,
   InternalPatchRequirements,
   InternalPatchValidation,

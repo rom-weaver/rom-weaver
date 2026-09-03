@@ -599,6 +599,27 @@ fn container_output_resolution_reports_extension_and_flag_errors() {
 }
 
 #[test]
+fn patch_output_resolution_preserves_patch_specific_extension_errors() {
+    let app = test_app();
+
+    let missing_extension = app
+        .resolve_patch_create_format(None, Path::new("output"))
+        .expect_err("an extensionless patch output needs a format flag");
+    assert_eq!(
+        missing_extension.to_string(),
+        "validation failed: output has no file extension; pass --format <name> or use a supported patch extension"
+    );
+
+    let unsupported_extension = app
+        .resolve_patch_create_format(None, Path::new("output.unknown"))
+        .expect_err("an unknown patch output extension must fail");
+    assert_eq!(
+        unsupported_extension.to_string(),
+        "validation failed: output extension `.unknown` is not a supported patch format; pass --format <name> or use a supported extension"
+    );
+}
+
+#[test]
 fn trim_extension_helpers_validate_paths_and_choose_operation_patterns() {
     assert_eq!(
         CliApp::normalize_trim_extension("  trimmed  ").unwrap(),

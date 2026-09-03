@@ -229,65 +229,31 @@ impl CliApp {
         flag: Option<&str>,
         output: &Path,
     ) -> Result<FormatResolution> {
-        let extension_display = output
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(|value| format!(".{value}"));
-        let extension_handler = self.patches.find_by_output_extension(output);
+        let normalized_flag = flag.map(normalize_create_patch_format);
+        let flag_canonical_name = normalized_flag.as_deref().and_then(|flag| {
+            self.patches
+                .find_by_name(flag)
+                .map(|handler| handler.descriptor().name.to_string())
+        });
+        let extension_name = self
+            .patches
+            .find_by_output_extension(output)
+            .map(|handler| handler.descriptor().name);
 
-        if let Some(flag) = flag {
-            let normalized = normalize_create_patch_format(flag);
-            let flag_canonical = self
-                .patches
-                .find_by_name(&normalized)
-                .map(|handler| handler.descriptor().name.to_string());
-            let warning = match &extension_display {
-                None => None,
-                Some(extension) => {
-                    let extension_name = extension_handler
-                        .as_ref()
-                        .map(|handler| handler.descriptor().name);
-                    let matches = match (&flag_canonical, extension_name) {
-                        (Some(flag_name), Some(extension_name)) => {
-                            flag_name.eq_ignore_ascii_case(extension_name)
-                        }
-                        _ => false,
-                    };
-                    if matches {
-                        None
-                    } else {
-                        Some(format!(
-                            "output extension `{extension}` does not match --format `{flag}`; writing `{normalized}`"
-                        ))
-                    }
-                }
-            };
-            return Ok(FormatResolution {
-                note: format!("explicit format={normalized}"),
-                format: normalized,
-                warning,
-            });
-        }
-
-        let Some(extension_display) = extension_display else {
-            return Err(RomWeaverError::Validation(
-                "output has no file extension; pass --format <name> or use a supported patch extension"
-                    .to_string(),
-            ));
-        };
-        match extension_handler {
-            Some(handler) => {
-                let resolved = handler.descriptor().name.to_string();
-                Ok(FormatResolution {
-                    note: format!("format={resolved} from output extension"),
-                    format: resolved,
-                    warning: None,
-                })
-            }
-            None => Err(RomWeaverError::Validation(format!(
-                "output extension `{extension_display}` is not a supported patch format; pass --format <name> or use a supported extension"
-            ))),
-        }
+        Self::resolve_output_format_core(
+            flag,
+            output,
+            normalize_create_patch_format,
+            flag_canonical_name.as_deref(),
+            extension_name,
+            OutputFormatResolutionMessages {
+                flag_label: "--format",
+                format_noun: "patch format",
+                missing_extension_label: "a supported patch extension",
+                raw_output_hint: "",
+                supported_formats: None,
+            },
+        )
     }
 
     pub(super) fn run_patch_create(&self, args: PatchCreateCommand) -> AppRunOutcome {

@@ -118,6 +118,24 @@ describe("buildSessionOutputFiles", () => {
     expect(result.files).toEqual([compressedFile]);
   });
 
+  it("routes multiple assets through the registry-selected 7z archive path", async () => {
+    const romA = await makeFile("rom-a-bytes", "gameA.bin");
+    const romB = await makeFile("rom-b-bytes", "gameB.bin");
+    const assets = [makeAsset("a1", "rom", romA), makeAsset("a2", "rom", romB)];
+    const compressedFile = await makeFile("7z-bytes", "gameA.7z");
+    mockCreateArchivePatchFileOutput.mockResolvedValue(compressedFile);
+    const options: ApplyWorkflowOptions = { output: { compression: "7z" } } as never;
+
+    const result = await buildSessionOutputFiles(assets, new Map(), options);
+
+    expect(mockCreateArchivePatchFileOutput).toHaveBeenCalledTimes(1);
+    const call = mockCreateArchivePatchFileOutput.mock.calls[0]?.[0];
+    expect(call?.compression).toBe("7z");
+    expect(call?.outputName).toBe("gameA.7z");
+    expect(call).not.toHaveProperty("overrides");
+    expect(result.files).toEqual([compressedFile]);
+  });
+
   it("groups multiple ROM assets (no cue/track) into a single zip archive, defaulting compression 'none' to zip with store codec", async () => {
     const romA = await makeFile("rom-a-bytes", "gameA.bin");
     const romB = await makeFile("rom-b-bytes", "gameB.bin");
@@ -307,6 +325,45 @@ describe("createSingleFileRomSpecificOutput", () => {
     expect(request.fileName).toBe("game.bin");
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(result).toBe(compressed);
+  });
+
+  it("passes configured RVZ settings through the shared output plan", async () => {
+    const outputFile = await makeFile("rom-bytes", "game.iso");
+    const compressed = await makeFile("rvz-bytes", "game.rvz");
+    const create = vi.fn(async () => ({ output: { fileName: "game.rvz" } }));
+    const runtime = { compression: { create } } as unknown as WorkflowRuntime;
+    mockCreatePatchFileFromRuntimeOutput.mockResolvedValue(compressed);
+
+    await createSingleFileRomSpecificOutput({
+      compression: "rvz",
+      options: {
+        output: {
+          outputName: "game.rvz",
+          container: {
+            rvzBlockSize: 262144,
+            rvzCodec: "zstd",
+            rvzCompressionLevel: 7,
+            rvzScrub: true,
+          },
+        },
+      } as never,
+      outputFile,
+      runtime,
+    });
+
+    const request = create.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      format: "rvz",
+      outputName: "game.rvz",
+      romSpecific: {
+        rvz: {
+          blockSize: 262144,
+          codec: "zstd",
+          compressionLevel: 7,
+          scrub: true,
+        },
+      },
+    });
   });
 
   it("builds RVZ and Z3DS single-file requests with runtime-specific options", async () => {
