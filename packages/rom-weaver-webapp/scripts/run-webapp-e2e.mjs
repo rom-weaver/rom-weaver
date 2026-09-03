@@ -855,6 +855,21 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   }
 };
 
+// WebKit keeps the hydration and accessibility passes in separate persistent
+// contexts, so they can overlap without sharing the stateful accessibility page.
+// Chromium stays serial: its accessibility pass owns the one global CSS-coverage
+// union, and preserving the phase order keeps that collection easy to reason about.
+export const runAuditPhases = async (runHydration, runAccessibility, parallel) => {
+  if (parallel) {
+    const results = await Promise.allSettled([runHydration(), runAccessibility()]);
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure) throw failure.reason;
+    return;
+  }
+  await runHydration();
+  await runAccessibility();
+};
+
 export const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 
 // Every docs route must render exactly one top-level heading; extracted so
@@ -1086,8 +1101,11 @@ const main = async () => {
     );
     try {
       if (RUN_AUDITS) {
-        await runHydrationAudit(createContext, previewBaseUrl);
-        await runAccessibilityAudit(createContext, previewBaseUrl);
+        await runAuditPhases(
+          () => runHydrationAudit(createContext, previewBaseUrl),
+          () => runAccessibilityAudit(createContext, previewBaseUrl),
+          browserName === "webkit",
+        );
       }
       if (RUN_RAW_JOURNEY) {
         await runApplyJourney(createContext, devBaseUrl, "raw apply/download", [

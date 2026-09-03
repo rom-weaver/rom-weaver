@@ -13,6 +13,7 @@ import {
   computeDocsRouteSlugs,
   hasVisiblePrerenderedShell,
   resolveE2EShard,
+  runAuditPhases,
   sha256,
   shouldRejectUnauthorized,
 } from "./run-webapp-e2e.mjs";
@@ -34,6 +35,56 @@ describe("resolveE2EShard", () => {
       () => resolveE2EShard(["--a11y", "--journeys-raw"]),
       /Use only one E2E shard: --a11y, --journeys, --journeys-raw, or --journeys-archive/,
     );
+  });
+});
+
+describe("runAuditPhases", () => {
+  it("runs the independent audit phases concurrently when requested", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    const phase = async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+    };
+
+    await runAuditPhases(phase, phase, true);
+
+    assert.equal(maximumActive, 2);
+  });
+
+  it("waits for the other phase to settle before reporting a failure", async () => {
+    const events = [];
+    const failedPhase = async () => {
+      events.push("failed");
+      throw new Error("audit failed");
+    };
+    const slowPhase = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      events.push("settled");
+    };
+
+    await assert.rejects(() => runAuditPhases(failedPhase, slowPhase, true), /audit failed/);
+
+    assert.deepEqual(events, ["failed", "settled"]);
+  });
+
+  it("keeps the Chromium audit phases ordered", async () => {
+    const events = [];
+    const phase = async (name) => {
+      events.push(`${name}:start`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      events.push(`${name}:end`);
+    };
+
+    await runAuditPhases(
+      () => phase("hydration"),
+      () => phase("accessibility"),
+      false,
+    );
+
+    assert.deepEqual(events, ["hydration:start", "hydration:end", "accessibility:start", "accessibility:end"]);
   });
 });
 
