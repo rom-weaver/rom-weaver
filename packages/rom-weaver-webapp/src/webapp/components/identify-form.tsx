@@ -24,6 +24,7 @@ import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useRomHashLookup } from "../../public/react/use-rom-hash-lookup.ts";
+import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
 
 const IDENTIFY_ACTIVITY_KEY = "identify";
@@ -69,39 +70,47 @@ const CandidateResult = ({
   /** A pasted-checksum expectation, so the staged card carries its match marks. */
   expected?: { checksums?: Record<string, string>; size?: number };
   showMemberPath: boolean;
-}) => (
-  <>
-    {showMemberPath ? <p className="pdesc mono identify-member">ROM: {candidate.path}</p> : null}
-    {candidate.status === "ambiguous" ? (
-      <p className="pdesc identify-ambiguous-lead">
-        {identifyMatchCountLabel(candidate.matches.length)} share this ROM&rsquo;s checksums. Every candidate is listed
-        in the Identify drawer below.
-      </p>
-    ) : null}
-    {candidate.status === "unknown" && showMemberPath ? (
-      <p className="pdesc identify-unknown-lead">No matching checksum for this ROM in the identification data.</p>
-    ) : null}
-    <RomInputPanels
-      identification={{
-        matches: candidate.matches,
-        status: candidate.status,
-        ...(candidate.condition ? { condition: candidate.condition } : {}),
-        ...(candidate.hint ? { hint: candidate.hint } : {}),
-        ...(candidate.quality ? { quality: candidate.quality } : {}),
-        ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
-        ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
-        ...(candidate.database ? { database: candidate.database } : {}),
-      }}
-      identifyDefaultOpen
-      info={{
-        checksums: candidate.checksums,
-        checksumVariants: candidate.checksumVariants,
-        defaultOpen: true,
-        ...(expected ? { expected } : {}),
-      }}
-    />
-  </>
-);
+}) => {
+  const identification = {
+    matches: candidate.matches,
+    status: candidate.status,
+    ...(candidate.condition ? { condition: candidate.condition } : {}),
+    ...(candidate.hint ? { hint: candidate.hint } : {}),
+    ...(candidate.quality ? { quality: candidate.quality } : {}),
+    ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
+    ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
+    ...(candidate.database ? { database: candidate.database } : {}),
+  };
+  // A matched record completes the drawer: a pasted checksum computes one
+  // digest and the record knows the other two plus the exact size.
+  const database = identifyRecordChecks(identification);
+  return (
+    <>
+      {showMemberPath ? <p className="pdesc mono identify-member">ROM: {candidate.path}</p> : null}
+      {candidate.status === "ambiguous" ? (
+        <p className="pdesc identify-ambiguous-lead">
+          {identifyMatchCountLabel(candidate.matches.length)} share this ROM&rsquo;s checksums. Every candidate is
+          listed in the Identify drawer below.
+        </p>
+      ) : null}
+      {candidate.status === "unknown" && showMemberPath ? (
+        <p className="pdesc identify-unknown-lead">No matching checksum for this ROM in the identification data.</p>
+      ) : null}
+      <RomInputPanels
+        identification={identification}
+        identifyDefaultOpen
+        info={{
+          ...(typeof candidate.sizeBytes === "number" ? { bytes: candidate.sizeBytes } : {}),
+          checksums: candidate.checksums,
+          checksumVariants: candidate.checksumVariants,
+          ...(database ? { database } : {}),
+          defaultOpen: true,
+          ...(expected ? { expected } : {}),
+        }}
+      />
+    </>
+  );
+};
 
 const IdentifyForm = ({
   containerId = "identify-container",

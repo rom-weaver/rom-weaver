@@ -89,6 +89,7 @@ const identifyRom = async (
         ...(asset.platform ? { detectedPlatform: asset.platform } : {}),
         matches: identification?.matches || [],
         path: asset.memberPath || asset.fileName || fileName,
+        ...(Number.isFinite(asset.sizeBytes) ? { sizeBytes: asset.sizeBytes } : {}),
         status: identifyUnavailable ? "unavailable" : identification?.status || "unknown",
         ...(identification?.quality ? { quality: identification.quality } : {}),
         ...(identification?.platformCandidates ? { platformCandidates: identification.platformCandidates } : {}),

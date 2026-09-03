@@ -2,6 +2,7 @@ import { Check, ChevronRight, X } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
+import type { IdentifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./checksum-list.tsx";
 import { FileProgress } from "./feedback.tsx";
@@ -190,11 +191,15 @@ const CollapsedVariantGroups = ({
   baseLabel,
   baseRows,
   bytes,
+  database,
+  databaseVariantId,
   variants,
 }: {
   baseLabel?: string;
   baseRows?: ReactNode;
   bytes?: number;
+  database?: DatabaseFill;
+  databaseVariantId?: string;
   variants: ChecksumVariant[];
 }) => {
   const [open, setOpen] = useState(false);
@@ -214,7 +219,7 @@ const CollapsedVariantGroups = ({
               {baseRows}
             </div>
           ) : null}
-          <VariantGroups bytes={bytes} variants={variants} />
+          <VariantGroups bytes={bytes} database={database} databaseVariantId={databaseVariantId} variants={variants} />
         </>
       ) : null}
     </>
@@ -357,11 +362,52 @@ const getVariantBytes = (variant: ChecksumVariant, sourceBytes: number | undefin
   return String(Math.max(0, Math.floor(sourceBytes) - stripped));
 };
 
+/** The identify record's checks for the one group they describe. */
+type DatabaseFill = { checksums: Record<string, string>; size?: number };
+
+/* One check row that falls back to the identification database when the run
+   produced no value of its own - a bare-checksum lookup computes one digest,
+   and the record knows the rest. A fallback value is a claim, not a
+   measurement, so it carries `ck-db` and says so to a screen reader. */
+const FilledCheckRow = ({
+  computed,
+  databaseValue,
+  label,
+}: {
+  computed: string;
+  databaseValue?: string;
+  label: string;
+}) => {
+  const fromDatabase = !computed && !!databaseValue;
+  const value = computed || databaseValue || "";
+  if (!value) return <ChecksumRow label={label} value="" />;
+  return (
+    <ChecksumRow
+      ariaLabel={fromDatabase ? `Copy ${label} from the identification database` : `Copy ${label}`}
+      className={fromDatabase ? "ck-db" : undefined}
+      copyValue={value}
+      label={label}
+      value={value}
+    />
+  );
+};
+
+const databaseByteValue = (database?: DatabaseFill): string =>
+  typeof database?.size === "number" && Number.isFinite(database.size) ? String(Math.floor(database.size)) : "";
+
+/* Variant ids that ARE the base group rather than a transform of it: `raw` is
+   the untransformed file, and `manual` is the identify hash path's echo of the
+   digest the user pasted. Neither earns its own group - they would repeat the
+   base rows verbatim. */
+const isBaseVariantId = (id: string): boolean => id === "raw" || id === "manual";
+
 type ChecksumGroupData = {
   id: string;
   label: ReactNode;
   byteValue?: string;
   checksums?: SourceInfoChecksums | null;
+  /** Record values filling the rows this group has no computed value for. */
+  database?: DatabaseFill;
   progress?: SourceInfoProgress | null;
 };
 
@@ -369,33 +415,48 @@ type ChecksumGroupData = {
    and disc tracks differ in where their values come from, not how they read in
    the Checks drawer. */
 const ChecksumGroup = ({ group }: { group: ChecksumGroupData }) => {
-  const { byteValue = "", checksums } = group;
+  const { byteValue = "", checksums, database } = group;
+  const bytesRow =
+    byteValue || databaseByteValue(database) ? (
+      <FilledCheckRow computed={byteValue} databaseValue={databaseByteValue(database)} label="BYTES" />
+    ) : null;
+  const hasCrc32 = !!(checksums?.crc32 || database?.checksums.crc32);
   return (
     <div className="ck-group">
       <div className="ck-group-head">{group.label}</div>
       {group.progress ? <FileProgress {...group.progress} /> : null}
       {CHECKSUM_VARIANT_ALGORITHMS.map(([algorithm, algorithmLabel]) => {
         const value = checksums?.[algorithm] || "";
-        if (!value) return null;
+        const databaseValue = database?.checksums[algorithm] || "";
+        if (!(value || databaseValue)) return null;
         return (
           <Fragment key={algorithm}>
-            <ChecksumRow label={algorithmLabel} value={value} />
+            <FilledCheckRow computed={value} databaseValue={databaseValue} label={algorithmLabel} />
             {/* BYTES pairs with CRC32 on one wide-drawer grid row */}
-            {algorithm === "crc32" && byteValue ? (
-              <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
-            ) : null}
+            {algorithm === "crc32" ? bytesRow : null}
           </Fragment>
         );
       })}
-      {!checksums?.crc32 && byteValue ? <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} /> : null}
+      {hasCrc32 ? null : bytesRow}
     </div>
   );
 };
 
 /* Checksum variants (headerless, auto-trimmed…) render as labeled sub-groups
    inside the same Checks drawer as the raw checksums. */
-const VariantGroups = ({ bytes, variants }: { bytes?: number; variants?: ChecksumVariant[] }) => {
-  const rows = (variants || []).filter((variant) => variant.id !== "raw");
+const VariantGroups = ({
+  bytes,
+  database,
+  databaseVariantId,
+  variants,
+}: {
+  bytes?: number;
+  /** Record checks for the one variant `databaseVariantId` names. */
+  database?: DatabaseFill;
+  databaseVariantId?: string;
+  variants?: ChecksumVariant[];
+}) => {
+  const rows = (variants || []).filter((variant) => !isBaseVariantId(variant.id));
   if (!rows.length) return null;
   return (
     <>
@@ -404,6 +465,7 @@ const VariantGroups = ({ bytes, variants }: { bytes?: number; variants?: Checksu
           group={{
             byteValue: getVariantBytes(variant, bytes),
             checksums: variant.checksums,
+            ...(database && variant.id === databaseVariantId ? { database } : {}),
             id: variant.id,
             label: variant.label,
           }}
@@ -418,6 +480,7 @@ const SourceInfoList = ({
   bytes,
   checksums,
   checksumVariants,
+  database,
   defaultOpen = false,
   expected,
   extractTiming,
@@ -433,6 +496,10 @@ const SourceInfoList = ({
   bytes?: number;
   checksums?: SourceInfoChecksums | null;
   checksumVariants?: ChecksumVariant[];
+  /** Checks the identification database knows for this exact ROM. They fill the
+   * rows the run computed no value for, in the one group the record describes -
+   * a record matched through a transform speaks for that variant, not the file. */
+  database?: IdentifyRecordChecks;
   defaultOpen?: boolean;
   /** Bundle-expected checks for this file, rendered as an "Expected" group with
    * per-row match marks against the computed values. */
@@ -464,15 +531,19 @@ const SourceInfoList = ({
     );
   }
   const hasBytes = typeof bytes === "number" && Number.isFinite(bytes);
-  if (!(hasBytes || checksums || hasExpected || lead || progress || trim?.detected)) return null;
+  if (!(hasBytes || checksums || database || hasExpected || lead || progress || trim?.detected)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
   // When transform variants (headerless, auto-trimmed…) are present - or the
   // bundle contributes an "Expected" group - the base checksums become one of
   // several groups, so they get their own labeled head ("Unchanged"/"Computed")
   // to match - an unlabeled block alongside labeled groups reads as if it
   // belonged to the first one.
-  const variantRows = (checksumVariants || []).filter((variant) => variant.id !== "raw");
+  const variantRows = (checksumVariants || []).filter((variant) => !isBaseVariantId(variant.id));
   const baseGroupLabel = variantRows.length ? "Unchanged" : "Computed";
+  // A record matched through `raw`/`manual` describes the file itself, so its
+  // values complete the base rows; any other variant id sends them to that
+  // variant's group instead, where the bytes they describe actually live.
+  const baseDatabase = database && isBaseVariantId(database.variantId) ? database : undefined;
   // A satisfied expectation collapses the drawer to a single verified group -
   // repeating the same hashes as "Computed" (and listing the other transform
   // variants) would only restate what the match already settled.
@@ -493,10 +564,10 @@ const SourceInfoList = ({
   // row in wide drawers, so they stay adjacent in the DOM.
   const baseRows = (
     <>
-      <ChecksumRow label="CRC32" value={checksums?.crc32 || ""} />
-      <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
-      <ChecksumRow label="MD5" value={checksums?.md5 || ""} />
-      <ChecksumRow label="SHA-1" value={checksums?.sha1 || ""} />
+      <FilledCheckRow computed={checksums?.crc32 || ""} databaseValue={baseDatabase?.checksums.crc32} label="CRC32" />
+      <FilledCheckRow computed={byteValue} databaseValue={databaseByteValue(baseDatabase)} label="BYTES" />
+      <FilledCheckRow computed={checksums?.md5 || ""} databaseValue={baseDatabase?.checksums.md5} label="MD5" />
+      <FilledCheckRow computed={checksums?.sha1 || ""} databaseValue={baseDatabase?.checksums.sha1} label="SHA-1" />
     </>
   );
   return (
@@ -516,6 +587,8 @@ const SourceInfoList = ({
             baseLabel={expectedMatch.id === "base" ? undefined : baseGroupLabel}
             baseRows={expectedMatch.id === "base" ? undefined : baseRows}
             bytes={bytes}
+            database={baseDatabase ? undefined : database}
+            databaseVariantId={database?.variantId}
             variants={variantRows.filter((variant) => variant.id !== expectedMatch.id)}
           />
         </>
@@ -532,7 +605,12 @@ const SourceInfoList = ({
           {hasExpected ? (
             <ExpectedChecksGroup bytes={bytes} checksums={checksums} expected={expected} mismatch={expectedMismatch} />
           ) : null}
-          <VariantGroups bytes={bytes} variants={checksumVariants} />
+          <VariantGroups
+            bytes={bytes}
+            database={baseDatabase ? undefined : database}
+            databaseVariantId={database?.variantId}
+            variants={checksumVariants}
+          />
         </>
       )}
       <TrimFixGroup trim={trim} />

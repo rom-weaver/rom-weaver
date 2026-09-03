@@ -3,6 +3,7 @@ import { Fragment } from "react";
 import { identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
+import { identifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyResolution } from "../../../../types/identify.ts";
 import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import type { useUiLocalizer } from "../../settings-context.tsx";
@@ -47,28 +48,22 @@ const ExpectedCheckRows = ({ checksums, size }: { checksums: Record<string, stri
   );
 };
 
-/** The database's single-component record for a match, when it has exactly one. */
-const soleExpectedComponent = (identification: ParsedIdentifyResolution | undefined) => {
-  if (identification?.status !== "matched") return undefined;
-  const components = identification.matches[0]?.expectedComponents;
-  return components?.length === 1 ? components[0] : undefined;
-};
-
-/* What the identify data adds beyond the check itself. A multi-track disc
-   record has no single expected file, so it contributes nothing here. */
+/* What the identify data adds beyond the check itself. The record is shared
+   with the Checks drawer; this only subtracts what the check already asserts,
+   so the card never repeats a value it is about to show as its own. */
 const databaseOnlyChecks = (
   checks: ParsedBundleChecks | undefined,
   identification: ParsedIdentifyResolution | undefined,
 ): { checksums: Record<string, string>; size?: number } | undefined => {
-  const component = soleExpectedComponent(identification);
-  if (!component) return undefined;
+  const record = identifyRecordChecks(identification);
+  if (!record) return undefined;
   const own = checks?.checksums || {};
   const checksums: Record<string, string> = {};
   for (const algorithm of EXPECTED_ROM_CHECK_ORDER) {
-    const value = component[algorithm];
+    const value = record.checksums[algorithm];
     if (value && !own[algorithm]) checksums[algorithm] = value;
   }
-  const size = typeof checks?.size === "number" || !component.size ? undefined : component.size;
+  const size = typeof checks?.size === "number" || record.size === undefined ? undefined : record.size;
   if (!(Object.keys(checksums).length || size !== undefined)) return undefined;
   return { checksums, ...(size === undefined ? {} : { size }) };
 };
