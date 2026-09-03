@@ -51,7 +51,7 @@ const createSessionStorage = (seed: Record<string, string> = {}, failOn: Storage
 };
 
 const createRegistration = (overrides: Partial<FakeRegistration> = {}): FakeRegistration => ({
-  active: { scriptURL: "https://example.com/cache-service-worker.js", state: "activated" },
+  active: { scriptURL: "https://example.com/rom-weaver-service-worker.js", state: "activated" },
   installing: null,
   scope: APP_SCOPE,
   unregister: vi.fn(async () => true),
@@ -211,7 +211,7 @@ const registered = (harness: ReturnType<typeof createHarness>, registration?: Fa
   harness
     .registerOptions()
     .onRegisteredSW?.(
-      "/cache-service-worker.js",
+      "/rom-weaver-service-worker.js",
       resolved as unknown as Parameters<NonNullable<RegisterOptions["onRegisteredSW"]>>[1],
     );
 };
