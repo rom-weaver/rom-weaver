@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
-import path, { dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
@@ -17,7 +17,9 @@ import {
   OPENGOOD_HEADERED_REVISION,
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
-  archiveExtractionCommand,
+  extractArchiveMembers,
+  normalizeArchivePath,
+  stripLeadingComponent,
   buildCatalogPlatforms,
   buildSystemPackV1,
   extractGoodToolsDumpTags,
@@ -559,69 +561,101 @@ test("the builder emits a checksum router that routes every pack key", async () 
   assert.deepEqual(readFileSync(join(outDir2, "checksum-routes.bin")), bytes);
 });
 
-// The Windows CI job keeps the workspace on `D:`, and the Git-bash tar reads an
-// argument containing a colon as `host:file` and mangles backslash separators.
-// Both shapes broke the identify data build in turn, so the tar command is
-// asserted against Windows-shaped paths on every platform.
-const WINDOWS_CACHE = "D:\\a\\_temp\\rom-weaver-identify-dats";
-const POSIX_CACHE = "/tmp/rom-weaver-identify-dats";
-const TAR_REVISION = "69ea62a2823823820d4f121c2b53bf20fd088ab4";
+// The identify build used to shell out to `tar`, and the Windows CI job (whose
+// workspace lives on `D:`) broke twice on how tar reparsed the paths it was
+// handed: a colon meant `host:file`, and the backslash separators were mangled.
+// Extraction now runs in process, so these cover the behaviour that replaced it.
+const TAR_PREFIX = "libretro-database-69ea62a2823823820d4f121c2b53bf20fd088ab4";
+// Longer than tar's 100-character name field, so the archive carries a PAX long
+// name - exactly what a real GitHub source archive does.
+const LONG_MEMBER = `metadat/no-intro/${"Nintendo - Nintendo Entertainment System ".repeat(3)}Parent-Clone.dat`;
 
-const windowsTarCommand = () =>
-  archiveExtractionCommand(
-    {
-      archive: path.win32.join(WINDOWS_CACHE, "libretro", `${TAR_REVISION}.tar.gz`),
-      members: [`libretro-database-${TAR_REVISION}/metadat/no-intro/Nintendo - Game Boy.dat`],
-      sourceRoot: path.win32.join(WINDOWS_CACHE, "libretro", TAR_REVISION),
-    },
-    path.win32,
-  );
-
-test("no tar argument carries a drive-letter colon on Windows paths", () => {
-  const { args } = windowsTarCommand();
-  for (const arg of args) {
-    assert.ok(!arg.includes(":"), `argument must not contain a colon: ${arg}`);
+const buildArchive = async (dir, entries) => {
+  const stage = join(dir, "stage");
+  for (const [name, body] of Object.entries(entries)) {
+    const target = join(stage, TAR_PREFIX, name);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, body);
   }
+  const archive = join(dir, "source.tar.gz");
+  const { create } = await import("tar");
+  await create({ cwd: stage, file: archive, gzip: true }, [TAR_PREFIX]);
+  return archive;
+};
+
+test("extractArchiveMembers writes the requested members with the top level stripped", async () => {
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-"));
+  const archive = await buildArchive(dir, { "dats/a.dat": "alpha", "dats/b.dat": "beta" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  const resolved = await extractArchiveMembers({
+    archive,
+    members: [`${TAR_PREFIX}/dats/a.dat`],
+    sourceRoot,
+  });
+
+  const target = resolved.get(`${TAR_PREFIX}/dats/a.dat`);
+  assert.equal(target, join(sourceRoot, "dats/a.dat"));
+  assert.equal(readFileSync(target, "utf8"), "alpha");
+  // Only what was asked for is written; the archive's other entries are skipped.
+  assert.throws(() => readFileSync(join(sourceRoot, "dats/b.dat")));
 });
 
-test("no tar argument carries a backslash on Windows paths", () => {
-  const { args } = windowsTarCommand();
-  for (const arg of args) {
-    assert.ok(!arg.includes("\\"), `argument must not contain a backslash: ${arg}`);
-  }
+test("extractArchiveMembers resolves a PAX long name", async () => {
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-pax-"));
+  const archive = await buildArchive(dir, { [LONG_MEMBER]: "long" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  const resolved = await extractArchiveMembers({
+    archive,
+    members: [`${TAR_PREFIX}/${LONG_MEMBER}`],
+    sourceRoot,
+  });
+
+  assert.ok(`${TAR_PREFIX}/${LONG_MEMBER}`.length > 100, "the fixture must exceed the name field");
+  assert.equal(readFileSync(resolved.get(`${TAR_PREFIX}/${LONG_MEMBER}`), "utf8"), "long");
 });
 
-test("tar is named the archive relative to the extraction root it runs from", () => {
-  const { args, cwd } = windowsTarCommand();
-  // Running from the extraction root is what removes the need for `-C`, whose
-  // absolute argument was mangled the same way the archive name was.
-  assert.equal(cwd, path.win32.join(WINDOWS_CACHE, "libretro", TAR_REVISION));
-  assert.deepEqual(args.slice(0, 3), ["-xzf", `../${TAR_REVISION}.tar.gz`, "--strip-components=1"]);
-  assert.ok(!args.includes("-C"));
-});
+test("extractArchiveMembers reports a member the archive does not hold", async () => {
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-missing-"));
+  const archive = await buildArchive(dir, { "dats/a.dat": "alpha" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
 
-test("tar member paths pass through unchanged after the flags", () => {
-  const members = ["prefix/dats/a.dat", "prefix/dats/b.dat"];
-  const { args } = archiveExtractionCommand(
-    {
-      archive: path.posix.join(POSIX_CACHE, "opengood", `${TAR_REVISION}.tar.gz`),
-      members,
-      sourceRoot: path.posix.join(POSIX_CACHE, "opengood", TAR_REVISION),
-    },
-    path.posix,
+  await assert.rejects(
+    extractArchiveMembers({ archive, members: [`${TAR_PREFIX}/dats/nope.dat`], sourceRoot }),
+    /is missing: .*nope\.dat/u,
   );
-  assert.deepEqual(args.slice(3), members);
 });
 
-test("posix paths produce the same relative archive name", () => {
-  const { args, cwd } = archiveExtractionCommand(
-    {
-      archive: path.posix.join(POSIX_CACHE, "libretro", `${TAR_REVISION}.tar.gz`),
-      members: ["prefix/dats/a.dat"],
-      sourceRoot: path.posix.join(POSIX_CACHE, "libretro", TAR_REVISION),
-    },
-    path.posix,
-  );
-  assert.equal(cwd, `${POSIX_CACHE}/libretro/${TAR_REVISION}`);
-  assert.equal(args[1], `../${TAR_REVISION}.tar.gz`);
+test("extract targets are joined with the platform separator", async () => {
+  // The member name stays `/`-separated because that is what a tar holds, while
+  // the path written to disk MUST use the platform's separator.
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-sep-"));
+  const archive = await buildArchive(dir, { "dats/a.dat": "alpha" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  const resolved = await extractArchiveMembers({
+    archive,
+    members: [`${TAR_PREFIX}/dats/a.dat`],
+    sourceRoot,
+  });
+  assert.equal(resolved.get(`${TAR_PREFIX}/dats/a.dat`), join(sourceRoot, "dats", "a.dat"));
+});
+
+test("archive paths are compared without a leading ./", () => {
+  assert.equal(normalizeArchivePath("./prefix/dats/a.dat"), "prefix/dats/a.dat");
+  assert.equal(normalizeArchivePath("prefix/dats/a.dat"), "prefix/dats/a.dat");
+  // A backslash is a legal character in a tar entry name, never a separator, so
+  // it MUST survive untouched.
+  assert.equal(normalizeArchivePath("prefix/odd\\name.dat"), "prefix/odd\\name.dat");
+});
+
+test("stripLeadingComponent drops exactly the top-level directory", () => {
+  assert.equal(stripLeadingComponent(`${TAR_PREFIX}/dats/a.dat`), "dats/a.dat");
+  assert.equal(stripLeadingComponent("./prefix/dats/a.dat"), "dats/a.dat");
+  assert.equal(stripLeadingComponent("prefix/only.dat"), "only.dat");
 });
