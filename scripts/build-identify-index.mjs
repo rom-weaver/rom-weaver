@@ -710,22 +710,22 @@ async function ensureArchiveFiles({
       await rename(`${archive}.part`, archive);
     }
     await mkdir(sourceRoot, { recursive: true });
-    // GNU tar reads an archive name that contains a colon as `host:file`, so an
-    // absolute Windows path such as `D:\...` fails with "Cannot connect to D:".
-    // Naming the archive relative to its own directory keeps a colon out of the
-    // argument on every platform; `-C` is a chdir target and is never parsed
-    // that way.
+    // No absolute path may reach tar here. The Windows CI job keeps the
+    // workspace on `D:`, and the Git-bash tar mishandles such a path twice
+    // over: it reads a name containing a colon as `host:file`, and it mangles
+    // the backslash separators. Running from the extraction root and naming
+    // the archive by a relative POSIX path avoids both, and drops the need for
+    // `-C`. `path.relative` yields platform separators, so rewrite them.
+    const relativeArchive = path.relative(sourceRoot, archive).split(path.sep).join("/");
     await runCommandText(
       "tar",
       [
         "-xzf",
-        path.basename(archive),
-        "-C",
-        sourceRoot,
+        relativeArchive,
         "--strip-components=1",
         ...missing.map((entry) => `${prefix}/${entry.sourcePath}`),
       ],
-      { cwd: archiveDir },
+      { cwd: sourceRoot },
     );
   }
   const result = new Map();
