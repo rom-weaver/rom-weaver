@@ -51,6 +51,14 @@ pub fn insert_thread_execution_details(
 /// Attach the handler's complete output set so callers never scan a shared
 /// directory and capture sibling-operation files. Call after checksum details;
 /// existing paths are preserved and missing paths gain name and size.
+/// Normalize an emitted-file path into the single shape every comparison uses.
+/// Windows callers seed `emitted_files` with backslash separators while this
+/// module stores forward slashes, so the two MUST be folded together before
+/// they are compared or a seeded entry is duplicated.
+fn emitted_path_key(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 pub fn attach_emitted_file_paths<P: AsRef<Path>>(
     mut report: OperationReport,
     paths: &[P],
@@ -70,12 +78,12 @@ pub fn attach_emitted_file_paths<P: AsRef<Path>>(
                 .as_object()
                 .and_then(|map| map.get("path"))
                 .and_then(Value::as_str)
-                .map(str::to_owned)
+                .map(emitted_path_key)
         })
         .collect::<HashSet<_>>();
     for path in paths {
         let path = path.as_ref();
-        let direct_key = path.to_string_lossy().replace('\\', "/");
+        let direct_key = emitted_path_key(&path.to_string_lossy());
         if seen.contains(&direct_key) {
             continue;
         }
@@ -85,9 +93,15 @@ pub fn attach_emitted_file_paths<P: AsRef<Path>>(
         let key = entry
             .get("path")
             .and_then(Value::as_str)
-            .map(str::to_owned)
+            .map(emitted_path_key)
             .unwrap_or_default();
-        if seen.insert(key) {
+        // The canonical key decides whether this is new, and the requested
+        // shape is recorded afterwards so a later duplicate in either shape is
+        // suppressed. Recording it first would swallow the entry whenever the
+        // two shapes are identical.
+        let is_new = seen.insert(key);
+        seen.insert(direct_key);
+        if is_new {
             emitted.push(Value::Object(entry));
         }
     }
@@ -116,7 +130,7 @@ pub fn build_known_emitted_file_detail(path: &Path, size_bytes: u64) -> Option<M
     let mut entry = Map::new();
     entry.insert(
         "path".to_string(),
-        json!(canonical.to_string_lossy().replace('\\', "/")),
+        json!(emitted_path_key(&canonical.to_string_lossy())),
     );
     entry.insert("file_name".to_string(), json!(file_name));
     entry.insert("size_bytes".to_string(), json!(size_bytes));
@@ -231,6 +245,40 @@ mod tests {
         let mut details = Map::new();
         insert_thread_execution_details(&mut details, &no_reason);
         assert!(!details.contains_key("thread_fallback_reason"));
+    }
+
+    #[test]
+    fn attach_emitted_file_paths_folds_backslash_separators_into_one_key() {
+        // A Windows caller seeds the path with backslashes while this module
+        // stores forward slashes. Without folding the two shapes the seeded
+        // entry is duplicated, which only ever failed on Windows.
+        let temp = TempDir::new().expect("temp dir");
+        let existing = temp.child("existing.bin");
+        existing.write_binary(b"old").expect("existing fixture");
+
+        let seeded = existing.path().to_string_lossy().replace('/', "\\");
+        let mut report = OperationReport::succeeded(
+            crate::OperationFamily::Container,
+            Some("test".to_string()),
+            "extract",
+            "done",
+            Some(100.0),
+            None,
+        );
+        report.details = Some(json!({
+            "emitted_files": [{"path": seeded, "kind": "rom"}]
+        }));
+
+        let report = attach_emitted_file_paths(report, &[existing.path()]);
+        let emitted = report
+            .details
+            .expect("details")
+            .get("emitted_files")
+            .and_then(Value::as_array)
+            .cloned()
+            .expect("emitted files");
+        assert_eq!(emitted.len(), 1);
+        assert_eq!(emitted[0].get("kind"), Some(&json!("rom")));
     }
 
     #[test]
