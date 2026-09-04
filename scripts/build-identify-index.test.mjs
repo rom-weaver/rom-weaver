@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
-import { dirname, join } from "node:path";
+import path, { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
@@ -17,6 +17,7 @@ import {
   OPENGOOD_HEADERED_REVISION,
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
+  archiveExtractionCommand,
   buildCatalogPlatforms,
   buildSystemPackV1,
   extractGoodToolsDumpTags,
@@ -556,4 +557,71 @@ test("the builder emits a checksum router that routes every pack key", async () 
     `${NES},Tandy - Color Computer`,
   ]);
   assert.deepEqual(readFileSync(join(outDir2, "checksum-routes.bin")), bytes);
+});
+
+// The Windows CI job keeps the workspace on `D:`, and the Git-bash tar reads an
+// argument containing a colon as `host:file` and mangles backslash separators.
+// Both shapes broke the identify data build in turn, so the tar command is
+// asserted against Windows-shaped paths on every platform.
+const WINDOWS_CACHE = "D:\\a\\_temp\\rom-weaver-identify-dats";
+const POSIX_CACHE = "/tmp/rom-weaver-identify-dats";
+const TAR_REVISION = "69ea62a2823823820d4f121c2b53bf20fd088ab4";
+
+const windowsTarCommand = () =>
+  archiveExtractionCommand(
+    {
+      archive: path.win32.join(WINDOWS_CACHE, "libretro", `${TAR_REVISION}.tar.gz`),
+      members: [`libretro-database-${TAR_REVISION}/metadat/no-intro/Nintendo - Game Boy.dat`],
+      sourceRoot: path.win32.join(WINDOWS_CACHE, "libretro", TAR_REVISION),
+    },
+    path.win32,
+  );
+
+test("no tar argument carries a drive-letter colon on Windows paths", () => {
+  const { args } = windowsTarCommand();
+  for (const arg of args) {
+    assert.ok(!arg.includes(":"), `argument must not contain a colon: ${arg}`);
+  }
+});
+
+test("no tar argument carries a backslash on Windows paths", () => {
+  const { args } = windowsTarCommand();
+  for (const arg of args) {
+    assert.ok(!arg.includes("\\"), `argument must not contain a backslash: ${arg}`);
+  }
+});
+
+test("tar is named the archive relative to the extraction root it runs from", () => {
+  const { args, cwd } = windowsTarCommand();
+  // Running from the extraction root is what removes the need for `-C`, whose
+  // absolute argument was mangled the same way the archive name was.
+  assert.equal(cwd, path.win32.join(WINDOWS_CACHE, "libretro", TAR_REVISION));
+  assert.deepEqual(args.slice(0, 3), ["-xzf", `../${TAR_REVISION}.tar.gz`, "--strip-components=1"]);
+  assert.ok(!args.includes("-C"));
+});
+
+test("tar member paths pass through unchanged after the flags", () => {
+  const members = ["prefix/dats/a.dat", "prefix/dats/b.dat"];
+  const { args } = archiveExtractionCommand(
+    {
+      archive: path.posix.join(POSIX_CACHE, "opengood", `${TAR_REVISION}.tar.gz`),
+      members,
+      sourceRoot: path.posix.join(POSIX_CACHE, "opengood", TAR_REVISION),
+    },
+    path.posix,
+  );
+  assert.deepEqual(args.slice(3), members);
+});
+
+test("posix paths produce the same relative archive name", () => {
+  const { args, cwd } = archiveExtractionCommand(
+    {
+      archive: path.posix.join(POSIX_CACHE, "libretro", `${TAR_REVISION}.tar.gz`),
+      members: ["prefix/dats/a.dat"],
+      sourceRoot: path.posix.join(POSIX_CACHE, "libretro", TAR_REVISION),
+    },
+    path.posix,
+  );
+  assert.equal(cwd, `${POSIX_CACHE}/libretro/${TAR_REVISION}`);
+  assert.equal(args[1], `../${TAR_REVISION}.tar.gz`);
 });

@@ -682,6 +682,25 @@ async function runCommandText(command, args, options = {}) {
   return stdout;
 }
 
+// Build the tar invocation that extracts `members` into `sourceRoot`.
+//
+// No absolute path may reach tar. The Windows CI job keeps the workspace on
+// `D:`, and the Git-bash tar mishandles such a path twice over: it reads a name
+// containing a colon as `host:file`, and it mangles the backslash separators.
+// Running from the extraction root and naming the archive by a relative POSIX
+// path avoids both, and removes the need for `-C`. `path.relative` yields
+// platform separators, so they are rewritten.
+//
+// Exported for the unit tests, which assert on Windows-shaped inputs that no
+// argument carries a colon or a backslash.
+export function archiveExtractionCommand({ archive, members, sourceRoot }, pathApi = path) {
+  const relativeArchive = pathApi.relative(sourceRoot, archive).split(pathApi.sep).join("/");
+  return {
+    args: ["-xzf", relativeArchive, "--strip-components=1", ...members],
+    cwd: sourceRoot,
+  };
+}
+
 async function ensureArchiveFiles({
   archiveUrl,
   cacheDir,
@@ -710,23 +729,12 @@ async function ensureArchiveFiles({
       await rename(`${archive}.part`, archive);
     }
     await mkdir(sourceRoot, { recursive: true });
-    // No absolute path may reach tar here. The Windows CI job keeps the
-    // workspace on `D:`, and the Git-bash tar mishandles such a path twice
-    // over: it reads a name containing a colon as `host:file`, and it mangles
-    // the backslash separators. Running from the extraction root and naming
-    // the archive by a relative POSIX path avoids both, and drops the need for
-    // `-C`. `path.relative` yields platform separators, so rewrite them.
-    const relativeArchive = path.relative(sourceRoot, archive).split(path.sep).join("/");
-    await runCommandText(
-      "tar",
-      [
-        "-xzf",
-        relativeArchive,
-        "--strip-components=1",
-        ...missing.map((entry) => `${prefix}/${entry.sourcePath}`),
-      ],
-      { cwd: sourceRoot },
-    );
+    const { args, cwd } = archiveExtractionCommand({
+      archive,
+      members: missing.map((entry) => `${prefix}/${entry.sourcePath}`),
+      sourceRoot,
+    });
+    await runCommandText("tar", args, { cwd });
   }
   const result = new Map();
   for (const entry of expected) {

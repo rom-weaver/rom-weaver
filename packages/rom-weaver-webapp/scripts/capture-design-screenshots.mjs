@@ -114,7 +114,10 @@ const capture = async () => {
           }
           if (captureCase.openOutputOptions) {
             const output = page.locator("#rom-weaver-row-output-file-name");
-            const options = output.locator(".cks > .cks-head");
+            // Anchored to the bundle drawer specifically. The output row holds
+            // more than one drawer, so a bare `.cks` matches several and the
+            // field waited for below lives only in this one.
+            const options = output.locator("#rom-weaver-bundle-job > .cks > .cks-head");
             if ((await options.getAttribute("aria-expanded")) === "false") await options.click();
             await output.locator("#rom-weaver-bundle-export-format").waitFor({ state: "visible" });
           }
