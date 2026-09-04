@@ -101,7 +101,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       path === ".github/cli-platforms.json" ||
       path.startsWith("packages/rom-weaver-cli-platforms/") ||
       /^(?:bin\/rom-weaver\.mjs|install\.(?:sh|ps1))$/.test(path) ||
-      /^(?:scripts\/(?:check-thread-guards|check-whitespace|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(
+      /^(?:scripts\/(?:build-identify-index|check-thread-guards|check-whitespace|ensure-identify-data|gen-third-party-licenses|prepare-npm-platform-package|sync-version|vendored-pathspecs|verify-cli-platform)\.mjs|scripts\/wasm\/)/.test(
         path,
       )
     ) {
