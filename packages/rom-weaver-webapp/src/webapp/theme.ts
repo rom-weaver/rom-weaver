@@ -54,7 +54,7 @@ const getSystemTheme = (): Theme => {
 };
 
 // Browser chrome (address bar / PWA title bar) follows the loom chassis color.
-const THEME_COLORS: Record<Theme, string> = { dark: "#0c0f13", light: "#eaedf1" };
+const THEME_COLORS: Record<Theme, string> = { dark: "#0c0f13", light: "#e5e3df" };
 
 const applyTheme = (theme: Theme) => {
   current = theme;
