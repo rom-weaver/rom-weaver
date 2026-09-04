@@ -81,7 +81,7 @@
   padding: 2px 18px 2px 9px;
   font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
   font-weight: 650;
-  color: var(--thread-text);
+  color: var(--thread-word);
   letter-spacing: 0.06em;
   isolation: isolate;
   transition: color 0.3s;
@@ -101,7 +101,7 @@
     background-color 0.3s;
 }
 .rw-app .step.is-woven .step-num {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .step.is-woven .step-num::before {
   opacity: 0.42;
@@ -132,7 +132,7 @@
   color: var(--ink-3);
 }
 .rw-app .step-meta .t {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .step-meta:has(.rb) {
   gap: var(--sp-s);
@@ -155,7 +155,7 @@
   color: var(--ink-3);
 }
 .rw-app .step-meta .rb.time {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 /* Balance the seam between adjacent headings. */
 .rw-app .step-body {

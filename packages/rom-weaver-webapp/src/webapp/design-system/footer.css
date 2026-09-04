@@ -49,7 +49,7 @@
   border-color: var(--seam);
 }
 .rw-app .footer-support {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .footer-support svg {
   transform-origin: center;
@@ -57,7 +57,7 @@
 }
 @media (hover: hover) {
   .rw-app .footer-support:hover {
-    color: var(--thread-text);
+    color: var(--thread-word);
   }
   .rw-app .footer-support:hover svg {
     fill: currentColor;
@@ -65,7 +65,7 @@
   }
 }
 .rw-app .footer-support:active {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .footer-support:active svg {
   fill: currentColor;

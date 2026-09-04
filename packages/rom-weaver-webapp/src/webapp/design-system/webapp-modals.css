@@ -286,7 +286,7 @@ html:has(.rw-modal) {
   border-radius: 4px;
 }
 .codec-combobox-option.active {
-  color: var(--thread-text);
+  color: var(--thread-word);
   background: var(--plate-2);
 }
 

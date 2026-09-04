@@ -119,7 +119,7 @@
   color: var(--ink-3);
 }
 .rw-app .step-meta .rb .t {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 
 /* EmulatorJS test bench. Its assets are fetched only after a game is loaded. */
@@ -273,7 +273,7 @@
   height: auto;
   min-height: 40px;
   padding-block: 6px;
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   background: color-mix(in oklab, var(--thread) 9%, transparent);

@@ -210,12 +210,12 @@
   flex: none;
   width: 13px;
   height: 13px;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .outname-source-name {
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--thread-text);
+  color: var(--thread-word);
   white-space: nowrap;
 }
 
@@ -228,7 +228,7 @@
   flex: none;
   width: 13px;
   height: 13px;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .optsbody {
   display: flex;
@@ -527,20 +527,20 @@
   display: inline-block;
 }
 .rw-app .patch-menu-btn:active {
-  color: var(--thread-text);
+  color: var(--thread-word);
   background: color-mix(in oklab, var(--thread) 8%, transparent);
   border-color: color-mix(in oklab, var(--thread) 40%, transparent);
 }
 @media (hover: hover) {
   .rw-app .patch-menu-btn:hover {
-    color: var(--thread-text);
+    color: var(--thread-word);
     background: color-mix(in oklab, var(--thread) 8%, transparent);
     border-color: color-mix(in oklab, var(--thread) 40%, transparent);
   }
 }
 .rw-app .patch-menu-btn.is-open,
 .rw-app .patch-menu-btn.is-editing {
-  color: var(--thread-text);
+  color: var(--thread-word);
   border-color: color-mix(in oklab, var(--thread) 45%, transparent);
 }
 .rw-app .patch-menu-list {
@@ -899,7 +899,7 @@
   color: var(--ink-2);
 }
 .rw-app .bundle-rom-expectation .card .card-meta {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .verification-row {
   display: grid;

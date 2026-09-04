@@ -38,11 +38,11 @@
 }
 @media (hover: hover) {
   .rw-app .drop:hover .main svg {
-    color: var(--thread-text);
+    color: var(--thread);
   }
 }
 .rw-app .drop:active .main svg {
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .drop .hint {
   font-size: 0.74rem;
@@ -294,7 +294,7 @@
   display: inline;
 }
 .rw-app .hero-lead .lead-accent {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .hero-lead .lead-sub {
   display: inline-flex;
@@ -314,13 +314,13 @@
   width: 6px;
   height: 6px;
   content: "";
-  background: var(--thread-text);
+  background: var(--thread);
   border-radius: 50%;
 }
 .rw-app .drop.hero .main svg {
   width: 24px;
   height: 24px;
-  color: var(--thread-text);
+  color: var(--thread);
   stroke-width: 2.2;
 }
 .rw-app .drop.hero .formats {
@@ -408,7 +408,7 @@
   width: 13px;
   height: 13px;
   background:
-    repeating-conic-gradient(var(--thread-text) 0 26deg, transparent 26deg 45deg),
+    repeating-conic-gradient(var(--thread) 0 26deg, transparent 26deg 45deg),
     conic-gradient(color-mix(in oklab, var(--seam-strong) 65%, transparent) 0 360deg);
   border-radius: 50%;
   mask-image: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.4px));
@@ -437,29 +437,29 @@
   border-radius: 99px;
 }
 .rw-app .drop:focus-within .main.btnish {
-  color: var(--thread-text);
+  color: var(--thread-word);
   border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
 }
 @media (hover: hover) {
   .rw-app .drop:hover .main.btnish {
-    color: var(--thread-text);
+    color: var(--thread-word);
     border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
   }
 }
 .rw-app .drop:active .main.btnish {
-  color: var(--thread-text);
+  color: var(--thread-word);
   border-color: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
 }
 .rw-app .drop:focus-within .main.btnish svg {
-  color: var(--thread-text);
+  color: var(--thread);
 }
 @media (hover: hover) {
   .rw-app .drop:hover .main.btnish svg {
-    color: var(--thread-text);
+    color: var(--thread);
   }
 }
 .rw-app .drop:active .main.btnish svg {
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .drop:not(.hero) {
   gap: var(--sp-xs);
@@ -571,14 +571,14 @@
 }
 @media (hover: hover) {
   .rw-app .step.is-input .drop:not(.hero):hover .main.btnish {
-    color: var(--thread-text);
+    color: var(--thread-word);
   }
 }
 .rw-app .step.is-input .drop:not(.hero):active .main.btnish {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .step.is-input .drop:not(.hero) .main.btnish svg {
-  color: var(--thread-text);
+  color: var(--thread);
 }
 /* with nothing staged the hero is THE page: a big, obvious drop target that
    claims a healthy share of the viewport, capped so the thesis + ghost steps
@@ -736,7 +736,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   flex: none;
   width: 14px;
   height: 14px;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .sample-tutorial-start-action-icon {
   display: inline-flex;
@@ -755,7 +755,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   font-size: 0.88rem;
   font-weight: 850;
   line-height: 1;
-  color: var(--thread-text);
+  color: var(--thread-word);
   background: color-mix(in oklab, var(--thread) 12%, var(--plate));
   border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong));
   border-radius: 50%;
@@ -960,7 +960,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   font-family: var(--mono);
   font-size: 0.9rem;
   font-weight: 850;
-  color: var(--thread-text);
+  color: var(--thread-word);
   letter-spacing: -0.04em;
   background: color-mix(in oklab, var(--thread) 14%, var(--well));
   border: 1px solid color-mix(in oklab, var(--thread) 72%, var(--seam-strong));
@@ -982,7 +982,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   margin-block-end: var(--sp-xs);
   font-size: 0.68rem;
   font-weight: 800;
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -1048,7 +1048,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   place-items: center;
   width: 14px;
   height: 14px;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .sample-tutorial-action-icon svg {
   width: 14px;
@@ -1215,11 +1215,11 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   flex: none;
   width: 16px;
   height: 16px;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .needs-input .hexref {
   font-weight: 700;
-  color: var(--thread-text);
+  color: var(--thread-word);
   letter-spacing: 0.04em;
 }
 
@@ -1262,7 +1262,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 .rw-app .ghost-next .ghost-next-num {
   font-size: 0.74rem;
   font-weight: 650;
-  color: var(--thread-text);
+  color: var(--thread-word);
   letter-spacing: 0.06em;
 }
 .rw-app .ghost-next .ghost-next-title {

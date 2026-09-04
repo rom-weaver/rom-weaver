@@ -136,18 +136,18 @@
   height: calc(var(--ctrl-h) * 0.6);
 }
 .rw-app .handle:focus-visible {
-  color: var(--thread-text);
+  color: var(--thread-word);
   border-color: var(--thread);
 }
 @media (hover: hover) {
   .rw-app .handle:hover:not(:disabled) {
-    color: var(--thread-text);
+    color: var(--thread-word);
     border-color: var(--thread);
   }
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .handle:active:not(:disabled) {
-  color: var(--thread-text);
+  color: var(--thread-word);
   background: color-mix(in oklab, var(--thread) 12%, var(--well));
   border-color: var(--thread);
 }
@@ -230,7 +230,7 @@
   border-radius: 4px;
 }
 .rw-app .tag.fmt {
-  color: var(--thread-text);
+  color: var(--thread-word);
   border-color: color-mix(in oklab, var(--thread) 40%, var(--seam-strong));
 }
 .rw-app .rm {
@@ -264,13 +264,13 @@
   }
 }
 .rw-app .rm.replace:active {
-  color: var(--thread-text);
+  color: var(--thread-word);
   background: color-mix(in oklab, var(--thread) 8%, transparent);
   border-color: color-mix(in oklab, var(--thread) 40%, transparent);
 }
 @media (hover: hover) {
   .rw-app .rm.replace:hover {
-    color: var(--thread-text);
+    color: var(--thread-word);
     background: color-mix(in oklab, var(--thread) 8%, transparent);
     border-color: color-mix(in oklab, var(--thread) 40%, transparent);
   }
@@ -320,7 +320,7 @@
   font-weight: 600;
 }
 .rw-app .patch-enable .switch-state .on {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .patch-enable input:checked ~ .switch-state .off,
 .rw-app .patch-enable input:not(:checked) ~ .switch-state .on {
@@ -340,7 +340,7 @@
   flex: none;
   width: 0.92rem;
   height: 0.92rem;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .target-grp.bad {
   color: var(--fault);
@@ -385,7 +385,7 @@
 .rw-app .meta-fmt {
   font-size: calc(var(--badge-fs) * 0.92);
   font-stretch: 86%;
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -590,7 +590,7 @@
 }
 .rw-app .tree-time {
   min-width: 42px;
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-align: end;
 }
 

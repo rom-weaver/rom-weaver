@@ -2,6 +2,11 @@
 :root {
   --thread: #d9690f;
   --thread-ink: #1c1206; /* text on a thread-colored surface */
+  /* Words that carry the accent. The dye itself is one hex in both themes and
+     only clears 3:1, the floor for large text and UI parts, so small accent
+     words are set in ink and the dye sits beside them as a border, underline,
+     icon or fill. */
+  --thread-word: var(--ink);
   --thread-hi: #fccb90; /* specular tint in the logo mark */
   /* Reusable 20px plain-weave alpha mask. */
   --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
@@ -17,7 +22,10 @@
   --loom-weft-1: var(--thread);
   --loom-weft-2: color-mix(in srgb, var(--thread) 62%, var(--warp-b));
   --loom-weft-3: var(--thread-hi);
-  --weft: var(--thread-text); /* hash readouts, dyed by the accent */
+  /* Hash readouts, dyed by the accent. Small text, so the dye is lightened
+     towards white to clear 4.5:1 on every dark plate; the light theme deepens
+     it instead. */
+  --weft: color-mix(in oklab, var(--thread) 72%, #fff);
   --font: system-ui, sans-serif;
   --dropdown-fs: 0.72rem;
   --ctl: 40px;
@@ -46,56 +54,61 @@
 }
 
 :root[data-theme="dark"] {
-  --chassis: #0c0f13; /* console shell */
-  --plate: #161b21; /* mounted plate */
-  --plate-2: #1c222a; /* raised plate */
-  --well: #0f1318; /* inset controls */
-  --seam: #39414e;
-  --seam-soft: #2c333f;
-  --seam-strong: #4b5564;
-  --ink: #edf0f5;
-  --ink-2: #b3bbc8;
-  --ink-3: #9aa3b1;
-  --ink-4: #939cab;
+  /* Warm charcoal: the dark grounds pulled slightly warm to sit under the
+     madder thread and the amber readouts, the night twin of the stone light
+     theme. */
+  --chassis: #12100e; /* console shell */
+  --plate: #1c1916; /* mounted plate */
+  --plate-2: #231f1b; /* raised plate */
+  --well: #151311; /* inset controls */
+  --seam: #433d37;
+  --seam-soft: #34302b;
+  --seam-strong: #5a534b;
+  --ink: #f2eee8;
+  --ink-2: #c0b8ae;
+  --ink-3: #a69e94;
+  --ink-4: #9d958b;
   /* Loom warp threads on the landing page: two tones so the plain weave's
      over/under reads without an outline. */
-  --warp-a: #2c333c;
-  --warp-b: #4a5563;
-  --thread-text: #ef8534; /* contrast-safe accent text */
+  --warp-a: #352f2a;
+  --warp-b: #55504a;
   --verified: #69aa84;
   --fault: #e0606a;
   --care: #d8a64f;
   --care-text: #d8a64f; /* amber already clears 4.5:1 on every dark surface */
   --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / 0.7), 0 4px 16px rgb(0 0 0 / 0.35);
-  --scrim: rgb(4 6 9 / 0.62);
+  --scrim: rgb(9 7 5 / 0.62);
   color-scheme: dark;
 }
 :root[data-theme="light"] {
-  --chassis: #ece9e1; /* warm gallery paper */
+  /* High key: a warm near-white chassis with white plates, so the page reads
+     bright and clean. With the grounds this close, seams carry the separation
+     between chassis, plate and well, so they are a full step darker than the
+     wells they edge. */
+  --chassis: #f4f2ee;
   --plate: #ffffff;
-  --plate-2: #f7f5ef;
-  --well: #efede6;
-  --seam: #d4d2ca;
-  --seam-soft: #e1dfd8;
-  --seam-strong: #b4b1a6;
-  --ink: #1a1d22;
-  --ink-2: #4b5159;
-  --ink-3: #62686f;
-  --ink-4: #686d76;
-  --warp-a: #43505f;
-  --warp-b: #6b7684;
+  --plate-2: #faf9f7;
+  --well: #edeae5;
+  --seam: #d3cfc8;
+  --seam-soft: #e2dfd9;
+  --seam-strong: #a29c92;
+  --ink: #1b1a18;
+  --ink-2: #4b4844;
+  --ink-3: #605c56;
+  --ink-4: #68635c;
+  --warp-a: #524b43;
+  --warp-b: #7a7269;
+  /* Readouts follow the accent but sit on the fault-tinted checksum row, which
+     is lighter than any plate; the raw dye lands near 3.5:1 on paper. Deepening
+     it keeps the hue and clears 4.5:1. */
+  --weft: color-mix(in oklab, var(--thread) 58%, #000);
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
-  --thread-text: #b03a0a;
-  /* Readouts also sit on the fault-tinted checksum row, which is lighter than
-     any plate --thread-text is verified against; on paper the bare accent text
-     lands at 4.49:1 there. Deepening it keeps the accent and clears 4.5:1. */
-  --weft: color-mix(in oklab, var(--thread-text) 85%, #000);
   --verified: #04684e;
   --fault: #b91c1c;
   --care: #c4870f;
   /* `--care` is a fill colour on paper: 3.1:1 as text on the plate. Amber words
      take this one instead - 5.6:1 on the plate, 4.8:1 in a well. */
-  --care-text: #8d5e00;
+  --care-text: #8a5c00;
   --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / 0.35), 0 4px 14px rgb(35 30 18 / 0.14);
   --scrim: rgb(40 36 28 / 0.42);
   color-scheme: light;
