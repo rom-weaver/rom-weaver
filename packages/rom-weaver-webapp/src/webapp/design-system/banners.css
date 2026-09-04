@@ -141,12 +141,12 @@
 }
 @media (hover: hover) {
   .rw-app .updates-ver:hover {
-    color: var(--thread-text);
+    color: var(--thread-word);
   }
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app .updates-ver:active {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .changelog-note {
   padding: var(--sp-s) 0;
@@ -208,7 +208,7 @@
    actually looking for. */
 .rw-app .changelog-head-link,
 .rw-app .changelog-more {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .release-changelog-entries a:active,
 .rw-app .changelog-head-transition a:active {
@@ -351,7 +351,7 @@
   }
 }
 .rw-app .rel-summary b {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .rel-summary-count {
   margin-inline-start: auto;
@@ -376,7 +376,7 @@
   display: inline-block;
   margin-block-start: var(--sp-m);
   font-size: 0.8rem;
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 /* page-wide drop veil */
 /* the veil overlays only the active form panel (same grid cell), not the whole
@@ -444,7 +444,7 @@
   flex: none;
   width: 19px;
   height: 19px;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 /* one drift keyframe for every woven surface: each sets --drift to a multiple
    of its own mask-size so the loop is seamless */

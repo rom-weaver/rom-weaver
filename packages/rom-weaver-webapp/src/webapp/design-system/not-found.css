@@ -40,11 +40,11 @@
   letter-spacing: -0.09em;
   background:
     linear-gradient(
-      color-mix(in oklab, var(--thread-text) 75%, transparent),
-      color-mix(in oklab, var(--thread-text) 75%, transparent)
+      color-mix(in oklab, var(--thread) 75%, transparent),
+      color-mix(in oklab, var(--thread) 75%, transparent)
     ),
     var(--weave-mask) 0 0 / 20px 20px,
-    var(--thread-text);
+    var(--thread);
   -webkit-background-clip: text;
   background-clip: text;
   background-blend-mode: normal, soft-light;

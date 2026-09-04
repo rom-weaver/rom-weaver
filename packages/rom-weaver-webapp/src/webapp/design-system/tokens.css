@@ -2,6 +2,11 @@
 :root {
   --thread: #d9690f;
   --thread-ink: #1c1206; /* text on a thread-colored surface */
+  /* Words that carry the accent. The dye itself is one hex in both themes and
+     only clears 3:1, the floor for large text and UI parts, so small accent
+     words are set in ink and the dye sits beside them as a border, underline,
+     icon or fill. */
+  --thread-word: var(--ink);
   --thread-hi: #fccb90; /* specular tint in the logo mark */
   /* Reusable 20px plain-weave alpha mask. */
   --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
@@ -17,7 +22,10 @@
   --loom-weft-1: var(--thread);
   --loom-weft-2: color-mix(in srgb, var(--thread) 62%, var(--warp-b));
   --loom-weft-3: var(--thread-hi);
-  --weft: var(--thread-text); /* hash readouts, dyed by the accent */
+  /* Hash readouts, dyed by the accent. Small text, so the dye is lightened
+     towards white to clear 4.5:1 on every dark plate; the light theme deepens
+     it instead. */
+  --weft: color-mix(in oklab, var(--thread) 72%, #fff);
   --font: system-ui, sans-serif;
   --dropdown-fs: 0.72rem;
   --ctl: 40px;
@@ -61,7 +69,6 @@
      over/under reads without an outline. */
   --warp-a: #2c333c;
   --warp-b: #4a5563;
-  --thread-text: #ef8534; /* contrast-safe accent text */
   --verified: #69aa84;
   --fault: #e0606a;
   --care: #d8a64f;
@@ -87,12 +94,11 @@
   --ink-4: #68635c;
   --warp-a: #43505f;
   --warp-b: #6b7684;
+  /* Readouts follow the accent but sit on the fault-tinted checksum row, which
+     is lighter than any plate; the raw dye lands near 3.5:1 on paper. Deepening
+     it keeps the hue and clears 4.5:1. */
+  --weft: color-mix(in oklab, var(--thread) 58%, #000);
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
-  --thread-text: #b03a0a;
-  /* Readouts also sit on the fault-tinted checksum row, which is lighter than
-     any plate --thread-text is verified against; on paper the bare accent text
-     lands at 4.49:1 there. Deepening it keeps the accent and clears 4.5:1. */
-  --weft: color-mix(in oklab, var(--thread-text) 85%, #000);
   --verified: #04684e;
   --fault: #b91c1c;
   --care: #c4870f;

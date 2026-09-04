@@ -1006,7 +1006,7 @@ describe("webapp keyboard navigation", () => {
 });
 
 // ── Accent dye lots ──────────────────────────────────────────────────────────
-// The accent axis re-dyes --thread / --thread-ink / --thread-text, which ~114
+// The accent axis re-dyes --thread / --thread-ink / --thread-hi, which ~114
 // declarations across 16 design-system files consume: primary buttons, the
 // selected mode thumb, focus rings, meter fills, drawer seams, the channel
 // badge. Every accent must therefore clear contrast on every surface, in both

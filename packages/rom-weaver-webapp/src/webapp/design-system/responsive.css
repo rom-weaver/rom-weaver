@@ -251,7 +251,7 @@
      label - an underline down here would read as a stray mark rather than a
      mark on a rail. */
   .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"] {
-    color: var(--thread-text);
+    color: var(--thread-word);
     background: transparent;
     border: 0;
   }

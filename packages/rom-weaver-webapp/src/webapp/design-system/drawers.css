@@ -236,7 +236,7 @@
   }
 }
 .rw-app .cks.is-open > .cks-head .chev {
-  color: var(--thread-text);
+  color: var(--thread);
   opacity: 1;
   transform: rotate(90deg);
 }
@@ -284,7 +284,7 @@
   border-color: transparent;
 }
 .rw-app .cks > .cks-head .rb.time {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 
 /* The drawer inner already pads the body like every other checks drawer;
@@ -693,7 +693,7 @@
   }
 }
 :root[data-theme="dark"] .ck .ck-v {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 :root[data-theme="light"] .cks {
   --ck-seam: var(--seam-strong);
@@ -724,12 +724,12 @@
 }
 @media (hover: hover) {
   .rw-app .ck:hover .copy {
-    color: var(--thread-text);
+    color: var(--thread-word);
     opacity: 1;
   }
 }
 .rw-app .ck:active .copy {
-  color: var(--thread-text);
+  color: var(--thread-word);
   opacity: 1;
 }
 .rw-app .ck .copy:active {
@@ -921,7 +921,7 @@
 }
 @media (hover: hover) {
   .rw-app .cue-copy:hover {
-    color: var(--thread-text);
+    color: var(--thread-word);
   }
 }
 .rw-app .cue-copy:active {
@@ -964,7 +964,7 @@
   cursor: grabbing;
 }
 .rw-app .rw-dragging .handle {
-  color: var(--thread-text);
+  color: var(--thread-word);
   border-color: var(--thread);
 }
 .rw-app .rw-shifting {

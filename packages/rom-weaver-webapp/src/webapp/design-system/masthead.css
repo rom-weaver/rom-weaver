@@ -102,7 +102,7 @@
 }
 .rw-app .brand-word b {
   font-weight: 650;
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .brand-hy {
   font-weight: 400;
@@ -189,7 +189,7 @@
   color: var(--verified);
 }
 .rw-app .channel-badge[data-channel="pr"] {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app a.channel-badge,
 .rw-app button.channel-badge {
@@ -669,12 +669,12 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 /* Support wears the footer donate color; the icon inherits it (see footer.css). */
 .rw-app .more-menu > .more-support,
 .rw-app .more-menu > .more-support svg {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 @media (hover: hover) {
   .rw-app .more-menu > .more-support:hover,
   .rw-app .more-menu > .more-support:hover svg {
-    color: var(--thread-text);
+    color: var(--thread-word);
   }
   .rw-app .more-menu > .more-support:hover svg {
     fill: currentcolor;
@@ -682,7 +682,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 }
 .rw-app .more-menu > .more-support:active,
 .rw-app .more-menu > .more-support:active svg {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .more-menu > .more-support:active svg {
   fill: currentcolor;
@@ -1031,7 +1031,7 @@ html:not([data-beta-tools-enabled="true"]) .rw-app .dock-tab[data-beta-tool] {
 }
 .rw-app .dock-tab[aria-selected="true"],
 .rw-app .dock-action[aria-expanded="true"] {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 @media (hover: hover) {
   .rw-app .dock-tab:not([aria-selected="true"]):hover,

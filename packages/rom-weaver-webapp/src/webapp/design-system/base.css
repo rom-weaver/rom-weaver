@@ -167,7 +167,7 @@
 .rw-app .stage-status .pct {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app button {
   font: inherit;
@@ -184,9 +184,14 @@
   color: var(--ink-2);
   text-decoration: none;
 }
+/* Links keep ink on hover and show the accent as the underline instead: the
+   raw dye does not clear 4.5:1 as small text on paper. */
 @media (hover: hover) {
   .rw-app a:hover {
-    color: var(--thread-text);
+    color: var(--thread-word);
+    text-decoration: underline;
+    text-decoration-color: var(--thread);
+    text-underline-offset: 3px;
   }
 }
 @media (display-mode: standalone) {
@@ -196,7 +201,10 @@
 }
 /* Touch devices need active feedback because they lack hover. */
 .rw-app a:active {
-  color: var(--thread-text);
+  color: var(--thread-word);
+  text-decoration: underline;
+  text-decoration-color: var(--thread);
+  text-underline-offset: 3px;
 }
 .sr-only {
   position: absolute;

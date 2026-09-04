@@ -429,7 +429,7 @@
 /* Virtual entries are staged in memory, not on disk - the only row kind whose
    bytes are not actually in OPFS, so it is the only one that takes the thread. */
 .rw-app .opfs-kind[data-kind="virtual"] {
-  color: var(--thread-text);
+  color: var(--thread-word);
   border-color: color-mix(in oklab, var(--thread) 40%, transparent);
 }
 .rw-app .opfs-size {
@@ -657,7 +657,7 @@
   margin-block-end: 9px;
   font-size: 0.84rem;
   font-weight: 650;
-  color: var(--thread-text);
+  color: var(--thread-word);
   letter-spacing: 0;
 }
 .rw-app .setrow {
@@ -769,7 +769,7 @@
 .rw-app .srange-head .v {
   font-size: 0.76rem;
   font-weight: 650;
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .srange-scale {
   display: flex;
@@ -999,7 +999,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
    selected tab a body without turning the rail into filled pills, which would
    put it in competition with the masthead's mode rail. */
 .rw-app .subtab[aria-selected="true"] {
-  color: var(--thread-text);
+  color: var(--thread-word);
   background: color-mix(in oklab, var(--thread) 15%, transparent);
   border-block-end-color: var(--thread);
 }
@@ -1038,7 +1038,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   margin: 0 0 var(--sp-m);
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
@@ -1312,7 +1312,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   border-radius: 4px;
 }
 .rw-app .status-row a {
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-decoration: underline dotted;
   text-underline-offset: 2px;
 }

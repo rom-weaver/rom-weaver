@@ -3,9 +3,11 @@
    Chassis, plate and ink stay put, so an accent reads as the same app in a
    different dye lot rather than a different theme.
 
-   Only --thread, --thread-ink, --thread-hi and --thread-text are set per dye
-   lot. The tokens in tokens.css that carry an accent - --shuttle, --weft and
-   the --loom-weft-* bands - are all derived from those four, so the progress
+   Only --thread, --thread-ink and --thread-hi are set per dye lot, and the
+   dye is the same hex in both themes: accent words are set in ink
+   (--thread-word), so no per-theme text variant exists. The tokens in
+   tokens.css that carry an accent - --shuttle, --weft and the --loom-weft-*
+   bands - are all derived from those three, so the progress
    meter's shuttle, the readouts and the hero loom follow an accent without a
    per-accent value of their own.
 
@@ -13,9 +15,7 @@
    and beta are visually distinct out of the box, but the accent is a user
    setting - whatever they pick wins.
 
-   Loaded after tokens.css: the per-theme --thread-text overrides here need to
-   out-specify and out-order the plain :root[data-theme] blocks. Madder is the
-   baseline defined in tokens.css and needs no block of its own.
+   Madder is the baseline defined in tokens.css and needs no block of its own.
 
    Every pairing below is verified in tests/browser/accessibility.browser.test.js
    ("accent" sweep) - both themes, every surface. */
@@ -26,71 +26,35 @@
   --thread-ink: #0b1030;
   --thread-hi: #c5cbf6;
 }
-:root[data-accent="woad"][data-theme="dark"] {
-  --thread-text: #9aa6ff;
-}
-:root[data-accent="woad"][data-theme="light"] {
-  --thread-text: #4149c4;
-}
-
 /* ── violet ── */
 :root[data-accent="violet"] {
   --thread: #9a6ae0;
   --thread-ink: #16092c;
   --thread-hi: #d7c3f3;
 }
-:root[data-accent="violet"][data-theme="dark"] {
-  --thread-text: #c3a4ff;
-}
-:root[data-accent="violet"][data-theme="light"] {
-  --thread-text: #6b3fb5;
-}
-
 /* ── verdigris: green ── */
 :root[data-accent="verdigris"] {
   --thread: #3faa72;
   --thread-ink: #04180e;
   --thread-hi: #aee1c6;
 }
-:root[data-accent="verdigris"][data-theme="dark"] {
-  --thread-text: #58c795;
-}
-:root[data-accent="verdigris"][data-theme="light"] {
-  --thread-text: #0b6b46;
-}
-
 /* ── teal ── */
 :root[data-accent="teal"] {
   --thread: #2aa0a8;
   --thread-ink: #03181a;
   --thread-hi: #9fe2e7;
 }
-:root[data-accent="teal"][data-theme="dark"] {
-  --thread-text: #45c3cb;
-}
-:root[data-accent="teal"][data-theme="light"] {
-  --thread-text: #06696f;
-}
-
 /* ── plum ── */
 :root[data-accent="plum"] {
   --thread: #cb63a5;
   --thread-ink: #2a0620;
   --thread-hi: #eac1db;
 }
-:root[data-accent="plum"][data-theme="dark"] {
-  --thread-text: #e58ac0;
-}
-:root[data-accent="plum"][data-theme="light"] {
-  --thread-text: #a3266f;
-}
-
 /* ── accent switch dissolve ──
    Registering the surface dyes as <color> lets them interpolate; the
    transition sits on :root so every var(--thread) consumer crossfades in one
-   pass instead of snapping. The text tokens (--thread-text, --thread-ink) are
-   deliberately left out: lerping text colour drags it through muddy mid-hues,
-   so text snaps to the new dye instead. The `accent-anim` class is applied by
+   pass instead of snapping. --thread-ink is deliberately left out: lerping text
+   colour drags it through muddy mid-hues, so text snaps to the new dye instead. The `accent-anim` class is applied by
    accent.ts only around a real accent change (never on boot - index.html
    resolves data-accent before first paint) so theme flips and initial load
    stay instant. Initial values are the madder baseline from tokens.css. */
@@ -139,7 +103,7 @@
   font-size: var(--badge-fs);
   font-weight: 700;
   line-height: 1.5;
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-transform: uppercase;
   letter-spacing: 0.07em;
   background: color-mix(in oklab, var(--thread) 16%, transparent);

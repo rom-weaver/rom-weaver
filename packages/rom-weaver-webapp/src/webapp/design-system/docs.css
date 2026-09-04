@@ -154,7 +154,7 @@ html:has(.docs-workbench) {
   width: 1rem;
   margin-inline-end: 7px;
   font: 700 0.78rem / 1 var(--mono);
-  color: var(--thread-text);
+  color: var(--thread);
   text-align: center;
   content: "+";
 }
@@ -212,7 +212,7 @@ html:has(.docs-workbench) {
   background: var(--well);
 }
 .rw-app .guide-nav-list a[aria-current="page"] {
-  color: var(--thread-text);
+  color: var(--thread-word);
   background: var(--warp-lines), color-mix(in oklab, var(--thread) 10%, var(--well));
 }
 
@@ -366,7 +366,7 @@ html:has(.docs-workbench) {
   left: -0.84em;
   width: 0.62em;
   height: 0.62em;
-  color: var(--thread-text);
+  color: var(--thread);
   opacity: 0;
   transition: opacity 0.15s var(--ease);
 }
@@ -474,7 +474,7 @@ html:has(.docs-workbench) {
 }
 .rw-app .docs-article a {
   font-weight: 600;
-  color: var(--thread-text);
+  color: var(--thread-word);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-decoration-color: color-mix(in oklab, var(--thread) 42%, transparent);
@@ -506,11 +506,11 @@ html:has(.docs-workbench) {
 }
 @media (hover: hover) {
   .rw-app .docs-disclosure > summary:hover {
-    color: var(--thread-text);
+    color: var(--thread-word);
   }
 }
 .rw-app .docs-disclosure > summary:active {
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .docs-disclosure[open] > summary {
   border-bottom: 1px solid var(--seam-soft);
@@ -606,7 +606,7 @@ html:has(.docs-workbench) {
   padding-inline-start: 0.2em;
   font-size: 0.9em;
   font-weight: 700;
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 /* The panel clips its own corners, so a table wider than the column has to
    scroll here or its last columns are simply unreachable. */
@@ -714,7 +714,7 @@ html:has(.docs-workbench) {
 .rw-app .docs-index-shelf > summary::before {
   width: 1rem;
   font: 700 0.9rem / 1 var(--mono);
-  color: var(--thread-text);
+  color: var(--thread);
   text-align: center;
   content: "+";
 }
@@ -815,7 +815,7 @@ html:has(.docs-workbench) {
 .rw-app .docs-faq-heading a {
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--thread-text);
+  color: var(--thread-word);
 }
 .rw-app .docs-faq-list {
   border-block: 1px solid var(--seam-soft);
@@ -907,7 +907,7 @@ html:has(.docs-workbench) {
   flex: none;
   width: 16px;
   height: 16px;
-  color: var(--thread-text);
+  color: var(--thread);
 }
 .rw-app .docs-step-copy {
   display: grid;
