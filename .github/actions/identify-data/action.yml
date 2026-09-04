@@ -4,8 +4,9 @@ description: >-
   ensure-identify-data. The cache key hashes the build scripts, which pin the
   libretro-database and OpenGood revisions and the pack format, so a hit means
   hasCurrentData() validates the restored dir and the step becomes a no-op;
-  a miss (a revision or format bump) rebuilds from the source archives and
-  saves the new packs. Requires node on PATH (setup-node or mise).
+  a miss (a revision or format bump) installs the npm dependencies, rebuilds
+  from the source archives and saves the new packs. Requires node on PATH
+  (setup-node or mise).
 
 runs:
   using: composite
@@ -19,6 +20,17 @@ runs:
         path: crates/rom-weaver-cli/data/identify/v1
         key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs') }}
         enableCrossOsArchive: true
+
+    # Only the rebuild path needs the repository's npm dependencies: the build
+    # reads the source archives with node-tar rather than shelling out to `tar`,
+    # whose path handling broke this job on Windows. A cache hit makes the next
+    # step a no-op, so the install is skipped there instead of being paid by
+    # every job that restores the packs. Scripts stay off - only package files
+    # are needed, never a lifecycle hook.
+    - name: Install identify build dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --ignore-scripts --no-audit --no-fund
 
     - name: Prepare ROM identify data
       shell: bash
