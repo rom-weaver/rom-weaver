@@ -9,7 +9,6 @@ import readline from "node:readline";
 import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { extract as tarExtract } from "tar";
 
 import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
 import {
@@ -697,6 +696,10 @@ async function runCommandText(command, args, options = {}) {
 // that wrote them, so `members` MUST use `/` too. GitHub archives exceed tar's
 // 100-character name field and carry PAX long names, which the reader resolves.
 export async function extractArchiveMembers({ archive, members, sourceRoot }) {
+  // Imported here, not at module scope: a cache hit makes this whole build a
+  // no-op, and the jobs that restore the packs do not install npm dependencies.
+  // A top-level import would make every one of them fail to even load.
+  const { extract: tarExtract } = await import("tar");
   const wanted = new Map(members.map((member) => [member, stripLeadingComponent(member)]));
   const seen = new Set();
   await tarExtract({

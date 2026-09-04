@@ -659,3 +659,19 @@ test("stripLeadingComponent drops exactly the top-level directory", () => {
   assert.equal(stripLeadingComponent("./prefix/dats/a.dat"), "dats/a.dat");
   assert.equal(stripLeadingComponent("prefix/only.dat"), "only.dat");
 });
+
+test("no npm package is imported at module scope", () => {
+  // A cache hit makes the identify build a no-op, and the jobs that merely
+  // restore the packs install no npm dependencies. A static import of a package
+  // would make every one of them fail to load the module at all, which is
+  // exactly how the node-tar switch first broke CI. Node builtins and relative
+  // imports are fine; a bare specifier MUST be imported lazily instead.
+  const source = readFileSync(new URL("./build-identify-index.mjs", import.meta.url), "utf8");
+  const offenders = [];
+  for (const match of source.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gmu)) {
+    const specifier = match[1];
+    if (specifier.startsWith("node:") || specifier.startsWith(".") || specifier.startsWith("/")) continue;
+    offenders.push(specifier);
+  }
+  assert.deepEqual(offenders, [], `import these lazily instead: ${offenders.join(", ")}`);
+});
