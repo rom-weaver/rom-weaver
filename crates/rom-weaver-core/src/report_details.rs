@@ -282,6 +282,62 @@ mod tests {
     }
 
     #[test]
+    fn emitted_path_key_folds_a_windows_drive_letter_path() {
+        // The shape the Windows CI job actually produces: a drive letter and
+        // backslash separators. Only the separators are rewritten - the drive
+        // letter and its colon MUST survive, or the path stops naming the file.
+        assert_eq!(
+            emitted_path_key("D:\\a\\rom-weaver\\out\\game.nes"),
+            "D:/a/rom-weaver/out/game.nes"
+        );
+        // A path already in the stored shape is left exactly as it is.
+        assert_eq!(
+            emitted_path_key("D:/a/rom-weaver/out/game.nes"),
+            "D:/a/rom-weaver/out/game.nes"
+        );
+        // A posix path never contains a backslash separator to rewrite.
+        assert_eq!(emitted_path_key("/tmp/out/game.nes"), "/tmp/out/game.nes");
+    }
+
+    #[test]
+    fn attach_emitted_file_paths_matches_a_seeded_windows_path_against_the_stored_shape() {
+        // Both shapes of the same file MUST collapse to one entry: the seeded
+        // Windows path and the forward-slash path this module stores.
+        let temp = TempDir::new().expect("temp dir");
+        let emitted = temp.child("emitted.bin");
+        emitted.write_binary(b"data").expect("emitted fixture");
+
+        let stored = emitted.path().to_string_lossy().replace('\\', "/");
+        let seeded = stored.replace('/', "\\");
+        assert_ne!(stored, seeded, "the two shapes must actually differ");
+
+        let mut report = OperationReport::succeeded(
+            crate::OperationFamily::Container,
+            Some("test".to_string()),
+            "extract",
+            "done",
+            Some(100.0),
+            None,
+        );
+        report.details = Some(json!({
+            "emitted_files": [{"path": seeded, "kind": "rom"}]
+        }));
+
+        // Attaching the same file twice must not add it either time.
+        let report = attach_emitted_file_paths(report, &[emitted.path()]);
+        let report = attach_emitted_file_paths(report, &[emitted.path()]);
+        let entries = report
+            .details
+            .expect("details")
+            .get("emitted_files")
+            .and_then(Value::as_array)
+            .cloned()
+            .expect("emitted files");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].get("kind"), Some(&json!("rom")));
+    }
+
+    #[test]
     fn attach_emitted_file_paths_deduplicates_and_skips_non_files() {
         let temp = TempDir::new().expect("temp dir");
         let existing = temp.child("existing.bin");

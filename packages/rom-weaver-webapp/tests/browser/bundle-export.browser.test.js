@@ -200,6 +200,35 @@ test("export bundle bundles the session from main-page options with a checks-onl
   saveAs.mockRestore();
 });
 
+// The docs screenshot capture (scripts/capture-design-screenshots.mjs) opens
+// this drawer by locator to reach the archive-type field. Playwright runs its
+// locators in strict mode, so a selector matching a second drawer in the same
+// row fails the release run rather than picking one. Adding a drawer beside
+// this one is fine; leaving the capture's selector ambiguous is not.
+test("the bundle drawer is addressable by a single selector inside the output row", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
+  await waitForApplyButtonEnabled();
+  await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
+
+  const outputRow = document.getElementById("rom-weaver-row-output-file-name");
+  expect(outputRow).not.toBeNull();
+
+  // The selector the capture actually uses MUST resolve to exactly one head.
+  const anchored = outputRow.querySelectorAll("#rom-weaver-bundle-job > .cks > .cks-head");
+  expect(anchored.length).toBe(1);
+  expect(anchored[0].textContent).toContain("Share this patch recipe (for patch creators)");
+
+  // It stays correct only because it is anchored: the row carries more than one
+  // drawer, so the unanchored selector this replaced is ambiguous by design.
+  const unanchored = outputRow.querySelectorAll(".cks > .cks-head");
+  expect(unanchored.length).toBeGreaterThan(1);
+
+  // The field the capture waits for lives behind this drawer, so it must start
+  // closed or the capture would screenshot the wrong state.
+  expect(anchored[0].getAttribute("aria-expanded")).toBe("false");
+});
+
 test("keeps the sharing job after an ordinary Apply completes", async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
