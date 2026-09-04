@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { IdentifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import type { ParsedIdentifyLookupResult } from "../../../../types/identify.ts";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
@@ -18,6 +19,8 @@ type RomInputInfoPanelProps = {
   bytes?: number;
   checksums?: SourceInfoChecksums | null;
   checksumVariants?: ChecksumVariant[];
+  /** Identify-record checks that fill the rows the run did not compute. */
+  database?: IdentifyRecordChecks;
   defaultOpen?: boolean;
   /** Bundle-expected ROM checks, rendered as an "Expected" group with match marks. */
   expected?: SourceInfoExpectedChecks;

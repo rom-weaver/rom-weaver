@@ -370,3 +370,119 @@ test("a staged ROM that misses the pasted checksum faults the step", async () =>
   await waitFor(() => host.querySelector(".card.bad"));
   expect(host.querySelector(".card.bad")).not.toBeNull();
 });
+
+/* A record knows every algorithm and the exact size before a byte is hashed, so
+   an identified ROM never has to show an empty check row - and a value nobody
+   measured has to stay distinguishable from one that was. */
+test("an identified ROM fills the rows the run did not compute from the record", async () => {
+  identifyRom.mockResolvedValue({
+    candidates: [
+      {
+        ...candidate("game.gba", "matched", [
+          {
+            ...gbaMatch("Metroid Fusion (USA)"),
+            expectedComponents: [
+              {
+                crc32: "abcd1234",
+                md5: "a".repeat(32),
+                ordinal: 0,
+                role: "rom",
+                sha1: "b".repeat(40),
+                size: 8388608,
+              },
+            ],
+          },
+        ]),
+        checksums: { crc32: "abcd1234" },
+      },
+    ],
+    input: "game.gba",
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  await selectRom();
+  await runIdentify();
+  await waitForText("Metroid Fusion (USA)");
+  await openDrawers();
+
+  expect(host.textContent).toContain("a".repeat(32));
+  expect(host.textContent).toContain("b".repeat(40));
+  expect(host.textContent).toContain("8388608");
+  // The measured CRC32 stays a measurement; only the three filled rows are
+  // marked as the database's claim.
+  const filled = [...host.querySelectorAll(".ck.ck-db")].map((row) => row.querySelector(".ck-k").textContent);
+  expect(filled).toEqual(["BYTES", "MD5", "SHA-1"]);
+});
+
+/* A record matched through a transform describes the transformed bytes. Filling
+   the base rows with it would claim the staged file hashes to values it does
+   not have. */
+test("a record matched through a transform fills that variant's group, not the base rows", async () => {
+  identifyRom.mockResolvedValue({
+    candidates: [
+      {
+        ...candidate("game.nes", "matched", [
+          {
+            ...gbaMatch("Headered Game (USA)"),
+            expectedComponents: [{ md5: "c".repeat(32), ordinal: 0, role: "rom", size: 40960 }],
+            variant: "remove-header",
+          },
+        ]),
+        checksumVariants: [{ checksums: { crc32: "99887766" }, id: "remove-header", label: "Headerless" }],
+        checksums: { crc32: "abcd1234" },
+      },
+    ],
+    input: "game.nes",
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  await selectRom("game.nes");
+  await runIdentify();
+  await waitForText("Headered Game (USA)");
+  await openDrawers();
+
+  const groups = [...host.querySelectorAll(".ck-group")];
+  const headerless = groups.find((group) => group.textContent.includes("Headerless"));
+  expect(headerless.textContent).toContain("c".repeat(32));
+  // The record's size is part of the fill, and every filled row is marked.
+  expect(headerless.textContent).toContain("40960");
+  expect([...headerless.querySelectorAll(".ck.ck-db")].map((row) => row.querySelector(".ck-k").textContent)).toEqual([
+    "BYTES",
+    "MD5",
+  ]);
+  const unchanged = groups.find((group) => group.querySelector(".ck-group-head").textContent === "Unchanged");
+  expect(unchanged.textContent).not.toContain("c".repeat(32));
+  expect(unchanged.textContent).not.toContain("40960");
+  expect(unchanged.querySelector(".ck.ck-db")).toBeNull();
+});
+
+/* A partial match means a required component did not match, or the artifact
+   carries components the record does not explain. The record then describes a
+   dump this file demonstrably is not, so none of it may fill the drawer. */
+test("a partial match never fills the drawer from the record", async () => {
+  identifyRom.mockResolvedValue({
+    candidates: [
+      {
+        ...candidate("game.gba", "matched", [
+          {
+            ...gbaMatch("Metroid Fusion (USA)"),
+            expectedComponents: [{ md5: "d".repeat(32), ordinal: 0, role: "rom", size: 4194304 }],
+          },
+        ]),
+        checksums: { crc32: "abcd1234" },
+        quality: "partial",
+      },
+    ],
+    input: "game.gba",
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  await selectRom();
+  await runIdentify();
+  await waitForText("Metroid Fusion (USA)");
+  await openDrawers();
+
+  expect(host.textContent).not.toContain("d".repeat(32));
+  expect(host.textContent).not.toContain("4194304");
+  expect(host.querySelector(".ck.ck-db")).toBeNull();
+});

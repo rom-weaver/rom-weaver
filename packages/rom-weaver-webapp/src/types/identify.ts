@@ -129,6 +129,9 @@ type ParsedIdentifyCandidate = {
   matches: ParsedIdentifyTitleMatch[];
   /** Member path inside the archive, or the input file name for a bare ROM. */
   path: string;
+  /** Exact byte size of this ROM. Absent on the bare-checksum path, where no
+   * file was read and only the matched record can supply a size. */
+  sizeBytes?: number;
   platformCandidates?: ParsedIdentifyPlatformCandidate[];
   quality?: IdentifyQuality;
   status: IdentifyStatus;

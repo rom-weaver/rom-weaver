@@ -535,6 +535,18 @@
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
+/* A value the identification database supplied because the run computed none.
+   It is a claim about the ROM, not a measurement of the staged bytes, so the
+   row is muted and its key carries a "db" tag. */
+.rw-app .ck.ck-db .ck-v {
+  color: var(--ink-2);
+}
+.rw-app .ck.ck-db .ck-k::after {
+  margin-inline-start: 0.35em;
+  font-size: 0.85em;
+  color: var(--ink-4);
+  content: "db";
+}
 /* Pair short checksum rows while full rows and groups span both tracks. */
 .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) {
   display: grid;
