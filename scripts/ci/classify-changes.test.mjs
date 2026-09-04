@@ -280,6 +280,31 @@ test("native package changes build every CLI platform", () => {
   }
 });
 
+test("identify data build scripts select the stacks that run them", () => {
+  // Both scripts are cache-key inputs for the identify-data action, so editing
+  // either forces a cache miss and makes every job using that action rebuild
+  // the packs from source.
+  for (const path of ["scripts/build-identify-index.mjs", "scripts/ensure-identify-data.mjs"]) {
+    assert.deepEqual(
+      classify(path),
+      {
+        rust: "true",
+        webapp: "true",
+        wasm_runtime: "false",
+        security: "false",
+        docker_cli: "false",
+        docker_webapp: "false",
+        docker_cli_arm64: "false",
+        docker_webapp_arm64: "false",
+        docker_prebuilt: "true",
+        repo_lint: "true",
+        full: "false",
+      },
+      path,
+    );
+  }
+});
+
 test("dependency and CI changes select their broader checks", () => {
   assert.deepEqual(classify("Cargo.lock"), {
     rust: "true",

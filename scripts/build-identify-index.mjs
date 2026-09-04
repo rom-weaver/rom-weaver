@@ -661,8 +661,8 @@ async function runCurl(url, outputPath, expectedBytes) {
   if (exitCode !== 0) throw new Error(`curl failed with exit code ${exitCode}: ${stderr.trim()}`);
 }
 
-async function runCommandText(command, args) {
-  const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+async function runCommandText(command, args, options = {}) {
+  const child = spawn(command, args, { ...options, stdio: ["ignore", "pipe", "pipe"] });
   let stdout = "";
   let stderr = "";
   child.stdout.setEncoding("utf8");
@@ -710,14 +710,23 @@ async function ensureArchiveFiles({
       await rename(`${archive}.part`, archive);
     }
     await mkdir(sourceRoot, { recursive: true });
-    await runCommandText("tar", [
-      "-xzf",
-      archive,
-      "-C",
-      sourceRoot,
-      "--strip-components=1",
-      ...missing.map((entry) => `${prefix}/${entry.sourcePath}`),
-    ]);
+    // GNU tar reads an archive name that contains a colon as `host:file`, so an
+    // absolute Windows path such as `D:\...` fails with "Cannot connect to D:".
+    // Naming the archive relative to its own directory keeps a colon out of the
+    // argument on every platform; `-C` is a chdir target and is never parsed
+    // that way.
+    await runCommandText(
+      "tar",
+      [
+        "-xzf",
+        path.basename(archive),
+        "-C",
+        sourceRoot,
+        "--strip-components=1",
+        ...missing.map((entry) => `${prefix}/${entry.sourcePath}`),
+      ],
+      { cwd: archiveDir },
+    );
   }
   const result = new Map();
   for (const entry of expected) {
