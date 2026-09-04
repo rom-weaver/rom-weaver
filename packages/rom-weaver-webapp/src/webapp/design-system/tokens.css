@@ -4,10 +4,9 @@
   --thread-ink: #1c1206; /* text on a thread-colored surface */
   /* Words that carry the accent. The dye itself is one hex in both themes and
      only clears 3:1, the floor for large text and UI parts, so small accent
-     words take the dye pulled towards the ink by one formula: on paper that
-     deepens it, on charcoal it lightens it, and every dye lot clears 4.5:1
-     without a hand-picked text variant. */
-  --thread-word: color-mix(in oklab, var(--thread) 58%, var(--ink));
+     words are set in ink and the dye sits beside them as a border, underline,
+     icon or fill. */
+  --thread-word: var(--ink);
   --thread-hi: #fccb90; /* specular tint in the logo mark */
   /* Reusable 20px plain-weave alpha mask. */
   --weave-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path d='M9.5 2h10.5v6H9.5zM0 2h.5v6H0zM0 12h10.5v6H0zM19.5 12h.5v6h-.5zM2 0h6v10.5H2zM2 19.5h6v.5H2zM12 9.5h6v10.5h-6zM12 0h6v.5h-6z'/></svg>");
