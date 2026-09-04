@@ -377,7 +377,8 @@ runs:
     # current tree (revisions + pack list checked against index.json) and skips
     # both the download and the build outright. The key hashes the builder, so
     # any change to pack contents misses by construction. A miss primes the
-    # cache here - the scripts use only node builtins, so this needs no npm ci.
+    # cache here, and the build reads its source archives with node-tar, so the
+    # miss path installs the npm dependencies first.
     - name: Restore identify data cache
       if: inputs.identify-data-cache == 'true'
       id: identify-data-cache
@@ -385,6 +386,11 @@ runs:
       with:
         path: crates/rom-weaver-cli/data/identify/v1
         key: identify-data-${{ hashFiles('scripts/build-identify-index.mjs', 'scripts/ensure-identify-data.mjs', 'scripts/wasm/brotli-compress.mjs') }}
+
+    - name: Install identify build dependencies
+      if: inputs.identify-data-cache == 'true' && steps.identify-data-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --ignore-scripts --no-audit --no-fund
 
     - name: Build identify data
       if: inputs.identify-data-cache == 'true' && steps.identify-data-cache.outputs.cache-hit != 'true'
