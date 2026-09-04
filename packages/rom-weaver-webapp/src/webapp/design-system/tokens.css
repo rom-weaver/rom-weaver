@@ -54,27 +54,30 @@
 }
 
 :root[data-theme="dark"] {
-  --chassis: #0c0f13; /* console shell */
-  --plate: #161b21; /* mounted plate */
-  --plate-2: #1c222a; /* raised plate */
-  --well: #0f1318; /* inset controls */
-  --seam: #39414e;
-  --seam-soft: #2c333f;
-  --seam-strong: #4b5564;
-  --ink: #edf0f5;
-  --ink-2: #b3bbc8;
-  --ink-3: #9aa3b1;
-  --ink-4: #939cab;
+  /* Warm charcoal: the dark grounds pulled slightly warm to sit under the
+     madder thread and the amber readouts, the night twin of the stone light
+     theme. */
+  --chassis: #12100e; /* console shell */
+  --plate: #1c1916; /* mounted plate */
+  --plate-2: #231f1b; /* raised plate */
+  --well: #151311; /* inset controls */
+  --seam: #433d37;
+  --seam-soft: #34302b;
+  --seam-strong: #5a534b;
+  --ink: #f2eee8;
+  --ink-2: #c0b8ae;
+  --ink-3: #a69e94;
+  --ink-4: #9d958b;
   /* Loom warp threads on the landing page: two tones so the plain weave's
      over/under reads without an outline. */
-  --warp-a: #2c333c;
-  --warp-b: #4a5563;
+  --warp-a: #352f2a;
+  --warp-b: #55504a;
   --verified: #69aa84;
   --fault: #e0606a;
   --care: #d8a64f;
   --care-text: #d8a64f; /* amber already clears 4.5:1 on every dark surface */
   --overlay-shadow: 0 24px 64px -24px rgb(0 0 0 / 0.7), 0 4px 16px rgb(0 0 0 / 0.35);
-  --scrim: rgb(4 6 9 / 0.62);
+  --scrim: rgb(9 7 5 / 0.62);
   color-scheme: dark;
 }
 :root[data-theme="light"] {
@@ -92,8 +95,8 @@
   --ink-2: #4b4844;
   --ink-3: #605c56;
   --ink-4: #68635c;
-  --warp-a: #43505f;
-  --warp-b: #6b7684;
+  --warp-a: #524b43;
+  --warp-b: #7a7269;
   /* Readouts follow the accent but sit on the fault-tinted checksum row, which
      is lighter than any plate; the raw dye lands near 3.5:1 on paper. Deepening
      it keeps the hue and clears 4.5:1. */
