@@ -71,17 +71,20 @@
   color-scheme: dark;
 }
 :root[data-theme="light"] {
-  --chassis: #ece9e1; /* warm gallery paper */
+  /* Cool linen: neutrals biased slightly blue, the daylight twin of the dark
+     graphite. Cool grounds are the complement of the madder thread, so the
+     accent and the amber readouts stay legible as accents. */
+  --chassis: #eaedf1;
   --plate: #ffffff;
-  --plate-2: #f7f5ef;
-  --well: #efede6;
-  --seam: #d4d2ca;
-  --seam-soft: #e1dfd8;
-  --seam-strong: #b4b1a6;
-  --ink: #1a1d22;
-  --ink-2: #4b5159;
-  --ink-3: #62686f;
-  --ink-4: #686d76;
+  --plate-2: #f5f6f8;
+  --well: #e4e7ec;
+  --seam: #c9cfd7;
+  --seam-soft: #dadfe5;
+  --seam-strong: #9ea7b3;
+  --ink: #14181e;
+  --ink-2: #434a54;
+  --ink-3: #59616b;
+  --ink-4: #626a74;
   --warp-a: #43505f;
   --warp-b: #6b7684;
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
@@ -95,9 +98,9 @@
   --care: #c4870f;
   /* `--care` is a fill colour on paper: 3.1:1 as text on the plate. Amber words
      take this one instead - 5.6:1 on the plate, 4.8:1 in a well. */
-  --care-text: #8d5e00;
-  --overlay-shadow: 0 24px 56px -20px rgb(35 30 18 / 0.35), 0 4px 14px rgb(35 30 18 / 0.14);
-  --scrim: rgb(40 36 28 / 0.42);
+  --care-text: #8a5c00;
+  --overlay-shadow: 0 24px 56px -20px rgb(18 24 32 / 0.35), 0 4px 14px rgb(18 24 32 / 0.14);
+  --scrim: rgb(24 30 38 / 0.42);
   color-scheme: light;
 }
 

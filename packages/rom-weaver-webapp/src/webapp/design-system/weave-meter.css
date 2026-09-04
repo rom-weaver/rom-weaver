@@ -8,7 +8,7 @@
   box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.25);
 }
 :root[data-theme="light"] .meter {
-  box-shadow: inset 0 1px 2px rgb(40 36 28 / 0.14);
+  box-shadow: inset 0 1px 2px rgb(18 24 32 / 0.14);
 }
 .rw-app .meter::before {
   position: absolute;
