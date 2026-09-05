@@ -1,9 +1,7 @@
 /**
  * The dye lots, in the settings picker's order. Source of truth for the
  * `--thread` / `--thread-hi` literals in design-system/accents.css (asserted by
- * tests/unit/accent-palette.test.ts), for the per-channel app icons that
- * scripts/generate-channel-icons.mjs rasterizes, and for the pre-tinted brand
- * marks scripts/brand-mark-assets.mjs emits.
+ * tests/unit/accent-palette.test.ts).
  *
  * Plain data in an .mjs (rather than accent.ts) so build tooling can import
  * the palette without a TypeScript loader; accent.ts re-exports it for the app.
