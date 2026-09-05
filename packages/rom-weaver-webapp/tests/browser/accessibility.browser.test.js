@@ -1082,7 +1082,7 @@ describe("accent dye-lot accessibility", () => {
               expect(markSvg).toContain("<svg");
               expect(markSvg).toContain(accent.swatch);
               expect(markSvg).toContain("#f6ecda");
-              expect(markSvg).toContain("#88a9cb");
+              expect(markSvg).toContain(accent.value === "madder" ? "#88a9cb" : accent.highlight);
               // No madder left anywhere once a different dye is selected.
               if (accent.value !== "madder") expect(markSvg).not.toContain("#d9690f");
             }

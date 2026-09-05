@@ -27,15 +27,20 @@ const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_ID}$`);
 
 const logoSourcePath = path.resolve(import.meta.dirname, "../src/assets/app/root/logo.svg");
 
+const tintBrandMark = (svg, accent) => {
+  const madder = ACCENTS.find((entry) => entry.value === DEFAULT_ACCENT);
+  if (!madder) throw new Error(`brand marks: default accent '${DEFAULT_ACCENT}' missing from the palette`);
+  if (!(svg.includes(madder.swatch) && svg.includes("#88a9cb"))) {
+    throw new Error("brand marks: source must contain both the orange and dusty-blue bands");
+  }
+  if (accent.value === DEFAULT_ACCENT) return svg;
+  return svg.replaceAll(madder.swatch, accent.swatch).replaceAll("#88a9cb", accent.highlight);
+};
+
 const createBrandMarks = () => {
   const logoSvg = fs.readFileSync(logoSourcePath, "utf8");
-  const madder = ACCENTS.find((accent) => accent.value === DEFAULT_ACCENT);
-  if (!madder) throw new Error(`brand marks: default accent '${DEFAULT_ACCENT}' missing from the palette`);
   return ACCENTS.map((accent) => {
-    const source = logoSvg.replaceAll(madder.swatch, accent.swatch).replaceAll(madder.highlight, accent.highlight);
-    if (source.includes(madder.swatch) && accent.value !== DEFAULT_ACCENT) {
-      throw new Error(`brand marks: ${madder.swatch} survived the ${accent.value} tint - logo.svg palette changed?`);
-    }
+    const source = tintBrandMark(logoSvg, accent);
     const hash = crypto.createHash("sha256").update(source).digest("hex").slice(0, 8);
     return { fileName: `assets/brand-mark-${accent.value}-${hash}.svg`, source, value: accent.value };
   });
@@ -117,4 +122,4 @@ const brandMarkAssets = () => {
   };
 };
 
-export { brandMarkAssets };
+export { brandMarkAssets, tintBrandMark };
