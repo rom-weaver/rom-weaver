@@ -79,7 +79,7 @@ const source = `class RomWeaver < Formula
       fish_completion.install "completions/rom-weaver.fish"
     end
     resource("identify-data").stage do
-      system "brotli", "--decompress", "--force", "--output", "identify-data.tar", "rom-weaver-identify-data.tar.br"
+      system "brotli", "--decompress", "--force", "--output=identify-data.tar", "rom-weaver-identify-data.tar.br"
       system "tar", "--extract", "--file", "identify-data.tar"
       share.install "share/rom-weaver"
     end

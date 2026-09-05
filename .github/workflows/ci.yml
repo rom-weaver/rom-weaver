@@ -651,6 +651,11 @@ jobs:
         # dependencies from crates.io, which may still contain the pre-change graph.
         run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
+      - name: Check packaged crates include their embedded files
+        # cargo's own verification is skipped above, so nothing else compiles
+        # the packaged tarball before a real publish.
+        run: node scripts/ci/check-package-includes.mjs
+
   identify-release-data:
     name: Package identify data
     runs-on: ubuntu-24.04

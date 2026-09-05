@@ -190,7 +190,7 @@ try {
         throw "brotli is required to extract $identifyAsset"
       }
       $identifyTar = Join-Path $tempDir 'rom-weaver-identify-data.tar'
-      & brotli --decompress --force --output $identifyTar $identifyPath
+      & brotli --decompress --force "--output=$identifyTar" $identifyPath
       if ($LASTEXITCODE -ne 0) { throw "failed to decompress $identifyAsset" }
       & tar --extract --file $identifyTar --directory $installDir
       if ($LASTEXITCODE -ne 0) { throw "tar cannot extract $identifyAsset" }

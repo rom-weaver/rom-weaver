@@ -62,7 +62,11 @@ output=
 input=
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --output) output=$2; shift 2 ;;
+    # brotli 1.2.0 takes the value only as --output=value. Given the split
+    # form it prints this message and exits 0 without writing anything, so
+    # the stub has to do the same or it hides the failure it models.
+    --output) echo "must pass the parameter as --output=value" >&2; exit 0 ;;
+    --output=*) output=$(echo "$1" | sed "s/^--output=//"); shift ;;
     --decompress|--force) shift ;;
     *) input=$1; shift ;;
   esac
