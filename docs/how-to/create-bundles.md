@@ -63,7 +63,7 @@ In **0x04 Apply**:
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="1368">
     <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="796" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
   </picture>
-  <figcaption>The bundle setting lives inside Output Options. The focused capture keeps the selector and action readable.</figcaption>
+  <figcaption>Bundle creation packages the staged recipe without applying the patches.</figcaption>
 </figure>
 
 Bundle creation does not apply the patches. It packages the recipe you have staged. **APPLY & DOWNLOAD** remains available separately when you also want to build the patched output.
@@ -85,21 +85,11 @@ Test the archive you will publish, not only the loose files used to make it:
 
 Also test the failure path. Add a harmless wrong sample file and make sure the bundle clearly asks for the matching ROM rather than silently producing an output.
 
-A matching checksum proves byte-for-byte reconstruction. Launching the result proves that the reconstructed file works. These are different checks.
+Compare the same checksum algorithm on both files to check reconstruction. Playing the result tests the paths you exercise; it does not establish that every patch combination works.
 
 ## Publish a useful release
 
-Publish the tested bundle archive with:
-
-- project name and version;
-- a short changelog;
-- expected Original region and revision;
-- the Original checksum and algorithm;
-- the expected output checksum and algorithm;
-- which patches are optional;
-- the bundle archive's own checksum;
-- a link to [Apply a ROM patch](apply-rom-patches.md#open-a-bundle);
-- a place to report problems.
+Follow the [release-notes checklist](create-rom-patches.md#write-useful-release-notes). Also include the bundle archive's checksum and a link to [Open a bundle](apply-rom-patches.md#open-a-bundle).
 
 Do not rely on the recipe as the only human explanation. Someone should be able to read the release page and understand what the download changes before opening it.
 

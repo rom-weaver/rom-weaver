@@ -2,8 +2,6 @@
 
 This page lists the supported runtime variables and the main developer overrides. Most runtime numbers and booleans are parsed by `rom_weaver_core::env`; the table notes exceptions.
 
-> **Not an env var:** the generated `packages/rom-weaver-webapp/src/wasm/generated/rom-weaver-format-metadata.ts` exports compile-time data tables named `ROM_WEAVER_CONTAINER_FORMATS`, `ROM_WEAVER_FORMAT_METADATA`, etc. Despite the `ROM_WEAVER_` prefix these are TypeScript `export const`s, **not** environment variables.
-
 <!-- START doctoc -->
 ## Table of contents
 
@@ -17,7 +15,7 @@ This page lists the supported runtime variables and the main developer overrides
 
 ## Command-scoped configuration
 
-Patch metadata and browser command arguments are command inputs, not ambient environment configuration. SOLID metadata is supplied with the `patch create --solid-*` flags documented in [CLI usage](cli.md), or with the corresponding `solid_*` fields on a typed WASM `PatchCreateCommand`.
+Patch metadata and browser command arguments are command inputs, not ambient environment configuration. SOLID metadata is supplied with the `patch create --solid-*` flags documented in [patch creation metadata](../reference/cli.md#patch-creation-metadata), or with the corresponding `solid_*` fields on a typed WASM `PatchCreateCommand`.
 
 The browser OPFS runner likewise has no constructor-level `program`, `argv0`, or `env` options. WASI argv0 is always `rom-weaver`. A command may still supply `env` in its per-run options when it needs one of the runtime knobs below.
 
@@ -56,7 +54,6 @@ Not for production use.
 | `window.ROM_WEAVER_MOBILE_SAFARI_DIAGNOSTICS` | exposed by app | `webapp/browser-runtime-diagnostics.ts` | Mobile-Safari runtime diagnostics handle (alias of the same diagnostics API). |
 | `window.ROM_WEAVER_IOS_SAFARI_MATRIX` | exposed by app | `webapp/mobile-safari-matrix.ts` | iOS-Safari format-matrix diagnostic harness API (diagnostic page only). |
 
-`ROM_WEAVER_SERVICE_WORKER_URL_PATTERN` (`webapp/pwa/pwa-service-worker-client.ts`) is **not** a knob - it is an internal module-level regex `const` (service-worker script-URL matcher), not a `window` global or configuration input. It is listed here only because a `grep ROM_WEAVER_` matches it.
 
 ## Webapp build/test/bench tooling (`*.mjs`)
 

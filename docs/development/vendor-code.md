@@ -222,18 +222,12 @@ curl -s -H 'User-Agent: rom-weaver' \
 
 If `write` still lists `wax`, stay inlined.
 
-Once it does not, the swap is four steps:
+Once a published version has the required feature split:
 
-1. Delete `crates/rom-weaver-containers/src/xdvdfs/`.
-2. Add the dependency to the root `Cargo.toml` `[workspace.dependencies]`:
-
-   ```toml
-   xdvdfs = { version = "0.9", default-features = false, features = ["std", "read", "write", "sync"] }
-   ```
-
-   Then `xdvdfs.workspace = true` in `crates/rom-weaver-containers/Cargo.toml`.
-3. In `crates/rom-weaver-containers/src/lib.rs`, replace `pub mod xdvdfs;` with `pub use ::xdvdfs;`, and drop the `extern crate alloc;` line above the `use std::{...}` block.
-4. Remove the dependencies that existed only for the inlined module from `crates/rom-weaver-containers/Cargo.toml` and the root `[workspace.dependencies]`: `arrayvec`, `async-trait`, `bincode`, `encoding_rs`, `maybe-async`, `proc-bitfield`, `serde-big-array`, and the `rand` dev-dependency. Drop the `[package.metadata.cargo-machete]` `async-trait` entry with them.
+1. Compare it with the local changes listed below. Preserve any required behavior that upstream does not include.
+2. Add that verified version to the workspace dependencies with `std`, `read`, `write`, and `sync`, and disable default features. Add `xdvdfs.workspace = true` to the containers crate.
+3. Replace the local module with a re-export of the dependency. Remove the inlined source only after all callers compile against the replacement.
+4. Remove dependencies used only by the inlined module. Check current callers before removing `arrayvec`, `async-trait`, `bincode`, `encoding_rs`, `maybe-async`, `proc-bitfield`, `serde-big-array`, or `rand`, and update the cargo-machete exception if it is no longer needed.
 
 Call sites do not change. `rom_weaver_containers::xdvdfs::...` keeps working in `rom-weaver-cli` and `cli_smoke`, and the internal paths (`blockdev`, `layout`, `read`, `write::fs`, `write::img`) match upstream's layout.
 

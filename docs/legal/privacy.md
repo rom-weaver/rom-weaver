@@ -36,7 +36,7 @@ All of it belongs to the rom-weaver site in your browser and is under your brows
 
 ## What the app downloads
 
-Opening the site downloads what any site downloads: HTML, styles, scripts, the WebAssembly module, fonts, and these pages. Opening Test also downloads the selected, self-hosted EmulatorJS core. As with any website, whoever hosts and routes that traffic can see ordinary request information: an IP address, a browser user agent, the path requested, and a timestamp.
+Opening the site downloads what any site downloads: HTML, styles, scripts, the WebAssembly module, fonts, and these pages. Opening Test also downloads the selected, self-hosted EmulatorJS core. ROM identification downloads self-hosted database packs during background preparation or when a lookup needs an uncached pack. Pack requests identify the database asset; the ROM checksum and filename are not sent. As with any website, whoever hosts and routes that traffic can see ordinary request information: an IP address, a browser user agent, the path requested, and a timestamp.
 
 There are no analytics, advertising, or tracking scripts in the deployed app.
 

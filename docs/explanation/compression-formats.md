@@ -1,6 +1,6 @@
 # Choosing a compression format
 
-CHD, RVZ, Z3DS, 7z, ZIP. This guide explains which compressed format fits which console, when trimming beats compressing, and what compression does to your checksums.
+CHD, RVZ, Z3DS, 7z, ZIP. This page explains which compressed format fits which console, when trimming beats compressing, and what compression does to your checksums.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -49,7 +49,7 @@ Some cartridge and disc formats carry padding rather than data. Trimming cuts it
 
 ## Compression changes your checksums
 
-A compressed file does not hash the same as the dump inside it, so a `.chd` will not match a database entry for the `.bin` it was made from. That is normal. `checksum` automatically unwraps many supported containers; use `--no-extract` when you mean to hash the wrapper bytes. `probe` identifies the container and reports its structure. If a patch guide expects a specific checksum, check the payload, and see [Fix a checksum error](../how-to/fix-checksum-errors.md) when it still disagrees.
+A compressed file does not hash the same as the dump inside it, so a `.chd` will not match a database entry for the `.bin` it was made from. The container and payload are different byte sequences. [Hash the ROM inside an archive](../how-to/identify-and-hash-files.md#hash-the-rom-inside-an-archive) gives the command for checking the payload.
 
 ## Which format should I choose?
 

@@ -62,7 +62,6 @@ Recipes for a real job you already have in front of you.
 
 - [Self-hosting](hosting/self-hosting.md): Docker, static deployment, reverse proxies, subpaths, HTTPS, and COOP/COEP.
 - [Webapp integration](hosting/webapp-integration.md): preload `?bundle=...` and `?rom=...&patch=...` URLs, or feed same-origin OPFS files into the pipeline.
-- [Runtime configuration](hosting/env-vars.md): native, WASM, webapp, test, and build configuration knobs.
 - [Hosted deployment channels](development/ci.md#deploy-channels): production, beta, nightly, and pull-request previews.
 
 ## Reference
@@ -73,6 +72,7 @@ Facts to look up. No advice, no steps.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): the machine-readable bundle format.
+- [Runtime configuration](hosting/env-vars.md): environment variables and browser diagnostic handles.
 - [Webapp masthead metadata](hosting/webapp-runtime-status.md): version, SHA, thread, PWA, and service-worker labels.
 
 ## Explanation
@@ -85,7 +85,7 @@ Background that makes the rest make sense.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
-- [Where identify data comes from](explanation/identify-sources.md): the OpenGood and Redump split and what each result quality proves.
+- [Where identify data comes from](explanation/identify-sources.md): Libretro metadata, OpenGood fallback records, and local lookup.
 - [Release provenance](explanation/release-provenance.md): what download verification proves and why the checks are shaped the way they are.
 - [Comparison with similar tools](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
 
@@ -100,7 +100,11 @@ Background that makes the rest make sense.
 - [Contribution guide](../CONTRIBUTING.md): reporting bugs, proposing changes, validation, and contribution licensing.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
-- [ROM identify data](development/identify-data.md): rebuild the OpenGood and Redump packs.
+- [ROM identify data](development/identify-data.md): rebuild the Libretro and OpenGood packs.
 - [References](development/references.md): format specifications and upstream reference implementations.
 
-…and more in the repository: commit conventions, CI, performance, browser concurrency, mobile Safari verification, vendored code, screenshots, the release guide, the CLA, the code of conduct, and the security policy all live under [`docs/development/`](https://github.com/rom-weaver/rom-weaver/tree/main/docs/development).
+- [CI workflows](development/ci.md) and [local CI checks](development/reproduce-ci-locally.md).
+- [Commit conventions](development/commits.md) and the [release guide](../.github/RELEASING.md).
+- [Performance](development/performance.md), [browser concurrency](development/browser-concurrency.md), and [Mobile Safari verification](development/mobile-safari-verification.md).
+- [Vendored code](development/vendor-code.md), [trim footer format](development/trim-revert-footer.md), and [screenshots](development/screenshots.md).
+- [CLA](../CLA.md), [code of conduct](../.github/CODE_OF_CONDUCT.md), [security policy](../.github/SECURITY.md), and [commercial licensing](../COMMERCIAL.md).

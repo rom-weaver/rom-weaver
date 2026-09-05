@@ -1,6 +1,6 @@
 # Browser and CLI
 
-rom-weaver ships two front ends over one engine. This page explains what they share, where they genuinely differ, and how to pick.
+rom-weaver ships two front ends over one engine. Both use the same patch and container implementations.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -18,7 +18,7 @@ rom-weaver ships two front ends over one engine. This page explains what they sh
 
 The patch formats, container handlers, checksum algorithms, and validation rules live in Rust. The CLI links that code natively. The webapp runs the same code compiled to WebAssembly, inside your browser's workers.
 
-So a patch created in the browser and a patch created by the CLI are the same patch. A bundle written by one is read by the other. Moving between them costs you nothing and changes no file you have already made.
+Patches and bundles created by either interface can be read by the other. Output bytes can depend on the selected format, options, and backend; sharing the engine does not guarantee identical compressed files.
 
 What differs is the interface, and that difference is deliberate.
 

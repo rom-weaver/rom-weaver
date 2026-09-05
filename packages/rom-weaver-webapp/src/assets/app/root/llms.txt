@@ -19,7 +19,7 @@
 - [What a bundle is](https://rom-weaver.com/docs/bundles): The portable patch recipe, what it contains, and when to make one.
 - [Browser and CLI](https://rom-weaver.com/docs/browser-and-cli): One engine, two front ends, and how to choose.
 - [Identify data sources](https://rom-weaver.com/docs/identify-sources): How pinned Libretro and OpenGood data provides local ROM identification.
-- [Comparison with similar tools](https://rom-weaver.com/docs/comparisons): How rom-weaver compares with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, format by format and feature by feature.
+- [Comparison with similar tools](https://rom-weaver.com/docs/comparisons): Workflow trade-offs between rom-weaver, RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool.
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
 - [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the release workflow's build provenance.
@@ -29,7 +29,7 @@
 - [Trim a ROM (CLI)](https://rom-weaver.com/docs/cli-trim): Trim, preview, and revert ROM padding from the command line.
 - [Work with archives](https://rom-weaver.com/docs/work-with-archives): Extract, convert, and create ZIP and 7z archives from the command line.
 - [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, patching flag, JSON output, exit codes, and man pages.
-- [Supported formats](https://rom-weaver.com/docs/supported-formats): The full patch, container, codec, checksum, trim, and header support tables.
+- [Supported formats](https://rom-weaver.com/docs/supported-formats): Patch, container, codec, checksum, trim, header, and browser emulator support.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
 

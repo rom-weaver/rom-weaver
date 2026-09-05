@@ -12,6 +12,7 @@ This is the authoritative support matrix for everything rom-weaver reads and wri
 - [Checksum support](#checksum-support)
 - [Trim support](#trim-support)
 - [Header detection and repair](#header-detection-and-repair)
+- [Browser emulator support](#browser-emulator-support)
 
 <!-- END doctoc -->
 
@@ -147,3 +148,38 @@ Probe, checksum, and patch apply recognize headers for A78, LNX, NES/FDS, SNES c
 
 
 For format specifications and upstream implementations, see [`references.md`](../development/references.md).
+
+## Browser emulator support
+
+The Test page supports these platforms:
+
+- Atari 7800
+- Atari Lynx
+- Nintendo Entertainment System
+- Nintendo Famicom Disk System
+- Nintendo Game Boy
+- Nintendo Game Boy Color
+- Nintendo Game Boy Advance
+- Nintendo 64
+- Nintendo DS
+- Super Nintendo Entertainment System
+- Sega Game Gear
+- Sega Master System
+- Sega Mega Drive or Genesis
+- Sega Saturn
+- Sony PlayStation
+- Sony PSP
+
+rom-weaver does not bundle EmulatorJS cores for these platforms:
+
+- Nintendo GameCube
+- Nintendo Wii
+- Nintendo 3DS
+- Sega CD
+- Sega Dreamcast
+- Sony PlayStation 2
+- NEC PC Engine
+- NEC PC Engine CD
+- SNK Neo Geo Pocket
+
+[Load and test a ROM](../how-to/test-roms-in-browser.md) covers the browser controls. Patch and container support do not imply emulator support.

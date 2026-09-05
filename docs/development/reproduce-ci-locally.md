@@ -1,6 +1,6 @@
 # Reproduce a CI failure locally
 
-Run the same checks CI runs, on your own machine, so you can fix a red build without pushing to find out. For what each workflow is and when it runs, see [Continuous integration](ci.md).
+Use the failed job name to choose a local check. Use the broad gate when you need to check the complete change. For what each workflow is and when it runs, see [Continuous integration](ci.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -20,7 +20,7 @@ mise run ci
 
 The pre-commit hooks select lint checks from your staged paths. CI reuses those same tasks over the whole tree, then adds tests, builds, publishability checks, and the macOS and Windows Rust legs. `mise run ci` is the local stand-in for that.
 
-Reach for the individual commands below when you are narrowing a failure or matching one specific job.
+For a known failure, run the matching command below first. The broad gate checks the complete change after that failure is fixed.
 
 ## Match a specific job
 

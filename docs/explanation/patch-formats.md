@@ -81,28 +81,15 @@ The [full format table](../reference/formats.md#patch-formats) is the authoritat
 
 ## How rom-weaver picks a patch's bytes
 
-Some ROM dumps carry a copier header: a small block of padding old duplicating hardware wrote in front of the real data. A patch author either included it or did not, and the patch has to be applied to the matching form. Applied to the wrong one, every change lands at the wrong place. The result usually still boots, which is what makes the mistake expensive.
+Some dumps contain a copier header before the ROM data. Others, especially Nintendo 64 dumps, store the same data in different byte orders. A patch needs the form its author used.
 
-A format that stores a checksum of its original settles this outright. BPS, UPS and PMSR store a CRC32; RUP and Solid store an MD5. rom-weaver hashes the dump both ways under whichever algorithm the patch used and takes the match, so the answer is proof, not preference. Checksums you supply yourself, from `--expect-in` or a bundle, count the same way and come first. A stated size on its own never counts: two ROMs of one length are not one ROM.
+rom-weaver first compares the available expected checksums against supported variants. Explicit checks and bundle checks take precedence over a patch's own source checks. File size alone can distinguish two candidate layouts, but cannot identify a ROM.
 
-A format can also settle it by refusing the wrong form. APS GBA states an exact original size and a checksum per block; xdelta/VCDIFF checks each chunk of the result it produced. rom-weaver applies the patch both ways with those checks on, and a form the format rejects was not the one the author used. A refusal on size alone still counts here, unlike above: the two forms differ by exactly the header, so a size tells them apart even though it cannot name the ROM. Ignoring checksum validation turns these checks off, and the comparison below decides instead.
+For the first patch, missing checksum evidence can trigger inference from patch records, validation failures, and the resulting platform header. N64 inference can also use a rewritten boot checksum. These are fallbacks, not checksum proof. Later chain steps use checksum evidence rather than repeating first-patch inference.
 
-IPS stores no checksum and checks nothing, so rom-weaver reads the shape of the patch instead:
+When the evidence cannot distinguish candidates, rom-weaver keeps the existing form. A reported inference still needs checking against the author's expected result. Publishing source and output checksums removes that uncertainty.
 
-- Changes that reach past the end of the shorter form cannot have been written for it.
-- Changes that fall inside the copier header were addressing real ROM data, because nobody edits copier padding.
-- A change is normally trimmed so its first and last byte differ from what was there before. Edges that already match the bytes underneath them point at the wrong form. Changes that overlap each other did not come from a trimming differ at all, so this rule says nothing about them.
-
-When the shape settles nothing - and for every format with no shape to read - rom-weaver applies the patch both ways and keeps the version the console still recognises as its own ROM, judged by the internal header every platform keeps. Its own checksum is a weak signal here, because a ROM hack routinely leaves it stale. Some formats stay beyond this last step: bsdiff and gdiff rebuild the whole ROM from the patch, so their two results cannot be lined up for a fair comparison, and rom-weaver leaves those dumps alone.
-
-Nintendo 64 dumps pose the same question in a different shape. They circulate in three byte orders, and a patch fits only the one its author had. Checksums settle it the same way. Without one, two things can still rule an order out:
-
-- A change covering the first four bytes has to leave a valid N64 magic, and each order spells that magic differently.
-- The trimmed-edge rule above works here too, because a wrong order moves the edge onto a different byte of the same four.
-
-Failing both, rom-weaver applies the patch all three ways and keeps the one whose result still carries a correct internal boot checksum. That works where the copier-header version cannot rely on it: an N64 hack has to fix that checksum or the console refuses to boot, so the patch usually carries a new one.
-
-None of this is proof, and rom-weaver treats it that way: when the evidence does not separate the candidates it changes nothing and leaves the dump as it found it. Anything it does settle this way is named in the result, so a decision made on evidence never looks like a decision made on proof. Publishing the expected checksums beside an IPS download is still the only way to make the question answerable.
+The [architecture guide](../development/ARCHITECTURE.md#patch-apply-rom-copier-headers) records the decision rules and implementation paths. [Fix a checksum error](../how-to/fix-checksum-errors.md) covers what to check in the browser.
 
 ### Interleaved Genesis dumps are not a header question
 

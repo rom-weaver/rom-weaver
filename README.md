@@ -47,46 +47,13 @@ Choose the [webapp](#webapp), [self-hosting](#self-hosting), or [CLI](#cli) path
 
 ## Webapp
 
-Open the hosted webapp at **[rom-weaver.com/apply](https://rom-weaver.com/apply)**. You do not need to install anything or create an account. Choose **Apply**, add a ROM and one or more patches, review the detected formats and checksums, then run the workflow and save the result. Use **Create** to generate a distributable patch from an original and a modified file. Your files are processed locally and never leave the device. Install it as a PWA from the browser menu to use it offline. New here? [Try the sample workflow](https://rom-weaver.com/apply?bundle=first-weave.zip) with a tiny original homebrew NES ROM and two independent patches that change “HELLO WORLD” to “ROM WEAVER.” For a guided explanation, use [guided Apply](https://rom-weaver.com/apply?guide=apply), [guided Create](https://rom-weaver.com/create?guide=create), or [guided Bundle](https://rom-weaver.com/apply?guide=bundle). To run the webapp on your own host, see the [Self-hosting](#self-hosting) section below or the [full self-hosting guide](./docs/hosting/self-hosting.md).
+Open [rom-weaver.com/apply](https://rom-weaver.com/apply). Add your ROM and patches, then download the result. Files are processed on your device. No install or account is needed.
+
+Start with [your first patch](docs/tutorials/first-patch.md) to practise on supplied homebrew files. The [browser guides](docs/README.md#in-the-browser) cover applying, creating, bundling, and testing ROM patches.
 
 ## Self-hosting
 
-For a quick setup, choose static files, Docker Run, or Docker Compose. The [full self-hosting guide](./docs/hosting/self-hosting.md) covers reverse proxies, subpath routing, HTTPS certificates, service-worker scope, and the required COOP/COEP headers.
-
-Static release files:
-
-```bash
-mkdir -p rom-weaver-webapp
-curl --fail --location --proto '=https' --tlsv1.2 \
-  --output rom-weaver-webapp.tar.gz \
-  https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-webapp.tar.gz
-tar --extract --gzip --file rom-weaver-webapp.tar.gz --directory rom-weaver-webapp
-```
-
-Serve the extracted `rom-weaver-webapp` directory from an HTTPS static host. For a pinned release, replace `latest` in the URL with its tag.
-
-Docker Run using the published GitHub Container Registry (GHCR) image:
-
-```bash
-docker run --detach --name rom-weaver-webapp \
-  --publish 8080:8080 \
-  ghcr.io/rom-weaver/rom-weaver-webapp:latest
-```
-
-Docker Compose using the same published GitHub Container Registry (GHCR) image: Download the [Docker Compose template](https://github.com/rom-weaver/rom-weaver/blob/main/docker-compose.yml) into a new directory:
-
-```bash
-mkdir -p rom-weaver-compose
-cd rom-weaver-compose
-curl --fail --location --proto '=https' --tlsv1.2 \
-  --output docker-compose.yml \
-  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docker-compose.yml
-docker compose pull
-docker compose up --detach
-curl --fail --silent --show-error http://localhost:8080/health
-```
-
-Only Docker with Compose is required. Set `PORT` to change the host port, for example `PORT=3000 docker compose up --detach`. To build the image from source instead, clone the repository and add `--build` to the `docker compose up` command from its checkout; that path is slower and intended for development. For standalone TLS, mount a trusted certificate as described in the guide and set `HTTPS_PORT` instead.
+Use the published Docker image or static release archive. The [self-hosting guide](docs/hosting/self-hosting.md) covers both, including HTTPS, reverse proxies, and subpaths.
 
 ## CLI
 
@@ -108,7 +75,7 @@ npm install --global rom-weaver
 ```
 
 
-Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. The install script covers macOS and Linux: it downloads the latest release to `~/.local/bin` and checks its build provenance, refusing to install a binary this repository did not publish. npm is the only channel covering every supported target at once, and needs Node.js 22+.
+Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. The install script covers macOS and Linux: it downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless strict verification is enabled; see [Verify a download](docs/how-to/verify-downloads.md). npm is the only channel covering every supported target at once, and needs Node.js 22+.
 
 <a name="build-from-source"></a>
 
@@ -120,19 +87,15 @@ The [development guide](./docs/development/development.md) covers the full toolc
 
 ## Why
 
-Every console generation brought its own compressed format: CHD for discs, RVZ for GameCube and Wii, Z3DS for 3DS ROMs, CSO and PBP for PSP, plus the usual ZIP and 7z on top. Working across them can mean finding several separate programs, learning different flags, and checking which builds are available for your platform.
+A patch job can require extraction, several patches in order, checksum checks, and compression. rom-weaver runs those steps together and can save the recipe as a bundle.
 
-Patching adds another manual sequence. A translation, bugfix, and undub may need to run in a specific order, with intermediate files kept straight and a compressed input unpacked before the first patch and recompressed afterward. Repeating that setup whenever the patch combination changes adds disk churn and room for mistakes to what should be one workflow.
-
-The last piece is curation. Keeping a collection in order means storing ROMs compressed, keeping the patches next to them, and being able to prove months later that a patched file came from the ROM you think it did. rom-weaver handles all of it in one place. It reads every format above. It writes CHD, RVZ, Z3DS, ZIP, and 7z archives. It chains as many patches as you want in a single pass without manually unpacking first, and records the whole recipe - patch order, checksums, and output names - in a bundle file you can hand to someone else. Native CLI builds are available for Linux, macOS, and Windows. The browser webapp handles patching and bundle workflows without an install.
-
-For the current measurements and trade-offs, see the [performance brief](#performance). For how rom-weaver lines up against the tools you may already use, the [comparison with similar tools](./docs/explanation/comparisons.md) puts it beside RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, format by format and feature by feature.
+[Browser and CLI](docs/explanation/browser-and-cli.md) explains the two interfaces. [Comparison with similar tools](docs/explanation/comparisons.md) covers alternatives.
 
 ## Performance
 
-rom-weaver matches or beats the reference tools on every measured axis: extraction time, compression time, and output size. On the measured arm64 corpus, extraction is faster in all four formats. CHD extracts 3.1–5.8× faster, RVZ 1.6–2.0×, ZIP 1.6–2.7×, and 7z 1.0–4.7×. RVZ and ZIP compression are 1.1–1.3× faster. 7z compression is even with its reference. CHD compression ranges from even to 1.3× faster. Output sizes match the references to within a fraction of a percent.
+The [performance guide](docs/development/performance.md) records measured compression and extraction times, output sizes, hardware, and test settings. Results vary by format and input; some compression cases are slower than the reference tool.
 
-The CLI and the threaded WASM webapp share one Rust engine. The browser adds worker, storage, and OPFS costs, so CLI and browser timings are not comparable. The [performance guide](./docs/development/performance.md) records the machine, corpus, settings, reference-tool versions, and repeated runs for each published result. It also lists the commands that reproduce them. Production WASM is optimized with `wasm-opt -O4`. The browser codec matrix is the runtime check for the shipped worker and storage path.
+The CLI and browser share one Rust engine. Browser workers and storage add costs, so native timings do not predict browser performance.
 
 ## Features
 
@@ -145,7 +108,7 @@ The CLI and the threaded WASM webapp share one Rust engine. The browser adds wor
 - **Local-first and private.** Everything runs on your machine. The webapp is an installable PWA that works offline and never uploads your files.
 - **One engine, two frontends.** The same Rust core powers the terminal CLI and the threaded WASM webapp. CLI operation commands can emit line-delimited JSON for scripting.
 
-The complete format, codec, and checksum compatibility tables are maintained in the [CLI guide](./docs/reference/formats.md).
+The complete format, codec, and checksum compatibility tables are maintained in [Supported formats](./docs/reference/formats.md).
 
 ## Notices
 

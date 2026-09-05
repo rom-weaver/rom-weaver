@@ -28,7 +28,7 @@ You need the patch and your own copy of the exact game release it was made for. 
 - whether the ROM has a header;
 - the required order when there is more than one patch.
 
-A filename is only a hint. Two different releases can have similar names. A checksum is calculated from every byte, so it is the useful proof.
+Compare the checksum, not just the filename. [How patching works](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the difference.
 
 If you have a checksum but not the file, paste it into **Identify by checksum**. It sits under the drop zone on the empty page, and in **0x02 ROM** once a patch is loaded. rom-weaver looks the checksum up in its local identification data and shows the expected ROM: its title, its region and revision, and every checksum and the size the data holds. Nothing is uploaded.
 
@@ -68,7 +68,7 @@ Each patch card shows its format and position. Open **Checks** to see what that 
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2348">
     <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1045" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme">
   </picture>
-  <figcaption>The focused patch stack. The site serves a mobile crop on small screens and matches the active theme.</figcaption>
+  <figcaption>Patches run from top to bottom. Each card shows the checks for that step.</figcaption>
 </figure>
 
 ## Put several patches in order
@@ -82,6 +82,8 @@ The On or Off switch temporarily skips a patch. This is useful for optional add-
 After changing order or switches, read the checks again. A valid chain should show each patch matching the bytes produced by the step before it.
 
 ## Choose the output and apply
+
+If **APPLY & DOWNLOAD** is disabled, wait for reading and checksumming to finish. Read the nearby notice and resolve any failed checks.
 
 In **0x04 Apply**:
 
@@ -104,7 +106,7 @@ In **0x04 Apply**:
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="654">
     <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="560" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the dark theme">
   </picture>
-  <figcaption>The output card is shown at readable size instead of shrinking the entire page into one image.</figcaption>
+  <figcaption>Choose the output name and format before applying.</figcaption>
 </figure>
 
 Everything happens locally in the browser. The ROM, patches, and result are not sent to rom-weaver - see [why your files stay on your device](../explanation/local-first.md).
@@ -119,18 +121,7 @@ Want to publish one? [Create and share a patch bundle](create-bundles.md) has a 
 
 ## If the ROM does not match
 
-Stop and find the difference. Do not turn on an override just to make the red message disappear.
-
-Check these in order:
-
-1. region and revision;
-2. the selected file inside an archive;
-3. header state;
-4. Nintendo 64 byte order;
-5. patch order;
-6. whether the ROM was already patched or trimmed.
-
-The [checksum error guide](fix-checksum-errors.md) explains each cause using the browser cards. A wrong filename by itself can be harmless. A wrong checksum or size is not.
+Follow [Fix a checksum error](fix-checksum-errors.md) before applying. That guide checks region, revision, archive selection, headers, Nintendo 64 byte order, patch order, and earlier modifications. A different filename alone is advisory; a checksum or size mismatch blocks the run.
 
 ## Use the result safely
 
