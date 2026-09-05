@@ -48,3 +48,27 @@ test("the identify build install is gated on a cache miss", () => {
     assert.match(condition, /cache-hit != 'true'/u, `${action.name}: ${condition.trim()}`);
   }
 });
+
+// The composite actions are only half the surface: a workflow job can also
+// reach the identify build through `mise run test-rust`, which bypasses the
+// actions entirely. `rust-macos` did exactly that and broke on the node-tar
+// switch, so the jobs are checked too.
+const WORKFLOW = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  ".github",
+  "workflows",
+  "ci.yml",
+);
+
+test("every job that runs the Rust tests sets up the identify data", () => {
+  const body = readFileSync(WORKFLOW, "utf8");
+  // Job blocks start at a two-space-indented `<name>:` key.
+  const jobs = body.split(/\n(?=  [\w-]+:\n)/u).filter((job) => job.includes("mise run test-rust"));
+  assert.ok(jobs.length > 0, "no job runs the Rust tests; the matcher is stale");
+  const missing = jobs
+    .filter((job) => !(job.includes('identify-data-cache: "true"') && /tools:.*\bnode\b/u.test(job)))
+    .map((job) => job.trimStart().split(":", 1)[0]);
+  assert.deepEqual(missing, [], `these run the Rust tests without node + the identify packs: ${missing}`);
+});
