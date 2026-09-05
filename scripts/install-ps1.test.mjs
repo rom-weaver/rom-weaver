@@ -40,10 +40,15 @@ function brotli {
   $input = $null
   for ($i = 0; $i -lt $Arguments.Count; $i++) {
     switch ($Arguments[$i]) {
-      '--output' { $output = $Arguments[++$i] }
+      # brotli 1.2.0 accepts the value only as --output=value; given the
+      # split form it warns and exits 0 without writing anything.
+      '--output' { Write-Error 'must pass the parameter as --output=value'; exit 0 }
       '--decompress' { }
       '--force' { }
-      default { $input = $Arguments[$i] }
+      default {
+        if ($Arguments[$i] -like '--output=*') { $output = $Arguments[$i].Substring(9) }
+        else { $input = $Arguments[$i] }
+      }
     }
   }
   & '${nodePath}' -e 'const fs=require("node:fs");const zlib=require("node:zlib");const [output,input]=process.argv.slice(1);fs.writeFileSync(output,zlib.brotliDecompressSync(fs.readFileSync(input)));' $output $input
