@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/rom-weaver/rom-weaver/0c950a5f3b44cfd597d9798357cae0d273264d13/packages/rom-weaver-webapp/src/assets/app/root/logo.svg" alt="" width="64" height="64"><br>
+  <img src="https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/packages/rom-weaver-webapp/src/assets/app/root/logo.svg" alt="" width="64" height="64"><br>
   rom-weaver-patches
 </h1>
 
@@ -9,8 +9,8 @@
 
 <p align="center">
   <a href="https://crates.io/crates/rom-weaver-patches"><img alt="crates.io" src="https://img.shields.io/crates/v/rom-weaver-patches?color=d9690f"></a>
-  <a href="https://docs.rs/rom-weaver-patches"><img alt="docs.rs" src="https://img.shields.io/docsrs/rom-weaver-patches?color=4a6d63"></a>
-  <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
+  <a href="https://docs.rs/rom-weaver-patches"><img alt="docs.rs" src="https://img.shields.io/docsrs/rom-weaver-patches?color=365d82"></a>
+  <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
 
 > **Beta software, published so the CLI can be.** This crate exists to build [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the `rom-weaver` command is the only supported interface. The Rust API is not documented beyond this page, changes without notice between minor releases, and using it in another project is unsupported.

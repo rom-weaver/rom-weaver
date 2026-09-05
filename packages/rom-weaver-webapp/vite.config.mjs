@@ -76,11 +76,7 @@ const docsScreenshotSources = Object.fromEntries(
   DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
 
-// A manifest's icons are read at install time, so an installed PWA's icon can
-// only follow the build channel - unlike the in-app mark, which follows the
-// user's accent. scripts/generate-channel-icons.mjs pre-renders (and commits) a
-// tinted set per channel; channels defaulting to madder have no directory and
-// fall through to the stock icons.
+// Channels without generated assets MUST fall back to the stock icons.
 const channelAssetPath = (channel, name) => {
   const override = path.join(rootAssetDir, "channels", channel, name);
   return fs.existsSync(override) ? override : path.join(rootAssetDir, name);

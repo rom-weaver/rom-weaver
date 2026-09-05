@@ -184,7 +184,7 @@ The WASM build needs a WASI SDK (v33+, auto-detected; see `scripts/wasm/detect-w
 
 ## Webapp UI - the loom workbench
 
-The React webapp's presentation layer uses the "loom workbench" design language (charcoal chassis, cartridge-orange thread accent, cream hash readouts, sage verification).
+The React webapp's presentation layer uses the "loom workbench" design language (charcoal chassis, cartridge-orange thread accent, cream hash readouts, dusty-blue verification).
 
 - **Stylesheets.** Hand-written semantic CSS is split by component under `packages/rom-weaver-webapp/src/webapp/design-system/`. `index.css` declares the cascade-layer order and imports the render-critical sheets; `deferred.css` and `docs-route.css` arrive later in their predeclared layers. Tokens live in `tokens.css`, component rules are scoped under `.rw-app`, and there are no utility classes, CSS-in-JS, or Tailwind.
 - **Shell.** `packages/rom-weaver-webapp/src/webapp/components/shell.tsx` (masthead, mode rail with the sliding thumb, reveal banners, selvage status strip), `packages/rom-weaver-webapp/src/webapp/components/log-dialog.tsx` (native `<dialog>` trace inspector over `packages/rom-weaver-webapp/src/webapp/log-store.ts`, which chains a capturing sink onto the logger). The selvage state comes from `packages/rom-weaver-webapp/src/lib/activity-store.ts`, which the workflow forms publish to (idle/running/done/failed + the active stage line).
