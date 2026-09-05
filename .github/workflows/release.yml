@@ -474,6 +474,11 @@ jobs:
         # previous release graph.
         run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
+      - name: Check packaged crates include their embedded files
+        # cargo's own verification is skipped above, so nothing else compiles
+        # the packaged tarball before a real publish.
+        run: node scripts/ci/check-package-includes.mjs
+
   # Package the static site beside the registry publishes rather than making all
   # of them wait for another production WASM build. The release PR head's CI
   # artifact is reused when its tree matches; otherwise build from release source.

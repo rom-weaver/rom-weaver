@@ -11,7 +11,14 @@ readme = "README.md"
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
-include = ["src/**", "tests/**", "examples/**", "Cargo.toml", "README.md"]
+include = [
+  "src/**",
+  "tests/**",
+  "examples/**",
+  "Cargo.toml",
+  "README.md",
+  "rom-weaver-bundle-v1.schema.json",
+]
 
 [lib]
 name = "rom_weaver_app"
