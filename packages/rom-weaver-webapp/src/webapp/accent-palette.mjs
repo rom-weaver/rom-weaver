@@ -8,7 +8,7 @@
  * Plain data in an .mjs (rather than accent.ts) so build tooling can import
  * the palette without a TypeScript loader; accent.ts re-exports it for the app.
  *
- * `highlight` is the logo's specular tint: hue and saturation of the swatch at
+ * `highlight` is the light accent fill: hue and saturation of the swatch at
  * `l + (100 - l) * 0.6`. Madder keeps the hand-picked value it has always
  * shipped (the rule would land 4 points off) so the stock mark is unchanged.
  */

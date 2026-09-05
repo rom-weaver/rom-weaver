@@ -1081,7 +1081,8 @@ describe("accent dye-lot accessibility", () => {
               const markSvg = await (await nativeFetch(markSrc)).text();
               expect(markSvg).toContain("<svg");
               expect(markSvg).toContain(accent.swatch);
-              expect(markSvg).toContain(accent.highlight);
+              expect(markSvg).toContain("#f6ecda");
+              expect(markSvg).toContain("#88a9cb");
               // No madder left anywhere once a different dye is selected.
               if (accent.value !== "madder") expect(markSvg).not.toContain("#d9690f");
             }

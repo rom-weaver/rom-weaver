@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/rom-weaver/rom-weaver/0c950a5f3b44cfd597d9798357cae0d273264d13/packages/rom-weaver-webapp/src/assets/app/root/logo.svg" alt="" width="64" height="64"><br>
+  <img src="https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/packages/rom-weaver-webapp/src/assets/app/root/logo.svg" alt="" width="64" height="64"><br>
   rom-weaver-cli
 </h1>
 
@@ -9,8 +9,8 @@
 
 <p align="center">
   <a href="https://crates.io/crates/rom-weaver-cli"><img alt="crates.io" src="https://img.shields.io/crates/v/rom-weaver-cli?color=d9690f"></a>
-  <a href="https://docs.rs/rom-weaver-cli"><img alt="docs.rs" src="https://img.shields.io/docsrs/rom-weaver-cli?color=4a6d63"></a>
-  <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-4a6d63"></a>
+  <a href="https://docs.rs/rom-weaver-cli"><img alt="docs.rs" src="https://img.shields.io/docsrs/rom-weaver-cli?color=365d82"></a>
+  <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
 
 > **Beta software.** The `rom-weaver` command is the supported interface, and the one to install. The four library crates it is built from (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only so this one can be; using them directly is unsupported.
