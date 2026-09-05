@@ -263,9 +263,9 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
 | `--bundle ARCHIVE`, `--no-bundle-rom` | Archive packaging and exclusion of ROM bytes. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
-| `--from FILE`, `--from -` | Reads a local-path specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec. |
+| `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec. |
 
-Patch metadata options bind to the preceding `--patch`. `--from` requires local-path entries and preserves an existing `$schema`; URL-only and checks-only entries are rejected.
+Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. A ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected.
 
 `bundle parse` accepts archive selection options for packaged bundles. A plain JSON recipe references paths and has no archive members to unpack. [Bundles from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
 

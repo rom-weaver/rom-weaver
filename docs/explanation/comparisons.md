@@ -17,7 +17,6 @@ The useful distinction is the job each tool handles: a single patch, an embedded
 - [Delivery and platforms](#delivery-and-platforms)
 - [Which one should you use?](#which-one-should-you-use)
 - [How this page was checked](#how-this-page-was-checked)
-- [Legend](#legend)
 
 <!-- END doctoc -->
 
@@ -32,6 +31,8 @@ The useful distinction is the job each tool handles: a single patch, an embedded
 | [xdelta3](https://github.com/jmacd/xdelta) | General binary differences using VCDIFF | Works beyond ROMs; it does not choose a ROM's header or byte order. |
 | [chdman](https://docs.mamedev.org/tools/chdman.html) | CHD creation, extraction, and verification | Provides the reference CHD tooling, including operations outside rom-weaver's CLI surface. |
 | [Dolphin tool](https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/DolphinTool/ConvertCommand.cpp) | GameCube and Wii disc conversion | Includes GCZ and WIA output, which rom-weaver does not create. |
+
+<a id="legend"></a>
 
 ## At a glance
 
@@ -82,7 +83,3 @@ Keep a tool that already handles your input and produces the result you need. Co
 ## How this page was checked
 
 The project descriptions above use the linked upstream repositories and official chdman documentation, checked on 2026-09-05. rom-weaver's details are checked against this repository's command, format, and parity-test implementations. The links are the source for current upstream capabilities.
-
-## Legend
-
-The detailed rom-weaver support tables use supported, partial, and unsupported markers. Their definitions live with the [format tables](../reference/formats.md#legend).

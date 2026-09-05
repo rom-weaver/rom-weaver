@@ -48,7 +48,7 @@ Find the guide that answers your question.
 
 ### Does rom-weaver include games?
 
-[The supplied homebrew samples](tutorials/first-patch.md#step-1-open-the-guided-sample).
+[Games, patches, and the supplied homebrew samples](explanation/how-patching-works.md#a-patch-is-not-a-game).
 
 ### Will it overwrite my original?
 

@@ -36,7 +36,7 @@ The CLI can modify files when explicitly requested: `trim --in-place` rewrites i
 
 ## What this costs you
 
-Local-first is a trade, and the browser side of the trade is real:
+The webapp targets the last two major versions of Chrome, Edge, Firefox, Safari, and iOS Safari. These browsers still impose limits:
 
 - **Memory and storage are the browser's, not the machine's.** A browser tab can run out of room on a large disc image long before your computer would.
 - **Capabilities vary by browser.** Threaded WebAssembly, large-file storage, and installable app support are not uniform. The site reports what it found in the masthead - see [Webapp runtime status](../hosting/webapp-runtime-status.md).
