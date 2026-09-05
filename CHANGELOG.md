@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/rom-weaver/rom-weaver/compare/v0.14.0...v0.14.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **install:** repair the v0.14.0 install and publish paths ([#677](https://github.com/rom-weaver/rom-weaver/issues/677)) ([4677ec6](https://github.com/rom-weaver/rom-weaver/commit/4677ec6940b1fb4435212ed13fd0720adeea9f32))
+
 ## [0.14.0](https://github.com/rom-weaver/rom-weaver/compare/v0.13.0...v0.14.0) (2026-09-05)
 
 
