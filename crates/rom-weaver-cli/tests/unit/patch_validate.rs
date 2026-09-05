@@ -58,6 +58,7 @@ fn validate_command(input: &Path, patches: Vec<PathBuf>) -> PatchValidateCommand
     PatchValidateCommand {
         input: input.to_path_buf(),
         select: Vec::new(),
+        patch_select: Vec::new(),
         filter: Vec::new(),
         no_extract: true,
         no_ignore: false,

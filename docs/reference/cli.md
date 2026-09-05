@@ -104,14 +104,15 @@ rom-weaver only asks interactive questions when stdin and stderr are both termin
 ## Reaching inside archives
 
 
-`probe`, `extract`, `identify`, `checksum`, `trim`, `bundle parse`, and the patching commands open archives automatically. Four flags control archive selection:
+`probe`, `extract`, `identify`, `checksum`, `trim`, `bundle parse`, and the patching commands open archives automatically. Five flags control archive selection:
 
-- `-s`/`--select` picks which file to use, by exact name, prefix, or glob.
+- `-s`/`--select` picks which file to use, by exact name, prefix, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
+- `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. Repeat it once per `--patch`, in the same order. Only `patch apply` and `patch validate` take it, and it is the only way to select different files from an archive input and an archive patch in one command.
 - `--filter rom` considers only files that look like ROMs; `--filter patch` only patches. Both judge by extension, and the flag is repeatable and comma-separable (`--filter rom,patch`).
 - `--no-ignore` also considers the files normally skipped: readmes, images, checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
 
-Not every command takes all four. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command>
+Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command>
 --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
