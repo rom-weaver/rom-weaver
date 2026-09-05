@@ -106,7 +106,13 @@ WORKDIR /app/packages/rom-weaver-webapp
 COPY packages/rom-weaver-webapp/package.json packages/rom-weaver-webapp/package-lock.json ./
 RUN npm ci
 
+# The webapp build runs the identify build from `scripts/`, which reads its
+# source archives with node-tar, so the root dependencies are needed too. Both
+# installs sit above `COPY . .` so a source change does not re-run them.
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+
 COPY . .
 
 # Cache mounts keep the cargo registry and the cmake-built C deps (libarchive)
