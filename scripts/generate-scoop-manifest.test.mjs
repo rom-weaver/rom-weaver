@@ -38,7 +38,7 @@ test("generates a manifest from the release checksum", () => {
     assert.deepEqual(manifest.installer.script, [
       '$identifyArchive = Join-Path $dir "rom-weaver-identify-data.tar.br"',
       '$identifyTar = Join-Path $dir "rom-weaver-identify-data.tar"',
-      "& brotli --decompress --force --output $identifyTar $identifyArchive",
+      '& brotli --decompress --force "--output=$identifyTar" $identifyArchive',
       'if ($LASTEXITCODE -ne 0) { throw "failed to decompress identify data" }',
       "& tar --extract --file $identifyTar --directory $dir",
       'if ($LASTEXITCODE -ne 0) { throw "failed to extract identify data" }',
