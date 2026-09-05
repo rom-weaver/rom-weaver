@@ -9,9 +9,9 @@
     <path fill="#20282d" d="M0 0h32v32H0z"/>
     <circle cx="16" cy="12" r="7.5" fill="#f6ecda"/>
     <circle cx="16" cy="12" r="2.75" fill="#20282d"/>
-    <path d="M0 29c14 0 17-9 32-9" fill="none" stroke="#aee1c6" stroke-width="5"/>
+    <path d="M0 29c14 0 17-9 32-9" fill="none" stroke="#88a9cb" stroke-width="5"/>
     <path d="M0 20c14 0 17 9 32 9" fill="none" stroke="#20282d" stroke-width="7"/>
-    <path d="M0 20c14 0 17 9 32 9" fill="none" stroke="#3faa72" stroke-width="5"/>
+    <path d="M0 20c14 0 17 9 32 9" fill="none" stroke="#d9690f" stroke-width="5"/>
   </g>
   <use href="#shell" fill="none" stroke="#20282d" stroke-width="2"/>
   <use href="#shell" fill="none" stroke="#f6ecda" stroke-width="0.75"/>

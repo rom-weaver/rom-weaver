@@ -2,16 +2,8 @@
 /**
  * Rasterize the per-channel app icons.
  *
- * A manifest's icons are read at install time, so an installed PWA's icon can
- * only vary per BUILD CHANNEL - it cannot follow the user's accent setting the
- * way the in-app mark does. This bakes one icon set per channel whose default
- * accent isn't madder, so a nightly install is a green tile on the home screen
- * and beta an indigo one.
- *
- * Outputs are COMMITTED (like the stock icons) and picked up by vite's static
- * asset copy. Nothing regenerates them during a normal build, so CI needs no
- * browser and the deploy job stays a plain node build. Re-run this by hand when
- * logo.svg, the icon masters, or an accent's colours change.
+ * All channels MUST use the same approved logo colors. Outputs are committed
+ * and copied by Vite; regenerate them when the logo or icon masters change.
  *
  * Rendering matches design/icon-masters/README.md: headless Chrome, because
  * ImageMagick's SVG delegate does not render these masters exactly. Playwright's
@@ -29,8 +21,6 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { ACCENTS } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "./brand-mark-assets.mjs";
 import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -39,12 +29,7 @@ const assetRoot = path.join(rootDir, "src", "assets", "app", "root");
 const masterRoot = path.join(rootDir, "design", "icon-masters");
 const outputRoot = path.join(assetRoot, "channels");
 
-// Channel defaults MUST match src/webapp/build-channel.ts.
-const CHANNEL_ACCENTS = {
-  beta: "woad",
-  nightly: "verdigris",
-  preview: "plum",
-};
+const CHANNELS = ["beta", "nightly", "preview"];
 
 // Sizes come from design/icon-masters/README.md; each master already bakes in
 // its own scale/offset for the mask it targets.
@@ -85,9 +70,7 @@ const main = async () => {
   let written = 0;
 
   try {
-    for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
-      const accent = ACCENTS.find((entry) => entry.value === accentName);
-      if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
+    for (const channel of CHANNELS) {
       const channelDir = path.join(outputRoot, channel);
       const emit = (name, buffer) => {
         const target = path.join(channelDir, name);
@@ -104,13 +87,11 @@ const main = async () => {
         console.log(`  wrote ${relative}`);
       };
 
-      console.log(`${channel} (${accent.swatch})`);
-      // The SVG favicon is the primary icon in index.html and the manifest, and
-      // needs no rasterizing - a string swap is the whole job.
-      emit("logo.svg", Buffer.from(tintBrandMark(fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8"), accent)));
+      console.log(channel);
+      emit("logo.svg", fs.readFileSync(path.join(assetRoot, "logo.svg")));
 
       for (const target of RASTER_TARGETS) {
-        const master = tintBrandMark(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), accent);
+        const master = fs.readFileSync(path.join(masterRoot, target.master), "utf8");
         emit(target.output, await rasterize(page, master, target.size));
       }
     }

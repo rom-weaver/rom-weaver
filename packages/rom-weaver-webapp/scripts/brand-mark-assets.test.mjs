@@ -1,35 +1,27 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
-import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "./brand-mark-assets.mjs";
+import { brandMarkAssets } from "./brand-mark-assets.mjs";
 
-const sources = [
-  "../src/assets/app/root/logo.svg",
-  "../design/icon-masters/icon-maskable.svg",
-  "../design/icon-masters/apple-touch-icon.svg",
-];
+test("emits one unchanged logo for every accent", () => {
+  const plugin = brandMarkAssets();
+  plugin.configResolved({ command: "build" });
+  const emitted = [];
+  const module = plugin.load.handler.call(
+    { emitFile: (asset) => emitted.push(asset) },
+    "\0virtual:rom-weaver-brand-marks",
+  );
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].source, fs.readFileSync(new URL("../src/assets/app/root/logo.svg", import.meta.url), "utf8"));
+  assert.ok(module.includes(JSON.stringify(`./${emitted[0].fileName}`)));
+});
 
-for (const source of sources) {
-  const svg = fs.readFileSync(new URL(source, import.meta.url), "utf8");
-  for (const accent of ACCENTS) {
-    test(`${source} pairs both bands for ${accent.value}`, () => {
-      const tinted = tintBrandMark(svg, accent);
-      if (accent.value === DEFAULT_ACCENT) {
-        assert.equal(tinted, svg);
-        return;
-      }
-      assert.ok(tinted.includes(`stroke="${accent.swatch}"`));
-      assert.ok(tinted.includes(`stroke="${accent.highlight}"`));
-      assert.ok(!tinted.includes("#d9690f"));
-      assert.ok(!tinted.includes("#88a9cb"));
-      const normalized = tinted.replaceAll(accent.swatch, "#d9690f").replaceAll(accent.highlight, "#88a9cb");
-      assert.equal(normalized, svg);
-    });
-  }
-  for (const missing of ["#d9690f", "#88a9cb"]) {
-    test(`${source} rejects a missing ${missing} band`, () => {
-      assert.throws(() => tintBrandMark(svg.replaceAll(missing, "#000000"), ACCENTS[1]), /both.*bands/);
-    });
-  }
+for (const channel of ["beta", "nightly", "preview"]) {
+  test(`${channel} preserves the fixed logo`, () => {
+    const root = new URL("../src/assets/app/root/", import.meta.url);
+    assert.equal(
+      fs.readFileSync(new URL(`channels/${channel}/logo.svg`, root), "utf8"),
+      fs.readFileSync(new URL("logo.svg", root), "utf8"),
+    );
+  });
 }
