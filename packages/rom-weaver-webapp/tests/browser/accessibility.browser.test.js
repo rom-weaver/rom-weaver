@@ -1071,12 +1071,13 @@ describe("accent dye-lot accessibility", () => {
             if (badge) {
               expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
               const markSrc = host.querySelector("img.brand-mark")?.getAttribute("src") || "";
-              expect(markSrc).toMatch(/assets\/brand-mark-[0-9a-f]{8}\.svg$/);
+              expect(markSrc).toMatch(new RegExp(`assets/brand-mark-${accent.value}-[0-9a-f]{8}\\.svg$`));
               const markSvg = await (await nativeFetch(markSrc)).text();
               expect(markSvg).toContain("<svg");
-              expect(markSvg).toContain("#d9690f");
+              expect(markSvg).toContain(accent.swatch);
               expect(markSvg).toContain("#f6ecda");
-              expect(markSvg).toContain("#88a9cb");
+              expect(markSvg).toContain('stroke="#f6ecda" stroke-width="5"');
+              expect(markSvg).not.toContain("#88a9cb");
             }
 
             const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });

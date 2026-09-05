@@ -2,7 +2,7 @@
 /**
  * Rasterize the per-channel app icons.
  *
- * All channels MUST use the same approved logo colors. Outputs are committed
+ * The back band MUST stay cream; the front band uses the channel accent. Outputs are committed
  * and copied by Vite; regenerate them when the logo or icon masters change.
  *
  * Rendering matches design/icon-masters/README.md: headless Chrome, because
@@ -21,6 +21,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { ACCENTS } from "../src/webapp/accent-palette.mjs";
+import { tintBrandMark } from "./brand-mark-assets.mjs";
 import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,7 +31,8 @@ const assetRoot = path.join(rootDir, "src", "assets", "app", "root");
 const masterRoot = path.join(rootDir, "design", "icon-masters");
 const outputRoot = path.join(assetRoot, "channels");
 
-const CHANNELS = ["beta", "nightly", "preview"];
+// Channel defaults MUST match src/webapp/build-channel.ts.
+const CHANNEL_ACCENTS = { beta: "woad", nightly: "verdigris", preview: "plum" };
 
 // Sizes come from design/icon-masters/README.md; each master already bakes in
 // its own scale/offset for the mask it targets.
@@ -70,7 +73,9 @@ const main = async () => {
   let written = 0;
 
   try {
-    for (const channel of CHANNELS) {
+    for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
+      const accent = ACCENTS.find((entry) => entry.value === accentName);
+      if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
       const channelDir = path.join(outputRoot, channel);
       const emit = (name, buffer) => {
         const target = path.join(channelDir, name);
@@ -88,10 +93,10 @@ const main = async () => {
       };
 
       console.log(channel);
-      emit("logo.svg", fs.readFileSync(path.join(assetRoot, "logo.svg")));
+      emit("logo.svg", Buffer.from(tintBrandMark(fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8"), accent)));
 
       for (const target of RASTER_TARGETS) {
-        const master = fs.readFileSync(path.join(masterRoot, target.master), "utf8");
+        const master = tintBrandMark(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), accent);
         emit(target.output, await rasterize(page, master, target.size));
       }
     }
