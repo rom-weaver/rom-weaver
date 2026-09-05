@@ -17,6 +17,9 @@ import {
   OPENGOOD_HEADERED_REVISION,
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
+  extractArchiveMembers,
+  normalizeArchivePath,
+  stripLeadingComponent,
   buildCatalogPlatforms,
   buildSystemPackV1,
   extractGoodToolsDumpTags,
@@ -556,4 +559,119 @@ test("the builder emits a checksum router that routes every pack key", async () 
     `${NES},Tandy - Color Computer`,
   ]);
   assert.deepEqual(readFileSync(join(outDir2, "checksum-routes.bin")), bytes);
+});
+
+// The identify build used to shell out to `tar`, and the Windows CI job (whose
+// workspace lives on `D:`) broke twice on how tar reparsed the paths it was
+// handed: a colon meant `host:file`, and the backslash separators were mangled.
+// Extraction now runs in process, so these cover the behaviour that replaced it.
+const TAR_PREFIX = "libretro-database-69ea62a2823823820d4f121c2b53bf20fd088ab4";
+// Longer than tar's 100-character name field, so the archive carries a PAX long
+// name - exactly what a real GitHub source archive does.
+const LONG_MEMBER = `metadat/no-intro/${"Nintendo - Nintendo Entertainment System ".repeat(3)}Parent-Clone.dat`;
+
+const buildArchive = async (dir, entries) => {
+  const stage = join(dir, "stage");
+  for (const [name, body] of Object.entries(entries)) {
+    const target = join(stage, TAR_PREFIX, name);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, body);
+  }
+  const archive = join(dir, "source.tar.gz");
+  const { create } = await import("tar");
+  await create({ cwd: stage, file: archive, gzip: true }, [TAR_PREFIX]);
+  return archive;
+};
+
+test("extractArchiveMembers writes the requested members with the top level stripped", async () => {
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-"));
+  const archive = await buildArchive(dir, { "dats/a.dat": "alpha", "dats/b.dat": "beta" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  const resolved = await extractArchiveMembers({
+    archive,
+    members: [`${TAR_PREFIX}/dats/a.dat`],
+    sourceRoot,
+  });
+
+  const target = resolved.get(`${TAR_PREFIX}/dats/a.dat`);
+  assert.equal(target, join(sourceRoot, "dats/a.dat"));
+  assert.equal(readFileSync(target, "utf8"), "alpha");
+  // Only what was asked for is written; the archive's other entries are skipped.
+  assert.throws(() => readFileSync(join(sourceRoot, "dats/b.dat")));
+});
+
+test("extractArchiveMembers resolves a PAX long name", async () => {
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-pax-"));
+  const archive = await buildArchive(dir, { [LONG_MEMBER]: "long" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  const resolved = await extractArchiveMembers({
+    archive,
+    members: [`${TAR_PREFIX}/${LONG_MEMBER}`],
+    sourceRoot,
+  });
+
+  assert.ok(`${TAR_PREFIX}/${LONG_MEMBER}`.length > 100, "the fixture must exceed the name field");
+  assert.equal(readFileSync(resolved.get(`${TAR_PREFIX}/${LONG_MEMBER}`), "utf8"), "long");
+});
+
+test("extractArchiveMembers reports a member the archive does not hold", async () => {
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-missing-"));
+  const archive = await buildArchive(dir, { "dats/a.dat": "alpha" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  await assert.rejects(
+    extractArchiveMembers({ archive, members: [`${TAR_PREFIX}/dats/nope.dat`], sourceRoot }),
+    /is missing: .*nope\.dat/u,
+  );
+});
+
+test("extract targets are joined with the platform separator", async () => {
+  // The member name stays `/`-separated because that is what a tar holds, while
+  // the path written to disk MUST use the platform's separator.
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-sep-"));
+  const archive = await buildArchive(dir, { "dats/a.dat": "alpha" });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  const resolved = await extractArchiveMembers({
+    archive,
+    members: [`${TAR_PREFIX}/dats/a.dat`],
+    sourceRoot,
+  });
+  assert.equal(resolved.get(`${TAR_PREFIX}/dats/a.dat`), join(sourceRoot, "dats", "a.dat"));
+});
+
+test("archive paths are compared without a leading ./", () => {
+  assert.equal(normalizeArchivePath("./prefix/dats/a.dat"), "prefix/dats/a.dat");
+  assert.equal(normalizeArchivePath("prefix/dats/a.dat"), "prefix/dats/a.dat");
+  // A backslash is a legal character in a tar entry name, never a separator, so
+  // it MUST survive untouched.
+  assert.equal(normalizeArchivePath("prefix/odd\\name.dat"), "prefix/odd\\name.dat");
+});
+
+test("stripLeadingComponent drops exactly the top-level directory", () => {
+  assert.equal(stripLeadingComponent(`${TAR_PREFIX}/dats/a.dat`), "dats/a.dat");
+  assert.equal(stripLeadingComponent("./prefix/dats/a.dat"), "dats/a.dat");
+  assert.equal(stripLeadingComponent("prefix/only.dat"), "only.dat");
+});
+
+test("no npm package is imported at module scope", () => {
+  // A cache hit makes the identify build a no-op, and the jobs that merely
+  // restore the packs install no npm dependencies. A static import of a package
+  // would make every one of them fail to load the module at all, which is
+  // exactly how the node-tar switch first broke CI. Node builtins and relative
+  // imports are fine; a bare specifier MUST be imported lazily instead.
+  const source = readFileSync(new URL("./build-identify-index.mjs", import.meta.url), "utf8");
+  const offenders = [];
+  for (const match of source.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gmu)) {
+    const specifier = match[1];
+    if (specifier.startsWith("node:") || specifier.startsWith(".") || specifier.startsWith("/")) continue;
+    offenders.push(specifier);
+  }
+  assert.deepEqual(offenders, [], `import these lazily instead: ${offenders.join(", ")}`);
 });

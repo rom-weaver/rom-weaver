@@ -22,6 +22,10 @@ WORKDIR /src
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl unzip zstd \
     && rm -rf /var/lib/apt/lists/*
+# node-tar reads the identify source archives, so the root dependencies are
+# installed before the build runs.
+COPY package.json package-lock.json /src/
+RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY scripts /src/scripts
 RUN node scripts/ensure-identify-data.mjs \
     && node scripts/build-identify-release-data.mjs \

@@ -283,7 +283,7 @@ runs:
     # playwright is pinned without a range in the webapp manifest and decides
     # which browser builds `playwright install` would fetch.
     - name: Resolve pinned tool versions
-      if: inputs.webapp-deps == 'true' || inputs.playwright == 'true'
+      if: inputs.webapp-deps == 'true' || inputs.playwright == 'true' || inputs.identify-data-cache == 'true'
       id: versions
       shell: bash
       env:
@@ -334,6 +334,32 @@ runs:
         path: packages/rom-weaver-webapp/node_modules
         key: node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('packages/rom-weaver-webapp/package-lock.json') }}
 
+    # The repository root has its own dependencies, and `scripts/` reads them:
+    # the identify build extracts its source archives with node-tar, and `npm
+    # test` covers those scripts. The webapp build runs the identify build, so
+    # every job that installs the webapp package needs this tree too, whether or
+    # not it also restores the built packs. Lifecycle scripts stay off - nothing
+    # here has one worth running, and skipping them keeps the install ~1s.
+    - name: Restore root node_modules cache
+      if: inputs.webapp-deps == 'true' || inputs.identify-data-cache == 'true'
+      id: root-node-modules-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: node_modules
+        key: root-node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('package-lock.json') }}
+
+    - name: Install root dependencies
+      if: (inputs.webapp-deps == 'true' || inputs.identify-data-cache == 'true') && steps.root-node-modules-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --ignore-scripts --no-audit --no-fund
+
+    - name: Save root node_modules cache
+      if: (inputs.webapp-deps == 'true' || inputs.identify-data-cache == 'true') && inputs.cache-save == 'true' && steps.root-node-modules-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: node_modules
+        key: root-node-modules-${{ runner.os }}-${{ steps.versions.outputs.node }}-${{ hashFiles('package-lock.json') }}
+
     # Browser binaries were the one download in this action that nothing
     # cached: every webapp, coverage, and nightly run re-fetched them. The
     # browser list is part of the key because the nightly matrix adds WebKit.
@@ -377,7 +403,7 @@ runs:
     # current tree (revisions + pack list checked against index.json) and skips
     # both the download and the build outright. The key hashes the builder, so
     # any change to pack contents misses by construction. A miss primes the
-    # cache here - the scripts use only node builtins, so this needs no npm ci.
+    # cache here, using the root dependencies installed above.
     - name: Restore identify data cache
       if: inputs.identify-data-cache == 'true'
       id: identify-data-cache

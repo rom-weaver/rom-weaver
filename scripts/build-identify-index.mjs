@@ -9,6 +9,7 @@ import readline from "node:readline";
 import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+
 import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
 import {
   buildPackFilter,
@@ -682,6 +683,52 @@ async function runCommandText(command, args, options = {}) {
   return stdout;
 }
 
+// Extract `members` from a gzipped tar into `sourceRoot`, dropping the archive's
+// top-level directory the way `--strip-components=1` does.
+//
+// This reads the archive in process rather than shelling out to `tar`. The
+// Windows CI job keeps the workspace on `D:`, and the Git-bash tar mishandled
+// such a path twice over: it read a name containing a colon as `host:file`, and
+// it mangled the backslash separators. Passing paths through a child process at
+// all is what created that exposure, so nothing here builds a command line.
+//
+// Entry names inside a tar are always `/`-separated regardless of the platform
+// that wrote them, so `members` MUST use `/` too. GitHub archives exceed tar's
+// 100-character name field and carry PAX long names, which the reader resolves.
+export async function extractArchiveMembers({ archive, members, sourceRoot }) {
+  // Imported here, not at module scope: a cache hit makes this whole build a
+  // no-op, and the jobs that restore the packs do not install npm dependencies.
+  // A top-level import would make every one of them fail to even load.
+  const { extract: tarExtract } = await import("tar");
+  const wanted = new Map(members.map((member) => [member, stripLeadingComponent(member)]));
+  const seen = new Set();
+  await tarExtract({
+    cwd: sourceRoot,
+    file: archive,
+    // `strip` alone would collide different archives' entries, so entries are
+    // filtered by their full name first and stripped afterwards.
+    filter: (entryPath) => wanted.has(normalizeArchivePath(entryPath)),
+    onReadEntry: (entry) => seen.add(normalizeArchivePath(entry.path)),
+    strip: 1,
+  });
+  const missing = members.filter((member) => !seen.has(member));
+  if (missing.length) {
+    throw new Error(`archive ${path.basename(archive)} is missing: ${missing.join(", ")}`);
+  }
+  return new Map([...wanted].map(([member, relative]) => [member, path.join(sourceRoot, relative)]));
+}
+
+// Tar entry names use `/` on every platform and may carry a `./` prefix.
+export function normalizeArchivePath(entryPath) {
+  return entryPath.replace(/^\.\//u, "");
+}
+
+// The path an entry lands on once the archive's top-level directory is dropped.
+export function stripLeadingComponent(entryPath) {
+  const [, ...rest] = normalizeArchivePath(entryPath).split("/");
+  return rest.join("/");
+}
+
 async function ensureArchiveFiles({
   archiveUrl,
   cacheDir,
@@ -710,23 +757,11 @@ async function ensureArchiveFiles({
       await rename(`${archive}.part`, archive);
     }
     await mkdir(sourceRoot, { recursive: true });
-    // No absolute path may reach tar here. The Windows CI job keeps the
-    // workspace on `D:`, and the Git-bash tar mishandles such a path twice
-    // over: it reads a name containing a colon as `host:file`, and it mangles
-    // the backslash separators. Running from the extraction root and naming
-    // the archive by a relative POSIX path avoids both, and drops the need for
-    // `-C`. `path.relative` yields platform separators, so rewrite them.
-    const relativeArchive = path.relative(sourceRoot, archive).split(path.sep).join("/");
-    await runCommandText(
-      "tar",
-      [
-        "-xzf",
-        relativeArchive,
-        "--strip-components=1",
-        ...missing.map((entry) => `${prefix}/${entry.sourcePath}`),
-      ],
-      { cwd: sourceRoot },
-    );
+    await extractArchiveMembers({
+      archive,
+      members: missing.map((entry) => `${prefix}/${entry.sourcePath}`),
+      sourceRoot,
+    });
   }
   const result = new Map();
   for (const entry of expected) {
@@ -2309,7 +2344,6 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   requireExecutable("curl");
-  requireExecutable("tar");
   const selected = resolveSelection(options);
   if (!selected.length) {
     throw new Error("No platforms selected to build");
