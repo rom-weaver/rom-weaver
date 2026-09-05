@@ -74,6 +74,7 @@ const FindPalette = ({
   useEffect(() => {
     if (!open) {
       setQuery("");
+      setActiveIndex(0);
       return undefined;
     }
     inputRef.current?.focus();
@@ -86,6 +87,11 @@ const FindPalette = ({
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [onClose, open, triggerRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.getElementById(`${listId}-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, listId, open]);
 
   const close = () => {
     onClose();

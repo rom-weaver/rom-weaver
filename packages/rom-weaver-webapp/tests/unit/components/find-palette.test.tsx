@@ -98,6 +98,20 @@ describe("Find", () => {
     ).toBe(true);
   });
 
+  it("resets the selected result when reopened after a search", () => {
+    const onSelectTab = vi.fn();
+    const { container } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
+    fireEvent.click(container.querySelector(".desktop-find .mode-find") as HTMLButtonElement);
+    fireEvent.change(findInput(container), { target: { value: "threads" } });
+    fireEvent.keyDown(findInput(container), { key: "ArrowDown" });
+    fireEvent.keyDown(findInput(container), { key: "Escape" });
+    fireEvent.click(container.querySelector(".desktop-find .mode-find") as HTMLButtonElement);
+    expect(findInput(container).value).toBe("");
+    expect(container.querySelector(".find-option.is-active")?.textContent).toContain("Apply");
+    fireEvent.keyDown(findInput(container), { key: "Enter" });
+    expect(onSelectTab).toHaveBeenCalledWith("patcher");
+  });
+
   it("filters as you type and opens a tool with Enter", () => {
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
