@@ -201,7 +201,7 @@ if curl --fail --location --proto '=https' --tlsv1.2 \
     if ! command -v brotli >/dev/null 2>&1; then
       echo "rom-weaver: Brotli decoder unavailable; installed the binary only" >&2
     elif brotli --decompress --force \
-      --output "$tmp_dir/rom-weaver-identify-data.tar" \
+      --output="$tmp_dir/rom-weaver-identify-data.tar" \
       "$tmp_dir/$identify_asset" &&
       tar --extract --file "$tmp_dir/rom-weaver-identify-data.tar" \
         --directory "$install_dir"; then

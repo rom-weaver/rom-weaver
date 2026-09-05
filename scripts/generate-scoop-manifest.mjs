@@ -56,7 +56,7 @@ const manifest = {
     script: [
       `$identifyArchive = Join-Path $dir "${identifyAsset}"`,
       '$identifyTar = Join-Path $dir "rom-weaver-identify-data.tar"',
-      "& brotli --decompress --force --output $identifyTar $identifyArchive",
+      '& brotli --decompress --force "--output=$identifyTar" $identifyArchive',
       'if ($LASTEXITCODE -ne 0) { throw "failed to decompress identify data" }',
       "& tar --extract --file $identifyTar --directory $dir",
       'if ($LASTEXITCODE -ne 0) { throw "failed to extract identify data" }',
