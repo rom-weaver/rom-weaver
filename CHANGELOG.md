@@ -117,7 +117,9 @@
 * **webapp:** relay service worker logs to the page log ([#661](https://github.com/rom-weaver/rom-weaver/issues/661)) ([db2ab45](https://github.com/rom-weaver/rom-weaver/commit/db2ab4530599dfaf89bfe5b95a083979c942ba60))
 
 
-### Internal
+<details>
+<summary>Internal</summary>
+
 
 * cache built identify packs and emulatorjs vendor drop ([#599](https://github.com/rom-weaver/rom-weaver/issues/599)) ([1bbc154](https://github.com/rom-weaver/rom-weaver/commit/1bbc1547ce5ee25ac4835eb5eef129219d60bef7))
 * **cli:** cover compression output planning ([#560](https://github.com/rom-weaver/rom-weaver/issues/560)) ([cbd7d1a](https://github.com/rom-weaver/rom-weaver/commit/cbd7d1a2c071ee41bcd172bcae2d80ed93b2a656))
@@ -156,6 +158,8 @@
 * reject non-executing test paths ([#557](https://github.com/rom-weaver/rom-weaver/issues/557)) ([e29d949](https://github.com/rom-weaver/rom-weaver/commit/e29d949c254ae14d917f93b73b710f816785674a))
 * **webapp:** rename the service worker to rom-weaver-service-worker ([#663](https://github.com/rom-weaver/rom-weaver/issues/663)) ([17e05bd](https://github.com/rom-weaver/rom-weaver/commit/17e05bdfc735345654d14d918ac06c7a3b5d1812))
 
+
+</details>
 ## [0.13.0](https://github.com/rom-weaver/rom-weaver/compare/v0.12.3...v0.13.0) (2026-08-12)
 
 
