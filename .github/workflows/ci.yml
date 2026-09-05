@@ -844,11 +844,15 @@ jobs:
         uses: actions/checkout@v7
 
       # The runner image ships cmake and the Xcode clang, which covers the
-      # vendored libarchive host build; no brew installs needed.
+      # vendored libarchive host build; no brew installs needed. `test-rust`
+      # runs the identify build, which reads its source archives with node-tar,
+      # so this leg needs node and the root install the same way `rust-host`
+      # does - without them the build fails on a missing `tar` package.
       - uses: ./.github/actions/setup-build-env
         with:
-          tools: rust nextest
+          tools: node rust nextest
           ccache: "true"
+          identify-data-cache: "true"
 
       - name: Rust tests
         run: mise run test-rust
