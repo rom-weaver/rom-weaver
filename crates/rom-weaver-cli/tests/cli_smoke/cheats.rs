@@ -1033,3 +1033,65 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
     assert_eq!(cheats.len(), 1, "{cheats:?}");
     assert_eq!(cheats[0]["id"], "cheat_rom");
 }
+
+#[test]
+fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let database = write_cheat_database(&temp, &rom);
+    let input = temp.child("game.nes");
+    fs::write(input.path(), &rom).expect("fixture");
+    let spec = temp.child("spec.json");
+    fs::write(
+        spec.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "rom": { "path": "game.nes" },
+            "patches": [],
+            "cheats": [{ "id": "cheat_rom" }],
+        }))
+        .expect("spec json"),
+    )
+    .expect("spec");
+    let output = temp.child("rom-weaver-bundle.json");
+    let spec_s = spec.path().to_str().expect("path").to_owned();
+    let output_s = output.path().to_str().expect("path").to_owned();
+
+    // Without --cheat the spec's own entries carry through.
+    let kept = parse_single_json_line(&command_stdout(
+        &[
+            "bundle", "create", "--from", &spec_s, "--output", &output_s, "--json",
+        ],
+        0,
+    ));
+    let cheats = kept["details"]["bundle_create"]["bundle"]["cheats"]
+        .as_array()
+        .expect("cheats");
+    assert_eq!(cheats.len(), 1);
+    assert_eq!(cheats[0]["id"], "cheat_rom");
+
+    // With --cheat the selection replaces them rather than appending.
+    let replaced = parse_single_json_line(&command_stdout(
+        &[
+            "bundle",
+            "create",
+            "--from",
+            &spec_s,
+            "--cheat-database",
+            &database,
+            "--cheat",
+            "cheat_rom",
+            "--output",
+            &output_s,
+            "--force",
+            "--json",
+        ],
+        0,
+    ));
+    let cheats = replaced["details"]["bundle_create"]["bundle"]["cheats"]
+        .as_array()
+        .expect("cheats");
+    assert_eq!(cheats.len(), 1, "{cheats:?}");
+    assert_eq!(cheats[0]["id"], "cheat_rom");
+    assert_eq!(cheats[0]["code"], "AKE-LVS");
+}

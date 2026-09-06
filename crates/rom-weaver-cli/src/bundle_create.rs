@@ -210,9 +210,10 @@ impl CliApp {
             }
         }
 
-        // Explicit --cheat flags resolve later and append; a spec's cheats
-        // only seed an otherwise empty list.
-        if args.cheats.is_empty() {
+        // An explicit --cheat selection replaces the spec's cheats wholesale,
+        // the way explicit --patch flags replace its patch chain; otherwise the
+        // spec's own entries carry through.
+        if args.cheats.is_empty() && args.cheat_selection.cheats.is_empty() {
             args.cheats = spec.cheats.clone();
         }
 
