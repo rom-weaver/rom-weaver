@@ -24,7 +24,7 @@ Use a game save file, not an emulator save state. A game save is the SRAM file t
 
 An emulator save state stores CPU, memory, and emulator state. It is not a game save and the Save Editor rejects it. Export the game's SRAM or battery save from the emulator instead.
 
-GameShark SP exports also work. The Save Editor reads a SharkPortSave file (`.sps`, `.xps`) and a GameShark SP snapshot (`.gsv`). It edits the game save inside the wrapper. The output keeps the wrapper, its title and notes, and its checksum, so the edited file loads in the same tools as the original. [Save containers](../reference/save-editor.md#save-containers) lists every wrapper the editor removes.
+GameShark SP exports also work. The Save Editor reads a SharkPortSave file (`.sps`, `.xps`) and a GameShark SP snapshot (`.gsv`). It edits the game save inside the wrapper. The output keeps the wrapper with its title and notes and recomputes its checksum, so the edited file loads in the same tools as the original. [Save containers](../reference/save-editor.md#save-containers) lists every wrapper the editor removes.
 
 The first version supports only these English retail layouts:
 
