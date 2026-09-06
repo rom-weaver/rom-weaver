@@ -8,7 +8,7 @@ mod saturn;
 mod sega;
 mod snes;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::trace;
 
 pub use game_boy::GAME_BOY_SRAM_32K;
@@ -51,7 +51,7 @@ impl SaveFormatDefinition {
 }
 
 /// The report-facing view of a physical format match.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SaveFormatCandidate {
     pub id: &'static str,

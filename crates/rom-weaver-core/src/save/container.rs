@@ -183,8 +183,10 @@ fn parse_shark_port(bytes: &[u8]) -> Option<SaveContainer> {
     })
 }
 
+/// VBA-M checks only the footer and reads 128 KiB after the header, so bytes
+/// past the save are kept verbatim rather than rejected.
 fn parse_gsv(bytes: &[u8]) -> Option<SaveContainer> {
-    if bytes.len() != GSV_HEADER_SIZE + GSV_SAVE_SIZE {
+    if bytes.len() < GSV_HEADER_SIZE + GSV_SAVE_SIZE {
         return None;
     }
     if bytes.get(GSV_FOOTER_OFFSET..GSV_FOOTER_OFFSET + GSV_FOOTER.len())? != GSV_FOOTER {
@@ -193,7 +195,7 @@ fn parse_gsv(bytes: &[u8]) -> Option<SaveContainer> {
     Some(SaveContainer {
         kind: SaveContainerKind::GameSharkSpSnapshot,
         outer: bytes.to_vec(),
-        inner: GSV_HEADER_SIZE..bytes.len(),
+        inner: GSV_HEADER_SIZE..GSV_HEADER_SIZE + GSV_SAVE_SIZE,
         checksum: None,
         warnings: Vec::new(),
     })
@@ -272,8 +274,9 @@ fn read_u32(bytes: &[u8], cursor: &mut usize) -> Option<u32> {
     Some(u32::from_le_bytes(slice.try_into().ok()?))
 }
 
-/// VBA-M sums `temp[i] << (crc % 24)` over a signed `char` buffer, so bytes
-/// >= 0x80 MUST sign-extend before the shift to stay byte-identical.
+/// VBA-M sums `temp[i] << (crc % 24)` over a `char` buffer. `char` is signed
+/// on the x86 builds that produced these files, so bytes >= 0x80 sign-extend
+/// before the shift to stay byte-identical with them.
 pub fn shark_port_checksum(payload: &[u8]) -> u32 {
     let mut crc: u32 = 0;
     for &byte in payload {
@@ -359,6 +362,18 @@ mod tests {
             wrapped.push(0);
             assert!(unwrap_save_container(&wrapped).is_none());
         }
+    }
+
+    #[test]
+    fn gsv_keeps_trailing_bytes_after_the_save() {
+        let mut wrapped = vec![0u8; GSV_HEADER_SIZE];
+        wrapped[GSV_FOOTER_OFFSET..GSV_HEADER_SIZE].copy_from_slice(GSV_FOOTER);
+        wrapped.extend_from_slice(&[0x11; GSV_SAVE_SIZE]);
+        wrapped.extend_from_slice(b"tail");
+        let (container, inner) = unwrap_save_container(&wrapped).expect("gsv");
+        assert_eq!(container.kind(), SaveContainerKind::GameSharkSpSnapshot);
+        assert_eq!(inner.len(), GSV_SAVE_SIZE);
+        assert_eq!(container.wrap(&inner).unwrap(), wrapped);
     }
 
     #[test]

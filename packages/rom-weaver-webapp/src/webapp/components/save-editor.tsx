@@ -689,7 +689,8 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
         ) : null}
         {kind === "unsupported" ? (
           <Notice level="warn">
-            ROMWeaver does not have an editor for this game. Save size: {formatByteSize(saveSize)}
+            ROMWeaver does not have an editor for this game. {containerName ? "Raw save size" : "Save size"}:{" "}
+            {formatByteSize(saveSize)}
             {containerName ? ` · Container: ${containerName}` : ""}
             {potentialFormat ? ` · Potential format: ${potentialFormat}` : ""}. The original file remains unchanged.
           </Notice>
