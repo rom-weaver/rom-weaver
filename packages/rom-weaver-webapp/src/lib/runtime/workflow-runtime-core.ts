@@ -251,6 +251,9 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
   createPatch: async ({
     original,
     modified,
+    codes,
+    codeSystem,
+    codeKind,
     format,
     metadata,
     outputName,
@@ -263,6 +266,8 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
     signal,
   }) => {
     const traceContext = { logLevel, onLog };
+    // The cheat-code path has no second ROM to stage: the engine synthesizes the
+    // modified image from the codes and diffs it against the original.
     const workerSources = await adapter.workerIo.stageSources([
       {
         fallbackFileName: "original.bin",
@@ -272,26 +277,35 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         source: original,
         trace: traceContext,
       },
-      {
-        fallbackFileName: "modified.bin",
-        pathBucket: "input",
-        pathPrefix: "create-patch-modified",
-        scope: "create-patch",
-        source: modified,
-        trace: traceContext,
-      },
+      ...(modified
+        ? [
+            {
+              fallbackFileName: "modified.bin",
+              pathBucket: "input" as const,
+              pathPrefix: "create-patch-modified",
+              scope: "create-patch" as const,
+              source: modified,
+              trace: traceContext,
+            },
+          ]
+        : []),
     ]);
     try {
       const [originalSource, modifiedSource] = workerSources;
-      if (!(originalSource && modifiedSource)) throw new Error("Create patch worker inputs were not staged");
+      if (!originalSource) throw new Error("Create patch worker inputs were not staged");
+      if (!(modifiedSource || codes?.length)) throw new Error("Create patch worker inputs were not staged");
       const result = await adapter.invokeCreatePatchWorker(
         {
           checksumName,
+          ...(codes?.length ? { codes } : {}),
+          ...(codeKind ? { codeKind } : {}),
+          ...(codeSystem ? { codeSystem } : {}),
           format,
           logLevel,
           metadata: toWorkerMetadata(metadata),
-          modifiedFileName: modifiedSource.fileName,
-          modifiedFilePath: modifiedSource.filePath,
+          ...(modifiedSource
+            ? { modifiedFileName: modifiedSource.fileName, modifiedFilePath: modifiedSource.filePath }
+            : {}),
           originalFileName: originalSource.fileName,
           originalFilePath: originalSource.filePath,
           outputName,

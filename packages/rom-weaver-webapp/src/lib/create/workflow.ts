@@ -105,9 +105,14 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
       percent: null,
       stage: "create",
     });
-    const modified = await prepareCreateSource(input.modified, "modified", input.selectedModifiedEntryName);
+    // Cheat-code mode has no modified ROM: the engine bakes the codes into the
+    // original and diffs the result, so the patch is named after the original.
+    const codes = (input.codes || []).map((code) => String(code || "").trim()).filter((code) => !!code);
+    const modified = codes.length
+      ? undefined
+      : await prepareCreateSource(input.modified as SourceRef, "modified", input.selectedModifiedEntryName);
     const defaultPatchFileName = getDefaultCreatePatchOutputFileName(
-      getWorkflowSourceFileName(modified, "modified.bin"),
+      getWorkflowSourceFileName(modified ?? original, modified ? "modified.bin" : "original.bin"),
       format,
     );
     const requestedFileName = getCreateOutputName(options) || defaultPatchFileName;
@@ -134,8 +139,11 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
           checksumName: !!sourceCrc32,
           format,
           logLevel: getCreateLogLevel(options),
+          ...(codes.length ? { codes } : {}),
+          ...(input.codeKind ? { codeKind: input.codeKind } : {}),
+          ...(input.codeSystem ? { codeSystem: input.codeSystem } : {}),
           metadata: getCreateMetadata(options),
-          modified: modified as SourceRef,
+          ...(modified ? { modified: modified as SourceRef } : {}),
           onLog: options.onLog,
           onProgress: (progress) =>
             reportProgress(options, {
@@ -149,7 +157,7 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
           sourceCrc32,
           threads: getCreateThreads(options),
         }),
-      () => ({ patchType: format, worker: true }),
+      () => ({ codeCount: codes.length, patchType: format, worker: true }),
     );
     if (compression === "none") return result;
     const patchFile = await createPatchFileFromPublicOutput(result.output, basePatchFileName);

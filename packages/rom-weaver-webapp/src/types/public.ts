@@ -42,7 +42,8 @@ type ApplyResult<TDestination> = {
 };
 
 type CreateResult<TDestination> = {
-  modified: SelectedInputInfo;
+  /** Absent in cheat-code mode: the modified ROM is synthesized, never staged. */
+  modified?: SelectedInputInfo;
   original: SelectedInputInfo;
   output: PublicOutput<TDestination>;
   sizeSummary?: WorkflowSizeSummary;
