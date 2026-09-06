@@ -38,7 +38,7 @@ It does not claim support for Japanese, European, Australian, Korean, or other r
 
 ## Use the browser
 
-1. Open Tools, then select Save Editor.
+1. Open More, then select Save Editor. The Save Editor is a beta tool, so turn on beta tools in Settings first.
 2. Add the 128 KiB game save file.
 3. Select the game when the page asks for one.
 4. Read the recognition result and the active-slot status.
