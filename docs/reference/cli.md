@@ -244,7 +244,7 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ### Extras
 
-- `--code` bakes a Game Genie, GameShark/Pro Action Replay, or raw Xploder code into the ROM, as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|gameboy|gba|psx` names the console when the ROM header does not. `--code-kind auto|game-genie|gameshark|xploder` pins the scheme instead of inferring it from the code's shape. Xploder supports raw GBA ROM-patch codes and plain PlayStation constant writes into PS-X EXE files. Runtime RAM, conditional, and encrypted codes are rejected. The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
+- `--code` bakes a Game Genie, GameShark/Pro Action Replay, or raw Xploder code into the ROM, as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|gameboy|gba|psx` names the console when the ROM header does not. `--code-kind auto|game-genie|gameshark|xploder` pins the scheme instead of inferring it from the code's shape. Xploder supports raw GBA ROM-patch codes and plain PlayStation constant writes into PS-X EXE files. Runtime RAM, conditional, and encrypted codes are rejected. One value may hold several codes joined with `+`, commas, or newlines. Codes are applied after the last `--patch`, and cannot be combined with `--patch-header strip` or `--n64-byte-order`. `patch create` takes the same three flags in place of `--modified` and writes a patch holding only the codes' byte writes. The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run: the ROM's checksums, the patches in order, and the result. It runs the same code as `bundle create`, so the file is byte-identical to the equivalent `bundle create` call. It carries no per-patch names or authors; for those use `bundle create`, `bundle create --from`, or `--tui`.
 - `--tui` asks for each patch's name, version, author, and optional state plus an output name, then applies and writes the bundle. It needs a terminal, and for now it needs explicit `--patch` files; re-opening a bundle is not supported yet.
 
@@ -258,7 +258,7 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ## Patch creation metadata
 
-SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. These options require SOLID output and cannot be combined with `--plan`.
+SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. When `--code` supplies the changes and the extended header has no `--solid-comment`, the comment records the codes. These options require SOLID output and cannot be combined with `--plan`.
 
 [Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.
 
