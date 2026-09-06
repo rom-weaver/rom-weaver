@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.15.0](https://github.com/rom-weaver/rom-weaver/compare/v0.14.1...v0.15.0) (2026-09-06)
+
+
+### Features
+
+* **cli:** add a setup command for the identify database ([#681](https://github.com/rom-weaver/rom-weaver/issues/681)) ([31f3a14](https://github.com/rom-weaver/rom-weaver/commit/31f3a146c7464e11c7b9d3551f0feaafda8fb554))
+* **cli:** install man pages from every method ([#682](https://github.com/rom-weaver/rom-weaver/issues/682)) ([031607d](https://github.com/rom-weaver/rom-weaver/commit/031607d4892d21627352b5b77774f6bc47d86558))
+* **patch:** add --patch-select for patch archives ([#680](https://github.com/rom-weaver/rom-weaver/issues/680)) ([ce84536](https://github.com/rom-weaver/rom-weaver/commit/ce84536ee5234e663ddd0e4dde409693d6dbf4bc))
+
+
+### Documentation
+
+* simplify guides and correct claims ([#679](https://github.com/rom-weaver/rom-weaver/issues/679)) ([702ee1a](https://github.com/rom-weaver/rom-weaver/commit/702ee1a10867fcfc78d382de6ae46c852b2773c3))
+
 ## [0.14.1](https://github.com/rom-weaver/rom-weaver/compare/v0.14.0...v0.14.1) (2026-09-05)
 
 
