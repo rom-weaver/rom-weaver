@@ -141,6 +141,26 @@ struct PatchApplyCompressionInputs<'a> {
     terminal_output_source: &'a mut PathBuf,
 }
 
+/// The selectors a patch source may use: the shared `--select`, and the
+/// per-patch `--patch-select` bound index-aligned with `--patch`.
+#[derive(Clone, Copy)]
+pub(super) struct PatchSelectors<'a> {
+    pub select: &'a [String],
+    pub per_patch: &'a [String],
+}
+
+impl<'a> PatchSelectors<'a> {
+    /// The patch at `index` uses its own selector when it has a non-empty one,
+    /// and otherwise falls back to `--select`.
+    fn for_patch(&self, index: usize) -> &'a [String] {
+        self.per_patch
+            .get(index)
+            .filter(|pattern| !pattern.is_empty())
+            .map(std::slice::from_ref)
+            .unwrap_or(self.select)
+    }
+}
+
 impl CliApp {
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
@@ -346,6 +366,7 @@ impl CliApp {
             no_extract,
             no_ignore,
             mut patches,
+            patch_select,
             output,
             bundle: _,
             with_patches: _,
@@ -626,7 +647,10 @@ impl CliApp {
         temp_paths.extend(discovered_sidecars.cleanup_paths);
         let (mut resolved_patches, extracted_patch_notes) = match self.resolve_patches(
             &patches,
-            &select,
+            PatchSelectors {
+                select: &select,
+                per_patch: &patch_select,
+            },
             &context,
             AutoExtractResolutionFlags {
                 no_extract,
@@ -2672,7 +2696,7 @@ impl CliApp {
     pub(super) fn resolve_patches(
         &self,
         patches: &[PathBuf],
-        select: &[String],
+        selectors: PatchSelectors<'_>,
         context: &OperationContext,
         flags: AutoExtractResolutionFlags,
         labels: PatchResolveLabels<'_>,
@@ -2697,7 +2721,9 @@ impl CliApp {
                 cleanup_paths: resolved_patch_cleanup_paths,
             } = self.resolve_source_with_auto_extract(
                 patch_path,
-                select,
+                // A per-patch selector overrides --select, which otherwise
+                // applies to the input and every patch alike.
+                selectors.for_patch(index),
                 context,
                 AutoExtractResolutionLabels {
                     command,

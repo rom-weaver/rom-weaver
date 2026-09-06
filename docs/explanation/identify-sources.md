@@ -1,6 +1,6 @@
 # Where identify data comes from
 
-`identify` matches local checksums against packs that ship with ROMWeaver. It never sends a checksum, file name, platform, or title to a lookup service.
+`identify` matches local checksums against packs that ship with rom-weaver. It never sends a checksum, file name, platform, or title to a lookup service.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -16,13 +16,13 @@
 
 ## Primary and fallback data
 
-[Libretro Database](https://github.com/libretro/libretro-database) supplies the primary metadata. ROMWeaver builds from an exact repository commit.
+[Libretro Database](https://github.com/libretro/libretro-database) supplies the primary metadata. rom-weaver builds from an exact repository commit.
 
-[OpenGood](https://github.com/SnowflakePowered/opengood) supplies historical GoodTools variants that Libretro does not know. ROMWeaver also pins this source to an exact commit.
+[OpenGood](https://github.com/SnowflakePowered/opengood) supplies historical GoodTools variants that Libretro does not know. rom-weaver also pins this source to an exact commit.
 
 ## Source precedence
 
-ROMWeaver compares records by the hash algorithm, normalized hash, file size, and hash scope. Libretro owns the title, region, and revision when both sources contain the same record.
+rom-weaver compares records by the hash algorithm, normalized hash, file size, and hash scope. Libretro owns the title, region, and revision when both sources contain the same record.
 
 An overlap has one lookup record. Its provenance lists both sources. OpenGood adds a record only when its hash key is absent from Libretro.
 
@@ -42,11 +42,11 @@ Each RWFP1 manifest records each source name, URL, commit, license, and generati
 
 Release packages include the default pack groups. Optional groups ship as separate application assets.
 
-The webapp precaches the default groups. A user can install a complete optional group from Settings.
+The webapp downloads default packs during background preparation. Optional groups can be installed together. A lookup can also download a missing pack and cache it after an integrity check.
 
-Identification reads only installed application assets. A missing local pack makes identification unavailable. It does not start a network lookup.
+The pack is an application asset; the checksum comparison happens locally. The request identifies the pack, not the ROM checksum or filename. Offline identification needs the relevant pack to be cached.
 
-A checksum with no file behind it - the expected ROM a bundle or a patch declares - is looked up the same local way. ROMWeaver still sends nothing.
+A checksum with no file behind it - the expected ROM a bundle or a patch declares - is looked up the same local way. rom-weaver still sends nothing.
 
 ## Related
 

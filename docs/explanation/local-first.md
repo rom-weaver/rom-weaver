@@ -18,9 +18,9 @@ rom-weaver is a local-first tool. The webapp is a program your browser downloads
 
 Reading, checksumming, patching, compressing, and writing all happen inside your browser tab, on your device. The hosted site sends you app code and normal web assets. The files you choose never travel back.
 
-This is not a policy promise that could quietly change - it is how the app is built. The patching engine is compiled to WebAssembly and runs in your browser's workers. There is no server-side patching endpoint for your files to go to, and no account to attach them to.
+The patching engine is compiled to WebAssembly and runs in your browser's workers. There is no server-side patching endpoint for your files to go to, and no account to attach them to.
 
-The one exception is a file you explicitly point at over the network: a bundle loaded from a URL has to be fetched from wherever it is hosted. Your local files are still local.
+Remote bundles and their sources are downloaded from their hosts. Identify packs and emulator cores are downloaded as app assets when needed. These downloads do not upload your local files.
 
 ## Where files live while a job runs
 
@@ -30,13 +30,13 @@ Large intermediate files are written to browser-managed local storage while a jo
 
 ## Your original is never modified
 
-rom-weaver writes a new file. The webapp hands you a download; the CLI writes to the output path you name. Your input file is read and never written to.
+The browser reads your selected files and produces a separate result. It does not modify the selected input.
 
-Keep the clean original anyway. Updates and other patches will want it again, and it is the only thing that can rescue a bad run.
+The CLI can modify files when explicitly requested: `trim --in-place` rewrites its source, and `--force` permits overwriting an existing output. [Trim a ROM from the CLI](../how-to/cli-trim.md) documents those choices. A preserved clean original remains useful for later patches.
 
 ## What this costs you
 
-Local-first is a trade, and the browser side of the trade is real:
+The webapp targets the last two major versions of Chrome, Edge, Firefox, Safari, and iOS Safari. These browsers still impose limits:
 
 - **Memory and storage are the browser's, not the machine's.** A browser tab can run out of room on a large disc image long before your computer would.
 - **Capabilities vary by browser.** Threaded WebAssembly, large-file storage, and installable app support are not uniform. The site reports what it found in the masthead - see [Webapp runtime status](../hosting/webapp-runtime-status.md).
@@ -46,7 +46,7 @@ When a browser cannot finish a large job, the CLI is the same engine without the
 
 ## Offline
 
-Because the work is local, the app can run without a network once your browser has cached it. Install it from your browser menu where that is offered, and open the routes you need once while online. Only remote bundle URLs still require a connection.
+Cached app code and local files can be used offline. Uncached identify packs, emulator cores, sample files, and remote bundle sources still need a connection. Browser storage eviction can remove cached assets. [Test a ROM](../how-to/test-roms-in-browser.md) covers preparing the emulator for offline use.
 
 ## Related
 

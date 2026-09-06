@@ -1150,7 +1150,7 @@ pub struct PatchApplyCommand {
             short = 's',
             long = "select",
             help_heading = "Archive/bundle",
-            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable)"
+            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable). --patch-select overrides it for the patch it follows"
         )
     )]
     #[serde(default)]
@@ -1215,6 +1215,19 @@ the ROM inside the input archive."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patches: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-select",
+            value_name = "GLOB",
+            action = clap::ArgAction::Append,
+            help_heading = "Archive/bundle",
+            help = "Pick which file to use inside the --patch archive before it. Repeatable, one per --patch; falls back to --select"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_select: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1682,11 +1695,11 @@ impl PatchApplyCommand {
         self.patch_header = resolved;
     }
 
-    /// Bind each `--patch-basis` occurrence to the most recent preceding
-    /// `--patch` and rewrite the vector index-aligned with `patches` (the
-    /// wasm path sends it index-aligned already).
+    /// Bind each `--patch-basis` and `--patch-select` occurrence to the most
+    /// recent preceding `--patch` and rewrite the vectors index-aligned with
+    /// `patches` (the wasm path sends them index-aligned already).
     pub fn align_patch_basis(&mut self, matches: &clap::ArgMatches) {
-        if self.patch_basis.is_empty() {
+        if self.patch_basis.is_empty() && self.patch_select.is_empty() {
             return;
         }
         let patch_indices: Vec<usize> = matches
@@ -1701,19 +1714,39 @@ impl PatchApplyCommand {
                 .partition_point(|patch_index| *patch_index < value_index)
                 .saturating_sub(1)
         };
-        let values = std::mem::take(&mut self.patch_basis);
-        let indices: Vec<usize> = matches
-            .indices_of("patch_basis")
-            .map(Iterator::collect)
-            .unwrap_or_default();
-        self.patch_basis = bind_per_patch(
-            values,
-            indices,
-            patch_indices.len(),
-            PatchBasisMode::Auto,
-            &patch_position,
+        if !self.patch_basis.is_empty() {
+            let values = std::mem::take(&mut self.patch_basis);
+            let indices: Vec<usize> = matches
+                .indices_of("patch_basis")
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            self.patch_basis = bind_per_patch(
+                values,
+                indices,
+                patch_indices.len(),
+                PatchBasisMode::Auto,
+                &patch_position,
+            );
+        }
+        if !self.patch_select.is_empty() {
+            let values = std::mem::take(&mut self.patch_select);
+            let indices: Vec<usize> = matches
+                .indices_of("patch_select")
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            self.patch_select = bind_per_patch(
+                values,
+                indices,
+                patch_indices.len(),
+                String::new(),
+                &patch_position,
+            );
+        }
+        trace!(
+            basis = ?self.patch_basis,
+            select = ?self.patch_select,
+            "aligned positional per-patch occurrences"
         );
-        trace!(basis = ?self.patch_basis, "aligned positional --patch-basis occurrences per patch");
     }
 }
 
@@ -1736,7 +1769,7 @@ pub struct PatchValidateCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable)"
+            help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable). --patch-select overrides it for the patch it follows"
         )
     )]
     #[serde(default)]
@@ -1777,6 +1810,19 @@ pub struct PatchValidateCommand {
         )
     )]
     pub patches: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-select",
+            value_name = "GLOB",
+            action = clap::ArgAction::Append,
+            help_heading = "Archive/bundle",
+            help = "Pick which file to use inside the --patch archive before it. Repeatable, one per --patch; falls back to --select"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_select: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1932,6 +1978,7 @@ impl PatchValidateCommand {
         if self.patch_basis.is_empty()
             && self.patch_input_check.is_empty()
             && self.patch_output_check.is_empty()
+            && self.patch_select.is_empty()
         {
             return;
         }
@@ -1980,10 +2027,20 @@ impl PatchValidateCommand {
             self.patch_output_check =
                 bind_per_patch(values, indices, count, String::new(), &patch_position);
         }
+        if !self.patch_select.is_empty() {
+            let values = std::mem::take(&mut self.patch_select);
+            let indices: Vec<usize> = matches
+                .indices_of("patch_select")
+                .map(Iterator::collect)
+                .unwrap_or_default();
+            self.patch_select =
+                bind_per_patch(values, indices, count, String::new(), &patch_position);
+        }
         trace!(
             basis = ?self.patch_basis,
             input_checks = ?self.patch_input_check,
             output_checks = ?self.patch_output_check,
+            select = ?self.patch_select,
             "aligned positional plan flags per patch"
         );
     }
@@ -3034,6 +3091,33 @@ pub enum IdentifyDatabaseCommands {
         command(about = "Download and update installed Redump system packs")
     )]
     Update(Box<IdentifyDatabaseUpdateCommand>),
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SetupCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Install into this directory instead of the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Download the database again even when it is already installed"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

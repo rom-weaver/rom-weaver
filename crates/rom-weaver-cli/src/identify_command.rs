@@ -1017,8 +1017,8 @@ impl CliApp {
             if let Some(platform) = missing_platforms.first() {
                 condition = Some("database_required".to_string());
                 hint = Some(format!(
-                    "no identify pack is installed for {platform}; run `rom-weaver identify \
-                     database install-all` or pass `--database-dir` with an existing user database"
+                    "no identify pack is installed for {platform}; this install shipped no \
+                     identify database, or pass `--database-dir` with an existing one"
                 ));
             } else if let Some(selected) = selected.iter().find(|selected| {
                 let IdentifyPackFile::V1(pack) = &selected.pack.file;

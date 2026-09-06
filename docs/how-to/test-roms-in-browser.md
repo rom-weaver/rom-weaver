@@ -25,41 +25,12 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test?guid
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
-The Test page supports these platforms:
-
-- Atari 7800
-- Atari Lynx
-- Nintendo Entertainment System
-- Nintendo Famicom Disk System
-- Nintendo Game Boy
-- Nintendo Game Boy Color
-- Nintendo Game Boy Advance
-- Nintendo 64
-- Nintendo DS
-- Super Nintendo Entertainment System
-- Sega Game Gear
-- Sega Master System
-- Sega Mega Drive or Genesis
-- Sega Saturn
-- Sony PlayStation
-- Sony PSP
-
-rom-weaver does not bundle EmulatorJS cores for these platforms:
-
-- Nintendo GameCube
-- Nintendo Wii
-- Nintendo 3DS
-- Sega CD
-- Sega Dreamcast
-- Sony PlayStation 2
-- NEC PC Engine
-- NEC PC Engine CD
-- SNK Neo Geo Pocket
+[Browser emulator support](../reference/formats.md#browser-emulator-support) lists the platforms with bundled cores.
 
 ## Test an Apply result
 
-1. Apply the patch on the [Apply page](https://rom-weaver.com/apply).
-2. Check **Post Apply Test** under **Options**. If it warns that the platform cannot be tested, use another emulator or the target hardware.
+1. Load your ROM and patches on the [Apply page](https://rom-weaver.com/apply).
+2. Check **Post Apply Test** under **Options**, then apply the patches. If the option warns that the platform cannot be tested, use another emulator or the target hardware.
 3. Select **Open in the Test tab** after Apply finishes.
 4. Play far enough to exercise the patched content.
 5. Return to Apply and download the result if you have not downloaded it.
@@ -129,7 +100,7 @@ Use the **Delete** action in **Storage** to remove one game. Use your browser's 
 
 ## Fix a game that does not start
 
-- **No emulator core for this system:** use one of the systems listed above.
+- **No emulator core for this system:** check [browser emulator support](../reference/formats.md#browser-emulator-support).
 - **WebGL 2 is required:** enable hardware acceleration or use a browser that supports WebGL 2.
 - **An archive does not load:** extract it yourself, then add the ROM file.
 - **A save does not appear:** load the same ROM bytes. rom-weaver uses the ROM's SHA-1 checksum to find its saves.

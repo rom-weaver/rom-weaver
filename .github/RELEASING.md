@@ -108,9 +108,9 @@ Cloudflare Pages reads the generated `dist/_headers` file. It applies the COOP/C
 
 Land changes on `main` through squash-merged pull requests. Use a Conventional Commit title for the pull request, because that title becomes the commit Release Please reads.
 
-Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and `feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a major release. Other allowed types do not trigger a release by themselves.
+Use `feat(scope): ...` for a minor release, `fix(scope): ...` for a patch, and `feat(scope)!: ...` (or a `BREAKING CHANGE:` footer) for a breaking release. Before 1.0, breaking changes bump the minor version. The [commit type table](../docs/development/commits.md#types) lists the other release effects.
 
-Merging to `main` does not open a release pull request - nothing runs on push. When you want to release, go to **Actions → Release → Run workflow** (branch `main`). The workflow waits for a completed successful `CI` push run for that exact main commit before it creates or refreshes the release pull request. If that run fails or is cancelled, no release pull request is opened. The workflow then syncs the generated version metadata and captures the release screenshots. Re-dispatch whenever you want an open release pull request brought up to date.
+Merging to `main` runs CI but does not open a release pull request. When you want to release, go to **Actions → Release → Run workflow** (branch `main`). The workflow waits for a completed successful `CI` push run for that exact main commit before it creates or refreshes the release pull request. If that run fails or is cancelled, no release pull request is opened. The workflow then syncs the generated version metadata and captures the release screenshots. Re-dispatch whenever you want an open release pull request brought up to date.
 
 The screenshot step reuses the `wasm-prod` artifact from that commit's CI run; if changed-path classification did not produce one, it rebuilds WASM from source and the run takes ~6.5 min longer.
 
@@ -118,7 +118,7 @@ The optional **Version to release as** input forces a specific version - the dis
 
 Merging the release pull request creates a **draft** GitHub Release and runs every asset-producing publisher against that draft. The `publish-release` job publishes it, which is what creates the `vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew and Scoop pushes run after that, because the manifests they write point at release download URLs that do not resolve while the release is a draft. Follow progress under GitHub's **Actions → Release** page.
 
-> **Never publish a draft release by hand, and never re-cut a version whose release was published.** Immutable releases are enabled, so publishing is a one-way door: the release accepts no further assets *and permanently reserves its tag name*, even if the release is later deleted. v0.6.0 was lost exactly that way - it published before its assets were uploaded, every upload came back `HTTP 422`, and the version could never be re-cut. A failed fan-out leaves a draft, which is safe: delete the draft and merge the release pull request again to retry the same version.
+> **Never publish a draft release by hand, and never re-cut a version whose release was published.** Immutable releases are enabled, so publishing is a one-way door: the release accepts no further assets *and permanently reserves its tag name*, even if the release is later deleted. v0.6.0 was lost exactly that way - it published before its assets were uploaded, every upload came back `HTTP 422`, and the version could never be re-cut. A failed fan-out leaves a draft. Follow [Retry a failed publication](#retry-a-failed-publication) to resume the original run.
 
 ### How a prerelease differs
 
@@ -143,10 +143,10 @@ Note the npm dist-tag is derived from the **version field**, never from the `nam
 
 Run **Actions → Retry release**, enter the numeric run ID from the failed **Release** workflow URL, and start it. This reruns the failed jobs and their dependents while preserving successful jobs and the artifacts they produced. Do not choose **Re-run all jobs**: that needlessly repeats the native builds.
 
-Because the release is still a draft, `publish-release` will not have run, so nothing is stamped immutable and the retry can still attach assets. A `publish-homebrew` or `publish-scoop` failure is the exception: those run after the release is published, so the release itself is fine and rerunning the one job is the whole fix. From the CLI, the same recovery is:
+Because the release is still a draft, `publish-release` will not have run, so nothing is stamped immutable and the retry can still attach assets. A `publish-homebrew` or `publish-scoop` failure is the exception: those run after the release is published, so the release itself is fine and rerunning the one job is the whole fix. From the CLI, set `FAILED_RUN_ID` to the numeric ID of the failed run, then use:
 
 ```bash
-gh workflow run release-retry.yml -f run_id=29885072562
+gh workflow run release-retry.yml -f run_id="$FAILED_RUN_ID"
 ```
 
 Manual `workflow_dispatch` remains available for Cargo and Docker, taking the version without a `v` prefix, such as `0.6.1`:
@@ -156,7 +156,7 @@ Manual `workflow_dispatch` remains available for Cargo and Docker, taking the ve
 
 These dispatches check out `v<version>`, so they only work **after** the release has been published and the tag exists. While the release is still a draft, rerun the jobs from the original Release run instead. Registry checks make Cargo retries safe when a previous attempt published only some packages.
 
-If the fan-out cannot be salvaged, delete the draft release and re-merge the release pull request: an unpublished draft holds no reservation on its tag name.
+If a retry still fails, inspect the failed job before changing release state. An already merged pull request cannot be merged again. Preserve the draft and original run while diagnosing the failure.
 
 Re-run failed npm jobs from the original Release run. npm validates the calling workflow's filename, so the reusable publisher must run under the registered `release.yml` trusted publisher rather than through a direct dispatch.
 

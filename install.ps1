@@ -172,6 +172,7 @@ try {
         } else { @() }
         if ($identifyAttestations.Count -eq 0) {
           Write-Warning "no build provenance from $repo for $identifyAsset; installed the binary only"
+          Write-Warning "run 'rom-weaver setup' to install the identify database"
           $installIdentify = $false
         } else {
           Write-Host "Verified build provenance for $identifyAsset"
@@ -179,6 +180,7 @@ try {
       } catch {
         if ((Get-StatusCode $_.Exception) -eq 404 -or $requireAttestation) {
           Write-Warning "could not verify $identifyAsset; installed the binary only"
+          Write-Warning "run 'rom-weaver setup' to install the identify database"
           $installIdentify = $false
         } else {
           Write-Warning "could not check build provenance for $identifyAsset; continuing unverified"
@@ -198,6 +200,7 @@ try {
     }
   } catch {
     Write-Warning "ROM identify data unavailable: $($_.Exception.Message); installed the binary only"
+    Write-Warning "run 'rom-weaver setup' to install the identify database"
   }
   if ($docsPath) {
     $docsDir = Join-Path $tempDir 'docs'

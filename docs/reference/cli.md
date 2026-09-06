@@ -11,6 +11,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 - [Identify](#identify)
   - [Identify flags](#identify-flags)
   - [Identify database directory](#identify-database-directory)
+  - [`setup`](#setup)
   - [`identify database` subcommands](#identify-database-subcommands)
   - [Identify result](#identify-result)
 - [Checksum](#checksum)
@@ -22,6 +23,8 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Header and byte-order flags](#header-and-byte-order-flags)
   - [Extras](#extras)
   - [Validation](#validation)
+- [Patch creation metadata](#patch-creation-metadata)
+- [Bundles](#bundles)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
@@ -44,11 +47,12 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `trim` | Cut the padding off a ROM, or put it back. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
-| `patch validate` | Check that patches would apply cleanly, without writing anything. |
+| `patch validate` | Check patch application without keeping an output ROM. |
 | `bundle create` | Write a `rom-weaver-bundle.json` recipe from local files. |
 | `bundle parse` | Read a bundle recipe and report what it points at. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
+| `setup` | Install the offline identify database. |
 | `completions` | Print a tab-completion script for your shell. |
 | `man` | Print one generated manpage or install all generated manpages. |
 
@@ -58,14 +62,11 @@ Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create` is
 
 `identify`, `probe`, and `checksum` accept `-` as the `--input` value to read from stdin.
 
-```bash
-curl -sL https://example.com/game.gba | rom-weaver checksum --input - --algo sha256
-xz -dc game.iso.xz | rom-weaver probe --input - --json
-```
+See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
 ### Alternate names
 
-Some commands and flags answer to more than one name. They are the same code either way, so pick whichever reads better:
+These alternate names invoke the same command or option:
 
 | Canonical | Also accepted |
 | --- | --- |
@@ -105,14 +106,15 @@ rom-weaver only asks interactive questions when stdin and stderr are both termin
 ## Reaching inside archives
 
 
-`probe`, `extract`, `identify`, `checksum`, `trim`, `bundle parse`, and the patching commands open archives automatically. Four flags control archive selection:
+`probe`, `extract`, `identify`, `checksum`, `trim`, `bundle parse`, and the patching commands open archives automatically. Five flags control archive selection:
 
-- `-s`/`--select` picks which file to use, by exact name, prefix, or glob.
+- `-s`/`--select` picks which file to use, by exact name, prefix, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
+- `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. Repeat it once per `--patch`, in the same order. Only `patch apply` and `patch validate` take it, and it is the only way to select different files from an archive input and an archive patch in one command.
 - `--filter rom` considers only files that look like ROMs; `--filter patch` only patches. Both judge by extension, and the flag is repeatable and comma-separable (`--filter rom,patch`).
 - `--no-ignore` also considers the files normally skipped: readmes, images, checksum sidecars, and OS clutter such as `.DS_Store`.
 - `--no-extract` skips all of this and works on the file itself.
 
-Not every command takes all four. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command>
+Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command>
 --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
@@ -139,6 +141,15 @@ Native identify performs no network access.
 ### Identify database directory
 
 Installed packs live in one directory. The default is the per-user data directory: `$XDG_DATA_HOME/rom-weaver/identify` on Linux (`~/.local/share` fallback), `~/Library/Application Support/rom-weaver/identify` on macOS, `%APPDATA%\rom-weaver\identify` on Windows. `ROM_WEAVER_DATA_DIR` overrides the base; `--database-dir` overrides the full path.
+
+### `setup`
+
+`rom-weaver setup` installs the identify database into the directory above, downloading it from this version's GitHub release. It is for installs that ship only the executable, such as `cargo binstall` and `cargo install`; Homebrew, scoop, npm, and the install script place the database beside the binary already.
+
+- `--database-dir DIR` installs somewhere other than the per-user data directory.
+- `--force` downloads again even when the database is already installed.
+
+Without `--force` an installed database is reported, not re-downloaded, so the command is safe to repeat. JSON output carries `packs`, `downloaded`, and `database_dir`.
 
 ### `identify database` subcommands
 
@@ -170,7 +181,7 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`. Optional result fields, present when known:
 
 - `quality`: `exact`, `partial`, or `metadata_only`.
-- `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the fix. `status` stays `unknown`.
+- `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the cause; identify never downloads a pack itself, so a missing database is installed with `rom-weaver setup`. `status` stays `unknown`.
 - `platform_candidates`: detected platforms with `confidence` and `evidence`.
 - `media`, `components`: the input's media kind and hashed components.
 - `database`: the pack that answered - `source`, `pack_format` (`RWFP1`), and `canonicalization_profile`.
@@ -224,7 +235,7 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ### Header and byte-order flags
 
-- `--patch-header auto|keep|strip` decides whether each patch applies to the ROM with or without its copier header. Auto works it out per patch from the patch's own source checksum under any algorithm, and for a patch that carries none from where its records land, from which form the format itself accepts, and from which result the console still recognises. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
+- `--patch-header auto|keep|strip` decides whether each patch applies to the ROM with or without its copier header. Auto compares source checksums per patch. For the first patch only, missing checksum evidence can trigger record, format-validation, and platform-header inference. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
 - `--output-header auto|keep|strip` decides whether the finished ROM keeps its header. Auto keeps the ones emulators need and drops the ones they do not.
 - `--repair-checksum` repairs supported internal checksums and compatibility header fields after patching.
 - `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an N64 ROM in the interleaving a patch expects. Auto matches the patch's source CRC32; for the first patch, a patch that carries no checksum falls back to the shape of its changes. An order settled that way is named in the report label. The output is written back in the order the input arrived in. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
@@ -237,11 +248,39 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ### Validation
 
-`patch validate` runs the same checks as `patch apply` but writes nothing: it parses each patch and verifies every checksum the format carries.
+`patch validate` parses and checks the patch chain without keeping an output ROM. It can write temporary files while applying patches. It verifies the checksums available in each format; formats without result checks cannot establish that the output matches the author's intent.
 
 - `--expect-in` adds a check on the ROM itself, and accepts a checksum (`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
 - `--strip-header` and `--n64-byte-order` put the ROM in the form the patches expect before checking; N64 byte order defaults to matching the patch's source CRC32.
 - Patches are checked as a chain by default, each against the output of the one before it. `--independent` checks each one against the original ROM instead and reports a verdict per patch, rather than stopping at the first failure.
+
+## Patch creation metadata
+
+SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. These options require SOLID output and cannot be combined with `--plan`.
+
+[Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.
+
+## Bundles
+
+`bundle schema` prints the JSON Schema. The committed schema is [rom-weaver-bundle-v1.schema.json](../rom-weaver-bundle-v1.schema.json).
+
+| Option | Meaning |
+| --- | --- |
+| `--rom-name`, `--rom-url` | Expected logical ROM name and remote source. A filename mismatch warns; checksum and size mismatches remain strict. |
+| `--patch-id`, `--patch-version` | Stable patch identity and author-controlled version. |
+| `--patch-author`, `--patch-name`, `--patch-description`, `--patch-label` | Patch metadata. |
+| `--patch-optional` | Marks the preceding patch optional. |
+| `--patch-source-url`, `--patch-header`, `--patch-basis` | Source URL, header policy, and input basis for the preceding patch. |
+| `--expect-out` | Expected final result checks. |
+| `--patch-expect-in`, `--patch-expect-out` | Expected checks around the preceding patch. |
+| `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
+| `--bundle ARCHIVE`, `--no-bundle-rom` | Archive packaging and exclusion of ROM bytes. |
+| `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
+| `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec. |
+
+Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. A ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected.
+
+`bundle parse` accepts archive selection options for packaged bundles. A plain JSON recipe references paths and has no archive members to unpack. [Bundles from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
 
 ## Supported formats
 
@@ -290,3 +329,5 @@ rom-weaver man --install
 ```
 
 `rom-weaver man --install` writes every page to `$XDG_DATA_HOME/man/man1` or `~/.local/share/man/man1` on Unix. Add a command path to install one page. Set `ROM_WEAVER_MAN_DIR` to choose another directory. On Windows it writes to `%LOCALAPPDATA%\rom-weaver\docs\man`. Use `man ./docs/man/rom-weaver.1` from a source checkout when the pages are not installed system-wide. Do not edit the generated `.1` files manually.
+
+[Generate man pages](../development/development.md#generated-files) covers source builds. [Install shell completions](../how-to/install-cli.md#install-shell-completions) covers shell integration.

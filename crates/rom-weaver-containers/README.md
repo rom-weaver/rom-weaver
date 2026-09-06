@@ -15,6 +15,18 @@
 
 > **Beta software, published so the CLI can be.** This crate exists to build [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the `rom-weaver` command is the only supported interface. The Rust API is not documented beyond this page, changes without notice between minor releases, and using it in another project is unsupported.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [What does this crate do?](#what-does-this-crate-do)
+- [Usage](#usage)
+- [Related crates](#related-crates)
+- [Stability](#stability)
+- [Documentation](#documentation)
+- [License](#license)
+
+<!-- END doctoc -->
+
 ## What does this crate do?
 
 The container registry and one handler per format, each implementing `rom-weaver-core`'s `ContainerHandler` trait.
@@ -28,11 +40,7 @@ The container registry and one handler per format, each implementing `rom-weaver
 
 ## Usage
 
-```bash
-cargo add rom-weaver-containers
-```
-
-`cargo add` selects the current release. To follow the exact-pinning guidance below, change its generated requirement to `=X.Y.Z`.
+Use the [CLI](https://rom-weaver.com/docs/install) for supported command-line operation. This crate is an internal dependency; its role and build features are documented here for contributors.
 
 This crate links native C libraries: a vendored libarchive plus zlib, bzip2, LZMA, zstd, and LZ4. Building it needs **CMake**, **Clang**, and a working native compiler toolchain. It declares `links = "archive"`, so only one libarchive-linking crate may appear in a dependency graph.
 

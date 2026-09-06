@@ -3,7 +3,7 @@ use super::*;
 use rayon::prelude::*;
 
 use super::patch_apply::{
-    ChainN64TransitionPlan, N64AutoInference, N64TargetRequest, N64TargetResolution,
+    ChainN64TransitionPlan, N64AutoInference, N64TargetRequest, N64TargetResolution, PatchSelectors,
 };
 use super::patch_commands::{
     PatchApplyProgressSink, PatchApplyProgressTracker, patch_progress_segment_start,
@@ -41,6 +41,7 @@ impl CliApp {
             no_extract,
             no_ignore,
             patches,
+            patch_select,
             assume_in,
             expect_in,
             strip_header,
@@ -162,7 +163,10 @@ impl CliApp {
         let mut temp_paths = cleanup_paths;
         let (resolved_patches, extracted_patch_notes) = match self.resolve_patches(
             &patches,
-            &select,
+            PatchSelectors {
+                select: &select,
+                per_patch: &patch_select,
+            },
             &context,
             AutoExtractResolutionFlags {
                 no_extract,

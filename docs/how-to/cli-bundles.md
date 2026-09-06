@@ -12,11 +12,7 @@ A `rom-weaver-bundle.json` bundle turns a tested patch job into a repeatable rec
 <!-- END doctoc -->
 
 
-[What a bundle is](../explanation/bundles.md) covers the idea; for an end-to-end release workflow in either the Apply webapp or terminal, start with [Create and share a patch bundle](create-bundles.md). The machine-readable schema is [`rom-weaver-bundle-v1.schema.json`](../rom-weaver-bundle-v1.schema.json); its `$id` resolves to the public GitHub copy at `https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json`. Print the current schema to stdout with `bundle schema`, then redirect it to a file or point an editor at it:
-
-```bash
-rom-weaver bundle schema > rom-weaver-bundle-v1.schema.json
-```
+[What a bundle is](../explanation/bundles.md) explains the format. The [bundle reference](../reference/cli.md#bundles) lists metadata flags and schema behavior. For browser controls, use [Create and share a patch bundle](create-bundles.md).
 
 ## Create a bundle from local files
 
@@ -30,13 +26,14 @@ rom-weaver bundle create \
   --output rom-weaver-bundle.json
 ```
 
-`-i`/`--input` names the ROM. `--rom-name` records the expected logical file name (and supplies display/output naming); applying a separately supplied ROM with a different basename warns but continues. Use `--rom-url` when the ROM ships from somewhere else and the bundle should only point at it.
+To distribute the recipe and patches together, add an archive output and exclude the ROM:
 
-Every `--patch-*` flag describes the `--patch` before it: `--patch-id`, `--patch-version`, `--patch-author`, `--patch-name`, `--patch-description`, `--patch-optional`, `--patch-label`, `--patch-source-url`, `--patch-header`, and `--patch-basis`. Give each patch an ID that stays the same across releases and the webapp keeps its settings when you publish a replacement; bump `--patch-version` at the same time.
+```bash
+rom-weaver bundle create -i original.sfc --patch translation.bps \
+  --output rom-weaver-bundle.json --bundle release.zip --no-bundle-rom
+```
 
-Checksums use the same tokens as `patch apply`. `--expect-out ALGO=HEX` pins the final result, `--patch-expect-in` and `--patch-expect-out` pin what a single patch should see and produce, and `--assume-in` takes the ROM's checksum on trust rather than reading the file.
-
-`--bundle <archive>` also packs the recipe and its files into one shareable archive. `--no-bundle-rom` leaves the ROM out and records only its checksums, which is the usual shape for distributing a patch. `--schema-ref <URL>` records a `$schema` URL for editors; it is left out unless you ask for it, so the output stays byte-stable.
+This records the expected ROM's checksums without including its bytes. For optional patches or release metadata, each `--patch-*` option describes the preceding `--patch`.
 
 ## Author a spec instead of flags
 
@@ -63,6 +60,11 @@ rom-weaver bundle create --from spec.json --output rom-weaver-bundle.json
 
 ## Parse and run a bundle
 
-`bundle parse --input <bundle>` checks a bundle and reports what it points at. Add `--output <dir>` to write out the files packed alongside it. For an archive bundle it also takes `-s`/`--select`, `--filter rom|patch`, and `--no-extract`, which behave as they do elsewhere. A plain JSON bundle references files by relative path, so there is nothing for those options to unpack.
+Inspect the recipe, then apply it with your matching ROM:
 
-To actually run a bundle, use `rom-weaver patch apply --bundle <path-or-url>`, with `--with` and `--without` to change which optional patches run. The compatibility spelling `weave` also detects a bundle given as its plain input; the exact detection rules are in the [CLI reference](../reference/cli.md#bundle-detection).
+```bash
+rom-weaver bundle parse --input release.zip
+rom-weaver patch apply -i original.sfc --bundle release.zip -o translated.sfc
+```
+
+Add `--output extracted` to `bundle parse` to extract packaged files. Use `--with ID` and `--without ID` on apply to change the selected optional patches. Test each combination you publish from the documented Original.

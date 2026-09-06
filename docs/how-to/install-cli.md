@@ -44,7 +44,7 @@ Scoop stores the generated manpages under the app directory's `docs\\man` folder
 
 ### Install script (macOS, Linux)
 
-Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing to install a binary this repository did not publish. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
+Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -84,12 +84,14 @@ Fetches the released binary instead of compiling from source, which `cargo insta
 cargo binstall rom-weaver-cli
 ```
 
-`cargo-binstall` installs only the executable. Install the generated manpages and the default offline identify database after it finishes:
+`cargo-binstall` installs only the executable, so no manpages or identify database sit beside it. Install them after:
 
 ```bash
 rom-weaver man --install
-rom-weaver identify database install-all
+rom-weaver setup
 ```
+
+`rom-weaver setup` downloads this version's database into the per-user data directory. Running it again reports what is installed instead of downloading again; `--force` refreshes it. The Homebrew, scoop, npm, and install-script packages already carry the database, so `setup` only reports on those.
 
 ### mise
 
@@ -99,11 +101,11 @@ Manages the CLI per project in `mise.toml` and verifies the release's GitHub art
 mise use 'github:rom-weaver/rom-weaver[minimum_release_age=0s]'
 ```
 
-The generic GitHub backend installs only one release asset. Install the generated manpages and the default offline identify database after it finishes:
+The generic GitHub backend installs only one release asset. Install the generated manpages and the identify database after it finishes:
 
 ```bash
 rom-weaver man --install
-rom-weaver identify database install-all
+rom-weaver setup
 ```
 
 ## Source install
@@ -123,10 +125,10 @@ Cargo installs the executable only. Install the generated manpages after it fini
 rom-weaver man --install
 ```
 
-Install the default offline identify database:
+Install the identify database:
 
 ```bash
-rom-weaver identify database install-all
+rom-weaver setup
 ```
 
 ## Run in Docker

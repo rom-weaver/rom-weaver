@@ -104,4 +104,4 @@ Do not use the output from an older release unless the new patch explicitly says
 
 Do not reach for the checksum override to get past a mismatch - it skips the check without repairing the file, and the result can fail hours into play. [Why forcing past a mismatch is risky](../explanation/how-patching-works.md#why-forcing-past-a-mismatch-is-risky) explains what an override is actually for.
 
-Once the checks match, return to [Apply a ROM patch](apply-rom-patches.md). If you need terminal diagnostics, see [Check patches without writing anything](cli-apply.md#check-patches-without-writing-anything). The [FAQ](../faq.md) covers related filename, privacy, and format questions.
+Once the checks match, return to [Apply a ROM patch](apply-rom-patches.md). If you need terminal diagnostics, see [Validate a patch chain](cli-apply.md#check-patches-without-writing-anything). The [FAQ](../faq.md) covers related filename, privacy, and format questions.

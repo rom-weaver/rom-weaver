@@ -5003,6 +5003,187 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
     );
 }
 
+fn create_bps(original: &std::path::Path, modified: &std::path::Path, output: &std::path::Path) {
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.to_str().expect("path"),
+            "--modified",
+            modified.to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            output.to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+}
+
+fn zip_files(inputs: &[&std::path::Path], output: &std::path::Path) {
+    let mut args = vec!["compress".to_string()];
+    for input in inputs {
+        args.push("--input".to_string());
+        args.push(input.to_str().expect("path").to_string());
+    }
+    args.push("--format".to_string());
+    args.push("zip".to_string());
+    args.push("--output".to_string());
+    args.push(output.to_str().expect("path").to_string());
+    args.push("--json".to_string());
+    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+    command_stdout(&borrowed, 0);
+}
+
+/// An archive input and an archive patch each need their own selector; before
+/// `--patch-select` the single `--select` had to satisfy both, which no
+/// pattern can do.
+#[test]
+fn patch_apply_patch_select_scopes_the_selector_to_the_patch_archive() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let sibling = temp.child("other.bin");
+    let modified_a = temp.child("game-mod-a.bin");
+    let modified_b = temp.child("game-mod-b.bin");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    let input_archive = temp.child("input.zip");
+    let patch_archive = temp.child("patches.zip");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"game payload").expect("fixture");
+    fs::write(sibling.path(), b"other payload").expect("fixture");
+    fs::write(modified_a.path(), b"game payload patched A").expect("fixture");
+    fs::write(modified_b.path(), b"game payload patched B").expect("fixture");
+
+    create_bps(original.path(), modified_a.path(), patch_a.path());
+    create_bps(original.path(), modified_b.path(), patch_b.path());
+    zip_files(&[original.path(), sibling.path()], input_archive.path());
+    zip_files(&[patch_a.path(), patch_b.path()], patch_archive.path());
+
+    let apply_output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input_archive.path().to_str().expect("path"),
+            "--select",
+            "game.bin",
+            "--patch",
+            patch_archive.path().to_str().expect("path"),
+            "--patch-select",
+            "update-a.bps",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_patch_envelope(&apply_json, "patch-apply", "BPS", "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified_a.path()).expect("modified")
+    );
+}
+
+/// Each `--patch-select` binds to the `--patch` before it, so two archives
+/// take different selectors and swapping the pairs swaps the result.
+#[test]
+fn patch_apply_patch_select_binds_to_the_preceding_patch() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let step_one = temp.child("game-step-1.bin");
+    let step_two = temp.child("game-step-2.bin");
+    let decoy = temp.child("game-decoy.bin");
+    let first_a = temp.child("first-a.bps");
+    let first_b = temp.child("first-b.bps");
+    let second_a = temp.child("second-a.bps");
+    let second_b = temp.child("second-b.bps");
+    let first_archive = temp.child("first.zip");
+    let second_archive = temp.child("second.zip");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"game payload").expect("fixture");
+    fs::write(step_one.path(), b"game payload step one").expect("fixture");
+    fs::write(step_two.path(), b"game payload step one step two").expect("fixture");
+    fs::write(decoy.path(), b"game payload decoy").expect("fixture");
+
+    create_bps(original.path(), step_one.path(), first_a.path());
+    create_bps(original.path(), decoy.path(), first_b.path());
+    create_bps(step_one.path(), step_two.path(), second_a.path());
+    create_bps(step_one.path(), decoy.path(), second_b.path());
+    zip_files(&[first_a.path(), first_b.path()], first_archive.path());
+    zip_files(&[second_a.path(), second_b.path()], second_archive.path());
+
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            first_archive.path().to_str().expect("path"),
+            "--patch-select",
+            "first-a.bps",
+            "--patch",
+            second_archive.path().to_str().expect("path"),
+            "--patch-select",
+            "second-a.bps",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(step_two.path()).expect("chained result")
+    );
+}
+
+/// `patch validate` resolves patches through the same helper, so it takes the
+/// selector too.
+#[test]
+fn patch_validate_accepts_a_patch_select_per_patch() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified_a = temp.child("game-mod-a.bin");
+    let modified_b = temp.child("game-mod-b.bin");
+    let patch_a = temp.child("update-a.bps");
+    let patch_b = temp.child("update-b.bps");
+    let patch_archive = temp.child("patches.zip");
+    fs::write(original.path(), b"game payload").expect("fixture");
+    fs::write(modified_a.path(), b"game payload patched A").expect("fixture");
+    fs::write(modified_b.path(), b"game payload patched B").expect("fixture");
+
+    create_bps(original.path(), modified_a.path(), patch_a.path());
+    create_bps(original.path(), modified_b.path(), patch_b.path());
+    zip_files(&[patch_a.path(), patch_b.path()], patch_archive.path());
+
+    let validate_output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch_archive.path().to_str().expect("path"),
+            "--patch-select",
+            "update-a.bps",
+            "--json",
+        ],
+        0,
+    );
+
+    let validate_json = parse_single_json_line(&validate_output);
+    assert_eq!(validate_json["status"], "succeeded");
+}
+
 #[test]
 fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
     let temp = setup_temp_dir();

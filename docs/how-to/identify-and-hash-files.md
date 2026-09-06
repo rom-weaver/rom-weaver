@@ -59,7 +59,7 @@ Then identify as usual; the command finds the installed pack on its own:
 rom-weaver identify --input game.bin
 ```
 
-Check what is installed with `rom-weaver identify database list`. A result with `"condition": "database_required"` means the detected platform's pack is not installed. Its `hint` names the install command.
+Check what is installed with `rom-weaver identify database list`. A result with `"condition": "database_required"` means the detected platform's pack is not installed; identify never downloads one itself. Install the database with `rom-weaver setup`, or point `--database-dir` at an existing one.
 
 ## Install an optional group
 

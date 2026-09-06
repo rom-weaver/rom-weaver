@@ -1,6 +1,6 @@
 # Extract, convert, and compress archives
 
-Open a ZIP, 7z, RAR, tar, or single compressed file from the terminal, get what you need out of it, and repackage it as ZIP or 7z. To patch a ROM that is inside an archive, no extraction is needed in either front end: add the archive as the input and rom-weaver looks inside, as covered in [Apply a ROM patch](apply-rom-patches.md) and [Apply patches from the CLI](cli-apply.md).
+Extract files, convert an archive, or create a ZIP or 7z from the terminal. To patch a ROM inside an archive, pass the archive directly to [patch apply](cli-apply.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -38,7 +38,7 @@ The new ZIP contains `extracted-patches/` as its top-level directory, because `c
 rom-weaver compress --input my-release --output my-release.zip
 ```
 
-ZIP accepts `store`, `deflate`, or `zstd`; 7z uses LZMA2. Pass `--codec` to choose, or leave it out for the default. In the browser, the same settings appear in the output card when the input supports them.
+ZIP accepts `store`, `deflate`, or `zstd`; 7z uses LZMA2. Pass `--codec` to choose, or leave it out for the default.
 
 Those two are the only general-purpose archive formats rom-weaver can create. ZIPX, RAR, TAR and its variants, Gzip, Bzip2, XZ, and Zstandard can be opened but not written, so converting *into* one of them is not possible - extract and use a different container.
 

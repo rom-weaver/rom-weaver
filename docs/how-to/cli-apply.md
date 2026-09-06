@@ -1,15 +1,16 @@
 # Apply patches from the CLI
 
-Apply one patch or an ordered chain in the terminal, handle headers and byte order, verify checksums, and validate patches without writing anything. New to the CLI? Start with [your first apply](../tutorials/cli-first-weave.md). Each recipe uses only the flags its task needs; the [patching flags](../reference/cli.md#patching) are catalogued in the reference.
+Apply one patch or an ordered chain in the terminal, handle headers and byte order, verify checksums, and validate patches without keeping an output ROM. New to the CLI? Start with [your first apply](../tutorials/cli-first-weave.md). Each recipe uses only the flags its task needs; the [patching flags](../reference/cli.md#patching) are catalogued in the reference.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Apply one or more patches](#apply-one-or-more-patches)
+- [Pick one patch out of an archive](#pick-one-patch-out-of-an-archive)
 - [Verify the ROM before and after](#verify-the-rom-before-and-after)
 - [Apply a patch made for a headerless ROM](#apply-a-patch-made-for-a-headerless-rom)
 - [Apply an N64 patch regardless of byte order](#apply-an-n64-patch-regardless-of-byte-order)
-- [Check patches without writing anything](#check-patches-without-writing-anything)
+- [Validate a patch chain](#validate-a-patch-chain)
 - [Where next](#where-next)
 
 <!-- END doctoc -->
@@ -33,11 +34,39 @@ rom-weaver patch apply \
 
 `patch apply` is the canonical spelling; `weave` remains accepted for compatibility.
 
-An output extension matching the selected ROM leaf writes a plain ROM, so `translated.sfc` does not need `--no-compress`. A registered container extension such as `.zip` still compresses the result. Pass `--no-compress` (or `--raw`) to force raw bytes, or set `--compress-format` (also `--format`), `--compress-codec` (also `--codec`), and `--compress-level` (also `--level`) to force compression.
+An output extension matching the selected ROM leaf writes a plain ROM, so `translated.sfc` does not need `--no-compress`. A registered container extension such as `.zip` still compresses the result. Use `--no-compress` to force raw bytes. The [output reference](../reference/cli.md#output-and-compression) lists compression overrides and aliases.
 
 For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Bundle applies keep their bundle-provided output name; a bundle without one still requires `--output`.
 
 Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops before anything is written - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
+
+## Pick one patch out of an archive
+
+Point `--patch` at an archive and `--patch-select` at the file inside it:
+
+```bash
+rom-weaver patch apply \
+  --input game.chd \
+  --select '*.bin' \
+  --patch quality-of-life.7z \
+  --patch-select 'Game (USA)/Quality of Life.ppf' \
+  --no-compress \
+  --output patched.bin
+```
+
+`--select` chooses the payload inside the input, `--patch-select` the file inside the patch archive. Without the second flag, `--select` applies to both, and no single pattern can match a `.bin` in the input and a `.ppf` in the patch.
+
+Match on the path when the archive nests its patches in folders: `'*USA*/*.ppf'` works, a bare `'*USA*'` does not.
+
+Repeat `--patch-select` once per `--patch`, in order; each binds to the `--patch` before it:
+
+```bash
+rom-weaver patch apply \
+  --input game.sfc \
+  --patch base.zip --patch-select base-v2.bps \
+  --patch extras.zip --patch-select widescreen.bps \
+  --output patched.sfc
+```
 
 ## Verify the ROM before and after
 
@@ -80,9 +109,11 @@ rom-weaver patch apply \
   --n64-byte-order big-endian
 ```
 
-## Check patches without writing anything
+<a id="check-patches-without-writing-anything"></a>
 
-`patch validate` parses each patch and verifies every checksum the format carries, without producing a ROM:
+## Validate a patch chain
+
+`patch validate` checks the chain without keeping an output ROM. It can create temporary files while applying the patches:
 
 ```bash
 rom-weaver patch validate \

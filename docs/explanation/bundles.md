@@ -1,6 +1,6 @@
 # What a bundle is
 
-A rom-weaver bundle is a patch recipe you can hand to someone. This page explains what problem it solves, what it does and does not contain, and when it is worth making one.
+A rom-weaver bundle records a patch recipe so another user can repeat it.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -23,24 +23,24 @@ A bundle moves that knowledge out of the release notes and into a file the tool 
 
 ## What it contains
 
-The required `rom-weaver-bundle.json` index records:
+The JSON recipe, conventionally named `rom-weaver-bundle.json`, can record:
 
 - which clean ROM is expected;
 - the patch files and their order;
 - which patches are required and which are optional;
 - patch names, authors, versions, and descriptions;
 - expected checksums before and after each step;
-- output filename and format defaults.
+- output filename, header policy, and expected checksums. Compression remains the applying user's choice.
 
-The archive around that index can carry the patch files themselves. A user drops the one archive into Apply, supplies their matching ROM, reviews the optional choices, and runs it.
+An archive can carry the recipe and its patch files together. A recipe can also reference local paths or download URLs.
 
 The machine-readable definition is [`rom-weaver-bundle-v1.schema.json`](../rom-weaver-bundle-v1.schema.json).
 
 ## What it is not
 
-**A bundle is not a pre-patched game.** It is a recipe. The default package, *Bundle + patches*, records the expected ROM's checksums but not its bytes, so a public release can travel without carrying copyrighted data.
+**A bundle is not a pre-patched game.** It is a recipe. A patch-only bundle records the expected ROM's checksums without including the ROM bytes. Each user supplies the matching ROM.
 
-There is a *Bundle + ROM + patches* package as well. It exists for homebrew, public domain material, your own backups, and anything else you hold the rights to redistribute. A convenient button does not grant permission.
+A bundle can include ROM bytes, but packaging does not grant redistribution rights.
 
 **A bundle is not release notes.** It tells rom-weaver what to do; it does not tell a person what your patch changes or why they would want it. Both still have to exist.
 
@@ -58,13 +58,9 @@ Skip it for a single patch with no options. One file plus a documented checksum 
 
 ## Links can carry them
 
-Because the recipe is a file, a URL can preload it:
+A link can preload a remotely hosted recipe. The browser downloads the recipe and referenced patches, then applies them locally. Cross-origin downloads depend on the host's CORS policy.
 
-```text
-https://rom-weaver.com/apply?bundle=https://example.com/release.zip
-```
-
-The host has to permit cross-origin browser downloads. The user's ROM still never leaves their device. [Webapp integration](../hosting/webapp-integration.md) covers the URL parameters and hosting requirements.
+[Open a hosted bundle in Apply](../how-to/create-bundles.md#open-a-hosted-bundle-in-apply) gives the link format. [Webapp integration](../hosting/webapp-integration.md) documents the host requirements.
 
 ## Related
 

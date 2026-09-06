@@ -7,6 +7,7 @@ The webapp masthead shows build identity, the configured thread count, and two i
 
 - [Build and thread values](#build-and-thread-values)
 - [Runtime values](#runtime-values)
+- [Theme](#theme)
 
 <!-- END doctoc -->
 
@@ -35,3 +36,7 @@ The version text normally looks like `vX.Y.Z · abcdef0`. The full build identif
 The first value describes how the page was launched; the second describes service-worker state. The combinations are therefore independent, such as `web · sw`, `pwa · sw`, or `pwa · sw off`. The prerendered shell resolves known runtime state before first paint, then React hydrates that shell in place instead of replacing the masthead nodes. While service-worker state is still unknown, the shell preserves the `sw` placeholder and adds a tooltip after the state resolves.
 
 The thread count is shown as `· 10 threads` on desktop and `· 10T` on mobile to preserve masthead space. The full wording remains available to assistive technology and in the tooltip.
+
+## Theme
+
+The masthead theme control switches between light and dark themes. Documentation screenshots use the selected theme.

@@ -59,56 +59,26 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `attestation-dry-run.yml` | manual | No | Prove the release attest steps and both installers' checks without cutting a release |
 | `attestation-dry-run-called.yml` | called by `attestation-dry-run.yml` | No | Prove that attestation permissions survive a reusable-workflow boundary |
 
-`pull-request.yml` holds the two gates a **contributor** rather than the code has to clear: the CLA signature (`CLA Check` job) and a Conventional Commits pull request title (`Title Check` job), under the `PR Gates` workflow. They share a file because they share every constraint - each posts a commit status against the pull request head instead of relying on its own check run, each has to work for a pull request from a fork, and each is required by the `main protection` ruleset. Both run on `pull_request_target`, which is what supplies a write token on a fork's pull request; nothing from the head is checked out or executed, and the scripts, the allowlist and the commitlint config all come from the base commit.
+`pull-request.yml` posts two required commit statuses against the pull request head: `CLA Signed` and `PR Title Lint`. It uses `pull_request_target` so fork contributions can receive statuses. It reads scripts, configuration, and the allowlist from the base commit; it never executes contributor code.
 
-| Script | Test | Posts |
-| --- | --- | --- |
-| `scripts/ci/cla-gate.mjs` | `cla-gate.test.mjs` | `CLA Signed` |
-| `scripts/ci/github-api.mjs` | (exercised by the CLA gate) | - |
+The title job runs commitlint on the pull request title. Squash merges use that title as the commit subject. [Commit conventions](commits.md) owns the title format.
 
-The title job runs commitlint and posts `PR Title Lint` directly with `gh api`. The CLA test drives its script against a stub GitHub API served over real HTTP, so the JSON, base64 and status handling runs rather than a mock of it.
+The CLA gate checks all contributors against [CLA version 2.0](../../CLA.md). Exempt logins come from `.github/cla-allowlist.txt`; signatures live in `signatures.json` on the `cla-signatures` branch. Each signature records the CLA version and a commit-pinned document URL.
 
-The CLA gate checks every contributor to a pull request against [CLA version 2.0](../../CLA.md), whose grant covers every repository in the `rom-weaver` organization rather than this one alone.
-
-| Where | What |
-| --- | --- |
-| `.github/cla-allowlist.txt` (default branch) | Logins exempt from signing, one glob per line. `*[bot]` covers every bot; brackets are literal, and an unescaped `*[bot]` would be a character class matching anything ending in b, o or t. |
-| `cla-signatures` branch, `signatures.json` | The signature records. It lives off the default branch because the `main protection` ruleset forbids direct pushes and names no bypass actor, so a workflow cannot commit there. |
-
-Each record carries `claVersion` and a `cla` link pinned to the commit the gate read the document at, because section 6 promises a signature names the version it was given against. A `blob/main` link would repoint every past record at the next version. `CLA_REF` supplies that commit, resolved with `git rev-parse HEAD` in the workflow rather than from the event payload - on `issue_comment`, which is the signing path, the checkout ref is the branch name `main`. Every other path is env-driven too (`CLA_FILE`, `CLA_DOCUMENT`, `SIGNATURES_BRANCH`, `SIGNATURES_PATH`, `ALLOWLIST_FILE`), so pointing the gate at an organization-level document and signature store later needs no code change - only a token that can write outside this repository.
-
-An unsigned contributor gets a failing status and one comment - edited in place on later runs, never duplicated - asking them to reply with the signing phrase, offered in a fenced block so GitHub renders its copy button. That reply is what appends their record. Matching ignores case, runs of interior whitespace, any trailing `.` or `!`, and the `*`, `_`, `` ` `` or `-` a contributor may wrap or bullet the line with - the leading and trailing delimiter sets are one constant precisely so they cannot drift apart again. Not ignored: a leading `>`, because accepting a quoted line would turn quoting the request while asking what it means into assent.
-
-A line that carries the phrase but is not the phrase - quoted, or with other words around it - does not sign, and the comment now says so rather than rejecting it in silence. That silence was the whole failure being fixed here; a contributor who typed the words and got nothing back believes they signed. Editing a comment reruns the gate, as does posting another, and between them that is the whole re-run story: the near-miss note asks for a correction, and editing the comment you just posted is the obvious way to make one. There is deliberately no `recheck` keyword. The prefilter already matches any comment mentioning the CLA, and it cannot miss a signing attempt - the phrase ends in "the CLA" and a near miss contains the whole phrase - so a second keyword bought nothing an edit does not.
-
-An edit signs only when the editor is the comment's own author: anyone with write access can edit somebody else's comment, so `sender` and `comment.user` have to agree before a signature is recorded.
-
-Commits whose author email matches no GitHub account are reported as `unlinked:<name>` rather than skipped.
-
-The two signals mean different things, and the job deliberately exits 0 on an unsigned verdict:
+A signing comment must contain the signing phrase on its own line. Matching ignores case, repeated whitespace, trailing punctuation, and supported Markdown delimiters. Quoted text and text with other words do not sign. Editing or posting a comment retries the check. An edit can sign only when the editor is the comment's author. Unlinked commit authors are reported as `unlinked:<name>`.
 
 | Signal | Meaning |
 | --- | --- |
-| `CLA Signed` | The verdict. Everyone has signed, or somebody has not. This is the one the ruleset can require, and the only one a signing comment can flip - see below. |
-| `CLA Check` job red | The gate itself broke: an API call failed, or the signature file would not parse. Never "somebody has not signed". |
+| `CLA Signed` | All contributors signed or are exempt. An unsigned verdict fails this status. |
+| `CLA Check` job | The gate ran successfully. API or signature-file errors fail the job; an unsigned verdict does not. |
 
-Requiring the **status** rather than the job name is load-bearing. A run triggered by `issue_comment` attaches its check run to the default branch rather than the pull request head, so a required `CLA Check` job would never be cleared by a contributor's signing comment - only by pushing a commit. The script posts `CLA Signed` against the head SHA explicitly, which works on both paths. The title gate posts `PR Title Lint` the same way, for consistency and so neither required check depends on how GitHub attaches a `pull_request_target` check run.
-
-The naming follows from that split. The jobs are named for the machinery and render under the workflow (`PR Gates / CLA Check`, `PR Gates / Title Check`); the statuses are named for the verdict and render bare in the ruleset's required list, so they carry the context the jobs get from the prefix (`CLA Signed`, `PR Title Lint`). Never give a job and a status the same name - the required-check picker lists check runs and commit statuses in one flat list, so a collision can silently bind the requirement to the check run, which is the broken half.
-
-**This replaced the hosted CLA Assistant app** ([#129] is the case that forced it). That app posted only in response to a `pull_request` event and offered no re-run button anywhere, so a force-push left the new head with no status at all and the pull request sat on "Expected - waiting for status to be reported" with every other check green and nothing able to merge past it. Commenting `recheck` did not help: that trigger belonged to the bot's own signature-request comment, which never exists for an author who has already signed. Only closing and reopening recovered it, at the cost of a full re-run of `ci.yml`. A workflow has none of those failure modes - it fires on `synchronize` (which force-pushes emit), reruns from the Actions tab, and always targets the current head SHA.
-
-[#129]: https://github.com/rom-weaver/rom-weaver/pull/129
+Branch protection requires the status, not the job. Comment-triggered jobs attach to the default branch, but the script posts the status to the pull request head. Job and status names must remain distinct so the required-check picker cannot bind the wrong one. `scripts/ci/cla-gate.test.mjs` checks the gate against a local HTTP API fixture.
 
 Coverage is deliberately sampled weekly rather than repeated after every green `main` build. It restores the source-exact production WASM cache and builds on a miss, so the report still covers the current commit; manual runs use the same path.
 
-The title gate lints the **pull request title only**. Merge commits are disabled and squash merges take `PR_TITLE` as the subject, so the title is the only text that reaches `main` and the only text Release Please reads. Branch commits are squashed away, so they are not linted.
+Title text enters commitlint through stdin from an environment variable, never through shell interpolation or `GITHUB_OUTPUT`. Editing the title reruns the check. The workflow log identifies a rejected rule.
 
-commitlint runs directly in the workflow step, reading the title from an environment variable through standard input. The step posts the required `PR Title Lint` status with `gh api`; it does not route the contributor-controlled title through `GITHUB_OUTPUT` or interpolate it into shell source. A rejected title leaves commitlint's exact rule in the Title Check log and a short failure annotation on the run. Editing the title reruns the job. Valid types still come only from `.config/commitlint.config.mjs`, so local hooks and the pull request gate enforce the same rules.
-
-Nothing publishes on a push, and nothing reacts to one either. `release.yml` has no `push` trigger: the release pull request is created and refreshed only by a manual **Run workflow** dispatch. Merging to `main` just accumulates commits.
-
-That is deliberate. The workflow force-pushes the release branch two or three times per run (the release-please commit, the synced metadata, the screenshots), and each push starts a full CI matrix on that pull request. Firing it on every merge put 20 CI runs on the 0.8.0 release pull request, 17 of them cancelled by the next merge, for a pull request nobody had yet decided to merge. Dispatching by hand spends that CI once, when a release is actually wanted.
+`release.yml` creates or refreshes a release pull request only on manual dispatch. Pushes to `main` still run CI and can publish nightly images and deployments; they do not start a stable release. Manual dispatch avoids repeated release-branch updates and cancelled CI runs after each merge.
 
 The release workflow waits for a completed successful `CI` push run for the exact main commit before it creates or refreshes the release pull request. The screenshots reuse that run's `wasm-prod` artifact when changed-path classification produced one; otherwise the job rebuilds WASM from source (~6.5 min). Merging the release pull request is what sets `release_created` and unlocks the publish jobs.
 
@@ -223,7 +193,7 @@ The deployment wrapper matches the Pages branch and commit hash before invoking 
 | `nightly` | `rom-weaver-nightly` | [nightly.rom-weaver.com](https://nightly.rom-weaver.com/) | Latest webapp changes from `main` |
 | `preview` | `rom-weaver-preview` | `pr-<n>.rom-weaver-preview.pages.dev` | Review an internal pull request |
 
-Only production is intended for search indexing. Beta, nightly, and pull-request preview builds include `noindex, nofollow` in both the HTML robots metadata and the Cloudflare `X-Robots-Tag` response header, and their generated `robots.txt` blocks crawling with `Disallow: /`. Production instead publishes `Allow: /`. Its sitemap lists the two stable, crawlable workflow pages: [`/apply`](https://rom-weaver.com/apply) and [`/create`](https://rom-weaver.com/create). History API navigation keeps those URLs distinct; the generated HTML gives each its own title, description, and canonical URL plus Open Graph and Twitter card metadata.
+Only production is intended for search indexing. Beta, nightly, and pull-request preview builds include `noindex, nofollow` in both the HTML robots metadata and the Cloudflare `X-Robots-Tag` response header, and their generated `robots.txt` blocks crawling with `Disallow: /`. Production instead publishes `Allow: /`. Its sitemap includes the public workflow and documentation routes generated in `vite.config.mjs`. History API navigation keeps those URLs distinct; the generated HTML gives each its own title, description, and canonical URL plus Open Graph and Twitter card metadata.
 
 The apex is the one canonical origin. `www` is a separate origin, so serving the app there would give it its own OPFS store and service worker and a user landing on it would see different saved state. The redirect that prevents this is a zone-level Single Redirect in the Cloudflare dashboard (rom-weaver.com -> Rules -> Redirect Rules, "www to apex"), not the build's `_redirects` - that file matches a path and never a hostname, and Cloudflare lists domain-level redirects as unsupported, so a rule written there is dropped silently. One was, from v0.7.2 through v0.9.0, and www served the app on its own origin for all three releases. Because the rule lives in the dashboard, nothing in this repository gates it; the `www` DNS record has to stay proxied for the rule to see the request at all.
 

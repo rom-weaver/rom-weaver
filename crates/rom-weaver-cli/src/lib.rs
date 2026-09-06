@@ -160,6 +160,27 @@ detected platform pick the pack. Nothing is uploaded."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
+            about = "Install the offline identify database",
+            long_about = "\
+Install the identify database this build's `identify` command searches.
+
+Run it once after installing rom-weaver by a method that ships only the
+executable, such as `cargo binstall` or `cargo install`. The Homebrew, scoop,
+npm, and install-script packages already place the database beside the binary,
+so this only reports what is there.
+
+The download comes from this version's GitHub release and lands in the per-user
+data directory; `identify database install-group` adds the optional packs."
+        )
+    )]
+    // Native-only: the browser build has no filesystem to install into, so the
+    // variant stays out of the generated TypeScript command union.
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    Setup(SetupCommand),
+
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
             // Webapp plumbing: the browser drop handler runs this. It stays
             // functional on the CLI but is not part of the advertised surface.
             hide = true,
@@ -1445,7 +1466,7 @@ pub use command_args::{
     IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
     IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
     PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, TrimCommand,
+    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SetupCommand, TrimCommand,
 };
 
 mod expect_tokens;

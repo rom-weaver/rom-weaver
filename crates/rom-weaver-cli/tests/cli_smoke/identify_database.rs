@@ -423,7 +423,40 @@ fn identify_reports_database_required_for_an_uninstalled_platform() {
     assert_eq!(identify["condition"], "database_required");
     let hint = identify["hint"].as_str().expect("hint");
     assert!(hint.contains("Sony PlayStation"));
-    assert!(hint.contains("identify database install"));
+    assert!(hint.contains("this install shipped no identify database"));
+}
+
+/// `setup` is idempotent and must not reach the network when the database is
+/// already in place, which is what makes it safe to put in install docs and
+/// run twice.
+#[test]
+fn setup_reports_an_installed_database_without_downloading() {
+    let temp = setup_temp_dir();
+    let database_dir = temp.child("identify");
+    let packs = database_dir.path().join("full-v1").join("packs");
+    fs::create_dir_all(&packs).expect("packs dir");
+    fs::write(packs.join("nintendo-game-boy-advance.pack.br"), b"pack").expect("pack fixture");
+
+    let output = command_stdout(
+        &[
+            "setup",
+            "--database-dir",
+            database_dir.path().to_str().expect("dir path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["packs"], 1);
+    assert_eq!(json["details"]["downloaded"], false);
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("already installed")
+    );
 }
 
 #[test]
