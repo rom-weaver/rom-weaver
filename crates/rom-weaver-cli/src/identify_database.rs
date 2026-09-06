@@ -1267,3 +1267,76 @@ fn import_report(
 #[cfg(all(test, not(target_arch = "wasm32")))]
 #[path = "../tests/unit/identify_database.rs"]
 mod tests;
+
+impl CliApp {
+    /// `rom-weaver setup`: put the identify database in place for an install
+    /// that shipped only the executable.
+    pub(super) fn run_setup(&self, command: SetupCommand) -> AppRunOutcome {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = command;
+            return self.finish(
+                "setup",
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("setup".to_string()),
+                    "setup",
+                    "setup is not supported in the browser build",
+                    None,
+                ),
+            );
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let report = self.run_setup_inner(command).unwrap_or_else(|error| {
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("setup".to_string()),
+                    "setup",
+                    error.to_string(),
+                    None,
+                )
+            });
+            self.finish("setup", report)
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn run_setup_inner(&self, command: SetupCommand) -> Result<OperationReport> {
+        let SetupCommand {
+            database_dir,
+            force,
+        } = command;
+        let provider = IdentifyPackProvider::new(database_dir)?;
+        let database_dir = provider.database_dir().to_path_buf();
+        let installed = super::identify_builtin::user_database_packs(&database_dir);
+
+        let (packs, label, downloaded) = match installed {
+            Some(packs) if !force => (
+                packs,
+                format!("identify database already installed ({packs} pack(s))"),
+                false,
+            ),
+            _ => {
+                let packs = super::identify_builtin::install_all(&database_dir)?;
+                (packs, format!("installed {packs} identify pack(s)"), true)
+            }
+        };
+
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("setup".to_string()),
+            "setup",
+            label,
+            Some(100.0),
+            None,
+        );
+        report.details = Some(json!({
+            "database_dir": database_dir.to_string_lossy(),
+            "packs": packs,
+            "downloaded": downloaded,
+            "version": env!("CARGO_PKG_VERSION"),
+        }));
+        Ok(report)
+    }
+}

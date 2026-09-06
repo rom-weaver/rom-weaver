@@ -3036,6 +3036,33 @@ pub enum IdentifyDatabaseCommands {
     Update(Box<IdentifyDatabaseUpdateCommand>),
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SetupCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "database-dir",
+            value_name = "DIR",
+            help = "Install into this directory instead of the per-user data directory"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub database_dir: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Download the database again even when it is already installed"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]

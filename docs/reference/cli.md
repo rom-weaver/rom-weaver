@@ -11,6 +11,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 - [Identify](#identify)
   - [Identify flags](#identify-flags)
   - [Identify database directory](#identify-database-directory)
+  - [`setup`](#setup)
   - [`identify database` subcommands](#identify-database-subcommands)
   - [Identify result](#identify-result)
 - [Checksum](#checksum)
@@ -49,6 +50,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `bundle parse` | Read a bundle recipe and report what it points at. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
+| `setup` | Install the offline identify database. |
 | `completions` | Print a tab-completion script for your shell. |
 
 `-h` prints a one-line summary of each option; `--help` prints the full explanation, including the extra detail on flags like `--patch-header`.
@@ -138,6 +140,15 @@ Native identify performs no network access.
 ### Identify database directory
 
 Installed packs live in one directory. The default is the per-user data directory: `$XDG_DATA_HOME/rom-weaver/identify` on Linux (`~/.local/share` fallback), `~/Library/Application Support/rom-weaver/identify` on macOS, `%APPDATA%\rom-weaver\identify` on Windows. `ROM_WEAVER_DATA_DIR` overrides the base; `--database-dir` overrides the full path.
+
+### `setup`
+
+`rom-weaver setup` installs the identify database into the directory above, downloading it from this version's GitHub release. It is for installs that ship only the executable, such as `cargo binstall` and `cargo install`; Homebrew, scoop, npm, and the install script place the database beside the binary already.
+
+- `--database-dir DIR` installs somewhere other than the per-user data directory.
+- `--force` downloads again even when the database is already installed.
+
+Without `--force` an installed database is reported, not re-downloaded, so the command is safe to repeat. JSON output carries `packs`, `downloaded`, and `database_dir`.
 
 ### `identify database` subcommands
 
