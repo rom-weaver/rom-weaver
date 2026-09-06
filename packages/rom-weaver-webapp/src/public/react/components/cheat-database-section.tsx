@@ -451,6 +451,9 @@ const AddCheatsDialog = ({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      setQuery("");
+      setFilter("all");
+      setPage(0);
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
     } else if (!open && dialog.open) {
