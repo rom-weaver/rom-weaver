@@ -28,11 +28,44 @@
   "bin": {
     "rom-weaver": "bin/rom-weaver.mjs"
   },
+  "man": [
+    "docs/man/rom-weaver.1",
+    "docs/man/rom-weaver-bundle.1",
+    "docs/man/rom-weaver-bundle-create.1",
+    "docs/man/rom-weaver-bundle-parse.1",
+    "docs/man/rom-weaver-bundle-schema.1",
+    "docs/man/rom-weaver-checksum.1",
+    "docs/man/rom-weaver-completions.1",
+    "docs/man/rom-weaver-compress.1",
+    "docs/man/rom-weaver-extract.1",
+    "docs/man/rom-weaver-formats.1",
+    "docs/man/rom-weaver-identify.1",
+    "docs/man/rom-weaver-identify-database.1",
+    "docs/man/rom-weaver-identify-database-import-redump.1",
+    "docs/man/rom-weaver-identify-database-install.1",
+    "docs/man/rom-weaver-identify-database-install-all.1",
+    "docs/man/rom-weaver-identify-database-install-group.1",
+    "docs/man/rom-weaver-identify-database-list.1",
+    "docs/man/rom-weaver-identify-database-path.1",
+    "docs/man/rom-weaver-identify-database-remove.1",
+    "docs/man/rom-weaver-identify-database-status.1",
+    "docs/man/rom-weaver-identify-database-update.1",
+    "docs/man/rom-weaver-patch.1",
+    "docs/man/rom-weaver-patch-apply.1",
+    "docs/man/rom-weaver-patch-create.1",
+    "docs/man/rom-weaver-patch-validate.1",
+    "docs/man/rom-weaver-probe.1",
+    "docs/man/rom-weaver-tools.1",
+    "docs/man/rom-weaver-tools-ppf-undo.1",
+    "docs/man/rom-weaver-trim.1",
+    "docs/man/rom-weaver-weave.1"
+  ],
   "dependencies": {
     "@rom-weaver/cli": "0.14.1"
   },
   "files": [
     "bin/rom-weaver.mjs",
+    "docs/man/*.1",
     "LICENSE"
   ],
   "publishConfig": {

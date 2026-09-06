@@ -25,7 +25,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 
 Every method here installs a binary built for the release: macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
 
-Homebrew, the install scripts, and npm also carry the generated CLI manpages and shell completions. Scoop, cargo-binstall, mise, and `cargo install` install the executable only; see [Install shell completions](#install-shell-completions) for those methods, and [man pages](../reference/cli.md#man-pages) for where the manpages come from.
+Homebrew, the install scripts, and global npm installs carry the generated CLI manpages and shell completions. Scoop, cargo-binstall, mise, and `cargo install` install the executable only; Docker has no `man(1)` program in its distroless image. See [Install shell completions](#install-shell-completions) for those methods, and [man pages](../reference/cli.md#man-pages) for where the manpages come from.
 
 ### Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
 
@@ -60,6 +60,8 @@ irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | i
 ### npm
 
 The only channel covering every supported target at once. Needs Node.js 22+. The unscoped `rom-weaver` package points at the `@rom-weaver/cli` launcher, whose binary arrives through a platform-specific optional dependency, so only your platform's binary is downloaded.
+
+Global installs of either package install the generated manpages on Unix. A local npm install keeps the pages under the package's `docs/man` directory.
 
 ```bash
 npm install --global rom-weaver

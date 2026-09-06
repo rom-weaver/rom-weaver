@@ -87,6 +87,14 @@ fn completions_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/completions")
 }
 
+fn package_manifests() -> [PathBuf; 2] {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    [
+        repository.join("package.json"),
+        repository.join("packages/rom-weaver-alias/package.json"),
+    ]
+}
+
 fn expected_completions() -> BTreeMap<String, Vec<u8>> {
     [
         (Shell::Bash, "rom-weaver.bash"),
@@ -185,6 +193,42 @@ fn check_completions(
     Ok(names_match && contents_match)
 }
 
+fn check_package_man_pages(pages: &BTreeMap<String, Vec<u8>>) -> std::io::Result<bool> {
+    let expected = pages
+        .keys()
+        .map(|name| format!("docs/man/{name}"))
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut matches = true;
+    for manifest_path in package_manifests() {
+        let contents = fs::read_to_string(&manifest_path)?;
+        let manifest: serde_json::Value = serde_json::from_str(&contents).map_err(|error| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("{}: {error}", manifest_path.display()),
+            )
+        })?;
+        let actual = manifest
+            .get("man")
+            .and_then(serde_json::Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<std::collections::BTreeSet<_>>()
+            })
+            .unwrap_or_default();
+        if actual != expected {
+            eprintln!(
+                "{}: man entries do not match the generated pages",
+                manifest_path.display()
+            );
+            matches = false;
+        }
+    }
+    Ok(matches)
+}
+
 fn main() -> ExitCode {
     let mode = env::args().nth(1).unwrap_or_else(|| "--write".to_string());
     let pages = expected_pages();
@@ -195,8 +239,9 @@ fn main() -> ExitCode {
         "--write" => match (
             write_pages(&output_dir, &pages),
             write_completions(&completions_dir, &completions),
+            check_package_man_pages(&pages),
         ) {
-            (Ok(()), Ok(())) => {
+            (Ok(()), Ok(()), Ok(true)) => {
                 println!(
                     "generated {} man pages and {} shell completions",
                     pages.len(),
@@ -204,7 +249,8 @@ fn main() -> ExitCode {
                 );
                 ExitCode::SUCCESS
             }
-            (Err(error), _) | (_, Err(error)) => {
+            (Ok(()), Ok(()), Ok(false)) => ExitCode::FAILURE,
+            (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
                 eprintln!("failed to generate CLI documentation: {error}");
                 ExitCode::FAILURE
             }
@@ -212,8 +258,9 @@ fn main() -> ExitCode {
         "--check" => match (
             check_pages(&output_dir, &pages),
             check_completions(&completions_dir, &completions),
+            check_package_man_pages(&pages),
         ) {
-            (Ok(true), Ok(true)) => {
+            (Ok(true), Ok(true), Ok(true)) => {
                 println!(
                     "{} generated man pages and {} shell completions are up to date",
                     pages.len(),
@@ -221,11 +268,11 @@ fn main() -> ExitCode {
                 );
                 ExitCode::SUCCESS
             }
-            (Ok(false), _) | (_, Ok(false)) => {
+            (Ok(false), _, _) | (_, Ok(false), _) | (_, _, Ok(false)) => {
                 eprintln!("generated CLI documentation is stale; run `mise run manpages`");
                 ExitCode::FAILURE
             }
-            (Err(error), _) | (_, Err(error)) => {
+            (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
                 eprintln!("failed to check generated CLI documentation: {error}");
                 ExitCode::FAILURE
             }

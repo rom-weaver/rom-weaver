@@ -279,7 +279,7 @@ Permission failures exit `1`. Under `--json` they arrive as a terminal event wit
 ## Man pages
 
 
-The pages under `docs/man` come from the same Clap definitions as `--help`, so they always match it. They are generated during release packaging and are installed by Homebrew and the install scripts. In a source checkout, run:
+The pages under `docs/man` come from the same Clap definitions as `--help`, so they always match it. They are generated during release packaging. Homebrew, the macOS/Linux install script, and global npm installs install them on Unix. A local npm install keeps them under the package's `docs/man` directory. Scoop, cargo-binstall, mise, `cargo install`, and Docker install the executable only; those methods have no standard manpage installation hook or, for Docker, no `man(1)` program.
 
 ```bash
 mise run manpages
