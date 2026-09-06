@@ -146,8 +146,9 @@ describe("SaveEditor", () => {
     await chooseFile();
     expect(screen.getByRole("group", { name: "trainer" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "progress" })).toBeTruthy();
-    expect((screen.getByLabelText("Gender") as HTMLSelectElement).value).toBe("male");
-    expect(screen.getByText("1")).toBeTruthy();
+    const gender = screen.getByRole("radiogroup", { name: "Gender" });
+    expect((gender.querySelector("input:checked") as HTMLInputElement).value).toBe("male");
+    expect(screen.getByLabelText("Badge 1").textContent).toContain("1");
   });
 
   it("shows a field error and keeps the previous value for invalid integers", async () => {

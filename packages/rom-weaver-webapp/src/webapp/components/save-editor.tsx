@@ -1,4 +1,4 @@
-import { Download, RotateCcw, Save as SaveIcon, Undo2 } from "lucide-react";
+import { Download, RotateCcw, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   listEmulatorSaves,
@@ -17,12 +17,45 @@ import {
   type SaveValue,
 } from "../../lib/runtime/save-editor-result.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
+import { join } from "../../public/react/components/ds/cx.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
+import { FileCard } from "../../public/react/components/ds/file-card.tsx";
+import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
+import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 
 type SaveEditorProps = { onSessionChange: (active: boolean) => void; pageDrop?: PageFileDrop | null };
 type FieldErrors = Record<string, string>;
+type FieldGroup = { id: string; title: string; fields: SaveField[] };
+type FieldSlot = { id: string; title: string; groups: FieldGroup[] };
+
+const SAVE_SUPPORTED_FILES = [
+  { extensions: ["sav", "srm", "eep", "fla"], label: "Raw game saves" },
+  { extensions: ["sps", "xps", "gsv"], label: "GameShark SP wrappers" },
+] as const;
+const SAVE_ACCEPT = ".sav,.srm,.eep,.fla,.sps,.xps,.gsv,application/octet-stream";
+const GHOST_STEPS = [
+  { num: "0x02", title: "Fields" },
+  { num: "0x03", title: "Write" },
+] as const;
+/* Titles for the id segments the Rust handlers emit; anything else is capitalized. */
+const GROUP_TITLES: Record<string, string> = {
+  equipment: "Equipment",
+  hearts: "Health",
+  inventory: "Inventory",
+  player: "Player",
+  progress: "Progress",
+  resources: "Resources",
+  trainer: "Trainer",
+};
+const INTEGRITY_STATE: Record<string, { state: "ok" | "warn" | "bad"; label: string }> = {
+  invalid: { label: "Integrity invalid", state: "bad" },
+  partially_recoverable: { label: "Partially recoverable", state: "bad" },
+  unsupported: { label: "Unsupported", state: "bad" },
+  valid: { label: "Integrity valid", state: "ok" },
+  valid_with_warnings: { label: "Valid with warnings", state: "warn" },
+};
 
 const outcomeKind = (recognition?: SaveRecognition): "recognized" | "ambiguous" | "unsupported" | "unknown" => {
   const outcome = recognition?.outcome;
@@ -43,13 +76,46 @@ const candidateFromRecognition = (recognition?: SaveRecognition): SaveCandidate 
 };
 
 const formatAssignment = (field: SaveField, value: string) => `${field.id}=${value}`;
-// A wrapped save (.sps/.xps/.gsv) stays wrapped on output, so the edited file
-// keeps the source extension instead of forcing .sav.
 const editedSaveName = (name: string) => {
-  const extension = /\.([^.]+)$/.exec(name)?.[1] ?? "sav";
-  return `${name.replace(/\.[^.]+$/, "")}-edited.${extension}`;
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? `${name.slice(0, dot)}-edited${name.slice(dot)}` : `${name}-edited.sav`;
 };
 const loadSaveApi = () => import("../../platform/browser/browser-save-api.ts");
+const titleFor = (segment: string) =>
+  GROUP_TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1).replaceAll("_", " ");
+const isReadOnly = (field: SaveField) => !field.editable || field.kind.startsWith("read_only");
+const isToggle = (field: SaveField) => field.kind === "boolean" || field.kind === "bitfield_boolean";
+const formatNumber = (value: number) => value.toLocaleString("en-US");
+const displayValue = (value: SaveValue) => {
+  const text = saveValueToText(value);
+  if (text === "true") return "on";
+  if (text === "false") return "off";
+  return text;
+};
+
+/**
+ * Group fields by their id prefix. A `slot_N.group.name` id (Zelda's three
+ * files) yields one slot per file with groups inside; `group.name` ids (the
+ * Pokémon trainer block) yield a single unnamed slot.
+ */
+const groupFields = (fields: readonly SaveField[]): FieldSlot[] => {
+  const slots = new Map<string, Map<string, SaveField[]>>();
+  for (const field of fields) {
+    const parts = field.id.split(".");
+    const slotId = parts.length >= 3 ? (parts[0] ?? "") : "";
+    const groupId = parts.length >= 3 ? (parts[1] ?? "") : (parts[0] ?? "");
+    const groups = slots.get(slotId) ?? new Map<string, SaveField[]>();
+    const members = groups.get(groupId) ?? [];
+    members.push(field);
+    groups.set(groupId, members);
+    slots.set(slotId, groups);
+  }
+  return Array.from(slots, ([slotId, groups]) => ({
+    groups: Array.from(groups, ([id, members]) => ({ fields: members, id, title: titleFor(id) })),
+    id: slotId,
+    title: slotId.replace(/^slot_(\d+)$/, "File $1"),
+  }));
+};
 
 const SaveFieldControl = ({
   field,
@@ -72,45 +138,76 @@ const SaveFieldControl = ({
   const common = {
     "aria-describedby": describedBy,
     "aria-invalid": error ? ("true" as const) : undefined,
-    className: "input save-editor-control",
     disabled,
     id: `save-field-${field.id}`,
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange(event.currentTarget.value),
+    onChange: (event: ChangeEvent<HTMLInputElement>) => onChange(event.currentTarget.value),
   };
-  if (field.kind === "boolean" || field.kind === "bitfield_boolean") {
-    return (
-      <input
-        {...common}
-        aria-label={field.label}
-        checked={text === "true"}
-        className="save-editor-checkbox"
-        onChange={(event) => onChange(String(event.currentTarget.checked))}
-        type="checkbox"
-      />
-    );
-  }
   if (field.constraints.choices?.length) {
     return (
-      <select {...common} className="select save-editor-control" value={text}>
+      <div aria-label={field.label} className="save-editor-segment" role="radiogroup">
         {field.constraints.choices.map((choice) => (
-          <option key={choice} value={choice}>
-            {choice}
-          </option>
+          <label className={join("save-editor-segment-option", text === choice && "is-on")} key={choice}>
+            <input
+              checked={text === choice}
+              disabled={disabled}
+              name={`save-field-${field.id}`}
+              onChange={() => onChange(choice)}
+              type="radio"
+              value={choice}
+            />
+            <span>{choice}</span>
+          </label>
         ))}
-      </select>
+      </div>
     );
   }
+  if (field.kind === "text") {
+    return (
+      <span className="save-editor-text">
+        <input
+          {...common}
+          className="input save-editor-control mono"
+          maxLength={field.constraints.max_length ?? undefined}
+          type="text"
+          value={text}
+        />
+        {field.constraints.max_length === null ? null : (
+          <span className="save-editor-range mono">
+            {text.length}/{field.constraints.max_length}
+          </span>
+        )}
+      </span>
+    );
+  }
+  const { max, min } = field.constraints;
   return (
-    <input
-      {...common}
-      aria-label={field.label}
-      max={field.constraints.max ?? undefined}
-      maxLength={field.constraints.max_length ?? undefined}
-      min={field.constraints.min ?? undefined}
-      step={field.step ?? undefined}
-      type={field.kind === "text" || field.kind === "read_only_text" ? "text" : "number"}
-      value={text}
-    />
+    <span className="save-editor-text">
+      <input
+        {...common}
+        className="input save-editor-control save-editor-number mono"
+        max={max ?? undefined}
+        min={min ?? undefined}
+        step={field.step ?? undefined}
+        type="number"
+        value={text}
+      />
+      {max === null ? null : (
+        <button
+          className="btn slim ghost save-editor-max"
+          disabled={disabled || text === String(max)}
+          onClick={() => onChange(String(max))}
+          type="button"
+        >
+          Max
+        </button>
+      )}
+      {min !== null || max !== null ? (
+        <span className="save-editor-range mono">
+          {min === null ? "…" : formatNumber(min)} – {max === null ? "…" : formatNumber(max)}
+          {field.step && field.step > 1 ? ` · step ${field.step}` : ""}
+        </span>
+      ) : null}
+    </span>
   );
 };
 
@@ -128,13 +225,13 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
   const [output, setOutput] = useState<PublicOutput | null>(null);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [selectedSaveId, setSelectedSaveId] = useState<string>();
+  const [selectedSlot, setSelectedSlot] = useState("");
   const [originalSram, setOriginalSram] = useState<Uint8Array | null>(null);
   const [replacementSram, setReplacementSram] = useState<Uint8Array | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState(false);
   const [undoAvailable, setUndoAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
   const outputRef = useRef<PublicOutput | null>(null);
   const handledDropRef = useRef(0);
   const requestRef = useRef(0);
@@ -170,6 +267,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     setErrors({});
     setPreview(null);
     setSelectedSaveId(undefined);
+    setSelectedSlot("");
     setOriginalSram(null);
     setReplacementSram(null);
     setPendingReplacement(false);
@@ -208,6 +306,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       setValues(nextValues);
       setOriginalValues(nextValues);
       setPreview(null);
+      setSelectedSlot(groupFields(result.document.fields)[0]?.id ?? "");
     } catch (cause) {
       if (request === requestRef.current) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -278,28 +377,23 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     clearOutput();
     setPreview(null);
   };
-  const assignments =
-    document?.fields
-      .filter((field) => field.editable)
-      .map((field) => {
-        const value = values[field.id];
-        const original = originalValues[field.id] ?? field.value;
-        return value && saveValueToText(value) !== saveValueToText(original)
-          ? formatAssignment(field, saveValueToText(value))
-          : null;
-      })
-      .filter((value): value is string => value !== null) || [];
+  const isChanged = (field: SaveField) => {
+    const value = values[field.id];
+    const original = originalValues[field.id] ?? field.value;
+    return !!value && saveValueToText(value) !== saveValueToText(original);
+  };
   const pendingChanges =
     document?.fields
-      .filter((field) => field.editable)
-      .flatMap((field) => {
-        const original = originalValues[field.id] ?? field.value;
-        const next = values[field.id];
-        if (!next || saveValueToText(next) === saveValueToText(original)) return [];
-        return [{ field, next, original }];
-      }) || [];
+      .filter((field) => field.editable && isChanged(field))
+      .map((field) => ({
+        field,
+        next: values[field.id] ?? field.value,
+        original: originalValues[field.id] ?? field.value,
+      })) || [];
+  const assignments = pendingChanges.map(({ field, next }) => formatAssignment(field, saveValueToText(next)));
+  const hasErrors = Object.values(errors).some(Boolean);
   const previewChanges = async () => {
-    if (!(source && document) || assignments.length === 0 || Object.values(errors).some(Boolean)) return;
+    if (!(source && document) || assignments.length === 0 || hasErrors) return;
     const { request, signal } = startRequest();
     setBusy(true);
     try {
@@ -321,7 +415,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     }
   };
   const writeEditedSave = async () => {
-    if (!source || assignments.length === 0 || Object.values(errors).some(Boolean)) return;
+    if (!source || assignments.length === 0 || hasErrors) return;
     const { request, signal } = startRequest();
     setBusy(true);
     setError("");
@@ -419,78 +513,171 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       setBusy(false);
     }
   };
-  const kind = outcomeKind(recognition);
-  const fieldGroups = document
-    ? Array.from(
-        document.fields.reduce((groups, field) => {
-          const group = field.id.split(".")[0] || "General";
-          const fields = groups.get(group) || [];
-          fields.push(field);
-          groups.set(group, fields);
-          return groups;
-        }, new Map<string, SaveField[]>()),
-      )
-    : [];
-  const sramSaves = saves.filter((record) => record.sram);
 
-  return (
-    <section className="save-editor" id="save-editor-panel">
-      <StepSection num="0x01" title="Save file">
-        <input
-          aria-label="Save file"
-          accept=".sav,.srm,.eep,.fla,.sps,.xps,.gsv,application/octet-stream"
-          hidden
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = "";
-            if (file) selectSource(file);
-          }}
-          ref={inputRef}
-          type="file"
-        />
-        <button
-          className="btn primary save-editor-pick"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-          type="button"
-        >
-          <SaveIcon aria-hidden="true" /> Choose .sav, .srm, .eep, .fla, .sps, or .gsv
-        </button>
-        <p className="save-editor-hint">You can also choose SRAM from the saved emulator list below.</p>
-        {source ? (
-          <p className="save-editor-source mono">
-            {source.name} · {formatByteSize(source.size)}
-          </p>
+  const kind = outcomeKind(recognition);
+  const slots = document ? groupFields(document.fields) : [];
+  const hasSlotTabs = slots.length > 1;
+  const activeSlot = slots.find((slot) => slot.id === selectedSlot) ?? slots[0];
+  const sramSaves = saves.filter((record) => record.sram);
+  const integrity = document ? INTEGRITY_STATE[document.integrity.state] : undefined;
+  const slotName = (slot: FieldSlot) => {
+    const name = slot.groups.flatMap((group) => group.fields).find((field) => field.id.endsWith(".player.name"));
+    const text = name ? saveValueToText(name.value).trim() : "";
+    return text ? `${slot.title} · ${text}` : slot.title;
+  };
+
+  const renderField = (field: SaveField) => {
+    const errorText = errors[field.id];
+    const changed = isChanged(field);
+    const readOnly = isReadOnly(field);
+    const controlId = `save-field-${field.id}`;
+    return (
+      <div className={join("save-editor-field", changed && "is-changed")} key={field.id}>
+        <div className="save-editor-field-head">
+          <label htmlFor={controlId}>{field.label}</label>
+          {field.description ? (
+            <span className="save-editor-description" id={`save-field-description-${field.id}`}>
+              {field.description}
+            </span>
+          ) : null}
+        </div>
+        {readOnly ? (
+          <output className="save-editor-readonly mono" id={controlId}>
+            {saveValueToText(field.value)}
+            <span className="save-editor-tag">read-only</span>
+          </output>
+        ) : (
+          <SaveFieldControl
+            disabled={busy}
+            error={errorText}
+            field={field}
+            onChange={(value) => updateField(field, value)}
+            value={values[field.id] || field.value}
+          />
+        )}
+        {changed ? (
+          <button
+            aria-label={`Reset ${field.label}`}
+            className="btn slim ghost save-editor-reset"
+            disabled={busy}
+            onClick={() => resetField(field)}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" /> Reset
+          </button>
+        ) : (
+          <span />
+        )}
+        {field.warnings.length ? <span className="save-editor-warning">{field.warnings.join(" ")}</span> : null}
+        {errorText ? (
+          <span className="save-editor-field-error" id={`save-field-error-${field.id}`} role="alert">
+            {errorText}
+          </span>
         ) : null}
+      </div>
+    );
+  };
+  const renderToggle = (field: SaveField) => {
+    const changed = isChanged(field);
+    const readOnly = isReadOnly(field);
+    const on = saveValueToText(values[field.id] || field.value) === "true";
+    return (
+      <label
+        className={join("save-editor-toggle", on && "is-on", changed && "is-changed")}
+        key={field.id}
+        title={field.description || undefined}
+      >
+        <input
+          checked={on}
+          disabled={busy || readOnly}
+          onChange={(event) => updateField(field, String(event.currentTarget.checked))}
+          type="checkbox"
+        />
+        <span aria-hidden="true" className="save-editor-toggle-mark" />
+        <span className="save-editor-toggle-label">{field.label}</span>
+        <span className="save-editor-toggle-id mono">{field.id.split(".").at(-1)}</span>
+      </label>
+    );
+  };
+  const renderGroup = (group: FieldGroup) => {
+    const toggles = group.fields.filter(isToggle);
+    const rows = group.fields.filter((field) => !isToggle(field));
+    const editable = group.fields.filter((field) => !isReadOnly(field)).length;
+    const on = toggles.filter((field) => saveValueToText(values[field.id] || field.value) === "true").length;
+    return (
+      <fieldset aria-label={group.id} className="save-editor-group" key={group.id}>
+        <legend className="save-editor-group-head">
+          <span className="save-editor-group-title">{group.title}</span>
+          <span className="save-editor-group-count mono">
+            {toggles.length && !rows.length
+              ? `${on} / ${toggles.length}`
+              : `${editable} editable · ${group.fields.length - editable} read-only`}
+          </span>
+        </legend>
+        {rows.length ? <div className="save-editor-rows">{rows.map(renderField)}</div> : null}
+        {toggles.length ? <div className="save-editor-toggles">{toggles.map(renderToggle)}</div> : null}
+      </fieldset>
+    );
+  };
+
+  const fileCard = source ? (
+    <div className="cards save-editor-file">
+      <FileCard
+        meta={
+          <>
+            <span className="fsize mono">{formatByteSize(source.size)}</span>
+            {document ? <span className="meta-fmt mono">{document.save_format_name}</span> : null}
+            {integrity ? <span className={join("save-editor-pill", integrity.state)}>{integrity.label}</span> : null}
+            {selectedSaveId ? <span className="meta-fmt mono">emulator SRAM</span> : null}
+          </>
+        }
+        name={<span className="nm mono">{source.name}</span>}
+        onRemove={resetEditor}
+        removeLabel="Remove save"
+        state={integrity?.state}
+      >
         {document ? (
-          <div aria-live="polite" className="save-editor-identity">
+          <p aria-live="polite" className="save-editor-identity">
             <strong>{document.identity.name}</strong>
             <span>{document.platform.toUpperCase()}</span>
-            <span>{document.save_format_name}</span>
-            <span>Integrity: {document.integrity.state.replaceAll("_", " ")}</span>
-            <span>Active slot: {document.active_slot}</span>
-            <span>Save index: {document.counter}</span>
-          </div>
+            {document.counter ? (
+              <span className="mono">
+                slot {document.active_slot} · index {document.counter}
+              </span>
+            ) : (
+              <span className="mono">{document.sections.length} checked copies</span>
+            )}
+          </p>
         ) : null}
+        {document?.warnings.map((warning) => (
+          <Notice key={warning} level="warn">
+            {warning}
+          </Notice>
+        ))}
         {kind === "ambiguous" ? (
           <div aria-live="polite" className="save-editor-candidates">
-            <strong>Choose the game format</strong>
-            {(recognition?.candidates || []).map((candidate) => (
-              <button
-                className="btn slim ghost"
-                disabled={busy}
-                key={candidate.identity.id}
-                onClick={() => {
-                  if (!source) return;
-                  setRecognition(undefined);
-                  const activeRequest = startRequest();
-                  void inspectSelected(source, candidate.identity.id, sourceRomSha1, activeRequest);
-                }}
-                type="button"
-              >
-                {candidate.identity.name} ({candidate.identity.family})
-              </button>
-            ))}
+            <p className="save-editor-candidates-lead">
+              <strong>Choose the game format</strong>
+              <span>Two games share this save layout, so the file alone cannot tell which one wrote it.</span>
+            </p>
+            <div className="save-editor-candidate-list">
+              {(recognition?.candidates || []).map((candidate) => (
+                <button
+                  className="btn slim ghost save-editor-candidate"
+                  disabled={busy}
+                  key={candidate.identity.id}
+                  onClick={() => {
+                    setRecognition(undefined);
+                    const activeRequest = startRequest();
+                    void inspectSelected(source, candidate.identity.id, sourceRomSha1, activeRequest);
+                  }}
+                  type="button"
+                >
+                  <span>{candidate.identity.name}</span>
+                  <span className="mono">{candidate.identity.family}</span>
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
         {kind === "unsupported" ? (
@@ -499,66 +686,125 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
             {potentialFormat ? ` · Potential format: ${potentialFormat}` : ""}. The original file remains unchanged.
           </Notice>
         ) : null}
-      </StepSection>
-      <StepSection fault={!!error} num="0x02" title="Fields" woven={!!document}>
-        {document ? (
-          <div className="save-editor-fields">
-            {fieldGroups.map(([group, fields]) => (
-              <fieldset className="save-editor-field-group" key={group}>
-                <legend>{group}</legend>
-                {fields.map((field) => {
-                  const errorText = errors[field.id];
-                  return (
-                    <div className="save-editor-field" key={field.id}>
-                      <label htmlFor={`save-field-${field.id}`}>{field.label}</label>
-                      {field.description ? (
-                        <span className="save-editor-description" id={`save-field-description-${field.id}`}>
-                          {field.description}
-                        </span>
-                      ) : null}
-                      {field.editable ? (
-                        <SaveFieldControl
-                          error={errorText}
-                          disabled={busy}
-                          field={field}
-                          onChange={(value) => updateField(field, value)}
-                          value={values[field.id] || field.value}
-                        />
-                      ) : (
-                        <output className="save-editor-readonly" id={`save-field-${field.id}`}>
-                          {saveValueToText(field.value)}
-                        </output>
-                      )}
-                      {errorText ? (
-                        <span className="save-editor-field-error" id={`save-field-error-${field.id}`} role="alert">
-                          {errorText}
-                        </span>
-                      ) : null}
-                      {field.editable ? (
-                        <button
-                          aria-label={`Reset ${field.label}`}
-                          className="btn slim ghost"
-                          disabled={busy}
-                          onClick={() => resetField(field)}
-                          type="button"
-                        >
-                          <RotateCcw aria-hidden="true" />
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </fieldset>
-            ))}
-            {assignments.length ? (
-              <p aria-live="polite" className="save-editor-pending">
-                {assignments.length} pending {assignments.length === 1 ? "change" : "changes"}
+      </FileCard>
+    </div>
+  ) : null;
+
+  const sramList = (
+    <div className="save-editor-stash">
+      <p className="save-editor-stash-title">Or open SRAM saved by the emulator in this browser</p>
+      {sramSaves.length ? (
+        <div className="save-editor-emulator-list">
+          {sramSaves.map((record) => (
+            <button
+              className="save-editor-record"
+              disabled={busy}
+              key={record.gameId}
+              onClick={() => chooseEmulatorSave(record)}
+              type="button"
+            >
+              <span>{record.label}</span>
+              <span className="mono">{formatByteSize(record.sram?.byteLength)}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="save-editor-empty">No stored SRAM records.</p>
+      )}
+    </div>
+  );
+
+  return (
+    <section className="panel save-editor" id="save-editor-container">
+      <UnifiedDropZone
+        accept={SAVE_ACCEPT}
+        addLabel="Replace the save"
+        afterDropZone={source ? fileCard : sramList}
+        big={!source}
+        disabled={busy}
+        heroLabel="Drop a game save to edit it"
+        heroLabelCoarse="Tap to add a game save"
+        info={
+          <p>
+            Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state.
+          </p>
+        }
+        inputId="save-editor-input-picker"
+        lead={{ line1: "ui.hero.saveThesis", line2: "ui.hero.saveThesis2" }}
+        multiple={false}
+        num="0x01"
+        onFiles={(files) => {
+          const selected = files.at(-1);
+          if (selected) selectSource(selected);
+        }}
+        supported={SAVE_SUPPORTED_FILES}
+        title="Save file"
+      />
+      {source ? (
+        <>
+          <StepSection
+            fault={!!error}
+            meta={pendingChanges.length ? `${pendingChanges.length} pending` : undefined}
+            num="0x02"
+            title="Fields"
+            woven={pendingChanges.length > 0}
+          >
+            {document && activeSlot ? (
+              <div className="save-editor-fields">
+                {hasSlotTabs ? (
+                  <div aria-label="Save files" className="save-editor-slots" role="tablist">
+                    {slots.map((slot) => (
+                      <button
+                        aria-selected={slot.id === activeSlot.id}
+                        className="save-editor-slot"
+                        key={slot.id}
+                        onClick={() => setSelectedSlot(slot.id)}
+                        role="tab"
+                        type="button"
+                      >
+                        {slotName(slot)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {activeSlot.groups.map(renderGroup)}
+              </div>
+            ) : (
+              <p className="save-editor-empty">
+                {busy ? "Reading the save…" : "Choose a supported save to inspect its fields."}
               </p>
+            )}
+            {error ? (
+              <Notice level="error" onDismiss={() => setError("")}>
+                {error}
+              </Notice>
+            ) : null}
+          </StepSection>
+          <StepSection num="0x03" title="Write" woven={!!output}>
+            {pendingChanges.length ? (
+              <ul aria-live="polite" className="save-editor-ledger">
+                {pendingChanges.map(({ field, next, original }) => (
+                  <li className="save-editor-chip" key={field.id}>
+                    <span>{field.label}</span>
+                    <span className="mono">
+                      {displayValue(original)} → {displayValue(next)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="save-editor-empty">No changes yet. Edit a field above to build the edited copy.</p>
+            )}
+            {preview ? (
+              <div aria-live="polite" className="save-editor-preview mono">
+                {preview.changes?.length || 0} field changes · integrity {preview.output_valid ? "valid" : "invalid"}
+                {preview.touched_sections?.length ? ` · sections ${preview.touched_sections.join(", ")}` : ""}
+              </div>
             ) : null}
             <div className="save-editor-actions">
               <button
                 className="btn slim ghost"
-                disabled={!assignments.length || busy}
+                disabled={!pendingChanges.length || busy}
                 onClick={resetAll}
                 type="button"
               >
@@ -566,7 +812,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
               </button>
               <button
                 className="btn slim ghost"
-                disabled={!assignments.length || busy}
+                disabled={!pendingChanges.length || busy || hasErrors}
                 onClick={() => void previewChanges()}
                 type="button"
               >
@@ -582,7 +828,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
                 </RunButton>
               ) : (
                 <RunButton
-                  disabled={!assignments.length || busy || Object.values(errors).some(Boolean)}
+                  disabled={!pendingChanges.length || busy || hasErrors}
                   icon={<Download aria-hidden="true" />}
                   onClick={() => void writeEditedSave()}
                 >
@@ -590,86 +836,39 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
                 </RunButton>
               )}
             </div>
-            {pendingChanges.length ? (
-              <aside aria-live="polite" className="save-editor-pending">
-                <strong>Pending changes</strong>
-                <ul>
-                  {pendingChanges.map(({ field, next, original }) => (
-                    <li key={field.id}>
-                      <span>{field.label}</span>
-                      <span className="mono">
-                        {saveValueToText(original)} → {saveValueToText(next)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </aside>
-            ) : null}
-          </div>
-        ) : (
-          <p className="save-editor-empty">Choose a supported save to inspect its fields.</p>
-        )}
-        {preview ? (
-          <div aria-live="polite" className="save-editor-preview">
-            {preview.changes?.length || 0} field changes · integrity {preview.output_valid ? "valid" : "invalid"}
-          </div>
-        ) : null}
-        {error ? (
-          <Notice level="error" onDismiss={() => setError("")}>
-            {error}
-          </Notice>
-        ) : null}
-      </StepSection>
-      <StepSection num="0x03" title="Emulator SRAM">
-        {sramSaves.length ? (
-          <div className="save-editor-emulator-list">
-            {sramSaves.map((record) => (
-              <button
-                className="btn slim ghost"
-                disabled={busy}
-                key={record.gameId}
-                onClick={() => chooseEmulatorSave(record)}
-                type="button"
-              >
-                {record.label} · {formatByteSize(record.sram?.byteLength)}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="save-editor-empty">No stored SRAM records.</p>
-        )}
-        {selectedSaveId && output ? (
-          <div className="save-editor-replace">
-            <button
-              className="btn slim ghost"
-              disabled={busy}
-              onClick={() => setPendingReplacement(true)}
-              type="button"
-            >
-              Replace selected SRAM
-            </button>
-            {pendingReplacement ? (
-              <span role="alert">
-                This replaces the stored SRAM.{" "}
-                <button className="btn slim danger" onClick={() => void replaceSelectedSram()} type="button">
-                  Confirm
+            {selectedSaveId && output ? (
+              <div className="save-editor-replace">
+                <button
+                  className="btn slim ghost"
+                  disabled={busy}
+                  onClick={() => setPendingReplacement(true)}
+                  type="button"
+                >
+                  Replace selected SRAM
                 </button>
-                <button className="btn slim ghost" onClick={() => setPendingReplacement(false)} type="button">
-                  Cancel
-                </button>
-              </span>
+                {pendingReplacement ? (
+                  <span role="alert">
+                    This replaces the stored SRAM.{" "}
+                    <button className="btn slim danger" onClick={() => void replaceSelectedSram()} type="button">
+                      Confirm
+                    </button>
+                    <button className="btn slim ghost" onClick={() => setPendingReplacement(false)} type="button">
+                      Cancel
+                    </button>
+                  </span>
+                ) : null}
+                {undoAvailable ? (
+                  <button className="btn slim ghost" onClick={() => void undoReplacement()} type="button">
+                    <Undo2 aria-hidden="true" /> Undo replacement
+                  </button>
+                ) : null}
+              </div>
             ) : null}
-            {undoAvailable ? (
-              <button className="btn slim ghost" onClick={() => void undoReplacement()} type="button">
-                <Undo2 aria-hidden="true" /> Undo replacement
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </StepSection>
-      <button className="btn slim ghost save-editor-reset" disabled={busy} onClick={resetEditor} type="button">
-        Reset editor
-      </button>
+          </StepSection>
+        </>
+      ) : (
+        <GhostSteps steps={GHOST_STEPS} />
+      )}
     </section>
   );
 };

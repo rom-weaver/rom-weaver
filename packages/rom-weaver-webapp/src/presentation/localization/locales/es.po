@@ -415,6 +415,11 @@ msgstr "Códecs DVD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.saveThesis"
+msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo de una partida guardada,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.detailEmulatorFile"
 msgstr "EmulatorJS: {name}"
 
@@ -1371,6 +1376,11 @@ msgstr "Novedades"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.nameLabel"
 msgstr "¿Qué juego necesita?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.saveThesis2"
+msgstr "con cada suma de verificación recalculada antes de descargar —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

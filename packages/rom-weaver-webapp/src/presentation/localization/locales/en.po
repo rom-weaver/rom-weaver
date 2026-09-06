@@ -415,6 +415,11 @@ msgstr "DVD Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.saveThesis"
+msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.detailEmulatorFile"
 msgstr "EmulatorJS: {name}"
 
@@ -1371,6 +1376,11 @@ msgstr "What’s new"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.nameLabel"
 msgstr "Which game do you need?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.saveThesis2"
+msgstr "with every checksum recalculated before you download —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

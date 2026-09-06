@@ -230,6 +230,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Undo the patch.",
   }),
   "ui.hero.toolsThesis2": msg({ id: "ui.hero.toolsThesis2", message: "Recover the original." }),
+  "ui.hero.saveThesis": msg({
+    id: "ui.hero.saveThesis",
+    message: "Edit trainer names, money, badges, hearts, and gear in a game save,",
+  }),
+  "ui.hero.saveThesis2": msg({
+    id: "ui.hero.saveThesis2",
+    message: "with every checksum recalculated before you download —",
+  }),
   "ui.hero.trimThesis": msg({
     id: "ui.hero.trimThesis",
     message: "Keep the game.",
