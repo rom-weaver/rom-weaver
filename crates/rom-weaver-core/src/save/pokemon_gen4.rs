@@ -477,7 +477,7 @@ fn build_document(
         let (offset, bit) = badge_location(badge);
         fields.push(SaveField {
             id: format!("progress.badge_{}", badge + 1),
-            label: format!("Badge {}", badge + 1),
+            label: badge_label(badge),
             section_id: 0,
             offset: offset as u16,
             kind: SaveFieldKind::BitfieldBoolean,
@@ -609,6 +609,17 @@ fn repair_main_crc(bytes: &mut [u8], active: &ParsedSlot) {
     let crc = crc16_ccitt(&bytes[active.base..active.base + active.main.offset]);
     let footer = active.base + active.main.offset;
     bytes[footer + 14..footer + 16].copy_from_slice(&crc.to_le_bytes());
+}
+
+/// Badge flag order follows the Johto and Kanto badge bytes of the trainer profile.
+/// https://github.com/pret/pokeheartgold/blob/master/include/constants/badges.h
+const BADGE_NAMES: [&str; 16] = [
+    "Zephyr", "Hive", "Plain", "Fog", "Storm", "Mineral", "Glacier", "Rising", "Boulder",
+    "Cascade", "Thunder", "Rainbow", "Soul", "Marsh", "Volcano", "Earth",
+];
+
+fn badge_label(badge: u8) -> String {
+    format!("{} Badge", BADGE_NAMES[usize::from(badge)])
 }
 
 fn badge_location(badge: u8) -> (usize, u8) {
