@@ -42,7 +42,7 @@ scoop install rom-weaver
 
 ### Install script (macOS, Linux)
 
-Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing to install a binary this repository did not publish. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
+Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \

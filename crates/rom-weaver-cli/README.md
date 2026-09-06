@@ -15,6 +15,19 @@
 
 > **Beta software.** The `rom-weaver` command is the supported interface, and the one to install. The four library crates it is built from (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only so this one can be; using them directly is unsupported.
 
+<!-- START doctoc -->
+## Table of contents
+
+- [What does this crate do?](#what-does-this-crate-do)
+- [Install](#install)
+- [Usage](#usage)
+- [Related crates](#related-crates)
+- [Stability](#stability)
+- [Documentation](#documentation)
+- [License](#license)
+
+<!-- END doctoc -->
+
 ## What does this crate do?
 
 The installable end of rom-weaver. It ships the `rom-weaver` binary and the `rom_weaver_app` command library that both frontends share. The native CLI and the `wasm32-wasip1-threads` build that powers the [rom-weaver.com](https://rom-weaver.com/) webapp run the exact same orchestration code.
@@ -56,11 +69,11 @@ Prebuilt binaries and a Homebrew tap are available. See the [project README](htt
 rom-weaver probe --input game.iso
 
 # Apply a patch, verifying checksums at every step
-rom-weaver weave --input game.sfc --patch hack.bps \
+rom-weaver patch apply --input game.sfc --patch hack.bps \
   --output game-hacked.sfc --no-compress
 
 # ...or let the output extension choose a compression format
-rom-weaver weave --input game.sfc --patch hack.bps --output game-hacked.zip
+rom-weaver patch apply --input game.sfc --patch hack.bps --output game-hacked.zip
 
 # Build a patch you can share
 rom-weaver patch create --original original.sfc --modified hacked.sfc --output hack.bps
@@ -75,9 +88,9 @@ rom-weaver compress --input game.cue --output game.chd
 rom-weaver probe --input game.chd --json
 ```
 
-A few commands and flags answer to more than one name: `weave` is the short name for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore` for `trim --revert`. Format names have alternates too, so `--format 7zip` and `--format 7z` are the same. The [CLI guide](https://rom-weaver.com/docs/cli#alternate-names) lists them all.
+A few commands and flags answer to more than one name: `weave` is a compatibility alias for `patch apply`, `inspect` for `probe`, and `trim --untrim`/`--restore` for `trim --revert`. Format names have alternates too, so `--format 7zip` and `--format 7z` are the same. The [CLI guide](https://rom-weaver.com/docs/cli#alternate-names) lists them all.
 
-The [CLI reference](https://rom-weaver.com/docs/cli) covers every command, the supported-format tables, compression settings, JSON output, man pages, Docker usage, and file permissions.
+The [CLI reference](https://rom-weaver.com/docs/cli) covers commands, shared flags, JSON output, and file permissions. [Supported formats](https://rom-weaver.com/docs/supported-formats) and [Install the CLI](https://rom-weaver.com/docs/install) cover capabilities and installation.
 
 ## Related crates
 

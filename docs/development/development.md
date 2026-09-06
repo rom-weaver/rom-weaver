@@ -168,9 +168,10 @@ When Clap commands or argument help changes, regenerate the man pages from those
 
 ```bash
 mise run manpages
+man ./docs/man/rom-weaver.1
 ```
 
-The webapp's sample NES ROMs, IPS patch, and ZIP bundles are reproducible from source. Generate the four public sample files in `packages/rom-weaver-webapp/dist/` with:
+The webapp's sample NES ROMs, IPS patches, and ZIP bundles are reproducible from source. Generate the four public sample files in `packages/rom-weaver-webapp/dist/` with:
 
 ```bash
 npm --prefix packages/rom-weaver-webapp run samples:generate

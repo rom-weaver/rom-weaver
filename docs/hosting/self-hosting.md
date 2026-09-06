@@ -51,7 +51,7 @@ With `fullchain.pem` and `privkey.pem` in `./certs`, open `https://localhost:844
 
 ### Run with Compose
 
-Docker Compose pulls the published webapp image from GitHub Container Registry (GHCR) by default and starts its included static server from a downloaded template: Download the [Docker Compose template](https://github.com/rom-weaver/rom-weaver/blob/main/docker-compose.yml) into a new directory:
+Download the [Docker Compose template](https://github.com/rom-weaver/rom-weaver/blob/main/docker-compose.yml) into a new directory, then start the published image:
 
 ```bash
 mkdir -p rom-weaver-compose
@@ -167,9 +167,9 @@ mise run build-wasm-prod
 npm --prefix packages/rom-weaver-webapp run build
 ```
 
-Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host. Preserve the directory structure. The build emits raw assets; generic hosts should enable Brotli or gzip compression when available, especially for the WASM file. The Docker image is the only distribution that adds static `.br` siblings, because its bundled server is configured to consume them; it gzips on demand for clients that cannot take brotli.
+Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host. Preserve the directory structure. The build includes raw assets and `.br` sidecars for compressible immutable assets. Configure your host to serve a sidecar with `Content-Encoding: br` when the client accepts Brotli, and the raw asset otherwise. Docker and the Cloudflare Pages integration handle this negotiation. A generic host can instead compress the raw assets itself.
 
-The build includes directory-index pages for `/apply`, `/create`, `/trim`, and `/tools`, so ordinary static servers can resolve direct visits and refreshes without rewrite configuration. A server that disables directory indexes must instead fall back to `index.html` for those navigation requests. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History API routes, and the service-worker scope resolve consistently. Explicit directory-document URLs such as `/apply/index.html` are normalized in the browser to the clean `/apply` route without another request. The old `/weave` forms are permanent-redirected to `/apply` by the Docker image and Cloudflare Pages build; configure the equivalent redirect on other static hosts.
+The build includes directory-index pages for its workflow and documentation routes, so ordinary static servers can resolve direct visits and refreshes without rewrite configuration. A server that disables directory indexes must instead fall back to `index.html` for those navigation requests. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History API routes, and the service-worker scope resolve consistently. Explicit directory-document URLs such as `/apply/index.html` are normalized in the browser to the clean `/apply` route without another request. The old `/weave` forms are permanent-redirected to `/apply` by the Docker image and Cloudflare Pages build; configure the equivalent redirect on other static hosts.
 
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, the equivalent cache policy is:
 

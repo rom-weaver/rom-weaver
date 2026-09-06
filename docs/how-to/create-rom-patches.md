@@ -86,7 +86,7 @@ The format list in Create only offers formats rom-weaver can make for the files 
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/create-output-mobile-dark.webp" width="1170" height="666">
     <img src="/docs/screenshots/create-output-desktop-dark.webp" width="2242" height="568" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the dark theme">
   </picture>
-  <figcaption>The focused output card. Mobile readers get a mobile capture and dark mode gets a dark capture.</figcaption>
+  <figcaption>The output controls set the patch name, format, and format-specific options.</figcaption>
 </figure>
 
 The browser reads both ROMs and creates the patch locally. None of those files are uploaded - see [why your files stay on your device](../explanation/local-first.md).
@@ -103,7 +103,7 @@ Your Modified file working does not prove the downloaded patch works. Test the a
 6. Compare the result's checksum with the Modified checksum shown on Create.
 7. Launch the rebuilt result in the emulator or hardware you support.
 
-A checksum match proves the patch rebuilt Modified byte for byte. Launching the rebuilt file proves the game itself still works. Do both.
+Compare the same checksum algorithm on both files to check reconstruction, then play enough of the rebuilt game to test your changes. Reaching the title screen alone does not test the complete game.
 
 Repeat the test for every supported optional-patch combination. Test from a clean browser page so loose files or old choices cannot hide a packaging mistake.
 

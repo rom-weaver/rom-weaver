@@ -22,6 +22,8 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Header and byte-order flags](#header-and-byte-order-flags)
   - [Extras](#extras)
   - [Validation](#validation)
+- [Patch creation metadata](#patch-creation-metadata)
+- [Bundles](#bundles)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
@@ -44,7 +46,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `trim` | Cut the padding off a ROM, or put it back. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
-| `patch validate` | Check that patches would apply cleanly, without writing anything. |
+| `patch validate` | Check patch application without keeping an output ROM. |
 | `bundle create` | Write a `rom-weaver-bundle.json` recipe from local files. |
 | `bundle parse` | Read a bundle recipe and report what it points at. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
@@ -57,14 +59,11 @@ Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create` is
 
 `identify`, `probe`, and `checksum` accept `-` as the `--input` value to read from stdin.
 
-```bash
-curl -sL https://example.com/game.gba | rom-weaver checksum --input - --algo sha256
-xz -dc game.iso.xz | rom-weaver probe --input - --json
-```
+See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
 ### Alternate names
 
-Some commands and flags answer to more than one name. They are the same code either way, so pick whichever reads better:
+These alternate names invoke the same command or option:
 
 | Canonical | Also accepted |
 | --- | --- |
@@ -223,7 +222,7 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ### Header and byte-order flags
 
-- `--patch-header auto|keep|strip` decides whether each patch applies to the ROM with or without its copier header. Auto works it out per patch from the patch's own source checksum under any algorithm, and for a patch that carries none from where its records land, from which form the format itself accepts, and from which result the console still recognises. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
+- `--patch-header auto|keep|strip` decides whether each patch applies to the ROM with or without its copier header. Auto compares source checksums per patch. For the first patch only, missing checksum evidence can trigger record, format-validation, and platform-header inference. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
 - `--output-header auto|keep|strip` decides whether the finished ROM keeps its header. Auto keeps the ones emulators need and drops the ones they do not.
 - `--repair-checksum` repairs supported internal checksums and compatibility header fields after patching.
 - `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an N64 ROM in the interleaving a patch expects. Auto matches the patch's source CRC32; for the first patch, a patch that carries no checksum falls back to the shape of its changes. An order settled that way is named in the report label. The output is written back in the order the input arrived in. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
@@ -236,11 +235,39 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ### Validation
 
-`patch validate` runs the same checks as `patch apply` but writes nothing: it parses each patch and verifies every checksum the format carries.
+`patch validate` parses and checks the patch chain without keeping an output ROM. It can write temporary files while applying patches. It verifies the checksums available in each format; formats without result checks cannot establish that the output matches the author's intent.
 
 - `--expect-in` adds a check on the ROM itself, and accepts a checksum (`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
 - `--strip-header` and `--n64-byte-order` put the ROM in the form the patches expect before checking; N64 byte order defaults to matching the patch's source CRC32.
 - Patches are checked as a chain by default, each against the output of the one before it. `--independent` checks each one against the original ROM instead and reports a verdict per patch, rather than stopping at the first failure.
+
+## Patch creation metadata
+
+SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. These options require SOLID output and cannot be combined with `--plan`.
+
+[Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.
+
+## Bundles
+
+`bundle schema` prints the JSON Schema. The committed schema is [rom-weaver-bundle-v1.schema.json](../rom-weaver-bundle-v1.schema.json).
+
+| Option | Meaning |
+| --- | --- |
+| `--rom-name`, `--rom-url` | Expected logical ROM name and remote source. A filename mismatch warns; checksum and size mismatches remain strict. |
+| `--patch-id`, `--patch-version` | Stable patch identity and author-controlled version. |
+| `--patch-author`, `--patch-name`, `--patch-description`, `--patch-label` | Patch metadata. |
+| `--patch-optional` | Marks the preceding patch optional. |
+| `--patch-source-url`, `--patch-header`, `--patch-basis` | Source URL, header policy, and input basis for the preceding patch. |
+| `--expect-out` | Expected final result checks. |
+| `--patch-expect-in`, `--patch-expect-out` | Expected checks around the preceding patch. |
+| `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
+| `--bundle ARCHIVE`, `--no-bundle-rom` | Archive packaging and exclusion of ROM bytes. |
+| `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
+| `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec. |
+
+Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. A ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected.
+
+`bundle parse` accepts archive selection options for packaged bundles. A plain JSON recipe references paths and has no archive members to unpack. [Bundles from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
 
 ## Supported formats
 
@@ -279,10 +306,6 @@ Permission failures exit `1`. Under `--json` they arrive as a terminal event wit
 ## Man pages
 
 
-The pages under `docs/man` come from the same Clap definitions as `--help`, so they always match it. They are generated during release packaging and are installed by Homebrew and the install scripts. In a source checkout, run:
+The pages under `docs/man` are generated from the same Clap definitions as `--help`. Release packaging generates them; Homebrew and the install scripts install them. They are not committed in a source checkout.
 
-```bash
-mise run manpages
-```
-
-Use `man ./docs/man/rom-weaver.1` from a source checkout when they are not installed system-wide. Do not edit the generated `.1` files manually.
+[Generate man pages](../development/development.md#generated-files) covers source builds. [Install shell completions](../how-to/install-cli.md#install-shell-completions) covers shell integration.

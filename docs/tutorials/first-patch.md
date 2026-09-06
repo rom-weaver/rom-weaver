@@ -1,8 +1,8 @@
 # Your first patch in the browser
 
-In about ten minutes you will patch a ROM in your browser and prove the result is correct, byte for byte. You need nothing but a browser: no install, no account, and no files of your own.
+Patch a supplied homebrew ROM in your browser, then check the downloaded result. You need nothing but a browser: no install, no account, and no files of your own.
 
-Everything here uses tiny homebrew ROMs made for this project, so there is nothing to obtain and nothing to break.
+The sample files download automatically when you open the guide.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -59,13 +59,23 @@ Your browser downloads a new ROM. The sample ROM you started from is untouched.
 
 ## Step 4: check that you got the right bytes
 
-The finished sample displays `ROM WEAVER`. Its SHA-256 is:
+1. Keep the downloaded ROM, then open a fresh [Apply page](https://rom-weaver.com/apply).
+2. Add only the downloaded ROM and wait for checksumming to finish.
+3. Open **Checks** on its ROM card and compare its SHA-1 with the value below.
+
+The finished sample displays `ROM WEAVER`. Its SHA-1 is:
+
+```text
+844b844c845dc99aa4f13a83b6c9cf639684ae8a
+```
+
+For a tool that reports SHA-256, the same file has this value:
 
 ```text
 7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e
 ```
 
-If your download has that checksum, it is byte-for-byte identical to the file this guide expects. That is the strongest confirmation a patch tool can give you, and it is the same check you will use on real patches.
+A match checks that you downloaded the expected result. [Checksums](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains what this comparison establishes.
 
 To see the sample files for yourself, choose **Download a test bundle** from the **New here?** beacon on the empty Apply page, or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
@@ -76,7 +86,7 @@ The same practice files drive two more guided runs:
 - [Guided Create](https://rom-weaver.com/create?guide=create) makes a patch from two homebrew ROMs.
 - [Guided Bundle](https://rom-weaver.com/apply?guide=bundle) turns the Apply sample into a patch-only release archive.
 
-Run them now, while the sample is still fresh.
+These are optional follow-up exercises.
 
 ## If something looked different
 

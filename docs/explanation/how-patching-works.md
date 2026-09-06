@@ -1,6 +1,6 @@
 # How ROM patching works
 
-Why a patch needs one exact starting file, what a checksum proves, why order matters, and what every word in the interface means. Nothing here is a procedure - it is the background that makes the procedures make sense.
+A patch describes changes to a particular starting file. The file version, checksum, and patch order determine whether those changes produce the intended result.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -18,21 +18,21 @@ Why a patch needs one exact starting file, what a checksum proves, why order mat
 
 ## A patch is not a game
 
-A ROM is a copy of a game stored in one or more files. A patch is a much smaller file that describes changes to one exact version of that game. The change might be a translation, a bug fix, restored content, or a new set of levels.
+A ROM is a copy of a game stored in one or more files. A patch is usually a smaller file that describes changes to one exact version of that game. The change might be a translation, a bug fix, restored content, or a new set of levels.
 
 Think of a patch as a list that says "replace these bytes with those bytes." You supply your own clean game file. rom-weaver combines the two and writes a new file, leaving the clean file alone.
 
-This is also why a patch release is legal to distribute where the game is not. A patch contains the author's changes, not the game. rom-weaver ships no game data of its own; the guided samples are homebrew ROMs written for this project.
+A patch usually avoids distributing the complete original ROM. It can still contain copyrighted bytes; the patch format alone does not establish redistribution rights. The guided samples are homebrew ROMs written for this project.
 
 ## Why the exact starting file matters
 
 A USA release and a Japanese release may look like the same game, but their bytes differ. The same is true for revisions, for cartridge headers, and for Nintendo 64 byte order. A patch written for one will usually reject the others, and the ones that do not reject it will produce a broken file.
 
-The patch author picked one file. Your job is to start from that same file. Everything rom-weaver shows you on the ROM card exists to tell you whether you did.
+The patch author picked one file. Your job is to start from that same file. rom-weaver compares the available checks against that starting file.
 
 ## What a checksum proves, and what a filename does not
 
-A checksum is a fingerprint calculated from every byte in a file. If two files have the same checksum, their bytes are the same. Renaming a file does not change its checksum, and no amount of correct-looking metadata can fake one.
+A checksum is a fingerprint calculated from every byte in a file. Different checksums prove the files differ. Matching checksums are evidence of a match, but collisions are possible: different files can have the same checksum. SHA-256 gives stronger evidence than CRC32. Renaming a file does not change its checksum.
 
 A filename proves nothing. The author may have named the ROM one way while your dumping tool named the same bytes another way. Two different files can carry the same name.
 
@@ -75,8 +75,6 @@ A compressed file does not hash the same as the dump inside it, so a `.chd` will
 - **Header**: extra bytes added to the front of some cartridge dumps.
 - **Patch order**: the sequence used when several patches build on one another.
 - **Bundle**: a recipe that records a ROM's checks, patch files, order, choices, and output settings. See [What a bundle is](bundles.md).
-
-You do not need to memorize this. The cards in the webapp surface each of these where it matters.
 
 ## Related
 

@@ -1,6 +1,6 @@
 # Create patches from the CLI
 
-Build a patch from an original ROM and a modified one, add SOLID metadata, and test the result before publishing it. New to the CLI? Start with [your first apply](../tutorials/cli-first-weave.md).
+Build a patch from an original ROM and a modified one, and test the result before publishing it. New to the CLI? Start with [your first apply](../tutorials/cli-first-weave.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -23,7 +23,7 @@ rom-weaver patch create \
   --output release.bps
 ```
 
-SOLID patches carry their own metadata. `--solid-system`, `--solid-game`, and `--solid-hack` fill in its three-string header. Adding any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` switches to the seven-string extended header; `--solid-extended` selects that header with the extra fields left empty. These flags need SOLID output and cannot be combined with `--plan`.
+For a SOLID patch with game and author metadata:
 
 ```bash
 rom-weaver patch create \
@@ -39,7 +39,15 @@ rom-weaver patch create \
 
 ## Test what you built
 
-Never publish an untested patch. Apply it back onto a clean copy of the original and checksum the result, as the [practice walkthrough](../tutorials/cli-first-weave.md#practice-patch-creation-and-bundles) shows end to end, or run `patch validate` for a check that writes nothing; its flags are covered in the [CLI reference](../reference/cli.md#validation).
+Apply the created patch to the clean Original, then compare the rebuilt file with Modified:
+
+```bash
+rom-weaver patch apply -i original.gba --patch release.bps -o rebuilt.gba
+rom-weaver checksum -i rebuilt.gba --algo sha256
+rom-weaver checksum -i modified.gba --algo sha256
+```
+
+The SHA-256 values must match. Test the rebuilt file in the emulator or hardware you support. `patch validate` alone cannot compare against your intended Modified file unless you supply that expected result check.
 
 ## Where next
 

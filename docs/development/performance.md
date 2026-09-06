@@ -1,6 +1,6 @@
 # Performance
 
-This page explains how rom-weaver is benchmarked. It lists the current numbers and shows how to reproduce them.
+This page explains how rom-weaver is benchmarked. It records measurements for the versions listed below and shows how to reproduce them.
 
 The suites below measure CHD, RVZ, 7z, and zip against their reference tools. Each suite measures both directions: compress and extract. Output size is recorded next to every timing.
 
@@ -31,11 +31,11 @@ The suites below measure CHD, RVZ, 7z, and zip against their reference tools. Ea
 
 ## Summary
 
-Ratios compare wall time. "2× faster" means the reference tool took twice as long. Results cover this corpus, not every file. Extraction is faster in all four formats. RVZ and ZIP compression are slightly faster. 7z compression is even with 7zz. CHD compression ranges from even to 1.3× faster. Output sizes match the references to within a fraction of a percent everywhere.
+Ratios compare wall time. "2× faster" means the reference tool took twice as long. Results cover this corpus, not every file. Extraction is faster in all four formats. RVZ and ZIP compression are slightly faster. 7z compression is even with 7zz. CHD compression ranges from 8% slower to 20% faster. Output sizes match the references to within a fraction of a percent everywhere.
 
 | Suite | Reference | Compress | Extract | Output size |
 | --- | --- | --- | --- | --- |
-| CHD | chdman 0.287 | even to 1.3× faster | 3.1–5.8× faster (6–22 s per disc) | within 0.3% |
+| CHD | chdman 0.287 | 8% slower to 20% faster | 3.1–5.8× faster (6–22 s per disc) | within 0.3% |
 | RVZ | dolphin-tool | 1.2–1.3× faster | 1.6–2.0× faster | within 0.5% |
 | 7z | 7zz 26.02 | even | 1.0–4.7× faster† | within 0.001% |
 | zip | Info-ZIP | 1.1–1.2× faster | 1.6–2.7× faster | within 0.1% |
@@ -77,7 +77,7 @@ Both sides run at parity. Where the two tools already agree on a default, both a
 | 7z | `--codec lzma2:5` | `-t7z -m0=lzma2 -mx=5 -mmt=on` | LZMA2 at 7-Zip's default level |
 | zip | `--codec deflate:6` | `zip -6` | Deflate at Info-ZIP's default level |
 
-Three further details:
+Additional measurement conditions:
 
 - **Archive extraction is capped at one layer.** rom-weaver unpacks archives found inside archives; `7zz` and `unzip` stop after one. The harness passes `--no-nested-extract` so both sides do the same work.
 - **The 7z extract path keeps rom-weaver's default common-file filter.** This skips sidecars such as provenance text files. `7zz` extracts every member. Add `--no-ignore` to the rom-weaver command in the harness for a pure decoder comparison.
@@ -175,7 +175,7 @@ LZMA2 at level 5 on both sides. The compress inputs are cartridge ROMs, 16 MB to
 | DS ROM `.nds` | 256 MB | 10.369 s ± 1.105 | 9.819 s ± 0.199 | +0.550 s (+5.6%) | 61.0 MB | 61.0 MB | −0.00003% |
 | 3DS ROM `.cci` | 1 GiB | 15.267 s ± 0.115 | 15.780 s ± 0.239 | −0.513 s (−3.3%) | 315.5 MB | 315.5 MB | −0.000007% |
 
-The SDK encoder keeps compression even with 7zz: every row is within ±6%, and the archives are 19–24 bytes smaller. The archive bytes are not expected to be identical, because the tools write different metadata. The parity check compares the extracted payload instead.
+The SDK encoder keeps compression even with 7zz: every row is within about ±7%, and the archives are 19–24 bytes smaller. The archive bytes are not expected to be identical, because the tools write different metadata. The parity check compares the extracted payload instead.
 
 `ROM_WEAVER_7Z_ENCODER=liblzma` still selects the seeded liblzma encoder. The legacy encoder is not measured in this table.
 
