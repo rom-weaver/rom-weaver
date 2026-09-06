@@ -347,3 +347,39 @@ fn cheat_codes_apply_after_explicit_patches() {
     assert_eq!(patched[0x100], 0x22, "the patch's own change survives");
     assert_eq!(patched[0x3D96], 0x48, "the cheat wins over the patch");
 }
+
+/// `--code` with an extended SOLID header records the codes in the comment
+/// unless the caller wrote one.
+#[test]
+fn cheat_create_solid_comment_records_codes() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.nes");
+    let patch = temp.child("cheat.solid");
+    fs::write(input.path(), nes_rom()).expect("fixture");
+    let input_s = input.path().to_str().expect("path").to_owned();
+    let patch_s = patch.path().to_str().expect("path").to_owned();
+
+    let create = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            &input_s,
+            "--code",
+            "AKE-LVS",
+            "--solid-extended",
+            "--output",
+            &patch_s,
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(create["status"], "succeeded");
+    assert_eq!(create["format"], "SOLID");
+    let bytes = fs::read(patch.path()).expect("patch");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("cheat codes (nes): AKE-LVS"),
+        "SOLID comment should record the codes"
+    );
+}
