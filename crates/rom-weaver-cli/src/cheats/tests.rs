@@ -111,6 +111,7 @@ fn gba_xploder_rom_patch_maps_halfword_offset() {
             offset: 8,
             value: 0xABCD,
             width: 2,
+            compare: None,
         }]
     );
 }
@@ -135,6 +136,7 @@ fn playstation_xploder_writes_map_into_psx_exe_payload() {
             offset: 0x800,
             value: 0xFF,
             width: 1,
+            compare: None,
         }]
     );
 
@@ -150,6 +152,7 @@ fn playstation_xploder_writes_map_into_psx_exe_payload() {
             offset: 0x802,
             value: 0x1234,
             width: 2,
+            compare: None,
         }]
     );
 
@@ -274,7 +277,8 @@ fn nes_no_compare_flat_offset() {
         vec![CheatWrite {
             offset: 0x3D86,
             value: 0x48,
-            width: 1
+            width: 1,
+            compare: None,
         }]
     );
 }
@@ -291,7 +295,8 @@ fn nes_compare_scan_picks_matching_bank() {
         vec![CheatWrite {
             offset: 0x4000,
             value: 0x12,
-            width: 1
+            width: 1,
+            compare: Some(0xFF),
         }]
     );
 }
@@ -342,9 +347,22 @@ fn genesis_flat_word_write() {
         vec![CheatWrite {
             offset: 0xFF,
             value: 0x1234,
-            width: 2
+            width: 2,
+            compare: None,
         }]
     );
+}
+
+/// A code with no compare byte resolves to a best-effort bank, and the write
+/// says so by carrying no compare - the UI keys its "verified" badge off this.
+#[test]
+fn writes_report_no_compare_when_the_code_carries_none() {
+    let rom = vec![0u8; 0x8000];
+    let layout = RomLayout::detect(&rom, CheatSystem::Nes);
+    let decoded = decode("C00012", CheatSystem::Nes, CheatKind::ProActionReplay).unwrap();
+    let writes = resolve_writes(&rom, &layout, &decoded).unwrap();
+    assert_eq!(writes.len(), 1);
+    assert_eq!(writes[0].compare, None);
 }
 
 #[test]
@@ -359,7 +377,8 @@ fn gameboy_bank0_compare() {
         vec![CheatWrite {
             offset: 0x14BC,
             value: 0x00,
-            width: 1
+            width: 1,
+            compare: Some(0x03),
         }]
     );
 
@@ -399,11 +418,13 @@ fn apply_writes_round_trip() {
                 offset: 0x02,
                 value: 0xAB,
                 width: 1,
+                compare: None,
             },
             CheatWrite {
                 offset: 0x04,
                 value: 0x1234,
                 width: 2,
+                compare: None,
             },
         ],
     )
@@ -424,11 +445,13 @@ fn apply_writes_uses_little_endian_for_xploder() {
                 offset: 0,
                 value: 0xABCD,
                 width: 2,
+                compare: None,
             },
             CheatWrite {
                 offset: 2,
                 value: 0x1234_5678,
                 width: 4,
+                compare: None,
             },
         ],
     )
@@ -612,6 +635,7 @@ fn conflict_detection_reports_different_values_only() {
                 offset: 10,
                 value: 0x1234,
                 width: 2,
+                compare: None,
             }],
         ),
         (
@@ -621,6 +645,7 @@ fn conflict_detection_reports_different_values_only() {
                 offset: 10,
                 value: 0x12,
                 width: 1,
+                compare: None,
             }],
         ),
         (
@@ -630,6 +655,7 @@ fn conflict_detection_reports_different_values_only() {
                 offset: 11,
                 value: 0xff,
                 width: 1,
+                compare: None,
             }],
         ),
     ];
@@ -816,6 +842,7 @@ fn sega32x_uses_the_genesis_decoders_and_layout() {
             offset: 0,
             value: 0xABCD,
             width: 2,
+            compare: None,
         }],
     )
     .unwrap();
@@ -862,6 +889,7 @@ fn conflict_detection_uses_the_system_byte_order() {
                 offset: 0x100,
                 value: 0x9934,
                 width: 2,
+                compare: None,
             }],
         ),
         (
@@ -871,6 +899,7 @@ fn conflict_detection_uses_the_system_byte_order() {
                 offset: 0x100,
                 value: 0x99,
                 width: 1,
+                compare: None,
             }],
         ),
     ];
@@ -896,6 +925,7 @@ fn conflict_detection_covers_four_byte_writes() {
                 offset: 0x200,
                 value: 0x1111_1111,
                 width: 4,
+                compare: None,
             }],
         ),
         (
@@ -905,6 +935,7 @@ fn conflict_detection_covers_four_byte_writes() {
                 offset: 0x202,
                 value: 0x2222_2222,
                 width: 4,
+                compare: None,
             }],
         ),
     ];
@@ -927,6 +958,7 @@ fn apply_writes_and_conflict_detection_agree_on_the_bytes() {
             offset: 4,
             value: 0xABCD,
             width: 2,
+            compare: None,
         };
         let mut rom = vec![0u8; 8];
         apply_writes(&mut rom, system, &[write]).unwrap();

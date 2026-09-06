@@ -122,6 +122,12 @@ pub struct CheatWrite {
     pub offset: usize,
     pub value: u32,
     pub width: u8,
+    /// The compare byte the code carried, when it had one and the resolver
+    /// matched it against this offset. `None` means the code carried no compare
+    /// byte, so the offset is a best-effort bank guess rather than a verified
+    /// match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compare: Option<u8>,
 }
 
 /// A decoded address class. This does not weaken [`resolve_writes`], which
