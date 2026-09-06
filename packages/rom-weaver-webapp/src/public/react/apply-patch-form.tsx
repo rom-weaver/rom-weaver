@@ -277,6 +277,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
+  // Mirrors the cheat step's On switches so the header controls in 0x03 and 0x05 can refuse a strip.
+  const [cheatsOn, setCheatsOn] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -1625,6 +1627,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[]) => {
       selectedCheatsRef.current = records;
+      setCheatsOn(records.length > 0);
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       const selection = {
@@ -1757,7 +1760,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
-        cheats={
+        cheats={({ headerStripConflict }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
@@ -1765,9 +1768,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
             rom={cheatRom}
-            validationMessage={cheatConflictMessage}
+            validationMessage={cheatConflictMessage || headerStripConflict}
           />
-        }
+        )}
+        cheatsOn={cheatsOn}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}

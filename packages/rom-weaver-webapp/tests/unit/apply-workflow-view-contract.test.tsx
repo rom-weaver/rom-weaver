@@ -257,7 +257,9 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero")).toBeNull();
     expect(container.querySelector(".ghost-steps")).toBeNull();
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
-    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
+    // The view takes the Cheats step (0x04) as a prop; this contract render
+    // supplies none, so the Apply step keeps its own 0x05.
+    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x05"]);
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",
     );
