@@ -411,10 +411,10 @@ describe("worker log relay", () => {
 });
 
 describe("service worker bootstrap", () => {
-  it("registers the three runtime routes, the precache plugin and the warm-up", async () => {
+  it("registers the four runtime routes, the precache plugin and the warm-up", async () => {
     const harness = await loadWorker();
 
-    expect(hoisted.routes).toHaveLength(3);
+    expect(hoisted.routes).toHaveLength(4);
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith(DEFAULT_MANIFEST, {
       ignoreURLParametersMatching: [/^sha256$/],
     });
