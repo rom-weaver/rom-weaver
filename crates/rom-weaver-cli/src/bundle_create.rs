@@ -455,6 +455,7 @@ impl CliApp {
             version: BUNDLE_VERSION,
             rom,
             patches,
+            cheats: Vec::new(),
             output,
         };
         let mut bytes = serde_json::to_vec_pretty(&bundle).map_err(|error| {

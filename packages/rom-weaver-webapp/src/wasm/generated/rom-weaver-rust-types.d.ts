@@ -552,6 +552,31 @@ header?: PatchApplyHeaderMode,
  */
 basis?: PatchInputBasis, };
 
+export type BundleCheatEntry = {
+/**
+ * Cheat database record ID. An exact description is also accepted, so a
+ * hand-authored bundle can name a cheat the way `cheat list` prints it.
+ */
+id: string,
+/**
+ * Which database the ID belongs to, for example `libretro-database`.
+ */
+source?: string,
+/**
+ * The database revision the selection was made against.
+ */
+revision?: string, description?: string,
+/**
+ * Raw code snapshot, so the entry still applies when the local cheat
+ * database is absent.
+ */
+code?: string,
+/**
+ * An optional cheat is skipped (and named in the report) when it cannot
+ * be resolved; omitted/false makes an unresolvable entry fail the apply.
+ */
+optional?: boolean, };
+
 export type BundleOutput = {
 /**
  * Default output file name.
@@ -577,7 +602,12 @@ $schema?: string, version: number, rom?: BundleRom,
 /**
  * Ordered: array order is the apply order.
  */
-patches: Array<BundlePatchEntry>, output?: BundleOutput, };
+patches: Array<BundlePatchEntry>,
+/**
+ * Cheat selections baked into the ROM after the patch chain, in selection
+ * order. Optional: a bundle without it is a plain patch recipe.
+ */
+cheats?: Array<BundleCheatEntry>, output?: BundleOutput, };
 
 export type BundleSourceKind = "json" | "compressed-json" | "archive";
 
