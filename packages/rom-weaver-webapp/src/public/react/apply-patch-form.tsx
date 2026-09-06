@@ -261,6 +261,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
+  // Mirrors the cheat step's On switches so the header controls in 0x03 and 0x05 can refuse a strip.
+  const [cheatsOn, setCheatsOn] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -1595,6 +1597,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[]) => {
       selectedCheatsRef.current = records;
+      setCheatsOn(records.length > 0);
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
@@ -1724,7 +1727,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
-        cheats={({ woven }) => (
+        cheats={({ headerStripConflict, woven }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
@@ -1732,10 +1735,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             outputSummary={completedCheats}
             rom={cheatRom}
             title={localizer.message("ui.step.cheats")}
-            validationMessage={cheatConflictMessage}
+            validationMessage={cheatConflictMessage || headerStripConflict}
             woven={woven}
           />
         )}
+        cheatsOn={cheatsOn}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}
