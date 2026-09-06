@@ -157,9 +157,9 @@
       "required": ["id"],
       "properties": {
         "id": {
-          "description": "Cheat database record ID. An exact description is also accepted, so a hand-authored bundle can name a cheat the way `cheat list` prints it.",
+          "description": "Cheat database record ID. An exact description is also accepted, so a hand-authored bundle can name a cheat the way `cheat list` prints it. Must not be blank.",
           "type": "string",
-          "minLength": 1
+          "pattern": "\\S"
         },
         "source": {
           "description": "Which database the ID belongs to, for example `libretro-database`.",
