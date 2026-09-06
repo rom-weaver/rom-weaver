@@ -26,6 +26,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Validation](#validation)
 - [Patch creation metadata](#patch-creation-metadata)
 - [Bundles](#bundles)
+  - [Bundle cheats](#bundle-cheats)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
@@ -305,8 +306,25 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--bundle ARCHIVE`, `--no-bundle-rom` | Archive packaging and exclusion of ROM bytes. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
 | `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec. |
+| `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the bundle's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
 
 Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. A ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected.
+
+### Bundle cheats
+
+The optional top-level `cheats` array records the cheat selection that produced a build, in selection order. `bundle create --cheat` and `patch apply --emit-bundle` write it. A bundle needs at least one `patches` entry or one `cheats` entry.
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Cheat database record ID. Required. An exact description is also accepted; one that matches several records fails with `cheat_selector_ambiguous`. |
+| `source`, `revision` | The database the ID belongs to and the revision it was selected against. |
+| `description` | The record's description. |
+| `code` | Raw code snapshot, so the entry still applies when the database is absent. |
+| `optional` | When true an unresolvable entry is skipped and named in the report; omitted or false makes it fail the apply. |
+
+Applying a bundle resolves each entry by `id` through the cheat database at `--cheat-database`, then falls back to `code`. An entry that resolves to nothing, or that the ROM's bytes cannot bake, fails the apply unless it is `optional`. Entries bake after the patch chain, so the result equals the same `patch apply --cheat`. Write conflicts fail with `cheat_write_conflict` unless `--allow-cheat-conflicts` is given.
+
+`bundle parse` names each cheat and whether it is optional.
 
 `bundle parse` accepts archive selection options for packaged bundles. A plain JSON recipe references paths and has no archive members to unpack. [Bundles from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
 

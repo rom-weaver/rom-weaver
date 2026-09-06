@@ -10,7 +10,7 @@
 - [CLI database directory](#cli-database-directory)
 - [Storage and network behavior](#storage-and-network-behavior)
 - [Preserved source fields](#preserved-source-fields)
-- [Bundle status](#bundle-status)
+- [Bundles](#bundles)
 
 <!-- END doctoc -->
 
@@ -115,9 +115,13 @@ Each imported record keeps the original code, every `cheatN_*` value, unknown fi
 
 ROMWeaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 
-## Bundle status
+## Bundles
 
-Bundles do not store cheat selections in this release. Stable cheat IDs, source records, revisions, and delivery classes provide the data for later bundle support.
+A bundle's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot.
+
+`bundle create --cheat` and `patch apply --emit-bundle` write the array. Applying the bundle resolves each entry by `id` against the database at `--cheat-database`, and falls back to its `code` snapshot when the database is absent. An unresolvable entry fails the apply unless it is marked `optional`.
+
+For the field list, see [CLI reference](cli.md#bundle-cheats).
 
 For the CLI task, see [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 

@@ -6,6 +6,7 @@ A `rom-weaver-bundle.json` bundle turns a tested patch job into a repeatable rec
 ## Table of contents
 
 - [Create a bundle from local files](#create-a-bundle-from-local-files)
+- [Include cheats in the bundle](#include-cheats-in-the-bundle)
 - [Author a spec instead of flags](#author-a-spec-instead-of-flags)
 - [Parse and run a bundle](#parse-and-run-a-bundle)
 
@@ -34,6 +35,27 @@ rom-weaver bundle create -i original.sfc --patch translation.bps \
 ```
 
 This records the expected ROM's checksums without including its bytes. For optional patches or release metadata, each `--patch-*` option describes the preceding `--patch`.
+
+## Include cheats in the bundle
+
+Add `--cheat` to record the selection beside the patches, so another machine rebuilds the same cheated ROM:
+
+```bash
+rom-weaver bundle create \
+  --input original.nes \
+  --patch fixes.ips \
+  --cheat "Infinite lives" \
+  --cheat "Start with 9 keys" \
+  --output rom-weaver-bundle.json
+```
+
+Applying the bundle bakes those cheats into the output:
+
+```bash
+rom-weaver patch apply -i original.nes --bundle rom-weaver-bundle.json -o patched.nes
+```
+
+Each entry is looked up in the cheat database, so install it first with `rom-weaver setup`. An entry still applies without the database, from the code the bundle recorded. Mark an entry `"optional": true` when the apply should skip it instead of failing.
 
 ## Author a spec instead of flags
 
