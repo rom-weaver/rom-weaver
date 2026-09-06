@@ -288,3 +288,62 @@ fn playstation_xploder_write_bakes_into_psx_exe() {
     let patched = fs::read(output.path()).expect("output");
     assert_eq!(patched[0x800], 0xFF);
 }
+
+/// A cheat lands after the explicit patch chain: the patch's own source
+/// checksum still matches, and the cheat wins over a patch that changes the
+/// same byte.
+#[test]
+fn cheat_codes_apply_after_explicit_patches() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.nes");
+    let modified = temp.child("modified.nes");
+    let patch = temp.child("hack.bps");
+    let output = temp.child("final.nes");
+    let mut hacked = nes_rom();
+    hacked[0x100] = 0x22;
+    hacked[0x3D96] = 0x11; // the byte AKE-LVS writes
+    fs::write(original.path(), nes_rom()).expect("fixture");
+    fs::write(modified.path(), hacked).expect("fixture");
+    let original_s = original.path().to_str().expect("path").to_owned();
+    let patch_s = patch.path().to_str().expect("path").to_owned();
+
+    let create = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            &original_s,
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            &patch_s,
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(create["status"], "succeeded");
+    assert_eq!(create["format"], "BPS");
+
+    let apply = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            &original_s,
+            "--patch",
+            &patch_s,
+            "--code",
+            "AKE-LVS",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(apply["status"], "succeeded");
+
+    let patched = fs::read(output.path()).expect("output");
+    assert_eq!(patched[0x100], 0x22, "the patch's own change survives");
+    assert_eq!(patched[0x3D96], 0x48, "the cheat wins over the patch");
+}
