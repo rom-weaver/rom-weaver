@@ -1133,7 +1133,7 @@ fn identify_hints_at_the_missing_pack_for_a_routed_platform() {
         details["hint"]
             .as_str()
             .expect("a hint accompanies the condition")
-            .contains("identify database install-all")
+            .contains("this install shipped no identify database")
     );
     assert_eq!(details["detected_platform"], json!("Sony PlayStation"));
     assert_eq!(

@@ -423,7 +423,7 @@ fn identify_reports_database_required_for_an_uninstalled_platform() {
     assert_eq!(identify["condition"], "database_required");
     let hint = identify["hint"].as_str().expect("hint");
     assert!(hint.contains("Sony PlayStation"));
-    assert!(hint.contains("identify database install"));
+    assert!(hint.contains("this install shipped no identify database"));
 }
 
 /// `setup` is idempotent and must not reach the network when the database is

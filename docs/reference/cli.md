@@ -180,7 +180,7 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`. Optional result fields, present when known:
 
 - `quality`: `exact`, `partial`, or `metadata_only`.
-- `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the fix. `status` stays `unknown`.
+- `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the cause; identify never downloads a pack itself, so a missing database is installed with `rom-weaver setup`. `status` stays `unknown`.
 - `platform_candidates`: detected platforms with `confidence` and `evidence`.
 - `media`, `components`: the input's media kind and hashed components.
 - `database`: the pack that answered - `source`, `pack_format` (`RWFP1`), and `canonicalization_profile`.
