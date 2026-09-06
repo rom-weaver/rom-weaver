@@ -44,7 +44,8 @@ Use these boundaries:
 
 - `crates/rom-weaver-core/src/save/mod.rs` defines the save document, game definitions, field schema, recognition outcomes, integrity state, and edits.
 - `crates/rom-weaver-core/src/save/formats/` defines physical save formats.
-- `crates/rom-weaver-core/src/save/container.rs` unwraps save wrappers (GameShark SP `.sps`, `.xps`, `.gsv`) before recognition and re-wraps edited bytes, so handlers always see raw save data.
+- `crates/rom-weaver-core/src/save/container.rs` unwraps save wrappers (GameShark SP `.sps`, `.xps`, `.gsv`; DeSmuME `.dsv`; DexDrive `.gme`; VGS `.mem`) before recognition and re-wraps edited bytes, so handlers always see raw save data. A new wrapper is one parser that returns the inner byte range; `wrap` splices edits back and keeps every other byte.
+- `crates/rom-weaver-core/src/save/formats/` is the physical format catalog, one file per platform. `candidate_save_formats` names every size match for an unsupported save; a format with a `signature` check sorts first. A catalog entry is a fact about a platform, not game recognition, so adding one never needs a handler.
 - `crates/rom-weaver-core/src/save/pokemon_gen3.rs` owns the Generation III game structure.
 - The other files in `src/save/` own Generation II, HeartGold/SoulSilver, and A Link to the Past structures.
 - `SaveGameRegistry` maps a game choice to one game definition and exposes the shared handler operations.
