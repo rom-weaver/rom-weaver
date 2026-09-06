@@ -13,7 +13,7 @@ import { type ProgressViewModel } from "../../presentation/workflow-presentation
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
-import { getCheatHeaderStripConflict, CHEAT_HEADER_STRIP_HINT } from "../../lib/cheats/header-guard.ts";
+import { getCheatHeaderStripConflict } from "../../lib/cheats/header-guard.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -1233,7 +1233,6 @@ const OutputHeaderField = ({
   headerlessExtension,
   onChange,
   retained,
-  stripDisabled,
   value,
   visible,
 }: {
@@ -1242,8 +1241,6 @@ const OutputHeaderField = ({
   headerlessExtension?: string;
   onChange: (value: "auto" | "keep" | "strip") => void;
   retained: boolean;
-  /** The cheat stack has a card switched On, so stripping is not on offer. */
-  stripDisabled?: boolean;
   value?: "auto" | "keep" | "strip";
   visible: boolean;
 }) => {
@@ -1276,9 +1273,7 @@ const OutputHeaderField = ({
       >
         <option value="auto">auto ({retained ? "keep" : "strip"})</option>
         <option value="keep">keep</option>
-        <option disabled={stripDisabled} title={stripDisabled ? CHEAT_HEADER_STRIP_HINT : undefined} value="strip">
-          strip
-        </option>
+        <option value="strip">strip</option>
       </DropdownSelect>
     </OutputField>
   );
@@ -1868,13 +1863,16 @@ function ApplyWorkflowFormView({
     return bundleMetaById && id !== undefined ? bundleMetaById.get(id) : undefined;
   });
   const bundleVerificationError = getBundleVerificationError(bundleMeta, patches);
-  // The single header state - the per-patch pins in 0x03 and the output control
-  // in 0x05 - decides the cheat guard; neither the Cheats step nor the header
-  // controls keep a copy of it.
+  // The per-patch header state in 0x03 decides the cheat guard; neither the
+  // Cheats step nor the header select keeps a copy of it. The output header in
+  // 0x05 is applied after the cheats bake, so it never moves a write.
+  // The request sends a decided auto resolution as an explicit mode, so the
+  // guard reads the same value the controller will send.
   const cheatHeaderStripConflict = getCheatHeaderStripConflict({
     cheatsOn: !!cheatsOn,
-    outputHeader: outputState.outputHeader,
-    patchHeaderModes: patches.map((item) => item.headerChoice),
+    patchHeaderModes: patches.map(
+      (item) => item.headerChoice ?? (item.headerAutoDecided ? item.headerAutoMode : undefined),
+    ),
   });
   const disabledPatchCount = disabledPatchFlags.filter(Boolean).length;
   const enabledPatchCount = patches.length - disabledPatchCount;
@@ -1976,7 +1974,6 @@ function ApplyWorkflowFormView({
       headerlessExtension={header.headerlessExtension}
       onChange={(value) => controllers.output.setOutputHeader?.(value)}
       retained={header.retained}
-      stripDisabled={!!cheatsOn}
       value={outputState.outputHeader}
       visible={header.visible}
     />
