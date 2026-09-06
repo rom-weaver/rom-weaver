@@ -15,6 +15,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [`identify database` subcommands](#identify-database-subcommands)
   - [Identify result](#identify-result)
 - [Checksum](#checksum)
+- [Cheats](#cheats)
 - [Patching](#patching)
   - [Inputs](#inputs)
   - [Output and compression](#output-and-compression)
@@ -45,6 +46,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
 | `trim` | Cut the padding off a ROM, or put it back. |
+| `cheat list` | List the cheat database's entries for a ROM, with each one's delivery. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
 | `patch validate` | Check patch application without keeping an output ROM. |
@@ -203,6 +205,28 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 ## Checksum
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
+
+## Cheats
+
+`cheat list --input ROM` detects the ROM's system, reads that system's shard from the cheat-database directory, matches the game, and prints one row per cheat: ID, delivery, raw code, description. `--json` puts the same data in `details.cheat_list`.
+
+Delivery is `rom` or `unsupported`. The match class is `exact` (a checksum matched), `title` (the file name matched a game title), or `manual` (`--game`). Every run prints the CC-BY-SA-4.0 attribution line once.
+
+The shared flags below are also on `patch apply` and `patch create`, under the `Cheats` help heading.
+
+| Flag | Meaning |
+| --- | --- |
+| `--cheat ID_OR_DESCRIPTION` | Select one cheat by record ID or by exact description. Repeatable. A description that matches more than one entry fails with `cheat_selector_ambiguous`. |
+| `--cheat-database DIR` | The directory holding `manifest.json` and the `<system>.json` shards. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then the per-user data directory. |
+| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
+| `--game ID` | Use this database game ID instead of matching by checksum or title. |
+| `--allow-cheat-conflicts` | Let a later cheat overwrite an earlier one at the same offset. Without it, two `rom` cheats writing different values to one byte fail with `cheat_write_conflict`. |
+
+`patch apply --cheat` bakes the selected entries into the output ROM, after the patch chain. Selecting an `unsupported` entry fails the run.
+
+`patch create --cheat` puts the `rom` entries in the patch and names the rest in `details.skipped_cheats`. Without `--cheat` it uses every cheat the matched game holds.
+
+The directory layout is in [Cheat database reference](cheat-database.md). The recipes are in [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 
 ## Patching
 

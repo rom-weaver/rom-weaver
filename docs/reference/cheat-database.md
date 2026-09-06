@@ -7,6 +7,7 @@
 - [Delivery classes](#delivery-classes)
 - [Match classes](#match-classes)
 - [Data source](#data-source)
+- [CLI database directory](#cli-database-directory)
 - [Storage and network behavior](#storage-and-network-behavior)
 - [Preserved source fields](#preserved-source-fields)
 - [Bundle status](#bundle-status)
@@ -65,6 +66,47 @@ Game titles and release checksums come from the same Libretro DAT files that bui
 
 The build drops, before packaging, every record that can never bake: structured RetroArch entries, placeholder codes, and codes whose literal address is provably runtime memory for that system.
 
+## CLI database directory
+
+The CLI reads the same files the webapp serves, from a directory on disk. It reads only the uncompressed `<system>.json` shards; it carries no brotli decoder.
+
+| Path | Contents |
+| --- | --- |
+| `manifest.json` | Source name, source revision, source URL, and license. Optional. |
+| `nes.json` | Nintendo Entertainment System shard. |
+| `snes.json` | Super Nintendo Entertainment System shard. |
+| `genesis.json` | Sega Genesis / Mega Drive shard. |
+| `gameboy.json` | Game Boy shard. |
+| `gameboy-color.json` | Game Boy Color shard. |
+| `gameboyadvance.json` | Game Boy Advance shard. |
+| `mastersystem.json` | Sega Master System shard. |
+| `gamegear.json` | Sega Game Gear shard. |
+| `sega32x.json` | Sega 32X shard. |
+
+The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABASE`, then a per-user default:
+
+| Platform | Default |
+| --- | --- |
+| Linux and BSD | `$XDG_DATA_HOME/rom-weaver/cheats`, or `$HOME/.local/share/rom-weaver/cheats` |
+| macOS | `$HOME/Library/Application Support/rom-weaver/cheats` |
+| Windows | `%LOCALAPPDATA%\rom-weaver\cheats` |
+
+A missing shard is an error naming the file it looked for. The CLI downloads nothing.
+
+Copy the shards from the repository:
+
+```bash
+mkdir -p ~/.local/share/rom-weaver/cheats
+cp packages/rom-weaver-webapp/public/cheats/manifest.json ~/.local/share/rom-weaver/cheats/
+cp packages/rom-weaver-webapp/public/cheats/*.json ~/.local/share/rom-weaver/cheats/
+```
+
+Or regenerate them from a libretro checkout:
+
+```bash
+node scripts/import-libretro-cheats.mjs --output-dir ~/.local/share/rom-weaver/cheats
+```
+
 ## Storage and network behavior
 
 Each shard is one identify data asset (`assets/identify-cheats-<platform slug>.json`) listed in the identify index with its size and SHA-256. The app loads only the detected or selected platform.
@@ -88,6 +130,8 @@ ROMWeaver does not synthesize RetroArch memory handlers. It only decodes the nat
 ## Bundle status
 
 Bundles do not store cheat selections in this release. Stable cheat IDs, source records, revisions, and delivery classes provide the data for later bundle support.
+
+For the CLI task, see [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 
 For the browser task, see [Use cheats in the browser](../how-to/use-browser-cheats.md).
 
