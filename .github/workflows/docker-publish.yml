@@ -117,6 +117,19 @@ jobs:
           name: identify-release-data
           path: target
 
+      - name: Download CLI documentation
+        id: docs
+        if: matrix.name == 'CLI'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: cli-assets
+          path: .tmp/cli-assets
+
+      - name: Extract CLI documentation
+        if: matrix.name == 'CLI' && steps.docs.outcome == 'success'
+        run: tar --extract --gzip --file .tmp/cli-assets/rom-weaver-cli-assets.tar.gz --directory docs
+
       # The fallback is correct but slow, and it is otherwise invisible - a
       # release that quietly went back to compiling everything should say so.
       - name: Resolve build source
@@ -182,6 +195,7 @@ jobs:
           build-args: |
             ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
             IDENTIFY_DATA=${{ steps.identify-data.outcome == 'success' && 'prebuilt' || 'source' }}
+            DOCS=${{ matrix.name == 'CLI' && steps.docs.outcome == 'success' && 'prebuilt' || 'source' }}
           labels: ${{ steps.metadata.outputs.labels }}
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}

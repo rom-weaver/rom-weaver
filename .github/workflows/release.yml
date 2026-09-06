@@ -687,6 +687,11 @@ jobs:
           printf '%s  rom-weaver-identify-data.tar.br\n' \
             "$(sha256sum rom-weaver-identify-data.tar.br | cut -d ' ' -f 1)" > \
             checksums/rom-weaver-identify-data.tar.br.sha256
+          curl --fail --location --retry 5 --retry-delay 2 --output rom-weaver-cli-assets.zip \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/rom-weaver-cli-assets.zip"
+          printf '%s  rom-weaver-cli-assets.zip\n' \
+            "$(sha256sum rom-weaver-cli-assets.zip | cut -d ' ' -f 1)" > \
+            checksums/rom-weaver-cli-assets.zip.sha256
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v7

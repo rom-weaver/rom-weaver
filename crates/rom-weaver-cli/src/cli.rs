@@ -229,6 +229,31 @@ Save it where your shell looks for completions, then start a new shell:
         shell: clap_complete::Shell,
     },
     #[command(
+        about = "Print or install the generated CLI man pages",
+        long_about = "\
+Print one generated CLI man page, or install generated pages in a user manpath.
+
+Pass a command path such as `patch apply` to print or install one page. Pass
+--install without a command to write every page under the user manpath. Set
+ROM_WEAVER_MAN_DIR or pass --man-dir to choose another directory.
+
+On Windows, the default directory is `%LOCALAPPDATA%\\rom-weaver\\docs\\man`,
+because Windows has no standard manpath."
+    )]
+    Man {
+        #[arg(value_name = "COMMAND", num_args = 0.., help = "Command path to print")]
+        command: Vec<String>,
+        #[arg(long, help = "Install the generated pages instead of printing one")]
+        install: bool,
+        #[arg(
+            long,
+            value_name = "DIR",
+            requires = "install",
+            help = "Directory to install pages into"
+        )]
+        man_dir: Option<std::path::PathBuf>,
+    },
+    #[command(
         about = "List the formats, codecs, and checksum algorithms this build supports",
         long_about = "\
 List what this build supports, read straight from its registries: container
@@ -319,6 +344,14 @@ pub fn main_entry() -> ExitCode {
         clap_complete::generate(shell, &mut command, "rom-weaver", &mut io::stdout());
         return ExitCode::SUCCESS;
     }
+    if let CliCommand::Man {
+        command,
+        install,
+        man_dir,
+    } = &cli.command
+    {
+        return run_man_command(command, *install, man_dir.as_deref());
+    }
     if let CliCommand::Formats = &cli.command {
         print_formats(cli.json);
         return ExitCode::SUCCESS;
@@ -402,6 +435,54 @@ pub fn main_entry() -> ExitCode {
     }
     install_cancel_handler();
     finish_run(run_command(command, options, reporter, prompter))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_man_command(
+    topics: &[String],
+    install: bool,
+    man_dir: Option<&std::path::Path>,
+) -> ExitCode {
+    let pages = rom_weaver_app::generated_man_pages();
+    let selected = rom_weaver_app::manpages::page_name(topics);
+    if !pages.contains_key(&selected) {
+        eprintln!(
+            "unknown man page `{}`; pass a command path such as `patch apply`",
+            topics.join(" ")
+        );
+        return ExitCode::from(2);
+    }
+
+    if install {
+        let output_dir = man_dir
+            .map(std::path::Path::to_path_buf)
+            .unwrap_or_else(rom_weaver_app::manpages::default_man_dir);
+        let selected_page = if topics.is_empty() {
+            None
+        } else {
+            Some(selected.as_str())
+        };
+        match rom_weaver_app::manpages::write_man_pages(&pages, &output_dir, selected_page) {
+            Ok(count) => {
+                println!(
+                    "installed {count} man page{} to {}",
+                    if count == 1 { "" } else { "s" },
+                    output_dir.display()
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!(
+                    "failed to install man pages in {}: {error}",
+                    output_dir.display()
+                );
+                ExitCode::from(1)
+            }
+        }
+    } else {
+        print!("{}", String::from_utf8_lossy(&pages[&selected]));
+        ExitCode::SUCCESS
+    }
 }
 
 /// Trip the process cancellation token on Ctrl-C so running work unwinds and
@@ -671,6 +752,20 @@ mod tests {
     fn completions_is_a_native_subcommand() {
         let matches = cli_command().try_get_matches_from(["rom-weaver", "completions", "fish"]);
         assert!(matches.is_ok(), "completions <shell> parses");
+    }
+
+    #[test]
+    fn man_pages_accept_print_and_install_forms() {
+        assert!(
+            cli_command()
+                .try_get_matches_from(["rom-weaver", "man", "patch", "apply"])
+                .is_ok()
+        );
+        assert!(
+            cli_command()
+                .try_get_matches_from(["rom-weaver", "man", "--install", "--man-dir", "/tmp/man",])
+                .is_ok()
+        );
     }
 
     fn output(json: bool, progress: Option<bool>) -> RomWeaverRunOutputOptions {

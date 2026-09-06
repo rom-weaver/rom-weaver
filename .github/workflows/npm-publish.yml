@@ -432,6 +432,18 @@ jobs:
       - name: Install npm dependencies
         run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
 
+      - name: Add generated man pages to alias package
+        uses: actions/download-artifact@v8
+        with:
+          name: cli-assets
+          path: .tmp/cli-assets
+
+      - name: Extract generated man pages
+        run: |
+          mkdir -p packages/rom-weaver-alias/docs
+          tar -xzf .tmp/cli-assets/rom-weaver-cli-assets.tar.gz \
+            -C packages/rom-weaver-alias/docs man
+
       - name: Publish alias package
         run: |
           cp LICENSE packages/rom-weaver-alias/LICENSE

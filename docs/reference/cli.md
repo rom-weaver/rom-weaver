@@ -54,6 +54,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
 | `setup` | Install the offline identify database. |
 | `completions` | Print a tab-completion script for your shell. |
+| `man` | Print one generated manpage or install all generated manpages. |
 
 `-h` prints a one-line summary of each option; `--help` prints the full explanation, including the extra detail on flags like `--patch-header`.
 
@@ -318,6 +319,15 @@ Permission failures exit `1`. Under `--json` they arrive as a terminal event wit
 ## Man pages
 
 
-The pages under `docs/man` are generated from the same Clap definitions as `--help`. Release packaging generates them; Homebrew and the install scripts install them. They are not committed in a source checkout.
+The pages under `docs/man` come from the same Clap definitions as `--help`, so they always match it. They are generated during release packaging. Homebrew, the macOS/Linux install script, and global npm installs install them on Unix. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
+
+The installed CLI can render a page or install every page:
+
+```bash
+rom-weaver man extract
+rom-weaver man --install
+```
+
+`rom-weaver man --install` writes every page to `$XDG_DATA_HOME/man/man1` or `~/.local/share/man/man1` on Unix. Add a command path to install one page. Set `ROM_WEAVER_MAN_DIR` to choose another directory. On Windows it writes to `%LOCALAPPDATA%\rom-weaver\docs\man`. Use `man ./docs/man/rom-weaver.1` from a source checkout when the pages are not installed system-wide. Do not edit the generated `.1` files manually.
 
 [Generate man pages](../development/development.md#generated-files) covers source builds. [Install shell completions](../how-to/install-cli.md#install-shell-completions) covers shell integration.

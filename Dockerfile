@@ -16,6 +16,7 @@
 # exist for the build that asks for it.
 ARG BINARY=source
 ARG IDENTIFY_DATA=source
+ARG DOCS=source
 
 FROM node:24-bookworm AS identify-data-source
 WORKDIR /src
@@ -67,7 +68,22 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then scripts/install-jwasm.sh; fi
 RUN --mount=type=cache,id=cli-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=cli-cargo-target-${TARGETARCH},target=/src/target,sharing=locked \
     cargo build --locked --release --package rom-weaver-cli \
+    && cargo run --locked --release -p rom-weaver-cli --example generate_manpages -- --write \
     && install -D --mode 0755 target/release/rom-weaver /out/rom-weaver
+
+FROM scratch AS docs-source
+COPY --from=builder /src/docs/man /share/man/man1
+COPY --from=builder /src/docs/completions /share/completions
+
+FROM scratch AS docs-prebuilt
+COPY docs/man /share/man/man1
+COPY docs/completions /share/completions
+
+FROM debian:trixie-slim AS docs-none
+RUN install --directory /share/man/man1 /share/completions
+
+# hadolint ignore=DL3006
+FROM docs-${DOCS} AS docs
 
 FROM scratch AS binary-source
 COPY --from=builder /out/rom-weaver /rom-weaver
@@ -115,6 +131,7 @@ FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
 # in a later `RUN chmod` keeps the 5 MB binary out of a second layer.
 COPY --from=binary --chmod=0755 /rom-weaver /usr/local/bin/rom-weaver
 COPY --from=identify-data /share /usr/local/share
+COPY --from=docs /share /usr/local/share
 COPY --from=workdir /rootfs /
 
 WORKDIR /work

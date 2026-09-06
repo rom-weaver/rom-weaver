@@ -5,78 +5,10 @@ use std::{
     process::ExitCode,
 };
 
-use clap::Command;
 use clap_complete::{Shell, generate};
 
-fn assert_documented(command: &Command, path: &[String]) {
-    let invocation = path.join(" ");
-    assert!(
-        command.get_about().is_some(),
-        "visible command `{invocation}` is missing about text"
-    );
-    for argument in command
-        .get_arguments()
-        .filter(|argument| !argument.is_hide_set())
-    {
-        assert!(
-            argument.get_help().is_some(),
-            "visible argument `{}` on `{invocation}` is missing help text",
-            argument.get_id()
-        );
-    }
-    for subcommand in command
-        .get_subcommands()
-        .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "help")
-    {
-        let mut subcommand_path = path.to_vec();
-        subcommand_path.push(subcommand.get_name().to_string());
-        assert_documented(subcommand, &subcommand_path);
-    }
-}
-
-fn collect_pages(command: &Command, path: &[String], pages: &mut BTreeMap<String, Vec<u8>>) {
-    let page_name = path.join("-");
-    let invocation = path.join(" ");
-    let mut page_command = command.clone().name(page_name.clone()).bin_name(invocation);
-    for subcommand in page_command
-        .get_subcommands_mut()
-        .filter(|subcommand| subcommand.get_name() == "help")
-    {
-        *subcommand = subcommand.clone().hide(true);
-    }
-    page_command.build();
-
-    let mut rendered = Vec::new();
-    clap_mangen::Man::new(page_command)
-        .render(&mut rendered)
-        .expect("render man page");
-    let rendered = String::from_utf8(rendered)
-        .expect("man page is UTF-8")
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n";
-    pages.insert(format!("{page_name}.1"), rendered.into_bytes());
-
-    for subcommand in command
-        .get_subcommands()
-        .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "help")
-    {
-        let mut subcommand_path = path.to_vec();
-        subcommand_path.push(subcommand.get_name().to_string());
-        collect_pages(subcommand, &subcommand_path, pages);
-    }
-}
-
 fn expected_pages() -> BTreeMap<String, Vec<u8>> {
-    let mut command = rom_weaver_app::cli_command();
-    command.build();
-    let root = command.get_name().to_string();
-    assert_documented(&command, std::slice::from_ref(&root));
-    let mut pages = BTreeMap::new();
-    collect_pages(&command, &[root], &mut pages);
-    pages
+    rom_weaver_app::generated_man_pages()
 }
 
 fn output_dir() -> PathBuf {
@@ -85,6 +17,14 @@ fn output_dir() -> PathBuf {
 
 fn completions_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/completions")
+}
+
+fn package_manifests() -> [PathBuf; 2] {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    [
+        repository.join("package.json"),
+        repository.join("packages/rom-weaver-alias/package.json"),
+    ]
 }
 
 fn expected_completions() -> BTreeMap<String, Vec<u8>> {
@@ -185,6 +125,42 @@ fn check_completions(
     Ok(names_match && contents_match)
 }
 
+fn check_package_man_pages(pages: &BTreeMap<String, Vec<u8>>) -> std::io::Result<bool> {
+    let expected = pages
+        .keys()
+        .map(|name| format!("docs/man/{name}"))
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut matches = true;
+    for manifest_path in package_manifests() {
+        let contents = fs::read_to_string(&manifest_path)?;
+        let manifest: serde_json::Value = serde_json::from_str(&contents).map_err(|error| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("{}: {error}", manifest_path.display()),
+            )
+        })?;
+        let actual = manifest
+            .get("man")
+            .and_then(serde_json::Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<std::collections::BTreeSet<_>>()
+            })
+            .unwrap_or_default();
+        if actual != expected {
+            eprintln!(
+                "{}: man entries do not match the generated pages",
+                manifest_path.display()
+            );
+            matches = false;
+        }
+    }
+    Ok(matches)
+}
+
 fn main() -> ExitCode {
     let mode = env::args().nth(1).unwrap_or_else(|| "--write".to_string());
     let pages = expected_pages();
@@ -195,8 +171,9 @@ fn main() -> ExitCode {
         "--write" => match (
             write_pages(&output_dir, &pages),
             write_completions(&completions_dir, &completions),
+            check_package_man_pages(&pages),
         ) {
-            (Ok(()), Ok(())) => {
+            (Ok(()), Ok(()), Ok(true)) => {
                 println!(
                     "generated {} man pages and {} shell completions",
                     pages.len(),
@@ -204,7 +181,8 @@ fn main() -> ExitCode {
                 );
                 ExitCode::SUCCESS
             }
-            (Err(error), _) | (_, Err(error)) => {
+            (Ok(()), Ok(()), Ok(false)) => ExitCode::FAILURE,
+            (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
                 eprintln!("failed to generate CLI documentation: {error}");
                 ExitCode::FAILURE
             }
@@ -212,8 +190,9 @@ fn main() -> ExitCode {
         "--check" => match (
             check_pages(&output_dir, &pages),
             check_completions(&completions_dir, &completions),
+            check_package_man_pages(&pages),
         ) {
-            (Ok(true), Ok(true)) => {
+            (Ok(true), Ok(true), Ok(true)) => {
                 println!(
                     "{} generated man pages and {} shell completions are up to date",
                     pages.len(),
@@ -221,11 +200,11 @@ fn main() -> ExitCode {
                 );
                 ExitCode::SUCCESS
             }
-            (Ok(false), _) | (_, Ok(false)) => {
+            (Ok(false), _, _) | (_, Ok(false), _) | (_, _, Ok(false)) => {
                 eprintln!("generated CLI documentation is stale; run `mise run manpages`");
                 ExitCode::FAILURE
             }
-            (Err(error), _) | (_, Err(error)) => {
+            (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => {
                 eprintln!("failed to check generated CLI documentation: {error}");
                 ExitCode::FAILURE
             }

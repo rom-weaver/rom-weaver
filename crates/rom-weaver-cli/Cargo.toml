@@ -52,6 +52,7 @@ clap.workspace = true
 # the Windows by-handle info std still gates behind an unstable feature.
 same-file.workspace = true
 clap_complete = "4.5"
+clap_mangen = "0.3.0"
 # Ctrl-C -> cancellation token. Tiny, one platform shim dependency each side.
 ctrlc = "3.5"
 # Light interactive prompts for `apply --tui`; built on `console`, already in
@@ -72,7 +73,6 @@ tracing-subscriber = { version = "0.3.20", default-features = false, features = 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_cmd.workspace = true
 assert_fs.workspace = true
-clap_mangen = "0.3.0"
 flate2.workspace = true
 
 [[bin]]

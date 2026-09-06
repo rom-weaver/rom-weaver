@@ -274,6 +274,7 @@ jobs:
             --file Dockerfile \
             --build-arg BINARY=prebuilt \
             --build-arg IDENTIFY_DATA=prebuilt \
+            --build-arg DOCS=none \
             --tag prebuilt-smoke \
             .
 

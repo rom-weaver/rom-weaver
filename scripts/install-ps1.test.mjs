@@ -76,6 +76,9 @@ function Invoke-WebRequest {
       $entry = $archive.CreateEntry('completions/rom-weaver.ps1')
       $writer = [System.IO.StreamWriter]::new($entry.Open())
       try { $writer.Write('completion') } finally { $writer.Dispose() }
+      $entry = $archive.CreateEntry('man/rom-weaver.1')
+      $writer = [System.IO.StreamWriter]::new($entry.Open())
+      try { $writer.Write('man page') } finally { $writer.Dispose() }
     } finally {
       $archive.Dispose()
     }
@@ -115,6 +118,10 @@ test("installs the binary", { skip: hasPowerShell ? false : "pwsh not available"
     assert.equal(
       readFileSync(join(installDirectory, "completions/rom-weaver.ps1"), "utf8"),
       "completion",
+    );
+    assert.equal(
+      readFileSync(join(installDirectory, "docs/man/rom-weaver.1"), "utf8"),
+      "man page",
     );
     assert.ok(output.includes(`Installed rom-weaver to ${target}`));
     assert.deepEqual(readFileSync(urlLog, "utf8").trim().split("\n"), [
@@ -179,6 +186,9 @@ function Invoke-WebRequest {
       $entry = $archive.CreateEntry('completions/rom-weaver.ps1')
       $writer = [System.IO.StreamWriter]::new($entry.Open())
       try { $writer.Write('completion') } finally { $writer.Dispose() }
+      $entry = $archive.CreateEntry('man/rom-weaver.1')
+      $writer = [System.IO.StreamWriter]::new($entry.Open())
+      try { $writer.Write('man page') } finally { $writer.Dispose() }
     } finally {
       $archive.Dispose()
     }

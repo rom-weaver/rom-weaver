@@ -47,6 +47,7 @@ Everything runs locally. Nothing is uploaded.
 ```bash
 cargo install rom-weaver-cli --locked
 rom-weaver --help
+rom-weaver man --install
 ```
 
 A source build links native C libraries and needs **Rust 1.95+**, **CMake**, **Clang**, and a native compiler toolchain. The crate's Cargo features (`typescript-types`, `wasm-app`) drive this project's own type generation and WASM entrypoint builds; they are not meant for external use.

@@ -25,7 +25,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 
 Every method here installs a binary built for the release: macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
 
-Homebrew, the install scripts, and npm also carry the generated CLI manpages and shell completions. Scoop, cargo-binstall, mise, and `cargo install` install the executable only; see [Install shell completions](#install-shell-completions) for those methods, and [man pages](../reference/cli.md#man-pages) for where the manpages come from.
+Homebrew, the macOS/Linux install script, and global npm installs put the generated CLI manpages in a Unix manpath. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. The Docker image stores the pages under `/usr/local/share/man/man1`, but it has no `man(1)` program. See [Install shell completions](#install-shell-completions) for completion files, and [man pages](../reference/cli.md#man-pages) for the page commands.
 
 ### Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
 
@@ -40,6 +40,8 @@ scoop bucket add rom-weaver https://github.com/rom-weaver/scoop-bucket
 scoop install rom-weaver
 ```
 
+Scoop stores the generated manpages under the app directory's `docs\\man` folder. Find that directory with `scoop prefix rom-weaver`; Windows has no standard manpath.
+
 ### Install script (macOS, Linux)
 
 Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
@@ -51,7 +53,7 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 
 ### Install script (Windows)
 
-The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It honors the same environment variables and runs the same checks. The PowerShell completion is installed under that directory's `completions` folder.
+The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It honors the same environment variables and runs the same checks. The generated manpages are stored under that directory's `docs\man` folder because Windows has no standard manpath. The PowerShell completion is installed under its `completions` folder.
 
 ```powershell
 irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex
@@ -60,6 +62,8 @@ irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | i
 ### npm
 
 The only channel covering every supported target at once. Needs Node.js 22+. The unscoped `rom-weaver` package points at the `@rom-weaver/cli` launcher, whose binary arrives through a platform-specific optional dependency, so only your platform's binary is downloaded.
+
+Global installs of either package install the generated manpages on Unix. A local npm install keeps the pages under the package's `docs/man` directory.
 
 ```bash
 npm install --global rom-weaver
@@ -80,9 +84,10 @@ Fetches the released binary instead of compiling from source, which `cargo insta
 cargo binstall rom-weaver-cli
 ```
 
-`cargo-binstall` installs only the executable, so no identify database sits beside it. Install it after:
+`cargo-binstall` installs only the executable, so no manpages or identify database sit beside it. Install them after:
 
 ```bash
+rom-weaver man --install
 rom-weaver setup
 ```
 
@@ -96,9 +101,10 @@ Manages the CLI per project in `mise.toml` and verifies the release's GitHub art
 mise use 'github:rom-weaver/rom-weaver[minimum_release_age=0s]'
 ```
 
-The generic GitHub backend installs only one release asset. Install the identify database after it finishes:
+The generic GitHub backend installs only one release asset. Install the generated manpages and the identify database after it finishes:
 
 ```bash
+rom-weaver man --install
 rom-weaver setup
 ```
 
@@ -111,6 +117,12 @@ git clone https://github.com/rom-weaver/rom-weaver.git
 cd rom-weaver
 cargo install --path crates/rom-weaver-cli --locked
 rom-weaver --version
+```
+
+Cargo installs the executable only. Install the generated manpages after it finishes:
+
+```bash
+rom-weaver man --install
 ```
 
 Install the identify database:
@@ -131,7 +143,7 @@ docker run --rm \
   probe --input /work/game.iso
 ```
 
-The image's working directory is `/work`; mount the directory holding your ROMs there and pass paths under `/work`. Arguments after the image name go straight to `rom-weaver`, so `--help` and every subcommand work unchanged.
+The image's working directory is `/work`; mount the directory holding your ROMs there and pass paths under `/work`. Arguments after the image name go straight to `rom-weaver`, so `--help` and every subcommand work unchanged. The generated manpages are present under `/usr/local/share/man/man1`; the image has no `man(1)` program, so use the [CLI reference](../reference/cli.md) or copy a page out with `docker cp`.
 
 `--user "$(id -u):$(id -g)"` is what makes the output usable. Bind-mounted files keep their host ownership. Without that flag, the container runs as the base image's `nonroot` user (uid 65532). The container may refuse permission to read your files, and anything it writes ends up owned by a uid that does not exist on the host. rom-weaver reads no home directory or user config, so an arbitrary uid needs no matching account inside the image.
 
