@@ -56,6 +56,7 @@ fn apply_command(input: &Path, patches: Vec<PathBuf>) -> PatchApplyCommand {
     PatchApplyCommand {
         input: input.to_path_buf(),
         select: Vec::new(),
+        patch_select: Vec::new(),
         target: None,
         filter: Vec::new(),
         no_extract: true,
@@ -1199,7 +1200,10 @@ fn resolving_patches_passes_plain_files_through_unchanged() {
     let (resolved, notes) = app()
         .resolve_patches(
             &[first.clone(), second.clone()],
-            &[],
+            PatchSelectors {
+                select: &[],
+                per_patch: &[],
+            },
             &context,
             AutoExtractResolutionFlags {
                 no_extract: true,
