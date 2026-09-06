@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { HomeLoom } from "../../src/webapp/components/home-loom.tsx";
 import { HomePage } from "../../src/webapp/components/home-page.tsx";
 
@@ -59,7 +60,7 @@ describe("HomeLoom", () => {
     document.documentElement.style.setProperty("--loom-weft-2", "#666");
     document.documentElement.style.setProperty("--loom-weft-3", "#777");
 
-    const { container, unmount } = render(<HomeLoom />);
+    const { container, unmount } = render(<HomeLoom ariaLabel="The original ROM has three patches." />);
     const canvas = container.querySelector("canvas") as HTMLCanvasElement;
     expect(canvas.getAttribute("role")).toBe("img");
     expect(canvas.getAttribute("aria-label")).toContain("three patches");
@@ -87,7 +88,7 @@ describe("HomeLoom", () => {
     vi.stubGlobal("requestAnimationFrame", vi.fn());
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
-    render(<HomeLoom />);
+    render(<HomeLoom ariaLabel="The original ROM has three patches." />);
     expect(requestAnimationFrame).not.toHaveBeenCalled();
     expect(context.save.mock.calls.length).toBe(3);
     expect(context.fill.mock.calls.length).toBeGreaterThan(0);
@@ -96,7 +97,11 @@ describe("HomeLoom", () => {
 
 describe("HomePage", () => {
   it("builds sub-path-safe workflow links and includes the public workflow copy", () => {
-    const { container } = render(<HomePage baseUrl="https://example.com/tools/" />);
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>,
+    );
     const links = Array.from(container.querySelectorAll("a.home-flow")).map((link) => link.getAttribute("href"));
     expect(links).toEqual([
       "/tools/apply-patch",
@@ -110,8 +115,34 @@ describe("HomePage", () => {
   });
 
   it("falls back to root-relative routes when the base URL is invalid", () => {
-    const { container } = render(<HomePage baseUrl="not a URL" />);
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="not a URL" />
+      </RomWeaverSettingsProvider>,
+    );
     expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply-patch");
     expect(container.querySelector("a[href='/create-patch']")).toBeTruthy();
+  });
+
+  it("updates homepage copy and workflow names when the language changes", () => {
+    const { container, rerender } = render(
+      <RomWeaverSettingsProvider settings={{ language: "de" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector("#home-title")?.textContent).toContain("Deine ROMs. Deine Änderungen.");
+    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Patch anwenden");
+    expect(container.textContent).toContain("Befehlszeile");
+
+    rerender(
+      <RomWeaverSettingsProvider settings={{ language: "es" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector("#home-title")?.textContent).toContain(
+      "Tus ROM. Tus cambios.",
+    );
+    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Aplicar parche");
+    expect(container.textContent).toContain("Línea de comandos");
   });
 });
