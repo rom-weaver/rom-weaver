@@ -451,7 +451,7 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim and PPF undo tabs are still beta - they navigate in production but must
+// The Trim, PPF undo, and Save Editor tabs are still beta - they navigate in production but must
 // not be indexed, and they inherit the Weave page's markup, so strip the shared
 // index directive to noindex and point their canonical at themselves (rather
 // than leaking a /apply canonical that would fold them into the patcher page).
@@ -649,6 +649,10 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         [
           "whats-new",
           withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "whats-new"), routePreloadLinks.get("whats-new")),
+        ],
+        [
+          "save-editor",
+          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "save-editor"), routePreloadLinks.get("save-editor")),
         ],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
         [
@@ -1027,6 +1031,7 @@ const WORKFLOW_ROUTE_MODULES = {
   patcher: "src/public/react/apply-patch-form.tsx",
   test: "src/public/react/emulator-test-view.tsx",
   "ppf-undo": "src/webapp/components/ppf-undo-form.tsx",
+  "save-editor": "src/webapp/components/save-editor.tsx",
   trim: "src/public/react/trim-form.tsx",
   "whats-new": "src/webapp/whats-new-page.tsx",
 };

@@ -26,6 +26,13 @@ const OFFLINE_PAGES = [
   // readiness is asserted through the visible tabpanel instead of a selected tab.
   { expectedView: "ppf-undo", label: "ppf-undo directory", path: "ppf-undo/", tabless: true },
   { expectedView: "ppf-undo", label: "ppf-undo directory document", path: "ppf-undo/index.html", tabless: true },
+  { expectedView: "save-editor", label: "save-editor directory", path: "save-editor/", tabless: true },
+  {
+    expectedView: "save-editor",
+    label: "save-editor directory document",
+    path: "save-editor/index.html",
+    tabless: true,
+  },
   // The retired /tools/ slug still serves the PPF undo page.
   { expectedView: "ppf-undo", label: "tools legacy directory", path: "tools/", tabless: true },
   { expectedView: "test", label: "test directory", path: "test/" },

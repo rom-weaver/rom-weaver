@@ -43,6 +43,15 @@ const TABS = [
     label: "PPF undo",
     placement: "more",
   },
+  {
+    beta: true,
+    group: "tools",
+    href: "save-editor",
+    icon: <svg aria-hidden="true" />,
+    id: "save-editor",
+    label: "Save Editor",
+    placement: "more",
+  },
 ] satisfies WorkflowTab[];
 
 const mastheadProps = {
@@ -87,6 +96,7 @@ describe("Masthead", () => {
       expect(list?.querySelector('[data-mode="docs"]')).toBeNull();
       expect(list?.querySelector('[data-mode="trim"]')).toBeNull();
       expect(list?.querySelector('[data-mode="ppf-undo"]')).toBeNull();
+      expect(list?.querySelector('[data-mode="save-editor"]')).toBeNull();
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
       expect(tabs[0]?.classList.contains(selectedClass)).toBe(true);
       // roving tabindex: exactly one reachable tab per list
