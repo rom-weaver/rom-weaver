@@ -151,6 +151,8 @@ struct EmitBundleInputs {
     bases: Vec<PatchBasisMode>,
     output: Option<PathBuf>,
     threads: ThreadBudget,
+    /// The cheat selection this run applied, filled in after the apply.
+    cheats: Vec<BundleCheatEntry>,
 }
 
 struct PatchApplyPrepareChainInputs<'a> {
@@ -253,7 +255,14 @@ impl CliApp {
             {
                 return outcome;
             }
-            return self.run_patch_apply_resolved(args, None, original_input, None, &mut None);
+            return self.run_patch_apply_resolved(
+                args,
+                None,
+                original_input,
+                None,
+                &mut None,
+                &mut Vec::new(),
+            );
         }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -327,8 +336,10 @@ impl CliApp {
             bases: args.patch_basis.clone(),
             output: args.output.clone(),
             threads: args.threads,
+            cheats: Vec::new(),
         });
         let mut final_output = None;
+        let mut applied_cheats = Vec::new();
         let outcome = if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
             let expected_rom_name = bundle_resolution
                 .as_ref()
@@ -341,6 +352,7 @@ impl CliApp {
                 original_input,
                 local_bundle,
                 &mut final_output,
+                &mut applied_cheats,
             )
         };
         // --emit-bundle failures don't undo the already-written apply; warn
@@ -349,6 +361,7 @@ impl CliApp {
             && outcome.status == OperationStatus::Succeeded
         {
             inputs.output = final_output.or(inputs.output);
+            inputs.cheats = applied_cheats;
             if let Err(error) = self.emit_apply_bundle(&emit_path, inputs) {
                 tracing::warn!(
                     %error,
@@ -364,9 +377,9 @@ impl CliApp {
     /// `bundle_create_inner`, so the emitted bundle is byte-for-byte what
     /// `bundle create` would write for the same inputs.
     fn emit_apply_bundle(&self, emit_path: &Path, inputs: EmitBundleInputs) -> Result<()> {
-        if inputs.patches.is_empty() {
+        if inputs.patches.is_empty() && inputs.cheats.is_empty() {
             return Err(RomWeaverError::Validation(
-                "--emit-bundle needs at least one applied --patch".to_string(),
+                "--emit-bundle needs at least one applied --patch or --cheat".to_string(),
             ));
         }
         let context = self.context(inputs.threads);
@@ -403,6 +416,7 @@ impl CliApp {
             output_check,
             threads: inputs.threads,
             patch_specs,
+            cheats: inputs.cheats,
             ..BundleCreateCommand::default()
         };
         self.bundle_create_inner(&create, &context)?;
@@ -448,6 +462,7 @@ impl CliApp {
         original_input: PathBuf,
         local_bundle: Option<PathBuf>,
         final_output: &mut Option<PathBuf>,
+        applied_cheats: &mut Vec<BundleCheatEntry>,
     ) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -491,13 +506,22 @@ impl CliApp {
         let has_manual_cheats = !codes.is_empty();
         // `--cheat` resolves to records only once the input ROM is resolved, so
         // the flag - not the (still empty) record list - decides whether this
-        // run has database cheats.
+        // run has database cheats. A bundle's recorded cheats count the same.
         let native_cheat_selection = !cheat_selection.cheats.is_empty();
+        // Native-only: resolving a bundle cheat reads the local cheat database.
+        #[cfg(not(target_arch = "wasm32"))]
+        let bundle_cheats = bundle_resolution
+            .as_ref()
+            .map(|resolution| resolution.cheats.clone())
+            .unwrap_or_default();
+        #[cfg(target_arch = "wasm32")]
+        let bundle_cheats: Vec<BundleCheatEntry> = Vec::new();
         #[cfg(not(target_arch = "wasm32"))]
         let mut cheat_records = cheat_records;
         #[cfg(target_arch = "wasm32")]
         let cheat_records = cheat_records;
-        let has_database_cheats = !cheat_records.is_empty() || native_cheat_selection;
+        let has_database_cheats =
+            !cheat_records.is_empty() || native_cheat_selection || !bundle_cheats.is_empty();
         let has_cheats = has_manual_cheats || has_database_cheats;
         let discover_implicit_patches = patches.is_empty() && !has_cheats && !no_extract;
         let input_kind_filter =
@@ -788,9 +812,41 @@ impl CliApp {
             }
         };
 
-        // Resolve `--cheat` against the resolved input ROM. The bakeable entries
-        // join `cheat_records` and are applied after the patch chain, like the
-        // webapp's.
+        // Resolve the bundle's recorded cheats and `--cheat` against the
+        // resolved input ROM. Both bake after the patch chain, like the
+        // webapp's. Native-only: the cheat database lives on disk.
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut skipped_bundle_cheats: Vec<crate::bundle_cheats::SkippedBundleCheat> = Vec::new();
+        #[cfg(not(target_arch = "wasm32"))]
+        if !bundle_cheats.is_empty() {
+            match self.resolve_bundle_cheats(
+                &resolved_input,
+                &bundle_cheats,
+                &cheat_selection,
+                &context,
+            ) {
+                Ok(resolved) => {
+                    applied_cheats.extend(
+                        bundle_cheats
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, _)| {
+                                !resolved
+                                    .skipped
+                                    .iter()
+                                    .any(|skipped| skipped.index == *index)
+                            })
+                            .map(|(_, entry)| entry.clone()),
+                    );
+                    cheat_records.extend(resolved.rom_records);
+                    skipped_bundle_cheats = resolved.skipped;
+                }
+                Err(error) => {
+                    Self::cleanup_temp_paths(&temp_paths);
+                    return self.finish("patch-apply", fail("prepare", error.to_string()));
+                }
+            }
+        }
         #[cfg(not(target_arch = "wasm32"))]
         if native_cheat_selection {
             match self.resolve_cheat_selection(&resolved_input, &cheat_selection, &context) {
@@ -808,6 +864,7 @@ impl CliApp {
                             ),
                         );
                     }
+                    applied_cheats.extend(resolved.bundle_cheat_entries(&cheat_selection.cheats));
                     cheat_records.extend(resolved.selected_rom_records());
                 }
                 Err(error) => {
@@ -816,6 +873,9 @@ impl CliApp {
                 }
             }
         }
+        // Now that the selection is resolved, the record list - not the flags -
+        // says whether this run bakes anything.
+        let has_database_cheats = !cheat_records.is_empty();
 
         // Bake cheat codes into a synthetic IPS patch applied before the explicit
         // patches. Resolved against the resolved input ROM bytes (header strip /
@@ -1278,6 +1338,19 @@ impl CliApp {
             && let Some(summary) = cheat_summary
         {
             report.label = format!("{}; {}", report.label, summary.label());
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if report.status == OperationStatus::Succeeded && !skipped_bundle_cheats.is_empty() {
+            report.label = format!(
+                "{}; skipped {} optional bundle cheat(s): {}",
+                report.label,
+                skipped_bundle_cheats.len(),
+                skipped_bundle_cheats
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
 
         *final_output = terminal_output_for_apply;

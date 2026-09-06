@@ -651,7 +651,12 @@ export type BundleCreateCommand = { rom?: string,
  * export skips re-hashing the same prepared leaf. `algo=hex` tokens supply
  * the emitted rom checks; a `size=N` token supplies the prepared size.
  */
-assume_in?: Array<string>, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
+assume_in?: Array<string>, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode,
+/**
+ * Cheat selections to record in the bundle. The wasm/JSON boundary sets
+ * this directly; the native CLI fills it from `--cheat`/`--cht`.
+ */
+cheats?: Array<BundleCheatEntry>, output: string, bundle?: string,
 /**
  * Optional packaged ROM payload. Checks are still calculated from `rom`.
  */

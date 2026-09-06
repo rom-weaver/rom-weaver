@@ -1560,6 +1560,7 @@ fn bundle_resolution(
     output_checks: Option<(String, FilenameRequirements)>,
 ) -> BundleApplyResolution {
     BundleApplyResolution {
+        cheats: Vec::new(),
         checks,
         expected_rom_name: None,
         output_checks,

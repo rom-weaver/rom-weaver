@@ -2702,6 +2702,17 @@ patches reads left to right:
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output_header: Option<PatchApplyOutputHeaderMode>,
+    /// Cheat selections to record in the bundle. The wasm/JSON boundary sets
+    /// this directly; the native CLI fills it from `--cheat`/`--cht`.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub cheats: Vec<crate::BundleCheatEntry>,
+    /// Native cheat-database selection; see `PatchApplyCommand::cheat_selection`.
+    #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub cheat_selection: CheatSelectionArgs,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

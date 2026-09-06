@@ -61,6 +61,30 @@ pub struct BundleParseResult {
     pub warnings: Vec<String>,
 }
 
+/// The cheat clause of the parse label: how many entries, how they are
+/// delivered, and which cheats they name.
+fn cheat_entry_summary(cheats: &[BundleCheatEntry]) -> String {
+    if cheats.is_empty() {
+        return String::new();
+    }
+    let named = cheats
+        .iter()
+        .map(|cheat| {
+            format!(
+                "{}{}",
+                cheat.description.as_deref().unwrap_or(&cheat.id),
+                if cheat.optional { " [optional]" } else { "" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "; {} cheat entr{}: {named}",
+        cheats.len(),
+        if cheats.len() == 1 { "y" } else { "ies" }
+    )
+}
+
 impl CliApp {
     pub(super) fn run_bundle_parse(&self, args: BundleParseCommand) -> AppRunOutcome {
         trace!(
@@ -76,14 +100,15 @@ impl CliApp {
         let report = match self.bundle_parse_inner(&args, &context) {
             Ok(result) => {
                 let label = format!(
-                    "parsed bundle `{}` ({} patch entr{})",
+                    "parsed bundle `{}` ({} patch entr{}{})",
                     args.input.display(),
                     result.bundle.patches.len(),
                     if result.bundle.patches.len() == 1 {
                         "y"
                     } else {
                         "ies"
-                    }
+                    },
+                    cheat_entry_summary(&result.bundle.cheats)
                 );
                 let mut report = OperationReport::succeeded(
                     OperationFamily::Command,

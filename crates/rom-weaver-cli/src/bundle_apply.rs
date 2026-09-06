@@ -29,6 +29,8 @@ pub(super) struct BundleApplyResolution {
     /// Per selected patch (apply order): declared basis and mid-chain
     /// declared checks, consumed by the apply chain loop.
     pub step_verifications: Vec<patch_plan::PatchStepVerification>,
+    /// The bundle's cheat entries, resolved once the input ROM is known.
+    pub cheats: Vec<BundleCheatEntry>,
 }
 
 enum BundleApplySource {
@@ -95,6 +97,7 @@ impl CliApp {
             bundle = %source.archive_source.display(),
             kind = ?source.loaded.kind,
             patches = bundle.patches.len(),
+            cheats = bundle.cheats.len(),
             has_rom = bundle.rom.is_some(),
             explicit_patches = args.patches.len(),
             "resolving bundle-driven patch apply"
@@ -121,7 +124,8 @@ impl CliApp {
         if args.patches.is_empty() {
             let selected =
                 self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
-            if selected.is_empty() {
+            // A cheats-only bundle legitimately selects no patch.
+            if selected.is_empty() && bundle.cheats.is_empty() {
                 return Err(RomWeaverError::Validation(
                     "no bundle patches selected (all are optional or disabled); pass --with <glob> to include some"
                         .to_string(),
@@ -288,6 +292,7 @@ impl CliApp {
             expected_rom_name,
             output_checks,
             step_verifications,
+            cheats: bundle.cheats.clone(),
         }))
     }
 

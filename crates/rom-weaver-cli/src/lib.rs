@@ -1476,6 +1476,7 @@ pub use patch_commands::{PatchCreateFormatPolicyMetadata, patch_create_format_po
 mod patch_filename_checksum;
 use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_requirements};
 
+mod bundle_cheats;
 mod bundle_schema;
 pub use bundle_schema::{
     BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_VERSION, BundleCheatEntry, BundleChecks,
