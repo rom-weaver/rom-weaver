@@ -832,6 +832,16 @@ pub(super) fn install_group(
     install_group_archive(database_dir, group, &bytes)
 }
 
+/// Whether a user install of the full database already sits in `database_dir`.
+/// Data shipped beside the executable does not count: `setup` exists to fill
+/// the gap when no such data was installed.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn user_database_packs(database_dir: &Path) -> Option<usize> {
+    let packs = database_dir.join(USER_FULL_DATA_DIR).join("packs");
+    let count = fs::read_dir(packs).ok()?.count();
+    (count > 0).then_some(count)
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn install_all(database_dir: &Path) -> Result<usize> {
     use std::io::Read;

@@ -190,9 +190,11 @@ if curl --fail --location --proto '=https' --tlsv1.2 \
     elif [ "$status" = 200 ] || [ "$status" = 404 ]; then
       identify_verified=0
       echo "rom-weaver: no build provenance from $repo for $identify_asset; installed the binary only" >&2
+      echo "rom-weaver: run \`rom-weaver setup\` to install the identify database" >&2
     elif [ "$require_attestation" = 1 ]; then
       identify_verified=0
       echo "rom-weaver: could not check build provenance for $identify_asset; installed the binary only" >&2
+      echo "rom-weaver: run \`rom-weaver setup\` to install the identify database" >&2
     else
       echo "rom-weaver: could not check build provenance for $identify_asset; continuing unverified" >&2
     fi
@@ -200,6 +202,7 @@ if curl --fail --location --proto '=https' --tlsv1.2 \
   if [ "$identify_verified" = 1 ]; then
     if ! command -v brotli >/dev/null 2>&1; then
       echo "rom-weaver: Brotli decoder unavailable; installed the binary only" >&2
+      echo "rom-weaver: run \`rom-weaver setup\` to install the identify database" >&2
     elif brotli --decompress --force \
       --output="$tmp_dir/rom-weaver-identify-data.tar" \
       "$tmp_dir/$identify_asset" &&
@@ -208,10 +211,12 @@ if curl --fail --location --proto '=https' --tlsv1.2 \
       echo "Installed ROM identify data to $install_dir/share/rom-weaver/identify/v1"
     else
       echo "rom-weaver: failed to extract Brotli identify data; installed the binary only" >&2
+      echo "rom-weaver: run \`rom-weaver setup\` to install the identify database" >&2
     fi
   fi
 else
   echo "rom-weaver: ROM identify data unavailable; installed the binary only" >&2
+  echo "rom-weaver: run \`rom-weaver setup\` to install the identify database" >&2
 fi
 
 # Documentation is a separate, platform-independent release asset so the
