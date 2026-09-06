@@ -1597,7 +1597,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[]) => {
       selectedCheatsRef.current = records;
-      setCheatsOn(records.length > 0);
+      // Only ROM-bakeable cheats depend on the header bytes; RAM cheats go to
+      // the cheat file and never see the ROM.
+      setCheatsOn(records.some((record) => cheatDelivery(record) === "rom"));
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);

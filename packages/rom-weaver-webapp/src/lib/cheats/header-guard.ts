@@ -1,9 +1,9 @@
 /**
  * Cheat offsets are computed against the original ROM bytes, header included,
- * so stripping the header moves every baked write. The CLI refuses `--code`
- * with header stripping; the webapp derives the same rule from the two places
- * a strip can be pinned - the per-patch header select in 0x03 and the output
- * header control in 0x05.
+ * so stripping the header before a patch moves every baked write. The CLI
+ * refuses `--code` with `--patch-header strip`; the webapp derives the same
+ * rule from the per-patch header select in 0x03. The output header in 0x05 is
+ * applied after the cheats bake and is not part of the rule.
  */
 
 type HeaderMode = "auto" | "keep" | "strip" | undefined;
@@ -16,21 +16,20 @@ export const CHEAT_HEADER_STRIP_HINT =
 export const CHEAT_HEADER_STRIP_MESSAGE = "Turn cheats off or set ROM header handling back to keep.";
 
 /**
- * The Cheats-step validation message, or "" when nothing conflicts. Only an
- * explicit "strip" pin conflicts; "auto" is the engine's own decision and is
- * left alone.
+ * The Cheats-step validation message, or "" when nothing conflicts. Callers
+ * MUST pass the mode the run will send: an explicit pin, or a decided auto
+ * resolution; an undecided "auto" is the engine's own decision and is left
+ * alone.
  */
 export const getCheatHeaderStripConflict = ({
   cheatsOn,
-  outputHeader,
   patchHeaderModes,
 }: {
-  /** At least one cheat card's switch is On. */
+  /** At least one ROM-bakeable cheat card's switch is On. */
   cheatsOn: boolean;
-  outputHeader?: HeaderMode;
   patchHeaderModes?: readonly HeaderMode[];
 }): string => {
   if (!cheatsOn) return "";
-  const stripped = outputHeader === "strip" || (patchHeaderModes || []).some((mode) => mode === "strip");
+  const stripped = (patchHeaderModes || []).some((mode) => mode === "strip");
   return stripped ? CHEAT_HEADER_STRIP_MESSAGE : "";
 };
