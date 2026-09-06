@@ -107,9 +107,7 @@ const UnifiedDropZone = ({
     <div className="hero-lead">
       <span className="lead-title">
         <span className="lead-line">{localizer.message(lead.line1)}</span>{" "}
-        <span className="lead-line">
-          {localizer.message(lead.line2)} <span className="lead-accent">{localizer.message("ui.hero.accent")}</span>.
-        </span>
+        <span className="lead-line lead-accent">{localizer.message(lead.line2)}</span>
       </span>
       <span className="lead-sub mono">{localizer.message("ui.hero.local")}</span>
     </div>

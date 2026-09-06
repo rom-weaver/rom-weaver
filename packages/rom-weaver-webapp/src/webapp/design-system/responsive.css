@@ -13,11 +13,8 @@
      kept that reset winning, so a boxed rule at this weight was dead; layer order
      would hand it the win instead and box the headline. */
   .rw-app .hero-lead .lead-title {
-    font-size: clamp(1.05rem, 4.6vw, 1.5rem);
+    font-size: clamp(1.5rem, 6.8vw, 2rem);
     line-height: 1.2;
-  }
-  .rw-app .hero-lead .lead-line {
-    display: inline;
   }
   .rw-app .hero-lead .lead-sub {
     padding: 1px 7px;

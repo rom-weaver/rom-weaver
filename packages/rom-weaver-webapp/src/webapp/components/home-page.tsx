@@ -106,20 +106,19 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
     <section aria-labelledby="home-title" className="home-page" id="panel-home">
       <div className="home-wrap home-hero">
         <div className="home-hero-head">
-          <p className="home-eyebrow">Local-first ROM and disc image toolkit</p>
+          <p className="home-eyebrow">Your ROM and disc image toolkit</p>
           <h1 id="home-title">
-            Patch, pack, and prove your ROMs. <em>Nothing leaves your machine.</em>
+            Your ROMs. Your changes. <em>All on your device.</em>
           </h1>
         </div>
         <div className="home-hero-body">
           <p className="home-lede">
-            rom-weaver reads every common cartridge and disc container, chains patches in the order you choose, and
-            saves the whole recipe as a bundle: patch order, checksums, and output names, so anyone can replay it
-            exactly. Use it in the browser or in the terminal.
+            Apply translations, combine patches, and create patches of your own. Work with ROMs and disc images,
+            compressed or raw, in your browser or terminal.
           </p>
           <div className="home-cta">
             <a className="btn primary lg" href={route("apply")}>
-              Open the webapp
+              Apply a patch
               <ArrowIcon />
             </a>
             <a className="btn ghost lg" href="#home-cli">

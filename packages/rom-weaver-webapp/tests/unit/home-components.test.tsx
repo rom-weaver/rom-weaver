@@ -99,9 +99,9 @@ describe("HomePage", () => {
     const { container } = render(<HomePage baseUrl="https://example.com/tools/" />);
     const links = Array.from(container.querySelectorAll("a.home-flow")).map((link) => link.getAttribute("href"));
     expect(links).toEqual(["/tools/apply", "/tools/apply?guide=bundle", "/tools/create", "/tools/test"]);
-    expect(container.querySelector("#home-title")?.textContent).toContain("Patch, pack, and prove");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
     expect(container.querySelectorAll(".home-flow")).toHaveLength(4);
-    expect(container.textContent).toContain("Nothing leaves your machine");
+    expect(container.textContent).toContain("All on your device.");
   });
 
   it("falls back to root-relative routes when the base URL is invalid", () => {
