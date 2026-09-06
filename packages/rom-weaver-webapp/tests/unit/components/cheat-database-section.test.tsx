@@ -215,6 +215,53 @@ describe("CheatDatabaseSection", () => {
     expect(view.getByText("1 / 2")).toBeTruthy();
   });
 
+  it("filters the picker by delivery and restates the count", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    await openDialog(view);
+    const chip = (name: string) => view.getByRole("button", { name });
+
+    expect(chip("All").getAttribute("aria-pressed")).toBe("true");
+    expect(view.getByText(/^4 of 4 cheats/u)).toBeTruthy();
+
+    fireEvent.click(chip("ROM"));
+    expect(chip("ROM").getAttribute("aria-pressed")).toBe("true");
+    expect(chip("All").getAttribute("aria-pressed")).toBe("false");
+    expect(view.getByText("Infinite lives")).toBeTruthy();
+    expect(view.queryByText("Infinite health")).toBeNull();
+    expect(view.getByText(/^1 of 4 cheats/u)).toBeTruthy();
+
+    fireEvent.click(chip("RAM"));
+    expect(view.getByText("Infinite health")).toBeTruthy();
+    expect(view.getByText("Moon jump")).toBeTruthy();
+    expect(view.queryByText("Infinite lives")).toBeNull();
+
+    fireEvent.click(chip("Needs a value"));
+    expect(view.getByText("Starting lives XX")).toBeTruthy();
+    expect(view.getByText(/^1 of 4 cheats/u)).toBeTruthy();
+  });
+
+  it("returns to the first page when the filter changes", async () => {
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyDatabaseCheats={makeClassifier(pagedRecords)}
+        shard={makeShard(pagedRecords)}
+      />,
+    );
+    await openDialog(view);
+    fireEvent.click(view.getByRole("button", { name: "Next" }));
+    expect(view.getByText("2 / 2")).toBeTruthy();
+
+    fireEvent.click(view.getByRole("button", { name: "ROM" }));
+    expect(view.getByText("1 / 1")).toBeTruthy();
+  });
+
+  it("states in the row why an entry cannot be added", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    await openDialog(view);
+    expect(view.getByText("Needs a value before it can be added.")).toBeTruthy();
+  });
+
   it("adds a cheat as a card, then removes it from the picker", async () => {
     const onSelectionChange = vi.fn();
     const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);

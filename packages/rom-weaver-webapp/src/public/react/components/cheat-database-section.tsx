@@ -12,6 +12,7 @@ import {
   type CheatDatabaseClient,
   type CheatDatabaseManifest,
   type CheatDatabaseSystem,
+  type CheatFilter,
   type CheatGameMatch,
   type CheatRomIdentity,
   type CheatSystemShard,
@@ -42,6 +43,14 @@ const MAX_LOCAL_CHT_BYTES = 16 * 1024 * 1024;
 const DIALOG_PAGE_SIZE = 8;
 
 const DEFAULT_DATABASE_CREDIT = "libretro-database CC-BY-SA-4.0";
+
+/** Delivery filters offered above the dialog list, in display order. */
+const CHEAT_FILTERS: ReadonlyArray<{ value: CheatFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "rom", label: "ROM" },
+  { value: "runtime", label: "RAM" },
+  { value: "requires-parameter", label: "Needs a value" },
+];
 
 const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : undefined);
 
@@ -78,6 +87,17 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
     return { badge: "Needs a value", short: "Value", text: "Add a value before selection" };
   }
   return { badge: "Unsupported", short: "N/A", text: "Cannot be selected" };
+};
+
+/**
+ * Why a picker row cannot be added, in the row's own text. The badge alone
+ * only names the class ("Value", "N/A"); a disabled button gives no reason at
+ * all to a screen reader that never reaches it.
+ */
+const blockedReason = (record: ClassifiedCheatRecord): string => {
+  if (record.resolution.type === "unsupported") return `Unsupported: ${record.resolution.reason}`;
+  if (record.resolution.type === "requiresParameter") return "Needs a value before it can be added.";
+  return "";
 };
 
 const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
@@ -412,6 +432,7 @@ const AddCheatsDialog = ({
 }: AddCheatsDialogProps) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<CheatFilter>("all");
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -426,7 +447,7 @@ const AddCheatsDialog = ({
     }
   }, [open]);
 
-  const visible = useMemo(() => filterCheats(records, query, "all"), [query, records]);
+  const visible = useMemo(() => filterCheats(records, query, filter), [filter, query, records]);
   const pageCount = Math.max(1, Math.ceil(visible.length / DIALOG_PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const rows = visible.slice(currentPage * DIALOG_PAGE_SIZE, currentPage * DIALOG_PAGE_SIZE + DIALOG_PAGE_SIZE);
@@ -470,16 +491,35 @@ const AddCheatsDialog = ({
                 value={query}
               />
             </label>
+            <fieldset className="cheat-filters">
+              <legend className="sr-only">Filter cheats by delivery</legend>
+              {CHEAT_FILTERS.map((option) => (
+                <button
+                  aria-pressed={filter === option.value}
+                  className={filter === option.value ? "cheat-filter is-on" : "cheat-filter"}
+                  key={option.value}
+                  onClick={() => {
+                    setFilter(option.value);
+                    setPage(0);
+                  }}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </fieldset>
             {rows.length ? (
               <ul className="cheat-pick-list">
                 {rows.map((entry) => {
                   const source = entry.record;
                   const delivery = deliveryCopy(entry);
                   const added = addedIds.has(source.id);
+                  const reason = blockedReason(entry);
                   return (
                     <li className="cheat-pick" key={source.id}>
                       <span className="cheat-pick-text">
                         <span className="cheat-pick-name">{source.description}</span>
+                        {reason ? <span className="cheat-pick-reason">{reason}</span> : null}
                         <span className="cheat-pick-badges">
                           {source.rawCode ? <span className="rb mono">{source.rawCode}</span> : null}
                           <span className="rb">{delivery.short}</span>
