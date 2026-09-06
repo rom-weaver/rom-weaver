@@ -429,6 +429,26 @@ describe("CheatDatabaseSection", () => {
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
   });
 
+  it("keeps the manual entry points for a system the decoder covers without a database", async () => {
+    const view = render(<CheatDatabaseSection {...props} rom={{ key: "rom-psx", system: "playstation" }} />);
+    const note = view.container.querySelector(".cheat-add-note")?.textContent || "";
+    expect(note).toContain("No cheat database for PlayStation");
+    expect(note).toContain("Xploder codes by hand");
+    expect(note).not.toContain("Unsupported system");
+
+    fireEvent.click(view.getByRole("button", { name: /Add cheat codes/u }));
+    expect(view.getByLabelText("Import RetroArch .cht")).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
+    expect((view.getByLabelText("System") as HTMLSelectElement).value).toBe("playstation");
+  });
+
+  it("keeps the unsupported copy for a system the decoder does not cover", async () => {
+    const view = render(<CheatDatabaseSection {...props} rom={{ key: "rom-n64", system: "n64" }} />);
+    expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("Unsupported system");
+    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    expect(view.queryByLabelText("Import RetroArch .cht")).toBeNull();
+  });
+
   it("shows manual browsing as unverified and keeps controls within their container", async () => {
     const view = render(
       <CheatDatabaseSection

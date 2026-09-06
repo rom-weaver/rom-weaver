@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   filterCheats,
+  isCheatDatabaseSystem,
+  isCheatManualSystem,
   matchCheatGame,
   reconcileSelectedCheatIds,
   selectManualGame,
@@ -107,6 +109,15 @@ describe("cheat database catalog", () => {
     expect(filterCheats(classified, "", "rom").map(({ record }) => record.id)).toEqual(["rom"]);
     expect(filterCheats(classified, "", "runtime").map(({ record }) => record.id)).toEqual(["ram", "mixed"]);
     expect(filterCheats(classified, "", "requires-parameter").map(({ record }) => record.id)).toEqual(["parameter"]);
+  });
+
+  it("separates database-backed systems from decoder-only ones", () => {
+    expect(isCheatDatabaseSystem("snes")).toBe(true);
+    expect(isCheatDatabaseSystem("playstation")).toBe(false);
+    expect(isCheatManualSystem("snes")).toBe(true);
+    expect(isCheatManualSystem("playstation")).toBe(true);
+    expect(isCheatManualSystem("n64")).toBe(false);
+    expect(isCheatManualSystem(undefined)).toBe(false);
   });
 
   it("keeps only selections that exist after records change", () => {

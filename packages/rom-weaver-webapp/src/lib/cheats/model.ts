@@ -2,8 +2,17 @@ const CHEAT_DATABASE_SYSTEMS = ["nes", "snes", "genesis", "gameboy", "gameboy-co
 
 export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
 
+/**
+ * Systems the code decoder handles but the cheat database does not cover. The
+ * wire value is the Rust `CheatSystem` variant name, not its CLI alias.
+ */
+const CHEAT_MANUAL_ONLY_SYSTEMS = ["playstation"] as const;
+
+/** Every system a hand-entered or imported code can be classified against. */
+export type CheatManualSystem = CheatDatabaseSystem | (typeof CHEAT_MANUAL_ONLY_SYSTEMS)[number];
+
 type CheatCodeKind = "game-genie" | "pro-action-replay" | "xploder";
-type RustCheatSystem = CheatDatabaseSystem;
+type RustCheatSystem = CheatManualSystem;
 
 export type RuntimeCheatRecord = {
   id: string;
@@ -116,13 +125,13 @@ export type ManualCheatKindOverride = "auto" | CheatCodeKind;
 type ManualCheatRequest = {
   code: string;
   description: string;
-  system: CheatDatabaseSystem;
+  system: CheatManualSystem;
   kind: ManualCheatKindOverride;
 };
 
 export type ManualCheatResult = {
   record: ClassifiedCheatRecord;
-  detectedSystem: CheatDatabaseSystem;
+  detectedSystem: CheatManualSystem;
   detectedType: string;
 };
 
@@ -136,13 +145,16 @@ export type DatabaseCheatClassifier = (
 export type LocalCheatFileImporter = (request: {
   content: string;
   fileName: string;
-  system: CheatDatabaseSystem;
+  system: CheatManualSystem;
 }) => Promise<ClassifiedCheatRecord[]>;
 
 export type LocalCheatFileImport = Parameters<LocalCheatFileImporter>[0];
 
 export const isCheatDatabaseSystem = (value: string | undefined): value is CheatDatabaseSystem =>
   CHEAT_DATABASE_SYSTEMS.some((system) => system === value);
+
+export const isCheatManualSystem = (value: string | undefined): value is CheatManualSystem =>
+  isCheatDatabaseSystem(value) || CHEAT_MANUAL_ONLY_SYSTEMS.some((system) => system === value);
 
 export const isSelectableCheat = (record: ClassifiedCheatRecord): boolean =>
   record.resolution.type !== "requiresParameter" && record.resolution.type !== "unsupported";

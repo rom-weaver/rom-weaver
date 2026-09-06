@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import {
   cheatDelivery,
-  type CheatDatabaseSystem,
+  type CheatManualSystem,
   type ClassifiedCheatRecord,
   type DatabaseCheatClassifier,
   type LocalCheatFileImporter,
@@ -139,8 +139,11 @@ const getApplyOutputVerification = ({
   return null;
 };
 
-const getCheatDatabaseSystem = (platform: string | undefined, fileName: string): CheatDatabaseSystem | undefined => {
+/** The cheat system for the identified ROM, database-backed or manual-only. */
+const getCheatSystem = (platform: string | undefined, fileName: string): CheatManualSystem | undefined => {
   const value = String(platform || "").toLocaleLowerCase("en-US");
+  // PS2 discs share the "sony playstation" prefix and have no cheat support.
+  if (value === "sony playstation" || value === "psx") return "playstation";
   if (value.includes("super nintendo") || value === "snes") return "snes";
   if (value.includes("nintendo entertainment system") || value === "nes") return "nes";
   if (value.includes("mega drive") || value.includes("genesis")) return "genesis";
@@ -151,7 +154,7 @@ const getCheatDatabaseSystem = (platform: string | undefined, fileName: string):
   return undefined;
 };
 
-const manualCheatId = (system: CheatDatabaseSystem, code: string, kind: string): string => {
+const manualCheatId = (system: CheatManualSystem, code: string, kind: string): string => {
   let hash = 2_166_136_261;
   for (const character of `${system}\0${kind}\0${code}`) {
     hash ^= character.codePointAt(0) || 0;
@@ -1537,7 +1540,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
   const cheatRomRow = cheatUiState.romInputs.length === 1 ? cheatUiState.romInputs[0] : undefined;
   const cheatFileName = cheatRomRow?.info.fileName || cheatRomRow?.info.archiveName || "";
-  const cheatSystem = getCheatDatabaseSystem(cheatRomRow?.info.romType?.platform, cheatFileName);
+  const cheatSystem = getCheatSystem(cheatRomRow?.info.romType?.platform, cheatFileName);
   const cheatChecksums = useMemo(() => {
     if (!cheatRomRow) return undefined;
     const values: Record<string, string[]> = {};
