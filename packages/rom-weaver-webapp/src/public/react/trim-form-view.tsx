@@ -33,7 +33,10 @@ const TrimPatchFormView = ({ confirm, dialog, dropZone, output, sourceEmpty, sou
   const localizer = useUiLocalizer();
   return (
     <section className="panel" id="trim-builder-container">
-      <UnifiedDropZone {...dropZone} lead={{ line1: "ui.hero.trimThesis", line2: "ui.hero.trimThesis2" }} />
+      <UnifiedDropZone
+        {...dropZone}
+        lead={{ line1: "ui.hero.trimThesis", line2: "ui.hero.trimThesis2", description: "ui.hero.trimDescription" }}
+      />
       {sourceEmpty ? (
         <GhostSteps
           steps={[

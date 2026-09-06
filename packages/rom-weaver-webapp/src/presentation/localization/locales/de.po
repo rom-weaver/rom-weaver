@@ -49,8 +49,6 @@ msgstr ""
 #~ msgstr "Keine Datei nötig - fügen Sie eine CRC32-, MD5- oder SHA-1-Prüfsumme in Hex ein."
 
 #. js-lingui-explicit-id
-
-#. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "„{patch}“ erwartet, dass „{predecessor}“ zuerst angewendet wird."
@@ -109,6 +107,11 @@ msgstr "Akzentfarbe"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.addRom"
 msgstr "ROM hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyDescription"
+msgstr "Füge eine ROM und ihre Patches hinzu und lade die gepatchte ROM oder ein wiederverwendbares Bundle herunter."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -239,6 +242,11 @@ msgstr "Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.commit"
 msgstr "Commit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createDescription"
+msgstr "Vergleiche originale und geänderte ROMs, direkt oder in Archiven, und erstelle einen Patch, den andere anwenden können."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -397,6 +405,11 @@ msgstr "Identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashDisclosure"
+msgstr "Per Prüfsumme identifizieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "ROM in Bundle einschließen"
 
@@ -524,6 +537,11 @@ msgstr "Erstelle einen Patch."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionOptional"
 msgstr "Alle optional machen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyDescription"
+msgstr "Gleiche die Prüfsumme deiner ROM mit der lokalen Datenbank ab, um den genauen Dump-Namen zu finden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -732,6 +750,11 @@ msgstr "Neuladen tauscht die zwischengespeicherte App aus. Laufende Jobs werden 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.trimDescription"
+msgstr "Entferne ungenutzte Fülldaten aus unterstützten ROMs und Disc-Images, um Speicherplatz zu sparen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.requireInputChecksumMatch"
 msgstr "Eingabe-Übereinstimmung erzwingen"
 
@@ -744,6 +767,11 @@ msgstr "Die erforderliche Worker-Unterstützung fehlt."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.reset"
 msgstr "Zurücksetzen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.toolsDescription"
+msgstr "Stelle die Original-ROM mit einem PPF3-Patch wieder her, der Undo-Daten enthält."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -774,6 +802,11 @@ msgstr "rom-weaver Startseite"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
 msgstr "rom-weaver ist in diesem Browser zwischengespeichert. Der nächste Besuch lädt aus dieser Kopie, mit oder ohne Netzwerk."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testDescription"
+msgstr "Füge eine unterstützte ROM direkt oder in einem Archiv hinzu, um das Spiel im Browser-Emulator zu testen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -894,6 +927,11 @@ msgstr "Gespeichert"
 #: src/presentation/localization/messages.ts
 msgid "ui.footer.donate"
 msgstr "Unterstützen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.supportedFormats"
+msgstr "Unterstützte Formate"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

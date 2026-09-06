@@ -28,9 +28,12 @@ describe("UnifiedDropZone", () => {
     expect(step?.querySelector(".step-num")?.textContent).toBe("0x01");
     expect(step?.querySelector(".step-title")?.textContent).toBe("Inputs");
     expect(step?.querySelector(".drop.hero.bare")).toBeTruthy();
-    expect(
-      Array.from(step?.querySelectorAll(".formats-set:first-child .fmt") || []).map((pill) => pill.textContent),
-    ).toEqual(["sfc", "nes", "ips", "zip"]);
+    expect(Array.from(step?.querySelectorAll(".formats .fmt") || []).map((pill) => pill.textContent)).toEqual([
+      "nes",
+      "zip",
+      "sfc",
+      "ips",
+    ]);
     expect(step?.querySelector(".hint")).toBeNull();
     expect(step?.querySelector("input[type=file]")?.id).toBe("rom-weaver-input-file-unified");
   });
@@ -43,6 +46,26 @@ describe("UnifiedDropZone", () => {
     expect(step?.classList.contains("is-empty")).toBe(false);
     expect(step?.querySelector(".drop.hero")).toBeNull();
     expect(step?.querySelector(".drop .main.btnish")).toBeTruthy();
+    expect(step?.querySelector(".hero-formats-help")).toBeNull();
+  });
+
+  it("keeps the full supported list outside the file-picker label", () => {
+    const { container } = render(
+      <UnifiedDropZone
+        big
+        addLabel="Add files"
+        heroLabel="Drop files"
+        heroLabelCoarse="Tap to add files"
+        onFiles={() => undefined}
+        supported={[{ label: "ROMs", extensions: ["sfc", "nes", "iso", "bin", "gba", "nds"] }]}
+      />,
+    );
+    expect(container.querySelectorAll(".formats .fmt")).toHaveLength(4);
+    const disclosure = container.querySelector("details.hero-formats-help");
+    expect(disclosure?.hasAttribute("open")).toBe(false);
+    expect(disclosure?.querySelector("summary")?.textContent).toBe("Supported formats");
+    expect(disclosure?.textContent).toContain("sfc, nes, iso, bin, gba, nds");
+    expect(disclosure?.closest("label")).toBeNull();
   });
 
   it("opens the existing file input from the Inputs heading action", () => {

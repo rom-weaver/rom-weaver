@@ -9,6 +9,7 @@ import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.ts
 import type { useUiLocalizer } from "../../settings-context.tsx";
 import type { useRomHashLookup } from "../../use-rom-hash-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
+import { Drawer } from "./drawer.tsx";
 import { ExtractName } from "./extraction-tree.tsx";
 import { FileCard } from "./file-card.tsx";
 
@@ -192,9 +193,10 @@ const RomExpectationCard = ({
 /**
  * Paste a checksum to find the ROM this run needs, without having the file.
  * Shared by the apply and identify pages - one lookup, one wording - so the
- * only difference is where its answer lands. The `hero` variant is the quiet
- * second door of the empty 0x01 hero; `compact` is the refine row 0x02 keeps
- * under an expectation card until a real ROM makes it concrete.
+ * only difference is where its answer lands. The `hero` variant belongs to
+ * Identify; Apply exposes the same form from a compact disclosure. `compact`
+ * is the refine row 0x02 keeps under an expectation card until a real ROM
+ * makes it concrete.
  */
 const RomHashSearch = ({
   idPrefix = "rom-weaver-rom",
@@ -206,16 +208,17 @@ const RomHashSearch = ({
   idPrefix?: string;
   lookup: ReturnType<typeof useRomHashLookup>;
   localizer: ReturnType<typeof useUiLocalizer>;
-  variant?: "compact" | "hero";
+  variant?: "compact" | "disclosure" | "hero";
 }) => {
   const inputId = `${idPrefix}-hash`;
   const compact = variant === "compact";
+  const disclosure = variant === "disclosure";
   const submitLabel = lookup.busy
     ? lookup.stage || localizer.message("ui.identify.hashSearching")
     : localizer.message(compact ? "ui.identify.hashSearchAgain" : "ui.identify.hashSearch");
-  return (
+  const form = (
     <form
-      className={compact ? "identify-hash identify-hash--compact" : "identify-hash identify-hash--hero"}
+      className={`identify-hash identify-hash--${variant}`}
       id={`${inputId}-search`}
       onSubmit={(event) => {
         event.preventDefault();
@@ -258,6 +261,18 @@ const RomHashSearch = ({
       ) : null}
     </form>
   );
+  if (disclosure) {
+    return (
+      <Drawer
+        bodyClassName="identify-hash-disclosure-body"
+        className="identify-hash-disclosure"
+        label={localizer.message("ui.identify.hashDisclosure")}
+      >
+        {form}
+      </Drawer>
+    );
+  }
+  return form;
 };
 
 /* The two validation messages the search shares with the identify page - one

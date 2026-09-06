@@ -80,17 +80,12 @@ describe("DropZone", () => {
     );
     const drop = container.querySelector("label.drop.hero");
     expect(drop).toBeTruthy();
-    const lanes = Array.from(container.querySelectorAll(".formats-lane"));
-    expect(lanes).toHaveLength(2);
-    expect(
-      lanes.map((lane) =>
-        Array.from(lane.querySelectorAll(".formats-set:first-child .fmt")).map((pill) => pill.textContent),
-      ),
-    ).toEqual([
-      ["sfc", "nes"],
-      ["ips", "bps"],
+    expect(Array.from(container.querySelectorAll(".formats .fmt")).map((pill) => pill.textContent)).toEqual([
+      "sfc",
+      "nes",
+      "ips",
+      "bps",
     ]);
-    expect(lanes.every((lane) => lane.querySelectorAll(".formats-set").length === 2)).toBe(true);
     const input = container.querySelector("input[type=file]") as HTMLInputElement;
     expect(input.id).toBe("unit-drop-input");
     expect(input.classList.contains("sr-only")).toBe(true);
@@ -107,13 +102,13 @@ describe("DropZone", () => {
     expect(onFiles.mock.calls[0]?.[0]?.[0]?.name).toBe("a.ips");
   });
 
-  it("repeats a short format list so its ticker cannot scroll fully out of view", () => {
+  it("shows each format once in a short static list", () => {
     const { container } = render(
       <DropZone big formats={["rom", "ppf3"]} label="Drop files" onFiles={() => undefined} />,
     );
-    const lanes = container.querySelectorAll(".formats-lane");
-    expect(lanes).toHaveLength(1);
-    expect(lanes[0]?.querySelectorAll(".formats-set:first-child .fmt")).toHaveLength(12);
-    expect(lanes[0]?.querySelectorAll(".formats-set")).toHaveLength(2);
+    expect(Array.from(container.querySelectorAll(".formats .fmt")).map((pill) => pill.textContent)).toEqual([
+      "rom",
+      "ppf3",
+    ]);
   });
 });

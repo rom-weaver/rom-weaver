@@ -104,7 +104,7 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    expect(screen.getByText("Play a patched ROM in an emulator, right in the browser,")).toBeTruthy();
+    expect(screen.getByText("Try your ROM.")).toBeTruthy();
     expect(screen.getByText("Next:")).toBeTruthy();
     expect(screen.getByText("Play")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
@@ -180,7 +180,7 @@ describe("EmulatorTestView", () => {
     fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
     fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
     fireEvent.click(screen.getByRole("button", { name: "Exit tutorial" }));
-    fireEvent.change(screen.getByLabelText(/Drop a ROM or choose a file/), {
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["local"], "local.nes")] },
     });
 
@@ -224,12 +224,12 @@ describe("EmulatorTestView", () => {
     loadRomMock.mockResolvedValue({ blob: new Blob(["disc"]), checksum: "b".repeat(40), fileName: "game.iso" });
 
     render(withSettings(<EmulatorTestView />));
-    fireEvent.change(screen.getByLabelText(/Drop a ROM or choose a file/), {
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["disc"], "game.iso")] },
     });
 
     expect((await screen.findByRole("alert")).textContent).toContain("Cannot play game.iso.");
-    expect(screen.getByText("Play a patched ROM in an emulator, right in the browser,")).toBeTruthy();
+    expect(screen.getByText("Try your ROM.")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 
@@ -244,7 +244,7 @@ describe("EmulatorTestView", () => {
     });
 
     render(withSettings(<EmulatorTestView />));
-    fireEvent.change(screen.getByLabelText(/Drop a ROM or choose a file/), {
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["disc"], "game.iso")] },
     });
 
@@ -288,7 +288,7 @@ describe("EmulatorTestView", () => {
     );
 
     render(withSettings(<EmulatorTestView />));
-    fireEvent.change(screen.getByLabelText(/Drop a ROM or choose a file/), {
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["archive"], "games.zip")] },
     });
 
@@ -322,7 +322,7 @@ describe("EmulatorTestView", () => {
     );
 
     expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
-    expect(screen.getByText("Play a patched ROM in an emulator, right in the browser,")).toBeTruthy();
+    expect(screen.getByText("Try your ROM.")).toBeTruthy();
   });
 
   it("keeps a WebGL 2 error visible and blocks the player", async () => {
@@ -367,7 +367,7 @@ describe("EmulatorTestView", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Stop and unload game" }));
 
     expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
-    expect(screen.getByText("Play a patched ROM in an emulator, right in the browser,")).toBeTruthy();
+    expect(screen.getByText("Try your ROM.")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 

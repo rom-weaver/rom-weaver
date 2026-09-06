@@ -65,7 +65,7 @@
    panel and presses flat against its edges. The svh term is what makes it shrink
    instead. */
 .rw-app .drop.hero {
-  gap: clamp(20px, min(4.8vw, 7svh), 62px);
+  gap: clamp(20px, min(4vw, 5.2svh), 48px);
   justify-content: center;
   min-height: 0;
   padding: 0;
@@ -183,7 +183,7 @@
 .rw-app .drop.hero .drop-base {
   display: flex;
   flex-direction: column;
-  gap: clamp(12px, min(2.6vw, 3.8svh), 34px);
+  gap: clamp(12px, min(2.2vw, 2.8svh), 26px);
   align-items: center;
   align-self: stretch;
 }
@@ -291,6 +291,14 @@
 .rw-app .hero-lead .lead-accent {
   color: var(--thread-text);
 }
+.rw-app .hero-lead .lead-description {
+  max-width: 48ch;
+  font-size: clamp(0.85rem, 1.2vw, 1rem);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
 .rw-app .hero-lead .lead-sub {
   display: inline-flex;
   gap: var(--sp-s);
@@ -319,41 +327,12 @@
   stroke-width: 2.2;
 }
 .rw-app .drop.hero .formats {
-  display: grid;
+  display: flex;
   flex: none;
+  flex-wrap: wrap;
   gap: var(--sp-xs);
+  justify-content: center;
   width: min(100%, 46rem);
-  padding-block-end: clamp(8px, min(3vw, 2.6svh), 24px);
-  margin-block-start: 0;
-  overflow: hidden;
-  pointer-events: none;
-  /* Fade format pills before the clipped edges. */
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
-}
-.rw-app .drop.hero .formats-lane {
-  min-width: 0;
-  overflow: hidden;
-}
-.rw-app .drop.hero .formats-track {
-  display: flex;
-  gap: var(--sp-xs);
-  width: max-content;
-  backface-visibility: hidden;
-  animation: formats-ticker 120s linear infinite;
-  /* Start the marquee at the phase a loop running since the epoch would be at:
-     --wall-clock is stamped with the current epoch-seconds at mount (see
-     layout.tsx / index.html), so a reload or remount resumes mid-stride
-     instead of restarting at 0. Unset (SSR / no JS) falls back to 0s. */
-  animation-delay: calc(-1 * mod(var(--wall-clock, 0s), 120s));
-  will-change: transform;
-}
-.rw-app .drop.hero .formats-lane:nth-child(2) .formats-track {
-  animation-direction: reverse;
-}
-.rw-app .drop.hero .formats-set {
-  display: flex;
-  gap: var(--sp-xs);
 }
 .rw-app .drop.hero .fmt {
   flex: none;
@@ -366,29 +345,36 @@
   border: 1px solid var(--seam);
   border-radius: 99px;
 }
-@keyframes formats-ticker {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(calc(-50% - 2.5px), 0, 0);
+.rw-app .hero-formats-help {
+  padding: 0 var(--pad) var(--sp-s);
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  text-align: center;
+}
+.rw-app .hero-formats-help > summary {
+  width: fit-content;
+  min-height: 44px;
+  padding: 12px 8px;
+  margin-inline: auto;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.rw-app .hero-formats-help > summary:active {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .hero-formats-help > summary:hover {
+    color: var(--thread-text);
   }
 }
-/* iOS WebKit may omit masked animation on first paint. */
-@supports (-webkit-touch-callout: none) {
-  .rw-app .drop.hero .formats {
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .drop.hero .formats-track {
-    margin-inline: auto;
-    animation: none;
-  }
-  .rw-app .drop.hero .formats-set + .formats-set {
-    display: none;
-  }
+.rw-app .hero-formats-help > .info-support {
+  padding: var(--sp-m);
+  text-align: start;
+  overflow-wrap: anywhere;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
 }
 
 .rw-app .drop.staging {
@@ -579,14 +565,16 @@
    claims a healthy share of the viewport, capped so the thesis + ghost steps
    below still fit above the fold */
 .rw-app .step.is-input.is-empty .drop.hero {
-  min-height: clamp(360px, calc(100svh - var(--hero-chrome)), 920px);
+  min-height: clamp(360px, calc(100svh - var(--hero-chrome) - var(--hero-extra-h, 0px)), 920px);
   /* Border-box padding, so at comfortable heights the min-height still governs
      and this only absorbs slack. Once the stack outgrows the panel it is the
      margin that keeps the headline off the seam instead of flush against it. */
   padding-block: clamp(12px, 2.4svh, 28px);
 }
-/* The checksum footer is part of the hero's frame, so the hero gives up the
-   footer's height to keep the thesis and the ghost steps above the fold. */
+/* The hero MUST reserve space for its checksum form or collapsed disclosure. */
+.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash-disclosure) {
+  --hero-extra-h: 44px;
+}
 .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
   gap: clamp(16px, min(4vw, 5.2svh), 48px);
   min-height: clamp(300px, calc(100svh - var(--hero-chrome) - var(--hero-search-h)), 920px);

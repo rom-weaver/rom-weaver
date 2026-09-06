@@ -517,12 +517,12 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         }
         big={workflowEmpty}
         disabled={busy || sampleLoading}
-        heroLabel="Drop a ROM or choose a file"
-        heroLabelCoarse="Choose a ROM file"
+        heroLabel="Drop or click to add a ROM or archive"
+        heroLabelCoarse="Tap to add a ROM or archive"
         id="emulator-test-input"
         info={<p>Choosing another ROM stops and replaces the current game.</p>}
         inputId="emulator-test-file-input"
-        lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2" }}
+        lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2", description: "ui.hero.testDescription" }}
         multiple={false}
         onBrowseStart={() => prepareEmulatorAudioContext()}
         onDropStart={() => prepareEmulatorAudioContext()}

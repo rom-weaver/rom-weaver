@@ -2086,12 +2086,11 @@ function ApplyWorkflowFormView({
               sampleLoading={sampleLoading}
               workflowEmpty={workflowEmpty}
             />
-            {/* The search is the hero's quiet second door, after the drop
-                target. It MUST follow the sample chip: the chip's zero-height
-                wrapper reaches the hero's corner from right after the drop
-                zone, and anything between the two pushes it out. Once a match
-                fills the bench the search moves to 0x02. */}
-            {canSearchRomHash && workflowEmpty ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
+            {/* Apply keeps checksum lookup available without competing with the
+                primary file-drop action. The form moves to 0x02 after a match. */}
+            {canSearchRomHash && workflowEmpty ? (
+              <RomHashSearch localizer={localizer} lookup={romHashLookup} variant="disclosure" />
+            ) : null}
           </>
         }
         big={workflowEmpty}

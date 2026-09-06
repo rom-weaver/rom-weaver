@@ -114,7 +114,8 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         <div className="home-hero-body">
           <p className="home-lede">
             Apply translations, combine patches, and create patches of your own. Work with ROMs and disc images,
-            compressed or raw, in your browser or terminal.
+            compressed or raw, in your browser or terminal. Save your patch order and checksums in a reusable bundle so
+            others can apply the same changes.
           </p>
           <div className="home-cta">
             <a className="btn primary lg" href={route("apply")}>

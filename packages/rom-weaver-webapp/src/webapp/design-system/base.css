@@ -44,10 +44,9 @@
   /* the only piece of dock geometry the rest of the page consumes; masthead.css
      raises it below the dock threshold */
   --dock-h: 0px;
-  /* the empty 0x01 hero fills the first screen at every width: 100svh minus
-     the chrome around it (masthead + banner slack + step head + the ghost-next
-     line + margins) */
-  --hero-chrome: calc(242px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+  /* The hero height MUST reserve space for the masthead, format disclosure,
+     step heading, next-step line, and margins. */
+  --hero-chrome: calc(294px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
   /* The checksum footer joined to the empty hero; only charged when present. */
   --hero-search-h: 109px;
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost

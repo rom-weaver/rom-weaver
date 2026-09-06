@@ -3,9 +3,8 @@
   .rw-app {
     --ctl: 48px;
     --mobile-input-head-h: 38px;
-    /* Includes the first-weave action below the hero so the empty bench still
-       occupies one phone viewport. */
-    --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+    /* The height reserve MUST include the format disclosure and fixed dock. */
+    --hero-chrome: calc(var(--mobile-input-head-h) + 269px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
     /* The joined checksum footer: label, then a 40px input row. */
     --hero-search-h: 116px;
   }
@@ -79,33 +78,12 @@
     /* Mobile browsers keep 100vh on the stable layout viewport while their
        visible chrome expands and contracts. The hero MUST not resize during
        that scroll-driven chrome change. */
-    min-height: max(300px, calc(100vh - var(--hero-chrome)));
+    min-height: max(300px, calc(100vh - var(--hero-chrome) - var(--hero-extra-h, 0px)));
   }
   .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
     min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
   }
-  /* On the apply page the New here? chip rides the seam between hero and
-     footer: half above, half below. Both sides pad for it only while the chip
-     is there - the identify page has no chip and keeps the plain seam. */
-  html:not([data-onboarding-enabled="false"])
-    .rw-app
-    .step.is-input.is-empty:has(> .step-body > .identify-hash--hero):has(> .step-body > .first-weave-demo)
-    .drop.hero {
-    padding-block-end: 24px;
-  }
-  html:not([data-onboarding-enabled="false"])
-    .rw-app
-    .step.is-input.is-empty:has(> .step-body > .first-weave-demo)
-    > .step-body
-    > .identify-hash--hero {
-    padding-block-start: 20px;
-  }
-  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .sample-tutorial-start-chip {
-    bottom: -14px;
-  }
-  /* A phone gives the chip a whole corner of a 390px hero, so it shrinks to
-     the size of the hint it is - the seam offsets above are half of this
-     28px height. */
+  /* The sample chip MUST fit inside the hero corner at phone widths. */
   .rw-app .sample-tutorial-start-chip {
     gap: 5px;
     padding: 4px 10px 4px 5px;

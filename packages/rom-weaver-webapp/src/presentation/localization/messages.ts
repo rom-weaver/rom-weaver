@@ -145,6 +145,32 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.masthead.slogan",
     message: "A ROM & Patch toolkit",
   }),
+  "ui.hero.applyDescription": msg({
+    id: "ui.hero.applyDescription",
+    message: "Add a ROM and its patches, then download the patched ROM or a reusable bundle.",
+  }),
+  "ui.hero.createDescription": msg({
+    id: "ui.hero.createDescription",
+    message: "Compare original and modified ROMs, raw or in archives, to create a patch others can apply.",
+  }),
+  "ui.hero.identifyDescription": msg({
+    id: "ui.hero.identifyDescription",
+    message: "Match your ROM’s checksum against the local database to find its exact dump name.",
+  }),
+  "ui.hero.trimDescription": msg({
+    id: "ui.hero.trimDescription",
+    message: "Remove unused padding from supported ROMs and disc images to save storage space.",
+  }),
+  "ui.hero.toolsDescription": msg({
+    id: "ui.hero.toolsDescription",
+    message: "Restore the original ROM with a PPF3 patch that includes undo data.",
+  }),
+  "ui.hero.testDescription": msg({
+    id: "ui.hero.testDescription",
+    message: "Add a supported ROM, raw or in an archive, to test the game in the browser emulator.",
+  }),
+  "ui.hero.supportedFormats": msg({ id: "ui.hero.supportedFormats", message: "Supported formats" }),
+  "ui.identify.hashDisclosure": msg({ id: "ui.identify.hashDisclosure", message: "Identify by checksum" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",
     message: "Make a patch.",

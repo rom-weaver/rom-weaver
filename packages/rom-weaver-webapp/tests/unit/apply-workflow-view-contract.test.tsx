@@ -217,7 +217,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
   });
 
-  it("keeps the hero while a checksum is typed, then fills the bench on a match", async () => {
+  it("opens the checksum disclosure, then fills the bench on a match", async () => {
     lookupExpectedRom.mockResolvedValue({
       matches: [
         {
@@ -231,14 +231,17 @@ describe("apply workflow view - empty bench", () => {
       status: "matched",
     });
     const { container } = renderView({ ui: createEmptyPatcherUiState() });
-    // The search is the hero's second door: it follows the drop target and
-    // the sample chip inside 0x01.
+    // Apply keeps the optional checksum path out of the primary drop target.
     const step = container.querySelector("section.step.unified-drop-step") as HTMLElement;
     const search = step.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
     const drop = step.querySelector("#rom-weaver-row-unified-drop") as HTMLElement;
     expect(search).toBeTruthy();
     expect(search.compareDocumentPosition(drop) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(container.querySelector(".drop.hero")).toBeTruthy();
+    const disclosure = step.querySelector<HTMLButtonElement>(".identify-hash-disclosure > .cks-head");
+    expect(disclosure?.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(disclosure as HTMLButtonElement);
+    expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
 
     const input = container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
     await act(async () => {

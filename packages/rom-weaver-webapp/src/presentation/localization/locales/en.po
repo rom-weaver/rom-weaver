@@ -49,8 +49,6 @@ msgstr ""
 #~ msgstr "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex."
 
 #. js-lingui-explicit-id
-
-#. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
@@ -109,6 +107,11 @@ msgstr "Accent"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.addRom"
 msgstr "Add a ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyDescription"
+msgstr "Add a ROM and its patches, then download the patched ROM or a reusable bundle."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -239,6 +242,11 @@ msgstr "Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.commit"
 msgstr "Commit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createDescription"
+msgstr "Compare original and modified ROMs, raw or in archives, to create a patch others can apply."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -397,6 +405,11 @@ msgstr "Identify"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashDisclosure"
+msgstr "Identify by checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.includeRom"
 msgstr "Include ROM in bundle"
 
@@ -524,6 +537,11 @@ msgstr "Make a patch."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionOptional"
 msgstr "Make all optional"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyDescription"
+msgstr "Match your ROM’s checksum against the local database to find its exact dump name."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -732,6 +750,11 @@ msgstr "Reloading swaps the cached app. Running jobs are finished first."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.trimDescription"
+msgstr "Remove unused padding from supported ROMs and disc images to save storage space."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.requireInputChecksumMatch"
 msgstr "Require input checksum match"
 
@@ -744,6 +767,11 @@ msgstr "Required worker support is unavailable."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.reset"
 msgstr "Reset"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.toolsDescription"
+msgstr "Restore the original ROM with a PPF3 patch that includes undo data."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -774,6 +802,11 @@ msgstr "rom-weaver home"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
 msgstr "rom-weaver is cached in this browser. The next visit loads from that copy, with or without a network."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testDescription"
+msgstr "Add a supported ROM, raw or in an archive, to test the game in the browser emulator."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -894,6 +927,11 @@ msgstr "Stored"
 #: src/presentation/localization/messages.ts
 msgid "ui.footer.donate"
 msgstr "Support"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.supportedFormats"
+msgstr "Supported formats"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
