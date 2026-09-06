@@ -116,18 +116,31 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
 };
 
 /**
- * Why a picker row cannot be added, in the row's own text. The badge alone
- * only names the class ("Value", "N/A"); a disabled button gives no reason at
- * all to a screen reader that never reaches it.
+ * The row's own note about its state: why it cannot be added, or what to do
+ * after adding it. The badge alone only names the class ("Value", "N/A"); a
+ * disabled button gives no reason at all to a screen reader that never reaches
+ * it.
  */
 const blockedReason = (record: ClassifiedCheatRecord): string => {
   if (record.resolution.type === "unsupported") return `Unsupported: ${record.resolution.reason}`;
-  if (record.resolution.type === "requiresParameter") return "Add it, then enter the value on its card.";
-  return "";
+  if (record.resolution.type !== "requiresParameter") return "";
+  return findPlaceholders(record.record.rawCode).length
+    ? "Add it, then enter the value on its card."
+    : "Needs a value before it can be added.";
 };
 
-/** Rows are addable unless nothing can ever be done with them. */
-const isAddableCheat = (record: ClassifiedCheatRecord): boolean => record.resolution.type !== "unsupported";
+/**
+ * Rows are addable unless nothing can be done with them. Rust marks an entry
+ * `requiresParameter` for a placeholder in its raw code OR for one in a raw
+ * field the card's editor cannot reach (`has_parameterized_executable_field`,
+ * `crates/rom-weaver-cli/src/cheats/mod.rs`). Only the first kind gets an
+ * editor, so only the first kind is addable.
+ */
+const isAddableCheat = (record: ClassifiedCheatRecord): boolean => {
+  if (record.resolution.type === "unsupported") return false;
+  if (record.resolution.type !== "requiresParameter") return true;
+  return findPlaceholders(record.record.rawCode).length > 0;
+};
 
 /** The drawer's Delivery reading, one line for every resolution type. */
 const deliveryDetail = (record: ClassifiedCheatRecord): string => {
@@ -776,7 +789,6 @@ export const CheatDatabaseSection = ({
     setManualRecords([]);
     setManualGameId("");
     resetParameterState();
-    selectionCallback.current?.([]);
   }, [identityKey, resetParameterState]);
 
   useEffect(() => {
@@ -832,7 +844,6 @@ export const CheatDatabaseSection = ({
       setAddedIds(new Set());
       setManualRecords([]);
       resetParameterState();
-      selectionCallback.current?.([]);
     }
     previousGameId.current = gameId;
   }, [gameId, resetParameterState]);
@@ -873,10 +884,29 @@ export const CheatDatabaseSection = ({
   const cards = useMemo(() => baseRecords.filter(({ record }) => addedIds.has(record.id)), [addedIds, baseRecords]);
   const copy = matchCopy(match);
 
-  const publish = (nextSelected: Set<string>, source = records) => {
-    setSelectedIds(nextSelected);
-    selectionCallback.current?.(source.filter(({ record }) => nextSelected.has(record.id)));
-  };
+  // Publishing from the settled state, not from a handler's captured values,
+  // is what keeps two cards resolving at the same time from overwriting each
+  // other's selection.
+  // Publish from settled state, never from a handler's captured values. The
+  // mount pass is skipped: the parent already holds an empty selection, and a
+  // remount must not wipe the output of a run that already finished.
+  const selectionPublished = useRef(false);
+  useEffect(() => {
+    if (!selectionPublished.current) {
+      selectionPublished.current = true;
+      return;
+    }
+    selectionCallback.current?.(records.filter(({ record }) => selectedIds.has(record.id)));
+  }, [records, selectedIds]);
+
+  /** Drop one id from the selection, leaving the set alone when it is absent. */
+  const deselect = (id: string) =>
+    setSelectedIds((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
 
   const forgetParameterState = (id: string) => {
     parameterSequence.current.set(id, (parameterSequence.current.get(id) ?? 0) + 1);
@@ -895,23 +925,22 @@ export const CheatDatabaseSection = ({
     const id = entry.record.id;
     const nextValues = [...(parameterValues[id] ?? [])];
     nextValues[position] = value;
-    setParameterValues({ ...parameterValues, [id]: nextValues });
+    setParameterValues((current) => ({ ...current, [id]: nextValues }));
     const sequence = (parameterSequence.current.get(id) ?? 0) + 1;
     parameterSequence.current.set(id, sequence);
     const filled = fillPlaceholders(entry.record.rawCode, nextValues);
     setParameterErrors(({ [id]: _error, ...rest }) => rest);
     if (!filled) {
       setResolvedRecords(({ [id]: _resolved, ...rest }) => rest);
-      if (!selectedIds.has(id)) return;
-      const nextSelected = new Set(selectedIds);
-      nextSelected.delete(id);
-      publish(nextSelected, records);
+      deselect(id);
       return;
     }
     void classifyManualCode({
       code: filled,
       description: entry.record.description,
-      kind: entry.detectedKind ?? "auto",
+      // Rust leaves detectedKind null on a requiresParameter record, so the
+      // filled code is always detected from scratch.
+      kind: "auto",
       system: entry.record.system,
     })
       .then((result) => {
@@ -929,15 +958,12 @@ export const CheatDatabaseSection = ({
             sourceRevision: entry.record.sourceRevision,
           },
         };
-        const nextResolved = { ...resolvedRecords, [id]: resolved };
-        setResolvedRecords(nextResolved);
-        const nextSelected = new Set(selectedIds);
-        if (isSelectableCheat(resolved)) nextSelected.add(id);
-        else nextSelected.delete(id);
-        publish(
-          nextSelected,
-          baseRecords.map((candidate) => nextResolved[candidate.record.id] ?? candidate),
-        );
+        setResolvedRecords((current) => ({ ...current, [id]: resolved }));
+        if (!isSelectableCheat(resolved)) {
+          deselect(id);
+          return;
+        }
+        setSelectedIds((current) => (current.has(id) ? current : new Set(current).add(id)));
       })
       .catch((reason: unknown) => {
         if (parameterSequence.current.get(id) !== sequence) return;
@@ -946,10 +972,7 @@ export const CheatDatabaseSection = ({
           ...errors,
           [id]: reason instanceof Error ? reason.message : "The filled code could not be classified.",
         }));
-        if (!selectedIds.has(id)) return;
-        const nextSelected = new Set(selectedIds);
-        nextSelected.delete(id);
-        publish(nextSelected, records);
+        deselect(id);
       });
   };
 
@@ -957,7 +980,7 @@ export const CheatDatabaseSection = ({
     const id = record.record.id;
     setAddedIds(new Set(addedIds).add(id));
     if (!isSelectableCheat(records.find((entry) => entry.record.id === id) ?? record)) return;
-    publish(new Set(selectedIds).add(id));
+    setSelectedIds((current) => new Set(current).add(id));
   };
 
   const dropRecord = (record: ClassifiedCheatRecord) => {
@@ -966,18 +989,17 @@ export const CheatDatabaseSection = ({
     nextAdded.delete(id);
     setAddedIds(nextAdded);
     forgetParameterState(id);
-    if (!selectedIds.has(id)) return;
-    const nextSelected = new Set(selectedIds);
-    nextSelected.delete(id);
-    publish(nextSelected);
+    deselect(id);
   };
 
   const toggleRecord = (record: ClassifiedCheatRecord) => {
     const id = record.record.id;
-    const nextSelected = new Set(selectedIds);
-    if (nextSelected.has(id)) nextSelected.delete(id);
-    else nextSelected.add(id);
-    publish(nextSelected);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const addManualRecord = (result: ManualCheatResult) => {
@@ -985,9 +1007,7 @@ export const CheatDatabaseSection = ({
     const nextRecords = [...manualRecords.filter(({ record }) => record.id !== id), result.record];
     setManualRecords(nextRecords);
     setAddedIds(new Set(addedIds).add(id));
-    const nextSelected = new Set(selectedIds);
-    if (isSelectableCheat(result.record)) nextSelected.add(id);
-    publish(nextSelected, [...classifiedRecords, ...nextRecords]);
+    if (isSelectableCheat(result.record)) setSelectedIds((current) => new Set(current).add(id));
   };
 
   const addImportedRecords = (nextRecords: ClassifiedCheatRecord[]) => {
@@ -1001,7 +1021,6 @@ export const CheatDatabaseSection = ({
     const nextAdded = new Set(addedIds);
     for (const { record } of nextRecords) nextAdded.add(record.id);
     setAddedIds(nextAdded);
-    publish(selectedIds, [...classifiedRecords, ...mergedRecords]);
   };
 
   const gameTitle = game?.title || rom?.title || "";

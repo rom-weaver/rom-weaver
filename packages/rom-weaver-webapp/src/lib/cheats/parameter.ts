@@ -1,8 +1,13 @@
 /**
- * Placeholder handling for database cheats that need a value. The runs this
- * finds MUST match the Rust `contains_parameter_placeholder` rule
+ * Placeholder handling for the raw code of a database cheat that needs a value.
+ * The runs this finds MUST match the Rust `contains_parameter_placeholder` rule
  * (`crates/rom-weaver-cli/src/cheats/mod.rs`): a `?` run of any width, or an
  * `X`/`x` run of at least two characters. A lone `X` is a hex digit.
+ *
+ * This covers only the raw code. Rust also marks a record `requiresParameter`
+ * for a placeholder in an executable raw field
+ * (`has_parameterized_executable_field`); those entries have no editor here and
+ * `findPlaceholders` reports nothing for them.
  */
 
 export type CheatPlaceholder = {
@@ -55,16 +60,20 @@ export const placeholderDecimal = (value: string): number | undefined => {
   return Number.isNaN(parsed) ? undefined : parsed;
 };
 
-/** True when `value` is hex and fits the run width. */
+/**
+ * True when `value` is hex and exactly as wide as the run. A half-typed value
+ * is not complete: classifying "6" of an intended "63" would briefly resolve
+ * the card to a code the user never meant, and cost one WASM call per keystroke.
+ */
 export const isPlaceholderValueComplete = (placeholder: CheatPlaceholder, value: string | undefined): boolean => {
   const trimmed = (value ?? "").trim();
-  return trimmed.length > 0 && trimmed.length <= placeholder.width && /^[0-9a-fA-F]+$/u.test(trimmed);
+  return trimmed.length === placeholder.width && /^[0-9a-fA-F]+$/u.test(trimmed);
 };
 
 /**
- * Replace every placeholder run with its value, uppercased and zero-padded to
- * the run width. Returns `undefined` when any run is still empty or not hex,
- * so callers never classify a half-filled code.
+ * Replace every placeholder run with its value, uppercased. Returns `undefined`
+ * unless every run holds exactly its width of hex digits, so callers never
+ * classify a half-typed code.
  */
 export const fillPlaceholders = (
   rawCode: string | null | undefined,

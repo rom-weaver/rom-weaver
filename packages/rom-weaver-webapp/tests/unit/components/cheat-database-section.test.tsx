@@ -105,6 +105,8 @@ const classifyManualCode: ManualCheatClassifier = async (request) => ({
   detectedType: "Action Replay",
 });
 
+const manualRequest = { description: "Starting lives XX", kind: "auto", system: "snes" } as const;
+
 /** Stands in for the WASM decoder: a filled code comes back ROM-bakeable. */
 const classifyValueCode: ManualCheatClassifier = async (request) => ({
   record: {
@@ -157,8 +159,34 @@ const addButton = (view: ReturnType<typeof render>, description: string) =>
 const includeSwitch = (view: ReturnType<typeof render>, description: string) =>
   view.getByRole("checkbox", { name: `Include ${description}` }) as HTMLInputElement;
 
-const valueInput = (view: ReturnType<typeof render>) =>
-  view.getByRole("textbox", { name: "Value for Starting lives XX" });
+const valueInput = (view: ReturnType<typeof render>, description = "Starting lives XX") =>
+  view.getByRole("textbox", { name: `Value for ${description}` });
+
+const parameterRecord = (id: string, description: string, rawCode: string): ClassifiedCheatRecord => ({
+  record: runtimeRecord(id, description, rawCode),
+  resolution: { type: "requiresParameter", payload: { record: runtimeRecord(id, description, rawCode) } },
+  detectedKind: null,
+});
+
+/** Two parameterized entries, so both can be filled while one is still in flight. */
+const pairedRecords: ClassifiedCheatRecord[] = [
+  parameterRecord("cheat-p1", "Starting lives XX", "7E0DBEXX"),
+  parameterRecord("cheat-p2", "Starting coins XX", "7E0DC0XX"),
+];
+
+const pairedProps = {
+  ...props,
+  classifyDatabaseCheats: makeClassifier(pairedRecords),
+  shard: makeShard(pairedRecords),
+};
+
+const deferred = <T,>() => {
+  let settle: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((resolve) => {
+    settle = resolve;
+  });
+  return { promise, settle };
+};
 
 describe("CheatDatabaseSection", () => {
   it("renders the numbered step, the match line, and the database credit", async () => {
@@ -319,6 +347,12 @@ describe("CheatDatabaseSection", () => {
     await openDialog(view);
     fireEvent.click(addButton(view, "Starting lives XX"));
 
+    // A half-typed value never reaches the classifier, but the hint reads it.
+    fireEvent.change(valueInput(view), { target: { value: "6" } });
+    expect(classify).not.toHaveBeenCalled();
+    expect(view.getByText(/hex · 2 digits · 0 to FF · = 6/u)).toBeTruthy();
+    expect(includeSwitch(view, "Starting lives XX").checked).toBe(false);
+
     fireEvent.change(valueInput(view), { target: { value: "63" } });
     await waitFor(() => expect(includeSwitch(view, "Starting lives XX").checked).toBe(true));
     expect(classify).toHaveBeenCalledWith({
@@ -349,6 +383,66 @@ describe("CheatDatabaseSection", () => {
     await waitFor(() => expect(includeSwitch(view, "Starting lives XX").checked).toBe(false));
     expect(includeSwitch(view, "Starting lives XX").disabled).toBe(true);
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("keeps both cards resolved when two values classify out of order", async () => {
+    const onSelectionChange = vi.fn();
+    const pending = new Map<string, ReturnType<typeof deferred<ManualCheatResult>>>();
+    const classifyManual: ManualCheatClassifier = (request) => {
+      const slot = deferred<ManualCheatResult>();
+      pending.set(request.code, slot);
+      return slot.promise;
+    };
+    const view = render(
+      <CheatDatabaseSection
+        {...pairedProps}
+        classifyManualCode={classifyManual}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    await view.findByText("Starting coins XX");
+    fireEvent.click(addButton(view, "Starting lives XX"));
+    fireEvent.click(addButton(view, "Starting coins XX"));
+
+    fireEvent.change(valueInput(view, "Starting lives XX"), { target: { value: "63" } });
+    fireEvent.change(valueInput(view, "Starting coins XX"), { target: { value: "12" } });
+    expect(pending.has("7E0DBE63")).toBe(true);
+    expect(pending.has("7E0DC012")).toBe(true);
+
+    // The second card resolves first; the first must survive it.
+    pending.get("7E0DC012")?.settle(await classifyValueCode({ ...manualRequest, code: "7E0DC012" }));
+    await waitFor(() => expect(includeSwitch(view, "Starting coins XX").checked).toBe(true));
+    pending.get("7E0DBE63")?.settle(await classifyValueCode({ ...manualRequest, code: "7E0DBE63" }));
+    await waitFor(() => expect(includeSwitch(view, "Starting lives XX").checked).toBe(true));
+
+    expect(includeSwitch(view, "Starting coins XX").checked).toBe(true);
+    expect(onSelectionChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ record: expect.objectContaining({ id: "cheat-p1", rawCode: "7E0DBE63" }) }),
+      expect.objectContaining({ record: expect.objectContaining({ id: "cheat-p2", rawCode: "7E0DC012" }) }),
+    ]);
+  });
+
+  it("still blocks an entry whose value sits in a raw field, not the code", async () => {
+    const rawFieldRecord: ClassifiedCheatRecord = {
+      record: { ...runtimeRecord("cheat-raw", "Item slot value", ""), rawCode: null },
+      resolution: {
+        type: "requiresParameter",
+        payload: { record: { ...runtimeRecord("cheat-raw", "Item slot value", ""), rawCode: null } },
+      },
+      detectedKind: null,
+    };
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyDatabaseCheats={makeClassifier([rawFieldRecord])}
+        shard={makeShard([rawFieldRecord])}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    await view.findByText("Item slot value");
+    expect((addButton(view, "Item slot value") as HTMLButtonElement).disabled).toBe(true);
+    expect(view.getByText("Needs a value before it can be added.")).toBeTruthy();
   });
 
   it("shows a classifier error for a filled code the decoder rejects", async () => {
