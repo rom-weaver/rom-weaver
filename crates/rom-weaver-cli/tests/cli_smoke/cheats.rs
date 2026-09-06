@@ -917,3 +917,119 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
     assert_eq!(parsed["cheats"][0]["code"], "AKE-LVS");
     assert!(parsed["patches"].as_array().expect("patches").is_empty());
 }
+
+/// Write a hand-authored cheats-only bundle beside [`nes_rom`], so the shapes
+/// `bundle create` never emits can be applied too.
+fn write_cheats_only_bundle(temp: &TempDir, name: &str, cheats: Value) -> String {
+    let bundle = temp.child(name);
+    let document = serde_json::json!({
+        "version": 1,
+        "rom": { "path": "game.nes" },
+        "patches": [],
+        "cheats": cheats,
+    });
+    fs::write(
+        bundle.path(),
+        serde_json::to_vec(&document).expect("bundle json"),
+    )
+    .expect("bundle");
+    bundle.path().to_str().expect("path").to_owned()
+}
+
+#[test]
+fn an_all_skipped_optional_bundle_names_what_it_dropped() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let input = temp.child("game.nes");
+    fs::write(input.path(), &rom).expect("fixture");
+    let empty = temp.child("no-database");
+    fs::create_dir_all(empty.path()).expect("directory");
+    let bundle = write_cheats_only_bundle(
+        &temp,
+        "optional-only-bundle.json",
+        serde_json::json!([{ "id": "cheat_ram", "optional": true }]),
+    );
+    let output = temp.child("patched.nes");
+
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--bundle",
+            &bundle,
+            "--cheat-database",
+            empty.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    ));
+    let label = report["label"].as_str().expect("label");
+    assert!(
+        label.contains("every cheat this bundle records was skipped"),
+        "{label}"
+    );
+    assert!(label.contains("cheat_ram"), "{label}");
+    assert!(!label.contains("was not executed"), "{label}");
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let input = temp.child("game.nes");
+    fs::write(input.path(), &rom).expect("fixture");
+    let empty = temp.child("no-database");
+    fs::create_dir_all(empty.path()).expect("directory");
+    let database = empty.path().to_str().expect("path").to_owned();
+    // Both entries name `cheat_rom`. With no database the second has no code
+    // to fall back on, so it is skipped while the first applies from its
+    // snapshot - the skip is tracked by index, not by id.
+    let bundle = write_cheats_only_bundle(
+        &temp,
+        "twin-bundle.json",
+        serde_json::json!([
+            { "id": "cheat_rom", "code": "AKE-LVS" },
+            { "id": "cheat_rom", "optional": true },
+        ]),
+    );
+    let output = temp.child("patched.nes");
+    let emitted = temp.child("emitted-bundle.json");
+
+    let events = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--bundle",
+            &bundle,
+            "--cheat-database",
+            &database,
+            "--output",
+            output.path().to_str().expect("path"),
+            "--emit-bundle",
+            emitted.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    ));
+    assert!(
+        events
+            .iter()
+            .any(|event| event["command"] == "patch-apply" && event["status"] == "succeeded"),
+        "{events:?}"
+    );
+    let parsed: Value =
+        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted bundle"))
+            .expect("bundle json");
+    let cheats = parsed["cheats"].as_array().expect("cheats");
+    assert_eq!(cheats.len(), 1, "{cheats:?}");
+    assert_eq!(cheats[0]["id"], "cheat_rom");
+}

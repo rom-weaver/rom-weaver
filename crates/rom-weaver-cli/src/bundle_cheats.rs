@@ -269,3 +269,68 @@ fn missing_record_error(
         entry.id
     ))
 }
+
+/// Every cheat one `patch apply` run applies, from both sources.
+#[derive(Default)]
+pub(crate) struct PatchApplyCheats {
+    /// Baked into the ROM after the patch chain.
+    pub rom_records: Vec<CheatRecord>,
+    /// Optional bundle entries that could not be resolved.
+    pub skipped: Vec<SkippedBundleCheat>,
+    /// The selection as bundle entries, for `--emit-bundle`.
+    pub applied: Vec<BundleCheatEntry>,
+}
+
+impl CliApp {
+    /// Resolve a bundle's recorded cheats and the `--cheat` selection against
+    /// `rom_path` into one record list, baked after the patch chain.
+    pub(crate) fn resolve_patch_apply_cheats(
+        &self,
+        rom_path: &Path,
+        bundle_cheats: &[BundleCheatEntry],
+        selection: &CheatSelectionArgs,
+        native_selection: bool,
+        context: &OperationContext,
+    ) -> Result<PatchApplyCheats> {
+        let mut cheats = PatchApplyCheats::default();
+        if !bundle_cheats.is_empty() {
+            let resolved =
+                self.resolve_bundle_cheats(rom_path, bundle_cheats, selection, context)?;
+            // A skipped entry is identified by index: two entries may share an
+            // id, and dropping the applied twin would lose it from the bundle.
+            cheats.applied.extend(
+                bundle_cheats
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| {
+                        !resolved
+                            .skipped
+                            .iter()
+                            .any(|skipped| skipped.index == *index)
+                    })
+                    .map(|(_, entry)| entry.clone()),
+            );
+            cheats.rom_records.extend(resolved.rom_records);
+            cheats.skipped = resolved.skipped;
+        }
+        if native_selection {
+            let resolved = self.resolve_cheat_selection(rom_path, selection, context)?;
+            if let Some(entry) = resolved.selected_unusable().first() {
+                return Err(RomWeaverError::Validation(format!(
+                    "cheat `{}` cannot be baked into the ROM",
+                    entry.record.description
+                )));
+            }
+            cheats
+                .applied
+                .extend(resolved.bundle_cheat_entries(&selection.cheats));
+            cheats.rom_records.extend(resolved.selected_rom_records());
+        }
+        debug!(
+            rom_cheats = cheats.rom_records.len(),
+            skipped = cheats.skipped.len(),
+            "resolved a patch apply cheat set"
+        );
+        Ok(cheats)
+    }
+}
