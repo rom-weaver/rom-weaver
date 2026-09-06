@@ -1565,6 +1565,7 @@ fn bundle_resolution(
         expected_rom_name: None,
         output_checks,
         step_verifications: Vec::new(),
+        cheats: Vec::new(),
     }
 }
 

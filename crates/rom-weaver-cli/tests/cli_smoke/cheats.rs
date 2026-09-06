@@ -679,3 +679,241 @@ fn an_unknown_cheat_system_names_the_flag_that_set_it() {
     assert!(!label.contains("--code-system"), "{label}");
     assert!(label.contains("gameboy-color"), "{label}");
 }
+
+/// `bundle create --cheat` for [`nes_rom`], recording one bakeable cheat and
+/// one the ROM's bytes cannot bake. Returns `(bundle path, database path)`.
+fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
+    let database = write_cheat_database(temp, rom);
+    let input = temp.child("game.nes");
+    fs::write(input.path(), rom).expect("fixture");
+    let bundle = temp.child("rom-weaver-bundle.json");
+    let bundle_s = bundle.path().to_str().expect("path").to_owned();
+
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "bundle",
+            "create",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--cheat-database",
+            &database,
+            "--cheat",
+            "cheat_rom",
+            "--output",
+            &bundle_s,
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(report["status"], "succeeded");
+    let cheats = &report["details"]["bundle_create"]["bundle"]["cheats"];
+    assert_eq!(cheats[0]["id"], "cheat_rom");
+    assert_eq!(cheats[0]["code"], "AKE-LVS");
+    assert_eq!(cheats[0]["revision"], "testrevision");
+
+    // A cheat the ROM cannot bake is refused, not recorded.
+    let refused = parse_single_json_line(&command_stdout(
+        &[
+            "bundle",
+            "create",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--cheat-database",
+            &database,
+            "--cheat",
+            "cheat_ram",
+            "--output",
+            temp.child("refused.json").path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    ));
+    let label = refused["label"].as_str().expect("label");
+    assert!(label.contains("High score"), "{label}");
+    (bundle_s, database)
+}
+
+#[test]
+fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let (bundle, database) = write_cheat_bundle(&temp, &rom);
+    let input = temp.child("game.nes");
+    let input_s = input.path().to_str().expect("path").to_owned();
+    let via_bundle = temp.child("via-bundle.nes");
+    let via_bundle_s = via_bundle.path().to_str().expect("path").to_owned();
+    let direct = temp.child("direct.nes");
+    let direct_s = direct.path().to_str().expect("path").to_owned();
+
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            &input_s,
+            "--bundle",
+            &bundle,
+            "--cheat-database",
+            &database,
+            "--output",
+            &via_bundle_s,
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(report["status"], "succeeded");
+    // AKE-LVS -> $BD86:48; header (16) + (0xBD86 - 0x8000) = 0x3D96.
+    assert_eq!(fs::read(via_bundle.path()).expect("output")[0x3D96], 0x48);
+
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            &input_s,
+            "--cheat-database",
+            &database,
+            "--cheat",
+            "cheat_rom",
+            "--output",
+            &direct_s,
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(via_bundle.path()).expect("bundle output"),
+        fs::read(direct.path()).expect("direct output"),
+        "a bundle apply must reproduce the direct cheat apply byte-for-byte"
+    );
+}
+
+#[test]
+fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let (bundle, _) = write_cheat_bundle(&temp, &rom);
+    let empty = temp.child("no-database");
+    fs::create_dir_all(empty.path()).expect("directory");
+    let empty_s = empty.path().to_str().expect("path").to_owned();
+    let input_s = temp
+        .child("game.nes")
+        .path()
+        .to_str()
+        .expect("path")
+        .to_owned();
+    let output = temp.child("patched.nes");
+    let output_s = output.path().to_str().expect("path").to_owned();
+    let args = |bundle: &str| {
+        vec![
+            "patch".to_owned(),
+            "apply".to_owned(),
+            "--input".to_owned(),
+            input_s.clone(),
+            "--bundle".to_owned(),
+            bundle.to_owned(),
+            "--cheat-database".to_owned(),
+            empty_s.clone(),
+            "--output".to_owned(),
+            output_s.clone(),
+            "--no-compress".to_owned(),
+            "--force".to_owned(),
+            "--json".to_owned(),
+        ]
+    };
+    fn borrowed(args: &[String]) -> Vec<&str> {
+        args.iter().map(String::as_str).collect()
+    }
+
+    // The recorded entry bakes from its own code snapshot with no database.
+    let report = parse_single_json_line(&command_stdout(&borrowed(&args(&bundle)), 0));
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output")[0x3D96], 0x48);
+
+    // An entry with no snapshot and no database fails, unless it is optional.
+    let stripped = temp.child("stripped-bundle.json");
+    let mut parsed: Value =
+        serde_json::from_str(&fs::read_to_string(&bundle).expect("bundle")).expect("bundle json");
+    parsed["cheats"][0]["code"] = Value::Null;
+    parsed["cheats"][0]["id"] = Value::String("cheat_missing".to_owned());
+    fs::write(
+        stripped.path(),
+        serde_json::to_vec(&parsed).expect("bundle json"),
+    )
+    .expect("bundle");
+    let failed = parse_single_json_line(&command_stdout(
+        &borrowed(&args(stripped.path().to_str().expect("path"))),
+        1,
+    ));
+    let label = failed["label"].as_str().expect("label");
+    assert!(label.contains("cheat_missing"), "{label}");
+    assert!(label.contains("rom-weaver setup"), "{label}");
+}
+
+#[test]
+fn bundle_parse_lists_the_cheats_a_bundle_carries() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let (bundle, _) = write_cheat_bundle(&temp, &rom);
+
+    let report = parse_single_json_line(&command_stdout(
+        &["bundle", "parse", "--input", &bundle, "--json"],
+        0,
+    ));
+    assert_eq!(report["status"], "succeeded");
+    let label = report["label"].as_str().expect("label");
+    assert!(label.contains("1 cheat entry"), "{label}");
+    assert!(label.contains("Team runs faster"), "{label}");
+    let cheats = report["details"]["bundle"]["bundle"]["cheats"]
+        .as_array()
+        .expect("cheats");
+    assert_eq!(cheats.len(), 1);
+    assert_eq!(cheats[0]["description"], "Team runs faster");
+}
+
+#[test]
+fn patch_apply_emit_bundle_records_the_cheat_selection() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let database = write_cheat_database(&temp, &rom);
+    let input = temp.child("game.nes");
+    fs::write(input.path(), &rom).expect("fixture");
+    let output = temp.child("patched.nes");
+    let emitted = temp.child("emitted-bundle.json");
+
+    // The bundle is written after the terminal apply event, so the last JSON
+    // line is not the one that reports the apply.
+    let events = parse_json_lines(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--cheat-database",
+            &database,
+            "--cheat",
+            "cheat_rom",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--emit-bundle",
+            emitted.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    ));
+    assert!(
+        events
+            .iter()
+            .any(|event| event["command"] == "patch-apply" && event["status"] == "succeeded"),
+        "{events:?}"
+    );
+    let parsed: Value =
+        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted bundle"))
+            .expect("bundle json");
+    assert_eq!(parsed["cheats"][0]["id"], "cheat_rom");
+    assert_eq!(parsed["cheats"][0]["code"], "AKE-LVS");
+    assert!(parsed["patches"].as_array().expect("patches").is_empty());
+}
