@@ -481,6 +481,7 @@ impl CliApp {
             code_system,
             code_kind,
             cheat_records,
+            cheat_selection,
             emit_bundle: _,
             tui: _,
             force,
@@ -488,7 +489,12 @@ impl CliApp {
             threads,
         } = args;
         let has_manual_cheats = !codes.is_empty();
-        let has_database_cheats = !cheat_records.is_empty();
+        // `--cheat` resolves to records only once the input ROM is resolved, so
+        // the flag - not the (still empty) record list - decides whether this
+        // run has database cheats.
+        let native_cheat_selection = !cheat_selection.cheats.is_empty();
+        let mut cheat_records = cheat_records;
+        let has_database_cheats = !cheat_records.is_empty() || native_cheat_selection;
         let has_cheats = has_manual_cheats || has_database_cheats;
         let discover_implicit_patches = patches.is_empty() && !has_cheats && !no_extract;
         let input_kind_filter =
@@ -779,6 +785,34 @@ impl CliApp {
             }
         };
 
+        // Resolve `--cheat` against the resolved input ROM. The bakeable entries
+        // join `cheat_records` and are applied after the patch chain, like the
+        // webapp's.
+        if native_cheat_selection {
+            match self.resolve_cheat_selection(&resolved_input, &cheat_selection, &context) {
+                Ok(resolved) => {
+                    if let Some(entry) = resolved.selected_unusable().first() {
+                        Self::cleanup_temp_paths(&temp_paths);
+                        return self.finish(
+                            "patch-apply",
+                            fail(
+                                "prepare",
+                                format!(
+                                    "cheat `{}` cannot be baked into the ROM",
+                                    entry.record.description
+                                ),
+                            ),
+                        );
+                    }
+                    cheat_records.extend(resolved.selected_rom_records());
+                }
+                Err(error) => {
+                    Self::cleanup_temp_paths(&temp_paths);
+                    return self.finish("patch-apply", fail("prepare", error.to_string()));
+                }
+            }
+        }
+
         // Bake cheat codes into a synthetic IPS patch applied before the explicit
         // patches. Resolved against the resolved input ROM bytes (header strip /
         // N64 byte-order rewrite are rejected above so offsets stay valid).
@@ -954,6 +988,7 @@ impl CliApp {
                     context: &context,
                     temp_paths: &mut temp_paths,
                     cheat_records: &cheat_records,
+                    allow_cheat_conflicts: cheat_selection.allow_cheat_conflicts,
                 }) {
                     Ok(outcome) => outcome,
                     Err(report) => return *report,
@@ -2992,6 +3027,7 @@ struct RunPatchApplyLoopInputs<'a> {
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
     cheat_records: &'a [CheatRecord],
+    allow_cheat_conflicts: bool,
 }
 
 struct PreparePatchApplyInputInputs<'a> {
@@ -3059,6 +3095,7 @@ impl CliApp {
             context,
             temp_paths,
             cheat_records,
+            allow_cheat_conflicts,
         } = inputs;
         let patch_count = resolved_patches.len() + usize::from(!cheat_records.is_empty());
         let mut current_input = apply_input;
@@ -3376,6 +3413,17 @@ impl CliApp {
         }
 
         if !cheat_records.is_empty() {
+            self.emit_running(
+                OperationLabel {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: Some("cheat"),
+                },
+                "apply",
+                format!("baking {} database cheat(s)", cheat_records.len()),
+                Some(0.0),
+                None,
+            );
             let mut rom = fs::read(&current_input).map_err(|error| {
                 Box::new(OperationReport::failed(
                     OperationFamily::Patch,
@@ -3385,16 +3433,17 @@ impl CliApp {
                     context.single_thread_execution(),
                 ))
             })?;
-            let (writes, summary) = Self::resolve_database_cheat_writes(&rom, cheat_records)
-                .map_err(|error| {
-                    Box::new(OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some("cheat".to_string()),
-                        "validate",
-                        error.to_string(),
-                        context.single_thread_execution(),
-                    ))
-                })?;
+            let (writes, summary) =
+                Self::resolve_database_cheat_writes(&rom, cheat_records, allow_cheat_conflicts)
+                    .map_err(|error| {
+                        Box::new(OperationReport::failed(
+                            OperationFamily::Patch,
+                            Some("cheat".to_string()),
+                            "validate",
+                            error.to_string(),
+                            context.single_thread_execution(),
+                        ))
+                    })?;
             cheats::apply_writes(&mut rom, summary.system, &writes).map_err(|error| {
                 Box::new(OperationReport::failed(
                     OperationFamily::Patch,

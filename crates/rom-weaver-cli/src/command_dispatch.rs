@@ -55,7 +55,7 @@ impl CliApp {
             Commands::Identify(args) => self.run_identify(*args),
             Commands::Setup(args) => self.run_setup(args),
             Commands::Ingest(args) => self.run_ingest(args),
-            Commands::Cheat(args) => self.run_cheat(args),
+            Commands::Cheat(args) => self.run_cheat(*args),
             Commands::Compress(mut args) => {
                 args.dry_run |= self.dry_run;
                 self.run_compress(args)

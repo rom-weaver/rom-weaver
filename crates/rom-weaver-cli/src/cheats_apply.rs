@@ -256,9 +256,12 @@ impl CliApp {
         ))
     }
 
+    /// `allow_conflicts` turns a same-offset disagreement from an error into
+    /// last-one-wins, which is what `--allow-cheat-conflicts` asks for.
     pub(super) fn resolve_database_cheat_writes(
         rom: &[u8],
         records: &[CheatRecord],
+        allow_conflicts: bool,
     ) -> Result<(Vec<CheatWrite>, CheatApplySummary)> {
         let system = records.first().map(|record| record.system).ok_or_else(|| {
             RomWeaverError::Validation("no cheat records were selected".to_string())
@@ -289,7 +292,7 @@ impl CliApp {
             }
         }
         let conflicts = cheats::detect_write_conflicts(&record_writes);
-        if let Some(conflict) = conflicts.first() {
+        if let Some(conflict) = conflicts.first().filter(|_| !allow_conflicts) {
             return Err(RomWeaverError::ValidationCode(
                 ValidationCodeError::new("cheat_write_conflict")
                     .with_message("selected ROM cheats write different values at the same offset")
@@ -309,6 +312,31 @@ impl CliApp {
                 write_count,
             },
         ))
+    }
+
+    /// Bake selected database records into a copy of `source`, writing the
+    /// patched ROM to `dest`.
+    pub(super) fn write_database_cheat_patched_rom(
+        source: &Path,
+        records: &[CheatRecord],
+        allow_conflicts: bool,
+        dest: &Path,
+    ) -> Result<CheatApplySummary> {
+        let mut rom = fs::read(source)?;
+        let (writes, summary) =
+            Self::resolve_database_cheat_writes(&rom, records, allow_conflicts)?;
+        trace!(
+            source = %source.display(),
+            records = records.len(),
+            writes = writes.len(),
+            "baking database cheats into ROM"
+        );
+        cheats::apply_writes(&mut rom, summary.system, &writes)?;
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(dest, rom)?;
+        Ok(summary)
     }
 
     /// Apply the resolved cheat writes to a copy of `source`, writing the patched

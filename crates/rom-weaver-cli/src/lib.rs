@@ -197,9 +197,21 @@ unpacking, use `probe`."
     Ingest(IngestCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(hide = true, about = "Classify database cheats against a ROM")
+        command(
+            about = "List the cheat database's entries for a ROM",
+            long_about = "\
+List the cheat database's entries for a ROM.
+
+`cheat list` identifies the ROM's system, loads that system's shard from the
+cheat-database directory, matches the game by checksum and then by title, and
+prints every cheat with whether it can be baked into the ROM.
+
+To use a cheat, bake it: `patch create --code`, then `patch apply`."
+        )
     )]
-    Cheat(CheatCommand),
+    // Boxed like the other large command structs so `CliCommand`'s flattened
+    // `App` variant stays small.
+    Cheat(Box<CheatCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
@@ -1435,6 +1447,10 @@ mod extract_batch;
 
 #[path = "cheat_command.rs"]
 mod cheat_command;
+#[cfg(not(target_arch = "wasm32"))]
+mod cheat_database;
+#[cfg(not(target_arch = "wasm32"))]
+mod cheat_resolution;
 mod cheats;
 mod cheats_apply;
 pub use cheat_command::CheatCommandResult;
@@ -1489,13 +1505,14 @@ pub use bundle_create::BundleCreateResult;
 
 mod command_args;
 pub use command_args::{
-    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatCommand, ChecksumCommand,
-    CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
-    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
-    IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
-    IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
-    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SetupCommand, TrimCommand,
+    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatAction, CheatCommand,
+    CheatSelectionArgs, ChecksumCommand, CompressCommand, ExtractCommand, IdentifyCommand,
+    IdentifyDatabaseCommands, IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand,
+    IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand,
+    IdentifyDatabaseUpdateCommand, IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT,
+    PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
+    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SetupCommand,
+    TrimCommand,
 };
 
 mod expect_tokens;
