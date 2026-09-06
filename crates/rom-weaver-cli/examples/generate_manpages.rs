@@ -5,78 +5,10 @@ use std::{
     process::ExitCode,
 };
 
-use clap::Command;
 use clap_complete::{Shell, generate};
 
-fn assert_documented(command: &Command, path: &[String]) {
-    let invocation = path.join(" ");
-    assert!(
-        command.get_about().is_some(),
-        "visible command `{invocation}` is missing about text"
-    );
-    for argument in command
-        .get_arguments()
-        .filter(|argument| !argument.is_hide_set())
-    {
-        assert!(
-            argument.get_help().is_some(),
-            "visible argument `{}` on `{invocation}` is missing help text",
-            argument.get_id()
-        );
-    }
-    for subcommand in command
-        .get_subcommands()
-        .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "help")
-    {
-        let mut subcommand_path = path.to_vec();
-        subcommand_path.push(subcommand.get_name().to_string());
-        assert_documented(subcommand, &subcommand_path);
-    }
-}
-
-fn collect_pages(command: &Command, path: &[String], pages: &mut BTreeMap<String, Vec<u8>>) {
-    let page_name = path.join("-");
-    let invocation = path.join(" ");
-    let mut page_command = command.clone().name(page_name.clone()).bin_name(invocation);
-    for subcommand in page_command
-        .get_subcommands_mut()
-        .filter(|subcommand| subcommand.get_name() == "help")
-    {
-        *subcommand = subcommand.clone().hide(true);
-    }
-    page_command.build();
-
-    let mut rendered = Vec::new();
-    clap_mangen::Man::new(page_command)
-        .render(&mut rendered)
-        .expect("render man page");
-    let rendered = String::from_utf8(rendered)
-        .expect("man page is UTF-8")
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n")
-        + "\n";
-    pages.insert(format!("{page_name}.1"), rendered.into_bytes());
-
-    for subcommand in command
-        .get_subcommands()
-        .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "help")
-    {
-        let mut subcommand_path = path.to_vec();
-        subcommand_path.push(subcommand.get_name().to_string());
-        collect_pages(subcommand, &subcommand_path, pages);
-    }
-}
-
 fn expected_pages() -> BTreeMap<String, Vec<u8>> {
-    let mut command = rom_weaver_app::cli_command();
-    command.build();
-    let root = command.get_name().to_string();
-    assert_documented(&command, std::slice::from_ref(&root));
-    let mut pages = BTreeMap::new();
-    collect_pages(&command, &[root], &mut pages);
-    pages
+    rom_weaver_app::generated_man_pages()
 }
 
 fn output_dir() -> PathBuf {

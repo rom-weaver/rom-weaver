@@ -23,6 +23,10 @@ test("generates a manifest from the release checksum", () => {
       join(checksums, "rom-weaver-identify-data.tar.br.sha256"),
       `${"d".repeat(64)}  rom-weaver-identify-data.tar.br\n`,
     );
+    writeFileSync(
+      join(checksums, "rom-weaver-cli-assets.zip.sha256"),
+      `${"e".repeat(64)}  rom-weaver-cli-assets.zip\n`,
+    );
 
     const output = join(directory, "bucket", "rom-weaver.json");
     execFileSync(process.execPath, [
@@ -43,18 +47,24 @@ test("generates a manifest from the release checksum", () => {
       "& tar --extract --file $identifyTar --directory $dir",
       'if ($LASTEXITCODE -ne 0) { throw "failed to extract identify data" }',
       "Remove-Item $identifyArchive, $identifyTar -Force",
+      '$docsArchive = Join-Path $dir "rom-weaver-cli-assets.zip"',
+      '$docsDir = Join-Path $dir "docs"',
+      "Expand-Archive -LiteralPath $docsArchive -DestinationPath $docsDir -Force",
+      "Remove-Item $docsArchive -Force",
     ]);
     for (const [architecture, platform, digit] of platforms) {
       const asset = `rom-weaver-${platform}.tar.gz`;
       assert.deepEqual(manifest.architecture[architecture].hash, [
         digit.repeat(64),
         "d".repeat(64),
+        "e".repeat(64),
       ]);
       // Scoop extracts the archive; the stable `rom-weaver.exe` inside it is
       // what `bin` points at, so the URL carries no rename fragment.
       assert.deepEqual(manifest.architecture[architecture].url, [
         `https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/${asset}`,
         "https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/rom-weaver-identify-data.tar.br",
+        "https://github.com/rom-weaver/rom-weaver/releases/download/v1.2.3/rom-weaver-cli-assets.zip",
       ]);
     }
   } finally {

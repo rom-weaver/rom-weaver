@@ -50,6 +50,7 @@
     "docs/man/rom-weaver-identify-database-remove.1",
     "docs/man/rom-weaver-identify-database-status.1",
     "docs/man/rom-weaver-identify-database-update.1",
+    "docs/man/rom-weaver-man.1",
     "docs/man/rom-weaver-patch.1",
     "docs/man/rom-weaver-patch-apply.1",
     "docs/man/rom-weaver-patch-create.1",

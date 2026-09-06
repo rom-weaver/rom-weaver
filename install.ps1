@@ -202,9 +202,14 @@ try {
   if ($docsPath) {
     $docsDir = Join-Path $tempDir 'docs'
     Expand-Archive -LiteralPath $docsPath -DestinationPath $docsDir -Force
+    $manDir = Join-Path $installDir 'docs/man'
+    New-Item -ItemType Directory -Path $manDir -Force | Out-Null
+    $manPages = @(Get-ChildItem -LiteralPath (Join-Path $docsDir 'man') -Filter '*.1' -File)
+    Copy-Item $manPages -Destination $manDir -Force
     $completionDir = Join-Path $installDir 'completions'
     New-Item -ItemType Directory -Path $completionDir -Force | Out-Null
     Copy-Item (Join-Path $docsDir 'completions/rom-weaver.ps1') (Join-Path $completionDir 'rom-weaver.ps1') -Force
+    Write-Host "Installed $($manPages.Count) man pages to $manDir"
     Write-Host "Installed PowerShell completion to $(Join-Path $completionDir 'rom-weaver.ps1')"
   }
 } finally {

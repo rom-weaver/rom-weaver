@@ -29,10 +29,17 @@ const identifyChecksum = readFileSync(
   "utf8",
 ).match(/^[a-f0-9]{64}/)?.[0];
 if (!identifyChecksum) throw new Error(`invalid checksum for ${identifyAsset}`);
+const docsAsset = "rom-weaver-cli-assets.zip";
+const docsChecksum = readFileSync(
+  resolve(checksumDirectory, `${docsAsset}.sha256`),
+  "utf8",
+).match(/^[a-f0-9]{64}/)?.[0];
+if (!docsChecksum) throw new Error(`invalid checksum for ${docsAsset}`);
 
 // Scoop extracts the binary tar.gz itself (fetching 7-Zip on demand). The
 // Brotli data asset is decoded by the installer script because Scoop does not
-// extract raw `.br` files.
+// extract raw `.br` files. The documentation zip is expanded into the app's
+// private docs directory because Windows has no standard manpath.
 const manifest = {
   version,
   description: "Local-first offline toolkit for ROMs and ROM hack patches",
@@ -46,8 +53,9 @@ const manifest = {
         url: [
           `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}/${asset}`,
           `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}/${identifyAsset}`,
+          `https://github.com/rom-weaver/rom-weaver/releases/download/v${version}/${docsAsset}`,
         ],
-        hash: [checksum, identifyChecksum],
+        hash: [checksum, identifyChecksum, docsChecksum],
       },
     ]),
   ),
@@ -61,6 +69,10 @@ const manifest = {
       "& tar --extract --file $identifyTar --directory $dir",
       'if ($LASTEXITCODE -ne 0) { throw "failed to extract identify data" }',
       "Remove-Item $identifyArchive, $identifyTar -Force",
+      `$docsArchive = Join-Path $dir "${docsAsset}"`,
+      '$docsDir = Join-Path $dir "docs"',
+      "Expand-Archive -LiteralPath $docsArchive -DestinationPath $docsDir -Force",
+      "Remove-Item $docsArchive -Force",
     ],
   },
 };

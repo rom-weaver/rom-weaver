@@ -17,9 +17,13 @@ mod formats_command;
 #[cfg(not(target_arch = "wasm32"))]
 mod interactive;
 #[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod manpages;
+#[cfg(not(target_arch = "wasm32"))]
 mod render;
 
 pub use cli::*;
+#[cfg(not(target_arch = "wasm32"))]
+pub use manpages::generated_man_pages;
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, Args, Subcommand, ValueEnum};
