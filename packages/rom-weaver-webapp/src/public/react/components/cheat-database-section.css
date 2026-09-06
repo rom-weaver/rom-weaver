@@ -330,6 +330,40 @@
     gap: 0.75rem;
   }
 
+  /* Value editor on a card that still needs a parameter. The fields sit in the
+     drawer's value column so the Code and Delivery rows stay aligned. */
+  .rw-app .cheat-value-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+  }
+
+  .rw-app .cheat-value-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.5rem;
+    align-items: baseline;
+  }
+
+  .rw-app .cheat-value-field input {
+    width: 6ch;
+    min-width: 6ch;
+    min-height: 2.75rem;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .rw-app .cheat-value-hint {
+    font-size: var(--badge-fs);
+    color: var(--weft);
+  }
+
+  .rw-app .cheat-value-error {
+    margin: 0;
+    color: var(--bad, currentColor);
+  }
+
   .rw-app .cheat-pick-btn:active,
   .rw-app .cheat-pager button:not(:disabled):active,
   .rw-app .cheat-filter:active,

@@ -1,20 +1,34 @@
 import { Check, FileUp, Plus, Search, WandSparkles, X } from "lucide-react";
-import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   cheatDelivery,
   createCheatDatabaseClient,
+  fillPlaceholders,
   filterCheats,
+  findPlaceholders,
   isCheatDatabaseSystem,
   isCheatManualSystem,
   isSelectableCheat,
   loadCheatDatabaseManifest,
   matchCheatGame,
+  placeholderDecimal,
+  placeholderHint,
   selectManualGame,
   type CheatDatabaseClient,
   type CheatDatabaseManifest,
   type CheatFilter,
   type CheatGameMatch,
   type CheatManualSystem,
+  type CheatPlaceholder,
   type CheatRomIdentity,
   type CheatSystemShard,
   type ClassifiedCheatRecord,
@@ -108,8 +122,18 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
  */
 const blockedReason = (record: ClassifiedCheatRecord): string => {
   if (record.resolution.type === "unsupported") return `Unsupported: ${record.resolution.reason}`;
-  if (record.resolution.type === "requiresParameter") return "Needs a value before it can be added.";
+  if (record.resolution.type === "requiresParameter") return "Add it, then enter the value on its card.";
   return "";
+};
+
+/** Rows are addable unless nothing can ever be done with them. */
+const isAddableCheat = (record: ClassifiedCheatRecord): boolean => record.resolution.type !== "unsupported";
+
+/** The drawer's Delivery reading, one line for every resolution type. */
+const deliveryDetail = (record: ClassifiedCheatRecord): string => {
+  if (record.resolution.type === "unsupported") return record.resolution.reason;
+  if (record.resolution.type === "requiresParameter") return "enter a value to include this cheat";
+  return cheatDelivery(record) === "rom" ? "baked into output" : "emulator cheat file";
 };
 
 const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
@@ -121,10 +145,58 @@ const countLabel = (count: number, noun: string) => `${count} ${noun}${count ===
 
 type CheatCardProps = {
   record: ClassifiedCheatRecord;
+  /** The record as the database classified it, before any value was entered. */
+  base: ClassifiedCheatRecord;
   position: number;
   selected: boolean;
+  values: string[];
+  error?: string;
   onToggle: () => void;
   onRemove: () => void;
+  onValueChange: (position: number, value: string) => void;
+};
+
+/** One hex input for a placeholder run, with its range hint and decimal reading. */
+const CheatValueField = ({
+  placeholder,
+  position,
+  count,
+  description,
+  value,
+  onChange,
+}: {
+  placeholder: CheatPlaceholder;
+  position: number;
+  count: number;
+  description: string;
+  value: string;
+  onChange: (value: string) => void;
+}) => {
+  const decimal = placeholderDecimal(value);
+  return (
+    <span className="cheat-value-field">
+      <label>
+        <span className="sr-only">
+          {count > 1 ? `Value ${position + 1} for ${description}` : `Value for ${description}`}
+        </span>
+        <input
+          autoCapitalize="characters"
+          autoComplete="off"
+          className="mono"
+          inputMode="text"
+          maxLength={placeholder.width}
+          onChange={(event) => onChange(event.target.value.replace(/[^0-9a-fA-F]/gu, "").toUpperCase())}
+          spellCheck={false}
+          type="text"
+          value={value}
+        />
+      </label>
+      <span className="cheat-value-hint">
+        {placeholderHint(placeholder.width)}
+        {decimal === undefined ? "" : ` · = ${decimal}`}
+      </span>
+    </span>
+  );
 };
 
 /**
@@ -132,10 +204,27 @@ type CheatCardProps = {
  * On/Off switch that drives inclusion, the raw code and delivery badges on the
  * meta line, and a details drawer.
  */
-const CheatCard = ({ record, position, selected, onToggle, onRemove }: CheatCardProps) => {
+const CheatCard = ({
+  record,
+  base,
+  position,
+  selected,
+  values,
+  error,
+  onToggle,
+  onRemove,
+  onValueChange,
+}: CheatCardProps) => {
   const delivery = deliveryCopy(record);
   const source = record.record;
   const selectable = isSelectableCheat(record);
+  const placeholders = findPlaceholders(base.record.rawCode);
+  const resolved = placeholders.length > 0 && record.resolution.type !== "requiresParameter";
+  const switchTitle = selectable
+    ? undefined
+    : placeholders.length
+      ? "Enter a value to include this cheat."
+      : "This cheat cannot be included.";
   return (
     <FileCard
       handle={
@@ -153,7 +242,7 @@ const CheatCard = ({ record, position, selected, onToggle, onRemove }: CheatCard
       }
       meta={
         <>
-          <label className="patch-enable">
+          <label className="patch-enable" title={switchTitle}>
             <input
               aria-label={`Include ${source.description}`}
               checked={selected}
@@ -177,25 +266,49 @@ const CheatCard = ({ record, position, selected, onToggle, onRemove }: CheatCard
       state="ok"
     >
       <Drawer
+        defaultOpen={placeholders.length > 0 && !resolved}
         label="Cheat"
         labelIcon={<WandSparkles aria-hidden="true" />}
         readouts={<DrawerReadout>{cheatKindLabel(record)}</DrawerReadout>}
       >
-        {source.rawCode ? (
+        {placeholders.length ? (
+          <div className="ck cheat-value">
+            <span className="ck-k">Value</span>
+            <span className="ck-v cheat-value-fields">
+              {placeholders.map((placeholder, index) => (
+                <CheatValueField
+                  count={placeholders.length}
+                  description={source.description}
+                  key={placeholder.index}
+                  onChange={(value) => onValueChange(index, value)}
+                  placeholder={placeholder}
+                  position={index}
+                  value={values[index] ?? ""}
+                />
+              ))}
+            </span>
+          </div>
+        ) : null}
+        {error ? (
+          <p className="cheat-value-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {base.record.rawCode ? (
           <div className="ck mono">
             <span className="ck-k">Code</span>
+            <span className="ck-v">{base.record.rawCode}</span>
+          </div>
+        ) : null}
+        {resolved && source.rawCode ? (
+          <div className="ck mono">
+            <span className="ck-k">Resolved</span>
             <span className="ck-v">{source.rawCode}</span>
           </div>
         ) : null}
         <div className="ck">
           <span className="ck-k">Delivery</span>
-          <span className="ck-v">
-            {record.resolution.type === "unsupported"
-              ? record.resolution.reason
-              : cheatDelivery(record) === "rom"
-                ? "baked into output"
-                : "emulator cheat file"}
-          </span>
+          <span className="ck-v">{deliveryDetail(record)}</span>
         </div>
         <div className="ck">
           <span className="ck-k">Source</span>
@@ -543,7 +656,7 @@ const AddCheatsDialog = ({
                       <button
                         aria-label={`${added ? "Remove" : "Add"} ${source.description}`}
                         className={added ? "cheat-pick-btn is-added" : "cheat-pick-btn"}
-                        disabled={!(added || isSelectableCheat(entry))}
+                        disabled={!(added || isAddableCheat(entry))}
                         onClick={() => (added ? onRemove(entry) : onAdd(entry))}
                         type="button"
                       >
@@ -629,9 +742,25 @@ export const CheatDatabaseSection = ({
   const [classificationError, setClassificationError] = useState("");
   const [classifying, setClassifying] = useState(false);
   const [manualRecords, setManualRecords] = useState<ClassifiedCheatRecord[]>([]);
+  // Value-editor state for entries that need a parameter, keyed by record id:
+  // what the user typed, the record the filled code classified into, and the
+  // classifier's own complaint about that code.
+  const [parameterValues, setParameterValues] = useState<Record<string, string[]>>({});
+  const [resolvedRecords, setResolvedRecords] = useState<Record<string, ClassifiedCheatRecord>>({});
+  const [parameterErrors, setParameterErrors] = useState<Record<string, string>>({});
   const selectionCallback = useRef(onSelectionChange);
   const previousGameId = useRef<string | undefined>(undefined);
+  // One sequence per parameterized card, so a slow classification never
+  // overwrites the result of a value typed after it.
+  const parameterSequence = useRef(new Map<string, number>());
   selectionCallback.current = onSelectionChange;
+
+  const resetParameterState = useCallback(() => {
+    parameterSequence.current = new Map();
+    setParameterValues({});
+    setResolvedRecords({});
+    setParameterErrors({});
+  }, []);
 
   const system = isCheatDatabaseSystem(rom?.system) ? rom.system : undefined;
   // The decoder covers systems the database does not (PlayStation). Those keep
@@ -646,8 +775,9 @@ export const CheatDatabaseSection = ({
     setAddedIds(new Set());
     setManualRecords([]);
     setManualGameId("");
+    resetParameterState();
     selectionCallback.current?.([]);
-  }, [identityKey]);
+  }, [identityKey, resetParameterState]);
 
   useEffect(() => {
     if (manifest || suppliedClient || suppliedShard) return;
@@ -701,10 +831,11 @@ export const CheatDatabaseSection = ({
       setSelectedIds(new Set());
       setAddedIds(new Set());
       setManualRecords([]);
+      resetParameterState();
       selectionCallback.current?.([]);
     }
     previousGameId.current = gameId;
-  }, [gameId]);
+  }, [gameId, resetParameterState]);
   useEffect(() => {
     if (!(game && system)) {
       setClassifiedRecords([]);
@@ -732,8 +863,14 @@ export const CheatDatabaseSection = ({
       active = false;
     };
   }, [classifyDatabaseCheats, game, system]);
-  const records = useMemo(() => [...classifiedRecords, ...manualRecords], [classifiedRecords, manualRecords]);
-  const cards = useMemo(() => records.filter(({ record }) => addedIds.has(record.id)), [addedIds, records]);
+  const baseRecords = useMemo(() => [...classifiedRecords, ...manualRecords], [classifiedRecords, manualRecords]);
+  // A resolved record replaces its database entry everywhere, keeping the same
+  // id, so selection, the picker and the output summary keep referring to it.
+  const records = useMemo(
+    () => baseRecords.map((entry) => resolvedRecords[entry.record.id] ?? entry),
+    [baseRecords, resolvedRecords],
+  );
+  const cards = useMemo(() => baseRecords.filter(({ record }) => addedIds.has(record.id)), [addedIds, baseRecords]);
   const copy = matchCopy(match);
 
   const publish = (nextSelected: Set<string>, source = records) => {
@@ -741,10 +878,85 @@ export const CheatDatabaseSection = ({
     selectionCallback.current?.(source.filter(({ record }) => nextSelected.has(record.id)));
   };
 
+  const forgetParameterState = (id: string) => {
+    parameterSequence.current.set(id, (parameterSequence.current.get(id) ?? 0) + 1);
+    setParameterValues(({ [id]: _dropped, ...rest }) => rest);
+    setResolvedRecords(({ [id]: _resolved, ...rest }) => rest);
+    setParameterErrors(({ [id]: _error, ...rest }) => rest);
+  };
+
+  /**
+   * Take one placeholder value and, once every run of the code is filled,
+   * re-classify the filled code as a manual entry. The result keeps the
+   * database entry's id and source fields, so a resolved cheat still points at
+   * the row it came from.
+   */
+  const setParameterValue = (entry: ClassifiedCheatRecord, position: number, value: string) => {
+    const id = entry.record.id;
+    const nextValues = [...(parameterValues[id] ?? [])];
+    nextValues[position] = value;
+    setParameterValues({ ...parameterValues, [id]: nextValues });
+    const sequence = (parameterSequence.current.get(id) ?? 0) + 1;
+    parameterSequence.current.set(id, sequence);
+    const filled = fillPlaceholders(entry.record.rawCode, nextValues);
+    setParameterErrors(({ [id]: _error, ...rest }) => rest);
+    if (!filled) {
+      setResolvedRecords(({ [id]: _resolved, ...rest }) => rest);
+      if (!selectedIds.has(id)) return;
+      const nextSelected = new Set(selectedIds);
+      nextSelected.delete(id);
+      publish(nextSelected, records);
+      return;
+    }
+    void classifyManualCode({
+      code: filled,
+      description: entry.record.description,
+      kind: entry.detectedKind ?? "auto",
+      system: entry.record.system,
+    })
+      .then((result) => {
+        if (parameterSequence.current.get(id) !== sequence) return;
+        const resolved: ClassifiedCheatRecord = {
+          ...result.record,
+          parameterValues: nextValues,
+          record: {
+            ...result.record.record,
+            description: entry.record.description,
+            gameId: entry.record.gameId,
+            id,
+            sourceFile: entry.record.sourceFile,
+            sourceIndex: entry.record.sourceIndex,
+            sourceRevision: entry.record.sourceRevision,
+          },
+        };
+        const nextResolved = { ...resolvedRecords, [id]: resolved };
+        setResolvedRecords(nextResolved);
+        const nextSelected = new Set(selectedIds);
+        if (isSelectableCheat(resolved)) nextSelected.add(id);
+        else nextSelected.delete(id);
+        publish(
+          nextSelected,
+          baseRecords.map((candidate) => nextResolved[candidate.record.id] ?? candidate),
+        );
+      })
+      .catch((reason: unknown) => {
+        if (parameterSequence.current.get(id) !== sequence) return;
+        setResolvedRecords(({ [id]: _resolved, ...rest }) => rest);
+        setParameterErrors((errors) => ({
+          ...errors,
+          [id]: reason instanceof Error ? reason.message : "The filled code could not be classified.",
+        }));
+        if (!selectedIds.has(id)) return;
+        const nextSelected = new Set(selectedIds);
+        nextSelected.delete(id);
+        publish(nextSelected, records);
+      });
+  };
+
   const addRecord = (record: ClassifiedCheatRecord) => {
     const id = record.record.id;
     setAddedIds(new Set(addedIds).add(id));
-    if (!isSelectableCheat(record)) return;
+    if (!isSelectableCheat(records.find((entry) => entry.record.id === id) ?? record)) return;
     publish(new Set(selectedIds).add(id));
   };
 
@@ -753,6 +965,7 @@ export const CheatDatabaseSection = ({
     const nextAdded = new Set(addedIds);
     nextAdded.delete(id);
     setAddedIds(nextAdded);
+    forgetParameterState(id);
     if (!selectedIds.has(id)) return;
     const nextSelected = new Set(selectedIds);
     nextSelected.delete(id);
@@ -828,12 +1041,16 @@ export const CheatDatabaseSection = ({
         <div className="cards patch-cards workflow-file-list" id="rom-weaver-list-cheat-stack">
           {cards.map((entry, index) => (
             <CheatCard
+              base={entry}
+              error={parameterErrors[entry.record.id]}
               key={entry.record.id}
               onRemove={() => dropRecord(entry)}
               onToggle={() => toggleRecord(entry)}
+              onValueChange={(position, value) => setParameterValue(entry, position, value)}
               position={index + 1}
-              record={entry}
+              record={resolvedRecords[entry.record.id] ?? entry}
               selected={selectedIds.has(entry.record.id)}
+              values={parameterValues[entry.record.id] ?? []}
             />
           ))}
         </div>

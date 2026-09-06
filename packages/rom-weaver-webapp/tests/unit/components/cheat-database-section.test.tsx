@@ -105,6 +105,17 @@ const classifyManualCode: ManualCheatClassifier = async (request) => ({
   detectedType: "Action Replay",
 });
 
+/** Stands in for the WASM decoder: a filled code comes back ROM-bakeable. */
+const classifyValueCode: ManualCheatClassifier = async (request) => ({
+  record: {
+    record: runtimeRecord("manual-value", request.description, request.code),
+    resolution: { type: "romBakeable", writes: [] },
+    detectedKind: "pro-action-replay",
+  },
+  detectedSystem: request.system,
+  detectedType: "Action Replay",
+});
+
 const importLocalCheatFile: LocalCheatFileImporter = async ({ fileName }) => [
   {
     detectedKind: "pro-action-replay",
@@ -142,6 +153,12 @@ const openDialog = async (view: ReturnType<typeof render>) => {
 
 const addButton = (view: ReturnType<typeof render>, description: string) =>
   view.getByRole("button", { name: `Add ${description}` });
+
+const includeSwitch = (view: ReturnType<typeof render>, description: string) =>
+  view.getByRole("checkbox", { name: `Include ${description}` }) as HTMLInputElement;
+
+const valueInput = (view: ReturnType<typeof render>) =>
+  view.getByRole("textbox", { name: "Value for Starting lives XX" });
 
 describe("CheatDatabaseSection", () => {
   it("renders the numbered step, the match line, and the database credit", async () => {
@@ -259,7 +276,7 @@ describe("CheatDatabaseSection", () => {
   it("states in the row why an entry cannot be added", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await openDialog(view);
-    expect(view.getByText("Needs a value before it can be added.")).toBeTruthy();
+    expect(view.getByText("Add it, then enter the value on its card.")).toBeTruthy();
   });
 
   it("adds a cheat as a card, then removes it from the picker", async () => {
@@ -279,10 +296,78 @@ describe("CheatDatabaseSection", () => {
     expect(view.container.querySelector("#rom-weaver-list-cheat-stack")).toBeNull();
   });
 
-  it("cannot add an entry that still needs a value", async () => {
-    const view = render(<CheatDatabaseSection {...props} />);
+  it("adds an entry that still needs a value, switched off until it is filled", async () => {
+    const onSelectionChange = vi.fn();
+    const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);
     await openDialog(view);
-    expect((addButton(view, "Starting lives XX") as HTMLButtonElement).disabled).toBe(true);
+    expect((addButton(view, "Starting lives XX") as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(addButton(view, "Starting lives XX"));
+    const toggle = includeSwitch(view, "Starting lives XX");
+    expect(toggle.disabled).toBe(true);
+    expect(toggle.closest("label")?.getAttribute("title")).toBe("Enter a value to include this cheat.");
+    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+    expect(view.getByText("hex · 2 digits · 0 to FF")).toBeTruthy();
+  });
+
+  it("classifies the filled code, turns the card on, and clears it again", async () => {
+    const onSelectionChange = vi.fn();
+    const classify = vi.fn(classifyValueCode);
+    const view = render(
+      <CheatDatabaseSection {...props} classifyManualCode={classify} onSelectionChange={onSelectionChange} />,
+    );
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Starting lives XX"));
+
+    fireEvent.change(valueInput(view), { target: { value: "63" } });
+    await waitFor(() => expect(includeSwitch(view, "Starting lives XX").checked).toBe(true));
+    expect(classify).toHaveBeenCalledWith({
+      code: "7E0DBE63",
+      description: "Starting lives XX",
+      kind: "auto",
+      system: "snes",
+    });
+    expect(view.getByText(/hex · 2 digits · 0 to FF · = 99/u)).toBeTruthy();
+    // The filled code lands in the meta badge, the drawer's Resolved row, and
+    // the picker row the entry came from.
+    expect(view.getAllByText("7E0DBE63")).toHaveLength(3);
+    expect(view.getByText("7E0DBEXX")).toBeTruthy();
+    expect(view.getByText("ROM cheat")).toBeTruthy();
+    expect(onSelectionChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        parameterValues: ["63"],
+        record: expect.objectContaining({
+          id: "cheat-4",
+          rawCode: "7E0DBE63",
+          sourceFile: "Super Mario World (USA).cht",
+          sourceRevision: "abc123",
+        }),
+      }),
+    ]);
+
+    fireEvent.change(valueInput(view), { target: { value: "" } });
+    await waitFor(() => expect(includeSwitch(view, "Starting lives XX").checked).toBe(false));
+    expect(includeSwitch(view, "Starting lives XX").disabled).toBe(true);
+    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("shows a classifier error for a filled code the decoder rejects", async () => {
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyManualCode={async () => {
+          throw new Error("7E0DBEFF is not a valid Action Replay code");
+        }}
+      />,
+    );
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Starting lives XX"));
+
+    fireEvent.change(valueInput(view), { target: { value: "FF" } });
+    await waitFor(() =>
+      expect(view.getByRole("alert").textContent).toContain("7E0DBEFF is not a valid Action Replay code"),
+    );
+    expect(includeSwitch(view, "Starting lives XX").checked).toBe(false);
   });
 
   it("keeps a card when its switch goes off and drops it when removed", async () => {

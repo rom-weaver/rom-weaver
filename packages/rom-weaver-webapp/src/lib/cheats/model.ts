@@ -55,6 +55,12 @@ export type ClassifiedCheatRecord = {
   record: RuntimeCheatRecord;
   resolution: CheatResolution;
   detectedKind: CheatCodeKind | null;
+  /**
+   * Values the user typed for each placeholder run of a database entry that
+   * needed one, in reading order. Present only on a re-classified record, so
+   * the card can restate what produced the resolved code.
+   */
+  parameterValues?: string[];
 };
 
 export type CheatGameRecord = {
