@@ -31,10 +31,11 @@ type FieldGroup = { id: string; title: string; fields: SaveField[] };
 type FieldSlot = { id: string; title: string; groups: FieldGroup[] };
 
 const SAVE_SUPPORTED_FILES = [
-  { extensions: ["sav", "srm", "eep", "fla"], label: "Raw game saves" },
+  { extensions: ["sav", "srm", "eep", "fla", "mpk", "mcr", "mcd"], label: "Raw game saves" },
   { extensions: ["sps", "xps", "gsv"], label: "GameShark SP wrappers" },
+  { extensions: ["dsv", "gme", "mem", "vgs"], label: "Emulator and memory card wrappers" },
 ] as const;
-const SAVE_ACCEPT = ".sav,.srm,.eep,.fla,.sps,.xps,.gsv,application/octet-stream";
+const SAVE_ACCEPT = `${SAVE_SUPPORTED_FILES.flatMap((group) => group.extensions.map((extension) => `.${extension}`)).join(",")},application/octet-stream`;
 const GHOST_STEPS = [
   { num: "0x02", title: "Fields" },
   { num: "0x03", title: "Write" },
@@ -219,6 +220,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
   const [recognition, setRecognition] = useState<SaveRecognition | undefined>();
   const [saveSize, setSaveSize] = useState<number>();
   const [potentialFormat, setPotentialFormat] = useState<string>();
+  const [containerName, setContainerName] = useState<string>();
   const [sourceRomSha1, setSourceRomSha1] = useState<string>();
   const [values, setValues] = useState<Record<string, SaveValue>>({});
   const [originalValues, setOriginalValues] = useState<Record<string, SaveValue>>({});
@@ -263,6 +265,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     setRecognition(undefined);
     setSaveSize(undefined);
     setPotentialFormat(undefined);
+    setContainerName(undefined);
     setSourceRomSha1(undefined);
     setValues({});
     setOriginalValues({});
@@ -330,6 +333,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       setRecognition(result.recognition);
       setSaveSize(result.saveSize);
       setPotentialFormat(result.potentialFormat);
+      setContainerName(result.containerName);
       const candidate = candidateFromRecognition(result.recognition);
       if (candidate) await inspectSelected(file, candidate.identity.id, romSha1, activeRequest);
     } catch (cause) {
@@ -629,6 +633,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
           <>
             <span className="fsize mono">{formatByteSize(source.size)}</span>
             {document ? <span className="meta-fmt mono">{document.save_format_name}</span> : null}
+            {containerName ? <span className="meta-fmt mono">{containerName}</span> : null}
             {integrity ? <span className={join("save-editor-pill", integrity.state)}>{integrity.label}</span> : null}
             {selectedSaveId ? <span className="meta-fmt mono">emulator SRAM</span> : null}
           </>
@@ -685,6 +690,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
         {kind === "unsupported" ? (
           <Notice level="warn">
             ROMWeaver does not have an editor for this game. Save size: {formatByteSize(saveSize)}
+            {containerName ? ` · Container: ${containerName}` : ""}
             {potentialFormat ? ` · Potential format: ${potentialFormat}` : ""}. The original file remains unchanged.
           </Notice>
         ) : null}

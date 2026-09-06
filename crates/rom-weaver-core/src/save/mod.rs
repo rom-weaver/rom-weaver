@@ -15,6 +15,9 @@ use ts_rs::TS;
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
 pub use container::{SaveContainer, SaveContainerKind, unwrap_save_container};
+pub use formats::{
+    SaveFormatCandidate, SaveFormatDefinition, all_save_formats, candidate_save_formats,
+};
 pub use pokemon_gen2::PokemonGen2Handler;
 pub use pokemon_gen3::PokemonGen3Handler;
 pub use pokemon_gen4::PokemonGen4Handler;
