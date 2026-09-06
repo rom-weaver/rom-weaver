@@ -305,7 +305,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
 | `--bundle ARCHIVE`, `--no-bundle-rom` | Archive packaging and exclusion of ROM bytes. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
-| `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec. |
+| `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec: `--patch` replaces the spec's patch chain and `--cheat` replaces its `cheats` array, in both cases wholesale. |
 | `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the bundle's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
 
 Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. A ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected.
@@ -323,6 +323,10 @@ The optional top-level `cheats` array records the cheat selection that produced 
 | `optional` | When true an unresolvable entry is skipped and named in the report; omitted or false makes it fail the apply. |
 
 Applying a bundle resolves each entry by `id` through the cheat database at `--cheat-database`, then falls back to `code`. An entry that resolves to nothing, or that the ROM's bytes cannot bake, fails the apply unless it is `optional`. Entries bake after the patch chain, so the result equals the same `patch apply --cheat`. Write conflicts fail with `cheat_write_conflict` unless `--allow-cheat-conflicts` is given.
+
+`patch apply --without-cheats` ignores the whole `cheats` array and runs only the patch chain. It is all-or-nothing; there is no per-cheat filter. A bundle with no patches and `--without-cheats` fails, because nothing is left to run.
+
+When every recorded cheat is `optional` and none resolves, a bundle with no patches fails and names each skipped entry.
 
 `bundle parse` names each cheat and whether it is optional.
 

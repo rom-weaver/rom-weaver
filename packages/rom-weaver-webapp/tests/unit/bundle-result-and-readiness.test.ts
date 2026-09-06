@@ -159,10 +159,7 @@ describe("bundle result parsing", () => {
   });
 
   it("warns that it drops the cheat selections a bundle records", () => {
-    const cheats = [
-      { id: "cheat_one" },
-      { id: "cheat_two" },
-    ];
+    const cheats = [{ id: "cheat_one" }, { id: "cheat_two" }];
     const parsed = parseBundleParseResult({
       bundle: {
         bundle: { patches: [], version: 1, cheats },

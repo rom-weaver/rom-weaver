@@ -55,6 +55,8 @@ Applying the bundle bakes those cheats into the output:
 rom-weaver patch apply -i original.nes --bundle rom-weaver-bundle.json -o patched.nes
 ```
 
+To run the same bundle without its cheats, add `--without-cheats`.
+
 Each entry is looked up in the cheat database, so install it first with `rom-weaver setup`. An entry still applies without the database, from the code the bundle recorded. Mark an entry `"optional": true` when the apply should skip it instead of failing.
 
 ## Author a spec instead of flags
