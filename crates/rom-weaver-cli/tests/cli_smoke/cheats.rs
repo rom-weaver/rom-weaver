@@ -1095,3 +1095,34 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
     assert_eq!(cheats[0]["id"], "cheat_rom");
     assert_eq!(cheats[0]["code"], "AKE-LVS");
 }
+
+#[test]
+fn without_cheats_runs_the_bundle_patch_chain_alone() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let (bundle, database) = write_cheat_bundle(&temp, &rom);
+    let input = temp.child("game.nes");
+    let output = temp.child("patched.nes");
+
+    // A cheats-only bundle has nothing left once the cheats are dropped.
+    let refused = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--bundle",
+            &bundle,
+            "--cheat-database",
+            &database,
+            "--without-cheats",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    ));
+    assert_eq!(refused["status"], "failed");
+    assert!(!output.path().exists());
+}

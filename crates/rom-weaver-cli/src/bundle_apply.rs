@@ -124,8 +124,9 @@ impl CliApp {
         if args.patches.is_empty() {
             let selected =
                 self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
-            // A cheats-only bundle legitimately selects no patch.
-            if selected.is_empty() && bundle.cheats.is_empty() {
+            // A cheats-only bundle legitimately selects no patch - unless the
+            // caller dropped the cheats too, leaving nothing to run.
+            if selected.is_empty() && (bundle.cheats.is_empty() || args.without_cheats) {
                 return Err(RomWeaverError::Validation(
                     "no bundle patches selected (all are optional or disabled); pass --with <glob> to include some"
                         .to_string(),
@@ -292,7 +293,12 @@ impl CliApp {
             expected_rom_name,
             output_checks,
             step_verifications,
-            cheats: bundle.cheats.clone(),
+            // `--without-cheats` runs the patch chain alone.
+            cheats: if args.without_cheats {
+                Vec::new()
+            } else {
+                bundle.cheats.clone()
+            },
         }))
     }
 

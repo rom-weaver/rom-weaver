@@ -479,6 +479,7 @@ impl CliApp {
             bundle: _,
             with_patches: _,
             without_patches: _,
+            without_cheats: _,
             no_compress,
             compress_format,
             compress_codec,

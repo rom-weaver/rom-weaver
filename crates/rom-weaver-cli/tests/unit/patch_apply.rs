@@ -66,6 +66,7 @@ fn apply_command(input: &Path, patches: Vec<PathBuf>) -> PatchApplyCommand {
         bundle: None,
         with_patches: Vec::new(),
         without_patches: Vec::new(),
+        without_cheats: false,
         no_compress: true,
         compress_format: None,
         compress_codec: Vec::new(),

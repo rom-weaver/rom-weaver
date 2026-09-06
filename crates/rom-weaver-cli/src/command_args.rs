@@ -1271,6 +1271,17 @@ archive with one at its root, and you passed no --patch of your own."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "without-cheats",
+            help_heading = "Archive/bundle",
+            help = "Ignore every cheat the bundle records and run only its patch chain"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub without_cheats: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             visible_alias = "raw",
             help_heading = "Basic",
