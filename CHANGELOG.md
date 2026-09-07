@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.1](https://github.com/rom-weaver/rom-weaver/compare/v0.15.0...v0.15.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **docker:** keep man pages and completions in the build context ([#701](https://github.com/rom-weaver/rom-weaver/issues/701)) ([c8a1803](https://github.com/rom-weaver/rom-weaver/commit/c8a1803ac406ffcc48b17df7d09a23f59c137b3b))
+
+
+### Internal
+
+* **deps-dev:** bump @vitejs/plugin-react from 6.1.0 to 6.1.1 in /packages/rom-weaver-webapp in the build-toolchain group ([#691](https://github.com/rom-weaver/rom-weaver/issues/691)) ([5ba243c](https://github.com/rom-weaver/rom-weaver/commit/5ba243c447edb107fd457c4579c79b2685ab0da4))
+* **deps-dev:** bump the linting group in /packages/rom-weaver-webapp with 4 updates ([#692](https://github.com/rom-weaver/rom-weaver/issues/692)) ([48d2d8f](https://github.com/rom-weaver/rom-weaver/commit/48d2d8fce25c6870faa223a041d022a40c820b53))
+* **deps-dev:** bump the root-npm group with 2 updates ([#690](https://github.com/rom-weaver/rom-weaver/issues/690)) ([43f2639](https://github.com/rom-weaver/rom-weaver/commit/43f2639447de7c4473635168921a6303e3e009d4))
+* **deps:** bump the rust-dependencies group with 5 updates ([#693](https://github.com/rom-weaver/rom-weaver/issues/693)) ([5874237](https://github.com/rom-weaver/rom-weaver/commit/587423768a115746ee315226493019a51ffc7458))
+* **release:** anchor release-please at the 0.15.0 commit ([#703](https://github.com/rom-weaver/rom-weaver/issues/703)) ([c0960f5](https://github.com/rom-weaver/rom-weaver/commit/c0960f51395e9489806256d3dedd0beeeab4663d))
+
 ## [0.15.0](https://github.com/rom-weaver/rom-weaver/compare/v0.14.1...v0.15.0) (2026-09-06)
 
 
