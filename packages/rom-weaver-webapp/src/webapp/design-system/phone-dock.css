@@ -5,8 +5,6 @@
     --mobile-input-head-h: 38px;
     /* The height reserve MUST include the format disclosure and fixed dock. */
     --hero-chrome: calc(var(--mobile-input-head-h) + 269px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
-    /* The joined checksum footer: label, then a 40px input row. */
-    --hero-search-h: 116px;
   }
 
   /* Enough scroll room below the form that the last card (the run/progress/
@@ -79,9 +77,6 @@
        visible chrome expands and contracts. The hero MUST not resize during
        that scroll-driven chrome change. */
     min-height: max(300px, calc(100vh - var(--hero-chrome) - var(--hero-extra-h, 0px)));
-  }
-  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
-    min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
   }
   /* The sample chip MUST fit inside the hero corner at phone widths. */
   .rw-app .sample-tutorial-start-chip {

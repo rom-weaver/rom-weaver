@@ -575,13 +575,6 @@
 .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash-disclosure) {
   --hero-extra-h: 44px;
 }
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
-  gap: clamp(16px, min(4vw, 5.2svh), 48px);
-  min-height: clamp(300px, calc(100svh - var(--hero-chrome) - var(--hero-search-h)), 920px);
-}
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero .drop-base {
-  gap: clamp(10px, min(2.2vw, 2.8svh), 26px);
-}
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;
 }

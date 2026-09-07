@@ -1238,9 +1238,10 @@ describe("webapp responsive navigation", () => {
     await setViewport(VIEWPORTS[0]);
     await renderPage(emptyApplyPage(), "light");
 
-    // 485px of navigation chrome, less the 116px the joined checksum footer
-    // takes (--hero-search-h), so the page footer still clears the dock.
-    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("369px");
+    // 307px of navigation chrome (--hero-chrome) plus the 44px the collapsed
+    // checksum disclosure takes (--hero-extra-h), so the page footer still
+    // clears the dock.
+    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("389px");
   });
 
   test("keeps the workflow gutter fluid without a narrow desktop cap", async () => {

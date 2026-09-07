@@ -47,8 +47,6 @@
   /* The hero height MUST reserve space for the masthead, format disclosure,
      step heading, next-step line, and margins. */
   --hero-chrome: calc(294px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
-  /* The checksum footer joined to the empty hero; only charged when present. */
-  --hero-search-h: 109px;
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
      slots): solid seam + thread-tinted fill strung with warp, lighting up on
      hover. Composed from theme-switched vars, so no per-theme overrides are
