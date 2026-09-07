@@ -49,4 +49,10 @@ docs/*
 !docs/screenshots/**
 !docs/legal
 !docs/legal/**
+# The release image copies the generated man pages and completions from here
+# (`docs-prebuilt` in the Dockerfile) after docker-publish.yml extracts them.
+!docs/man
+!docs/man/**
+!docs/completions
+!docs/completions/**
 packages/rom-weaver-webapp/tests
