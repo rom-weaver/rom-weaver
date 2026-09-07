@@ -145,44 +145,69 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.masthead.slogan",
     message: "A ROM & Patch toolkit",
   }),
-  "ui.hero.accent": msg({ id: "ui.hero.accent", message: "at native speed" }),
+  "ui.hero.applyDescription": msg({
+    id: "ui.hero.applyDescription",
+    message: "Add a ROM and its patches, then download the patched ROM or a reusable bundle.",
+  }),
+  "ui.hero.createDescription": msg({
+    id: "ui.hero.createDescription",
+    message: "Compare original and modified ROMs, raw or in archives, to create a patch others can apply.",
+  }),
+  "ui.hero.identifyDescription": msg({
+    id: "ui.hero.identifyDescription",
+    message: "Match your ROM’s checksum against the local database to find its exact dump name.",
+  }),
+  "ui.hero.trimDescription": msg({
+    id: "ui.hero.trimDescription",
+    message: "Remove unused padding from supported ROMs and disc images to save storage space.",
+  }),
+  "ui.hero.toolsDescription": msg({
+    id: "ui.hero.toolsDescription",
+    message: "Restore the original ROM with a PPF3 patch that includes undo data.",
+  }),
+  "ui.hero.testDescription": msg({
+    id: "ui.hero.testDescription",
+    message: "Add a supported ROM, raw or in an archive, to test the game in the browser emulator.",
+  }),
+  "ui.hero.supportedFormats": msg({ id: "ui.hero.supportedFormats", message: "Supported formats" }),
+  "ui.identify.hashDisclosure": msg({ id: "ui.identify.hashDisclosure", message: "Identify by checksum" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",
-    message: "Turn an original ROM and its modified version, whether compressed or raw,",
+    message: "Make a patch.",
   }),
   "ui.hero.createThesis2": msg({
     id: "ui.hero.createThesis2",
-    message: "into a compressed, shareable patch others can apply —",
+    message: "Share your changes.",
   }),
   "ui.hero.local": msg({
     id: "ui.hero.local",
-    message: "All local, in your browser — files never leave your machine.",
+    message: "Runs in your browser. Your files stay on this device.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply patches to any ROM, compressed or raw," }),
-  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "and download the result or a shareable bundle —" }),
+  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply a patch." }),
+  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "Change how you play." }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",
-    message: "Play a patched ROM in an emulator, right in the browser,",
+    message: "Try your ROM.",
   }),
-  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "with saves that stay on this device —" }),
+  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "See your changes in play." }),
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
-    message: "Match a ROM to its game, region, revision, and exact dump name,",
+    message: "Know your ROM.",
   }),
   "ui.hero.identifyThesis2": msg({
     id: "ui.hero.identifyThesis2",
-    message: "by checksum, right in this browser —",
+    message: "Find its exact match.",
   }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
-    message: "Revert a patched ROM to its original dump,",
+    message: "Undo the patch.",
   }),
-  "ui.hero.toolsThesis2": msg({ id: "ui.hero.toolsThesis2", message: "using the patch's own undo data —" }),
+  "ui.hero.toolsThesis2": msg({ id: "ui.hero.toolsThesis2", message: "Recover the original." }),
   "ui.hero.trimThesis": msg({
     id: "ui.hero.trimThesis",
-    message: "Strip padding and junk blocks from ROM dumps,",
+    message: "Keep the game.",
   }),
-  "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "and shrink them for storage —" }),
+  "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "Lose the padding." }),
   "ui.identify.hashInvalid": msg({
     id: "ui.identify.hashInvalid",
     message: "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters.",

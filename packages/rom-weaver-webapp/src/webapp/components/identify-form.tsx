@@ -335,7 +335,11 @@ const IdentifyForm = ({
         heroLabelCoarse="Tap to add a ROM"
         info={<p>Identification runs locally. Your ROM never leaves this browser.</p>}
         inputId={inputId}
-        lead={{ line1: "ui.hero.identifyThesis", line2: "ui.hero.identifyThesis2" }}
+        lead={{
+          line1: "ui.hero.identifyThesis",
+          line2: "ui.hero.identifyThesis2",
+          description: "ui.hero.identifyDescription",
+        }}
         multiple={false}
         onFiles={(files) => {
           const selected = files.at(-1);

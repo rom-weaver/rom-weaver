@@ -110,18 +110,8 @@ msgstr "Add a ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.local"
-msgstr "All local, in your browser — files never leave your machine."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "and download the result or a shareable bundle —"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis2"
-msgstr "and shrink them for storage —"
+msgid "ui.hero.applyDescription"
+msgstr "Add a ROM and its patches, then download the patched ROM or a reusable bundle."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -136,17 +126,12 @@ msgstr "Apply"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Apply patches to any ROM, compressed or raw,"
+msgstr "Apply a patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
 msgstr "Applying the patch failed."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.accent"
-msgstr "at native speed"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -195,11 +180,6 @@ msgstr "Browser tab"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis2"
-msgstr "with a database that stays local —"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFiles"
 msgstr "Cached offline files"
 
@@ -222,6 +202,11 @@ msgstr "CD"
 #: src/presentation/localization/messages.ts
 msgid "settings.chdCreateCdCodecs"
 msgstr "CD Codecs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "Change how you play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -260,6 +245,11 @@ msgstr "Commit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.createDescription"
+msgstr "Compare original and modified ROMs, raw or in archives, to create a patch others can apply."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Compression failed."
 
@@ -272,6 +262,11 @@ msgstr "Copy"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacksFailed"
 msgstr "Could not change {label}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashPlaceholder"
+msgstr "CRC32, MD5, or SHA-1"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -390,6 +385,11 @@ msgstr "Filter log"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "Find its exact match."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Fix order"
 
@@ -402,6 +402,11 @@ msgstr "Fix ROM header"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.identify"
 msgstr "Identify"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashDisclosure"
+msgstr "Identify by checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -435,13 +440,18 @@ msgstr "Installing offline copy — {percent}%"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "into a compressed, shareable patch others can apply —"
+msgid "ui.hero.trimThesis"
+msgstr "Keep the game."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacksNote"
 msgstr "Keep these offline. Unticked databases are still downloaded on demand when a ROM needs them; unticking one removes its cached copy."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Know your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,13 +525,23 @@ msgstr "Looking for a specific ROM?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.trimThesis2"
+msgstr "Lose the padding."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis"
+msgstr "Make a patch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionOptional"
 msgstr "Make all optional"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis"
-msgstr "Match a ROM to its exact dump name,"
+msgid "ui.hero.identifyDescription"
+msgstr "Match your ROM’s checksum against the local database to find its exact dump name."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -660,11 +680,6 @@ msgstr "Page Logs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashPlaceholder"
-msgstr "CRC32, MD5, or SHA-1"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "Patch creation failed."
 
@@ -682,11 +697,6 @@ msgstr "Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.patchesIgnored"
 msgstr "Patches belong in Apply and were ignored."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis"
-msgstr "Play a patched ROM in an emulator, right in the browser,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -715,6 +725,11 @@ msgstr "Reading dropped files…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.toolsThesis2"
+msgstr "Recover the original."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.release"
 msgstr "Release to add files"
 
@@ -735,6 +750,11 @@ msgstr "Reloading swaps the cached app. Running jobs are finished first."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.trimDescription"
+msgstr "Remove unused padding from supported ROMs and disc images to save storage space."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.requireInputChecksumMatch"
 msgstr "Require input checksum match"
 
@@ -750,13 +770,13 @@ msgstr "Reset"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.common.retry"
-msgstr "Retry"
+msgid "ui.hero.toolsDescription"
+msgstr "Restore the original ROM with a PPF3 patch that includes undo data."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis"
-msgstr "Revert a patched ROM to its original dump,"
+msgid "ui.common.retry"
+msgstr "Retry"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -782,6 +802,16 @@ msgstr "rom-weaver home"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
 msgstr "rom-weaver is cached in this browser. The next visit loads from that copy, with or without a network."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testDescription"
+msgstr "Add a supported ROM, raw or in an archive, to test the game in the browser emulator."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.local"
+msgstr "Runs in your browser. Your files stay on this device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -825,6 +855,11 @@ msgstr "Sections"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis2"
+msgstr "See your changes in play."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.title"
 msgstr "Settings"
 
@@ -842,6 +877,11 @@ msgstr "Share bundle"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.shareTitle"
 msgstr "Share this patch recipe (for patch creators)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis2"
+msgstr "Share your changes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -885,13 +925,13 @@ msgstr "Stored"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis"
-msgstr "Strip padding and junk blocks from ROM dumps,"
+msgid "ui.footer.donate"
+msgstr "Support"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Support"
+msgid "ui.hero.supportedFormats"
+msgstr "Supported formats"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1005,13 +1045,18 @@ msgstr "Transferred"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis"
+msgstr "Try your ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Turn all on"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis"
-msgstr "Turn an original ROM and its modified version, whether compressed or raw,"
+msgid "ui.hero.toolsThesis"
+msgstr "Undo the patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1040,11 +1085,6 @@ msgstr "Use duplicate ROMs?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis2"
-msgstr "using the patch's own undo data —"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.chain.verifiedDuringWeave"
 msgstr "verified during apply"
 
@@ -1067,11 +1107,6 @@ msgstr "What the offline states mean"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "What’s new"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis2"
-msgstr "with saves that stay on this device —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

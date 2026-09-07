@@ -35,10 +35,10 @@ type UnifiedDropZoneProps = {
   inputId?: string;
   /** Extra content for the step-header info popover (above the supported-file lists). */
   info?: ReactNode;
-  /** Full per-bucket extension support, listed in the hero ticker and info popover. */
+  /** Full per-bucket extension support for the format disclosure and input help. */
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
-  lead?: { line1: MessageId; line2: MessageId };
+  lead?: { line1: MessageId; line2: MessageId; description: MessageId };
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
   title?: ReactNode;
@@ -64,7 +64,7 @@ const UnifiedDropZone = ({
   heroLabel,
   heroLabelCoarse,
   info,
-  lead = { line1: "ui.hero.thesis", line2: "ui.hero.thesis2" },
+  lead = { line1: "ui.hero.thesis", line2: "ui.hero.thesis2", description: "ui.hero.applyDescription" },
   multiple = true,
   num = "0x01",
   onBrowseStart,
@@ -88,29 +88,32 @@ const UnifiedDropZone = ({
     onFiles(files);
   };
   const formats = [...new Set(supported?.flatMap((group) => group.extensions) || [])];
+  const previewFormats = [
+    ...new Set([...["nes", "bps", "iso", "zip"].filter((format) => formats.includes(format)), ...formats]),
+  ].slice(0, 4);
+  const supportedFormats = supported?.length ? (
+    <div className="info-support">
+      {supported.map((group) => (
+        <p key={group.label}>
+          <b>{group.label}</b> <span className="mono">{group.extensions.join(", ")}</span>
+        </p>
+      ))}
+    </div>
+  ) : null;
   const popover =
     info || supported?.length ? (
       <InfoPopover title="Input handling">
         {info}
-        {supported?.length ? (
-          <div className="info-support">
-            {supported.map((group) => (
-              <p key={group.label}>
-                <b>{group.label}</b> <span className="mono">{group.extensions.join(", ")}</span>
-              </p>
-            ))}
-          </div>
-        ) : null}
+        {supportedFormats}
       </InfoPopover>
     ) : undefined;
   const heroLead = big ? (
     <div className="hero-lead">
       <span className="lead-title">
         <span className="lead-line">{localizer.message(lead.line1)}</span>{" "}
-        <span className="lead-line">
-          {localizer.message(lead.line2)} <span className="lead-accent">{localizer.message("ui.hero.accent")}</span>.
-        </span>
+        <span className="lead-line lead-accent">{localizer.message(lead.line2)}</span>
       </span>
+      <span className="lead-description">{localizer.message(lead.description)}</span>
       <span className="lead-sub mono">{localizer.message("ui.hero.local")}</span>
     </div>
   ) : undefined;
@@ -131,7 +134,7 @@ const UnifiedDropZone = ({
       <DropZone
         {...dropZoneProps}
         bare
-        formats={formats}
+        formats={previewFormats}
         hintCoarse={big ? undefined : localizer.message("ui.drop.tap")}
         inputRef={inputRef}
         label={big ? heroLabel : addLabel}
@@ -143,6 +146,12 @@ const UnifiedDropZone = ({
         onFiles={emit}
       />
       {afterDropZone}
+      {big && supportedFormats ? (
+        <details className="hero-formats-help">
+          <summary>{localizer.message("ui.hero.supportedFormats")}</summary>
+          {supportedFormats}
+        </details>
+      ) : null}
     </StepSection>
   );
 };

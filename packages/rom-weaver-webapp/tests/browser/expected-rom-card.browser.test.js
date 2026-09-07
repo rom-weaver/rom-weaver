@@ -66,11 +66,15 @@ test("a patch's declared source ROM shows the expected ROM card", async () => {
    runner under its normal concurrency - so this file stays mock-free and
    asserts only what needs a real page: the control, and the validation that
    happens before any lookup. */
-test("the empty apply page offers a checksum search that validates before looking up", async () => {
+test("the empty apply page opens a checksum disclosure that validates before looking up", async () => {
   mount(createElement(ApplyPatchForm, {}));
 
   await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
-  expect(getHashForm().textContent).toContain("Looking for a specific ROM?");
+  const disclosure = document.querySelector(".identify-hash-disclosure > .cks-head");
+  expect(disclosure?.textContent).toContain("Identify by checksum");
+  expect(disclosure?.getAttribute("aria-expanded")).toBe("false");
+  disclosure.click();
+  await expect.poll(() => disclosure?.getAttribute("aria-expanded")).toBe("true");
   expect(getHashInput().placeholder).toBe("CRC32, MD5, or SHA-1");
   expect(document.querySelector(".ghost-steps")).not.toBeNull();
 
