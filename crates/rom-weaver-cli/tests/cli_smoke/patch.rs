@@ -1,5 +1,41 @@
 use super::shared::*;
 
+#[test]
+fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.sfc");
+    source.write_str("source bytes").expect("fixture");
+    let patch = temp.child("change.ips");
+    patch.write_str("PATCHEOF").expect("patch fixture");
+    let destination = temp.child("missing/patched.sfc");
+    let bundle = temp.child("preview.json");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+            "--emit-bundle",
+            bundle.path().to_str().expect("path"),
+            "--no-compress",
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    let events = parse_json_lines(&output);
+    assert_eq!(events.len(), 1, "a dry run must not apply patches");
+    let terminal = &events[0];
+    assert_eq!(terminal["details"]["dry_run"], true);
+    assert!(!temp.child("missing").path().exists());
+    assert!(!bundle.path().exists());
+    assert_eq!(fs::read(source.path()).expect("source"), b"source bytes");
+}
+
 // Table-driven per-format smoke tests.
 //
 // Shared runners cover create/apply/probe/ignore-checksum orchestration; unique

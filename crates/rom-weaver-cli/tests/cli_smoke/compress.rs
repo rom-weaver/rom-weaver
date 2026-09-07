@@ -1,6 +1,55 @@
 use super::shared::*;
 
 #[test]
+fn compress_dry_run_does_not_create_output_directory() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.bin");
+    input.write_str("payload").expect("fixture");
+    let destination = temp.child("missing/output.zip");
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    let terminal = parse_single_json_line(&output);
+    assert_eq!(terminal["details"]["dry_run"], true);
+    assert!(!temp.child("missing").path().exists());
+    assert_eq!(fs::read(input.path()).expect("input"), b"payload");
+}
+
+#[test]
+fn compress_human_summary_keeps_destination_and_format_warning() {
+    let temp = setup_temp_dir();
+    let input = temp.child("source.bin");
+    input.write_str("payload").expect("fixture");
+    let destination = temp.child("output.7z");
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--no-color",
+        ],
+        0,
+    );
+    let output = String::from_utf8(output).expect("UTF-8 output");
+    assert!(output.contains(destination.path().to_str().expect("path")));
+    assert!(output.contains("warning:"), "{output}");
+    assert!(destination.path().exists());
+}
+
+#[test]
 fn compress_routes_through_registered_container_format() {
     let temp = setup_temp_dir();
     temp.child("file.bin")

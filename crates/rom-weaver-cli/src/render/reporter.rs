@@ -96,8 +96,8 @@ impl HumanReporter {
 
     fn render_terminal(&self, event: &ProgressEvent) {
         match event.status {
-            OperationStatus::Succeeded
-                if self.quiet && commands::success_is_write_summary(&event.command) => {}
+            OperationStatus::Succeeded if commands::quiet_suppresses_success(self.quiet, event) => {
+            }
             OperationStatus::Succeeded => commands::render_success(&self.surface, event),
             OperationStatus::Failed => self.surface.error(&format!("error: {}", event.label)),
             OperationStatus::Unsupported => {

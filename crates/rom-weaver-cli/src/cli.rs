@@ -15,8 +15,8 @@ use rom_weaver_app::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{
-    NoninteractivePrompter, ProgressSink, SelectionPrompter, clear_in_progress_outputs,
-    process_cancellation_token, remove_in_progress_outputs,
+    NoninteractivePrompter, OperationFamily, OperationReport, ProgressSink, SelectionPrompter,
+    clear_in_progress_outputs, process_cancellation_token, remove_in_progress_outputs,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -79,6 +79,17 @@ Full guide: https://rom-weaver.com/docs/cli";
     )
 )]
 struct Cli {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'n',
+            long = "dry-run",
+            global = true,
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Plan the command without changing files or downloading data"
+        )
+    )]
+    dry_run: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -339,6 +350,9 @@ pub fn main_entry() -> ExitCode {
     // any command runs. `cli_command()` rebuilds the same clap tree the parse
     // used, so the generated script covers every real subcommand.
     if let CliCommand::Completions { shell } = &cli.command {
+        if cli.dry_run {
+            return print_native_dry_run_plan("completions", Vec::new(), cli.json);
+        }
         let shell = *shell;
         let mut command = cli_command();
         clap_complete::generate(shell, &mut command, "rom-weaver", &mut io::stdout());
@@ -350,15 +364,21 @@ pub fn main_entry() -> ExitCode {
         man_dir,
     } = &cli.command
     {
-        return run_man_command(command, *install, man_dir.as_deref());
+        return run_man_command(command, *install, man_dir.as_deref(), cli.dry_run, cli.json);
     }
     if let CliCommand::Formats = &cli.command {
+        if cli.dry_run {
+            return print_native_dry_run_plan("formats", Vec::new(), cli.json);
+        }
         print_formats(cli.json);
         return ExitCode::SUCCESS;
     }
     // `bundle schema` prints the raw JSON Schema to stdout (redirect it to a
     // file / point an editor at it), before any command runs.
     if let CliCommand::App(Commands::Bundle(BundleCommands::Schema)) = &cli.command {
+        if cli.dry_run {
+            return print_native_dry_run_plan("bundle-schema", Vec::new(), cli.json);
+        }
         print!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA);
         return ExitCode::SUCCESS;
     }
@@ -398,6 +418,10 @@ pub fn main_entry() -> ExitCode {
     // meaningless when emitting JSON.
     let interactive = !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
     let options = RunCommandOptions::from_output(cli.output_options(interactive), stdout_is_tty);
+    let options = RunCommandOptions {
+        dry_run: cli.dry_run,
+        ..options
+    };
 
     // `--json` passes the event stream straight through; otherwise render for humans - richly when
     // stdout is a terminal, plainly when piped.
@@ -423,7 +447,7 @@ pub fn main_entry() -> ExitCode {
     // `apply --emit-bundle`.
     let is_apply_tui =
         matches!(&command, Commands::Patch(PatchCommands::Apply(apply)) if apply.tui);
-    if is_apply_tui {
+    if is_apply_tui && !options.dry_run {
         if !interactive {
             eprintln!(
                 "--tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs"
@@ -442,6 +466,8 @@ fn run_man_command(
     topics: &[String],
     install: bool,
     man_dir: Option<&std::path::Path>,
+    dry_run: bool,
+    json: bool,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
     let selected = rom_weaver_app::manpages::page_name(topics);
@@ -453,10 +479,18 @@ fn run_man_command(
         return ExitCode::from(2);
     }
 
+    let output_dir = man_dir
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(rom_weaver_app::manpages::default_man_dir);
+    if dry_run {
+        let writes = if install {
+            vec![output_dir.display().to_string()]
+        } else {
+            Vec::new()
+        };
+        return print_native_dry_run_plan("man", writes, json);
+    }
     if install {
-        let output_dir = man_dir
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_else(rom_weaver_app::manpages::default_man_dir);
         let selected_page = if topics.is_empty() {
             None
         } else {
@@ -483,6 +517,49 @@ fn run_man_command(
         print!("{}", String::from_utf8_lossy(&pages[&selected]));
         ExitCode::SUCCESS
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn print_native_dry_run_plan(command: &str, writes: Vec<String>, json: bool) -> ExitCode {
+    let read_only = writes.is_empty();
+    let writes_label = writes.join(", ");
+    let label = if read_only {
+        format!("dry run: {command} only reads; no changes planned")
+    } else {
+        format!("dry run: would run {command}; nothing written")
+    };
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        None,
+        "plan",
+        label.clone(),
+        Some(100.0),
+        None,
+    );
+    report.details = Some(serde_json::json!({
+        "dry_run": true,
+        "command": command,
+        "writes": writes,
+        "downloads": [],
+        "read_only": read_only,
+        "outputs_unknown": false,
+        "notes": [],
+    }));
+    if json {
+        match serde_json::to_string(&report.into_event(command)) {
+            Ok(event) => println!("{event}"),
+            Err(error) => {
+                eprintln!("failed to serialize dry-run plan: {error}");
+                return ExitCode::from(1);
+            }
+        }
+    } else {
+        println!("{label}");
+        if !read_only {
+            println!("writes: {writes_label}");
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 /// Trip the process cancellation token on Ctrl-C so running work unwinds and
