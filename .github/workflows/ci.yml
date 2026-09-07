@@ -262,19 +262,24 @@ jobs:
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
           cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
-      # The prebuilt stage takes the binary out of `prebuilt/<arch>/`, so each
-      # leg smokes the directory its own architecture resolves.
+      # The prebuilt stages take the binary out of `prebuilt/<arch>/` and the
+      # man pages and completions out of `docs/`, so each leg smokes the
+      # directory its own architecture resolves. Stubs stand in for the real
+      # files: this proves the release fan-out's COPY sources reach the build
+      # context (`.dockerignore` decides that), not their contents.
       - name: Build CLI prebuilt path
         if: matrix.name == 'CLI'
         run: |
           set -euo pipefail
-          mkdir -p "prebuilt/${{ matrix.arch }}"
+          mkdir -p "prebuilt/${{ matrix.arch }}" docs/man docs/completions
           printf 'stub\n' > "prebuilt/${{ matrix.arch }}/rom-weaver"
+          printf 'stub\n' > docs/man/rom-weaver.1
+          printf 'stub\n' > docs/completions/rom-weaver.bash
           docker build \
             --file Dockerfile \
             --build-arg BINARY=prebuilt \
             --build-arg IDENTIFY_DATA=prebuilt \
-            --build-arg DOCS=none \
+            --build-arg DOCS=prebuilt \
             --tag prebuilt-smoke \
             .
 
