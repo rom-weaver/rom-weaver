@@ -120,6 +120,12 @@ export function normalizeRomWeaverRunRequest(
     ...baseOutput,
     ...outputOverrides,
   });
+  if (hasRequestShape && commandOrRequest.dry_run !== undefined) {
+    if (typeof commandOrRequest.dry_run !== "boolean") {
+      throw new TypeError("rom-weaver dry_run must be a boolean");
+    }
+    return { command, dry_run: commandOrRequest.dry_run, output };
+  }
   return { command, output };
 }
 

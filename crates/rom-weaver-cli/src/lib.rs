@@ -421,6 +421,10 @@ PPF3 format. Without it there is nothing to reverse from."
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct RomWeaverRunRequest {
     pub command: Commands,
+    /// Plan a command without changing files or downloading data.
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub dry_run: bool,
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub output: RomWeaverRunOutputOptions,
@@ -489,6 +493,7 @@ pub struct AppRunOptions {
     pub emit_progress_events: bool,
     pub interactive_selection_enabled: bool,
     pub assume_yes: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -507,12 +512,13 @@ impl RomWeaverApp {
         prompter: Arc<dyn SelectionPrompter>,
     ) -> AppRunOutcome {
         let reporter = Arc::new(TimingProgressSink::new(reporter));
-        let app = CliApp::new(
+        let app = CliApp::new_with_dry_run(
             reporter,
             prompter,
             options.emit_progress_events,
             options.interactive_selection_enabled,
             options.assume_yes,
+            options.dry_run,
         );
         app.run(command)
     }
@@ -526,6 +532,7 @@ pub struct RunCommandOptions {
     pub emit_progress_events: bool,
     pub interactive_selection_enabled: bool,
     pub assume_yes: bool,
+    pub dry_run: bool,
 }
 
 impl RunCommandOptions {
@@ -537,6 +544,7 @@ impl RunCommandOptions {
             emit_progress_events: output.emit_progress_events(stdout_is_tty),
             interactive_selection_enabled: output.interactive_selection_enabled,
             assume_yes: output.assume_yes,
+            dry_run: false,
         }
     }
 }
@@ -767,13 +775,17 @@ mod wasm_host_prompt {
 /// interactive selection back to the browser host; elsewhere it never prompts.
 pub fn run_request(request: RomWeaverRunRequest, stdout_is_tty: bool) -> ExitCode {
     let output = request.output;
+    let dry_run = request.dry_run;
     #[cfg(target_arch = "wasm32")]
     let prompter: Arc<dyn SelectionPrompter> = wasm_host_prompt::prompter();
     #[cfg(not(target_arch = "wasm32"))]
     let prompter: Arc<dyn SelectionPrompter> = Arc::new(rom_weaver_core::NoninteractivePrompter);
     run_command(
         request.command,
-        RunCommandOptions::from_output(output, stdout_is_tty),
+        RunCommandOptions {
+            dry_run,
+            ..RunCommandOptions::from_output(output, stdout_is_tty)
+        },
         Arc::new(JsonProgressSink),
         prompter,
     )
@@ -814,6 +826,7 @@ pub fn run_command_outcome(
             emit_progress_events: options.emit_progress_events,
             interactive_selection_enabled: options.interactive_selection_enabled,
             assume_yes: options.assume_yes,
+            dry_run: options.dry_run,
         },
         reporter,
         prompter,
@@ -1001,6 +1014,7 @@ struct CliApp {
     emit_progress_events: bool,
     interactive_selection_enabled: bool,
     assume_yes: bool,
+    dry_run: bool,
     containers: ContainerRegistry,
     patches: PatchRegistry,
     checksum: NativeChecksumEngine,
@@ -1348,6 +1362,9 @@ pub enum FilterKind {
 
 #[path = "command_dispatch.rs"]
 mod command_dispatch;
+
+#[path = "dry_run.rs"]
+mod dry_run;
 
 #[path = "probe_command.rs"]
 mod probe_command;

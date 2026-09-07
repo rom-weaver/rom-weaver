@@ -115,6 +115,29 @@ fn string_and_size_fields_fall_back_to_a_dash() {
 }
 
 #[test]
+fn emitted_file_rows_prefer_the_destination_path() {
+    let file = json!({
+        "file_name": "game.nes",
+        "path": "/roms/extracted/game.nes",
+        "size_bytes": 2048,
+        "kind": "rom",
+    });
+    assert_eq!(
+        emitted_file_row(&file),
+        vec![
+            "/roms/extracted/game.nes".to_string(),
+            humanize_bytes(2048),
+            "rom".to_string(),
+        ]
+    );
+    assert_eq!(
+        emitted_file_row(&json!({ "file_name": "game.nes" }))[0],
+        "game.nes",
+        "the old file-name-only detail remains readable"
+    );
+}
+
+#[test]
 fn collect_pairs_flattens_nested_objects_and_humanizes_byte_counts() {
     let value = json!({
         "format": "chd",
@@ -133,7 +156,7 @@ fn collect_pairs_flattens_nested_objects_and_humanizes_byte_counts() {
 }
 
 #[test]
-fn collect_pairs_joins_scalar_arrays_and_drops_empty_ones() {
+fn collect_pairs_keeps_object_and_empty_arrays_visible() {
     let value = json!({
         "codecs": ["zstd", "lzma", 7, true],
         "objects": [{ "a": 1 }],
@@ -149,9 +172,102 @@ fn collect_pairs_joins_scalar_arrays_and_drops_empty_ones() {
         .collect();
     assert_eq!(
         rendered,
-        vec![("Codecs", "zstd, lzma, 7, true"), ("Flag", "false"),],
-        "null scalars and arrays with no scalar members are omitted"
+        vec![
+            ("Codecs", "zstd, lzma, 7, true"),
+            ("Flag", "false"),
+            ("Nulls", "none"),
+            ("Objects", r#"{"a":1}"#),
+        ],
+        "arrays of objects and empty values remain visible in a human summary"
     );
+}
+
+#[test]
+fn empty_details_report_that_the_label_must_be_rendered() {
+    assert!(
+        !render_object(&surface(), &json!({})),
+        "the caller uses this false result to show the event label"
+    );
+}
+
+#[test]
+fn dry_run_pairs_show_planned_destinations_and_no_side_effects() {
+    let details = json!({
+        "dry_run": true,
+        "command": "compress",
+        "input": "/roms/game.iso",
+        "output": "/roms/game.chd",
+        "writes": ["/roms/game.chd"],
+        "downloads": [],
+        "read_only": false,
+    });
+    assert_eq!(
+        dry_run_pairs(details.as_object().expect("plan object")),
+        vec![
+            ("Input".to_string(), "/roms/game.iso".to_string()),
+            ("Output".to_string(), "/roms/game.chd".to_string()),
+            ("Writes".to_string(), "/roms/game.chd".to_string()),
+            ("Downloads".to_string(), "none".to_string()),
+            ("Read only".to_string(), "no".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn dry_run_pairs_mark_read_only_plans_with_no_writes() {
+    let details = json!({
+        "dry_run": true,
+        "command": "checksum",
+        "writes": [],
+        "downloads": [],
+        "read_only": true,
+    });
+    assert_eq!(
+        dry_run_pairs(details.as_object().expect("plan object")),
+        vec![
+            ("Writes".to_string(), "none".to_string()),
+            ("Downloads".to_string(), "none".to_string()),
+            ("Read only".to_string(), "yes".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn dry_run_requires_the_explicit_detail_flag() {
+    assert!(is_dry_run(&event(
+        "compress",
+        "dry run: would write; nothing written",
+        Some(json!({ "dry_run": true })),
+    )));
+    assert!(!is_dry_run(&event(
+        "compress",
+        "dry run: would write; nothing written",
+        Some(json!({})),
+    )));
+}
+
+#[test]
+fn quiet_keeps_dry_run_plans_visible() {
+    let ordinary_write = event("compress", "compressed", Some(json!({})));
+    let dry_run = event(
+        "compress",
+        "dry run: would write; nothing written",
+        Some(json!({ "dry_run": true })),
+    );
+    assert!(quiet_suppresses_success(true, &ordinary_write));
+    assert!(!quiet_suppresses_success(true, &dry_run));
+    assert!(!quiet_suppresses_success(false, &ordinary_write));
+}
+
+#[test]
+fn dry_run_without_a_no_write_label_gets_a_clear_notice() {
+    assert!(needs_no_files_written_notice("trim simulation complete"));
+    assert!(!needs_no_files_written_notice(
+        "dry run: would write `/roms/game.chd`; nothing written"
+    ));
+    assert!(!needs_no_files_written_notice(
+        "dry run: checksum only reads; no changes planned"
+    ));
 }
 
 #[test]

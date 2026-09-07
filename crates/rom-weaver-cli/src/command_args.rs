@@ -945,14 +945,7 @@ pub struct CompressCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub force: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            short = 'n',
-            long = "dry-run",
-            help = "Print the plan (inputs, output, format, codec, level, threads) and stop without writing"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dry_run: bool,
@@ -1017,14 +1010,7 @@ pub struct TrimCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub in_place: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            short = 'n',
-            long = "dry-run",
-            help = "Report what would be trimmed without writing anything"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dry_run: bool,
@@ -1632,14 +1618,7 @@ output is written back in the order the input arrived in."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub force: bool,
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        arg(
-            short = 'n',
-            long = "dry-run",
-            help = "Print the plan (inputs, patches, output, format, codec, level, threads) and stop without writing"
-        )
-    )]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dry_run: bool,

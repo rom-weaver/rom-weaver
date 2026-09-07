@@ -1,6 +1,7 @@
 use super::*;
 
 impl CliApp {
+    #[cfg(any(not(target_arch = "wasm32"), test))]
     pub(super) fn new(
         reporter: Arc<dyn ProgressSink>,
         prompter: Arc<dyn SelectionPrompter>,
@@ -8,12 +9,31 @@ impl CliApp {
         interactive_selection_enabled: bool,
         assume_yes: bool,
     ) -> Self {
+        Self::new_with_dry_run(
+            reporter,
+            prompter,
+            emit_progress_events,
+            interactive_selection_enabled,
+            assume_yes,
+            false,
+        )
+    }
+
+    pub(super) fn new_with_dry_run(
+        reporter: Arc<dyn ProgressSink>,
+        prompter: Arc<dyn SelectionPrompter>,
+        emit_progress_events: bool,
+        interactive_selection_enabled: bool,
+        assume_yes: bool,
+        dry_run: bool,
+    ) -> Self {
         Self {
             reporter,
             prompter,
             emit_progress_events,
             interactive_selection_enabled,
             assume_yes,
+            dry_run,
             containers: ContainerRegistry::new(),
             patches: PatchRegistry::new(),
             checksum: NativeChecksumEngine,
@@ -23,6 +43,11 @@ impl CliApp {
     pub(super) fn run(&self, command: Commands) -> AppRunOutcome {
         let command_name = Self::command_name(&command);
         trace!(command = command_name, "dispatching CLI command");
+        if self.dry_run
+            && let Some(outcome) = self.plan_dry_run(&command)
+        {
+            return outcome;
+        }
         match command {
             Commands::Probe(args) => self.run_probe(args),
             Commands::Extract(args) => self.run_extract(args),
@@ -30,10 +55,19 @@ impl CliApp {
             Commands::Identify(args) => self.run_identify(*args),
             Commands::Setup(args) => self.run_setup(args),
             Commands::Ingest(args) => self.run_ingest(args),
-            Commands::Compress(args) => self.run_compress(args),
-            Commands::Trim(args) => self.run_trim(args),
+            Commands::Compress(mut args) => {
+                args.dry_run |= self.dry_run;
+                self.run_compress(args)
+            }
+            Commands::Trim(mut args) => {
+                args.dry_run |= self.dry_run;
+                self.run_trim(args)
+            }
             Commands::Patch(command) => match command {
-                PatchCommands::Apply(args) => self.run_patch_apply(*args),
+                PatchCommands::Apply(mut args) => {
+                    args.dry_run |= self.dry_run;
+                    self.run_patch_apply(*args)
+                }
                 PatchCommands::Validate(args) => self.run_patch_validate(*args),
                 PatchCommands::Create(args) => self.run_patch_create(*args),
             },

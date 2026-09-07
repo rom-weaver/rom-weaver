@@ -616,7 +616,11 @@ export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, lo
  */
 assume_yes?: boolean, };
 
-export type RomWeaverRunRequest = { command: Commands, output?: RomWeaverRunOutputOptions, };
+export type RomWeaverRunRequest = { command: Commands,
+/**
+ * Plan a command without changing files or downloading data.
+ */
+dry_run?: boolean, output?: RomWeaverRunOutputOptions, };
 
 export type RomWeaverCommand = Commands;
 

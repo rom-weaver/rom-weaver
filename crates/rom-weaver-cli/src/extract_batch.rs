@@ -198,6 +198,7 @@ mod tests {
                 assume_yes: false,
                 emit_progress_events: false,
                 interactive_selection_enabled: false,
+                dry_run: false,
             },
             reporter,
             prompter,

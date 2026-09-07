@@ -163,6 +163,19 @@ impl<'a> PatchSelectors<'a> {
 
 impl CliApp {
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
+        if args.dry_run {
+            let command = Commands::Patch(PatchCommands::Apply(Box::new(args.clone())));
+            if let Some(outcome) = self.plan_dry_run(&command) {
+                return outcome;
+            }
+            let original_input = args.input.clone();
+            if let Some(outcome) =
+                self.validate_patch_apply_output_preflight(&args, None, &original_input, None)
+            {
+                return outcome;
+            }
+            return self.run_patch_apply_resolved(args, None, original_input, None, &mut None);
+        }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
         trace!(
@@ -469,6 +482,17 @@ impl CliApp {
                     ),
                 );
             };
+            for patch in &patches {
+                if let Some(report) = self.require_readable_path(
+                    "patch-apply",
+                    OperationFamily::Patch,
+                    None,
+                    patch,
+                    probe_threads.clone(),
+                ) {
+                    return self.finish("patch-apply", report);
+                }
+            }
             let report = self.patch_apply_dry_run(
                 &input,
                 &patches,
@@ -3594,6 +3618,13 @@ impl CliApp {
     ) -> OperationReport {
         let mut details = Map::new();
         details.insert("dry_run".to_string(), json!(true));
+        details.insert("command".to_string(), json!("patch-apply"));
+        details.insert("writes".to_string(), json!([output.display().to_string()]));
+        details.insert("downloads".to_string(), json!([]));
+        details.insert("read_only".to_string(), json!(false));
+        details.insert("notes".to_string(), json!([
+            "patch contents, checksums, archive members, and destination write access are not validated during dry run"
+        ]));
         details.insert("input".to_string(), json!(input.display().to_string()));
         details.insert(
             "patches".to_string(),

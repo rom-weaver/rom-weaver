@@ -93,11 +93,13 @@ Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available cor
 
 List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`, `--expect-out`, `--assume-in`, and the compression codec flags) can be repeated or comma-separated: `--algo crc32,sha1` and `--algo crc32 --algo sha1` do the same thing.
 
-These three appear on the commands that write files:
+`-n`/`--dry-run` is available on every command, before or after the command name. It reports planned changes without writing destination files, changing installed databases, or downloading inputs. Read-only commands report a read-only plan instead of running the operation. Dry runs do not ask interactive questions.
 
-- `--force` overwrites an output that already exists. Without it, a command that would overwrite stops before writing anything.
-- `-n`/`--dry-run` reports what the command would write, and writes nothing.
-- `-y`/`--yes` answers every confirmation with yes, so a run never waits for input.
+Compression, trimming, and explicit patch application retain their detailed plans. Explicit patch application needs `--output` for its dry-run plan. Other commands report the requested destinations and any unresolved work. Archive member selection, remote bundle contents, checksums, and destination write access can remain unvalidated; the plan names these limits. A successful dry run means the plan completed, not that the later operation is guaranteed to succeed. Trimming an archive can use temporary extraction files, which are removed after planning.
+
+In human output, a dry run shows the plan and a no-write notice. JSON plans carry `details.dry_run`, `writes`, `downloads`, and `read_only`; `writes` and `downloads` describe planned actions, not completed actions. Existing detailed plan fields remain available.
+
+`--force` overwrites an output that already exists on commands that support it. Without it, a command that would overwrite stops before writing anything. `-y`/`--yes` answers confirmations with yes; it does not choose between candidates.
 
 rom-weaver only asks interactive questions when stdin and stderr are both terminals and `--json` is off. Otherwise, it decides on its own or fails.
 
@@ -303,7 +305,7 @@ rom-weaver --json probe --input game.sfc | jq
 ## File permissions
 
 
-Inputs are checked for readability before a command does any work. The commands that write large outputs (`extract`, `compress`, `trim`, `patch apply`, and `patch create`) have their destination checked for writability at the same point, so a read-only output directory costs you a quick error rather than an abandoned multi-gigabyte compress. Both checks do the real thing, an open, a listing, or a create, so ACLs, group membership, and read-only mounts are honored instead of guessed at from mode bits.
+During normal execution, inputs are checked for readability before a command does any work. The commands that write large outputs (`extract`, `compress`, `trim`, `patch apply`, and `patch create`) have their destination checked for writability at the same point, so a read-only output directory costs you a quick error rather than an abandoned multi-gigabyte compress. Both checks do the real thing, an open, a listing, or a create, so ACLs, group membership, and read-only mounts are honored instead of guessed at from mode bits.
 
 Denials name the path, the operation, and the identities involved:
 

@@ -66,6 +66,24 @@ describe("createRomWeaverCommand", () => {
 });
 
 describe("normalizeRomWeaverRunRequest", () => {
+  it.each([true, false])("preserves dry_run=%s when normalizing a request", (dryRun) => {
+    const command = createRomWeaverCommand("extract", { input: "/input.zip", output: "/output" });
+    const request = normalizeRomWeaverRunRequest({ command, dry_run: dryRun }, { json: true });
+    expect(request).toEqual({ command, dry_run: dryRun, output: { json: true } });
+    expect(JSON.parse(JSON.stringify(request)).dry_run).toBe(dryRun);
+  });
+
+  it.each(["true", "false", 1, null])("rejects invalid dry_run=%s instead of running the command", (dryRun) => {
+    expect(() =>
+      normalizeRomWeaverRunRequest(
+        asRequest({
+          command: { args: { input: "/input.zip", output: "/output" }, type: "extract" },
+          dry_run: dryRun,
+        }),
+      ),
+    ).toThrow("rom-weaver dry_run must be a boolean");
+  });
+
   it("wraps a bare command and drops unset output options", () => {
     expect(normalizeRomWeaverRunRequest(asCommand({ args: { input: "/rom.sfc" }, type: "extract" }))).toEqual({
       command: { args: { input: "/rom.sfc" }, type: "extract" },
