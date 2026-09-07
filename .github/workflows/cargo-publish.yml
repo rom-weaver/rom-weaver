@@ -117,3 +117,10 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
           CRATES_IO_USER_AGENT: rom-weaver-release-workflow (https://github.com/${{ github.repository }})
+
+      # rust-cache's post-job cleanup treats every entry of target/ as a build
+      # profile directory, and cargo publish leaves its packaging trees in
+      # target/package, which that cleanup cannot walk. They are throwaway.
+      - name: Remove packaging trees before the cache saves
+        if: always()
+        run: rm -rf target/package
