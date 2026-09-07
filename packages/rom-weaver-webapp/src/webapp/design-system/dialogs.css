@@ -1210,9 +1210,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   color: var(--verified);
   border-color: color-mix(in oklab, var(--verified) 35%, transparent);
 }
-/* A cache standing by is not a cache in use, and one tint of green apart was not
-   telling anyone that. Stored, not serving: no colour of its own, and the glyph
-   is a box rather than a cloud. */
+/* Stored caches use a neutral color to distinguish them from the serving cache. */
 .rw-app .sw-chip[data-sw="ready"] {
   color: var(--ink-2);
 }

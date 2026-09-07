@@ -2,13 +2,8 @@ import { createLogger } from "../lib/logging.ts";
 import type { Accent } from "./accent.ts";
 
 /**
- * Deploy-channel identity. Every channel ships the same bundle from the same
- * commit range, so without a visual marker a nightly tab, a PR preview and
- * production are indistinguishable - including as installed PWAs. The channel
- * is stamped in at build time from CI's already-resolved deploy target and
- * surfaces as a masthead badge plus the default accent dye lot.
- *
- * Production is the baseline identity: no badge, madder accent.
+ * The build channel supplies the masthead badge and default UI accent.
+ * Production uses no badge and the madder accent.
  */
 
 const logger = createLogger("build-channel");

@@ -111,23 +111,9 @@
     --thread-hi 0.45s var(--ease);
 }
 
-/* The mark is an <img> whose src swaps to the new dye in one frame; a brief
-   fade-up masks the hard swap so it reads as part of the same dissolve. */
-:root.accent-anim .brand-mark {
-  animation: accent-redye 0.45s var(--ease);
-}
-@keyframes accent-redye {
-  from {
-    opacity: 0.3;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   :root.accent-anim {
     transition: none;
-  }
-  :root.accent-anim .brand-mark {
-    animation: none;
   }
 }
 

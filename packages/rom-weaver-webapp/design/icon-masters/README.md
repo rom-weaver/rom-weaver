@@ -12,14 +12,16 @@ Source SVGs for the pre-rendered PNGs in `../../src/assets/app/root/`. Each wrap
 
 ## Geometry
 
-The logo is geometrically centered but optically high: its top corners are square ears while its bottom corners are rounded flares, so the top hits a circular launcher mask first. Each master therefore nudges the logo DOWN (`translate(off, off + dy)`), balancing radial reach against Android's 50%-radius circle mask.
+The logo uses a 32 × 32 viewBox. The cartridge fills 30 × 30 units; the disc hole is 5.5 units wide, and both bands are 5 units wide. A charcoal gap separates the bands at their crossing. A 0.75-unit cream outline sits over a 2-unit charcoal outline, keeping the silhouette visible on both dark and light surfaces. The favicon uses this mark directly, without the launcher padding.
 
-| master               | output                       | scale | dy (of 1254) |
-| -------------------- | ---------------------------- | ----- | ------------ |
-| icon-maskable.svg    | icon-maskable-{192,512}.png  | 0.80  | 48           |
-| apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.74  | 44           |
+The launcher masters center the mark on an opaque charcoal background. The maskable master keeps the mark inside the central 80%-diameter safe circle.
 
-`off = 1254 * (1 - scale) / 2`. dy scales roughly +1 per scale point (84% is flush against the circle at dy 52; 80% leaves ~13px margin at 512px).
+| master | output | scale | offset (x and y) |
+| --- | --- | --- | --- |
+| icon-maskable.svg | icon-maskable-{192,512}.png | 0.63 | 5.92 |
+| apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.80 | 3.2 |
+
+`offset = 16 * (1 - scale)`.
 
 ## Rendering
 
