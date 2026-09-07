@@ -749,11 +749,12 @@ jobs:
             printf '%s  %s\n' "$(sha256sum "$asset" | cut -d ' ' -f 1)" "$asset" > \
               "checksums/$asset.sha256"
           done
-          curl --fail --location --retry 5 --retry-delay 2 --output rom-weaver-identify-data.tar.br \
-            "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/rom-weaver-identify-data.tar.br"
-          printf '%s  rom-weaver-identify-data.tar.br\n' \
-            "$(sha256sum rom-weaver-identify-data.tar.br | cut -d ' ' -f 1)" > \
-            checksums/rom-weaver-identify-data.tar.br.sha256
+          for asset in rom-weaver-identify-data.tar.br rom-weaver-cli-assets.zip; do
+            curl --fail --location --retry 5 --retry-delay 2 --output "$asset" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/$asset"
+            printf '%s  %s\n' "$(sha256sum "$asset" | cut -d ' ' -f 1)" "$asset" > \
+              "checksums/$asset.sha256"
+          done
 
       - name: Checkout Scoop bucket
         uses: actions/checkout@v7
