@@ -5,7 +5,6 @@
   "include-v-in-tag": true,
   "always-update": true,
   "bump-minor-pre-major": true,
-  "last-release-sha": "03b2f1bdf7b583760d005d7d1183b2137d4ee5c7",
   "packages": {
     ".": {
       "package-name": "@rom-weaver/cli",
