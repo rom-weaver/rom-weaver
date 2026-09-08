@@ -25,7 +25,7 @@ test.each([393, 1280])("the ticker fits a %ipx viewport and pauses for keyboard 
         big: true,
         heroLabel: "Drop files",
         onFiles: () => undefined,
-        supported: [{ label: "ROMs", extensions: ["nes", "sfc"] }],
+        supported: [{ label: "ROMs", extensions: ["nes", "sfc", "gba", "nds"] }],
       }),
     ),
   );
@@ -34,9 +34,11 @@ test.each([393, 1280])("the ticker fits a %ipx viewport and pauses for keyboard 
   const track = container.querySelector(".formats-track");
   const sets = container.querySelectorAll(".formats-set");
   expect(formats.getBoundingClientRect().width).toBeLessThanOrEqual(width);
-  expect(sets[0].getBoundingClientRect().width).toBeGreaterThanOrEqual(formats.clientWidth);
-  expect(sets[0].getBoundingClientRect().width).toBe(sets[1].getBoundingClientRect().width);
+  expect(container.querySelectorAll(".formats-lane")).toHaveLength(2);
+  expect(sets[0].offsetWidth).toBe(sets[1].offsetWidth);
   expect(getComputedStyle(track).animationName).toBe("formats-ticker");
+  expect(getComputedStyle(track).animationDuration).toBe("120s");
+  expect(getComputedStyle(container.querySelectorAll(".formats-track")[1]).animationDirection).toBe("reverse");
   expect(getComputedStyle(track).animationPlayState).toBe("running");
   container.querySelector("input[type=file]").focus();
   expect(getComputedStyle(track).animationPlayState).toBe("paused");

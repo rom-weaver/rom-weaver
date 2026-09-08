@@ -103,11 +103,9 @@ describe("DropZone", () => {
     const { container } = render(
       <DropZone big formats={["rom", "ppf3"]} label="Drop files" onFiles={() => undefined} />,
     );
-    expect(Array.from(container.querySelectorAll(".formats .fmt")).map((pill) => pill.textContent)).toEqual([
-      "rom",
-      "ppf3",
-      "rom",
-      "ppf3",
-    ]);
+    expect(container.querySelectorAll(".formats-lane")).toHaveLength(1);
+    expect(Array.from(container.querySelectorAll(".formats .fmt")).map((pill) => pill.textContent)).toEqual(
+      Array.from({ length: 24 }, (_, index) => ["rom", "ppf3"][index % 2]),
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { type ReactNode, type Ref, useId, useState } from "react";
+import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
@@ -10,6 +10,12 @@ import { join } from "./cx.ts";
 const stampDroppedFiles = (files: readonly File[], atMs: number): void => {
   for (const file of files) recordDrop(file.name, atMs);
 };
+
+// False until the extension ticker has hydrated once this session. The retained
+// prerendered node inherits :root --wall-clock; every later mount stamps the
+// current epoch. Module-scoped so it spans the ticker unmounting (hero ->
+// compact) and remounting (reset back to hero).
+let tickerHasMounted = false;
 
 /**
  * Loom layout primitives: the numbered step section (0x01 …), the inline info
@@ -134,6 +140,31 @@ const DropZone = ({
   const resolvedInputId = inputId || generatedInputId;
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
+  const formatsRef = useRef<HTMLSpanElement>(null);
+  const showFormats = Boolean(big && formats?.length);
+  // Hydration MUST preserve the clock seeded in index.html.
+  // Later mounts refresh it so the ticker resumes at the current phase.
+  useLayoutEffect(() => {
+    if (!showFormats) return;
+    const lane = formatsRef.current;
+    if (lane && tickerHasMounted) lane.style.setProperty("--wall-clock", `${Date.now() / 1000}s`);
+    tickerHasMounted = true;
+  }, [showFormats]);
+  const formatSplit = Math.ceil((formats?.length || 0) / 2);
+  const formatRows: { format: string; key: string }[][] = [];
+  if (formats?.length) {
+    if (formats.length < 4) {
+      const row: { format: string; key: string }[] = [];
+      for (let repeat = 0; repeat < 12 / formats.length; repeat += 1) {
+        for (const format of formats) row.push({ format, key: `${repeat}-${format}` });
+      }
+      formatRows.push(row);
+    } else {
+      const entries = formats.map((format) => ({ format, key: format }));
+      formatRows.push(entries.slice(0, formatSplit), entries.slice(formatSplit));
+    }
+  }
+
   const emit = (list: FileList | null) => {
     if (!list || list.length === 0) return;
     const files = Array.from(list);
@@ -166,18 +197,22 @@ const DropZone = ({
   );
   const formatsNode =
     big && formats?.length ? (
-      <span aria-hidden="true" className="formats">
-        <span className="formats-track">
-          {[0, 1].map((copy) => (
-            <span className="formats-set" key={copy}>
-              {formats.map((format) => (
-                <span className="fmt mono" key={format}>
-                  {format}
+      <span aria-hidden="true" className="formats" ref={formatsRef}>
+        {formatRows.map((row) => (
+          <span className="formats-lane" key={row.map((entry) => entry.format).join("|")}>
+            <span className="formats-track">
+              {[0, 1].map((copy) => (
+                <span className="formats-set" key={copy}>
+                  {row.map(({ format, key }) => (
+                    <span className="fmt mono" key={key}>
+                      {format}
+                    </span>
+                  ))}
                 </span>
               ))}
             </span>
-          ))}
-        </span>
+          </span>
+        ))}
       </span>
     ) : null;
 
