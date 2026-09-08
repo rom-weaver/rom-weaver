@@ -402,6 +402,7 @@ fn check_archive_entry_size(size: u64, extracted_bytes: &mut u64) -> Result<()> 
 
 /// The Libretro license text the data build copies beside the packs; it
 /// travels with every archive because CC-BY-SA requires it.
+#[cfg(not(target_arch = "wasm32"))]
 const LIBRETRO_LICENSE_FILE: &str = "libretro-database-LICENSE";
 
 #[cfg(not(target_arch = "wasm32"))]
