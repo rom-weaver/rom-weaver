@@ -2052,9 +2052,7 @@ function ApplyWorkflowFormView({
       <NeedsInput onClick={openUnifiedPicker}>
         Add ROM in <b className="hexref mono">0x01</b> or click for any input
       </NeedsInput>
-      {canSearchRomHash && !manualRomLookup ? (
-        <RomHashSearch localizer={localizer} lookup={romHashLookup} variant="disclosure" />
-      ) : null}
+      {canSearchRomHash && !manualRomLookup ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
     </>
   );
   const patchesNeedsInput = (

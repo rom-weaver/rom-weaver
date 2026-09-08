@@ -276,7 +276,7 @@ describe("apply workflow view - empty bench", () => {
     expect((container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement).value).toBe("");
   });
 
-  it("keeps the checksum disclosure in 0x02 while patches wait for a ROM", async () => {
+  it("keeps the checksum search open in 0x02 while patches wait for a ROM", async () => {
     lookupExpectedRom.mockResolvedValue({
       matches: [
         {
@@ -296,9 +296,10 @@ describe("apply workflow view - empty bench", () => {
     expect(romStep.textContent).toContain("Add ROM in");
     const search = romStep.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
     expect(search).toBeTruthy();
-    const disclosure = romStep.querySelector<HTMLButtonElement>(".identify-hash-disclosure > .cks-head");
-    expect(disclosure?.textContent).toContain("Identify by checksum");
-    fireEvent.click(disclosure as HTMLButtonElement);
+    // The search stands open, as in the hero: no drawer to click first.
+    expect(search.closest(".cks-body")).toBeNull();
+    expect(romStep.querySelector(".identify-hash-disclosure")).toBeNull();
+    expect(search.querySelector(".identify-hash-label")?.textContent).toBeTruthy();
 
     const input = romStep.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
     await act(async () => {
@@ -309,11 +310,10 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",
     );
-    // The match replaces the disclosure with the refine row - one search per step.
+    // The match replaces the open search with the refine row - one search per step.
     const forms = romStep.querySelectorAll("#rom-weaver-rom-hash-search");
     expect(forms).toHaveLength(1);
     expect(forms[0]?.classList.contains("identify-hash--compact")).toBe(true);
-    expect(romStep.querySelector(".identify-hash-disclosure")).toBeNull();
   });
 
   it("loads the sample into the existing drop pipeline without navigating", async () => {
