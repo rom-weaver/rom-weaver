@@ -1724,16 +1724,18 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
-        cheats={
+        cheats={({ woven }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
             rom={cheatRom}
+            title={localizer.message("ui.step.cheats")}
             validationMessage={cheatConflictMessage}
+            woven={woven}
           />
-        }
+        )}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}

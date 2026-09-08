@@ -108,6 +108,7 @@ const props = {
   shard,
   classifyDatabaseCheats,
   classifyManualCode,
+  title: "Cheats",
 } as const;
 
 /** Open the picker and wait for its rows. */
@@ -304,6 +305,52 @@ describe("CheatDatabaseSection", () => {
     expect(view.queryByRole("button", { name: "Add this cheat" })).toBeNull();
   });
 
+  it("adds an unsupported manual code as an excluded card that names the reason", async () => {
+    const onSelectionChange = vi.fn();
+    const classifyUnsupported: ManualCheatClassifier = async (request) => ({
+      record: {
+        record: cheatRecord("manual-2", request.description, request.code),
+        resolution: { type: "unsupported", reason: "the code targets runtime memory" },
+        detectedKind: "pro-action-replay",
+      },
+      detectedSystem: request.system,
+      detectedType: "Action Replay",
+    });
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyManualCode={classifyUnsupported}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    await openDialog(view);
+    fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
+    fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "7E0010FF" } });
+    fireEvent.click(view.getByRole("button", { name: "Check code" }));
+    await view.findByText("Cannot be baked into the ROM");
+    expect((view.getByRole("button", { name: "Add this cheat" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onSelectionChange).not.toHaveBeenCalledWith([
+      expect.objectContaining({ record: expect.objectContaining({ id: "manual-2" }) }),
+    ]);
+  });
+
+  it("shows the loading state in the picker instead of an empty search result", async () => {
+    let finishClassification: ((records: ClassifiedCheatRecord[]) => void) | undefined;
+    const classifier: DatabaseCheatClassifier = () =>
+      new Promise((resolve) => {
+        finishClassification = resolve;
+      });
+    const view = render(<CheatDatabaseSection {...props} classifyDatabaseCheats={classifier} />);
+    await waitFor(() => expect(finishClassification).toBeDefined());
+    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    expect(view.getByRole("status").textContent).toContain("Checking cheat delivery types");
+    expect(view.queryByText(/No cheats match this search/u)).toBeNull();
+
+    finishClassification?.(records);
+    await view.findByText("Infinite lives");
+    expect(view.queryByText(/Checking cheat delivery types/u)).toBeNull();
+  });
+
   it("shows manual browsing as unverified and keeps controls within their container", async () => {
     const view = render(
       <CheatDatabaseSection
@@ -316,7 +363,7 @@ describe("CheatDatabaseSection", () => {
     await view.findByText("Infinite lives");
     expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
     expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("Game selected manually");
-    expect(view.container.querySelectorAll("input, select, textarea, button").length).toBeGreaterThan(0);
+    expect(view.container.querySelectorAll(".cheat-pick")).toHaveLength(2);
   });
 });
 

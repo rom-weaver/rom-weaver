@@ -275,6 +275,11 @@ msgstr "Kanal"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.cheats"
+msgstr "Cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
 
