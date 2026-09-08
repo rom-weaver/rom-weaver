@@ -99,6 +99,35 @@ export const buildIdentifyReleaseData = (options) => {
         brotliFile: `packs/${brotliFile}`,
       };
     });
+  // Cheat shards ride in the group that owns their platform's pack, so one
+  // group install brings both. The release tree keeps only the Brotli copy.
+  const verifyBrotliPair = (rawPath, brotliPath, label) => {
+    if (!existsSync(brotliPath)) {
+      throw new Error(`${brotliPath} is missing; rebuild the identify data with Brotli sidecars`);
+    }
+    let decompressed;
+    try {
+      decompressed = brotliDecompressSync(readFileSync(brotliPath));
+    } catch (error) {
+      throw new Error(`${brotliPath} is not valid Brotli: ${error.message}`);
+    }
+    if (!decompressed.equals(readFileSync(rawPath))) {
+      throw new Error(`${brotliPath} does not match ${label}`);
+    }
+  };
+  const allCheats = (Array.isArray(index.cheats) ? [...index.cheats] : [])
+    .sort((left, right) => compare(left.slug, right.slug))
+    .map((entry) => {
+      if (basename(entry.file) !== entry.file || basename(entry.slug) !== entry.slug) {
+        throw new Error(`unsafe identify cheat shard path: ${entry.file}`);
+      }
+      const inputShard = join(input, entry.file);
+      if (statSync(inputShard).size !== entry.rawBytes || sha256File(inputShard) !== entry.sha256) {
+        throw new Error(`${entry.file} does not match index.json`);
+      }
+      verifyBrotliPair(inputShard, `${inputShard}.br`, entry.file);
+      return { ...entry, brotliFile: `cheats/${entry.slug}.json.br` };
+    });
   const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
   const resolvedGroups = resolveIdentifyPackGroups(index);
   const groups = resolvedGroups.groups.length
@@ -138,10 +167,22 @@ export const buildIdentifyReleaseData = (options) => {
           brotliSha256: sha256File(outputPack),
         };
       });
+    const cheats = allCheats
+      .filter((entry) => slugs.has(entry.slug))
+      .map((entry) => {
+        const outputShard = join(dataDir, entry.brotliFile);
+        mkdirSync(dirname(outputShard), { recursive: true });
+        copyFileSync(join(input, `${entry.file}.br`), outputShard);
+        return {
+          ...entry,
+          brotliBytes: statSync(outputShard).size,
+          brotliSha256: sha256File(outputShard),
+        };
+      });
     const archiveGroups = group.default ? groups : [group];
     // The checksum router is browser-only; a release archive never carries it.
     const { checksumRoutes: _checksumRoutes, ...indexWithoutRouter } = index;
-    const groupIndex = { ...indexWithoutRouter, groups: archiveGroups, systems };
+    const groupIndex = { ...indexWithoutRouter, cheats, groups: archiveGroups, systems };
     const groupCatalog = Array.isArray(catalog.platforms)
       ? {
           ...catalog,
@@ -175,6 +216,7 @@ export const buildIdentifyReleaseData = (options) => {
     rmSync(temporaryTar);
     return {
       archive: archivePath,
+      cheats: cheats.length,
       dataDir,
       group: group.id,
       sha256: sha256File(archivePath),

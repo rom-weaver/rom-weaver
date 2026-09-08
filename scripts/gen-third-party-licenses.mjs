@@ -199,21 +199,28 @@ const IN_SOURCE_DEPENDENCIES = [
     ],
   },
 ];
-const CHEAT_DATABASE_MANIFEST = path.join(WEBAPP_ROOT, "public", "cheats", "manifest.json");
+const IDENTIFY_DATA_DIR = path.join(REPO_ROOT, "crates", "rom-weaver-cli", "data", "identify", "v1");
 
-function cheatDatabaseRows() {
-  const manifest = JSON.parse(fs.readFileSync(CHEAT_DATABASE_MANIFEST, "utf8"));
+// The Libretro database supplies the identify DATs and the cheat shards the
+// webapp serves, so one attribution row covers the whole adapted data set.
+// The build pins the revision and copies the license text into the data dir.
+function identifyDataRows() {
+  const indexPath = path.join(IDENTIFY_DATA_DIR, "index.json");
+  if (!fs.existsSync(indexPath)) {
+    throw new Error(`${indexPath} is missing; run node scripts/ensure-identify-data.mjs first`);
+  }
+  const libretro = JSON.parse(fs.readFileSync(indexPath, "utf8")).sources?.libretro;
+  if (!libretro?.revision || !libretro.licenseFile) {
+    throw new Error(`${indexPath} records no Libretro source revision and license file`);
+  }
   return [
     {
       kind: "data",
-      license: manifest.license,
-      licenseFiles: [
-        path.join(WEBAPP_ROOT, "public", "cheats", "LICENSE"),
-        path.join(WEBAPP_ROOT, "public", "cheats", "ATTRIBUTION.md"),
-      ],
-      name: manifest.source,
-      source: `${manifest.sourceUrl}/tree/${manifest.sourceRevision}`,
-      version: manifest.sourceRevision,
+      license: libretro.license,
+      licenseFiles: [path.join(IDENTIFY_DATA_DIR, libretro.licenseFile)],
+      name: "libretro/libretro-database",
+      source: `${libretro.url}/tree/${libretro.revision}`,
+      version: libretro.revision,
     },
   ];
 }
@@ -487,7 +494,7 @@ function main() {
   const cargo = cargoRows(metadata);
   const source = inSourceRows();
   const npm = target === "cli" ? [] : loadWebappRows();
-  const webappData = target === "cli" ? [] : cheatDatabaseRows();
+  const webappData = target === "cli" ? [] : identifyDataRows();
   const cliRows = [...cargo, ...source];
   const rowsByScope = {
     cli: cliRows,

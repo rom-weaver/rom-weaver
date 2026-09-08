@@ -17,6 +17,7 @@ import {
   OPENGOOD_HEADERED_REVISION,
   OPENGOOD_ONLY_PLATFORMS,
   OPENGOOD_REVISION,
+  extractArchiveDirectory,
   extractArchiveMembers,
   normalizeArchivePath,
   stripLeadingComponent,
@@ -674,4 +675,32 @@ test("no npm package is imported at module scope", () => {
     offenders.push(specifier);
   }
   assert.deepEqual(offenders, [], `import these lazily instead: ${offenders.join(", ")}`);
+});
+
+test("extractArchiveDirectory writes every .cht file below one archive directory", async () => {
+  const dir = mkdtempSync(join(os.tmpdir(), "rw-tar-dir-"));
+  const archive = await buildArchive(dir, {
+    "cht/Nintendo - Game Boy/Zelda (USA).cht": 'cheat0_desc = "Lives"\n',
+    "cht/Nintendo - Game Boy/Sub/Nested.CHT": "cheat0_code = 0100\n",
+    "cht/Nintendo - Game Boy/README.md": "not a cheat file",
+    "cht/Nintendo - Game Boy Color/Other.cht": "cheat0_code = 0200\n",
+    "dats/a.dat": "alpha",
+  });
+  const sourceRoot = join(dir, "out");
+  mkdirSync(sourceRoot, { recursive: true });
+
+  const members = await extractArchiveDirectory({
+    archive,
+    directory: "cht/Nintendo - Game Boy",
+    sourceRoot,
+  });
+
+  assert.deepEqual(members, [
+    "cht/Nintendo - Game Boy/Sub/Nested.CHT",
+    "cht/Nintendo - Game Boy/Zelda (USA).cht",
+  ]);
+  assert.equal(readFileSync(join(sourceRoot, members[1]), "utf8"), 'cheat0_desc = "Lives"\n');
+  assert.throws(() => readFileSync(join(sourceRoot, "cht/Nintendo - Game Boy/README.md")));
+  assert.throws(() => readFileSync(join(sourceRoot, "cht/Nintendo - Game Boy Color/Other.cht")));
+  assert.throws(() => readFileSync(join(sourceRoot, "dats/a.dat")));
 });
