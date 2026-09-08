@@ -131,18 +131,6 @@ const getApplyOutputVerification = ({
   return null;
 };
 
-const getCheatDatabaseSystem = (platform: string | undefined, fileName: string): CheatDatabaseSystem | undefined => {
-  const value = String(platform || "").toLocaleLowerCase("en-US");
-  if (value.includes("super nintendo") || value === "snes") return "snes";
-  if (value.includes("nintendo entertainment system") || value === "nes") return "nes";
-  if (value.includes("mega drive") || value.includes("genesis")) return "genesis";
-  if (value.includes("game boy advance") || /\.gba$/iu.test(fileName)) return "gameboyadvance";
-  if (value.includes("game boy") || /\.gbc?$/iu.test(fileName)) {
-    return /\.gbc$/iu.test(fileName) ? "gameboy-color" : "gameboy";
-  }
-  return undefined;
-};
-
 const manualCheatId = (system: CheatDatabaseSystem, code: string, kind: string): string => {
   let hash = 2_166_136_261;
   for (const character of `${system}\0${kind}\0${code}`) {
@@ -1483,7 +1471,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
   const cheatRomRow = cheatUiState.romInputs.length === 1 ? cheatUiState.romInputs[0] : undefined;
   const cheatFileName = cheatRomRow?.info.fileName || cheatRomRow?.info.archiveName || "";
-  const cheatSystem = getCheatDatabaseSystem(cheatRomRow?.info.romType?.platform, cheatFileName);
+  const cheatPlatform = cheatRomRow?.info.romType?.platform;
   const cheatChecksums = useMemo(() => {
     if (!cheatRomRow) return undefined;
     const values: Record<string, string[]> = {};
@@ -1508,11 +1496,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             checksums: cheatChecksums,
             fileName: cheatFileName,
             key: `${cheatRomRow.id}:${cheatRomRow.info.sha1 || cheatRomRow.info.crc32 || cheatFileName}`,
-            system: cheatSystem,
+            platform: cheatPlatform,
             title: cheatFileName,
           }
         : null,
-    [cheatChecksums, cheatFileName, cheatRomRow, cheatSystem],
+    [cheatChecksums, cheatFileName, cheatPlatform, cheatRomRow],
   );
   const getCheatSource = useCallback(() => {
     const source = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources().rom?.source;

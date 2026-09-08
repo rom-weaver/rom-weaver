@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CheatDatabaseSection } from "../../../src/public/react/components/cheat-database-section.tsx";
 import type {
+  CheatDatabaseIndex,
   CheatSystemShard,
   ClassifiedCheatRecord,
   DatabaseCheatClassifier,
@@ -110,8 +111,29 @@ const importLocalCheatFile: LocalCheatFileImporter = async ({ fileName }) => [
   },
 ];
 
+const SNES = "Nintendo - Super Nintendo Entertainment System";
+
+const index: CheatDatabaseIndex = {
+  sourceRevision: "abc123",
+  sourceUrl: "https://github.com/libretro/libretro-database",
+  license: "CC-BY-SA-4.0",
+  entries: [
+    {
+      platform: SNES,
+      slug: "nintendo-super-nintendo-entertainment-system",
+      cheatSystem: "snes",
+      file: "cheats-nintendo-super-nintendo-entertainment-system.json",
+      rawBytes: 100,
+      sha256: "a".repeat(64),
+      games: 1,
+      cheats: 4,
+    },
+  ],
+};
+
 const props = {
-  rom: { key: "rom-a", system: "snes", title: "Super Mario World", checksums: { sha1: "aa11" } },
+  rom: { key: "rom-a", platform: SNES, title: "Super Mario World", checksums: { sha1: "aa11" } },
+  index,
   shard,
   classifyDatabaseCheats,
   importLocalCheatFile,
@@ -199,7 +221,7 @@ describe("CheatDatabaseSection", () => {
     fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "7E0010FF" } });
     fireEvent.change(view.getByLabelText("Code type"), { target: { value: "pro-action-replay" } });
     fireEvent.click(view.getByRole("button", { name: "Check code" }));
-    await view.findByText(/Detected SNES · Action Replay/u);
+    await view.findByText(/Detected Nintendo - Super Nintendo Entertainment System · Action Replay/u);
     fireEvent.click(view.getByRole("button", { name: "Add this cheat" }));
     expect(onSelectionChange).toHaveBeenLastCalledWith([
       expect.objectContaining({ record: expect.objectContaining({ id: "manual-1" }) }),
@@ -275,15 +297,35 @@ describe("CheatDatabaseSection", () => {
     const view = render(
       <CheatDatabaseSection
         {...props}
-        rom={{ key: "unknown", system: "snes", title: "Unknown game", checksums: { sha1: "no-match" } }}
+        rom={{ key: "unknown", platform: SNES, title: "Unknown game", checksums: { sha1: "no-match" } }}
       />,
     );
-    fireEvent.change(view.getByLabelText("Browse games for SNES"), { target: { value: "smw-us" } });
+    fireEvent.change(view.getByLabelText(`Browse games for ${SNES}`), { target: { value: "smw-us" } });
     await view.findByText("Game selected manually");
     expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
     expect(view.container.querySelector(".cheat-database-section")?.className).toContain("cheat-database-section");
     expect(
       view.container.querySelectorAll('input, select, textarea, button[aria-expanded="true"]').length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("CheatDatabaseSection platform resolution", () => {
+  it("reports a platform the index does not cover as unsupported", async () => {
+    const view = render(
+      <CheatDatabaseSection {...props} rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }} />,
+    );
+    await view.findByText("Unsupported system");
+    expect(view.queryByText("Import RetroArch .cht")).toBeNull();
+  });
+
+  it("resolves the loosely formatted tag ingest reports to the index platform", async () => {
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        rom={{ key: "rom-c", platform: "Nintendo Super Nintendo Entertainment System", checksums: { sha1: "aa11" } }}
+      />,
+    );
+    await view.findByText("Exact ROM revision matched");
   });
 });

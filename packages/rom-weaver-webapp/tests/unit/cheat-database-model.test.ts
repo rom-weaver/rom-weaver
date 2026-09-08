@@ -3,7 +3,10 @@ import {
   filterCheats,
   matchCheatGame,
   reconcileSelectedCheatIds,
+  resolveCheatDatabaseEntry,
   selectManualGame,
+  type CheatDatabaseEntry,
+  type CheatDatabaseIndex,
   type CheatDatabaseRecord,
   type CheatSystemShard,
   type ClassifiedCheatRecord,
@@ -81,25 +84,99 @@ const classified: ClassifiedCheatRecord[] = [
   },
 ];
 
+const entryFor = (
+  platform: string,
+  slug: string,
+  cheatSystem: CheatDatabaseEntry["cheatSystem"],
+): CheatDatabaseEntry => ({
+  platform,
+  slug,
+  cheatSystem,
+  file: `cheats-${slug}.json`,
+  rawBytes: 10,
+  sha256: "b".repeat(64),
+  games: 1,
+  cheats: 1,
+});
+
+const snesEntry = entryFor(
+  "Nintendo - Super Nintendo Entertainment System",
+  "nintendo-super-nintendo-entertainment-system",
+  "snes",
+);
+const gameBoyEntry = entryFor("Nintendo - Game Boy", "nintendo-game-boy", "gameboy");
+const gameBoyColorEntry = entryFor("Nintendo - Game Boy Color", "nintendo-game-boy-color", "gameboy-color");
+const index: CheatDatabaseIndex = {
+  sourceRevision: "abc123",
+  sourceUrl: "https://github.com/libretro/libretro-database",
+  license: "CC-BY-SA-4.0",
+  entries: [snesEntry, gameBoyEntry, gameBoyColorEntry],
+};
+const catalog = {
+  format: "rom-weaver-identify-catalog-v1",
+  platforms: [
+    {
+      aliases: ["snes", "super famicom"],
+      canonicalPlatform: "Nintendo - Super Nintendo Entertainment System",
+      mediaProfiles: [],
+      packFormat: "RWFP1",
+      packSha256: "",
+      packSlug: "nintendo-super-nintendo-entertainment-system",
+      source: "libretro" as const,
+    },
+  ],
+};
+
 describe("cheat database catalog", () => {
   it("matches a known checksum before it considers the title", () => {
     expect(
-      matchCheatGame({ key: "rom-a", system: "snes", title: "Wrong title", checksums: { sha1: "aa11" } }, shard),
+      matchCheatGame(
+        { key: "rom-a", platform: snesEntry.platform, title: "Wrong title", checksums: { sha1: "aa11" } },
+        snesEntry,
+        shard,
+      ),
     ).toMatchObject({ kind: "exact", game: { id: "smw-us" } });
   });
 
   it("marks a title-only and manual match as unverified", () => {
     expect(
-      matchCheatGame({ key: "rom-a", system: "snes", fileName: "Super Mario World (Europe).sfc" }, shard),
+      matchCheatGame(
+        { key: "rom-a", platform: snesEntry.platform, fileName: "Super Mario World (Europe).sfc" },
+        snesEntry,
+        shard,
+      ),
     ).toMatchObject({ kind: "title", game: { id: "smw-us" } });
     expect(selectManualGame(shard, "smw-us")).toMatchObject({ kind: "manual", game: { id: "smw-us" } });
   });
 
   it("does not offer unsupported systems", () => {
-    expect(matchCheatGame({ key: "rom-a", system: "n64" }, undefined)).toEqual({
+    expect(matchCheatGame({ key: "rom-a", platform: "Nintendo - Nintendo 64" }, undefined, undefined)).toEqual({
       kind: "unsupported-system",
-      system: "n64",
+      platform: "Nintendo - Nintendo 64",
     });
+  });
+
+  it("resolves a platform tag through the identify catalog aliases", () => {
+    expect(resolveCheatDatabaseEntry(index, catalog, { platform: "super famicom" })).toBe(snesEntry);
+    expect(
+      resolveCheatDatabaseEntry(index, catalog, { platform: "Nintendo Super Nintendo Entertainment System" }),
+    ).toBe(snesEntry);
+    expect(resolveCheatDatabaseEntry(index, catalog, { platform: "Nintendo - Nintendo 64" })).toBeUndefined();
+    expect(resolveCheatDatabaseEntry(index, catalog, null)).toBeUndefined();
+    expect(resolveCheatDatabaseEntry(undefined, catalog, { platform: "snes" })).toBeUndefined();
+  });
+
+  it("falls back to the index platform names without a catalog", () => {
+    expect(resolveCheatDatabaseEntry(index, undefined, { platform: "Nintendo Game Boy" })).toBe(gameBoyEntry);
+  });
+
+  it("uses the .gbc extension to split Game Boy Color from the shared Game Boy header", () => {
+    expect(resolveCheatDatabaseEntry(index, undefined, { platform: "Nintendo Game Boy", fileName: "a.gbc" })).toBe(
+      gameBoyColorEntry,
+    );
+    expect(resolveCheatDatabaseEntry(index, undefined, { platform: "Nintendo Game Boy", fileName: "a.gb" })).toBe(
+      gameBoyEntry,
+    );
   });
 
   it("searches descriptions and filters the Rust classification results", () => {

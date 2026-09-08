@@ -1,5 +1,6 @@
 const CHEAT_DATABASE_SYSTEMS = ["nes", "snes", "genesis", "gameboy", "gameboy-color", "gameboyadvance"] as const;
 
+/** The Rust `CheatSystem` identifier a shard's records carry. */
 export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
 
 type CheatCodeKind = "game-genie" | "pro-action-replay" | "xploder";
@@ -71,31 +72,34 @@ export type CheatSystemShard = {
   games: CheatGameRecord[];
 };
 
-type CheatDatabaseManifestSystem = {
-  path: string;
-  compressedPath: string;
-  label: string;
+/**
+ * One `cheats[]` row of the identify index: the shard for one identify
+ * platform. `file` is the data-dir file name the build staged under
+ * `assets/identify-`, and `sha256` is what the worker verifies before parsing.
+ */
+export type CheatDatabaseEntry = {
+  platform: string;
+  slug: string;
+  cheatSystem: CheatDatabaseSystem;
+  file: string;
+  rawBytes: number;
+  sha256: string;
   games: number;
   cheats: number;
-  rawBytes: number;
-  compressedBytes: number;
 };
 
-export type CheatDatabaseManifest = {
-  attributionPath: string;
-  licensePath: string;
-  schemaVersion: 1;
-  source: string;
+export type CheatDatabaseIndex = {
   sourceRevision: string;
   sourceUrl: string;
-  license: "CC-BY-SA-4.0";
-  systems: Partial<Record<CheatDatabaseSystem, CheatDatabaseManifestSystem>>;
+  license: string;
+  entries: CheatDatabaseEntry[];
 };
 
 export type CheatRomIdentity = {
   /** Changes whenever the original ROM changes, even when its title stays the same. */
   key: string;
-  system?: string;
+  /** The platform tag ingest reported for the ROM, resolved through the identify catalog. */
+  platform?: string;
   title?: string;
   fileName?: string;
   checksums?: Record<string, string | string[]>;
@@ -103,7 +107,7 @@ export type CheatRomIdentity = {
 
 export type CheatGameMatch =
   | { kind: "no-rom" }
-  | { kind: "unsupported-system"; system?: string }
+  | { kind: "unsupported-system"; platform?: string }
   | { kind: "exact"; game: CheatGameRecord }
   | { kind: "title"; game: CheatGameRecord }
   | { kind: "manual"; game: CheatGameRecord }

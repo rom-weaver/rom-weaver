@@ -1,16 +1,17 @@
 import { ChevronDown, Database, FileUp, Plus, Search } from "lucide-react";
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { IdentifyCatalog } from "../../../lib/identify/identify-catalog.ts";
 import {
   cheatDelivery,
   createCheatDatabaseClient,
   filterCheats,
-  isCheatDatabaseSystem,
   isSelectableCheat,
-  loadCheatDatabaseManifest,
   matchCheatGame,
+  parseCheatDatabaseIndex,
+  resolveCheatDatabaseEntry,
   selectManualGame,
   type CheatDatabaseClient,
-  type CheatDatabaseManifest,
+  type CheatDatabaseIndex,
   type CheatDatabaseSystem,
   type CheatFilter,
   type CheatGameMatch,
@@ -23,15 +24,25 @@ import {
   type ManualCheatResult,
   type LocalCheatFileImporter,
 } from "../../../lib/cheats/index.ts";
+import { loadIdentifyIndexAndCatalog } from "../../../platform/browser/identify-packs.ts";
 import "./cheat-database-section.css";
 
-const SYSTEM_LABELS: Record<CheatDatabaseSystem, string> = {
-  nes: "NES",
-  snes: "SNES",
-  genesis: "Sega Genesis / Mega Drive",
-  gameboy: "Game Boy",
-  "gameboy-color": "Game Boy Color",
-  gameboyadvance: "Game Boy Advance",
+type SystemOption = { value: CheatDatabaseSystem; label: string };
+
+/** `owner/repo` for the notice line; the index stores the repository URL. */
+const sourceName = (sourceUrl: string): string => {
+  try {
+    return new URL(sourceUrl).pathname.replace(/^\/+|\/+$/gu, "") || sourceUrl;
+  } catch {
+    return sourceUrl;
+  }
+};
+
+const loadCheatDatabase = async (): Promise<{ index: CheatDatabaseIndex; catalog: IdentifyCatalog | undefined }> => {
+  const { index, catalog } = await loadIdentifyIndexAndCatalog();
+  const parsed = parseCheatDatabaseIndex(index);
+  if (!parsed) throw new Error("This deployment ships no cheat database.");
+  return { index: parsed, catalog };
 };
 
 const MAX_LOCAL_CHT_BYTES = 16 * 1024 * 1024;
@@ -159,11 +170,12 @@ const CheatRow = ({ record, checked, expanded, onToggle, onExpand }: CheatRowPro
 
 type ManualCodeFormProps = {
   defaultSystem: CheatDatabaseSystem;
+  systems: SystemOption[];
   classifier: ManualCheatClassifier;
   onAdd: (result: ManualCheatResult) => void;
 };
 
-const ManualCodeForm = ({ defaultSystem, classifier, onAdd }: ManualCodeFormProps) => {
+const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCodeFormProps) => {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("Manual cheat");
@@ -253,7 +265,7 @@ const ManualCodeForm = ({ defaultSystem, classifier, onAdd }: ManualCodeFormProp
                 }}
                 value={system}
               >
-                {Object.entries(SYSTEM_LABELS).map(([value, label]) => (
+                {systems.map(({ value, label }) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
@@ -283,7 +295,8 @@ const ManualCodeForm = ({ defaultSystem, classifier, onAdd }: ManualCodeFormProp
           {result ? (
             <div className="manual-cheat-result" role="status">
               <p>
-                Detected {SYSTEM_LABELS[result.detectedSystem]} · {result.detectedType}
+                Detected {systems.find(({ value }) => value === result.detectedSystem)?.label ?? result.detectedSystem}{" "}
+                · {result.detectedType}
               </p>
               <p>{deliveryCopy(result.record).text}</p>
               <button disabled={!isSelectableCheat(result.record)} onClick={() => onAdd(result)} type="button">
@@ -361,7 +374,9 @@ const LocalCheatFileForm = ({ importer, onImport, system }: LocalCheatFileFormPr
 
 export type CheatDatabaseSectionProps = {
   rom: CheatRomIdentity | null;
-  manifest?: CheatDatabaseManifest;
+  /** Test seams: a supplied index skips the identify index fetch. */
+  index?: CheatDatabaseIndex;
+  catalog?: IdentifyCatalog;
   shard?: CheatSystemShard;
   client?: CheatDatabaseClient;
   classifyManualCode: ManualCheatClassifier;
@@ -374,7 +389,8 @@ export type CheatDatabaseSectionProps = {
 
 export const CheatDatabaseSection = ({
   rom,
-  manifest,
+  index,
+  catalog,
   shard: suppliedShard,
   client: suppliedClient,
   classifyManualCode,
@@ -385,7 +401,8 @@ export const CheatDatabaseSection = ({
   validationMessage,
 }: CheatDatabaseSectionProps) => {
   const [loadedShard, setLoadedShard] = useState<CheatSystemShard>();
-  const [loadedManifest, setLoadedManifest] = useState<CheatDatabaseManifest>();
+  const [loadedIndex, setLoadedIndex] = useState<CheatDatabaseIndex>();
+  const [loadedCatalog, setLoadedCatalog] = useState<IdentifyCatalog>();
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
@@ -401,8 +418,13 @@ export const CheatDatabaseSection = ({
   const previousGameId = useRef<string | undefined>(undefined);
   selectionCallback.current = onSelectionChange;
 
-  const system = isCheatDatabaseSystem(rom?.system) ? rom.system : undefined;
-  const activeManifest = manifest ?? loadedManifest;
+  const activeIndex = index ?? loadedIndex;
+  const activeCatalog = catalog ?? loadedCatalog;
+  const entry = useMemo(
+    () => resolveCheatDatabaseEntry(activeIndex, activeCatalog, rom),
+    [activeCatalog, activeIndex, rom],
+  );
+  const system = entry?.cheatSystem;
   const identityKey = rom?.key;
   useEffect(() => {
     if (identityKey === "") return;
@@ -415,12 +437,14 @@ export const CheatDatabaseSection = ({
   }, [identityKey]);
 
   useEffect(() => {
-    if (manifest || suppliedClient || suppliedShard) return;
+    if (index) return;
     let active = true;
     setLoadError("");
-    void loadCheatDatabaseManifest()
-      .then((nextManifest) => {
-        if (active) setLoadedManifest(nextManifest);
+    void loadCheatDatabase()
+      .then((loaded) => {
+        if (!active) return;
+        setLoadedIndex(loaded.index);
+        setLoadedCatalog(loaded.catalog);
       })
       .catch((reason: unknown) => {
         if (active) setLoadError(reason instanceof Error ? reason.message : "The cheat database is unavailable.");
@@ -428,19 +452,19 @@ export const CheatDatabaseSection = ({
     return () => {
       active = false;
     };
-  }, [manifest, suppliedClient, suppliedShard]);
+  }, [index]);
 
   useEffect(() => {
-    if (suppliedShard || !system || !(suppliedClient || activeManifest)) {
+    if (suppliedShard || !entry) {
       setLoadedShard(undefined);
       return;
     }
-    const client = suppliedClient ?? createCheatDatabaseClient(activeManifest as CheatDatabaseManifest);
+    const client = suppliedClient ?? createCheatDatabaseClient();
     let active = true;
     setLoading(true);
     setLoadError("");
     void client
-      .loadSystem(system)
+      .loadShard(entry)
       .then((nextShard) => {
         if (active) setLoadedShard(nextShard);
       })
@@ -454,10 +478,10 @@ export const CheatDatabaseSection = ({
       active = false;
       if (!suppliedClient) client.close();
     };
-  }, [activeManifest, suppliedClient, suppliedShard, system]);
+  }, [entry, suppliedClient, suppliedShard]);
 
   const shard = suppliedShard ?? loadedShard;
-  const automaticMatch = useMemo(() => matchCheatGame(rom, shard), [rom, shard]);
+  const automaticMatch = useMemo(() => matchCheatGame(rom, entry, shard), [entry, rom, shard]);
   const match = manualGameId ? selectManualGame(shard, manualGameId) : automaticMatch;
   const game = matchGame(match);
   const gameId = game?.id;
@@ -552,9 +576,9 @@ export const CheatDatabaseSection = ({
         </p>
       ) : null}
 
-      {rom && system && shard && match.kind !== "exact" ? (
+      {rom && entry && shard && match.kind !== "exact" ? (
         <label className="cheat-game-picker">
-          <span>Browse games for {SYSTEM_LABELS[system]}</span>
+          <span>Browse games for {entry.platform}</span>
           <select onChange={(event) => setManualGameId(event.target.value)} value={manualGameId}>
             <option value="">Use automatic match</option>
             {shard.games.map((candidate) => (
@@ -632,7 +656,15 @@ export const CheatDatabaseSection = ({
             onImport={addImportedRecords}
             system={system}
           />
-          <ManualCodeForm classifier={classifyManualCode} defaultSystem={system} onAdd={addManualRecord} />
+          <ManualCodeForm
+            classifier={classifyManualCode}
+            defaultSystem={system}
+            onAdd={addManualRecord}
+            systems={(activeIndex?.entries ?? []).map((candidate) => ({
+              label: candidate.platform,
+              value: candidate.cheatSystem,
+            }))}
+          />
         </>
       ) : null}
 
@@ -656,9 +688,9 @@ export const CheatDatabaseSection = ({
       <aside className="cheat-notices">
         <p>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</p>
         <p>RAM cheats need a compatible RetroArch core or emulator. ROMWeaver does not upload ROM data or checksums.</p>
-        {activeManifest ? (
+        {activeIndex ? (
           <p>
-            Database: {activeManifest.source} at {activeManifest.sourceRevision} · {activeManifest.license}
+            Database: {sourceName(activeIndex.sourceUrl)} at {activeIndex.sourceRevision} · {activeIndex.license}
           </p>
         ) : null}
         <p>Each system becomes available offline after it loads once.</p>

@@ -1,13 +1,44 @@
+import { type IdentifyCatalog, normalizePlatformAlias, resolveCatalogPlatform } from "../identify/identify-catalog.ts";
 import {
   cheatDelivery,
   type ClassifiedCheatRecord,
+  type CheatDatabaseEntry,
+  type CheatDatabaseIndex,
   type CheatFilter,
   type CheatGameMatch,
   type CheatGameRecord,
   type CheatRomIdentity,
   type CheatSystemShard,
-  isCheatDatabaseSystem,
 } from "./model.ts";
+
+const GAME_BOY_SLUG = "nintendo-game-boy";
+const GAME_BOY_COLOR_SLUG = "nintendo-game-boy-color";
+
+/**
+ * Pick the shard for a ROM's platform tag. The identify catalog owns the alias
+ * rules, so whatever name ingest reported resolves to the same pack slug the
+ * identify run uses; a deployment without a catalog falls back to comparing
+ * normalized platform names against the index rows.
+ */
+export const resolveCheatDatabaseEntry = (
+  index: CheatDatabaseIndex | undefined,
+  catalog: IdentifyCatalog | undefined,
+  identity: Pick<CheatRomIdentity, "platform" | "fileName"> | null,
+): CheatDatabaseEntry | undefined => {
+  const platform = identity?.platform;
+  if (!(index && platform)) return undefined;
+  let slug = resolveCatalogPlatform(catalog, platform)?.packSlug;
+  if (!slug) {
+    const normalized = normalizePlatformAlias(platform);
+    slug = index.entries.find((entry) => normalizePlatformAlias(entry.platform) === normalized)?.slug;
+  }
+  // Game Boy and Game Boy Color share one header layout, so ingest tags both
+  // as Game Boy; the file extension is the one signal that separates them.
+  if (slug === GAME_BOY_SLUG && /\.gbc$/iu.test(identity?.fileName ?? "")) {
+    slug = index.entries.some((entry) => entry.slug === GAME_BOY_COLOR_SLUG) ? GAME_BOY_COLOR_SLUG : slug;
+  }
+  return index.entries.find((entry) => entry.slug === slug);
+};
 
 const normalizeText = (value: string): string =>
   value
@@ -26,9 +57,13 @@ const checksumValues = (game: CheatGameRecord): Array<[string, string]> =>
     }),
   );
 
-export const matchCheatGame = (identity: CheatRomIdentity | null, shard?: CheatSystemShard): CheatGameMatch => {
+export const matchCheatGame = (
+  identity: CheatRomIdentity | null,
+  entry: CheatDatabaseEntry | undefined,
+  shard?: CheatSystemShard,
+): CheatGameMatch => {
   if (!identity) return { kind: "no-rom" };
-  if (!isCheatDatabaseSystem(identity.system)) return { kind: "unsupported-system", system: identity.system };
+  if (!entry) return { kind: "unsupported-system", platform: identity.platform };
   if (!shard) return { kind: "none" };
 
   const checksums = new Map(
