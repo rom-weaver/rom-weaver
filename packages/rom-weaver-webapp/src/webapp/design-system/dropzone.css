@@ -327,12 +327,41 @@
   stroke-width: 2.2;
 }
 .rw-app .drop.hero .formats {
-  display: flex;
+  display: grid;
   flex: none;
-  flex-wrap: wrap;
   gap: var(--sp-xs);
-  justify-content: center;
   width: min(100%, 46rem);
+  padding-block-end: clamp(8px, min(3vw, 2.6svh), 24px);
+  margin-block-start: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Fade format pills before the clipped edges. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+}
+.rw-app .drop.hero .formats-lane {
+  min-width: 0;
+  overflow: hidden;
+}
+.rw-app .drop.hero .formats-track {
+  display: flex;
+  gap: var(--sp-xs);
+  width: max-content;
+  backface-visibility: hidden;
+  animation: formats-ticker 120s linear infinite;
+  /* Start the marquee at the phase a loop running since the epoch would be at:
+     --wall-clock is stamped with the current epoch-seconds at mount (see
+     layout.tsx / index.html), so a reload or remount resumes mid-stride
+     instead of restarting at 0. Unset (SSR / no JS) falls back to 0s. */
+  animation-delay: calc(-1 * mod(var(--wall-clock, 0s), 120s));
+  will-change: transform;
+}
+.rw-app .drop.hero .formats-lane:nth-child(2) .formats-track {
+  animation-direction: reverse;
+}
+.rw-app .drop.hero .formats-set {
+  display: flex;
+  gap: var(--sp-xs);
 }
 .rw-app .drop.hero .fmt {
   flex: none;
@@ -344,6 +373,30 @@
   background: var(--plate);
   border: 1px solid var(--seam);
   border-radius: 99px;
+}
+@keyframes formats-ticker {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(calc(-50% - 2.5px), 0, 0);
+  }
+}
+/* iOS WebKit may omit masked animation on first paint. */
+@supports (-webkit-touch-callout: none) {
+  .rw-app .drop.hero .formats {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .drop.hero .formats-track {
+    margin-inline: auto;
+    animation: none;
+  }
+  .rw-app .drop.hero .formats-set + .formats-set {
+    display: none;
+  }
 }
 .rw-app .hero-formats-help {
   padding: 0 var(--pad) var(--sp-s);
@@ -571,9 +624,9 @@
      margin that keeps the headline off the seam instead of flush against it. */
   padding-block: clamp(12px, 2.4svh, 28px);
 }
-/* The hero MUST reserve space for its checksum form or collapsed disclosure. */
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash-disclosure) {
-  --hero-extra-h: 44px;
+/* The hero MUST reserve space for its visible checksum form. */
+.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash) {
+  --hero-extra-h: 100px;
 }
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;

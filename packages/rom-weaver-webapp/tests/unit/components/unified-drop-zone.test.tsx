@@ -28,12 +28,9 @@ describe("UnifiedDropZone", () => {
     expect(step?.querySelector(".step-num")?.textContent).toBe("0x01");
     expect(step?.querySelector(".step-title")?.textContent).toBe("Inputs");
     expect(step?.querySelector(".drop.hero.bare")).toBeTruthy();
-    expect(Array.from(step?.querySelectorAll(".formats .fmt") || []).map((pill) => pill.textContent)).toEqual([
-      "nes",
-      "zip",
-      "sfc",
-      "ips",
-    ]);
+    expect(
+      Array.from(step?.querySelectorAll(".formats-set:first-child .fmt") || []).map((pill) => pill.textContent),
+    ).toEqual(["sfc", "nes", "ips", "zip"]);
     expect(step?.querySelector(".hint")).toBeNull();
     expect(step?.querySelector("input[type=file]")?.id).toBe("rom-weaver-input-file-unified");
   });
@@ -60,7 +57,7 @@ describe("UnifiedDropZone", () => {
         supported={[{ label: "ROMs", extensions: ["sfc", "nes", "iso", "bin", "gba", "nds"] }]}
       />,
     );
-    expect(container.querySelectorAll(".formats .fmt")).toHaveLength(4);
+    expect(container.querySelectorAll(".formats-set:first-child .fmt")).toHaveLength(6);
     const disclosure = container.querySelector("details.hero-formats-help");
     expect(disclosure?.hasAttribute("open")).toBe(false);
     expect(disclosure?.querySelector("summary")?.textContent).toBe("Supported formats");

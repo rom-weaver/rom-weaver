@@ -2088,9 +2088,7 @@ function ApplyWorkflowFormView({
             />
             {/* Apply keeps checksum lookup available without competing with the
                 primary file-drop action. The form moves to 0x02 after a match. */}
-            {canSearchRomHash && workflowEmpty ? (
-              <RomHashSearch localizer={localizer} lookup={romHashLookup} variant="disclosure" />
-            ) : null}
+            {canSearchRomHash && workflowEmpty ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
           </>
         }
         big={workflowEmpty}
