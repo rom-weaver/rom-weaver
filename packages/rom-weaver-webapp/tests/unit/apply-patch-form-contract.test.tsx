@@ -323,6 +323,10 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     await vi.waitFor(() => expect(applyButton.disabled).toBe(false));
     await act(async () => fireEvent.click(applyButton));
     await vi.waitFor(() => expect(latestFakeWorkflow?.run).toHaveBeenCalled());
+    // The run replaces the primary action with the progress panel, which carries
+    // the progress id and not the button id, so the button is only queryable
+    // again once the output has landed.
+    await vi.waitFor(() => expect(container.textContent).toContain("Download Patched"));
 
     latestFakeWorkflow?.__setSaveError(new Error("download failed"));
     const download = container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
