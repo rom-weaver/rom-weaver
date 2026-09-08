@@ -28,19 +28,29 @@ const rootDir = process.cwd();
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
+const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
+// Packs and cheat shards ship only as `.br` sidecars; the license text is
+// inlined into the attribution bundle instead of served as an asset.
 const identifyDataSources = Object.fromEntries(
   fs
     .readdirSync(identifyDataDir)
-    .filter((name) => !name.endsWith(".pack"))
+    .filter((name) => {
+      if (name.endsWith(".pack")) return false;
+      if (name.startsWith("cheats-") && name.endsWith(".json")) return false;
+      return name !== identifyDataIndex.sources?.libretro?.licenseFile;
+    })
     .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
-const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
 const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
 const identifyPackEntry = (system) => ({
   sha256: system.sha256,
   sizeBytes: system.rawBytes || 0,
   url: `assets/identify-${system.file}?sha256=${system.sha256}`,
 });
+// A cheat shard installs with the group that owns its platform's pack, so the
+// Settings toggle, the warm-up and `install-group` all carry cheats along.
+const identifyCheatEntriesForSlugs = (slugs) =>
+  (identifyDataIndex.cheats ?? []).filter((entry) => slugs.includes(entry.slug)).map(identifyPackEntry);
 // Default packs are downloaded by the background warm-up rather than precached:
 // they are three quarters of what a first visit would otherwise pull down, and
 // an identify run fetches whatever it needs on demand long before the warm-up
@@ -53,7 +63,11 @@ const identifyChecksumRouterEntries = identifyDataIndex.checksumRoutes
 const identifyDefaultPackGroup = {
   id: "default",
   label: "Built-in systems",
-  packs: [...identifyPackGroups.defaultSystems.map(identifyPackEntry), ...identifyChecksumRouterEntries],
+  packs: [
+    ...identifyPackGroups.defaultSystems.map(identifyPackEntry),
+    ...identifyCheatEntriesForSlugs(identifyPackGroups.defaultSystems.map((system) => system.slug)),
+    ...identifyChecksumRouterEntries,
+  ],
   required: true,
 };
 const identifyOptionalPackGroups = [
@@ -63,17 +77,19 @@ const identifyOptionalPackGroups = [
     .map((group) => ({
       id: group.id,
       label: group.label,
-      packs: group.systems.map((slug) => {
-        const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
-        if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
-        return identifyPackEntry(system);
-      }),
+      packs: [
+        ...group.systems.map((slug) => {
+          const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
+          if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
+          return identifyPackEntry(system);
+        }),
+        ...identifyCheatEntriesForSlugs(group.systems),
+      ],
     })),
 ];
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootAssetDir = path.join(rootDir, "src", "assets", "app", "root");
-const cheatDatabaseAssetDir = path.join(rootDir, "public", "cheats");
 const docsScreenshotSources = Object.fromEntries(
   DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
@@ -293,30 +309,6 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
     if (destination) {
       res.writeHead(301, { Location: `/${destination}${req.url.slice(requestPath.length)}` });
       res.end();
-      return;
-    }
-    if (requestPath.startsWith("/cheats/")) {
-      const relativePath = requestPath.slice("/cheats/".length);
-      const segments = relativePath.split("/");
-      if (!relativePath || segments.some((segment) => !segment || segment === "." || segment === "..")) {
-        next();
-        return;
-      }
-      const sourcePath = path.join(cheatDatabaseAssetDir, ...segments);
-      if (!isRegularFile(sourcePath)) {
-        next();
-        return;
-      }
-      fs.readFile(sourcePath, (err, source) => {
-        if (err) {
-          next(err);
-          return;
-        }
-        res.statusCode = 200;
-        setRootStaticAssetContentType(requestPath, res);
-        res.setHeader("Cache-Control", "no-cache");
-        res.end(source);
-      });
       return;
     }
     const generatedSampleAsset = getGeneratedSampleAsset(requestPath);
@@ -574,7 +566,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
     closeBundle() {
       const distDir = path.resolve(rootDir, outDir);
       copyEmulatorJsAssets(distDir);
-      fs.cpSync(cheatDatabaseAssetDir, path.join(distDir, "cheats"), { recursive: true });
       const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
       for (const assetPath of Object.keys(rootStaticAssetSources)) {
         const outputPath = path.join(distDir, assetPath);
@@ -810,8 +801,9 @@ const writePrecacheSizes =
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
-// siblings directly. Cheat shards use their imported sidecars too. Compressed
-// formats stay on the ordinary static path. Mutable root files stay off this path.
+// siblings directly. Already-compressed formats (woff2, png, zip) fail the
+// savings bar and stay on the ordinary static path. Mutable root files (such
+// as index.html, the service worker, and changelog.json) stay off this path.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
 // _routes.json rejects more than 100 combined include/exclude entries, so this
 // is the hard ceiling rather than an early warning. The 17 identify packs ate
@@ -851,15 +843,15 @@ const writeBrotliSidecars = () => {
           `${assetUrl} has a brotli sidecar but no entry in SIDECAR_CONTENT_TYPES (functions/assets/content-types.js); add its content type there`,
         );
       };
-      const cheatSidecarAssetUrls = fs
-        .readdirSync(path.join(distDir, "cheats"))
-        .filter((name) => name.endsWith(".json.br"))
-        .map((name) => `/cheats/${name.slice(0, -3)}`);
-      const sidecarUrls = [`/assets/${wasmNames[0]}`, ...(cheatSidecarAssetUrls.length > 0 ? ["/cheats/*"] : [])];
-      for (const assetUrl of [`/assets/${wasmNames[0]}`, ...cheatSidecarAssetUrls]) {
-        assertSidecarTypeIsKnown(assetUrl);
-      }
-      if (fs.readdirSync(assetsDir).some((name) => name.startsWith("identify-") && name.endsWith(".pack.br"))) {
+      const sidecarUrls = [`/assets/${wasmNames[0]}`];
+      assertSidecarTypeIsKnown(sidecarUrls[0]);
+      // Packs and cheat shards are staged as `.br`-only sidecars, all under one
+      // wildcard include; each still needs a known content type.
+      const identifySidecars = fs
+        .readdirSync(assetsDir)
+        .filter((name) => name.startsWith("identify-") && (name.endsWith(".pack.br") || name.endsWith(".json.br")));
+      if (identifySidecars.length > 0) {
+        for (const name of identifySidecars) assertSidecarTypeIsKnown(`/assets/${name.slice(0, -3)}`);
         sidecarUrls.push("/assets/identify-*");
       }
       for (const name of fs.readdirSync(assetsDir)) {
@@ -1387,7 +1379,13 @@ export default defineConfig(({ command, mode }) => {
           manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
           // The checksum router is warm-up data like the packs, so neither
           // the raw file nor its brotli sidecar joins the precache.
-          globIgnores: ["**/*.map", "assets/identify-*.pack.br", "assets/identify-*.bin", "assets/identify-*.bin.br"],
+          globIgnores: [
+            "**/*.map",
+            "assets/identify-*.pack.br",
+            "assets/identify-*.bin",
+            "assets/identify-*.bin.br",
+            "assets/identify-cheats-*.json.br",
+          ],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
             // offline, a route the user has not visited yet has nothing in the runtime

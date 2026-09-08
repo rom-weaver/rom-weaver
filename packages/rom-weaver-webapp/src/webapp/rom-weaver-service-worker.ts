@@ -204,15 +204,11 @@ const getAppBasePath = () => {
 const APP_BASE_PATH = getAppBasePath().replace(/\/?$/, "/");
 const EMULATORJS_MANIFEST_PATH = `${APP_BASE_PATH}emulatorjs/manifest.json`;
 const EMULATORJS_DATA_PATH_PREFIX = `${APP_BASE_PATH}emulatorjs/data/`;
-const CHEAT_DATABASE_PATH_PREFIX = `${APP_BASE_PATH}cheats/`;
 
 const isEmulatorJsAssetRequest = (request: Request, url: URL) =>
   request.method === "GET" &&
   isSameOriginRequest(url) &&
   (url.pathname === EMULATORJS_MANIFEST_PATH || url.pathname.startsWith(EMULATORJS_DATA_PATH_PREFIX));
-
-const isCheatDatabaseRequest = (request: Request, url: URL) =>
-  request.method === "GET" && isSameOriginRequest(url) && url.pathname.startsWith(CHEAT_DATABASE_PATH_PREFIX);
 
 const isManifestRequest = (request: Request, url: URL) =>
   request.destination === "manifest" || MANIFEST_PATH_REGEX.test(url.pathname);
@@ -460,10 +456,11 @@ registerRoute(({ request, url }) => isEmulatorJsAssetRequest(request, url), serv
 /* Every pack now enters the same cache through the background warm-up, an
    explicit group install, or an on-demand single-pack fetch during an identify
    run. Identify requests MUST stay local once cached. The checksum router
-   (`identify-checksum-routes.bin`) is a member of the default group and takes
-   the same path. */
+   (`identify-checksum-routes.bin`) and the cheat shards
+   (`identify-cheats-<slug>.json`) are members of their platform's group and
+   take the same path. */
 const isIdentifyPackRequest = (url: URL) =>
-  url.origin === self.location.origin && /\/assets\/identify-.*\.(?:pack|bin)$/u.test(url.pathname);
+  url.origin === self.location.origin && /\/assets\/identify-(?:.*\.(?:pack|bin)|cheats-.*\.json)$/u.test(url.pathname);
 
 // `priority: "low"` is a fetch priority hint (Chromium); other engines ignore
 // the field. It keeps warm-up traffic behind interactive requests.
@@ -498,25 +495,6 @@ const serveIdentifyPack = async ({ request }: { request: Request }) => {
 };
 
 registerRoute(({ url }) => isIdentifyPackRequest(url), serveIdentifyPack);
-
-// Shards stay out of the install precache. A successful first load makes that system available
-// offline, while an uncached offline request fails instead of showing stale or invented data.
-registerRoute(
-  ({ request, url }) => isCheatDatabaseRequest(request, url),
-  async ({ request }) => {
-    const cachedResponse = await matchCachedResponse(request, new URL(request.url));
-    if (cachedResponse) return cachedResponse;
-    try {
-      return await fetchAndUpdateCache(request);
-    } catch (err) {
-      logServiceWorker("cheat database request failed", {
-        error: formatError(err),
-        url: request.url,
-      });
-      return Response.error();
-    }
-  },
-);
 
 logServiceWorker("script initialized", {
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,

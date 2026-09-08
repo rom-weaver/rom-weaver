@@ -411,10 +411,10 @@ describe("worker log relay", () => {
 });
 
 describe("service worker bootstrap", () => {
-  it("registers the four runtime routes, the precache plugin and the warm-up", async () => {
+  it("registers the three runtime routes, the precache plugin and the warm-up", async () => {
     const harness = await loadWorker();
 
-    expect(hoisted.routes).toHaveLength(4);
+    expect(hoisted.routes).toHaveLength(3);
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith(DEFAULT_MANIFEST, {
       ignoreURLParametersMatching: [/^sha256$/],
     });
@@ -691,6 +691,9 @@ describe("identify pack route", () => {
     const matches = (request: Request) => match({ request, url: new URL(request.url) });
 
     expect(matches(new Request(PACK_URL))).toBe(true);
+    expect(matches(new Request(`${APP_ORIGIN}/assets/identify-checksum-routes.bin`))).toBe(true);
+    expect(matches(new Request(`${APP_ORIGIN}/assets/identify-cheats-nintendo-game-boy.json?sha256=aa`))).toBe(true);
+    expect(matches(new Request(`${APP_ORIGIN}/assets/identify-index.json`))).toBe(false);
     expect(matches(new Request(`${APP_ORIGIN}/assets/other.pack`))).toBe(false);
     expect(matches(new Request("https://other.test/assets/identify-computers.pack"))).toBe(false);
   });
