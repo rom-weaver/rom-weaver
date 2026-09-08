@@ -82,7 +82,7 @@ Facts to look up. No advice, no steps.
 Background that makes the rest make sense.
 
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
-- [ROM cheats and runtime cheats](explanation/rom-and-runtime-cheats.md): why some cheats change files while others need an emulator cheat file.
+- [ROM cheats](explanation/rom-cheats.md): why ROMWeaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why your files stay on your device](explanation/local-first.md): what local-first buys you and what it costs.
 - [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.

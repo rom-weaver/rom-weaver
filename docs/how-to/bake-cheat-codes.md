@@ -47,7 +47,17 @@ rom-weaver patch apply \
   --output game-coded.bin
 ```
 
-`--code-system` accepts `nes`, `snes`, `genesis`, `gameboy`, `gba`, and `psx`. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, and `xploder`.
+`--code-system` accepts `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gba`, and `psx`. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, and `xploder`.
+
+A Master System Game Genie code works the same way:
+
+```bash
+rom-weaver patch apply \
+  --input game.sms \
+  --code 00A-1FA \
+  --code-system sms \
+  --output game-coded.sms
+```
 
 Use `gba` with `--code-kind xploder` for raw Xploder Advance codes. The tool cannot bake GBA RAM writes into a ROM. GBA ROM-patch codes use four words, for example:
 

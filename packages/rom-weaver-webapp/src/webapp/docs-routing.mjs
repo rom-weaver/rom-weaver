@@ -82,9 +82,9 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/how-patching-works",
   }),
   Object.freeze({
-    file: "explanation/rom-and-runtime-cheats.md",
-    label: "ROM and runtime cheats",
-    slug: "docs/rom-and-runtime-cheats",
+    file: "explanation/rom-cheats.md",
+    label: "ROM cheats",
+    slug: "docs/rom-cheats",
   }),
   Object.freeze({ file: "explanation/local-first.md", label: "Why files stay local", slug: "docs/local-first" }),
   Object.freeze({ file: "explanation/patch-formats.md", label: "Patch formats", slug: "docs/patch-formats" }),

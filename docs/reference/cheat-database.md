@@ -15,26 +15,28 @@
 
 ## Supported systems
 
-| Database system | Rust decoder | ROM baking | Runtime export |
-| --- | --- | --- | --- |
-| Nintendo Entertainment System | NES | Yes | Yes |
-| Super Nintendo Entertainment System | SNES | Yes | Yes |
-| Sega Genesis / Mega Drive | Genesis | Yes | Yes |
-| Game Boy | Game Boy | Yes | Yes |
-| Game Boy Color | Compatible Game Boy codes | Yes | Yes |
-| Game Boy Advance | Xploder-compatible codes | Yes | Yes |
+| Database system | Rust decoders |
+| --- | --- |
+| Nintendo Entertainment System | Game Genie, Pro Action Replay |
+| Super Nintendo Entertainment System | Game Genie, Pro Action Replay |
+| Sega Genesis / Mega Drive | Game Genie, Pro Action Replay |
+| Sega 32X | Game Genie, Pro Action Replay |
+| Sega Master System | Game Genie, Pro Action Replay |
+| Sega Game Gear | Game Genie, Pro Action Replay |
+| Game Boy | Game Genie, GameShark |
+| Game Boy Color | Game Genie, GameShark |
+| Game Boy Advance | Xploder ROM-patch codes |
 
 ROMWeaver does not offer database systems outside this table.
 
 ## Delivery classes
 
-| Class | Output |
-| --- | --- |
-| ROM-bakeable | Ordered ROM write step |
-| Runtime | RetroArch `.cht` entry |
-| Mixed | Complete original `.cht` entry |
-| Requires parameter | Disabled until a value editor exists |
-| Unsupported | Disabled with a reason |
+| Class | Meaning | Output |
+| --- | --- | --- |
+| ROM cheat | Every subcode decodes to a cartridge ROM address | Ordered ROM write step |
+| Unsupported | The code cannot bake into the ROM | Disabled, with a reason |
+
+An unsupported row shows its reason and cannot be selected. Reasons include: the code targets runtime memory, some of its linked subcodes target runtime memory, the entry needs a parameter value, or the entry is a structured RetroArch memory entry rather than a native code.
 
 ## Match classes
 
@@ -61,13 +63,15 @@ The distribution includes the full license text and the source revision in the t
 
 Game titles and release checksums come from the same Libretro DAT files that build the platform's identify pack, so a cheat match and an identify match agree on the ROM.
 
+The build drops, before packaging, every record that can never bake: structured RetroArch entries, placeholder codes, and codes whose literal address is provably runtime memory for that system.
+
 ## Storage and network behavior
 
 Each shard is one identify data asset (`assets/identify-cheats-<platform slug>.json`) listed in the identify index with its size and SHA-256. The app loads only the detected or selected platform.
 
 A shard belongs to the same pack group as its platform's identify pack. The background warm-up downloads the default group, the Settings page installs optional groups, and the CLI `identify database install-group` installs the same shards natively. An uncached shard is fetched on demand when the Cheats section opens.
 
-All six shards are in the default group. Together they add about 6 MB to the default group download and about 83 MB of decoded JSON to the browser's cache storage.
+All nine shards are in the default group. Together they add about 4.5 MB to the default group download and about 58 MB of decoded JSON to the browser's cache storage.
 
 The service worker verifies each shard's SHA-256 before it stores it, and the parsing worker verifies it again before use. A shard that fails either check reports the database as unavailable.
 
@@ -79,11 +83,7 @@ The hosted app requests shards only from its own origin. It makes no runtime req
 
 Each imported record keeps the original code, every `cheatN_*` value, unknown fields, source file, source index, and source revision.
 
-The browser also accepts local RetroArch `.cht` files up to 16 MiB. Rust parses and classifies these records in the worker.
-
-The exporter renumbers selected entries from zero. It sets each selected entry to enabled and preserves the other fields.
-
-ROMWeaver does not synthesize RetroArch memory handlers. It only preserves tested native or structured source entries.
+ROMWeaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 
 ## Bundle status
 
@@ -91,4 +91,4 @@ Bundles do not store cheat selections in this release. Stable cheat IDs, source 
 
 For the browser task, see [Use cheats in the browser](../how-to/use-browser-cheats.md).
 
-For the delivery model, see [ROM cheats and runtime cheats](../explanation/rom-and-runtime-cheats.md).
+For the baking model, see [ROM cheats](../explanation/rom-cheats.md).
