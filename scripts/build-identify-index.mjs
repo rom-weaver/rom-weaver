@@ -882,6 +882,11 @@ async function writeCheatShard(platform, games, options) {
     releases: releasesFromIdentifyGames(games),
     sourceRevision: LIBRETRO_REVISION,
   });
+  // The freshness check expects one shard per CHEAT_PLATFORMS entry, so an
+  // entry that filters down to nothing is a configuration error, not a skip.
+  if (shard.games.length === 0) {
+    throw new Error(`${platform} has no bakeable cheats; remove it from CHEAT_PLATFORMS`);
+  }
   const fileName = cheatShardFileName(slug);
   const bytes = encodeCheatShard(shard);
   const outPath = path.join(options.outPath, fileName);
