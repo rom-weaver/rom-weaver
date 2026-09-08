@@ -400,6 +400,10 @@ fn check_archive_entry_size(size: u64, extracted_bytes: &mut u64) -> Result<()> 
     Ok(())
 }
 
+/// The Libretro license text the data build copies beside the packs; it
+/// travels with every archive because CC-BY-SA requires it.
+const LIBRETRO_LICENSE_FILE: &str = "libretro-database-LICENSE";
+
 #[cfg(not(target_arch = "wasm32"))]
 fn archive_directory_allowed(path: &Path) -> bool {
     [
@@ -424,6 +428,7 @@ fn archive_relative_path(path: &Path) -> Result<PathBuf> {
     })?;
     let allowed = relative == Path::new("index.json")
         || relative == Path::new("catalog.json")
+        || relative == Path::new(LIBRETRO_LICENSE_FILE)
         || (relative.parent() == Some(Path::new("packs"))
             && relative
                 .file_name()
@@ -795,6 +800,10 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
         }
         for (slug, pack) in &packs {
             write_group_atomic(&install.join(format!("{slug}.pack")), pack)?;
+        }
+        let license = stage.join(LIBRETRO_LICENSE_FILE);
+        if license.is_file() {
+            write_group_atomic(&install.join(LIBRETRO_LICENSE_FILE), &fs::read(&license)?)?;
         }
         if !cheats.is_empty() {
             fs::create_dir_all(install.join("cheats"))?;
@@ -1612,6 +1621,7 @@ mod tests {
             "share/rom-weaver/identify",
             ARCHIVE_PREFIX,
             "share/rom-weaver/identify/v1/packs",
+            "share/rom-weaver/identify/v1/cheats",
         ] {
             assert!(archive_directory_allowed(Path::new(allowed)));
         }
@@ -1637,6 +1647,21 @@ mod tests {
             archive_relative_path(Path::new("share/rom-weaver/identify/v1/packs/a.pack.br"))
                 .expect("pack path"),
             PathBuf::from("packs/a.pack.br")
+        );
+        assert_eq!(
+            archive_relative_path(Path::new("share/rom-weaver/identify/v1/cheats/a.json.br"))
+                .expect("cheat shard path"),
+            PathBuf::from("cheats/a.json.br")
+        );
+        assert_eq!(
+            archive_relative_path(Path::new(
+                "share/rom-weaver/identify/v1/libretro-database-LICENSE"
+            ))
+            .expect("license path"),
+            PathBuf::from("libretro-database-LICENSE")
+        );
+        assert!(
+            archive_relative_path(Path::new("share/rom-weaver/identify/v1/cheats/a.json")).is_err()
         );
         assert!(
             error_text(archive_relative_path(Path::new("etc/passwd")))

@@ -128,6 +128,15 @@ export const buildIdentifyReleaseData = (options) => {
       verifyBrotliPair(inputShard, `${inputShard}.br`, entry.file);
       return { ...entry, brotliFile: `cheats/${entry.slug}.json.br` };
     });
+  // CC-BY-SA requires the license text to travel with the adapted data, so
+  // every archive carries the copy the build placed in the data dir.
+  const licenseFile = index.sources?.libretro?.licenseFile;
+  if (typeof licenseFile !== "string" || basename(licenseFile) !== licenseFile) {
+    throw new Error(`${indexPath} names no Libretro license file`);
+  }
+  if (!existsSync(join(input, licenseFile))) {
+    throw new Error(`${join(input, licenseFile)} is missing; rebuild the identify data`);
+  }
   const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
   const resolvedGroups = resolveIdentifyPackGroups(index);
   const groups = resolvedGroups.groups.length
@@ -179,6 +188,7 @@ export const buildIdentifyReleaseData = (options) => {
           brotliSha256: sha256File(outputShard),
         };
       });
+    copyFileSync(join(input, licenseFile), join(dataDir, licenseFile));
     const archiveGroups = group.default ? groups : [group];
     // The checksum router is browser-only; a release archive never carries it.
     const { checksumRoutes: _checksumRoutes, ...indexWithoutRouter } = index;
