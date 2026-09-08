@@ -176,6 +176,24 @@ describe("Masthead", () => {
     expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
   });
 
+  it("marks More current on What's new, which has no rail tab of its own", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="whats-new" />));
+    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
+    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
+  });
+
+  it("keeps the What's new row a real link so a modified click opens it normally", () => {
+    const onSelectTab = vi.fn();
+    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    const row = getByRole("menuitem", { name: "What\u2019s new" }) as HTMLAnchorElement;
+    expect(row.getAttribute("href")).toBe("whats-new");
+    fireEvent.click(row, { ctrlKey: true });
+    expect(onSelectTab).not.toHaveBeenCalled();
+    fireEvent.click(row);
+    expect(onSelectTab).toHaveBeenCalledWith("whats-new");
+  });
+
   it("activates a tab with Space as well as Enter", () => {
     const onSelectTab = vi.fn();
     const { getAllByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));

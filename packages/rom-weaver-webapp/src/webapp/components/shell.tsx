@@ -660,16 +660,20 @@ const UtilityMenu = ({
       ) : null}
       <fieldset className="more-group">
         <legend className="more-group-label">{localizer.message("ui.tools.project")}</legend>
-        <button
-          onClick={() => {
-            if (onOpenWorkflowTab) select(() => onOpenWorkflowTab("whats-new"));
+        <a
+          data-more-workflow="whats-new"
+          href="whats-new"
+          onClick={(event) => {
+            if (!onOpenWorkflowTab) return;
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            select(() => onOpenWorkflowTab("whats-new"));
           }}
           role="menuitem"
-          type="button"
         >
           <Newspaper aria-hidden="true" />
           {localizer.message("ui.update.whatsNew")}
-        </button>
+        </a>
         {githubHref ? (
           <a
             href={githubHref}
@@ -1212,7 +1216,8 @@ const Masthead = ({
   const BrandHeading = currentTab === "docs" || currentTab === "home" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
   const moreTabs = tabs.filter(isMoreMenuTab);
-  const currentInMore = moreTabs.some((tab) => tab.id === currentTab);
+  // What's new has no WorkflowTab entry; it lives in More's Project group.
+  const currentInMore = currentTab === "whats-new" || moreTabs.some((tab) => tab.id === currentTab);
   const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
