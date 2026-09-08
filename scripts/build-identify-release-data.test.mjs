@@ -41,9 +41,22 @@ const fixture = ({ grouped = false } = {}) => {
         },
       ]
     : undefined;
+  const cheatShard = Buffer.from('{"schemaVersion":1,"system":"nes","games":[]}\n');
+  writeFileSync(join(input, "cheats-alpha.json"), cheatShard);
+  writeFileSync(join(input, "cheats-alpha.json.br"), brotliCompressSync(cheatShard));
+  const cheats = [
+    {
+      cheatSystem: "nes",
+      file: "cheats-alpha.json",
+      platform: "alpha",
+      rawBytes: cheatShard.length,
+      sha256: sha256(cheatShard),
+      slug: "alpha",
+    },
+  ];
   writeFileSync(
     join(input, "index.json"),
-    `${JSON.stringify({ checksumRoutes: { file: "checksum-routes.bin" }, format: "fixture", groups, systems })}\n`,
+    `${JSON.stringify({ cheats, checksumRoutes: { file: "checksum-routes.bin" }, format: "fixture", groups, systems })}\n`,
   );
   writeFileSync(join(input, "checksum-routes.bin"), Buffer.from("RWCR1 fixture router"));
   writeFileSync(join(input, "checksum-routes.bin.br"), Buffer.from("RWCR1 fixture router br"));
@@ -165,4 +178,40 @@ test("release indexes drop the browser-only checksum router", () => {
     assert.ok(!existsSync(join(optional.dataDir, "checksum-routes.bin")), optional.group);
   }
   assert.ok(!existsSync(join(built.dataDir, "checksum-routes.bin")));
+});
+
+test("cheat shards ride in the group that owns their platform pack", () => {
+  const { input, root } = fixture({ grouped: true });
+  const result = buildIdentifyReleaseData({
+    archive: join(root, "rom-weaver-identify-data.tar.br"),
+    input,
+    out: join(root, "release"),
+  });
+  const index = JSON.parse(readFileSync(join(result.dataDir, "index.json"), "utf8"));
+  assert.equal(result.cheats, 1);
+  assert.equal(index.cheats.length, 1);
+  assert.equal(index.cheats[0].brotliFile, "cheats/alpha.json.br");
+  const shard = join(result.dataDir, "cheats", "alpha.json.br");
+  assert.ok(existsSync(shard));
+  assert.equal(index.cheats[0].brotliSha256, sha256(readFileSync(shard)));
+  assert.ok(!existsSync(join(result.dataDir, "cheats-alpha.json")));
+  const optionalIndex = JSON.parse(
+    readFileSync(join(result.optional[0].dataDir, "index.json"), "utf8"),
+  );
+  assert.deepEqual(optionalIndex.cheats, []);
+  assert.equal(result.optional[0].cheats, 0);
+});
+
+test("rejects a cheat shard that does not match its index integrity fields", () => {
+  const { input, root } = fixture();
+  writeFileSync(join(input, "cheats-alpha.json"), "{}\n");
+  assert.throws(
+    () =>
+      buildIdentifyReleaseData({
+        archive: join(root, "rom-weaver-identify-data.tar.br"),
+        input,
+        out: join(root, "release"),
+      }),
+    /cheats-alpha\.json does not match index\.json/u,
+  );
 });
