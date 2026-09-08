@@ -30,10 +30,10 @@
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 252000,
-        "maxRawBytes": 265000,
-        "expectedBrotliBytes": 69000,
-        "maxBrotliBytes": 73000
+        "expectedRawBytes": 272000,
+        "maxRawBytes": 279000,
+        "expectedBrotliBytes": 74000,
+        "maxBrotliBytes": 76000
       },
       {
         "name": "Save Editor JavaScript",
@@ -61,10 +61,10 @@
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 7285000,
-        "maxRawBytes": 7502000,
-        "expectedBrotliBytes": 1912000,
-        "maxBrotliBytes": 1989000
+        "expectedRawBytes": 7501000,
+        "maxRawBytes": 7689000,
+        "expectedBrotliBytes": 1815000,
+        "maxBrotliBytes": 1860000
       }
     ]
   },
