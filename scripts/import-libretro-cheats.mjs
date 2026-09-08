@@ -43,9 +43,219 @@ export const CHEAT_PLATFORMS = Object.freeze({
     cheatSystem: "genesis",
     directory: "cht/Sega - Mega Drive - Genesis",
   },
+  "Sega - Master System - Mark III": {
+    cheatSystem: "mastersystem",
+    directory: "cht/Sega - Master System - Mark III",
+  },
+  "Sega - Game Gear": {
+    cheatSystem: "gamegear",
+    directory: "cht/Sega - Game Gear",
+  },
+  "Sega - 32X": {
+    cheatSystem: "sega32x",
+    directory: "cht/Sega - 32X",
+  },
 });
 
 export const cheatShardFileName = (slug) => `cheats-${slug}.json`;
+
+// Build-time prefilter: drop records the Rust classifier (crates/rom-weaver-cli/src/cheats)
+// can never bake into a ROM, so shards ship only candidates. A record survives
+// unless it is provably dead:
+//   - no native code (missing/empty rawCode), a structured RetroArch entry
+//     (the raw_fields the Rust `has_structured_runtime_semantics` list), or a
+//     `?`/`XX` parameter placeholder;
+//   - EVERY subcode decodes to a literal address the target system's ROM
+//     range can never contain. Subcodes are split the way Rust does (`+`, `,`,
+//     `;`, whitespace; the Xploder four-word grouping for gameboyadvance).
+// Per system, only a form whose address is unambiguous gets checked:
+//   nes            - Pro Action Replay hex (`:` stripped): addr < 0x8000 is RAM.
+//                    Letters-only Game Genie codes are always kept.
+//   snes           - only when the record's codeKind is pro-action-replay
+//                    (Game Genie is otherwise ambiguous until decoded against
+//                    the ROM): 24-bit addr in bank 7E/7F, or a system bank
+//                    with low < 0x2000, is RAM.
+//   genesis/sega32x- colon or 10-hex Pro Action Replay: addr >= 0xE00000 is
+//                    RAM. 8-char Game Genie codes are always kept.
+//   gameboy(-color)- 8-hex GameShark: addr >= 0x8000 is RAM. 6/9-digit Game
+//                    Genie codes are always kept.
+//   gameboyadvance - only the four-word Xploder ROM-patch form, or a decoded
+//                    address in 0x08000000..0x0A000000, counts as bakeable;
+//                    every other shape (runtime/conditional Xploder codes)
+//                    counts as RAM.
+//   mastersystem/  - `00AAAAVV` Pro Action Replay: addr >= 0xC000 is RAM.
+//   gamegear/sg1000  `AAAA:VV` Fusion RAM codes are always RAM. Game Genie
+//                    `DDA-AAA[-RXR]` codes are always kept.
+const STRUCTURED_RUNTIME_FIELDS = new Set([
+  "address",
+  "value",
+  "handler",
+  "memory_search_size",
+  "address_bit_position",
+  "big_endian",
+  "repeat_count",
+  "repeat_add_to_address",
+  "repeat_add_to_value",
+  "condition",
+  "condition_type",
+  "condition_address",
+  "condition_value",
+  "activation",
+]);
+
+const hasStructuredRuntimeSemantics = (record) =>
+  Object.keys(record.rawFields ?? {}).some((name) => STRUCTURED_RUNTIME_FIELDS.has(name));
+
+const containsParameterPlaceholder = (value) =>
+  value.includes("?") || value.toUpperCase().includes("XX");
+
+const isHex = (value, length) => value.length === length && /^[0-9a-fA-F]+$/u.test(value);
+
+// Mirrors Rust `split_codes`.
+const splitCodes = (input) =>
+  input
+    .split(/[+,;\s]+/u)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+
+const isGbaRomPatchWord = (token) => token.length === 8 && /^1[8aAcCeE]/u.test(token);
+
+// Mirrors Rust `split_xploder_codes`: a four-word GBA ROM-patch code stays
+// together as one item, a two-word raw code merges into one item.
+const splitXploderCodes = (input) => {
+  const tokens = input
+    .split(/[+,;\s]+/u)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const codes = [];
+  let index = 0;
+  while (index < tokens.length) {
+    if (
+      index + 3 < tokens.length &&
+      tokens[index].length === 8 &&
+      tokens[index + 1].length === 8 &&
+      tokens[index + 2].length === 8 &&
+      tokens[index + 3].length === 8 &&
+      tokens[index].toUpperCase() === "00000000" &&
+      isGbaRomPatchWord(tokens[index + 1]) &&
+      tokens[index + 3].toUpperCase() === "00000000"
+    ) {
+      codes.push(tokens[index] + tokens[index + 1] + tokens[index + 2] + tokens[index + 3]);
+      index += 4;
+      continue;
+    }
+    if (
+      index + 1 < tokens.length &&
+      tokens[index].length === 8 &&
+      (tokens[index + 1].length === 4 || tokens[index + 1].length === 8)
+    ) {
+      codes.push(tokens[index] + tokens[index + 1]);
+      index += 2;
+      continue;
+    }
+    codes.push(tokens[index]);
+    index += 1;
+  }
+  return codes;
+};
+
+const nesSubcodeIsRam = (subcode) => {
+  const stripped = subcode.replace(/:/gu, "");
+  if (!/^[0-9a-fA-F]+$/u.test(stripped) || (stripped.length !== 6 && stripped.length !== 8)) {
+    return false;
+  }
+  return Number.parseInt(stripped.slice(0, 4), 16) < 0x8000;
+};
+
+const snesSubcodeIsRam = (subcode, record) => {
+  if (record.codeKind !== "pro-action-replay") return false;
+  const stripped = subcode.replace(/[-:]/gu, "");
+  if (!isHex(stripped, 8)) return false;
+  const address = Number.parseInt(stripped.slice(0, 6), 16);
+  const bank = (address >> 16) & 0xff;
+  const low = address & 0xffff;
+  const systemBank = bank <= 0x3f || (bank >= 0x80 && bank <= 0xbf);
+  return bank === 0x7e || bank === 0x7f || (systemBank && low < 0x2000);
+};
+
+const genesisSubcodeIsRam = (subcode) => {
+  let address;
+  if (subcode.includes(":")) {
+    const [addressPart] = subcode.split(":");
+    if (!isHex(addressPart, 6)) return false;
+    address = Number.parseInt(addressPart, 16);
+  } else {
+    if (!isHex(subcode, 10)) return false;
+    address = Number.parseInt(subcode.slice(0, 6), 16);
+  }
+  return address >= 0xe0_0000;
+};
+
+const gameboySubcodeIsRam = (subcode) => {
+  const stripped = subcode.replace(/-/gu, "");
+  if (!isHex(stripped, 8)) return false;
+  const low = Number.parseInt(stripped.slice(4, 6), 16);
+  const high = Number.parseInt(stripped.slice(6, 8), 16);
+  return ((high << 8) | low) >= 0x8000;
+};
+
+const gbaSubcodeIsRam = (subcode) => {
+  const code = subcode.toUpperCase();
+  if (isHex(code, 32)) {
+    return !(
+      code.slice(0, 8) === "00000000" &&
+      ["18", "1A", "1C", "1E"].includes(code.slice(8, 10)) &&
+      code.slice(16, 20) === "0000" &&
+      code.slice(24, 32) === "00000000"
+    );
+  }
+  if (isHex(code, 12)) {
+    const type = code[0];
+    if (type !== "3" && type !== "8") return true;
+    const address = Number.parseInt(code.slice(1, 8), 16);
+    return !(address >= 0x0800_0000 && address < 0x0a00_0000);
+  }
+  return true;
+};
+
+const segaZ80SubcodeIsRam = (subcode) => {
+  if (/^[0-9a-fA-F]{4}:[0-9a-fA-F]{2}$/u.test(subcode)) return true;
+  const stripped = subcode.replace(/-/gu, "");
+  if (isHex(stripped, 8) && stripped.slice(0, 2) === "00") {
+    return Number.parseInt(stripped.slice(2, 6), 16) >= 0xc000;
+  }
+  return false;
+};
+
+const SUBCODE_RAM_CHECKS = Object.freeze({
+  nes: nesSubcodeIsRam,
+  snes: snesSubcodeIsRam,
+  genesis: genesisSubcodeIsRam,
+  sega32x: genesisSubcodeIsRam,
+  gameboy: gameboySubcodeIsRam,
+  "gameboy-color": gameboySubcodeIsRam,
+  gameboyadvance: gbaSubcodeIsRam,
+  mastersystem: segaZ80SubcodeIsRam,
+  gamegear: segaZ80SubcodeIsRam,
+  sg1000: segaZ80SubcodeIsRam,
+});
+
+// Returns false only for a record the Rust classifier can never bake: it has
+// no native code, carries structured RetroArch runtime fields, needs a
+// parameter value, or every one of its subcodes decodes to a literal address
+// outside the system's cartridge ROM range.
+export function isBakeableCandidate(cheatSystem, record) {
+  const rawCode = record.rawCode;
+  if (rawCode === null || rawCode === undefined || rawCode.trim() === "") return false;
+  if (hasStructuredRuntimeSemantics(record)) return false;
+  if (containsParameterPlaceholder(rawCode)) return false;
+  const subcodes =
+    cheatSystem === "gameboyadvance" ? splitXploderCodes(rawCode) : splitCodes(rawCode);
+  if (subcodes.length === 0) return false;
+  const subcodeIsRam = SUBCODE_RAM_CHECKS[cheatSystem];
+  if (!subcodeIsRam) return true;
+  return !subcodes.every((subcode) => subcodeIsRam(subcode, record));
+}
 
 const DEVICE_ANNOTATIONS = new Set([
   "action replay",
@@ -344,6 +554,7 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
   }
   const byTitle = releaseIndex(releases);
   const games = new Map();
+  let droppedCount = 0;
 
   for (const file of [...files].sort((left, right) => compare(left.sourcePath, right.sourcePath))) {
     const sourceFile = file.sourcePath;
@@ -379,10 +590,16 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
 
     for (const parsed of parseCht(file.text, { sourceFile, sourceRevision })) {
       const record = { ...parsed, gameId, system: cheatSystem, ...(codeKind ? { codeKind } : {}) };
+      if (!isBakeableCandidate(cheatSystem, record)) {
+        droppedCount += 1;
+        continue;
+      }
       record.id = stableCheatId(cheatSystem, gameId, record);
       if (!game.cheats.has(record.id)) game.cheats.set(record.id, record);
     }
   }
+
+  console.error(`[cheats] ${cheatSystem}: dropped ${droppedCount} record(s) that can never bake`);
 
   const serializedGames = [...games.values()]
     .map((game) => ({
@@ -400,6 +617,7 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
       sourceFiles: [...game.sourceFiles].sort(compare),
       title: game.title,
     }))
+    .filter((game) => game.cheats.length > 0)
     .sort(
       (left, right) =>
         compare(left.normalizedTitle, right.normalizedTitle) || compare(left.id, right.id),

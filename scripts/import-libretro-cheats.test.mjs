@@ -10,6 +10,7 @@ import {
   buildCheatShard,
   cheatShardFileName,
   encodeCheatShard,
+  isBakeableCandidate,
   normalizeReleaseName,
   parseCht,
   releasesFromIdentifyGames,
@@ -62,7 +63,17 @@ test("every cheat platform is an identify platform in the default group", () => 
     Object.values(CHEAT_PLATFORMS)
       .map((spec) => spec.cheatSystem)
       .sort(),
-    ["gameboy", "gameboy-color", "gameboyadvance", "genesis", "nes", "snes"],
+    [
+      "gameboy",
+      "gameboy-color",
+      "gameboyadvance",
+      "gamegear",
+      "genesis",
+      "mastersystem",
+      "nes",
+      "sega32x",
+      "snes",
+    ],
   );
   assert.equal(cheatShardFileName("nintendo-game-boy"), "cheats-nintendo-game-boy.json");
 });
@@ -157,14 +168,20 @@ test("buildCheatShard uses stable IDs and exact checksum title associations", ()
   assert.deepEqual(first, second);
   assert.equal(first.schemaVersion, CHEAT_SHARD_SCHEMA_VERSION);
   assert.equal(first.system, "nes");
-  assert.equal(first.games.length, 2);
+  // "Unknown Homebrew (World)" carries only a Pro Action Replay code whose
+  // literal address is RAM ("0010:01" < 0x8000), so the prefilter drops its
+  // only record and the game itself never reaches the shard.
+  assert.equal(first.games.length, 1);
 
   const matched = first.games.find((game) => game.title === "Test Game (USA)");
   assert.equal(matched.sourceFiles.length, 2);
   assert.equal(matched.checksums.length, 1);
   assert.equal(matched.checksums[0].crc32, "abcdef01");
   assert.deepEqual(matched.regions, ["USA"]);
-  assert.equal(matched.cheats.length, 5);
+  // cheat2 (placeholder "7E1234??") and cheat7 (structured address/value/handler
+  // fields) are dropped by the prefilter; cheat9 and cheat11 share one stable
+  // ID, so 3 records remain of the original 6.
+  assert.equal(matched.cheats.length, 3);
   assert.ok(matched.cheats.every((cheat) => cheat.gameId === matched.id && cheat.system === "nes"));
   assert.ok(matched.cheats.every((cheat) => cheat.sourceRevision === REVISION));
   assert.ok(
@@ -180,8 +197,7 @@ test("buildCheatShard uses stable IDs and exact checksum title associations", ()
   assert.equal(new Set(matched.cheats.map((cheat) => cheat.id)).size, matched.cheats.length);
 
   const missing = first.games.find((game) => game.title === "Unknown Homebrew (World)");
-  assert.deepEqual(missing.checksums, []);
-  assert.deepEqual(missing.regions, ["World"]);
+  assert.equal(missing, undefined);
 
   const encoded = encodeCheatShard(first);
   assert.deepEqual(JSON.parse(encoded.toString("utf8")), first);
@@ -219,8 +235,10 @@ test("GBA device annotations use the Xploder decoder family", () => {
     cheatSystem: "gameboyadvance",
     files: [
       {
+        // Type "8" Xploder write with the address in ROM (0x08000000-0x0A000000)
+        // so the prefilter keeps the record.
         sourcePath: "cht/Nintendo - Game Boy Advance/Public Test (USA) (Action Replay).cht",
-        text: 'cheat0_desc = "Lives"\ncheat0_code = "32000000 0001"\n',
+        text: 'cheat0_desc = "Lives"\ncheat0_code = "89000000 0001"\n',
       },
     ],
     releases: [],
@@ -239,4 +257,104 @@ test("buildCheatShard refuses to build without a system or revision", () => {
     () => buildCheatShard({ cheatSystem: "nes", files: [], releases: [], sourceRevision: "" }),
     /needs a sourceRevision/u,
   );
+});
+
+// Minimal record shape isBakeableCandidate needs: rawCode plus the raw field
+// map (empty unless a case exercises the structured-fields rule).
+const record = (rawCode, overrides = {}) => ({ rawCode, rawFields: {}, ...overrides });
+
+test("isBakeableCandidate drops empty codes, placeholders, and structured RetroArch fields", () => {
+  assert.equal(isBakeableCandidate("nes", record(null)), false);
+  assert.equal(isBakeableCandidate("nes", record("  ")), false);
+  assert.equal(isBakeableCandidate("nes", record("7E1234??")), false);
+  assert.equal(isBakeableCandidate("nes", record("7E12XX00")), false);
+  assert.equal(
+    isBakeableCandidate("nes", record("013F0DC6", { rawFields: { address: "4660", value: "63" } })),
+    false,
+  );
+  assert.equal(isBakeableCandidate("nes", record("AAAA-BBBB")), true);
+});
+
+test("isBakeableCandidate: nes keeps Game Genie letters and drops RAM Pro Action Replay", () => {
+  assert.equal(isBakeableCandidate("nes", record("0010:01")), false); // addr 0x0010 < 0x8000
+  assert.equal(isBakeableCandidate("nes", record("F010:01")), true); // addr 0xF010 >= 0x8000
+  assert.equal(isBakeableCandidate("nes", record("AAAA-BBBC")), true); // letters-only Game Genie
+});
+
+test("isBakeableCandidate: snes only filters when the title said Pro Action Replay", () => {
+  assert.equal(isBakeableCandidate("snes", record("7E123401")), true); // codeKind unset, kept
+  assert.equal(
+    isBakeableCandidate("snes", record("7E123401", { codeKind: "pro-action-replay" })),
+    false, // bank 7E is RAM
+  );
+  assert.equal(
+    isBakeableCandidate("snes", record("00800001", { codeKind: "pro-action-replay" })),
+    true, // system bank, low 0x8000 is not < 0x2000
+  );
+});
+
+test("isBakeableCandidate: genesis and sega32x drop RAM Pro Action Replay, keep Game Genie", () => {
+  for (const cheatSystem of ["genesis", "sega32x"]) {
+    assert.equal(isBakeableCandidate(cheatSystem, record("E00000:0001")), false); // >= 0xE00000
+    assert.equal(isBakeableCandidate(cheatSystem, record("000000:0001")), true);
+    assert.equal(isBakeableCandidate(cheatSystem, record("ABDZ78F7")), true); // Game Genie shape
+  }
+});
+
+test("isBakeableCandidate: gameboy and gameboy-color drop RAM GameShark, keep Game Genie", () => {
+  for (const cheatSystem of ["gameboy", "gameboy-color"]) {
+    assert.equal(isBakeableCandidate(cheatSystem, record("01000090")), false); // addr 0x9000 >= 0x8000
+    assert.equal(isBakeableCandidate(cheatSystem, record("01000010")), true); // addr 0x1000 < 0x8000
+    assert.equal(isBakeableCandidate(cheatSystem, record("014BCE")), true); // 6-digit Game Genie
+  }
+});
+
+test("isBakeableCandidate: gameboyadvance keeps only the ROM-patch and in-range forms", () => {
+  assert.equal(
+    isBakeableCandidate("gameboyadvance", record("00000000 18000000 00000001 00000000")),
+    true, // four-word ROM patch
+  );
+  assert.equal(isBakeableCandidate("gameboyadvance", record("89000000 0001")), true); // addr 0x9000000
+  assert.equal(isBakeableCandidate("gameboyadvance", record("32000000 0001")), false); // addr 0x2000000, RAM
+});
+
+test("isBakeableCandidate: mastersystem, gamegear, sg1000 drop RAM forms, keep Game Genie", () => {
+  for (const cheatSystem of ["mastersystem", "gamegear", "sg1000"]) {
+    assert.equal(isBakeableCandidate(cheatSystem, record("00C00001")), false); // addr 0xC000 >= 0xC000
+    assert.equal(isBakeableCandidate(cheatSystem, record("00300001")), true); // addr 0x3000 < 0xC000
+    assert.equal(isBakeableCandidate(cheatSystem, record("C000:01")), false); // Fusion RAM code
+    assert.equal(isBakeableCandidate(cheatSystem, record("1F2-3C4")), true); // Game Genie
+  }
+});
+
+test("a game left with only dropped records disappears from the shard", () => {
+  const shard = buildCheatShard({
+    cheatSystem: "mastersystem",
+    files: [
+      {
+        sourcePath: "cht/Sega - Master System - Mark III/Only RAM (World).cht",
+        text: 'cheat0_desc = "Bad code"\ncheat0_code = "00C00001"\n',
+      },
+    ],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+  assert.deepEqual(shard.games, []);
+});
+
+test("Master System fixture keeps the Game Genie code and drops the RAM codes", () => {
+  const directory = "cht/Sega - Master System - Mark III";
+  const text = readFileSync(
+    path.join(FIXTURE_ROOT, ...directory.split("/"), "Sample Game (World).cht"),
+    "utf8",
+  );
+  const shard = buildCheatShard({
+    cheatSystem: "mastersystem",
+    files: [{ sourcePath: `${directory}/Sample Game (World).cht`, text }],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+  assert.equal(shard.games.length, 1);
+  assert.equal(shard.games[0].cheats.length, 1);
+  assert.equal(shard.games[0].cheats[0].rawCode, "1F2-3C4");
 });
