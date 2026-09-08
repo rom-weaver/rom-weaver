@@ -49,27 +49,29 @@ Title and manual matches can target another region or revision.
 
 ## Data source
 
-The generated database derives from `libretro/libretro-database` at revision `4968f556a0bf749378901086646b78bc78703b88`.
+The shards derive from the `cht/` directories of `libretro/libretro-database` at the same pinned revision as the identify packs. The identify index (`index.json`, `sources.libretro.revision`) records that revision, and the Cheats section shows it.
 
 Source [libretro/libretro-database](https://github.com/libretro/libretro-database)
 
 License CC-BY-SA-4.0
 
-The generated shards are an adapted database under CC-BY-SA-4.0. ROMWeaver's code license does not replace that data license.
+The generated shards are an adapted database under CC-BY-SA-4.0. ROMWeaver's code license does not replace that data license. ShareAlike applies to redistributed adaptations of this database.
 
-The distribution includes the full license text, the source revision, and separate attribution.
+The distribution includes the full license text and the source revision in the third-party notices.
 
-The normalized shards are adaptations under CC-BY-SA-4.0. ShareAlike applies to redistributed adaptations of this database. It does not change ROMWeaver's separate software license.
+Game titles and release checksums come from the same Libretro DAT files that build the platform's identify pack, so a cheat match and an identify match agree on the ROM.
 
 ## Storage and network behavior
 
-The app ships one small manifest and one shard per supported system. It loads only the detected or selected system.
+Each shard is one identify data asset (`assets/identify-cheats-<platform slug>.json`) listed in the identify index with its size and SHA-256. The app loads only the detected or selected platform.
+
+A shard belongs to the same pack group as its platform's identify pack. The background warm-up downloads the default group, the Settings page installs optional groups, and the CLI `identify database install-group` installs the same shards natively. An uncached shard is fetched on demand when the Cheats section opens.
+
+The service worker verifies each shard's SHA-256 before it stores it, and the parsing worker verifies it again before use. A shard that fails either check reports the database as unavailable.
 
 A dedicated browser worker parses each shard. The initial JavaScript bundle does not contain the database.
 
 The hosted app requests shards only from its own origin. It makes no runtime request to Libretro.
-
-The service worker caches a shard after its first successful load. The shard then works offline with that app version.
 
 ## Preserved source fields
 

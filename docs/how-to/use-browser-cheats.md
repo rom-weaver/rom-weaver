@@ -69,9 +69,9 @@ A code with `?` or `X` placeholders needs a value. ROMWeaver preserves the place
 
 ## Use the database offline
 
-Open a system's cheat list once while online. The service worker caches that system shard after a successful load.
+Cheat shards install with the built-in identify packs. Leave the app open while online until the offline warm-up in Settings reports the built-in systems as installed.
 
-An uncached system shard is unavailable offline. ROMWeaver does not contact Libretro or another third-party server at runtime.
+Opening a system's cheat list once while online also caches that shard. ROMWeaver does not contact Libretro or another third-party server at runtime.
 
 For the delivery model, see [ROM cheats and runtime cheats](../explanation/rom-and-runtime-cheats.md).
 
