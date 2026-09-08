@@ -1,10 +1,8 @@
 import { type IdentifyCatalog, normalizePlatformAlias, resolveCatalogPlatform } from "../identify/identify-catalog.ts";
 import {
-  cheatDelivery,
   type ClassifiedCheatRecord,
   type CheatDatabaseEntry,
   type CheatDatabaseIndex,
-  type CheatFilter,
   type CheatGameMatch,
   type CheatGameRecord,
   type CheatRomIdentity,
@@ -13,13 +11,31 @@ import {
 
 const GAME_BOY_SLUG = "nintendo-game-boy";
 const GAME_BOY_COLOR_SLUG = "nintendo-game-boy-color";
+const MASTER_SYSTEM_SLUG = "sega-master-system-mark-iii";
+const GAME_GEAR_SLUG = "sega-game-gear";
+const MEGA_DRIVE_SLUG = "sega-mega-drive-genesis";
+const SEGA_32X_SLUG = "sega-32x";
 
 /** Cartridge extensions that name a platform when ingest reported no tag. */
 const SLUG_BY_EXTENSION: Record<string, string> = {
   gb: GAME_BOY_SLUG,
   gba: "nintendo-game-boy-advance",
   gbc: GAME_BOY_COLOR_SLUG,
+  sms: MASTER_SYSTEM_SLUG,
+  gg: GAME_GEAR_SLUG,
+  "32x": SEGA_32X_SLUG,
 };
+
+/**
+ * Consoles that share a ROM header with another console, so ingest reports one
+ * platform tag for both. The file extension is the one signal that separates
+ * them, and the narrower shard is used only when the index carries it.
+ */
+const EXTENSION_OVERRIDES: Array<{ from: string; extension: string; to: string }> = [
+  { from: GAME_BOY_SLUG, extension: "gbc", to: GAME_BOY_COLOR_SLUG },
+  { from: MASTER_SYSTEM_SLUG, extension: "gg", to: GAME_GEAR_SLUG },
+  { from: MEGA_DRIVE_SLUG, extension: "32x", to: SEGA_32X_SLUG },
+];
 
 const extensionOf = (fileName: string | undefined): string =>
   (fileName ?? "").slice((fileName ?? "").lastIndexOf(".") + 1).toLocaleLowerCase("en-US");
@@ -43,11 +59,9 @@ export const resolveCheatDatabaseEntry = (
     slug = index.entries.find((entry) => normalizePlatformAlias(entry.platform) === normalized)?.slug;
   }
   if (!(slug || platform)) slug = SLUG_BY_EXTENSION[extensionOf(identity.fileName)];
-  // Game Boy and Game Boy Color share one header layout, so ingest tags both
-  // as Game Boy; the file extension is the one signal that separates them.
-  if (slug === GAME_BOY_SLUG && extensionOf(identity.fileName) === "gbc") {
-    slug = index.entries.some((entry) => entry.slug === GAME_BOY_COLOR_SLUG) ? GAME_BOY_COLOR_SLUG : slug;
-  }
+  const extension = extensionOf(identity.fileName);
+  const override = EXTENSION_OVERRIDES.find((rule) => rule.from === slug && rule.extension === extension);
+  if (override && index.entries.some((entry) => entry.slug === override.to)) slug = override.to;
   return index.entries.find((entry) => entry.slug === slug);
 };
 
@@ -103,19 +117,12 @@ export const selectManualGame = (shard: CheatSystemShard | undefined, gameId: st
   return game ? { kind: "manual", game } : { kind: "none" };
 };
 
-export const filterCheats = (
-  cheats: ClassifiedCheatRecord[],
-  query: string,
-  filter: CheatFilter,
-): ClassifiedCheatRecord[] => {
+export const filterCheats = (cheats: ClassifiedCheatRecord[], query: string): ClassifiedCheatRecord[] => {
   const needle = normalizeText(query);
-  return cheats.filter((cheat) => {
-    if (needle && !normalizeText(`${cheat.record.description} ${cheat.record.rawCode ?? ""}`).includes(needle)) {
-      return false;
-    }
-    if (filter === "all") return true;
-    return cheatDelivery(cheat) === filter;
-  });
+  if (!needle) return cheats;
+  return cheats.filter((cheat) =>
+    normalizeText(`${cheat.record.description} ${cheat.record.rawCode ?? ""}`).includes(needle),
+  );
 };
 
 export const reconcileSelectedCheatIds = (

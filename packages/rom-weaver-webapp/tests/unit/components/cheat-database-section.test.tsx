@@ -6,13 +6,12 @@ import type {
   CheatDatabaseIndex,
   CheatSystemShard,
   ClassifiedCheatRecord,
+  CheatRecord,
   DatabaseCheatClassifier,
-  LocalCheatFileImporter,
   ManualCheatClassifier,
-  RuntimeCheatRecord,
 } from "../../../src/lib/cheats/index.ts";
 
-const runtimeRecord = (id: string, description: string, rawCode: string): RuntimeCheatRecord => ({
+const cheatRecord = (id: string, description: string, rawCode: string): CheatRecord => ({
   id,
   system: "snes",
   gameId: "smw-us",
@@ -26,34 +25,14 @@ const runtimeRecord = (id: string, description: string, rawCode: string): Runtim
 
 const records: ClassifiedCheatRecord[] = [
   {
-    record: runtimeRecord("cheat-1", "Infinite lives", "C2B4-6D07"),
+    record: cheatRecord("cheat-1", "Infinite lives", "C2B4-6D07"),
     resolution: { type: "romBakeable", writes: [] },
     detectedKind: "game-genie",
   },
   {
-    record: runtimeRecord("cheat-2", "Infinite health", "7E0DBE3F"),
-    resolution: {
-      type: "runtime",
-      payload: { record: runtimeRecord("cheat-2", "Infinite health", "7E0DBE3F") },
-    },
+    record: cheatRecord("cheat-2", "Infinite health", "7E0DBE3F"),
+    resolution: { type: "unsupported", reason: "the code targets runtime memory" },
     detectedKind: "pro-action-replay",
-  },
-  {
-    record: runtimeRecord("cheat-3", "Moon jump", "7E0010FF+C00000EA"),
-    resolution: {
-      type: "mixed",
-      writes: [],
-      payload: { record: runtimeRecord("cheat-3", "Moon jump", "7E0010FF+C00000EA") },
-    },
-    detectedKind: null,
-  },
-  {
-    record: runtimeRecord("cheat-4", "Starting lives XX", "7E0DBEXX"),
-    resolution: {
-      type: "requiresParameter",
-      payload: { record: runtimeRecord("cheat-4", "Starting lives XX", "7E0DBEXX") },
-    },
-    detectedKind: null,
   },
 ];
 
@@ -79,37 +58,13 @@ const classifyDatabaseCheats: DatabaseCheatClassifier = async (input) =>
 
 const classifyManualCode: ManualCheatClassifier = async (request) => ({
   record: {
-    record: runtimeRecord("manual-1", request.description, request.code),
-    resolution: {
-      type: "runtime",
-      payload: { record: runtimeRecord("manual-1", request.description, request.code) },
-    },
+    record: cheatRecord("manual-1", request.description, request.code),
+    resolution: { type: "romBakeable", writes: [] },
     detectedKind: "pro-action-replay",
   },
   detectedSystem: request.system,
   detectedType: "Action Replay",
 });
-
-const importLocalCheatFile: LocalCheatFileImporter = async ({ fileName }) => [
-  {
-    detectedKind: "pro-action-replay",
-    record: {
-      ...runtimeRecord("local-1", "Imported health", "7E0010FF"),
-      sourceFile: fileName,
-      sourceRevision: "local-import",
-    },
-    resolution: {
-      payload: {
-        record: {
-          ...runtimeRecord("local-1", "Imported health", "7E0010FF"),
-          sourceFile: fileName,
-          sourceRevision: "local-import",
-        },
-      },
-      type: "runtime",
-    },
-  },
-];
 
 const SNES = "Nintendo - Super Nintendo Entertainment System";
 
@@ -126,7 +81,7 @@ const index: CheatDatabaseIndex = {
       rawBytes: 100,
       sha256: "a".repeat(64),
       games: 1,
-      cheats: 4,
+      cheats: 2,
     },
   ],
 };
@@ -136,7 +91,6 @@ const props = {
   index,
   shard,
   classifyDatabaseCheats,
-  importLocalCheatFile,
   classifyManualCode,
 } as const;
 
@@ -145,27 +99,26 @@ describe("CheatDatabaseSection", () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await view.findByText("Exact ROM revision matched");
     expect(view.getByText("ROM cheat")).toBeTruthy();
-    expect(view.getAllByText("RAM cheat")).toHaveLength(2);
-    expect(view.getByText("Needs a value")).toBeTruthy();
+    expect(view.getByText("Unsupported")).toBeTruthy();
+    expect(view.getByText("Cannot be baked into the ROM")).toBeTruthy();
     expect(view.getByText(/Community cheat data can contain errors/u)).toBeTruthy();
     expect(view.getByText(/does not upload ROM data or checksums/u)).toBeTruthy();
   });
 
-  it("shows conflict and separate ROM and cheat-file output summaries", async () => {
+  it("shows the conflict message and the baked ROM cheat summary", async () => {
     const view = render(
       <CheatDatabaseSection
         {...props}
-        outputSummary={{ cheatFileName: "game-modified.cht", rom: 1, runtime: 2 }}
+        outputSummary={{ rom: 1 }}
         validationMessage="Cheat conflict at ROM offset 0x2871."
       />,
     );
     await view.findByText("Exact ROM revision matched");
     expect(view.getByRole("alert").textContent).toContain("Cheat conflict at ROM offset 0x2871");
     expect(view.getByText(/Contains patches and 1 baked ROM cheat/u)).toBeTruthy();
-    expect(view.getByText(/game-modified\.cht contains 2 RAM or runtime cheats/u)).toBeTruthy();
   });
 
-  it("searches, filters, selects, and disables parameter entries", async () => {
+  it("searches, selects, and disables unsupported entries", async () => {
     const onSelectionChange = vi.fn();
     const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);
     await view.findByText("Infinite lives");
@@ -174,16 +127,19 @@ describe("CheatDatabaseSection", () => {
     expect(view.getByText("Infinite health")).toBeTruthy();
     expect(view.queryByText("Infinite lives")).toBeNull();
     fireEvent.change(view.getByRole("searchbox"), { target: { value: "" } });
-    fireEvent.click(view.getByLabelText("RAM / runtime"));
-    expect(view.queryByText("Infinite lives")).toBeNull();
-    expect(view.getByText("Moon jump")).toBeTruthy();
 
-    fireEvent.click(view.getByLabelText("All"));
-    fireEvent.click(view.getByRole("checkbox", { name: /Infinite health/u }));
+    fireEvent.click(view.getByRole("checkbox", { name: /Infinite lives/u }));
     expect(onSelectionChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ record: expect.objectContaining({ id: "cheat-2" }) }),
+      expect.objectContaining({ record: expect.objectContaining({ id: "cheat-1" }) }),
     ]);
-    expect((view.getByRole("checkbox", { name: /Starting lives/u }) as HTMLInputElement).disabled).toBe(true);
+    expect((view.getByRole("checkbox", { name: /Infinite health/u }) as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("shows the unsupported reason in the details", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    const details = await view.findAllByRole("button", { name: "Details" });
+    fireEvent.click(details[1] as HTMLElement);
+    expect(view.getByText("the code targets runtime memory")).toBeTruthy();
   });
 
   it("clears selections when the original ROM identity changes", async () => {
@@ -239,60 +195,6 @@ describe("CheatDatabaseSection", () => {
     expect(view.queryByRole("button", { name: "Add this cheat" })).toBeNull();
   });
 
-  it("imports a local RetroArch file without selecting its entries", async () => {
-    const onSelectionChange = vi.fn();
-    const importer = vi.fn(importLocalCheatFile);
-    const view = render(
-      <CheatDatabaseSection {...props} importLocalCheatFile={importer} onSelectionChange={onSelectionChange} />,
-    );
-    const file = new File(['cheat0_desc = "Imported health"'], "private.cht", { type: "text/plain" });
-
-    fireEvent.change(view.getByLabelText("Import RetroArch .cht"), { target: { files: [file] } });
-
-    await view.findByText("Imported 1 cheat from private.cht.");
-    expect(importer).toHaveBeenCalledWith({
-      content: 'cheat0_desc = "Imported health"',
-      fileName: "private.cht",
-      system: "snes",
-    });
-    expect((view.getByRole("checkbox", { name: /Imported health/u }) as HTMLInputElement).checked).toBe(false);
-    fireEvent.click(view.getByRole("checkbox", { name: /Imported health/u }));
-    expect(onSelectionChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ record: expect.objectContaining({ id: "local-1" }) }),
-    ]);
-  });
-
-  it("ignores a pending local import after the ROM changes", async () => {
-    const onSelectionChange = vi.fn();
-    let finishImport: ((records: ClassifiedCheatRecord[]) => void) | undefined;
-    const importer = vi.fn(
-      () =>
-        new Promise<ClassifiedCheatRecord[]>((resolve) => {
-          finishImport = resolve;
-        }),
-    );
-    const view = render(
-      <CheatDatabaseSection {...props} importLocalCheatFile={importer} onSelectionChange={onSelectionChange} />,
-    );
-    const file = new File(['cheat0_desc = "Imported health"'], "private.cht", { type: "text/plain" });
-    fireEvent.change(view.getByLabelText("Import RetroArch .cht"), { target: { files: [file] } });
-    await waitFor(() => expect(importer).toHaveBeenCalledOnce());
-
-    view.rerender(
-      <CheatDatabaseSection
-        {...props}
-        importLocalCheatFile={importer}
-        onSelectionChange={onSelectionChange}
-        rom={{ ...props.rom, key: "rom-b" }}
-      />,
-    );
-    const importedRecords = await importLocalCheatFile({ content: "", fileName: "private.cht", system: "snes" });
-    finishImport?.(importedRecords);
-
-    await waitFor(() => expect(view.queryByText("Imported health")).toBeNull());
-    expect(onSelectionChange).toHaveBeenLastCalledWith([]);
-  });
-
   it("shows manual browsing as unverified and keeps controls within their container", async () => {
     const view = render(
       <CheatDatabaseSection
@@ -316,7 +218,7 @@ describe("CheatDatabaseSection platform resolution", () => {
       <CheatDatabaseSection {...props} rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }} />,
     );
     await view.findByText("Unsupported system");
-    expect(view.queryByText("Import RetroArch .cht")).toBeNull();
+    expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
   });
 
   it("resolves the loosely formatted tag ingest reports to the index platform", async () => {

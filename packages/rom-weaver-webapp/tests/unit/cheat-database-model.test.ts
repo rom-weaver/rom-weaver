@@ -9,8 +9,8 @@ import {
   type CheatDatabaseIndex,
   type CheatDatabaseRecord,
   type CheatSystemShard,
+  type CheatRecord,
   type ClassifiedCheatRecord,
-  type RuntimeCheatRecord,
 } from "../../src/lib/cheats/index.ts";
 
 const raw = (id: string, description: string): CheatDatabaseRecord => ({
@@ -25,7 +25,7 @@ const raw = (id: string, description: string): CheatDatabaseRecord => ({
   sourceRevision: "abc123",
 });
 
-const runtimeRecord = (id: string, description: string): RuntimeCheatRecord => ({
+const cheatRecord = (id: string, description: string): CheatRecord => ({
   id,
   system: "snes",
   gameId: "smw-us",
@@ -56,30 +56,13 @@ const shard: CheatSystemShard = {
 
 const classified: ClassifiedCheatRecord[] = [
   {
-    record: runtimeRecord("rom", "Infinite lives"),
+    record: cheatRecord("rom", "Infinite lives"),
     resolution: { type: "romBakeable", writes: [] },
     detectedKind: null,
   },
   {
-    record: runtimeRecord("ram", "Infinite health"),
-    resolution: { type: "runtime", payload: { record: runtimeRecord("ram", "Infinite health") } },
-    detectedKind: null,
-  },
-  {
-    record: runtimeRecord("mixed", "Moon jump"),
-    resolution: {
-      type: "mixed",
-      writes: [],
-      payload: { record: runtimeRecord("mixed", "Moon jump") },
-    },
-    detectedKind: null,
-  },
-  {
-    record: runtimeRecord("parameter", "Starting lives XX"),
-    resolution: {
-      type: "requiresParameter",
-      payload: { record: runtimeRecord("parameter", "Starting lives XX") },
-    },
+    record: cheatRecord("ram", "Infinite health"),
+    resolution: { type: "unsupported", reason: "the code targets runtime memory" },
     detectedKind: null,
   },
 ];
@@ -106,11 +89,15 @@ const snesEntry = entryFor(
 );
 const gameBoyEntry = entryFor("Nintendo - Game Boy", "nintendo-game-boy", "gameboy");
 const gameBoyColorEntry = entryFor("Nintendo - Game Boy Color", "nintendo-game-boy-color", "gameboy-color");
+const masterSystemEntry = entryFor("Sega - Master System - Mark III", "sega-master-system-mark-iii", "mastersystem");
+const gameGearEntry = entryFor("Sega - Game Gear", "sega-game-gear", "gamegear");
+const megaDriveEntry = entryFor("Sega - Mega Drive - Genesis", "sega-mega-drive-genesis", "genesis");
+const sega32xEntry = entryFor("Sega - 32X", "sega-32x", "sega32x");
 const index: CheatDatabaseIndex = {
   sourceRevision: "abc123",
   sourceUrl: "https://github.com/libretro/libretro-database",
   license: "CC-BY-SA-4.0",
-  entries: [snesEntry, gameBoyEntry, gameBoyColorEntry],
+  entries: [snesEntry, gameBoyEntry, gameBoyColorEntry, masterSystemEntry, gameGearEntry, megaDriveEntry, sega32xEntry],
 };
 const catalog = {
   format: "rom-weaver-identify-catalog-v1",
@@ -175,6 +162,24 @@ describe("cheat database catalog", () => {
     expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.gbc" })).toBe(gameBoyColorEntry);
     expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.gb" })).toBe(gameBoyEntry);
     expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.nes" })).toBeUndefined();
+    expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.sms" })).toBe(masterSystemEntry);
+    expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.gg" })).toBe(gameGearEntry);
+    expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.32x" })).toBe(sega32xEntry);
+  });
+
+  it("uses the extension to split consoles that share a ROM header", () => {
+    expect(
+      resolveCheatDatabaseEntry(index, undefined, { platform: "Sega Master System Mark III", fileName: "a.gg" }),
+    ).toBe(gameGearEntry);
+    expect(
+      resolveCheatDatabaseEntry(index, undefined, { platform: "Sega Master System Mark III", fileName: "a.sms" }),
+    ).toBe(masterSystemEntry);
+    expect(
+      resolveCheatDatabaseEntry(index, undefined, { platform: "Sega Mega Drive Genesis", fileName: "a.32x" }),
+    ).toBe(sega32xEntry);
+    expect(resolveCheatDatabaseEntry(index, undefined, { platform: "Sega Mega Drive Genesis", fileName: "a.md" })).toBe(
+      megaDriveEntry,
+    );
   });
 
   it("uses the .gbc extension to split Game Boy Color from the shared Game Boy header", () => {
@@ -186,11 +191,10 @@ describe("cheat database catalog", () => {
     );
   });
 
-  it("searches descriptions and filters the Rust classification results", () => {
-    expect(filterCheats(classified, "health", "all").map(({ record }) => record.id)).toEqual(["ram"]);
-    expect(filterCheats(classified, "", "rom").map(({ record }) => record.id)).toEqual(["rom"]);
-    expect(filterCheats(classified, "", "runtime").map(({ record }) => record.id)).toEqual(["ram", "mixed"]);
-    expect(filterCheats(classified, "", "requires-parameter").map(({ record }) => record.id)).toEqual(["parameter"]);
+  it("searches descriptions and codes", () => {
+    expect(filterCheats(classified, "health").map(({ record }) => record.id)).toEqual(["ram"]);
+    expect(filterCheats(classified, "").map(({ record }) => record.id)).toEqual(["rom", "ram"]);
+    expect(filterCheats(classified, "c2b4").map(({ record }) => record.id)).toEqual(["rom", "ram"]);
   });
 
   it("keeps only selections that exist after records change", () => {
