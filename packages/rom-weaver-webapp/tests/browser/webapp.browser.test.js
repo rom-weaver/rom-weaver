@@ -162,8 +162,8 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(romInput).toBeInTheDocument();
 
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /apply-patch/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /create-patch/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Apply Patch" })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Create Patch" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
@@ -174,7 +174,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await waitForInputStackFile("game.bin");
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
   // The output section (and its apply button) renders once the workflow has files.
-  await expect.element(page.getByRole("button", { name: /apply-patch & download/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Apply & download" })).toBeInTheDocument();
 
   await page.getByRole("button", { name: "Clear ROM input" }).click();
   await expect
@@ -201,10 +201,10 @@ test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Test"]);
+    .toEqual(["Apply Patch", "Create Patch", "Test ROM"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Identify Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
 });
 
@@ -251,7 +251,7 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
     await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
     // Identify is one click from More: it has its own route, so it never hid
     // behind the old Tools page.
-    await expect.element(page.getByRole("menuitem", { name: "Identify Beta" })).toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).toBeInTheDocument();
     await page.getByRole("menuitem", { name: "PPF undo Beta" }).click();
     // Only ONE Identify form can exist. PPF undo links nowhere near it, so a page
     // drop has exactly one consumer and the two cannot fight over the activity key.

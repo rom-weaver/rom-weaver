@@ -164,6 +164,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
 
   try {
     for (const testCase of [
+      { finalView: "patcher", initialView: "patcher", path: "apply-patch/", replayClick: true },
+      { finalView: "creator", initialView: "creator", path: "create-patch/" },
+      { finalView: "trim", initialView: "patcher", path: "trim-rom/" },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "patcher", path: "trim/" },
@@ -628,7 +631,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       // Trim and PPF undo live in the More menu, not the mode rail; their Beta
       // chip is part of the accessible name.
       for (const [label, panelId] of [
-        ["Trim", "panel-trim"],
+        ["Trim ROM", "panel-trim"],
         ["PPF undo", "panel-ppf-undo"],
       ]) {
         await page.getByRole("button", { name: "More", exact: true }).click();
