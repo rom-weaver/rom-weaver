@@ -642,6 +642,13 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
           "ppf-undo",
           withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
         ],
+        // What's new needs a document of its own or the host serves 404.html,
+        // whose not-found flag hides the route on a direct load or reload. Its
+        // content is fetched release notes, so it stays out of the index.
+        [
+          "whats-new",
+          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "whats-new"), routePreloadLinks.get("whats-new")),
+        ],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
         [
           "tools",
@@ -1020,6 +1027,7 @@ const WORKFLOW_ROUTE_MODULES = {
   test: "src/public/react/emulator-test-view.tsx",
   "ppf-undo": "src/webapp/components/ppf-undo-form.tsx",
   trim: "src/public/react/trim-form.tsx",
+  "whats-new": "src/webapp/whats-new-page.tsx",
 };
 
 const findChunkForModule = (bundle, moduleSuffix) =>
