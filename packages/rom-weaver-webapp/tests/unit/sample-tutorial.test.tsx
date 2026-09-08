@@ -212,9 +212,11 @@ describe("sample tutorial", () => {
     const region = document.querySelector("[aria-live]");
     expect(region?.textContent).toContain("First section");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    // The card commits the new step when its exit animation settles, so the
+    // text lands a frame later than the click.
+    await waitFor(() => expect(region?.textContent).toContain("Second section"));
     // Same node, new content - a region inserted alongside its content never announces.
     expect(document.querySelector("[aria-live]")).toBe(region);
-    expect(region?.textContent).toContain("Second section");
   });
 
   it("moves focus into the guide so it is reachable once the trigger unmounts", () => {
