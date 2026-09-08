@@ -1382,6 +1382,9 @@ pub use identify_command::{
     IdentifyProvenance, IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
 };
 
+#[path = "identify_name_search.rs"]
+mod identify_name_search;
+
 #[path = "identify_builtin.rs"]
 mod identify_builtin;
 

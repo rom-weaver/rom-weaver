@@ -621,3 +621,56 @@ fn identify_matches_a_headerless_variant_inside_gzip() {
     assert_eq!(identify["matches"][0]["name"], "Compressed Header Test [!]");
     assert_eq!(identify["matches"][0]["variant"], "remove-header");
 }
+
+#[test]
+fn identify_searches_a_pack_by_name() {
+    let temp = setup_temp_dir();
+    let mut games = rwfp1_games(
+        &[
+            ([0x00, 0x00, 0x00, 0x01], "Super Mario World (USA)"),
+            ([0x00, 0x00, 0x00, 0x02], "Mario Kart (USA)"),
+        ],
+        5,
+    );
+    games[0].dump_tags = vec!["!".to_string()];
+    fs::write(temp.child("test.pack").path(), encode_rwfp1(games)).expect("identify pack");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--name",
+            "mario world",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let identify = &json["details"]["identify"];
+
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(identify["status"], "matched");
+    assert_eq!(identify["input"], "mario world");
+    assert_eq!(identify["matches"][0]["name"], "Super Mario World (USA)");
+    assert_eq!(identify["matches"][0]["algorithm"], "name");
+    assert_eq!(identify["matches"][0]["dump_tags"][0], "!");
+    assert!(identify["matches"][1].is_null(), "only one title matches");
+}
+
+#[test]
+fn identify_by_name_needs_a_pack_selection() {
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["identify", "--name", "mario"])
+        .assert()
+        .code(1)
+        .get_output()
+        .stderr
+        .clone();
+    let text = String::from_utf8(output).expect("utf8 stderr");
+    assert!(
+        text.contains("--system") && text.contains("--database"),
+        "expected both flags in the error, got: {text}"
+    );
+}
