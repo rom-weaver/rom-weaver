@@ -194,6 +194,27 @@ describe("runRomWeaverProbeWorker", () => {
     expect(onProgress).not.toHaveBeenCalled();
   });
 
+  it("reports a CHD header's digests alongside the platform", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        chd: { media_kind: "cd", raw_sha1: " abc ", sha1: "def" },
+        container: { entry_records: ["game.bin"] },
+        platform: "Sony PlayStation",
+      }),
+    );
+
+    await expect(runRomWeaverProbeWorker({ romFilter: true, sourcePath: "/game.chd" })).resolves.toMatchObject({
+      chd: { rawSha1: "abc", sha1: "def" },
+      platform: "Sony PlayStation",
+    });
+  });
+
+  it("omits the chd field for a container without header digests", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ container: { entry_records: ["game.sfc"] } }));
+
+    await expect(runRomWeaverProbeWorker({ sourcePath: "/game.zip" })).resolves.not.toHaveProperty("chd");
+  });
+
   it("rejects a probe with no source path", async () => {
     await expect(runRomWeaverProbeWorker({ sourcePath: " " })).rejects.toThrow(
       "Container probe source path is required",
