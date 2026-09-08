@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { act, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
+import { StepSection } from "../../src/public/react/components/ds/layout.tsx";
 import { shouldIdentifySource } from "../../src/lib/input/input-identification-policy.ts";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
 import type {
@@ -133,6 +134,15 @@ const patchItem = (fileName: string): PatchStackItemState =>
     validationValues: [],
   }) as unknown as PatchStackItemState;
 
+// The only production caller (apply-patch-form) always supplies the 0x04
+// cheats step, so the harness supplies a stand-in to keep the step numbering
+// the same as the real bench.
+const cheatsStep = (
+  <StepSection num="0x04" title="Cheats">
+    <p>cheats</p>
+  </StepSection>
+);
+
 const renderView = ({
   bundleMetaById,
   bundleExpectedRomChecks,
@@ -181,6 +191,7 @@ const renderView = ({
     <RomWeaverSettingsProvider settings={settings}>
       <ApplyWorkflowFormView
         bundleMetaById={bundleMetaById}
+        cheats={cheatsStep}
         bundleExpectedRomChecks={bundleExpectedRomChecks}
         controllers={controllers}
         emulatorOutput={emulatorOutput as never}
@@ -258,7 +269,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero")).toBeNull();
     expect(container.querySelector(".ghost-steps")).toBeNull();
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
-    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
+    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04", "0x05"]);
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",
     );
