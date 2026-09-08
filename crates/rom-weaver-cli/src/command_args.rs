@@ -1551,7 +1551,7 @@ output is written back in the order the input arrived in."
         arg(
             long = "code-system",
             help_heading = "Diagnostics/authoring",
-            help = "Console the --code values are for (nes, snes, genesis, gameboy, gba, psx), when the ROM header does not say"
+            help = "Console the --code values are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gba, psx), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -2146,7 +2146,7 @@ apply and verifies the input, as long as the file name survives."
         not(target_arch = "wasm32"),
         arg(
             long = "code-system",
-            help = "Console the --code values are for (nes, snes, genesis, gameboy, gba, psx), when the ROM header does not say"
+            help = "Console the --code values are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gba, psx), when the ROM header does not say"
         )
     )]
     #[serde(default)]
@@ -2978,27 +2978,6 @@ pub struct CheatCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     pub records: Vec<crate::cheats::CheatRecord>,
-    /// Raw RetroArch text for local import through the JSON/WASM boundary.
-    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub cht_source: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub cht_file_name: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub cht_system: Option<crate::cheats::CheatSystem>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub selected_ids: Vec<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(short, long))]
-    #[serde(default)]
-    #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub output: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

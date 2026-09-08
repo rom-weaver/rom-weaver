@@ -197,10 +197,7 @@ unpacking, use `probe`."
     Ingest(IngestCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(
-            hide = true,
-            about = "Classify database cheats and export runtime entries"
-        )
+        command(hide = true, about = "Classify database cheats against a ROM")
     )]
     Cheat(CheatCommand),
     #[cfg_attr(
@@ -1443,8 +1440,7 @@ mod cheats_apply;
 pub use cheat_command::CheatCommandResult;
 pub use cheats::{
     CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatTarget, CheatWrite,
-    CheatWriteConflict, ClassifiedCheatRecord, MAX_CHT_BYTES, MAX_CHT_RECORDS,
-    RetroArchParseOptions, RuntimeCheatPayload, export_retroarch_cht, parse_retroarch_cht,
+    CheatWriteConflict, ClassifiedCheatRecord,
 };
 pub mod dcp;
 pub mod gdrom;

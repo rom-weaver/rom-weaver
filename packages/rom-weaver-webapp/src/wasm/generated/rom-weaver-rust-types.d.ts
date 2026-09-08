@@ -276,7 +276,7 @@ assets: Array<IngestRomAsset>,
  */
 patches: Array<PatchDescriptor>, };
 
-export type CheatSystem = "nes" | "snes" | "genesis" | "gameboy" | "gameboy-color" | "gameboyadvance" | "playstation";
+export type CheatSystem = "nes" | "snes" | "genesis" | "gameboy" | "gameboy-color" | "gameboyadvance" | "playstation" | "mastersystem" | "gamegear" | "sega32x" | "sg1000";
 
 export type CheatKind = "game-genie" | "pro-action-replay" | "xploder";
 
@@ -286,15 +286,13 @@ export type CheatWrite = { offset: number, value: number, width: number, };
 
 export type CheatRecord = { id: string, system: CheatSystem, gameId: string, description: string, rawCode: string | null, codeKind?: CheatKind, rawFields: { [key in string]: string }, sourceFile: string, sourceIndex: number, sourceRevision: string, };
 
-export type RuntimeCheatPayload = { record: CheatRecord, };
-
-export type CheatResolution = { "type": "romBakeable", writes: Array<CheatWrite>, } | { "type": "runtime", payload: RuntimeCheatPayload, } | { "type": "mixed", writes: Array<CheatWrite>, payload: RuntimeCheatPayload, } | { "type": "requiresParameter", payload: RuntimeCheatPayload, } | { "type": "unsupported", reason: string, };
+export type CheatResolution = { "type": "romBakeable", writes: Array<CheatWrite>, } | { "type": "unsupported", reason: string, };
 
 export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null, };
 
 export type CheatWriteConflict = { firstId: string, secondId: string, offset: number, firstValue: number, secondValue: number, };
 
-export type CheatCommandResult = { records: Array<ClassifiedCheatRecord>, conflicts: Array<CheatWriteConflict>, runtimeOutput: string | null, };
+export type CheatCommandResult = { records: Array<ClassifiedCheatRecord>, conflicts: Array<CheatWriteConflict>, };
 
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 
@@ -443,11 +441,7 @@ export type CheatCommand = { input: string,
  * Direct records for the JSON/WASM boundary. The native argv parser does
  * not expose this internal command.
  */
-records: Array<CheatRecord>,
-/**
- * Raw RetroArch text for local import through the JSON/WASM boundary.
- */
-chtSource?: string, chtFileName?: string, chtSystem?: CheatSystem, selectedIds?: Array<string>, output?: string, };
+records: Array<CheatRecord>, };
 
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 

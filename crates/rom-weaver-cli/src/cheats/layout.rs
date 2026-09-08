@@ -9,7 +9,7 @@
 
 use rom_weaver_core::Result;
 
-use super::{CheatSystem, CheatWrite, DecodedCode, coded};
+use super::{CheatSystem, CheatWrite, DecodedCode, SEGA8_RAM_START, coded};
 
 const NES_INES_MAGIC: [u8; 4] = *b"NES\x1A";
 const NES_HEADER_BYTES: usize = 16;
@@ -22,6 +22,10 @@ const GB_BANK_BYTES: usize = 0x4000;
 const GBA_ROM_START: u32 = 0x0800_0000;
 const GBA_ROM_END: u32 = 0x0A00_0000;
 const PSX_EXE_HEADER_BYTES: usize = 0x800;
+const SEGA8_COPIER_HEADER_BYTES: usize = 512;
+const SEGA8_SLOT_BYTES: usize = 0x4000;
+/// Slot 0 below $0400 holds the fixed boot area, which is always bank 0.
+const SEGA8_FIXED_BYTES: u32 = 0x400;
 
 /// How CPU/bus addresses map onto file offsets for a ROM.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,6 +39,8 @@ pub enum Mapping {
     SnesLoRom,
     SnesHiRom,
     GbaRom,
+    /// Sega 8-bit mapper with 16 KiB slots.
+    Sega8,
     PlayStationExe {
         load_address: u32,
         data_bytes: usize,
@@ -55,10 +61,28 @@ impl RomLayout {
         match system {
             CheatSystem::Nes => detect_nes(rom),
             CheatSystem::Snes => detect_snes(rom),
-            CheatSystem::Genesis | CheatSystem::GameBoy | CheatSystem::GameBoyColor => Self {
+            CheatSystem::Genesis
+            | CheatSystem::Sega32x
+            | CheatSystem::GameBoy
+            | CheatSystem::GameBoyColor => Self {
                 system,
                 header_bytes: 0,
                 mapping: Mapping::Flat,
+            },
+            CheatSystem::MasterSystem | CheatSystem::GameGear | CheatSystem::Sg1000 => Self {
+                system,
+                // Copier dumps carry a 512-byte header, detected by the same
+                // size remainder rule as SNES.
+                header_bytes: if rom.len() % 1024 == SEGA8_COPIER_HEADER_BYTES {
+                    SEGA8_COPIER_HEADER_BYTES
+                } else {
+                    0
+                },
+                mapping: if matches!(system, CheatSystem::Sg1000) {
+                    Mapping::Flat
+                } else {
+                    Mapping::Sega8
+                },
             },
             CheatSystem::GameBoyAdvance => Self {
                 system,
@@ -222,7 +246,10 @@ pub(crate) fn resolve_writes(
     match layout.system {
         CheatSystem::Nes => resolve_nes(rom, layout, decoded),
         CheatSystem::Snes => resolve_snes(rom, layout, decoded),
-        CheatSystem::Genesis => resolve_genesis(rom, layout, decoded),
+        CheatSystem::Genesis | CheatSystem::Sega32x => resolve_genesis(rom, layout, decoded),
+        CheatSystem::MasterSystem | CheatSystem::GameGear | CheatSystem::Sg1000 => {
+            resolve_sega8(rom, layout, decoded)
+        }
         CheatSystem::GameBoy | CheatSystem::GameBoyColor => resolve_gameboy(rom, decoded),
         CheatSystem::GameBoyAdvance => resolve_gba(rom, decoded),
         CheatSystem::PlayStation => resolve_playstation(rom, layout, decoded),
@@ -386,6 +413,56 @@ fn resolve_gameboy(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>>
     }
     Ok(vec![CheatWrite {
         offset,
+        value: decoded.value,
+        width: decoded.width,
+    }])
+}
+
+fn resolve_sega8(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Result<Vec<CheatWrite>> {
+    let cpu = decoded.address;
+    let offending = format!("{cpu:#06X}");
+    if cpu >= SEGA8_RAM_START {
+        return Err(ram_error(&offending));
+    }
+    let direct = layout.header_bytes + cpu as usize;
+    let scan_banks = matches!(layout.mapping, Mapping::Sega8) && cpu >= SEGA8_FIXED_BYTES;
+    if let Some(compare) = decoded.compare {
+        if !scan_banks {
+            if rom.get(direct) != Some(&compare) {
+                return Err(no_match_error(&offending));
+            }
+            return Ok(vec![CheatWrite {
+                offset: direct,
+                value: decoded.value,
+                width: decoded.width,
+            }]);
+        }
+        // The slot the address falls in can hold any bank, so every bank whose
+        // byte matches the compare is a candidate.
+        let slot_offset = (cpu as usize) % SEGA8_SLOT_BYTES;
+        let bank_count = (rom.len().saturating_sub(layout.header_bytes)) / SEGA8_SLOT_BYTES;
+        let mut writes = Vec::new();
+        for bank in 0..bank_count.max(1) {
+            let offset = layout.header_bytes + bank * SEGA8_SLOT_BYTES + slot_offset;
+            if rom.get(offset) == Some(&compare) {
+                writes.push(CheatWrite {
+                    offset,
+                    value: decoded.value,
+                    width: decoded.width,
+                });
+            }
+        }
+        if writes.is_empty() {
+            return Err(no_match_error(&offending));
+        }
+        return Ok(writes);
+    }
+    // No compare: slot n holds bank n, the power-on mapping.
+    if direct.saturating_add(decoded.width as usize) > rom.len() {
+        return Err(range_error(direct, rom.len()));
+    }
+    Ok(vec![CheatWrite {
+        offset: direct,
         value: decoded.value,
         width: decoded.width,
     }])

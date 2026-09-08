@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs};
+use std::fs;
 
 use rom_weaver_core::{OperationFamily, OperationReport};
 use serde::Serialize;
@@ -13,7 +13,6 @@ use super::*;
 pub struct CheatCommandResult {
     pub records: Vec<ClassifiedCheatRecord>,
     pub conflicts: Vec<CheatWriteConflict>,
-    pub runtime_output: Option<PathBuf>,
 }
 
 impl CliApp {
@@ -32,47 +31,8 @@ impl CliApp {
             Ok(rom) => rom,
             Err(error) => return self.finish("cheat", fail(error.to_string())),
         };
-        let mut records = args.records.clone();
-        if let Some(source) = args.cht_source.as_deref() {
-            let Some(system) = args.cht_system else {
-                return self.finish(
-                    "cheat",
-                    fail("chtSystem is required when chtSource is provided".to_string()),
-                );
-            };
-            let source_file = args
-                .cht_file_name
-                .as_deref()
-                .and_then(|name| Path::new(name).file_name())
-                .and_then(|name| name.to_str())
-                .filter(|name| !name.is_empty())
-                .unwrap_or("imported.cht");
-            let imported = match crate::cheats::parse_retroarch_cht(
-                source,
-                crate::cheats::RetroArchParseOptions {
-                    system,
-                    game_id: "local-import",
-                    source_file,
-                    source_revision: "local-import",
-                },
-            ) {
-                Ok(records) if !records.is_empty() => records,
-                Ok(_) => {
-                    return self.finish(
-                        "cheat",
-                        fail("the RetroArch cheat file contains no cheat entries".to_string()),
-                    );
-                }
-                Err(error) => return self.finish("cheat", fail(error.to_string())),
-            };
-            records.extend(imported);
-        } else if args.cht_file_name.is_some() || args.cht_system.is_some() {
-            return self.finish(
-                "cheat",
-                fail("chtSource is required for RetroArch cheat import".to_string()),
-            );
-        }
-        let classified = records
+        let classified = args
+            .records
             .iter()
             .map(|record| crate::cheats::classify_record(&rom, record))
             .collect::<Vec<_>>();
@@ -82,64 +42,10 @@ impl CliApp {
                 CheatResolution::RomBakeable { writes } => {
                     Some((entry.record.id.clone(), writes.clone()))
                 }
-                _ => None,
+                CheatResolution::Unsupported { .. } => None,
             })
             .collect::<Vec<_>>();
         let conflicts = crate::cheats::detect_write_conflicts(&writes);
-
-        let runtime_output = if args.selected_ids.is_empty() {
-            None
-        } else {
-            let Some(output) = args.output.as_ref() else {
-                return self.finish(
-                    "cheat",
-                    fail(
-                        "--output is required when selectedIds contains runtime cheats".to_string(),
-                    ),
-                );
-            };
-            let by_id = classified
-                .iter()
-                .map(|entry| (entry.record.id.as_str(), entry))
-                .collect::<BTreeMap<_, _>>();
-            let mut selected = Vec::with_capacity(args.selected_ids.len());
-            for id in &args.selected_ids {
-                let Some(entry) = by_id.get(id.as_str()) else {
-                    return self.finish(
-                        "cheat",
-                        fail(format!("selected cheat ID `{id}` does not exist")),
-                    );
-                };
-                match entry.resolution {
-                    CheatResolution::Runtime { .. } | CheatResolution::Mixed { .. } => {
-                        selected.push(entry.record.clone());
-                    }
-                    _ => {
-                        return self.finish(
-                            "cheat",
-                            fail(format!(
-                                "selected cheat ID `{id}` is not a runtime or mixed cheat"
-                            )),
-                        );
-                    }
-                }
-            }
-            let rendered = match crate::cheats::export_retroarch_cht(&selected) {
-                Ok(rendered) => rendered,
-                Err(error) => return self.finish("cheat", fail(error.to_string())),
-            };
-            if let Some(parent) = output
-                .parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-                && let Err(error) = fs::create_dir_all(parent)
-            {
-                return self.finish("cheat", fail(error.to_string()));
-            }
-            if let Err(error) = fs::write(output, rendered.as_bytes()) {
-                return self.finish("cheat", fail(error.to_string()));
-            }
-            Some(output.clone())
-        };
 
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
@@ -153,7 +59,6 @@ impl CliApp {
             "cheats": CheatCommandResult {
                 records: classified,
                 conflicts,
-                runtime_output,
             }
         }));
         self.finish("cheat", report)
