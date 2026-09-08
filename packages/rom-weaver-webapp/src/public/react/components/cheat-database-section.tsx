@@ -1,5 +1,5 @@
-import { ChevronDown, Database, FileUp, Plus, Search } from "lucide-react";
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Database, Plus, Search } from "lucide-react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { IdentifyCatalog } from "../../../lib/identify/identify-catalog.ts";
 import {
   cheatDelivery,
@@ -13,7 +13,6 @@ import {
   type CheatDatabaseClient,
   type CheatDatabaseIndex,
   type CheatDatabaseSystem,
-  type CheatFilter,
   type CheatGameMatch,
   type CheatRomIdentity,
   type CheatSystemShard,
@@ -22,7 +21,6 @@ import {
   type ManualCheatClassifier,
   type ManualCheatKindOverride,
   type ManualCheatResult,
-  type LocalCheatFileImporter,
 } from "../../../lib/cheats/index.ts";
 import { loadIdentifyIndexAndCatalog } from "../../../platform/browser/identify-packs.ts";
 import "./cheat-database-section.css";
@@ -44,15 +42,6 @@ const loadCheatDatabase = async (): Promise<{ index: CheatDatabaseIndex; catalog
   if (!parsed) throw new Error("This deployment ships no cheat database.");
   return { index: parsed, catalog };
 };
-
-const MAX_LOCAL_CHT_BYTES = 16 * 1024 * 1024;
-
-const FILTERS: Array<{ id: CheatFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "rom", label: "ROM / baked" },
-  { id: "runtime", label: "RAM / runtime" },
-  { id: "requires-parameter", label: "Requires value" },
-];
 
 const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : undefined);
 
@@ -81,13 +70,10 @@ const matchCopy = (match: CheatGameMatch): { heading: string; detail: string } =
   return { heading: "No automatic match", detail: "Select a game to browse unverified cheats for this console." };
 };
 
-const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; text: string } => {
-  const delivery = cheatDelivery(record);
-  if (delivery === "rom") return { badge: "ROM cheat", text: "Baked into output" };
-  if (delivery === "runtime") return { badge: "RAM cheat", text: "Requires emulator cheat file" };
-  if (delivery === "requires-parameter") return { badge: "Needs a value", text: "Add a value before selection" };
-  return { badge: "Unsupported", text: "Cannot be selected" };
-};
+const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; text: string } =>
+  cheatDelivery(record) === "rom"
+    ? { badge: "ROM cheat", text: "Baked into output" }
+    : { badge: "Unsupported", text: "Cannot be baked into the ROM" };
 
 const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
@@ -156,12 +142,6 @@ const CheatRow = ({ record, checked, expanded, onToggle, onExpand }: CheatRowPro
             <dt>Delivery</dt>
             <dd>{record.resolution.type === "unsupported" ? record.resolution.reason : delivery.text}</dd>
           </div>
-          {record.resolution.type === "mixed" ? (
-            <div>
-              <dt>Compatibility</dt>
-              <dd>The complete mixed entry goes into the emulator cheat file. ROMWeaver does not split it.</dd>
-            </div>
-          ) : null}
         </dl>
       ) : null}
     </li>
@@ -310,68 +290,6 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
   );
 };
 
-type LocalCheatFileFormProps = {
-  importer: LocalCheatFileImporter;
-  onImport: (records: ClassifiedCheatRecord[]) => void;
-  system: CheatDatabaseSystem;
-};
-
-const LocalCheatFileForm = ({ importer, onImport, system }: LocalCheatFileFormProps) => {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
-  const sequence = useRef(0);
-
-  useEffect(
-    () => () => {
-      sequence.current += 1;
-    },
-    [],
-  );
-
-  const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || busy) return;
-    const request = ++sequence.current;
-    setError("");
-    setStatus("");
-    if (file.size > MAX_LOCAL_CHT_BYTES) {
-      setError("The cheat file is larger than the 16 MiB import limit.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const records = await importer({ content: await file.text(), fileName: file.name, system });
-      if (sequence.current !== request) return;
-      onImport(records);
-      setStatus(`Imported ${records.length} cheat${records.length === 1 ? "" : "s"} from ${file.name}.`);
-    } catch (reason) {
-      if (sequence.current === request) {
-        setError(reason instanceof Error ? reason.message : "The cheat file could not be imported.");
-      }
-    } finally {
-      if (sequence.current === request) setBusy(false);
-    }
-  };
-
-  return (
-    <div className="local-cheat-file">
-      <label>
-        <span>
-          <FileUp aria-hidden="true" />
-          Import RetroArch .cht
-        </span>
-        <input accept=".cht,text/plain" disabled={busy} onChange={importFile} type="file" />
-      </label>
-      <p>ROMWeaver reads and classifies this file locally. Imported entries stay intact.</p>
-      {busy ? <p aria-live="polite">Importing cheat file…</p> : null}
-      {error ? <p role="alert">{error}</p> : null}
-      {status ? <p role="status">{status}</p> : null}
-    </div>
-  );
-};
-
 export type CheatDatabaseSectionProps = {
   rom: CheatRomIdentity | null;
   /** Test seams: a supplied index skips the identify index fetch. */
@@ -381,9 +299,8 @@ export type CheatDatabaseSectionProps = {
   client?: CheatDatabaseClient;
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
-  importLocalCheatFile: LocalCheatFileImporter;
   onSelectionChange?: (records: ClassifiedCheatRecord[]) => void;
-  outputSummary?: { rom: number; runtime: number; cheatFileName?: string };
+  outputSummary?: { rom: number };
   validationMessage?: string;
 };
 
@@ -395,7 +312,6 @@ export const CheatDatabaseSection = ({
   client: suppliedClient,
   classifyManualCode,
   classifyDatabaseCheats,
-  importLocalCheatFile,
   onSelectionChange,
   outputSummary,
   validationMessage,
@@ -406,7 +322,6 @@ export const CheatDatabaseSection = ({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<CheatFilter>("all");
   const [manualGameId, setManualGameId] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [classifiedRecords, setClassifiedRecords] = useState<ClassifiedCheatRecord[]>([]);
@@ -432,7 +347,6 @@ export const CheatDatabaseSection = ({
     setManualRecords([]);
     setManualGameId("");
     setQuery("");
-    setFilter("all");
     selectionCallback.current?.([]);
   }, [identityKey]);
 
@@ -521,7 +435,7 @@ export const CheatDatabaseSection = ({
     };
   }, [classifyDatabaseCheats, game, system]);
   const records = useMemo(() => [...classifiedRecords, ...manualRecords], [classifiedRecords, manualRecords]);
-  const visibleRecords = useMemo(() => filterCheats(records, query, filter), [filter, query, records]);
+  const visibleRecords = useMemo(() => filterCheats(records, query), [query, records]);
   const copy = matchCopy(match);
 
   const publishSelection = (next: Set<string>, source = records) => {
@@ -537,16 +451,6 @@ export const CheatDatabaseSection = ({
     publishSelection(nextSelected, [...classifiedRecords, ...nextRecords]);
   };
 
-  const addImportedRecords = (nextRecords: ClassifiedCheatRecord[]) => {
-    const sourceFiles = new Set(nextRecords.map(({ record }) => record.sourceFile));
-    const retainedRecords = manualRecords.filter(
-      ({ record }) => record.sourceRevision !== "local-import" || !sourceFiles.has(record.sourceFile),
-    );
-    const mergedRecords = [...retainedRecords, ...nextRecords];
-    setManualRecords(mergedRecords);
-    publishSelection(selectedIds, [...classifiedRecords, ...mergedRecords]);
-  };
-
   return (
     <section aria-labelledby="cheat-database-heading" className="cheat-database-section">
       <header>
@@ -555,7 +459,7 @@ export const CheatDatabaseSection = ({
         </span>
         <div>
           <h2 id="cheat-database-heading">Cheats</h2>
-          <p>ROM cheats change the output ROM. RAM cheats go into a separate emulator cheat file.</p>
+          <p>ROM cheats change the output ROM.</p>
         </div>
       </header>
 
@@ -603,20 +507,6 @@ export const CheatDatabaseSection = ({
                 value={query}
               />
             </label>
-            <fieldset>
-              <legend className="sr-only">Filter cheats by delivery type</legend>
-              {FILTERS.map((option) => (
-                <label key={option.id}>
-                  <input
-                    checked={filter === option.id}
-                    name="cheat-filter"
-                    onChange={() => setFilter(option.id)}
-                    type="radio"
-                  />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-            </fieldset>
           </div>
 
           {!classifying && visibleRecords.length ? (
@@ -643,29 +533,21 @@ export const CheatDatabaseSection = ({
               ))}
             </ul>
           ) : classifying ? null : (
-            <p role="status">No cheats match this search and filter.</p>
+            <p role="status">No cheats match this search.</p>
           )}
         </>
       ) : null}
 
       {system ? (
-        <>
-          <LocalCheatFileForm
-            importer={importLocalCheatFile}
-            key={`${identityKey ?? "unknown"}:${system}`}
-            onImport={addImportedRecords}
-            system={system}
-          />
-          <ManualCodeForm
-            classifier={classifyManualCode}
-            defaultSystem={system}
-            onAdd={addManualRecord}
-            systems={(activeIndex?.entries ?? []).map((candidate) => ({
-              label: candidate.platform,
-              value: candidate.cheatSystem,
-            }))}
-          />
-        </>
+        <ManualCodeForm
+          classifier={classifyManualCode}
+          defaultSystem={system}
+          onAdd={addManualRecord}
+          systems={(activeIndex?.entries ?? []).map((candidate) => ({
+            label: candidate.platform,
+            value: candidate.cheatSystem,
+          }))}
+        />
       ) : null}
 
       {outputSummary ? (
@@ -676,18 +558,12 @@ export const CheatDatabaseSection = ({
               {outputSummary.rom === 1 ? "" : "s"}.
             </p>
           ) : null}
-          {outputSummary.runtime ? (
-            <p>
-              Cheat file: {outputSummary.cheatFileName || "RetroArch .cht"} contains {outputSummary.runtime} RAM or
-              runtime cheat{outputSummary.runtime === 1 ? "" : "s"}.
-            </p>
-          ) : null}
         </div>
       ) : null}
 
       <aside className="cheat-notices">
         <p>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</p>
-        <p>RAM cheats need a compatible RetroArch core or emulator. ROMWeaver does not upload ROM data or checksums.</p>
+        <p>ROMWeaver does not upload ROM data or checksums.</p>
         {activeIndex ? (
           <p>
             Database: {sourceName(activeIndex.sourceUrl)} at {activeIndex.sourceRevision} · {activeIndex.license}

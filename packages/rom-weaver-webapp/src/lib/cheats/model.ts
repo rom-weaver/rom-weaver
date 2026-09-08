@@ -1,4 +1,14 @@
-const CHEAT_DATABASE_SYSTEMS = ["nes", "snes", "genesis", "gameboy", "gameboy-color", "gameboyadvance"] as const;
+const CHEAT_DATABASE_SYSTEMS = [
+  "nes",
+  "snes",
+  "genesis",
+  "gameboy",
+  "gameboy-color",
+  "gameboyadvance",
+  "mastersystem",
+  "gamegear",
+  "sega32x",
+] as const;
 
 /** The Rust `CheatSystem` identifier a shard's records carry. */
 export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
@@ -6,7 +16,7 @@ export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
 type CheatCodeKind = "game-genie" | "pro-action-replay" | "xploder";
 type RustCheatSystem = CheatDatabaseSystem;
 
-export type RuntimeCheatRecord = {
+export type CheatRecord = {
   id: string;
   system: RustCheatSystem;
   gameId: string;
@@ -20,14 +30,8 @@ export type RuntimeCheatRecord = {
 };
 
 type CheatWrite = { offset: number; value: number; width: number };
-type RuntimeCheatPayload = { record: RuntimeCheatRecord };
 
-type CheatResolution =
-  | { type: "romBakeable"; writes: CheatWrite[] }
-  | { type: "runtime"; payload: RuntimeCheatPayload }
-  | { type: "mixed"; writes: CheatWrite[]; payload: RuntimeCheatPayload }
-  | { type: "requiresParameter"; payload: RuntimeCheatPayload }
-  | { type: "unsupported"; reason: string };
+type CheatResolution = { type: "romBakeable"; writes: CheatWrite[] } | { type: "unsupported"; reason: string };
 
 export type CheatDatabaseRecord = {
   id: string;
@@ -44,7 +48,7 @@ export type CheatDatabaseRecord = {
 };
 
 export type ClassifiedCheatRecord = {
-  record: RuntimeCheatRecord;
+  record: CheatRecord;
   resolution: CheatResolution;
   detectedKind: CheatCodeKind | null;
 };
@@ -113,8 +117,6 @@ export type CheatGameMatch =
   | { kind: "manual"; game: CheatGameRecord }
   | { kind: "none" };
 
-export type CheatFilter = "all" | "rom" | "runtime" | "requires-parameter";
-
 export type ManualCheatKindOverride = "auto" | CheatCodeKind;
 
 type ManualCheatRequest = {
@@ -137,25 +139,10 @@ export type DatabaseCheatClassifier = (
   system: CheatDatabaseSystem,
 ) => Promise<ClassifiedCheatRecord[]>;
 
-export type LocalCheatFileImporter = (request: {
-  content: string;
-  fileName: string;
-  system: CheatDatabaseSystem;
-}) => Promise<ClassifiedCheatRecord[]>;
-
-export type LocalCheatFileImport = Parameters<LocalCheatFileImporter>[0];
-
 export const isCheatDatabaseSystem = (value: string | undefined): value is CheatDatabaseSystem =>
   CHEAT_DATABASE_SYSTEMS.some((system) => system === value);
 
-export const isSelectableCheat = (record: ClassifiedCheatRecord): boolean =>
-  record.resolution.type !== "requiresParameter" && record.resolution.type !== "unsupported";
+export const isSelectableCheat = (record: ClassifiedCheatRecord): boolean => record.resolution.type === "romBakeable";
 
-export const cheatDelivery = (
-  record: ClassifiedCheatRecord,
-): "rom" | "runtime" | "requires-parameter" | "unsupported" => {
-  if (record.resolution.type === "romBakeable") return "rom";
-  if (record.resolution.type === "runtime" || record.resolution.type === "mixed") return "runtime";
-  if (record.resolution.type === "requiresParameter") return "requires-parameter";
-  return "unsupported";
-};
+export const cheatDelivery = (record: ClassifiedCheatRecord): "rom" | "unsupported" =>
+  record.resolution.type === "romBakeable" ? "rom" : "unsupported";

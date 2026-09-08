@@ -1,10 +1,5 @@
 import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-runtime.ts";
-import type {
-  CheatDatabaseRecord,
-  ClassifiedCheatRecord,
-  LocalCheatFileImport,
-  RuntimeCheatRecord,
-} from "../../lib/cheats/model.ts";
+import type { CheatDatabaseRecord, CheatRecord, ClassifiedCheatRecord } from "../../lib/cheats/model.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
@@ -48,15 +43,12 @@ type BrowserPpfUndoInput = {
 };
 
 type BrowserCheatInput = {
-  importedFile?: LocalCheatFileImport;
-  records: Array<CheatDatabaseRecord | RuntimeCheatRecord>;
+  records: Array<CheatDatabaseRecord | CheatRecord>;
   rom: SourceRef;
-  selectedIds?: string[];
-  outputName?: string;
   signal?: AbortSignal;
 };
 
-const toRuntimeCheatRecord = (record: CheatDatabaseRecord | RuntimeCheatRecord): RuntimeCheatRecord => ({
+const toCheatRecord = (record: CheatDatabaseRecord | CheatRecord): CheatRecord => ({
   id: record.id,
   system: record.system,
   gameId: record.gameId,
@@ -71,15 +63,12 @@ const toRuntimeCheatRecord = (record: CheatDatabaseRecord | RuntimeCheatRecord):
   sourceRevision: record.sourceRevision,
 });
 
-const runBrowserCheats = async ({ importedFile, outputName, records, rom, selectedIds, signal }: BrowserCheatInput) => {
+const runBrowserCheats = async ({ records, rom, signal }: BrowserCheatInput) => {
   browserRuntime.binary.assertSource(rom, "Cheat classification");
   const cheat = browserRuntime.cheat;
   if (!cheat) throw new Error("The cheat worker is unavailable");
   const result = await cheat.run({
-    ...(importedFile ? { importedFile } : {}),
-    ...(outputName ? { outputName } : {}),
-    records: records.map(toRuntimeCheatRecord),
-    ...(selectedIds?.length ? { selectedIds } : {}),
+    records: records.map(toCheatRecord),
     signal,
     source: rom,
   });

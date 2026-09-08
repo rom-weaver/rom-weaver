@@ -40,15 +40,6 @@ const getApplyThreads = (options: PatchInput["options"]) => options?.workers?.th
 const getApplyPatchTargets = (options: PatchInput["options"]) => options?.patchTargets;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("apply");
 
-const getCheatOutputMode = (
-  patchCount: number,
-  romCheatCount: number,
-  runtimeCheatCount: number,
-): "rom" | "runtime-only" | "rom-and-runtime" => {
-  if (!runtimeCheatCount) return "rom";
-  return patchCount || romCheatCount ? "rom-and-runtime" : "runtime-only";
-};
-
 const getRuntimeExternalPath = (
   sourceRef: ReturnType<typeof getPatchFileExternalSource>,
   runtime: WorkflowRuntime,
@@ -729,57 +720,20 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });
 
   const romCheatCount = input.cheatRecords?.length || 0;
-  const runtimeCheatCount = input.runtimeCheatRecords?.length || 0;
-  const cheatOutputMode = getCheatOutputMode(patches.length, romCheatCount, runtimeCheatCount);
-  const materialized =
-    cheatOutputMode === "runtime-only"
-      ? { compressionTimeMs: undefined, files: [], rawOutputSize: 0 }
-      : await traceWorkflowStageBlock(
-          options,
-          "output.materialization",
-          "output",
-          () => buildSessionOutputFiles(inputAssets, patchedById, options, runtime),
-          () => ({
-            inputCount: inputAssets.length,
-            patchedCount: patchedById.size,
-          }),
-        );
+  const materialized = await traceWorkflowStageBlock(
+    options,
+    "output.materialization",
+    "output",
+    () => buildSessionOutputFiles(inputAssets, patchedById, options, runtime),
+    () => ({
+      inputCount: inputAssets.length,
+      patchedCount: patchedById.size,
+    }),
+  );
   const { compressionTimeMs, files: outputFiles, rawOutputSize } = materialized;
-  let outputs = await Promise.all(outputFiles.map((file) => toPublicOutput(file, runtime)));
+  const outputs = await Promise.all(outputFiles.map((file) => toPublicOutput(file, runtime)));
   const primaryInput = targets[0] || getPrimaryInputAsset(inputAssets);
   if (!primaryInput) throw new Error("No input file provided");
-
-  let cheatFileName: string | undefined;
-  if (runtimeCheatCount) {
-    const cheatRuntime = runtime.cheat;
-    if (!cheatRuntime) throw new Error("Runtime cheat export is unavailable in this output mode");
-    const requestedOutputName = getBaseFileName(options.output?.outputName || primaryInput.fileName || "output.bin");
-    cheatFileName = replaceFileNameExtension(requestedOutputName, "cht");
-    const runtimeRecords = input.runtimeCheatRecords || [];
-    const exported = await cheatRuntime.run({
-      outputName: cheatFileName,
-      records: runtimeRecords,
-      selectedIds: runtimeRecords.map((record) => record.id),
-      signal: options.signal,
-      source: toWorkerSourceRef(primaryInput.file, primaryInput.fileName || "input.bin"),
-    });
-    if (!exported.output) throw new Error("Runtime cheat export did not create a cheat file");
-
-    if (cheatOutputMode === "runtime-only") {
-      outputs = [exported.output];
-    } else {
-      const createArchive = runtime.compression.create;
-      if (!createArchive) throw new Error("ZIP output is required when ROM and runtime cheats are selected");
-      const packageName = `${getBaseFileName(requestedOutputName).replace(/\.[^.]+$/u, "")}-romweaver.zip`;
-      const archive = await createArchive({
-        entries: [...outputs, exported.output].map((output) => ({ fileName: output.fileName, filePath: output.path })),
-        format: "zip",
-        options: { outputName: packageName, signal: options.signal },
-      });
-      const packageOutput = "output" in archive ? archive.output : archive;
-      outputs = [packageOutput, ...outputs, exported.output];
-    }
-  }
 
   traceWorkflowStage(options, "stage.finish", "result", "output", {
     inputCount: inputAssets.length,
@@ -788,13 +742,10 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     patchedCount: patchedById.size,
     rawOutputSize,
     romCheatCount,
-    runtimeCheatCount,
   });
 
   return {
-    ...(romCheatCount || runtimeCheatCount
-      ? { cheats: { ...(cheatFileName ? { cheatFileName } : {}), rom: romCheatCount, runtime: runtimeCheatCount } }
-      : {}),
+    ...(romCheatCount ? { cheats: { rom: romCheatCount } } : {}),
     inputs: inputAssets.map((asset) => ({
       fileName: asset.fileName,
       id: asset.id,
@@ -829,10 +780,4 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   };
 };
 
-export {
-  getCheatOutputMode,
-  getPatchHeaderModes,
-  getPatchN64ByteOrders,
-  retainUncompressedWorkerOutputs,
-  runApplyWorkflow,
-};
+export { getPatchHeaderModes, getPatchN64ByteOrders, retainUncompressedWorkerOutputs, runApplyWorkflow };

@@ -5,7 +5,6 @@ import {
   type CheatDatabaseSystem,
   type ClassifiedCheatRecord,
   type DatabaseCheatClassifier,
-  type LocalCheatFileImporter,
   type ManualCheatClassifier,
 } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
@@ -1077,10 +1076,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           setCompletedOutput(null);
           setCompletedCheats(undefined);
           const selectedCheats = selectedCheatsRef.current;
-          workflow.setCheats?.({
-            rom: selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
-            runtime: selectedCheats.filter((record) => cheatDelivery(record) === "runtime").map(({ record }) => record),
-          });
+          workflow.setCheats?.(
+            selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
+          );
           const result = (await workflow.run()) as BrowserApplyResult;
           handleApplyComplete(result);
           return normalizeApplyResult(result);
@@ -1593,36 +1591,20 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [getCheatSource],
   );
-  const importLocalCheatFile = useCallback<LocalCheatFileImporter>(
-    async ({ content, fileName, system }) => {
-      const { runBrowserCheats } = await loadBrowserApi();
-      return (
-        await runBrowserCheats({
-          importedFile: { content, fileName, system },
-          records: [],
-          rom: getCheatSource(),
-        })
-      ).records;
-    },
-    [getCheatSource],
-  );
   const preflightSequence = useRef(0);
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[]) => {
       selectedCheatsRef.current = records;
       setCompletedOutput(null);
       setCompletedCheats(undefined);
-      const selection = {
-        rom: records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
-        runtime: records.filter((record) => cheatDelivery(record) === "runtime").map(({ record }) => record),
-      };
-      (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(selection);
+      const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
+      (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords);
       const sequence = ++preflightSequence.current;
       setCheatConflictMessage("");
-      if (selection.rom.length < 2) return;
-      const descriptions = new Map(selection.rom.map((record) => [record.id, record.description]));
+      if (romRecords.length < 2) return;
+      const descriptions = new Map(romRecords.map((record) => [record.id, record.description]));
       void loadBrowserApi()
-        .then(({ runBrowserCheats }) => runBrowserCheats({ records: selection.rom, rom: getCheatSource() }))
+        .then(({ runBrowserCheats }) => runBrowserCheats({ records: romRecords, rom: getCheatSource() }))
         .then(({ conflicts }) => {
           const [conflict] = conflicts;
           if (sequence !== preflightSequence.current || !conflict) return;
@@ -1746,7 +1728,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
-            importLocalCheatFile={importLocalCheatFile}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
             rom={cheatRom}

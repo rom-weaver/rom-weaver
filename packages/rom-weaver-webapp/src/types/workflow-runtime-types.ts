@@ -3,7 +3,7 @@ import type {
   RomSpecificCompressionFormat,
 } from "../lib/compression/container-format-registry.ts";
 import type { InputAsset } from "../lib/input/input-assets.ts";
-import type { RuntimeCheatRecord } from "../lib/cheats/model.ts";
+import type { CheatRecord } from "../lib/cheats/model.ts";
 import type { RetainedRuntimeOutput, VfsOutputRef } from "../storage/vfs/types.ts";
 import type { ROM_WEAVER_COMPRESSION_METADATA } from "../wasm/generated/rom-weaver-format-metadata.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../workers/protocol/patch-engine.ts";
@@ -108,7 +108,7 @@ type PatchApplyUserOptions = {
 
 type PatchInput = {
   /** Selected records that Rust resolves as ordered ROM transformations. */
-  cheatRecords?: RuntimeCheatRecord[];
+  cheatRecords?: CheatRecord[];
   inputs: Array<SourceRef> | SourceRef;
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;
@@ -118,8 +118,6 @@ type PatchInput = {
   parsedPatches?: ParsedPatchLike[];
   selectedInputEntryName?: string;
   selectedPatchEntryNames?: Record<number, string>;
-  /** Selected records that Rust preserves in a RetroArch cheat file. */
-  runtimeCheatRecords?: RuntimeCheatRecord[];
   options?: ApplyWorkflowOptions;
 };
 
@@ -304,9 +302,7 @@ type CompressionCreateResult = {
 
 type ApplyWorkflowResult = {
   cheats?: {
-    cheatFileName?: string;
     rom: number;
-    runtime: number;
   };
   output: PublicOutput;
   outputs: PublicOutput[];

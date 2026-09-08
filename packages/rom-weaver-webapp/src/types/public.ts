@@ -32,9 +32,7 @@ type AppliedPatchInfo = {
 
 type ApplyResult<TDestination> = {
   cheats?: {
-    cheatFileName?: string;
     rom: number;
-    runtime: number;
   };
   inputs: SelectedInputInfo[];
   output: PublicOutput<TDestination>;

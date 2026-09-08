@@ -590,7 +590,7 @@ const createBrowserTrimRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["t
   });
 
 const createBrowserCheatRuntime = (workerIo: RuntimeWorkerIo): NonNullable<WorkflowRuntime["cheat"]> => ({
-  run: async ({ importedFile, outputName, records, selectedIds, signal, source }) => {
+  run: async ({ records, signal, source }) => {
     const staged = await workerIo.stageSource({
       fallbackFileName: "cheat-target.bin",
       pathPrefix: "cheat-target",
@@ -601,20 +601,10 @@ const createBrowserCheatRuntime = (workerIo: RuntimeWorkerIo): NonNullable<Workf
       const result = await invokeRomWeaverCheatWorker({
         inputPath: staged.filePath,
         knownInputPaths: [staged.filePath],
-        ...(importedFile ? { importedFile } : {}),
-        ...(outputName ? { outputName } : {}),
         records,
-        ...(selectedIds?.length ? { selectedIds } : {}),
         signal,
       });
-      const output = result.runtimeOutput
-        ? await workerIo.createWorkerOutput(
-            result.runtimeOutput,
-            outputName || "runtime-cheats.cht",
-            "The cheat worker did not return a RetroArch cheat file",
-          )
-        : undefined;
-      return { conflicts: result.conflicts, output, records: result.records };
+      return { conflicts: result.conflicts, records: result.records };
     } finally {
       await staged.cleanup().catch(() => undefined);
     }

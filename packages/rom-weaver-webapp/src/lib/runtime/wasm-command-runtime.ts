@@ -20,7 +20,7 @@ import type {
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
-import type { ClassifiedCheatRecord, LocalCheatFileImport, RuntimeCheatRecord } from "../cheats/model.ts";
+import type { CheatRecord, ClassifiedCheatRecord } from "../cheats/model.ts";
 import type { CheatWriteConflict } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import type { CompressionLevelProfile, PatchBasisMode, PatchValidationPlan } from "../../wasm/index.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
@@ -933,10 +933,9 @@ const invokeRomWeaverPatchApplyWorker = async (
 type RomWeaverCheatResult = {
   conflicts: CheatWriteConflict[];
   records: ClassifiedCheatRecord[];
-  runtimeOutput?: Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0];
 };
 
-const parseCheatCommandResult = (result: RomWeaverJsonResult): Omit<RomWeaverCheatResult, "runtimeOutput"> => {
+const parseCheatCommandResult = (result: RomWeaverJsonResult): RomWeaverCheatResult => {
   const terminal = getTerminalEvent(result);
   const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : undefined);
   const cheats = asRecord(details?.cheats);
@@ -950,53 +949,26 @@ const parseCheatCommandResult = (result: RomWeaverJsonResult): Omit<RomWeaverChe
 };
 
 const invokeRomWeaverCheatWorker = async (input: {
-  importedFile?: LocalCheatFileImport;
   inputPath: string;
   knownInputPaths?: string[];
   logLevel?: LogLevel | string;
-  outputName?: string;
-  records: RuntimeCheatRecord[];
-  selectedIds?: string[];
+  records: CheatRecord[];
   signal?: AbortSignal;
 }): Promise<RomWeaverCheatResult> => {
-  const run = async (outputPath?: string) => {
-    const command = createRomWeaverCommand("cheat", {
-      ...(input.importedFile
-        ? {
-            chtFileName: input.importedFile.fileName,
-            chtSource: input.importedFile.content,
-            chtSystem: input.importedFile.system,
-          }
-        : {}),
-      input: input.inputPath,
-      records: input.records,
-      ...(input.selectedIds?.length ? { selectedIds: input.selectedIds } : {}),
-      ...(outputPath ? { output: outputPath } : {}),
-    });
-    const result = await runRomWeaverJson(
-      command,
-      toRomWeaverOptions({
-        knownInputPaths: input.knownInputPaths,
-        logLevel: input.logLevel,
-        signal: input.signal,
-      }),
-    );
-    ensureRomWeaverSuccess(result, "Cheat classification failed");
-    return { parsed: parseCheatCommandResult(result), result };
-  };
-
-  if (!(input.outputName && input.selectedIds?.length)) return (await run()).parsed;
-  return runWithRomWeaverOutputScope(input.inputPath, input.outputName, [], async (outputPath) => {
-    const { parsed, result } = await run(outputPath);
-    return {
-      ...parsed,
-      runtimeOutput: {
-        fileName: input.outputName,
-        filePath: outputPath,
-        timing: getRunResultTiming(result),
-      },
-    };
+  const command = createRomWeaverCommand("cheat", {
+    input: input.inputPath,
+    records: input.records,
   });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      signal: input.signal,
+    }),
+  );
+  ensureRomWeaverSuccess(result, "Cheat classification failed");
+  return parseCheatCommandResult(result);
 };
 
 const invokeRomWeaverCreatePatchCandidatesWorker = async (
