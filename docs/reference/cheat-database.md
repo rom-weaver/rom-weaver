@@ -67,6 +67,8 @@ Each shard is one identify data asset (`assets/identify-cheats-<platform slug>.j
 
 A shard belongs to the same pack group as its platform's identify pack. The background warm-up downloads the default group, the Settings page installs optional groups, and the CLI `identify database install-group` installs the same shards natively. An uncached shard is fetched on demand when the Cheats section opens.
 
+All six shards are in the default group. Together they add about 6 MB to the default group download and about 83 MB of decoded JSON to the browser's cache storage.
+
 The service worker verifies each shard's SHA-256 before it stores it, and the parsing worker verifies it again before use. A shard that fails either check reports the database as unavailable.
 
 A dedicated browser worker parses each shard. The initial JavaScript bundle does not contain the database.
