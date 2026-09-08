@@ -12,7 +12,7 @@ afterEach(() => {
   container?.remove();
 });
 
-test.each([393, 1280])("the ticker fits a %ipx viewport and pauses for keyboard input", async (width) => {
+test.each([393, 1280])("the ticker fits a %ipx viewport and keeps moving during interaction", async (width) => {
   await page.viewport(width, 900);
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -41,7 +41,9 @@ test.each([393, 1280])("the ticker fits a %ipx viewport and pauses for keyboard 
   expect(getComputedStyle(container.querySelectorAll(".formats-track")[1]).animationDirection).toBe("reverse");
   expect(getComputedStyle(track).animationPlayState).toBe("running");
   container.querySelector("input[type=file]").focus();
-  expect(getComputedStyle(track).animationPlayState).toBe("paused");
+  expect(getComputedStyle(track).animationPlayState).toBe("running");
+  container.querySelector(".drop.hero").classList.add("dragging");
+  expect(getComputedStyle(track).animationPlayState).toBe("running");
   const disclosure = container.querySelector("details");
   expect(disclosure.closest("label")).toBeNull();
   expect(disclosure.textContent).toContain("nes, sfc");

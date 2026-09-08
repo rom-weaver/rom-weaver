@@ -398,11 +398,6 @@
     display: none;
   }
 }
-.rw-app .step.is-input:focus-within .formats-track,
-.rw-app .drop.hero:active .formats-track,
-.rw-app .drop.hero.dragging .formats-track {
-  animation-play-state: paused;
-}
 .rw-app .hero-formats-help {
   padding: 0 var(--pad) var(--sp-s);
   font-size: 0.78rem;
