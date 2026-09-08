@@ -15,8 +15,11 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
     match system {
         CheatSystem::Nes => decode_nes(normalized, raw),
         CheatSystem::Snes => decode_snes(normalized, raw),
-        CheatSystem::Genesis => decode_genesis(normalized, raw),
+        CheatSystem::Genesis | CheatSystem::Sega32x => decode_genesis(normalized, raw),
         CheatSystem::GameBoy | CheatSystem::GameBoyColor => decode_gameboy(normalized, raw),
+        CheatSystem::MasterSystem | CheatSystem::GameGear | CheatSystem::Sg1000 => {
+            decode_sega8(normalized, system, raw)
+        }
         CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => Err(coded(
             "cheat_bad_system",
             "Game Genie codes do not support this system",
@@ -236,6 +239,52 @@ fn decode_gameboy(code: &str, raw: &str) -> Result<DecodedCode> {
 
     Ok(DecodedCode {
         system: CheatSystem::GameBoy,
+        kind: CheatKind::GameGenie,
+        address,
+        value,
+        compare,
+        width: 1,
+    })
+}
+
+// --- Master System / Game Gear / SG-1000 -----------------------------------
+
+/// Sega 8-bit Game Genie: `DDA-AAA` or `DDA-AAA-RXR`. The decode is the one in
+/// Genesis Plus GX `libretro/libretro.c` `decode_cheat`
+/// (https://github.com/libretro/Genesis-Plus-GX/blob/master/libretro/libretro.c).
+fn decode_sega8(code: &str, system: CheatSystem, raw: &str) -> Result<DecodedCode> {
+    if code.len() != 6 && code.len() != 9 {
+        return Err(coded(
+            "cheat_bad_code",
+            "Sega 8-bit Game Genie codes must be 6 or 9 hex digits",
+            raw,
+        ));
+    }
+    let mut n = [0u32; 9];
+    for (index, character) in code.chars().enumerate() {
+        n[index] = character.to_digit(16).ok_or_else(|| {
+            coded(
+                "cheat_bad_code",
+                "invalid character in Sega 8-bit Game Genie code",
+                raw,
+            )
+        })?;
+    }
+
+    let value = (n[0] << 4) | n[1];
+    // The high address nibble is the 6th digit complemented.
+    let address = ((n[5] ^ 0xF) << 12) | (n[2] << 8) | (n[3] << 4) | n[4];
+    let compare = if code.len() == 9 {
+        // The 8th digit is a check digit and is ignored; the compare byte is
+        // carried by digits G and I, de-obfuscated by rotate-right 2, XOR 0xBA.
+        let packed = ((n[6] << 4) | n[8]) as u8;
+        Some(packed.rotate_right(2) ^ 0xBA)
+    } else {
+        None
+    };
+
+    Ok(DecodedCode {
+        system,
         kind: CheatKind::GameGenie,
         address,
         value,

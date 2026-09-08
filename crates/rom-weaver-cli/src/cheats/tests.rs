@@ -197,17 +197,16 @@ fn plus_separated_gba_rom_patch_is_bakeable() {
 }
 
 #[test]
-fn gba_native_runtime_semantics_stay_available_for_export() {
+fn gba_runtime_only_codes_are_unsupported() {
     for code in ["000084F5 000A", "100193C0 0007", "D0000000 0000"] {
         let mut entry = record(CheatSystem::GameBoyAdvance, code);
         entry.code_kind = Some(CheatKind::Xploder);
         let classified = classify_record(&vec![0; 0x100], &entry);
         assert!(
-            matches!(classified.resolution, CheatResolution::Runtime { .. }),
+            matches!(classified.resolution, CheatResolution::Unsupported { .. }),
             "{code}: {:?}",
             classified.resolution
         );
-        assert_eq!(classified.detected_kind, Some(CheatKind::Xploder));
     }
 }
 
@@ -233,6 +232,32 @@ fn auto_kind_inference() {
         decode_auto("8000FF", CheatSystem::Nes).unwrap().kind,
         CheatKind::ProActionReplay
     );
+}
+
+#[test]
+fn colon_codes_never_decode_as_game_genie() {
+    // `AAAAAA:VV` strips to eight hex digits, the Genesis Game Genie length.
+    let genesis = decode_auto("E00000:AB", CheatSystem::Genesis).unwrap();
+    assert_eq!(genesis.kind, CheatKind::ProActionReplay);
+    assert_eq!(genesis.address, 0xE0_0000);
+    let sega32x = decode_auto("FFB78E:0000", CheatSystem::Sega32x).unwrap();
+    assert_eq!(sega32x.kind, CheatKind::ProActionReplay);
+    // `AAAA:VV` strips to six hex digits, the Master System Game Genie length.
+    for system in [
+        CheatSystem::MasterSystem,
+        CheatSystem::GameGear,
+        CheatSystem::Sg1000,
+    ] {
+        let err = decode_auto("1234:56", system).unwrap_err();
+        assert_eq!(err_code(&err), "cheat_ram_address");
+        let record = record(system, "1234:56");
+        let classified = classify_record(&vec![0u8; 0x20000], &record);
+        assert!(
+            matches!(classified.resolution, CheatResolution::Unsupported { .. }),
+            "{:?}",
+            classified.resolution
+        );
+    }
 }
 
 // --- resolve_writes --------------------------------------------------------
@@ -437,10 +462,12 @@ fn classifies_runtime_addresses_for_each_family() {
     ];
     for (system, code) in cases {
         let classified = classify_record(&vec![0; 0x10_0000], &record(system, code));
-        assert!(
-            matches!(classified.resolution, CheatResolution::Runtime { .. }),
-            "{system:?} {code}: {:?}",
-            classified.resolution
+        assert_eq!(
+            classified.resolution,
+            CheatResolution::Unsupported {
+                reason: "the code targets runtime memory".to_string()
+            },
+            "{system:?} {code}"
         );
     }
 }
@@ -454,12 +481,19 @@ fn classifies_all_rom_all_runtime_and_mixed_groups() {
         CheatResolution::RomBakeable { .. }
     ));
     let all_runtime = classify_record(&rom, &record(CheatSystem::Nes, "0010AA+0020BB"));
-    assert!(matches!(
+    assert_eq!(
         all_runtime.resolution,
-        CheatResolution::Runtime { .. }
-    ));
+        CheatResolution::Unsupported {
+            reason: "the code targets runtime memory".to_string()
+        }
+    );
     let mixed = classify_record(&rom, &record(CheatSystem::Nes, "8000AA+0010BB"));
-    assert!(matches!(mixed.resolution, CheatResolution::Mixed { .. }));
+    assert_eq!(
+        mixed.resolution,
+        CheatResolution::Unsupported {
+            reason: "linked subcodes target runtime memory".to_string()
+        }
+    );
 }
 
 #[test]
@@ -467,10 +501,13 @@ fn parameterized_records_are_not_decoded() {
     for placeholder in ["7E1234??", "80309437 XXXX", "0010XX", "0010?"] {
         let classified =
             classify_record(&vec![0; 0x10000], &record(CheatSystem::Snes, placeholder));
-        assert!(matches!(
+        assert_eq!(
             classified.resolution,
-            CheatResolution::RequiresParameter { .. }
-        ));
+            CheatResolution::Unsupported {
+                reason: "the entry needs a parameter value".to_string()
+            },
+            "{placeholder}"
+        );
     }
 }
 
@@ -491,14 +528,16 @@ fn parameter_detection_ignores_descriptions_and_checks_executable_fields() {
     parameterized
         .raw_fields
         .insert("value".to_string(), "XX".to_string());
-    assert!(matches!(
+    assert_eq!(
         classify_record(&rom, &parameterized).resolution,
-        CheatResolution::RequiresParameter { .. }
-    ));
+        CheatResolution::Unsupported {
+            reason: "the entry needs a parameter value".to_string()
+        }
+    );
 }
 
 #[test]
-fn structured_and_conditional_records_remain_runtime_payloads() {
+fn structured_and_conditional_records_are_unsupported() {
     let mut structured = record(CheatSystem::Snes, "7E1234FF");
     structured
         .raw_fields
@@ -507,10 +546,12 @@ fn structured_and_conditional_records_remain_runtime_payloads() {
         .raw_fields
         .insert("condition_value".to_string(), "12".to_string());
     let classified = classify_record(&vec![0; 0x10000], &structured);
-    assert!(matches!(
+    assert_eq!(
         classified.resolution,
-        CheatResolution::Runtime { .. }
-    ));
+        CheatResolution::Unsupported {
+            reason: "the entry is a structured runtime memory entry".to_string()
+        }
+    );
 }
 
 #[test]
@@ -521,10 +562,12 @@ fn snes_ambiguous_code_needs_a_device_hint() {
         entry.code_kind = None;
         entry
     };
-    assert!(matches!(
+    assert_eq!(
         classify_record(&rom, &runtime).resolution,
-        CheatResolution::Runtime { .. }
-    ));
+        CheatResolution::Unsupported {
+            reason: "the code targets runtime memory".to_string()
+        }
+    );
 
     let mut ambiguous = record(CheatSystem::Snes, "ABCDEFFF");
     ambiguous.code_kind = None;
@@ -550,10 +593,12 @@ fn dashed_snes_code_is_detected_as_game_genie_without_a_hint() {
 
     let classified = classify_record(&vec![0; 0x40_0000], &entry);
 
-    assert!(matches!(
+    assert_eq!(
         classified.resolution,
-        CheatResolution::Runtime { .. }
-    ));
+        CheatResolution::Unsupported {
+            reason: "the code targets runtime memory".to_string()
+        }
+    );
     assert_eq!(classified.detected_kind, Some(CheatKind::GameGenie));
 }
 
@@ -652,4 +697,152 @@ fn split_codes_separates_joined_codes() {
         vec!["AKE-LVS", "SXIOPO", "GOSSIP", "YYYYYY"]
     );
     assert_eq!(split_codes("  "), Vec::<&str>::new());
+}
+
+// --- Sega 8-bit ------------------------------------------------------------
+//
+// The expected values below are derived from the Genesis Plus GX decode
+// formulas (`libretro/libretro.c`, `decode_cheat`), not copied from a
+// published code list.
+
+#[test]
+fn sega8_game_genie_vector() {
+    let decoded = decode("11A-C3B", CheatSystem::MasterSystem, CheatKind::GameGenie).unwrap();
+    assert_eq!(decoded.address, 0x4AC3);
+    assert_eq!(decoded.value, 0x11);
+    assert_eq!(decoded.compare, None);
+    assert_eq!(decoded.width, 1);
+}
+
+#[test]
+fn sega8_game_genie_compare_vector() {
+    let decoded = decode("11A-C3B-0A7", CheatSystem::GameGear, CheatKind::GameGenie).unwrap();
+    assert_eq!(decoded.address, 0x4AC3);
+    assert_eq!(decoded.value, 0x11);
+    // Digit 8 is a check digit; compare = rotate_right(0x07, 2) ^ 0xBA.
+    assert_eq!(decoded.compare, Some(0x7B));
+}
+
+#[test]
+fn sega8_action_replay_vector() {
+    let decoded = decode(
+        "0012-34FF",
+        CheatSystem::MasterSystem,
+        CheatKind::ProActionReplay,
+    )
+    .unwrap();
+    assert_eq!(decoded.address, 0x1234);
+    assert_eq!(decoded.value, 0xFF);
+    assert_eq!(decoded.width, 1);
+}
+
+#[test]
+fn sega8_infers_the_kind_from_the_code_shape() {
+    let mut par = record(CheatSystem::MasterSystem, "0012-34FF");
+    par.code_kind = None;
+    par.raw_fields.clear();
+    assert_eq!(
+        classify_record(&vec![0; 0x8000], &par).detected_kind,
+        Some(CheatKind::ProActionReplay)
+    );
+
+    let mut genie = record(CheatSystem::MasterSystem, "11A-C3B");
+    genie.code_kind = None;
+    genie.raw_fields.clear();
+    assert_eq!(
+        classify_record(&vec![0; 0x8000], &genie).detected_kind,
+        Some(CheatKind::GameGenie)
+    );
+}
+
+#[test]
+fn sega8_runtime_address_is_unsupported() {
+    let mut entry = record(CheatSystem::MasterSystem, "00C0-12AB");
+    entry.raw_fields.clear();
+    assert_eq!(
+        classify_record(&vec![0; 0x8000], &entry).resolution,
+        CheatResolution::Unsupported {
+            reason: "the code targets runtime memory".to_string()
+        }
+    );
+}
+
+#[test]
+fn sega8_copier_header_shifts_the_offset() {
+    let rom = vec![0u8; 512 + 0x8000];
+    let layout = RomLayout::detect(&rom, CheatSystem::MasterSystem);
+    assert_eq!(layout.header_bytes, 512);
+    let decoded = decode("11A-C3B", CheatSystem::MasterSystem, CheatKind::GameGenie).unwrap();
+    let writes = resolve_writes(&rom, &layout, &decoded).unwrap();
+    assert_eq!(writes[0].offset, 512 + 0x4AC3);
+}
+
+#[test]
+fn sega8_compare_byte_scans_every_bank() {
+    // Slot offset 0x0AC3 of banks 1 and 3 carry the compare byte, so both are
+    // candidates; bank 0 is scanned too and is excluded only by its byte.
+    let mut rom = vec![0u8; 0x10000];
+    rom[0x4000 + 0x0AC3] = 0x7B;
+    rom[0xC000 + 0x0AC3] = 0x7B;
+    let layout = RomLayout::detect(&rom, CheatSystem::MasterSystem);
+    let decoded = decode(
+        "11A-C3B-0A7",
+        CheatSystem::MasterSystem,
+        CheatKind::GameGenie,
+    )
+    .unwrap();
+    let writes = resolve_writes(&rom, &layout, &decoded).unwrap();
+    assert_eq!(
+        writes.iter().map(|write| write.offset).collect::<Vec<_>>(),
+        vec![0x4AC3, 0xCAC3]
+    );
+}
+
+#[test]
+fn sega32x_uses_the_genesis_decoders_and_layout() {
+    let decoded = decode("ABD5-78F7", CheatSystem::Sega32x, CheatKind::GameGenie).unwrap();
+    assert_eq!(decoded.address, 0xBE47BD);
+    assert_eq!(decoded.value, 0x1F00);
+    assert_eq!(decoded.width, 2);
+
+    let mut rom = vec![0u8; 0x20];
+    apply_writes(
+        &mut rom,
+        CheatSystem::Sega32x,
+        &[CheatWrite {
+            offset: 0,
+            value: 0xABCD,
+            width: 2,
+        }],
+    )
+    .unwrap();
+    assert_eq!(&rom[..2], &[0xAB, 0xCD]);
+}
+
+#[test]
+fn cheat_system_serde_names_match_the_database_shards() {
+    let expected = [
+        (CheatSystem::Nes, "nes"),
+        (CheatSystem::Snes, "snes"),
+        (CheatSystem::Genesis, "genesis"),
+        (CheatSystem::GameBoy, "gameboy"),
+        (CheatSystem::GameBoyColor, "gameboy-color"),
+        (CheatSystem::GameBoyAdvance, "gameboyadvance"),
+        (CheatSystem::PlayStation, "playstation"),
+        (CheatSystem::MasterSystem, "mastersystem"),
+        (CheatSystem::GameGear, "gamegear"),
+        (CheatSystem::Sega32x, "sega32x"),
+        (CheatSystem::Sg1000, "sg1000"),
+    ];
+    for (system, name) in expected {
+        assert_eq!(
+            serde_json::to_string(&system).unwrap(),
+            format!("\"{name}\"")
+        );
+        assert_eq!(
+            serde_json::from_str::<CheatSystem>(&format!("\"{name}\"")).unwrap(),
+            system
+        );
+        assert_eq!(CheatSystem::parse(system.id()), Some(system));
+    }
 }

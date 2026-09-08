@@ -17,8 +17,8 @@ use rom_weaver_app::{
     PatchCommands, PatchCreateCommand, PatchDescriptor, PatchInputBasis, PatchInputMatch,
     PatchInputVerdict, PatchN64ByteOrderMode, PatchPlanVerdict, PatchValidateCommand,
     PatchValidationPlan, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, RomWeaverBundle,
-    RomWeaverRunOutputOptions, RomWeaverRunRequest, RuntimeCheatPayload, ToolsCommands,
-    TrimCommand, compression_metadata, patch_create_format_policy_metadata,
+    RomWeaverRunOutputOptions, RomWeaverRunRequest, ToolsCommands, TrimCommand,
+    compression_metadata, patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ContainerDefaultOutputMetadata,
@@ -187,7 +187,6 @@ fn render_types() -> String {
         export_decl::<CheatTarget>(&config),
         export_decl::<CheatWrite>(&config),
         export_decl::<CheatRecord>(&config),
-        export_decl::<RuntimeCheatPayload>(&config),
         export_decl::<CheatResolution>(&config),
         export_decl::<ClassifiedCheatRecord>(&config),
         export_decl::<CheatWriteConflict>(&config),
