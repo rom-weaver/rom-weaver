@@ -1,47 +1,59 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import {
+  cheatShardUrl,
   createCheatDatabaseClient,
-  loadCheatDatabaseManifest,
-  sameOriginUrl,
-  type CheatDatabaseManifest,
+  parseCheatDatabaseIndex,
+  type CheatDatabaseEntry,
   type CheatSystemShard,
 } from "../../src/lib/cheats/index.ts";
 
-const manifest: CheatDatabaseManifest = {
-  attributionPath: "/cheats/ATTRIBUTION.md",
-  licensePath: "/cheats/LICENSE",
-  schemaVersion: 1,
-  source: "libretro/libretro-database",
-  sourceRevision: "abc123",
-  sourceUrl: "https://github.com/libretro/libretro-database",
-  license: "CC-BY-SA-4.0",
-  systems: {
-    snes: {
-      path: "/cheats/snes.json?revision=abc123",
-      compressedPath: "/cheats/snes.json.br?revision=abc123",
-      label: "Super Nintendo Entertainment System",
-      games: 1,
-      cheats: 1,
-      rawBytes: 100,
-      compressedBytes: 50,
-    },
-  },
+const entry: CheatDatabaseEntry = {
+  platform: "Nintendo - Super Nintendo Entertainment System",
+  slug: "nintendo-super-nintendo-entertainment-system",
+  cheatSystem: "snes",
+  file: "cheats-nintendo-super-nintendo-entertainment-system.json",
+  rawBytes: 100,
+  sha256: "c".repeat(64),
+  games: 1,
+  cheats: 1,
 };
 
-describe("cheat database loader", () => {
-  it("rejects third-party asset URLs before any request", async () => {
-    expect(() => sameOriginUrl("https://example.com/cheats.json", window.location.origin)).toThrow(
-      "must use the app origin",
-    );
-    const fetcher = vi.fn<typeof fetch>();
-    await expect(loadCheatDatabaseManifest("https://example.com/manifest.json", fetcher)).rejects.toThrow(
-      "must use the app origin",
-    );
-    expect(fetcher).not.toHaveBeenCalled();
+const identifyIndex = {
+  format: "rom-weaver-identify-system-pack-v1",
+  sources: {
+    libretro: { url: "https://github.com/libretro/libretro-database", revision: "abc123", license: "CC-BY-SA-4.0" },
+  },
+  systems: [],
+  cheats: [entry],
+};
+
+describe("cheat database index", () => {
+  it("reads the cheat rows and the Libretro source out of the identify index", () => {
+    expect(parseCheatDatabaseIndex(identifyIndex)).toEqual({
+      sourceRevision: "abc123",
+      sourceUrl: "https://github.com/libretro/libretro-database",
+      license: "CC-BY-SA-4.0",
+      entries: [entry],
+    });
   });
 
-  it("requests one same-origin system shard through the dedicated worker", async () => {
+  it("treats an index without cheat rows or with a malformed row as unavailable", () => {
+    expect(parseCheatDatabaseIndex({ ...identifyIndex, cheats: undefined })).toBeUndefined();
+    expect(parseCheatDatabaseIndex({ ...identifyIndex, cheats: [{ ...entry, sha256: "short" }] })).toBeUndefined();
+    expect(parseCheatDatabaseIndex({ ...identifyIndex, cheats: [{ ...entry, cheatSystem: "n64" }] })).toBeUndefined();
+    expect(parseCheatDatabaseIndex({ ...identifyIndex, cheats: [{ ...entry, file: "../x.json" }] })).toBeUndefined();
+    expect(parseCheatDatabaseIndex({ ...identifyIndex, sources: {} })).toBeUndefined();
+  });
+});
+
+describe("cheat database loader", () => {
+  it("builds the same identify asset URL the service worker's pack table carries", () => {
+    const url = cheatShardUrl(entry, "https://rom-weaver.test/apply");
+    expect(url.href).toBe(`https://rom-weaver.test/assets/identify-${entry.file}?sha256=${entry.sha256}`);
+  });
+
+  it("requests one same-origin shard through the dedicated worker", async () => {
     const shard: CheatSystemShard = { schemaVersion: 1, system: "snes", games: [] };
     const listeners = new Map<string, EventListener>();
     const postMessage = vi.fn((message: { id: number }) => {
@@ -53,11 +65,14 @@ describe("cheat database loader", () => {
       postMessage,
       terminate,
     } as unknown as Worker;
-    const client = createCheatDatabaseClient(manifest, () => worker);
+    const client = createCheatDatabaseClient(() => worker, "https://rom-weaver.test/");
 
-    await expect(client.loadSystem("snes")).resolves.toEqual(shard);
+    await expect(client.loadShard(entry)).resolves.toEqual(shard);
     expect(postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ system: "snes", url: expect.stringContaining("/cheats/snes.json?revision=abc123") }),
+      expect.objectContaining({
+        entry,
+        url: `https://rom-weaver.test/assets/identify-${entry.file}?sha256=${entry.sha256}`,
+      }),
     );
     client.close();
     expect(terminate).toHaveBeenCalledOnce();

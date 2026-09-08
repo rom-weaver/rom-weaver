@@ -70,6 +70,8 @@ type IdentifyPackGroup = {
 
 type IdentifyIndex = {
   catalog?: string;
+  /** Cheat shards built beside the packs; parsed by lib/cheats/loader.ts. */
+  cheats?: unknown[];
   checksumRoutes?: ChecksumRoutesEntry;
   format: string;
   /** Upstream database revisions, logged so a page and a worker can be compared. */
@@ -328,6 +330,15 @@ const loadCatalog = async (): Promise<IdentifyCatalog | undefined> => {
     logger.debug("identify catalog unavailable", { error: describe(cause) });
     return undefined;
   }
+};
+
+/** The identify index and catalog as one fetch, for consumers outside the identify run. */
+const loadIdentifyIndexAndCatalog = async (): Promise<{
+  index: IdentifyIndex;
+  catalog: IdentifyCatalog | undefined;
+}> => {
+  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
+  return { index, catalog };
 };
 
 const getIndex = (): Promise<IdentifyIndex> => {
@@ -678,6 +689,7 @@ export {
   IdentifyDataUnavailableError,
   installIdentifyPackGroup,
   listOptionalIdentifyPackGroups,
+  loadIdentifyIndexAndCatalog,
   loadIdentifyPacks,
   loadIdentifyPackSelection,
   resetIdentifyPackCache,

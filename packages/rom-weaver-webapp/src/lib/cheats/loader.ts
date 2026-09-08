@@ -1,37 +1,79 @@
 import workerUrl from "./cheat-database.worker.ts?worker&url";
-import type { CheatDatabaseManifest, CheatDatabaseSystem, CheatSystemShard } from "./model.ts";
+import {
+  type CheatDatabaseEntry,
+  type CheatDatabaseIndex,
+  type CheatSystemShard,
+  isCheatDatabaseSystem,
+} from "./model.ts";
 
-type WorkerRequest = { id: number; url: string; system: CheatDatabaseSystem };
+type WorkerRequest = { id: number; url: string; entry: CheatDatabaseEntry };
 type WorkerResponse = { id: number; shard?: CheatSystemShard; error?: string };
 
-const sameOriginUrl = (path: string, origin: string): URL => {
-  const url = new URL(path, origin);
-  if (url.origin !== origin) throw new Error("Cheat database assets must use the app origin.");
+/** Shards ship next to the identify packs under the same `assets/identify-` prefix. */
+const CHEAT_ASSET_PREFIX = "assets/identify-";
+
+/** The shard URL the service worker's pack table knows: file name plus the digest it verifies. */
+const cheatShardUrl = (entry: CheatDatabaseEntry, base: string): URL => {
+  const url = new URL(`${CHEAT_ASSET_PREFIX}${entry.file}`, base);
+  if (url.origin !== new URL(base).origin) throw new Error("Cheat database assets must use the app origin.");
+  url.searchParams.set("sha256", entry.sha256);
   return url;
 };
 
-export const loadCheatDatabaseManifest = async (
-  path = "/cheats/manifest.json",
-  fetcher: typeof fetch = fetch,
-): Promise<CheatDatabaseManifest> => {
-  const url = sameOriginUrl(path, globalThis.location.origin);
-  const response = await fetcher(url, { cache: "default", credentials: "same-origin" });
-  if (!response.ok) throw new Error(`The cheat database manifest returned HTTP ${response.status}.`);
-  const manifest = (await response.json()) as Partial<CheatDatabaseManifest>;
-  if (manifest.schemaVersion !== 1 || !manifest.systems || !manifest.sourceRevision) {
-    throw new Error("The cheat database manifest has an invalid schema.");
+const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+const parseEntry = (value: unknown): CheatDatabaseEntry | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (!(isNonEmptyString(record.platform) && isNonEmptyString(record.slug) && isNonEmptyString(record.file))) {
+    return undefined;
   }
-  return manifest as CheatDatabaseManifest;
+  if (!isCheatDatabaseSystem(typeof record.cheatSystem === "string" ? record.cheatSystem : undefined)) return undefined;
+  if (!(isCount(record.rawBytes) && /^[0-9a-f]{64}$/u.test(String(record.sha256)))) return undefined;
+  if (record.file.includes("/") || record.file.includes("\\")) return undefined;
+  return {
+    platform: record.platform,
+    slug: record.slug,
+    cheatSystem: record.cheatSystem as CheatDatabaseEntry["cheatSystem"],
+    file: record.file,
+    rawBytes: record.rawBytes,
+    sha256: String(record.sha256),
+    games: isCount(record.games) ? record.games : 0,
+    cheats: isCount(record.cheats) ? record.cheats : 0,
+  };
+};
+
+/**
+ * Read the cheat rows out of the identify index. An index without a `cheats`
+ * array is a deployment that predates cheat data, which is "unavailable", not
+ * "no cheats for this ROM", so it returns `undefined`.
+ */
+export const parseCheatDatabaseIndex = (index: unknown): CheatDatabaseIndex | undefined => {
+  if (!index || typeof index !== "object") return undefined;
+  const record = index as { cheats?: unknown; sources?: { libretro?: Record<string, unknown> } };
+  if (!Array.isArray(record.cheats)) return undefined;
+  const libretro = record.sources?.libretro;
+  if (!(libretro && isNonEmptyString(libretro.revision) && isNonEmptyString(libretro.url))) return undefined;
+  const entries = record.cheats.map(parseEntry);
+  if (entries.some((entry) => entry === undefined)) return undefined;
+  return {
+    sourceRevision: libretro.revision,
+    sourceUrl: libretro.url,
+    license: isNonEmptyString(libretro.license) ? libretro.license : "CC-BY-SA-4.0",
+    entries: entries as CheatDatabaseEntry[],
+  };
 };
 
 export interface CheatDatabaseClient {
-  loadSystem(system: CheatDatabaseSystem): Promise<CheatSystemShard>;
+  loadShard(entry: CheatDatabaseEntry): Promise<CheatSystemShard>;
   close(): void;
 }
 
 export const createCheatDatabaseClient = (
-  manifest: CheatDatabaseManifest,
   createWorker: () => Worker = () => new Worker(workerUrl, { name: "rom-weaver-cheat-database", type: "module" }),
+  base: string = document.baseURI,
 ): CheatDatabaseClient => {
   let nextId = 1;
   let worker: Worker | undefined;
@@ -56,14 +98,17 @@ export const createCheatDatabaseClient = (
   };
 
   return {
-    loadSystem(system) {
-      const entry = manifest.systems[system];
-      if (!entry) return Promise.reject(new Error(`The cheat database does not include ${system}.`));
-      const url = sameOriginUrl(entry.path, globalThis.location.origin).href;
+    loadShard(entry) {
+      let url: string;
+      try {
+        url = cheatShardUrl(entry, base).href;
+      } catch (error) {
+        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+      }
       const id = nextId++;
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject });
-        getWorker().postMessage({ id, url, system } satisfies WorkerRequest);
+        getWorker().postMessage({ id, url, entry } satisfies WorkerRequest);
       });
     },
     close() {
@@ -75,4 +120,4 @@ export const createCheatDatabaseClient = (
   };
 };
 
-export { sameOriginUrl };
+export { cheatShardUrl };
