@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { brotliCompressSync } from "node:zlib";
 import { join } from "node:path";
@@ -54,9 +54,11 @@ const fixture = ({ grouped = false } = {}) => {
       slug: "alpha",
     },
   ];
+  writeFileSync(join(input, "libretro-database-LICENSE"), "fixture license\n");
+  const sources = { libretro: { licenseFile: "libretro-database-LICENSE", revision: "fixture" } };
   writeFileSync(
     join(input, "index.json"),
-    `${JSON.stringify({ cheats, checksumRoutes: { file: "checksum-routes.bin" }, format: "fixture", groups, systems })}\n`,
+    `${JSON.stringify({ cheats, checksumRoutes: { file: "checksum-routes.bin" }, format: "fixture", groups, sources, systems })}\n`,
   );
   writeFileSync(join(input, "checksum-routes.bin"), Buffer.from("RWCR1 fixture router"));
   writeFileSync(join(input, "checksum-routes.bin.br"), Buffer.from("RWCR1 fixture router br"));
@@ -200,6 +202,23 @@ test("cheat shards ride in the group that owns their platform pack", () => {
   );
   assert.deepEqual(optionalIndex.cheats, []);
   assert.equal(result.optional[0].cheats, 0);
+  for (const dataDir of [result.dataDir, result.optional[0].dataDir]) {
+    assert.equal(readFileSync(join(dataDir, "libretro-database-LICENSE"), "utf8"), "fixture license\n");
+  }
+});
+
+test("refuses a data dir that lost the Libretro license text", () => {
+  const { input, root } = fixture();
+  rmSync(join(input, "libretro-database-LICENSE"));
+  assert.throws(
+    () =>
+      buildIdentifyReleaseData({
+        archive: join(root, "rom-weaver-identify-data.tar.br"),
+        input,
+        out: join(root, "release"),
+      }),
+    /libretro-database-LICENSE is missing/u,
+  );
 });
 
 test("rejects a cheat shard that does not match its index integrity fields", () => {

@@ -1012,6 +1012,8 @@ impl CliApp {
                     ))
                 })?;
                 // The platform's cheat shard installs beside its pack and leaves with it.
+                // Its index row stays, as the pack's own `systems` row does: nothing
+                // native reads the rows, and a reinstall replaces them by slug.
                 let shard = provider
                     .database_dir()
                     .join("cheats")
