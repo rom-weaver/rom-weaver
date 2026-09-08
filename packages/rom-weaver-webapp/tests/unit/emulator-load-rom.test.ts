@@ -126,11 +126,33 @@ describe("CHD disc images", () => {
   });
 
   it("falls back to the header's combined SHA-1", async () => {
-    workflowMocks.probeRom.mockResolvedValueOnce({ chd: { sha1: "d".repeat(40) }, entries: [] });
+    workflowMocks.probeRom.mockResolvedValueOnce({
+      chd: { sha1: "d".repeat(40) },
+      entries: [],
+      platform: "Sony PlayStation",
+    });
 
     await expect(loadEmulatorRom(new Blob(["chd"]), "game.chd")).resolves.toMatchObject({
       checksum: "d".repeat(40),
     });
+  });
+
+  it("extracts a CHD whose core cannot read one", async () => {
+    workflowMocks.probeRom.mockResolvedValueOnce({
+      chd: { rawSha1: "c".repeat(40) },
+      entries: [],
+      platform: "Sony Playstation Portable",
+    });
+
+    await expect(loadEmulatorRom(new Blob(["chd"]), "game.chd")).resolves.toMatchObject({ fileName: "game.nes" });
+    expect(workflowMocks.ingestRom).toHaveBeenCalled();
+  });
+
+  it("extracts a CHD the probe could not name a platform for", async () => {
+    workflowMocks.probeRom.mockResolvedValueOnce({ chd: { rawSha1: "c".repeat(40) }, entries: [] });
+
+    await loadEmulatorRom(new Blob(["chd"]), "game.chd");
+    expect(workflowMocks.ingestRom).toHaveBeenCalled();
   });
 
   it("rejects a CHD whose header has no SHA-1", async () => {
