@@ -50,6 +50,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.find.cliIdentifyAndHash"
+#~ msgstr "Identify and hash ROMs (CLI)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.find.applyPatchHint"
+#~ msgstr "Apply Patch opens a bundle and runs its saved patch sequence."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” expects “{predecessor}” applied first."
 
@@ -165,6 +175,11 @@ msgstr "Apply tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.bundleHint"
+msgstr "Apply Patch owns bundles and runs their saved patch sequence."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
 msgstr "Applying the patch failed."
 
@@ -217,6 +232,11 @@ msgstr "Branch"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Browser tab"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.bundlesApplyPatch"
+msgstr "Bundles — Apply Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1062,6 +1082,36 @@ msgstr "Test this ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.testTool"
 msgstr "Test tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliArchiveHint"
+msgstr "The CLI can extract and compress archives."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliIdentifyAndHashHint"
+msgstr "The CLI can inspect files and calculate checksums."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliTrimRevertHint"
+msgstr "The CLI can restore padding; the browser Trim page cannot."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliSetupHint"
+msgstr "The CLI guide covers installation and setup."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliPatchHint"
+msgstr "The CLI guide covers this patch command."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliReferenceHint"
+msgstr "The CLI reference lists this command."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

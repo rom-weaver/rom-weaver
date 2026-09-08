@@ -50,6 +50,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.find.cliIdentifyAndHash"
+#~ msgstr "Identificar y calcular hashes de ROM (CLI)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.find.applyPatchHint"
+#~ msgstr "Apply Patch abre un bundle y ejecuta su secuencia de parches guardada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
@@ -165,6 +175,11 @@ msgstr "Herramienta Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.bundleHint"
+msgstr "Apply Patch gestiona bundles y ejecuta su secuencia de parches guardada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
 msgstr "No se pudo aplicar el parche."
 
@@ -217,6 +232,11 @@ msgstr "Rama"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Pestaña del navegador"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.bundlesApplyPatch"
+msgstr "Bundles — Apply Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1062,6 +1082,36 @@ msgstr "Probar esta ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.testTool"
 msgstr "Herramienta Probar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliArchiveHint"
+msgstr "La CLI puede extraer y comprimir archivos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliIdentifyAndHashHint"
+msgstr "La CLI puede inspeccionar archivos y calcular sumas de verificación."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliTrimRevertHint"
+msgstr "La CLI puede restaurar el relleno; la página Trim del navegador no."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliSetupHint"
+msgstr "La guía de la CLI trata la instalación y la configuración."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliPatchHint"
+msgstr "La guía de la CLI trata este comando de parches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliReferenceHint"
+msgstr "La referencia de la CLI enumera este comando."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

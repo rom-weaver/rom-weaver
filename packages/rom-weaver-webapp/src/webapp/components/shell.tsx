@@ -1164,8 +1164,8 @@ const Masthead = ({
   const findLabel = localizerFindLabel(localizer);
   // Find honours the beta-tools setting the way More does.
   const findSources = useMemo(
-    () => ({ donateHref, githubHref, tabs: tabs.filter((tab) => betaToolsEnabled || !tab.beta) }),
-    [betaToolsEnabled, donateHref, githubHref, tabs],
+    () => ({ baseHref: homeHref, donateHref, githubHref, tabs: tabs.filter((tab) => betaToolsEnabled || !tab.beta) }),
+    [betaToolsEnabled, donateHref, githubHref, homeHref, tabs],
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
   const toggleFind = (placement: "desktop" | "mobile") => {

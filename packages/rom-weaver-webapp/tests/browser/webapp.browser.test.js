@@ -162,8 +162,8 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(romInput).toBeInTheDocument();
 
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: /apply-patch/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: /create-patch/i })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
@@ -174,7 +174,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await waitForInputStackFile("game.bin");
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
   // The output section (and its apply button) renders once the workflow has files.
-  await expect.element(page.getByRole("button", { name: /apply & download/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: /apply-patch & download/i })).toBeInTheDocument();
 
   await page.getByRole("button", { name: "Clear ROM input" }).click();
   await expect
@@ -216,7 +216,7 @@ const dropOnPage = async (fileName) => {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 120));
 };
 
-/* Regression: Identify used to exist twice - once at /identify and once inside
+/* Regression: Identify used to exist twice - once at /identify-rom and once inside
    the old Tools page - so one page drop reached two forms and both wrote the
    same activity-store key. PPF undo mounts no IdentifyForm at all. */
 test("only one Identify workflow ever consumes a page drop", async () => {
@@ -452,8 +452,12 @@ test("the New here? beacon stays compact and its popover carries every start act
 
   chip.click();
   await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
-  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe("/apply?guide=apply");
-  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe("/apply?guide=bundle");
+  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
+    "/apply-patch?guide=apply",
+  );
+  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe(
+    "/apply-patch?guide=bundle",
+  );
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);

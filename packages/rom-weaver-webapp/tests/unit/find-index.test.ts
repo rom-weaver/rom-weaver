@@ -3,15 +3,26 @@ import { createLocalizer } from "../../src/presentation/localization/index.ts";
 import { createFindIndex, searchFind } from "../../src/webapp/find-index.ts";
 
 const TABS = [
-  { href: "apply", icon: null, id: "patcher", label: "Apply" },
-  { href: "create", icon: null, id: "creator", label: "Create" },
+  { href: "apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
+  { href: "apply-patch#bundle", icon: null, id: "bundle", label: "Bundles" },
+  { href: "create-patch", icon: null, id: "creator", label: "Create Patch" },
   {
     beta: true,
     group: "tools" as const,
-    href: "identify",
+    href: "identify-rom",
     icon: null,
     id: "identify",
-    label: "Identify",
+    label: "Identify ROM",
+    placement: "more" as const,
+  },
+  { href: "test-rom", icon: null, id: "test", label: "Test ROM" },
+  {
+    beta: true,
+    group: "tools" as const,
+    href: "trim-rom",
+    icon: null,
+    id: "trim",
+    label: "Trim ROM",
     placement: "more" as const,
   },
 ];
@@ -37,10 +48,13 @@ const sources = {
 describe("createFindIndex", () => {
   it("lists tools then app surfaces for browsing, and every setting for search", () => {
     const index = createFindIndex(sources);
-    expect(index.browse.map((entry) => entry.id).slice(0, 4)).toEqual([
+    expect(index.browse.map((entry) => entry.id).slice(0, 7)).toEqual([
       "tool:patcher",
+      "tool:bundle",
       "tool:creator",
       "tool:identify",
+      "tool:test",
+      "tool:trim",
       "app:settings",
     ]);
     expect(index.browse.some((entry) => entry.kind === "setting")).toBe(false);
@@ -58,11 +72,53 @@ describe("searchFind", () => {
   it("ranks tools before settings before guides", () => {
     const index = createFindIndex(sources, GUIDES);
     const kinds = searchFind(index, "checksum").map((result) => result.entry.kind);
-    expect(kinds[0]).toBe("setting");
+    expect(kinds[0]).toBe("tool");
     expect(kinds.at(-1)).toBe("guide");
     expect(kinds.indexOf("setting")).toBeLessThan(kinds.indexOf("guide"));
     const identify = searchFind(index, "identify");
-    expect(identify[0]?.entry).toMatchObject({ id: "tool:identify", kind: "tool", hint: "Beta" });
+    expect(identify[0]?.entry).toMatchObject({
+      id: "tool:identify",
+      kind: "tool",
+      hint: "Match your ROM’s checksum against the local database to find its exact dump name.",
+    });
+  });
+
+  it("maps browser and CLI command aliases to the matching tool or guide", () => {
+    const index = createFindIndex(sources, GUIDES);
+    expect(searchFind(index, "weave")[0]?.entry).toMatchObject({ id: "tool:patcher", href: "apply-patch" });
+    expect(searchFind(index, "bundle")[0]?.entry).toMatchObject({
+      action: { type: "view", view: "bundle" },
+      hint: "Apply Patch owns bundles and runs their saved patch sequence.",
+      href: "apply-patch#bundle",
+      id: "tool:bundle",
+      label: "Bundles — Apply Patch",
+    });
+    expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-patch" });
+    expect(searchFind(index, "play emulator")[0]?.entry).toMatchObject({ id: "tool:test" });
+    expect(searchFind(index, "bsdiff")[0]?.entry).toMatchObject({ id: "tool:patcher" });
+    expect(searchFind(index, "untrim")[0]?.entry).toMatchObject({
+      hint: "The CLI can restore padding; the browser Trim page cannot.",
+      href: "/docs/cli-trim",
+    });
+    const inspect = searchFind(index, "inspect").find((result) => result.entry.id === "guide:cli-probe--inspect");
+    expect(inspect?.entry).toMatchObject({
+      hint: "The CLI can inspect files and calculate checksums.",
+      href: "/docs/identify-and-hash-files",
+    });
+    expect(inspect?.entry.action).toMatchObject({ type: "view", view: "docs" });
+    expect(searchFind(index, "extract")[0]?.entry).toMatchObject({
+      hint: "The CLI can extract and compress archives.",
+      href: "/docs/work-with-archives",
+    });
+    expect(searchFind(index, "completions")[0]?.entry).toMatchObject({
+      hint: "The CLI reference lists this command.",
+      href: "/docs/cli",
+    });
+  });
+
+  it("keeps CLI guide routes inside the self-hosted app base", () => {
+    const index = createFindIndex({ ...sources, baseHref: "https://example.com/rom-weaver/" });
+    expect(searchFind(index, "inspect")[0]?.entry.href).toBe("/rom-weaver/docs/identify-and-hash-files");
   });
 
   it("links a guide hit to the guide with the query highlighted", () => {

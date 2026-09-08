@@ -196,7 +196,7 @@ const renderView = ({
 };
 
 describe("apply workflow view - empty bench", () => {
-  beforeEach(() => window.history.replaceState(null, "", "/apply"));
+  beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
   afterEach(() => vi.unstubAllGlobals());
 
   it("renders only the 0x01 hero", () => {
@@ -297,7 +297,7 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it("starts the sample tutorial from a guided Apply URL", async () => {
-    window.history.replaceState(null, "", "/apply?guide=apply");
+    window.history.replaceState(null, "", "/apply-patch?guide=apply");
     const onUnifiedDrop = vi.fn();
     vi.stubGlobal(
       "fetch",
@@ -334,7 +334,7 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it("starts the bundle tutorial and selects a patch-only ZIP from a guided Bundle URL", async () => {
-    window.history.replaceState(null, "", "/apply?guide=bundle");
+    window.history.replaceState(null, "", "/apply-patch?guide=bundle");
     const onUnifiedDrop = vi.fn();
     const setBundlePackage = vi.fn();
     vi.stubGlobal(
@@ -1218,6 +1218,58 @@ describe("apply workflow view - bundle controls", () => {
     );
     expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+  });
+
+  it("opens and focuses the bundle step for a direct hash URL", async () => {
+    window.location.hash = "#bundle";
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const toggle = container.querySelector("#rom-weaver-bundle-job .cks-head") as HTMLButtonElement;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    expect(document.activeElement).toBe(toggle);
+    window.location.hash = "";
+  });
+
+  it("reopens the bundle step when the same hash is selected again", () => {
+    window.location.hash = "";
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const toggle = container.querySelector("#rom-weaver-bundle-job .cks-head") as HTMLButtonElement;
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    act(() => {
+      window.location.hash = "#bundle";
+      window.dispatchEvent(new Event("hashchange"));
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    window.location.hash = "";
   });
 });
 

@@ -1,4 +1,14 @@
-import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings } from "lucide-react";
+import {
+  BookOpen,
+  Gamepad2,
+  GitCompare,
+  House,
+  Package,
+  RotateCcw,
+  ScanSearch,
+  Scissors,
+  Settings,
+} from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -69,30 +79,38 @@ import {
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
-  // "Apply": the tab both applies patch chains and edits/exports them as bundles.
-  { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
-  { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
+  // "Apply Patch": the tab both applies patch chains and edits/exports them as bundles.
+  { href: "apply-patch", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply Patch" },
+  { href: "create-patch", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create Patch" },
+  { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM" },
   // Reference rather than a workflow: filed under Docs in More on both layouts.
   { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  {
+    group: "tools",
+    href: "apply-patch#bundle",
+    icon: <Package aria-hidden="true" />,
+    id: "bundle",
+    label: "Bundles",
+    placement: "more",
+  },
   // Beta utility routes. They stay behind the beta-tools setting and show up
   // under Tools in More once it is on.
   {
     beta: true,
     group: "tools",
-    href: "identify",
+    href: "identify-rom",
     icon: <ScanSearch aria-hidden="true" />,
     id: "identify",
-    label: "Identify",
+    label: "Identify ROM",
     placement: "more",
   },
   {
     beta: true,
     group: "tools",
-    href: "trim",
+    href: "trim-rom",
     icon: <Scissors aria-hidden="true" />,
     id: "trim",
-    label: "Trim",
+    label: "Trim ROM",
     placement: "more",
   },
   {
@@ -508,6 +526,13 @@ function WebappRoot({
         if (href) window.location.assign(`/${href}`);
         return;
       }
+      if (id === "bundle") {
+        if (window.location.hash.toLowerCase() === "#bundle") window.dispatchEvent(new Event("hashchange"));
+        else window.location.hash = "bundle";
+        pendingViewRef.current = null;
+        selectViewWithTransition(() => actions.onSelectView("patcher"));
+        return;
+      }
       const view = id as WebappRootProps["state"]["currentView"];
       if (view === "test") requestEmulatorStartFromUserAction();
       if (view === "docs") {
@@ -739,7 +764,7 @@ function WebappRoot({
                   </h1>
                   <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
                   <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href="/apply">
+                    <a className="btn primary not-found-home" href="/apply-patch">
                       <House aria-hidden="true" />
                       Apply a patch
                     </a>

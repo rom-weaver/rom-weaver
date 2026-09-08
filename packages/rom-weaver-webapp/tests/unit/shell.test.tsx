@@ -24,6 +24,14 @@ const TABS = [
   { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
   { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
   {
+    group: "tools",
+    href: "apply-patch#bundle",
+    icon: <svg aria-hidden="true" />,
+    id: "bundle",
+    label: "Bundles",
+    placement: "more",
+  },
+  {
     beta: true,
     group: "tools",
     href: "trim",
@@ -37,7 +45,7 @@ const TABS = [
 const mastheadProps = {
   currentTab: "patcher",
   githubHref: "https://example.com/repo",
-  homeHref: "/apply",
+  homeHref: "/apply-patch",
   onOpenChangelog: () => undefined,
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
@@ -158,6 +166,10 @@ describe("More menu destinations", () => {
     openDesktopMore(container);
     fireEvent.click(getByRole("menuitem", { name: "Docs" }));
     expect(onSelectTab).toHaveBeenCalledWith("docs");
+
+    openDesktopMore(container);
+    fireEvent.click(getByRole("menuitem", { name: "Bundles" }));
+    expect(onSelectTab).toHaveBeenCalledWith("bundle");
   });
 
   it("falls back to the Log dialog when no Storage handler is given", () => {

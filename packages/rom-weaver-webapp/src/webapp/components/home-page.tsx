@@ -64,9 +64,9 @@ const buildFlows = (route: (slug: string) => string): Flow[] => [
   {
     bring: "A ROM and one or more patches, in any order you choose.",
     get: "The patched ROM with checksums checked. Save the chain as a bundle to replay or share it.",
-    href: route("apply"),
+    href: route("apply-patch"),
     primary: true,
-    title: "Apply",
+    title: "Apply Patch",
   },
   {
     bring: (
@@ -75,20 +75,20 @@ const buildFlows = (route: (slug: string) => string): Flow[] => [
       </>
     ),
     get: "One file that pins patch order, expected checksums, and output names. Open it and the workflow is ready to run.",
-    href: `${route("apply")}?guide=bundle`,
+    href: `${route("apply-patch")}?guide=bundle`,
     title: "Bundle",
   },
   {
     bring: "An original file and your modified copy.",
     get: "A patch in the format you choose, small enough to share.",
-    href: route("create"),
-    title: "Create",
+    href: route("create-patch"),
+    title: "Create Patch",
   },
   {
     bring: "A ROM you just patched, or one from disk.",
     get: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
-    href: route("test"),
-    title: "Test",
+    href: route("test-rom"),
+    title: "Test ROM",
   },
 ];
 
@@ -118,7 +118,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             others can apply the same changes.
           </p>
           <div className="home-cta">
-            <a className="btn primary lg" href={route("apply")}>
+            <a className="btn primary lg" href={route("apply-patch")}>
               Apply a patch
               <ArrowIcon />
             </a>

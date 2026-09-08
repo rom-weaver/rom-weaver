@@ -27,7 +27,7 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 ## Step 1: open the guided sample
 
-Open [guided Apply](https://rom-weaver.com/apply?guide=apply).
+Open [guided Apply](https://rom-weaver.com/apply-patch?guide=apply).
 
 rom-weaver loads a tiny homebrew NES ROM and two patches written for this guide. Nothing is uploaded, and no commercial game data is involved.
 
@@ -83,8 +83,8 @@ To see the sample files for yourself, choose **Download a test bundle** from the
 
 The same practice files drive two more guided runs:
 
-- [Guided Create](https://rom-weaver.com/create?guide=create) makes a patch from two homebrew ROMs.
-- [Guided Bundle](https://rom-weaver.com/apply?guide=bundle) turns the Apply sample into a patch-only release archive.
+- [Guided Create](https://rom-weaver.com/create-patch?guide=create) makes a patch from two homebrew ROMs.
+- [Guided Bundle](https://rom-weaver.com/apply-patch?guide=bundle) turns the Apply sample into a patch-only release archive.
 
 These are optional follow-up exercises.
 
@@ -92,7 +92,7 @@ These are optional follow-up exercises.
 
 This tutorial is written against the guided sample, so the usual surprises have simple causes:
 
-- **The page was empty when it opened.** The guide runs from the `?guide=apply` part of the link. Open [guided Apply](https://rom-weaver.com/apply?guide=apply) again rather than the plain Apply page.
+- **The page was empty when it opened.** The guide runs from the `?guide=apply` part of the link. Open [guided Apply](https://rom-weaver.com/apply-patch?guide=apply) again rather than the plain Apply page.
 - **The button was greyed out.** Every file has to finish reading and checksumming first. The notice nearest the disabled button always says what it is still waiting for.
 - **The patches were in the other order.** That is valid for this sample. Both patches target the original ROM, so either order produces the same result.
 - **Your checksum did not match.** Confirm you applied both patches and that you are hashing the downloaded file rather than the sample you started from.

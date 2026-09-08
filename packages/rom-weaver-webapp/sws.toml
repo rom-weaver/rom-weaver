@@ -26,26 +26,125 @@ log-level = "info"
 
 [advanced]
 
-# Keep the old workflow URL alive for the Docker distribution too. Query
-# strings are retained by static-web-server's redirect handling.
+# Legacy workflow links MUST retain query strings and redirect directly.
+[[advanced.redirects]]
+source = "/apply"
+destination = "/apply-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply/"
+destination = "/apply-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply.html"
+destination = "/apply-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply/index.html"
+destination = "/apply-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create"
+destination = "/create-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create/"
+destination = "/create-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create.html"
+destination = "/create-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/create/index.html"
+destination = "/create-patch"
+kind = 301
+
+[[advanced.redirects]]
+source = "/identify"
+destination = "/identify-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/identify/"
+destination = "/identify-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/identify.html"
+destination = "/identify-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/identify/index.html"
+destination = "/identify-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test"
+destination = "/test-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test/"
+destination = "/test-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test.html"
+destination = "/test-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/test/index.html"
+destination = "/test-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/trim"
+destination = "/trim-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/trim/"
+destination = "/trim-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/trim.html"
+destination = "/trim-rom"
+kind = 301
+
+[[advanced.redirects]]
+source = "/trim/index.html"
+destination = "/trim-rom"
+kind = 301
+
 [[advanced.redirects]]
 source = "/weave"
-destination = "/apply"
+destination = "/apply-patch"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/"
-destination = "/apply"
+destination = "/apply-patch"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave.html"
-destination = "/apply"
+destination = "/apply-patch"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/index.html"
-destination = "/apply"
+destination = "/apply-patch"
 kind = 301
 
 # Cross-origin isolation - required for SharedArrayBuffer (wasm threads).

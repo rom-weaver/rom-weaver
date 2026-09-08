@@ -131,6 +131,26 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.env.threads": msg({ id: "ui.env.threads", message: "threads" }),
   "ui.find.empty": msg({ id: "ui.find.empty", message: "Nothing matches" }),
+  "ui.find.bundleHint": msg({
+    id: "ui.find.bundleHint",
+    message: "Apply Patch owns bundles and runs their saved patch sequence.",
+  }),
+  "ui.find.bundlesApplyPatch": msg({ id: "ui.find.bundlesApplyPatch", message: "Bundles — Apply Patch" }),
+  "ui.find.cliArchiveHint": msg({
+    id: "ui.find.cliArchiveHint",
+    message: "The CLI can extract and compress archives.",
+  }),
+  "ui.find.cliIdentifyAndHashHint": msg({
+    id: "ui.find.cliIdentifyAndHashHint",
+    message: "The CLI can inspect files and calculate checksums.",
+  }),
+  "ui.find.cliPatchHint": msg({ id: "ui.find.cliPatchHint", message: "The CLI guide covers this patch command." }),
+  "ui.find.cliReferenceHint": msg({ id: "ui.find.cliReferenceHint", message: "The CLI reference lists this command." }),
+  "ui.find.cliSetupHint": msg({ id: "ui.find.cliSetupHint", message: "The CLI guide covers installation and setup." }),
+  "ui.find.cliTrimRevertHint": msg({
+    id: "ui.find.cliTrimRevertHint",
+    message: "The CLI can restore padding; the browser Trim page cannot.",
+  }),
   "ui.find.kindApp": msg({ id: "ui.find.kindApp", message: "App" }),
   "ui.find.kindGuide": msg({ id: "ui.find.kindGuide", message: "Guide" }),
   "ui.find.kindSetting": msg({ id: "ui.find.kindSetting", message: "Setting" }),

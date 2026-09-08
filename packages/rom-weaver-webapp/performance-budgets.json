@@ -54,11 +54,11 @@
       },
       {
         "name": "Apply",
-        "path": "/apply/"
+        "path": "/apply-patch/"
       },
       {
         "name": "Create",
-        "path": "/create/"
+        "path": "/create-patch/"
       }
     ],
     "scores": {

@@ -13,8 +13,8 @@ import { Masthead } from "../../src/webapp/components/shell.tsx";
 
 const noop = () => undefined;
 const PAGE_TABS = [
-  { href: "/apply", icon: null, id: "patcher", label: "Apply" },
-  { href: "/create", icon: null, id: "creator", label: "Create" },
+  { href: "/apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
+  { href: "/create-patch", icon: null, id: "creator", label: "Create Patch" },
 ];
 
 let host;

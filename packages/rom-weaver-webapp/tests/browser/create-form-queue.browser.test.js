@@ -241,7 +241,7 @@ beforeEach(() => {
   workflowMockState.originalStateOverrides = {};
   workflowMockState.runDeferred = createDeferred();
   workflowMockState.runCalls = 0;
-  window.history.replaceState(null, "", "/create");
+  window.history.replaceState(null, "", "/create-patch");
 });
 
 afterEach(() => {
@@ -251,7 +251,7 @@ afterEach(() => {
 });
 
 test("guided Create URL starts and loads the sample tutorial", async () => {
-  window.history.replaceState(null, "", "/create?guide=create");
+  window.history.replaceState(null, "", "/create-patch?guide=create");
   const requested = [];
   globalThis.fetch = async (url) => {
     requested.push(String(url));
