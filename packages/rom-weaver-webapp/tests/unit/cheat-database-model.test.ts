@@ -170,6 +170,13 @@ describe("cheat database catalog", () => {
     expect(resolveCheatDatabaseEntry(index, undefined, { platform: "Nintendo Game Boy" })).toBe(gameBoyEntry);
   });
 
+  it("falls back to the cartridge extension when ingest reported no platform tag", () => {
+    expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.GBA" })).toBeUndefined();
+    expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.gbc" })).toBe(gameBoyColorEntry);
+    expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.gb" })).toBe(gameBoyEntry);
+    expect(resolveCheatDatabaseEntry(index, catalog, { fileName: "game.nes" })).toBeUndefined();
+  });
+
   it("uses the .gbc extension to split Game Boy Color from the shared Game Boy header", () => {
     expect(resolveCheatDatabaseEntry(index, undefined, { platform: "Nintendo Game Boy", fileName: "a.gbc" })).toBe(
       gameBoyColorEntry,

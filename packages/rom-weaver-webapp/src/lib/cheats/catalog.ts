@@ -14,6 +14,16 @@ import {
 const GAME_BOY_SLUG = "nintendo-game-boy";
 const GAME_BOY_COLOR_SLUG = "nintendo-game-boy-color";
 
+/** Cartridge extensions that name a platform when ingest reported no tag. */
+const SLUG_BY_EXTENSION: Record<string, string> = {
+  gb: GAME_BOY_SLUG,
+  gba: "nintendo-game-boy-advance",
+  gbc: GAME_BOY_COLOR_SLUG,
+};
+
+const extensionOf = (fileName: string | undefined): string =>
+  (fileName ?? "").slice((fileName ?? "").lastIndexOf(".") + 1).toLocaleLowerCase("en-US");
+
 /**
  * Pick the shard for a ROM's platform tag. The identify catalog owns the alias
  * rules, so whatever name ingest reported resolves to the same pack slug the
@@ -25,16 +35,17 @@ export const resolveCheatDatabaseEntry = (
   catalog: IdentifyCatalog | undefined,
   identity: Pick<CheatRomIdentity, "platform" | "fileName"> | null,
 ): CheatDatabaseEntry | undefined => {
-  const platform = identity?.platform;
-  if (!(index && platform)) return undefined;
-  let slug = resolveCatalogPlatform(catalog, platform)?.packSlug;
-  if (!slug) {
+  if (!(index && identity)) return undefined;
+  const platform = identity.platform;
+  let slug = platform ? resolveCatalogPlatform(catalog, platform)?.packSlug : undefined;
+  if (!slug && platform) {
     const normalized = normalizePlatformAlias(platform);
     slug = index.entries.find((entry) => normalizePlatformAlias(entry.platform) === normalized)?.slug;
   }
+  if (!(slug || platform)) slug = SLUG_BY_EXTENSION[extensionOf(identity.fileName)];
   // Game Boy and Game Boy Color share one header layout, so ingest tags both
   // as Game Boy; the file extension is the one signal that separates them.
-  if (slug === GAME_BOY_SLUG && /\.gbc$/iu.test(identity?.fileName ?? "")) {
+  if (slug === GAME_BOY_SLUG && extensionOf(identity.fileName) === "gbc") {
     slug = index.entries.some((entry) => entry.slug === GAME_BOY_COLOR_SLUG) ? GAME_BOY_COLOR_SLUG : slug;
   }
   return index.entries.find((entry) => entry.slug === slug);
