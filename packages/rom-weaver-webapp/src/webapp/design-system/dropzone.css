@@ -403,11 +403,6 @@
 .rw-app .drop.hero.dragging .formats-track {
   animation-play-state: paused;
 }
-@media (hover: hover) {
-  .rw-app .drop.hero:hover .formats-track {
-    animation-play-state: paused;
-  }
-}
 .rw-app .hero-formats-help {
   padding: 0 var(--pad) var(--sp-s);
   font-size: 0.78rem;
