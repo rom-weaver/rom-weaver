@@ -1817,7 +1817,8 @@ function ApplyWorkflowFormView({
   pendingDrops = [],
   startup = { message: "", status: "ready" },
 }: {
-  cheats?: ReactNode;
+  /** The 0x04 cheats step; receives the same finished-stage accent as the ROM and patch steps. */
+  cheats?: (state: { woven: boolean }) => ReactNode;
   controllers: {
     output: PatcherOutputController;
     patchStack: PatcherStackController;
@@ -2174,7 +2175,7 @@ function ApplyWorkflowFormView({
           steps={[
             { num: "0x02", title: localizer.message("ui.step.rom") },
             { num: "0x03", title: localizer.message("ui.step.patches") },
-            { num: "0x04", title: "Cheats" },
+            { num: "0x04", title: localizer.message("ui.step.cheats") },
             { num: "0x05", title: localizer.message("ui.step.apply") },
           ]}
         />
@@ -2286,7 +2287,7 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          {cheats}
+          {cheats?.({ woven: wovenSteps })}
 
           <WorkflowOutputStep
             action={renderOutputAction}

@@ -120,6 +120,10 @@
   overflow: auto;
   overscroll-behavior: contain;
 }
+/* Add-cheats dialog */
+.rw-app .cheat-dlg {
+  max-width: min(44rem, calc(100vw - 32px));
+}
 /* Log dialog */
 .rw-app .log-dlg {
   max-width: min(1280px, calc(100vw - 32px));

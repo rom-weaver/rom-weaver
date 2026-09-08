@@ -84,17 +84,12 @@
     margin: 0;
   }
 
-  /* Add-cheats dialog */
-  .rw-app .cheat-dlg .dlg-frame {
-    width: min(44rem, 96vw);
-    max-height: 90vh;
-  }
-
+  /* Add-cheats dialog. Its width lives in design-system/dialogs.css with the
+     other dialog sizes, in the same layer as the .dlg rules it overrides. */
   .rw-app .cheat-dlg .dlg-body {
     display: grid;
     gap: 0.75rem;
     min-width: 0;
-    overflow-y: auto;
   }
 
   .rw-app .cheat-search {

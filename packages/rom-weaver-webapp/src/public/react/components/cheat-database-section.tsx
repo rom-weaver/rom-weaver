@@ -49,8 +49,6 @@ const loadCheatDatabase = async (): Promise<{ index: CheatDatabaseIndex; catalog
 /** Rows per page in the add-cheats dialog list. */
 const DIALOG_PAGE_SIZE = 8;
 
-const DEFAULT_DATABASE_CREDIT = "libretro-database CC-BY-SA-4.0";
-
 const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : undefined);
 
 const matchCopy = (match: CheatGameMatch): { heading: string; detail: string } => {
@@ -85,8 +83,6 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
 
 const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
-
-const cheatKindLabel = (record: ClassifiedCheatRecord): string => record.detectedKind || "raw RAM write";
 
 const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -150,7 +146,7 @@ const CheatCard = ({ record, position, selected, onToggle, onRemove }: CheatCard
       <Drawer
         label="Cheat"
         labelIcon={<WandSparkles aria-hidden="true" />}
-        readouts={<DrawerReadout>{cheatKindLabel(record)}</DrawerReadout>}
+        readouts={record.detectedKind ? <DrawerReadout>{record.detectedKind}</DrawerReadout> : undefined}
       >
         {source.rawCode ? (
           <div className="ck mono">
@@ -326,6 +322,8 @@ type AddCheatsDialogProps = {
   stackCount: number;
   onAdd: (record: ClassifiedCheatRecord) => void;
   onRemove: (record: ClassifiedCheatRecord) => void;
+  /** Replaces the list while the shard loads or classifies, or when either failed. */
+  status?: { text: string; error?: boolean };
   gamePicker?: ReactNode;
   extras?: ReactNode;
   notices?: ReactNode;
@@ -345,6 +343,7 @@ const AddCheatsDialog = ({
   stackCount,
   onAdd,
   onRemove,
+  status,
   gamePicker,
   extras,
   notices,
@@ -409,7 +408,11 @@ const AddCheatsDialog = ({
                 value={query}
               />
             </label>
-            {rows.length ? (
+            {status ? (
+              <p className="cheat-pick-empty" role={status.error ? "alert" : "status"}>
+                {status.text}
+              </p>
+            ) : rows.length ? (
               <ul className="cheat-pick-list">
                 {rows.map((entry) => {
                   const source = entry.record;
@@ -480,6 +483,8 @@ export type CheatDatabaseSectionProps = {
   onSelectionChange?: (records: ClassifiedCheatRecord[]) => void;
   outputSummary?: { rom: number };
   validationMessage?: string;
+  /** Localized step heading. */
+  title: ReactNode;
   /** Step number in the apply workflow. */
   num?: string;
   /** Marks the step as finished (the apply run produced its cheat output). */
@@ -497,6 +502,7 @@ export const CheatDatabaseSection = ({
   onSelectionChange,
   outputSummary,
   validationMessage,
+  title,
   num = "0x04",
   woven,
 }: CheatDatabaseSectionProps) => {
@@ -622,7 +628,15 @@ export const CheatDatabaseSection = ({
     };
   }, [classifyDatabaseCheats, game, system]);
   const records = useMemo(() => [...classifiedRecords, ...manualRecords], [classifiedRecords, manualRecords]);
-  const cards = useMemo(() => records.filter(({ record }) => addedIds.has(record.id)), [addedIds, records]);
+  // Cards keep the order the user added them in, like the patch stack.
+  const cards = useMemo(
+    () =>
+      [...addedIds].flatMap((id) => {
+        const entry = records.find(({ record }) => record.id === id);
+        return entry ? [entry] : [];
+      }),
+    [addedIds, records],
+  );
   const copy = matchCopy(match);
 
   const publish = (nextSelected: Set<string>, source = records) => {
@@ -667,9 +681,16 @@ export const CheatDatabaseSection = ({
   };
 
   const gameTitle = game?.title || rom?.title || "";
-  const databaseCredit = activeIndex
-    ? `${sourceName(activeIndex.sourceUrl)} ${activeIndex.license}`
-    : DEFAULT_DATABASE_CREDIT;
+  const databaseCredit = activeIndex ? ` · ${sourceName(activeIndex.sourceUrl)} ${activeIndex.license}` : "";
+  const pickerStatus = loadError
+    ? { error: true, text: `The cheat database is unavailable. ${loadError}` }
+    : classificationError
+      ? { error: true, text: classificationError }
+      : loading
+        ? { text: "Loading this system's cheat database…" }
+        : classifying
+          ? { text: "Checking cheat delivery types in ROMWeaver…" }
+          : undefined;
   const systems: SystemOption[] = (activeIndex?.entries ?? []).map((candidate) => ({
     label: candidate.platform,
     value: candidate.cheatSystem,
@@ -700,7 +721,7 @@ export const CheatDatabaseSection = ({
         </>
       }
       num={num}
-      title="Cheats"
+      title={title}
       woven={woven}
     >
       {cards.length ? (
@@ -732,7 +753,8 @@ export const CheatDatabaseSection = ({
       </button>
       <p className="cheat-add-note">
         {copy.heading}
-        {game ? ` · ${countLabel(game.cheats.length, "database cheat")}` : ""} · {databaseCredit}
+        {game ? ` · ${countLabel(game.cheats.length, "database cheat")}` : ""}
+        {databaseCredit}
       </p>
 
       {loading ? <p aria-live="polite">Loading this system's cheat database…</p> : null}
@@ -785,6 +807,7 @@ export const CheatDatabaseSection = ({
         open={dialogOpen}
         records={records}
         stackCount={cards.length}
+        status={pickerStatus}
         title={gameTitle ? `Add cheats · ${gameTitle}` : "Add cheats"}
       />
     </StepSection>
