@@ -1011,6 +1011,19 @@ impl CliApp {
                         path.display()
                     ))
                 })?;
+                // The platform's cheat shard installs beside its pack and leaves with it.
+                let shard = provider
+                    .database_dir()
+                    .join("cheats")
+                    .join(format!("{}.json.br", entry.pack_slug));
+                if shard.is_file() {
+                    fs::remove_file(&shard).map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to remove `{}`: {error}",
+                            shard.display()
+                        ))
+                    })?;
+                }
                 let mut report = OperationReport::succeeded(
                     OperationFamily::Command,
                     Some("identify-database".to_string()),

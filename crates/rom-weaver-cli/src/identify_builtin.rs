@@ -199,6 +199,20 @@ struct PackIndex {
     systems: Vec<PackIndexEntry>,
     #[serde(default)]
     groups: Vec<PackGroup>,
+    /// Cheat shards ride in the group that owns their platform's pack; older
+    /// archives carry none.
+    #[serde(default)]
+    cheats: Vec<CheatIndexEntry>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CheatIndexEntry {
+    slug: String,
+    brotli_file: String,
+    brotli_bytes: u64,
+    brotli_sha256: String,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -394,6 +408,7 @@ fn archive_directory_allowed(path: &Path) -> bool {
         "share/rom-weaver/identify",
         ARCHIVE_PREFIX,
         "share/rom-weaver/identify/v1/packs",
+        "share/rom-weaver/identify/v1/cheats",
     ]
     .iter()
     .any(|allowed| path == Path::new(allowed))
@@ -412,7 +427,11 @@ fn archive_relative_path(path: &Path) -> Result<PathBuf> {
         || (relative.parent() == Some(Path::new("packs"))
             && relative
                 .file_name()
-                .is_some_and(|name| name.to_string_lossy().ends_with(".pack.br")));
+                .is_some_and(|name| name.to_string_lossy().ends_with(".pack.br")))
+        || (relative.parent() == Some(Path::new("cheats"))
+            && relative
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(".json.br")));
     if !allowed
         || relative
             .components()
@@ -512,11 +531,16 @@ fn merge_json_records(
     Ok(())
 }
 
+/// Merge the archive's record arrays into the installed metadata. `fields`
+/// MUST exist in the archive; `optional_fields` are merged only when the
+/// archive carries them, so an archive built before a field existed still
+/// installs.
 #[cfg(not(target_arch = "wasm32"))]
 fn merged_metadata(
     installed_path: &Path,
     archive_path: &Path,
     fields: &[(&str, &str)],
+    optional_fields: &[(&str, &str)],
 ) -> Result<Vec<u8>> {
     let archive = read_json_object(archive_path)?;
     let mut installed = if installed_path.is_file() {
@@ -526,6 +550,11 @@ fn merged_metadata(
     };
     for (field, key) in fields {
         merge_json_records(&mut installed, &archive, field, key)?;
+    }
+    for (field, key) in optional_fields {
+        if archive.contains_key(*field) {
+            merge_json_records(&mut installed, &archive, field, key)?;
+        }
     }
     serde_json::to_vec_pretty(&installed).map_err(|error| {
         RomWeaverError::Validation(format!("failed to serialize identify metadata: {error}"))
@@ -544,7 +573,13 @@ fn write_group_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn group_archive_entries(stage: &Path, group: &str) -> Result<Vec<PackIndexEntry>> {
+struct GroupArchiveEntries {
+    packs: Vec<PackIndexEntry>,
+    cheats: Vec<CheatIndexEntry>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn group_archive_entries(stage: &Path, group: &str) -> Result<GroupArchiveEntries> {
     let index_path = stage.join("index.json");
     let index: PackIndex = serde_json::from_slice(&fs::read(&index_path).map_err(|error| {
         RomWeaverError::Validation(format!(
@@ -639,7 +674,37 @@ fn group_archive_entries(stage: &Path, group: &str) -> Result<Vec<PackIndexEntry
             "identify pack group `{group}` contains unexpected pack files"
         )));
     }
-    Ok(index.systems)
+    for entry in &index.cheats {
+        validate_group_id(&entry.slug)?;
+        if entry.brotli_file != format!("cheats/{}.json.br", entry.slug) {
+            return Err(RomWeaverError::Validation(format!(
+                "identify cheat shard `{}` has an invalid archive path",
+                entry.slug
+            )));
+        }
+        if !expected.contains(entry.slug.as_str()) {
+            return Err(RomWeaverError::Validation(format!(
+                "identify cheat shard `{}` belongs to no pack in group `{group}`",
+                entry.slug
+            )));
+        }
+        let bytes = fs::read(stage.join(&entry.brotli_file)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to read staged identify cheat shard `{}`: {error}",
+                entry.brotli_file
+            ))
+        })?;
+        if bytes.len() as u64 != entry.brotli_bytes || sha256(&bytes) != entry.brotli_sha256 {
+            return Err(RomWeaverError::Validation(format!(
+                "identify cheat shard `{}` does not match its index digest",
+                entry.slug
+            )));
+        }
+    }
+    Ok(GroupArchiveEntries {
+        packs: index.systems,
+        cheats: index.cheats,
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -670,6 +735,7 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
         &database_dir.join("index.json"),
         &stage.join("index.json"),
         &[("systems", "slug"), ("groups", "id")],
+        &[("cheats", "slug")],
     ) {
         Ok(bytes) => bytes,
         Err(error) => {
@@ -681,6 +747,7 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
         &database_dir.join("catalog.json"),
         &stage.join("catalog.json"),
         &[("platforms", "packSlug")],
+        &[],
     ) {
         Ok(bytes) => bytes,
         Err(error) => {
@@ -691,11 +758,21 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
     rom_weaver_checksum::identify_catalog::IdentifyCatalog::parse(&catalog_bytes)?;
 
     let packs = entries
+        .packs
         .iter()
         .map(|entry| {
             decompress(&stage.join(&entry.brotli_file)).map(|bytes| (entry.slug.as_str(), bytes))
         })
         .collect::<Result<Vec<_>>>()?;
+    // Shards stay Brotli-compressed on disk: nothing native reads them yet, and
+    // the digest was checked while staging.
+    let cheats = entries
+        .cheats
+        .iter()
+        .map(|entry| {
+            fs::read(stage.join(&entry.brotli_file)).map(|bytes| (entry.slug.as_str(), bytes))
+        })
+        .collect::<std::io::Result<Vec<_>>>()?;
     let install = parent.join(format!(
         ".identify-group-{group}-{}.install",
         std::process::id()
@@ -718,6 +795,15 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
         }
         for (slug, pack) in &packs {
             write_group_atomic(&install.join(format!("{slug}.pack")), pack)?;
+        }
+        if !cheats.is_empty() {
+            fs::create_dir_all(install.join("cheats"))?;
+        }
+        for (slug, shard) in &cheats {
+            write_group_atomic(
+                &install.join("cheats").join(format!("{slug}.json.br")),
+                shard,
+            )?;
         }
         write_group_atomic(&install.join("index.json"), &index_bytes)?;
         write_group_atomic(&install.join("catalog.json"), &catalog_bytes)?;
@@ -946,8 +1032,35 @@ mod tests {
         slug: &str,
         platform: &str,
     ) -> Vec<u8> {
+        builder_style_archive_with_cheats(include_pack, false, group, slug, platform)
+    }
+
+    fn builder_style_archive_with_cheats(
+        include_pack: bool,
+        include_cheats: bool,
+        group: &str,
+        slug: &str,
+        platform: &str,
+    ) -> Vec<u8> {
         let raw = b"pack bytes";
         let compressed = brotli_compress(raw);
+        let shard_raw = br#"{"schemaVersion":1,"system":"nes","games":[]}"#;
+        let shard_compressed = brotli_compress(shard_raw);
+        let cheats = if include_cheats {
+            serde_json::json!([{
+                "platform": platform,
+                "slug": slug,
+                "cheatSystem": "nes",
+                "file": format!("cheats-{slug}.json"),
+                "rawBytes": shard_raw.len(),
+                "sha256": sha256(shard_raw),
+                "brotliFile": format!("cheats/{slug}.json.br"),
+                "brotliBytes": shard_compressed.len(),
+                "brotliSha256": sha256(&shard_compressed),
+            }])
+        } else {
+            serde_json::json!([])
+        };
         let index = serde_json::to_vec(&serde_json::json!({
             "groups": [{
                 "id": group,
@@ -963,7 +1076,8 @@ mod tests {
                 "brotliFile": format!("packs/{slug}.pack.br"),
                 "brotliBytes": compressed.len(),
                 "brotliSha256": sha256(&compressed),
-            }]
+            }],
+            "cheats": cheats,
         }))
         .expect("index JSON");
         let catalog = serde_json::to_vec(&serde_json::json!({
@@ -1026,9 +1140,67 @@ mod tests {
                     )
                     .expect("pack entry");
             }
+            if include_cheats {
+                let mut directory = tar::Header::new_gnu();
+                directory.set_entry_type(tar::EntryType::Directory);
+                directory.set_size(0);
+                directory.set_mode(0o755);
+                directory.set_cksum();
+                builder
+                    .append_data(
+                        &mut directory,
+                        "share/rom-weaver/identify/v1/cheats",
+                        std::io::empty(),
+                    )
+                    .expect("cheats directory entry");
+                let mut header = tar::Header::new_gnu();
+                header.set_size(shard_compressed.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder
+                    .append_data(
+                        &mut header,
+                        format!("share/rom-weaver/identify/v1/cheats/{slug}.json.br"),
+                        shard_compressed.as_slice(),
+                    )
+                    .expect("cheat shard entry");
+            }
             builder.finish().expect("tar archive");
         }
         brotli_compress(&tar_bytes)
+    }
+
+    #[test]
+    fn optional_group_install_copies_the_group_cheat_shards() {
+        let temp = assert_fs::TempDir::new().expect("temporary directory");
+        let database = temp.path().join("identify");
+        let archive =
+            builder_style_archive_with_cheats(true, true, "optional", "test", "Test System");
+
+        assert_eq!(
+            install_group_archive(&database, "optional", &archive).expect("install"),
+            1
+        );
+        let shard = database.join("cheats").join("test.json.br");
+        assert!(shard.is_file(), "cheat shard installed beside the packs");
+        let index: serde_json::Value =
+            serde_json::from_slice(&fs::read(database.join("index.json")).expect("index"))
+                .expect("index JSON");
+        let cheats = index["cheats"].as_array().expect("cheats");
+        assert_eq!(cheats.len(), 1);
+        assert_eq!(cheats[0]["slug"], serde_json::json!("test"));
+        assert_eq!(
+            sha256(&fs::read(&shard).expect("shard bytes")),
+            cheats[0]["brotliSha256"]
+        );
+
+        // An archive without shards installs over it and keeps the row.
+        let plain = builder_style_archive_for_group(true, "optional", "test", "Test System");
+        install_group_archive(&database, "optional", &plain).expect("reinstall");
+        let index: serde_json::Value =
+            serde_json::from_slice(&fs::read(database.join("index.json")).expect("index"))
+                .expect("index JSON");
+        assert_eq!(index["cheats"].as_array().expect("cheats").len(), 1);
     }
 
     fn builder_style_archive(include_pack: bool) -> Vec<u8> {
@@ -1797,6 +1969,7 @@ mod tests {
             &temp.path().join("absent.json"),
             &archive,
             &[("systems", "slug")],
+            &[("cheats", "slug")],
         )
         .expect("merged metadata");
         let value: serde_json::Value = serde_json::from_slice(&bytes).expect("merged JSON");
@@ -1835,7 +2008,9 @@ mod tests {
         let catalog = group_catalog("test");
 
         let stage = stage_dir(&valid, &catalog, &["test.pack.br"]);
-        let entries = group_archive_entries(stage.path(), "optional").expect("group entries");
+        let entries = group_archive_entries(stage.path(), "optional")
+            .expect("group entries")
+            .packs;
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].slug, "test");
 
