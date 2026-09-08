@@ -156,6 +156,12 @@ class MockCreateWorkflow {
     });
   }
 
+  setCheatCodes(codes, system) {
+    this.cheatCodes = [...codes];
+    this.cheatCodeSystem = system;
+    return Promise.resolve();
+  }
+
   setModified(source) {
     workflowMockState.modifiedSetCalls += 1;
     this.emitProgress("Preparing modified ROM...");
