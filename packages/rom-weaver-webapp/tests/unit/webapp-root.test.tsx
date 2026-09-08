@@ -196,7 +196,10 @@ describe("tab selection", () => {
   it("waits for the lazy Docs route before switching to it", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector('.dock-tab[data-mode="docs"]') as HTMLAnchorElement);
+    // Docs lives under More on both layouts, not in the dock.
+    expect(container.querySelector('.dock-tab[data-mode="docs"]')).toBeNull();
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-more-workflow="docs"]') as HTMLButtonElement);
     expect(called("onSelectView")).not.toHaveBeenCalled();
 
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("docs"));

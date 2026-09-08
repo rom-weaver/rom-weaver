@@ -70,6 +70,11 @@ msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirl
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.resultCount"
+msgstr "{count} resultados"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "candidate.warningCount"
 msgstr "{count} aviso(s)"
 
@@ -115,6 +120,21 @@ msgstr "Añade una ROM y sus parches y descarga la ROM parcheada o un paquete re
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.testDescription"
+msgstr "Añade una ROM compatible, sin comprimir o en un archivo comprimido, para probar el juego en el emulador del navegador."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "se aplica después del parche {n}"
 
@@ -157,6 +177,11 @@ msgstr "auto (anterior)"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "ROM base"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.beta"
+msgstr "Beta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -385,6 +410,16 @@ msgstr "Filtrar el registro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Buscar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Buscar una herramienta, guía o ajuste"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
 msgstr "Encuentra su coincidencia exacta."
 
@@ -397,6 +432,11 @@ msgstr "Corregir orden"
 #: src/presentation/localization/messages.ts
 msgid "settings.fixChecksum"
 msgstr "Corregir cabecera ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Guía"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -600,6 +640,11 @@ msgstr "¿No es la ROM que buscaba?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nada coincide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.viewCurrent"
 msgstr "Actual"
 
@@ -710,6 +755,11 @@ msgstr "salida anterior"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.project"
+msgstr "Proyecto"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.pullRequest"
 msgstr "Pull request"
 
@@ -805,11 +855,6 @@ msgstr "rom-weaver está en la caché de este navegador. La próxima visita carg
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testDescription"
-msgstr "Añade una ROM compatible, sin comprimir o en un archivo comprimido, para probar el juego en el emulador del navegador."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
 msgstr "Se ejecuta en tu navegador. Tus archivos se quedan en este dispositivo."
 
@@ -857,6 +902,11 @@ msgstr "Secciones"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "Ve tus cambios en el juego."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindSetting"
+msgstr "Ajuste"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1040,6 +1090,16 @@ msgstr "Hilos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Herramienta"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
+msgstr "Herramientas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Transferido"
 
@@ -1052,6 +1112,12 @@ msgstr "Prueba tu ROM."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Activar todos"
+
+#~ msgid "ui.find.kindSetting"
+#~ msgstr "Ajuste"
+
+#~ msgid "ui.find.label"
+#~ msgstr "Buscar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

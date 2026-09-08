@@ -415,7 +415,15 @@ const PAGE_TABS = [
   { href: "apply", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
   { href: "test", icon: createElement("span", { "aria-hidden": "true" }), id: "test", label: "Test" },
-  { href: "trim", icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: createElement("span", { "aria-hidden": "true" }),
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
 ];
 
 // Production page chrome (single <main className="workbench"> + one tabpanel)
@@ -1098,8 +1106,23 @@ describe("webapp responsive navigation", () => {
   // second masthead row.
   const ALL_TABS = [
     ...PAGE_TABS,
-    { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
-    { href: "ppf-undo", icon: createElement("span", { "aria-hidden": "true" }), id: "ppf-undo", label: "PPF undo" },
+    {
+      group: "docs",
+      href: "docs",
+      icon: createElement("span", { "aria-hidden": "true" }),
+      id: "docs",
+      label: "Docs",
+      placement: "more",
+    },
+    {
+      beta: true,
+      group: "tools",
+      href: "ppf-undo",
+      icon: createElement("span", { "aria-hidden": "true" }),
+      id: "ppf-undo",
+      label: "PPF undo",
+      placement: "more",
+    },
   ];
 
   const renderMastheadOnly = async (tabs) =>
@@ -1130,6 +1153,25 @@ describe("webapp responsive navigation", () => {
       ),
       "light",
     );
+
+  test("Find keeps keyboard selections visible on desktop and phone", async () => {
+    for (const width of [1280, 390]) {
+      await setViewport({ height: 430, width });
+      await renderMastheadOnly(ALL_TABS);
+      host.querySelector(width > 999 ? ".desktop-find button" : ".dock-find").click();
+      await settle();
+      const input = host.querySelector(".find-input");
+      const options = host.querySelectorAll(".find-option");
+      for (let index = 1; index < options.length; index += 1) {
+        input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+        await settle();
+        const selected = host.querySelector(".find-option.is-active").getBoundingClientRect();
+        const list = host.querySelector(".find-results").getBoundingClientRect();
+        expect(selected.top).toBeGreaterThanOrEqual(list.top - 1);
+        expect(selected.bottom).toBeLessThanOrEqual(list.bottom + 1);
+      }
+    }
+  });
 
   test("the masthead is one row at every width it keeps the rail", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {

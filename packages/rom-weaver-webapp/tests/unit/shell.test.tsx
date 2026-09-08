@@ -12,6 +12,7 @@ import {
   readPwaState,
   SiteFooter,
 } from "../../src/webapp/components/shell.tsx";
+import type { WorkflowTab } from "../../src/webapp/components/shell.tsx";
 
 const withSettings = (children: ReactNode) => (
   <RomWeaverSettingsProvider settings={{}}>{children}</RomWeaverSettingsProvider>
@@ -20,10 +21,18 @@ const withSettings = (children: ReactNode) => (
 const TABS = [
   { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
-];
+  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: <svg aria-hidden="true" />,
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
+] satisfies WorkflowTab[];
 
 const mastheadProps = {
   currentTab: "patcher",
@@ -143,8 +152,12 @@ describe("More menu destinations", () => {
     expect(onOpenChangelog).toHaveBeenCalledTimes(1);
 
     openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Trim" }));
+    fireEvent.click(getByRole("menuitem", { name: "Trim Beta" }));
     expect(onSelectTab).toHaveBeenCalledWith("trim");
+
+    openDesktopMore(container);
+    fireEvent.click(getByRole("menuitem", { name: "Docs" }));
+    expect(onSelectTab).toHaveBeenCalledWith("docs");
   });
 
   it("falls back to the Log dialog when no Storage handler is given", () => {
