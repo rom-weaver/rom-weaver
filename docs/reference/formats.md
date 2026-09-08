@@ -170,6 +170,8 @@ The Test page supports these platforms:
 - Sony PlayStation
 - Sony PSP
 
+The Test page passes a `.chd` file to the emulator core unchanged. rom-weaver reads the payload SHA-1 from the CHD header and the platform from the disc data, without extracting the file. A CHD inside a ZIP or 7z archive is extracted instead.
+
 rom-weaver does not bundle EmulatorJS cores for these platforms:
 
 - Nintendo GameCube

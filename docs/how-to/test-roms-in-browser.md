@@ -25,6 +25,8 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test?guid
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
+A CHD disc image opens without extraction. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it.
+
 [Browser emulator support](../reference/formats.md#browser-emulator-support) lists the platforms with bundled cores.
 
 ## Test an Apply result
