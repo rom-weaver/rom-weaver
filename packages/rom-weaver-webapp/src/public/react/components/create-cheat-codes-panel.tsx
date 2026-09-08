@@ -51,7 +51,7 @@ type CreateCheatCodesPanelProps = {
 const recordCodes = (record: ClassifiedCheatRecord, system?: string): string[] =>
   splitCheatCodes(record.record.rawCode || "", system);
 
-/** Codes the picker and the import path add are appended to the textarea. */
+/** Codes the picker adds are appended to the textarea. */
 const appendCodes = (value: string, codes: readonly string[], system?: string): string => {
   const existing = new Set(splitCheatCodes(value, system).map((code) => code.toUpperCase()));
   const added: string[] = [];

@@ -201,62 +201,6 @@
   color: var(--fault);
   border-color: color-mix(in oklab, var(--fault) 55%, transparent);
 }
-.rw-app .log-dlg .logview {
-  display: flex;
-  flex: 0 1 auto;
-  gap: var(--sp-2xs);
-  min-inline-size: 0;
-  padding: 3px;
-  margin: 0;
-  background: var(--well);
-  border: 1px solid var(--seam-strong);
-  border-radius: var(--r-s);
-}
-.rw-app .log-dlg .logview .seg-btn {
-  display: inline-flex;
-  flex: 1 1 0;
-  align-items: center;
-  justify-content: center;
-  min-inline-size: 0;
-  height: 28px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 0.76rem;
-  font-weight: 650;
-  color: var(--ink-3);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  appearance: none;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: calc(var(--r-s) - 3px);
-  transition:
-    background 0.18s,
-    color 0.18s;
-}
-@media (hover: hover) {
-  .rw-app .log-dlg .logview .seg-btn:hover {
-    color: var(--ink);
-  }
-}
-/* Touch devices need active feedback because they lack hover. */
-.rw-app .log-dlg .logview .seg-btn:active {
-  color: var(--ink);
-}
-.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"] {
-  color: var(--thread-ink);
-  background: var(--thread);
-  box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
-}
-@media (hover: hover) {
-  .rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:hover {
-    color: var(--thread-ink);
-  }
-}
-.rw-app .log-dlg .logview .seg-btn[aria-pressed="true"]:active {
-  color: var(--thread-ink);
-}
 /* Every tab's own controls live in a bar under the head rather than in it, so
    the head carries nothing but the tab rail and the close button at any width.
    Rows stack: the controls own the first, and a filter (logs, storage) the one

@@ -693,7 +693,7 @@ const LogViewToggle = ({
   onChange: (view: "current" | "previous") => void;
   showingPrevious: boolean;
 }) => (
-  <fieldset className="logview">
+  <fieldset className="seg logview">
     <legend className="sr-only">{localizer.message("ui.log.viewLabel")}</legend>
     <button aria-pressed={!showingPrevious} className="seg-btn" onClick={() => onChange("current")} type="button">
       {localizer.message("ui.log.viewCurrent")}
