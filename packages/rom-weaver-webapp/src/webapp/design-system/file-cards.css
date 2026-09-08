@@ -665,17 +665,6 @@
   flex: 1 1 8rem;
   min-width: 0;
 }
-@media (min-width: 1000px) {
-  .rw-app .identify-hash--hero {
-    justify-content: center;
-  }
-  .rw-app .identify-hash--hero .identify-hash-label {
-    flex: none;
-  }
-  .rw-app .identify-hash--hero .identify-hash-row {
-    flex: 0 1 36rem;
-  }
-}
 .rw-app .identify-hash-submit {
   flex: none;
 }

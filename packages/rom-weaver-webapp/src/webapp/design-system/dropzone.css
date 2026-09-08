@@ -624,14 +624,6 @@
      margin that keeps the headline off the seam instead of flush against it. */
   padding-block: clamp(12px, 2.4svh, 28px);
 }
-@media (min-width: 1000px) {
-  .rw-app .drop.hero {
-    gap: 20px;
-  }
-  .rw-app .drop.hero .drop-base {
-    gap: 16px;
-  }
-}
 /* The hero MUST reserve space for its visible checksum form. */
 .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash) {
   --hero-extra-h: 100px;
