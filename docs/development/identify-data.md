@@ -11,6 +11,7 @@ ROMWeaver builds deterministic RWFP1 packs from pinned Libretro and OpenGood dat
 - [Checksum router](#checksum-router)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
+- [Cheat shards](#cheat-shards)
 - [Determinism and provenance](#determinism-and-provenance)
 - [Pack integrity](#pack-integrity)
 
@@ -81,6 +82,16 @@ Release archives, npm platform packages, Homebrew, Scoop, and container images i
 The default `bundled-identify-data` feature enables the packaged default data. Builds without it ignore packaged packs.
 
 `identify database install-group` downloads or imports one optional group. It merges the group into the local database. It does not remove other installed groups.
+
+## Cheat shards
+
+The same build writes one cheat shard per platform in `CHEAT_PLATFORMS` (`scripts/import-libretro-cheats.mjs`). It extracts that platform's `cht/` directory from the pinned Libretro archive, matches each `.cht` file title against the platform's parsed release list, and writes `cheats-<slug>.json` plus a Brotli copy next to the packs.
+
+`index.json` lists each shard under `cheats` with its platform, slug, Rust `cheatSystem` identifier, size, SHA-256, and pack group. `sources.libretro.licenseFile` names the copied license text.
+
+The webapp stages shards as `assets/identify-cheats-<slug>.json` sidecars, serves them through the identify pack route, and adds them to their platform's pack group. The release tree stores them under `cheats/<slug>.json.br`; `identify database install-group` copies them beside the packs, and `identify database remove` deletes them with the pack.
+
+To add a platform, add a `CHEAT_PLATFORMS` entry whose key is an identify platform name and whose `cheatSystem` is a Rust `CheatSystem` identifier. A platform without a Rust decoder still exports runtime cheats.
 
 ## Determinism and provenance
 
