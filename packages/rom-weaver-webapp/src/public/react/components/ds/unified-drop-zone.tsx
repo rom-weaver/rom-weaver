@@ -88,9 +88,6 @@ const UnifiedDropZone = ({
     onFiles(files);
   };
   const formats = [...new Set(supported?.flatMap((group) => group.extensions) || [])];
-  const previewFormats = [
-    ...new Set([...["nes", "bps", "iso", "zip"].filter((format) => formats.includes(format)), ...formats]),
-  ].slice(0, 4);
   const supportedFormats = supported?.length ? (
     <div className="info-support">
       {supported.map((group) => (
@@ -134,7 +131,7 @@ const UnifiedDropZone = ({
       <DropZone
         {...dropZoneProps}
         bare
-        formats={previewFormats}
+        formats={formats}
         hintCoarse={big ? undefined : localizer.message("ui.drop.tap")}
         inputRef={inputRef}
         label={big ? heroLabel : addLabel}

@@ -217,7 +217,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
   });
 
-  it("opens the checksum disclosure, then fills the bench on a match", async () => {
+  it("shows checksum search immediately, then fills the bench on a match", async () => {
     lookupExpectedRom.mockResolvedValue({
       matches: [
         {
@@ -238,10 +238,8 @@ describe("apply workflow view - empty bench", () => {
     expect(search).toBeTruthy();
     expect(search.compareDocumentPosition(drop) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(container.querySelector(".drop.hero")).toBeTruthy();
-    const disclosure = step.querySelector<HTMLButtonElement>(".identify-hash-disclosure > .cks-head");
-    expect(disclosure?.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(disclosure as HTMLButtonElement);
-    expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
+    expect(search.closest(".cks-body")).toBeNull();
+    expect(search.querySelector("label")?.textContent).toBe("Identify by checksum");
 
     const input = container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
     await act(async () => {

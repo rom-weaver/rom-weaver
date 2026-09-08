@@ -329,10 +329,51 @@
 .rw-app .drop.hero .formats {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
-  gap: var(--sp-xs);
-  justify-content: center;
   width: min(100%, 46rem);
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+.rw-app .drop.hero .formats-track {
+  display: flex;
+  width: max-content;
+  min-width: 200%;
+  animation: formats-ticker 90s linear infinite;
+}
+.rw-app .drop.hero .formats-set {
+  display: flex;
+  flex: 1 0 auto;
+  gap: var(--sp-xs);
+  align-items: center;
+  justify-content: space-around;
+  padding-inline-end: var(--sp-xs);
+}
+@keyframes formats-ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.rw-app .step.is-input:focus-within .formats-track,
+.rw-app .drop.hero:active .formats-track,
+.rw-app .drop.hero.dragging .formats-track {
+  animation-play-state: paused;
+}
+@media (hover: hover) {
+  .rw-app .drop.hero:hover .formats-track {
+    animation-play-state: paused;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .drop.hero .formats {
+    overflow-x: auto;
+    mask-image: none;
+  }
+  .rw-app .drop.hero .formats-track {
+    min-width: 100%;
+    animation: none;
+  }
+  .rw-app .drop.hero .formats-set + .formats-set {
+    display: none;
+  }
 }
 .rw-app .drop.hero .fmt {
   flex: none;
@@ -571,9 +612,9 @@
      margin that keeps the headline off the seam instead of flush against it. */
   padding-block: clamp(12px, 2.4svh, 28px);
 }
-/* The hero MUST reserve space for its checksum form or collapsed disclosure. */
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash-disclosure) {
-  --hero-extra-h: 44px;
+/* The hero MUST reserve space for its visible checksum form. */
+.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash) {
+  --hero-extra-h: 100px;
 }
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;

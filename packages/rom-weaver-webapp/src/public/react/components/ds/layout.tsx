@@ -167,11 +167,17 @@ const DropZone = ({
   const formatsNode =
     big && formats?.length ? (
       <span aria-hidden="true" className="formats">
-        {formats.map((format) => (
-          <span className="fmt mono" key={format}>
-            {format}
-          </span>
-        ))}
+        <span className="formats-track">
+          {[0, 1].map((copy) => (
+            <span className="formats-set" key={copy}>
+              {formats.map((format) => (
+                <span className="fmt mono" key={format}>
+                  {format}
+                </span>
+              ))}
+            </span>
+          ))}
+        </span>
       </span>
     ) : null;
 
