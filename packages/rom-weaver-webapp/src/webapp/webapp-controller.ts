@@ -134,6 +134,7 @@ const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode
   if (view === "docs" && readRouteSegments().includes("docs")) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
+  if (view === "patcher" && window.location.hash.toLowerCase() === "#bundle") nextUrl.hash = "#bundle";
   if (nextUrl.href === window.location.href) return;
   window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
 };

@@ -177,4 +177,14 @@ describe("the landing route at the app base", () => {
     controller.selectView("patcher");
     expect(window.location.pathname).toBe("/rom-weaver/apply");
   });
+
+  it("keeps the bundle step hash while normalizing the Apply route", () => {
+    window.history.replaceState({}, "", "/apply#bundle");
+
+    const controller = createController();
+
+    expect(controller.getState().currentView).toBe("patcher");
+    expect(window.location.pathname).toBe("/apply");
+    expect(window.location.hash).toBe("#bundle");
+  });
 });

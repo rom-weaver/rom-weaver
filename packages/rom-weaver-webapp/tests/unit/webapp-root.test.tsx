@@ -214,6 +214,19 @@ describe("tab selection", () => {
     expect(called("onSelectView")).toHaveBeenCalledWith("patcher");
   });
 
+  it("re-emits the bundle hash when Bundles is selected while already targeted", async () => {
+    const { container } = await renderRoot();
+    window.history.replaceState({}, "", "/apply#bundle");
+    const hashchange = vi.fn();
+    window.addEventListener("hashchange", hashchange);
+
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-more-workflow="bundle"]') as HTMLButtonElement);
+
+    expect(hashchange).toHaveBeenCalledTimes(1);
+    window.removeEventListener("hashchange", hashchange);
+  });
+
   it("waits for the lazy Docs route before switching to it", async () => {
     const { called, container } = await renderRoot();
 

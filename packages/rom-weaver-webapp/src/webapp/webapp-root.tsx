@@ -713,7 +713,9 @@ function WebappRoot({
                 // Not a view of its own: reuse "patcher" and let the hash tell
                 // Apply which step to reveal, on both a fresh mount and a
                 // same-view re-click.
-                window.location.hash = BUNDLE_STEP_HASH;
+                if (window.location.hash.toLowerCase() === `#${BUNDLE_STEP_HASH}`)
+                  window.dispatchEvent(new Event("hashchange"));
+                else window.location.hash = BUNDLE_STEP_HASH;
                 pendingViewRef.current = null;
                 selectViewWithTransition(() => actions.onSelectView("patcher"));
                 return;
