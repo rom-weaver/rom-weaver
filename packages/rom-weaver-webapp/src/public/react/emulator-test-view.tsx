@@ -119,6 +119,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       currentGame?.checksum
         ? createEmulatorGameIdentity({
             checksum: currentGame.checksum,
+            fileName: currentGame.fileName,
           })
         : null,
     [currentGame],
