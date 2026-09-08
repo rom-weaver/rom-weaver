@@ -19,6 +19,7 @@ import {
   RomHashSearch,
   type RomExpectation,
 } from "../../public/react/components/ds/rom-expectation-card.tsx";
+import { RelatedStrip } from "./related-strip.tsx";
 import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
@@ -41,6 +42,8 @@ const IDENTIFY_SUPPORTED_FILES = [
 type IdentifyFormProps = {
   containerId?: string;
   inputId?: string;
+  /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
+  onSelectTab?: (id: string) => void;
   pageDrop?: PageFileDrop | null;
 };
 
@@ -115,6 +118,7 @@ const CandidateResult = ({
 const IdentifyForm = ({
   containerId = "identify-container",
   inputId = "identify-input-picker",
+  onSelectTab,
   pageDrop,
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
@@ -443,6 +447,9 @@ const IdentifyForm = ({
       ) : (
         <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.step.rom") }]} />
       )}
+      {!busy && !!result && !unavailable && onSelectTab ? (
+        <RelatedStrip entryKey="identify" onSelectTab={onSelectTab} />
+      ) : null}
     </section>
   );
 };

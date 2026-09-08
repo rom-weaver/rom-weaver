@@ -55,6 +55,8 @@ type CreatePatchFormProps = {
   threads?: number | string;
   onOriginalChange?: (file: BinarySource | null) => void;
   onModifiedChange?: (file: BinarySource | null) => void;
+  /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
+  onSelectTab?: (id: string) => void;
   onSettingsChange?: (settings: CreatePatchFormSettings) => void;
   onPatchTypeChange?: (patchType: string) => void;
   onProgress?: (event: ProgressEvent) => void;
@@ -76,6 +78,8 @@ type TrimPatchFormProps = {
   disabled?: boolean;
   threads?: number | string;
   onSourceChange?: (file: BinarySource | null) => void;
+  /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
+  onSelectTab?: (id: string) => void;
   onSettingsChange?: (settings: TrimPatchFormSettings) => void;
   onOutputFormatChange?: (format: string) => void;
   onProgress?: (event: ProgressEvent) => void;

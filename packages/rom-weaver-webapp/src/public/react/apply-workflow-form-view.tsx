@@ -13,6 +13,7 @@ import { type ProgressViewModel } from "../../presentation/workflow-presentation
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
+import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -1781,6 +1782,7 @@ function ApplyWorkflowFormView({
   bundleTools,
   onBundleMetaChange,
   onBundleMetaBulkChange,
+  onSelectTab,
   onSelectView,
   onUnifiedDrop,
   patchEnablement,
@@ -1808,6 +1810,8 @@ function ApplyWorkflowFormView({
   bundleRomExpectation?: BundleRomExpectation;
   onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
   onBundleMetaBulkChange?: (ids: readonly string[], updates: Partial<BundlePatchMeta>) => void;
+  /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
+  onSelectTab?: (id: string) => void;
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
@@ -2287,6 +2291,7 @@ function ApplyWorkflowFormView({
             title="Apply"
             woven={applyDone || running}
           />
+          {applyDone && onSelectTab ? <RelatedStrip entryKey="patcher" onSelectTab={onSelectTab} /> : null}
         </>
       )}
 

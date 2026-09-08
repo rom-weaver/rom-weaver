@@ -1126,6 +1126,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
 
   const createModel = (): CreatePatchFormViewModel => ({
+    done: !!completedOutput,
+    onSelectTab: props.onSelectTab,
     dialog: (
       <>
         {candidateSelectionDialog}
