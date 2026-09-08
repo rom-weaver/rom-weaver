@@ -132,7 +132,7 @@ const EmulatorJsAction = ({
           retained = getApplyEntry(fileName) || getApplyEntry();
         }
         if (!retained?.checksum) throw new Error("The retained ROM has no SHA-1 checksum.");
-        const { gameName } = createEmulatorGameIdentity({ checksum: retained.checksum });
+        const { gameName } = createEmulatorGameIdentity({ checksum: retained.checksum, fileName: retained.fileName });
         prepareEmulatorAudioContext(gameName);
         setCurrentGame(retained.id);
         requestEmulatorStartFromUserAction(gameName);

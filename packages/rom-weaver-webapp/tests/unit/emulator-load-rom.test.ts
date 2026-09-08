@@ -10,11 +10,13 @@ const workflowMocks = vi.hoisted(() => ({
   getIngestOutputBlob: vi.fn(async () => new Blob(["game"])),
   ingestRom: vi.fn(),
   outputDispose: vi.fn(async () => undefined),
+  probeRom: vi.fn(),
 }));
 
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({
   getIngestOutputBlob: workflowMocks.getIngestOutputBlob,
   ingestRom: workflowMocks.ingestRom,
+  probeRom: workflowMocks.probeRom,
 }));
 
 type ArchiveOutput = Parameters<typeof pickEmulatorRomOutput>[0][number];
@@ -25,6 +27,7 @@ beforeEach(() => {
   workflowMocks.getIngestOutputBlob.mockClear();
   workflowMocks.ingestRom.mockReset();
   workflowMocks.outputDispose.mockClear();
+  workflowMocks.probeRom.mockReset();
   workflowMocks.ingestRom.mockImplementation(async (_blob, _fileName, options) => {
     options.onProgress?.({
       id: "extract",
@@ -98,6 +101,64 @@ it("keeps the detected platform for a bare disc image", async () => {
 
   await expect(loadEmulatorRom(new Blob(["game"]), "game.iso")).resolves.toMatchObject({
     platform: "Sony Playstation Portable",
+  });
+});
+
+describe("CHD disc images", () => {
+  it("hands the CHD to the emulator unextracted with the header's payload SHA-1", async () => {
+    workflowMocks.probeRom.mockImplementation(async (_blob, _fileName, options) => {
+      options.onProgress?.({ label: "Reading game.chd...", percent: 10, stage: "input" });
+      return { chd: { rawSha1: "C".repeat(40), sha1: "d".repeat(40) }, entries: [], platform: "Sony PlayStation" };
+    });
+    const onProgress = vi.fn();
+    const blob = new Blob(["chd"]);
+
+    await expect(loadEmulatorRom(blob, "Game.CHD", { onProgress })).resolves.toEqual({
+      blob,
+      checksum: "c".repeat(40),
+      fileName: "Game.CHD",
+      platform: "Sony PlayStation",
+    });
+    expect(workflowMocks.ingestRom).not.toHaveBeenCalled();
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "Reading game.chd...", percent: 10, stage: "input" }),
+    );
+  });
+
+  it("falls back to the header's combined SHA-1", async () => {
+    workflowMocks.probeRom.mockResolvedValueOnce({
+      chd: { sha1: "d".repeat(40) },
+      entries: [],
+      platform: "Sony PlayStation",
+    });
+
+    await expect(loadEmulatorRom(new Blob(["chd"]), "game.chd")).resolves.toMatchObject({
+      checksum: "d".repeat(40),
+    });
+  });
+
+  it("extracts a CHD whose core cannot read one", async () => {
+    workflowMocks.probeRom.mockResolvedValueOnce({
+      chd: { rawSha1: "c".repeat(40) },
+      entries: [],
+      platform: "Sony Playstation Portable",
+    });
+
+    await expect(loadEmulatorRom(new Blob(["chd"]), "game.chd")).resolves.toMatchObject({ fileName: "game.nes" });
+    expect(workflowMocks.ingestRom).toHaveBeenCalled();
+  });
+
+  it("extracts a CHD the probe could not name a platform for", async () => {
+    workflowMocks.probeRom.mockResolvedValueOnce({ chd: { rawSha1: "c".repeat(40) }, entries: [] });
+
+    await loadEmulatorRom(new Blob(["chd"]), "game.chd");
+    expect(workflowMocks.ingestRom).toHaveBeenCalled();
+  });
+
+  it("rejects a CHD whose header has no SHA-1", async () => {
+    workflowMocks.probeRom.mockResolvedValueOnce({ entries: [], platform: "Sony PlayStation" });
+
+    await expect(loadEmulatorRom(new Blob(["chd"]), "game.chd")).rejects.toThrow("carries no SHA-1");
   });
 });
 

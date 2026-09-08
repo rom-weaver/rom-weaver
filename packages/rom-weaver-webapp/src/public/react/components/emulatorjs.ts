@@ -57,6 +57,16 @@ const DEFAULT_ASPECT_RATIO = "4 / 3";
 const getEmulatorJsAspectRatio = (core?: string): string =>
   (core ? CORE_ASPECT_RATIOS[core] : undefined) ?? DEFAULT_ASPECT_RATIO;
 
+/**
+ * The vendored cores that read a CHD themselves, taken from each core's
+ * libretro `valid_extensions`: pcsx_rearmed, yabause, and genesis_plus_gx list
+ * `chd`. Every other core needs the disc extracted first - ppsspp accepts only
+ * `elf, iso, cso, prx, pbp`, and smsplus no disc image at all.
+ */
+const CHD_CAPABLE_CORES: ReadonlySet<string> = new Set(["psx", "segaMD", "segaSaturn"]);
+
+const coreReadsChd = (core?: string): boolean => !!core && CHD_CAPABLE_CORES.has(core);
+
 const getEmulatorJsCore = (platform?: string, fileName?: string): string | undefined => {
   const normalizedPlatform = platform?.trim();
   if (normalizedPlatform) return PLATFORM_CORES[normalizedPlatform];
@@ -67,4 +77,4 @@ const getEmulatorJsCore = (platform?: string, fileName?: string): string | undef
   return match ? EXTENSION_CORES[match[0]] : undefined;
 };
 
-export { getEmulatorJsAspectRatio, getEmulatorJsCore };
+export { coreReadsChd, getEmulatorJsAspectRatio, getEmulatorJsCore };

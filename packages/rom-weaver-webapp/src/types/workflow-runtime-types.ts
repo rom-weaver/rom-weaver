@@ -281,6 +281,10 @@ type CompressionCreateInput =
 
 type CompressionProbeResult = {
   entries: CompressionEntryInfo[];
+  /** Console decoded from the container's bytes, when the probe recognises one. */
+  platform?: string;
+  /** Digests read from a CHD header, without decompressing the payload. */
+  chd?: { rawSha1?: string; sha1?: string };
 };
 
 type CompressionExtractResult = {

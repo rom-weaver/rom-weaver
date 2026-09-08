@@ -270,7 +270,7 @@ const runRomWeaverProbeWorker = async (
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<{ entries: CompressionProbeResult["entries"]; platform?: string }> => {
+): Promise<CompressionProbeResult> => {
   const sourcePath = String(input.sourcePath || "").trim();
   if (!sourcePath) throw new Error("Container probe source path is required");
   const command = createRomWeaverCommand("probe", {
@@ -297,7 +297,19 @@ const runRomWeaverProbeWorker = async (
   const terminal = getTerminalEvent(result);
   const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
   const platform = typeof details?.platform === "string" ? details.platform.trim() : "";
-  return { entries: getContainerEntriesFromProbe(result), ...(platform ? { platform } : {}) };
+  const chd = getChdProbeDetails(details?.chd);
+  return { entries: getContainerEntriesFromProbe(result), ...(platform ? { platform } : {}), ...(chd ? { chd } : {}) };
+};
+
+// The CHD header's own digests: `raw_sha1` covers the decoded payload, `sha1` the payload plus
+// metadata. Hosts use them to identify a CHD without decompressing it.
+const getChdProbeDetails = (value: unknown): CompressionProbeResult["chd"] | undefined => {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const rawSha1 = typeof record.raw_sha1 === "string" ? record.raw_sha1.trim() : "";
+  const sha1 = typeof record.sha1 === "string" ? record.sha1.trim() : "";
+  if (!(rawSha1 || sha1)) return undefined;
+  return { ...(rawSha1 ? { rawSha1 } : {}), ...(sha1 ? { sha1 } : {}) };
 };
 
 type LibretroSidecarMatch = { name: string; order: number };

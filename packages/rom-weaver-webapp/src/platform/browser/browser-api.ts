@@ -10,6 +10,7 @@ import type { ApplySettings, CreateSettings, WorkerSettings } from "../../types/
 import type { BrowserSourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import type { RuntimePatchCreateFormatCandidates } from "../../types/workflow-runtime-adapter.ts";
+import type { CompressionProbeInput } from "../../types/workflow-runtime-types.ts";
 import { getDefaultBrowserThreadCount } from "../shared/compression-options.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
 import { configureBrowserAssetBaseUrl } from "./browser-asset-base.ts";
@@ -61,6 +62,21 @@ const ingestRom = async (source: Blob, fileName: string, options: BrowserIngestR
     onProgress: options.onProgress,
     signal: options.signal,
     source,
+  });
+};
+
+type BrowserProbeRomOptions = Partial<Pick<NonNullable<CompressionProbeInput["options"]>, "onProgress" | "signal">>;
+
+/**
+ * Metadata-only look at one input: its entries, the platform decoded from its
+ * bytes, and a CHD's header digests. Nothing is extracted.
+ */
+const probeRom = async (source: Blob, fileName: string, options: BrowserProbeRomOptions = {}) => {
+  const probe = browserRuntime.compression.probe;
+  if (!probe) throw new Error("The rom-weaver probe runtime is unavailable.");
+  return probe({
+    options: { ...options, romFilter: true },
+    source: { fileName, source },
   });
 };
 
@@ -347,6 +363,7 @@ export {
   identifyRom,
   ingestRom,
   preloadBrowserRuntime,
+  probeRom,
   TrimWorkflow,
   undoPpf,
 };

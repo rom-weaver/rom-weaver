@@ -1,8 +1,10 @@
 import type { WorkflowProgress } from "../../../platform/browser/browser-api.ts";
 import { isRomFileName } from "../file-classification.ts";
-import { getEmulatorJsCore } from "./emulatorjs.ts";
+import { coreReadsChd, getEmulatorJsCore } from "./emulatorjs.ts";
 
-type IngestRom = (typeof import("../../../platform/browser/browser-api.ts"))["ingestRom"];
+type BrowserApi = typeof import("../../../platform/browser/browser-api.ts");
+type IngestRom = BrowserApi["ingestRom"];
+type ProbeRom = BrowserApi["probeRom"];
 type ArchiveOutput = Awaited<ReturnType<IngestRom>>["outputs"][number];
 type LoadEmulatorRomOptions = {
   onProgress?: (progress: WorkflowProgress) => void;
@@ -40,8 +42,44 @@ const renameRomToOutput = (outputFileName: string, romFileName: string) => {
   return `${stem}${extension}`;
 };
 
+const isChdFileName = (fileName: string) => /\.chd$/i.test(fileName.trim());
+
+/**
+ * A CHD goes to EmulatorJS as-is when its core reads CHD: a decompressed
+ * multi-track disc would be several files the player cannot take as one blob.
+ * The metadata-only probe supplies the platform, decoded from the disc data,
+ * and the header's payload SHA-1, which becomes the save identity. Returns
+ * `undefined` when the disc belongs to a core that cannot read a CHD (ppsspp)
+ * or the probe named no platform at all, leaving the caller to extract the
+ * disc as it did before.
+ */
+const loadEmulatorChd = async (blob: Blob, fileName: string, probeRom: ProbeRom, options: LoadEmulatorRomOptions) => {
+  let sequence = 0;
+  const probe = await probeRom(blob, fileName, {
+    onProgress: (progress: { label?: string; message?: string; percent?: number | null; stage?: string }) =>
+      options.onProgress?.({
+        id: "emulator-probe",
+        label: progress.label || progress.message || "Reading CHD...",
+        percent: progress.percent,
+        role: "input",
+        sequence: ++sequence,
+        stage: (progress.stage as WorkflowProgress["stage"]) || "checksum",
+        workflow: "apply",
+      }),
+    signal: options.signal,
+  });
+  if (!coreReadsChd(getEmulatorJsCore(probe.platform, fileName))) return undefined;
+  const checksum = normalizedSha1(probe.chd?.rawSha1) || normalizedSha1(probe.chd?.sha1);
+  if (!checksum) throw new Error("The CHD header carries no SHA-1, so rom-weaver cannot identify its saves.");
+  return { blob, checksum, fileName, ...(probe.platform ? { platform: probe.platform } : {}) };
+};
+
 const loadEmulatorRom = async (blob: Blob, fileName: string, options: LoadEmulatorRomOptions = {}) => {
-  const { getIngestOutputBlob, ingestRom } = await import("../../../platform/browser/browser-api.ts");
+  const { getIngestOutputBlob, ingestRom, probeRom } = await import("../../../platform/browser/browser-api.ts");
+  if (isChdFileName(fileName)) {
+    const loaded = await loadEmulatorChd(blob, fileName, probeRom, options);
+    if (loaded) return loaded;
+  }
   let sequence = 0;
   const { outputs, result } = await ingestRom(blob, fileName, {
     identify: false,
