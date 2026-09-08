@@ -109,6 +109,25 @@ test("parseCht preserves unknown escapes and reports malformed quotes", () => {
   assert.equal(bom.rawCode, "1234");
 });
 
+test("releasesFromIdentifyGames indexes every merged name so renamed records still match", () => {
+  const [renamed] = identifyGames();
+  renamed.name = "Test Game (U) [!]";
+  renamed.alternateNames = ["Test Game (USA)"];
+  const releases = releasesFromIdentifyGames([renamed]);
+  assert.deepEqual(
+    releases.map((release) => release.name),
+    ["Test Game (U) [!]", "Test Game (USA)"],
+  );
+  const shard = buildCheatShard({
+    cheatSystem: "nes",
+    files: fixtureFiles(),
+    releases,
+    sourceRevision: REVISION,
+  });
+  const matched = shard.games.find((game) => game.title === "Test Game (USA)");
+  assert.equal(matched.checksums.length, 1);
+});
+
 test("releasesFromIdentifyGames keeps one row per hashed component and drops legacy variants", () => {
   assert.deepEqual(releasesFromIdentifyGames(identifyGames()), [
     {

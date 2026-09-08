@@ -296,25 +296,26 @@ const compare = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
 
 const checksumKey = (checksum) => canonicalJson(checksum);
 
-// One release row per hashed component of an identify game record. GoodTools
-// legacy variants carry names no `.cht` file uses, so they add nothing.
+// One release row per name and hashed component of an identify game record.
+// The identify merge MAY replace `name` with the OpenGood filename-style name
+// and keep the No-Intro name in `alternateNames`; `.cht` files are named after
+// the No-Intro form, so every name MUST index the same dump. GoodTools legacy
+// variants carry names no `.cht` file uses, so they add nothing.
 export function releasesFromIdentifyGames(games) {
   const releases = [];
   for (const game of games) {
     if (game.legacyVariant) continue;
+    const names = [...new Set([game.name, ...(game.alternateNames ?? [])].filter(Boolean))];
     for (const component of game.components ?? []) {
       if (!(component.crc32 || component.md5 || component.sha1)) continue;
-      releases.push({
-        name: game.name,
-        region: game.region ?? null,
-        checksum: {
-          crc32: component.crc32 ?? null,
-          md5: component.md5 ?? null,
-          name: component.filename ?? null,
-          sha1: component.sha1 ?? null,
-          size: Number.isSafeInteger(component.size) && component.size > 0 ? component.size : null,
-        },
-      });
+      const checksum = {
+        crc32: component.crc32 ?? null,
+        md5: component.md5 ?? null,
+        name: component.filename ?? null,
+        sha1: component.sha1 ?? null,
+        size: Number.isSafeInteger(component.size) && component.size > 0 ? component.size : null,
+      };
+      for (const name of names) releases.push({ name, region: game.region ?? null, checksum });
     }
   }
   return releases;
