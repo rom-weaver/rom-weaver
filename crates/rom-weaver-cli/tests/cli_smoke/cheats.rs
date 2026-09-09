@@ -385,7 +385,9 @@ fn write_cheat_database(temp: &TempDir, rom: &[u8]) -> String {
         }],
     });
     fs::write(
-        directory.child("nes.json").path(),
+        directory
+            .child("nintendo-nintendo-entertainment-system.json")
+            .path(),
         serde_json::to_vec(&shard).expect("shard json"),
     )
     .expect("shard");
@@ -511,8 +513,11 @@ fn cheat_list_names_the_missing_shard() {
         1,
     ));
     let label = report["label"].as_str().expect("label");
-    assert!(label.contains("nes.json"), "{label}");
-    assert!(label.contains("public/cheats"), "{label}");
+    assert!(
+        label.contains("nintendo-nintendo-entertainment-system.json.br"),
+        "{label}"
+    );
+    assert!(label.contains("rom-weaver setup"), "{label}");
 }
 
 #[test]

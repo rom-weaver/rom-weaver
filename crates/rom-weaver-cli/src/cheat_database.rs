@@ -2,14 +2,15 @@
 //! selector resolution for the native `cheat`, `patch apply`, and
 //! `patch create` commands.
 //!
-//! The directory holds the same files the webapp serves from
-//! `packages/rom-weaver-webapp/public/cheats`: one `manifest.json` plus one
-//! uncompressed `<system>.json` shard per system. Only the uncompressed shards
-//! are read - the CLI carries no brotli decoder.
+//! The directory is the `cheats` directory `rom-weaver setup` installs beside
+//! the identify packs: one Brotli `<platform slug>.json.br` shard per system,
+//! optionally beside a `manifest.json`. A plain `<platform slug>.json` and the
+//! `cheats-<platform slug>.json` spelling the data build writes are read too.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -114,27 +115,40 @@ impl GameMatchKind {
     }
 }
 
-/// The file name a system's shard uses, in both the webapp's public directory
-/// and the CLI's database directory.
-pub(crate) fn shard_file_name(system: CheatSystem) -> Option<&'static str> {
+/// The identify platform slug a system's cheat shard is named after. `setup`
+/// installs `cheats/<slug>.json.br`, keyed by the same `CHEAT_PLATFORMS` slug
+/// the data build uses (`scripts/import-libretro-cheats.mjs`).
+pub(crate) fn shard_slug(system: CheatSystem) -> Option<&'static str> {
     match system {
-        CheatSystem::Nes => Some("nes.json"),
-        CheatSystem::Snes => Some("snes.json"),
-        CheatSystem::Genesis => Some("genesis.json"),
-        CheatSystem::GameBoy => Some("gameboy.json"),
-        CheatSystem::GameBoyColor => Some("gameboy-color.json"),
-        CheatSystem::GameBoyAdvance => Some("gameboyadvance.json"),
-        CheatSystem::MasterSystem => Some("mastersystem.json"),
-        CheatSystem::GameGear => Some("gamegear.json"),
-        CheatSystem::Sega32x => Some("sega32x.json"),
+        CheatSystem::Nes => Some("nintendo-nintendo-entertainment-system"),
+        CheatSystem::Snes => Some("nintendo-super-nintendo-entertainment-system"),
+        CheatSystem::Genesis => Some("sega-mega-drive-genesis"),
+        CheatSystem::GameBoy => Some("nintendo-game-boy"),
+        CheatSystem::GameBoyColor => Some("nintendo-game-boy-color"),
+        CheatSystem::GameBoyAdvance => Some("nintendo-game-boy-advance"),
+        CheatSystem::MasterSystem => Some("sega-master-system-mark-iii"),
+        CheatSystem::GameGear => Some("sega-game-gear"),
+        CheatSystem::Sega32x => Some("sega-32x"),
         // libretro ships no PlayStation or SG-1000 cheat shard.
         CheatSystem::PlayStation | CheatSystem::Sg1000 => None,
     }
 }
 
-/// The directory holding `manifest.json` and the `<system>.json` shards:
-/// `--cheat-database`, else `$ROM_WEAVER_CHEAT_DATABASE`, else the per-user
-/// data directory.
+/// Every file name a shard may carry, most preferred first: the compressed form
+/// `setup` installs, then the plain form, then the `cheats-` prefixed spelling
+/// the repository's own data directory uses.
+fn shard_candidates(slug: &str) -> [String; 4] {
+    [
+        format!("{slug}.json.br"),
+        format!("{slug}.json"),
+        format!("cheats-{slug}.json.br"),
+        format!("cheats-{slug}.json"),
+    ]
+}
+
+/// The directory holding the shards: `--cheat-database`, else
+/// `$ROM_WEAVER_CHEAT_DATABASE`, else `cheats` inside the identify database
+/// directory that `rom-weaver setup` installs into.
 pub(crate) fn resolve_directory(explicit: Option<&Path>) -> Result<PathBuf> {
     if let Some(directory) = explicit {
         trace!(directory = %directory.display(), "cheat database directory from --cheat-database");
@@ -145,38 +159,15 @@ pub(crate) fn resolve_directory(explicit: Option<&Path>) -> Result<PathBuf> {
         trace!(directory = %directory.display(), "cheat database directory from environment");
         return Ok(directory);
     }
-    let directory = default_data_directory()?.join("rom-weaver").join("cheats");
-    trace!(directory = %directory.display(), "cheat database directory from the default data directory");
+    let directory = default_directory()?;
+    trace!(directory = %directory.display(), "cheat database directory from the identify database directory");
     Ok(directory)
 }
 
-fn default_data_directory() -> Result<PathBuf> {
-    let missing = || {
-        RomWeaverError::Validation(
-            "could not find a per-user data directory; pass --cheat-database DIR or set \
-             ROM_WEAVER_CHEAT_DATABASE"
-                .to_string(),
-        )
-    };
-    if cfg!(target_os = "windows") {
-        return std::env::var_os("LOCALAPPDATA")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .ok_or_else(missing);
-    }
-    let home = std::env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
-    if cfg!(target_os = "macos") {
-        return home
-            .map(|home| home.join("Library").join("Application Support"))
-            .ok_or_else(missing);
-    }
-    if let Some(value) = std::env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(value));
-    }
-    home.map(|home| home.join(".local").join("share"))
-        .ok_or_else(missing)
+/// `<identify database directory>/cheats`, which is where `rom-weaver setup`
+/// unpacks the cheat shards that travel in the identify archive.
+pub(crate) fn default_directory() -> Result<PathBuf> {
+    Ok(crate::identify_database::default_database_dir()?.join("cheats"))
 }
 
 /// Read the manifest when it is present. A missing manifest is not fatal: the
@@ -193,27 +184,47 @@ fn load_manifest(directory: &Path) -> Option<CheatDatabaseManifest> {
     }
 }
 
-/// Load one system's shard out of `directory`.
+/// Load one system's shard out of `directory`. A Brotli `<slug>.json.br` wins
+/// over a plain `<slug>.json`, because that is the form `setup` installs.
 pub(crate) fn load_shard(directory: &Path, system: CheatSystem) -> Result<CheatShard> {
-    let Some(file_name) = shard_file_name(system) else {
+    let Some(slug) = shard_slug(system) else {
         return Err(RomWeaverError::Validation(format!(
             "the cheat database has no shard for {}; supported systems are nes, snes, genesis, \
-             gameboy, gameboy-color, and gba",
+             32x, sms, gamegear, gameboy, gameboy-color, and gba",
             system.id()
         )));
     };
-    let path = directory.join(file_name);
-    trace!(path = %path.display(), system = system.id(), "loading cheat database shard");
-    let bytes = fs::read(&path).map_err(|error| {
+    let candidates = shard_candidates(slug);
+    let Some(path) = candidates
+        .iter()
+        .map(|name| directory.join(name))
+        .find(|path| path.is_file())
+    else {
+        return Err(shard_missing_error(directory, slug));
+    };
+    let compressed = path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("br"));
+    trace!(path = %path.display(), system = system.id(), compressed, "loading cheat database shard");
+    // Check the file's size before reading it, the way the identify packs do:
+    // a hostile shard must not reach memory to be rejected.
+    let limit = if compressed {
+        MAX_COMPRESSED_SHARD_BYTES
+    } else {
+        MAX_SHARD_BYTES
+    };
+    check_shard_file_size(&path, limit)?;
+    let raw = fs::read(&path).map_err(|error| {
         RomWeaverError::Validation(format!(
-            "could not read the cheat database shard `{}` ({error}); the shards ship in the \
-             webapp's packages/rom-weaver-webapp/public/cheats directory - copy the \
-             uncompressed `{file_name}` and `manifest.json` there, or regenerate them with \
-             `node scripts/import-libretro-cheats.mjs --output-dir {}`",
-            path.display(),
-            directory.display()
+            "could not read the cheat database shard `{}`: {error}",
+            path.display()
         ))
     })?;
+    let bytes = if compressed {
+        decompress_shard(&raw, &path, MAX_SHARD_BYTES)?
+    } else {
+        raw
+    };
     let shard: CheatShard = serde_json::from_slice(&bytes).map_err(|error| {
         RomWeaverError::Validation(format!(
             "the cheat database shard `{}` is not valid: {error}",
@@ -227,6 +238,58 @@ pub(crate) fn load_shard(directory: &Path, system: CheatSystem) -> Result<CheatS
         "loaded cheat database shard"
     );
     Ok(shard)
+}
+
+/// A missing shard names the file it looked for and the command that installs
+/// it, so the user does not have to find the layout first.
+fn shard_missing_error(directory: &Path, slug: &str) -> RomWeaverError {
+    RomWeaverError::Validation(format!(
+        "the cheat database has no shard `{slug}.json.br` in `{}`; install it with \
+         `rom-weaver setup`, or regenerate the shards with \
+         `node scripts/import-libretro-cheats.mjs --output-dir {}`",
+        directory.display(),
+        directory.display()
+    ))
+}
+
+/// The largest shard the CLI will read, before and after decompression. The
+/// biggest shipped shard is under 40 MiB raw and under 2 MiB compressed.
+const MAX_SHARD_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_COMPRESSED_SHARD_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Reject an oversized shard from its directory entry, before any read.
+fn check_shard_file_size(path: &Path, limit: u64) -> Result<()> {
+    let size = fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+    if size > limit {
+        return Err(RomWeaverError::Validation(format!(
+            "the cheat database shard `{}` is {size} bytes, over the {limit}-byte limit",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
+/// Brotli shards are bounded: a hostile file must not expand without limit.
+fn decompress_shard(raw: &[u8], path: &Path, limit: u64) -> Result<Vec<u8>> {
+    let mut decompressed = Vec::new();
+    brotli::Decompressor::new(raw, 4096)
+        .take(limit + 1)
+        .read_to_end(&mut decompressed)
+        .map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "could not decompress the cheat database shard `{}`: {error}",
+                path.display()
+            ))
+        })?;
+    if decompressed.len() as u64 > limit {
+        return Err(RomWeaverError::Validation(format!(
+            "the cheat database shard `{}` exceeds the {limit}-byte limit",
+            path.display()
+        )));
+    }
+    Ok(decompressed)
 }
 
 /// Fold a title or file name into the comparison form the webapp uses:
@@ -464,5 +527,38 @@ mod tests {
             panic!("expected a coded validation error");
         };
         assert_eq!(coded.code(), "cheat_selector_unknown");
+    }
+
+    #[test]
+    fn load_shard_prefers_the_brotli_copy_and_bounds_it() {
+        let directory = std::env::temp_dir().join(format!("rw-cheat-shard-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).expect("directory");
+        let slug = shard_slug(CheatSystem::Nes).expect("slug");
+        let shard = serde_json::json!({
+            "schemaVersion": 1,
+            "system": "nes",
+            "sourceRevision": "test",
+            "games": [],
+        });
+        // A plain copy that would fail to parse proves the `.br` copy wins.
+        fs::write(directory.join(format!("{slug}.json")), b"not json").expect("plain");
+        let raw = serde_json::to_vec(&shard).expect("shard json");
+        let mut compressed = Vec::new();
+        brotli::BrotliCompress(
+            &mut raw.as_slice(),
+            &mut compressed,
+            &brotli::enc::BrotliEncoderParams::default(),
+        )
+        .expect("compress");
+        fs::write(directory.join(format!("{slug}.json.br")), &compressed).expect("brotli");
+        let loaded = load_shard(&directory, CheatSystem::Nes).expect("shard loads");
+        assert_eq!(loaded.system, CheatSystem::Nes);
+
+        // The decompression bound rejects a shard that expands past the limit.
+        let error = decompress_shard(&compressed, Path::new("shard.json.br"), 4)
+            .expect_err("the bound rejects it");
+        assert!(error.to_string().contains("limit"), "{error}");
+        let _ = fs::remove_dir_all(&directory);
     }
 }
