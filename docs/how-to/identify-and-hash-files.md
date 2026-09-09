@@ -47,10 +47,10 @@ Repeat `--database` to search more packs. `--database` accepts RWFP1 packs.
 
 ## Install the default identify data
 
-Release packages include the default local database. After a Cargo or binary-only install, install the same versioned archive:
+Release packages include the default local database. After a Cargo or binary-only install, install the database that matches the CLI release:
 
 ```bash
-rom-weaver identify database install-all
+rom-weaver setup
 ```
 
 Then identify as usual; the command finds the installed pack on its own:

@@ -26,6 +26,7 @@ The suites below measure CHD, RVZ, 7z, and zip against their reference tools. Ea
     - [Extract](#extract-2)
     - [Compress](#compress-2)
 - [Reproducing](#reproducing)
+- [Browser benchmarks](#browser-benchmarks)
 
 <!-- END doctoc -->
 
@@ -272,3 +273,47 @@ Flags:
 `report-<suite>.json` records the host CPU, the rom-weaver version, the reference tool, the run counts, and for every case both tools' timings and output sizes.
 
 A source one tool declines is recorded as a skip and the run continues.
+
+## Browser benchmarks
+
+Run all browser-worker benchmarks with Vitest bench mode (from `packages/rom-weaver-webapp`):
+
+```bash
+npm run test:browser:wasm:bench
+```
+
+Run the suites that cover the same operations as the Python benchmark scripts:
+
+```bash
+npm run test:browser:wasm:bench:command-paths
+npm run test:browser:wasm:bench:checksum-threading
+```
+
+Benchmark environment variables:
+
+- Shared Vitest bench timing:
+  - `ROM_WEAVER_WASM_BENCH_TIME_MS` (default `50`)
+  - `ROM_WEAVER_WASM_BENCH_ITERATIONS` (default `1`)
+  - `ROM_WEAVER_WASM_BENCH_WARMUP_TIME_MS` (default `0`)
+  - `ROM_WEAVER_WASM_BENCH_WARMUP_ITERATIONS` (default `0`)
+  - `ROM_WEAVER_WASM_BENCH_OUTPUT_JSON` (optional output JSON path)
+  - `ROM_WEAVER_WASM_BENCH_CLEAR_FIXTURE_CACHE` (`1` clears the persistent OPFS fixture cache before setup)
+- `bench-command-paths.py` benchmark suite (`tests/wasm/browser-worker-client.bench.mjs`):
+  - `ROM_WEAVER_WASM_BENCH_COMMANDS` (default `compress,extract,checksum,patch-create,patch-apply`)
+  - `ROM_WEAVER_WASM_BENCH_CONTAINER_FORMATS` (default `chd,rvz,7z,zip,tar,tar.gz,tar.bz2,tar.xz,z3ds,gz,bz2,xz,zst`)
+  - `ROM_WEAVER_WASM_BENCH_PATCH_FORMATS` (default `all`)
+  - `ROM_WEAVER_WASM_BENCH_CODECS` (default `all`; filters codec cases)
+  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_ALGOS` (default `all`)
+  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_MODES` (default `raw`)
+  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_COMBO_ALGOS` (default `crc32,md5,sha1`, `none` to disable)
+  - `ROM_WEAVER_WASM_BENCH_SOURCE_MIB` (default `128`)
+  - `ROM_WEAVER_WASM_BENCH_PATCH_SOURCE_MIB` (default `128`)
+  - `ROM_WEAVER_WASM_BENCH_THREADS` (default `4`)
+- `bench-checksum-threading.py` benchmark suite (`tests/wasm/browser-checksum-threading.bench.mjs`):
+  - `ROM_WEAVER_WASM_BENCH_THREADING_ALGORITHMS` (default `crc32c,crc16,adler32`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_SIZES_MIB` (default `128`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_SEQUENTIAL_THREADS` (default `1`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_PARALLEL_THREADS` (default `4`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_STRIDE_MIB` (default `2`)
+
+The [browser WASM runtime reference](../../packages/rom-weaver-webapp/src/wasm/README.md) describes the worker and OPFS APIs these suites measure.

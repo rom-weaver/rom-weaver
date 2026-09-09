@@ -314,22 +314,15 @@ error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 (`/roms/game.iso` is mode 0600 owned by 0:0; this process runs as 1000:1000)
 ```
 
-Read that as three facts: what was refused, who owns it, and who asked. Only a genuinely missing path is reported as `input path does not exist`. A file that exists but cannot be reached, including one behind a directory you cannot traverse, is always reported as a denial rather than as a typo. The fixes for each case are in [Fix a permission error](../how-to/fix-permission-errors.md).
+The message identifies what was refused, who owns it, and which identity made the request. Only a genuinely missing path is reported as `input path does not exist`. A file that exists but cannot be reached, including one behind a directory without search permission, is reported as a denial. [Fix a permission error](../how-to/fix-permission-errors.md) gives the corrective steps.
 
 Permission failures exit `1`. Under `--json` they arrive as a terminal event with `"status": "failed"`, carrying `"stage": "validate"` when the preflight caught them.
 
 ## Man pages
 
 
-The pages under `docs/man` come from the same Clap definitions as `--help`, so they always match it. They are generated during release packaging. Homebrew, the macOS/Linux install script, and global npm installs install them on Unix. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
+The pages under `docs/man` come from the same Clap definitions as `--help`. Release packaging generates them. `rom-weaver man [COMMAND...]` prints a page. `rom-weaver man --install [COMMAND...]` writes all pages, or the named page, to the configured man directory. `--man-dir DIR` and `ROM_WEAVER_MAN_DIR` select that directory.
 
-The installed CLI can render a page or install every page:
+On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`. Homebrew, the macOS/Linux install script, and global npm installs add the pages to a Unix manpath. Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install only the executable. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
 
-```bash
-rom-weaver man extract
-rom-weaver man --install
-```
-
-`rom-weaver man --install` writes every page to `$XDG_DATA_HOME/man/man1` or `~/.local/share/man/man1` on Unix. Add a command path to install one page. Set `ROM_WEAVER_MAN_DIR` to choose another directory. On Windows it writes to `%LOCALAPPDATA%\rom-weaver\docs\man`. Use `man ./docs/man/rom-weaver.1` from a source checkout when the pages are not installed system-wide. Do not edit the generated `.1` files manually.
-
-[Generate man pages](../development/development.md#generated-files) covers source builds. [Install shell completions](../how-to/install-cli.md#install-shell-completions) covers shell integration.
+[Install the CLI](../how-to/install-cli.md) covers man-page installation. [Generate man pages](../development/development.md#generated-files) covers source builds.

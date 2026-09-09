@@ -80,19 +80,19 @@ location = /rom-weaver {
 }
 
 location = /rom-weaver/weave {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location = /rom-weaver/weave/ {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location = /rom-weaver/weave.html {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location = /rom-weaver/weave/index.html {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location /rom-weaver/ {
@@ -200,7 +200,7 @@ These headers can be scoped to the rom-weaver subpath. They do not need to be ap
 
 When a static host cannot set these headers, rom-weaver's service worker can add them for responses within its scope. See [Service worker and subpaths](#service-worker-and-subpaths) for the bounded reload and fallback behavior.
 
-After deployment, open the browser console and confirm:
+After deployment, open the browser console and check:
 
 ```js
 crossOriginIsolated === true

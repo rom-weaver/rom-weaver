@@ -24,8 +24,8 @@ The browser OPFS runner likewise has no constructor-level `program`, `argv0`, or
 | Variable | Type | Default | Read at | Purpose |
 | --- | --- | --- | --- | --- |
 | `ROM_WEAVER_LOG` | filter string | unset | `crates/rom-weaver-cli/src/lib.rs` | Tracing filter spec (e.g. `rom_weaver_app=trace`); also honored via `RUST_LOG` when no explicit CLI log level is selected. |
-| `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-patches/src/lib.rs` | Cap below which patch apply/create buffers in memory; above it the streaming path is used. Set to `0` to force streaming for benchmarks. |
-| `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-cli/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). Set to `0` to force the on-disk path for regression/parity runs. |
+| `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-patches/src/lib.rs` | Cap below which patch apply/create buffers in memory; above it the streaming path is used. `0` forces streaming. |
+| `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-cli/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). `0` forces temporary-file storage. |
 | `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1-2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |
 | `ROM_WEAVER_7Z_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1 GiB wasm / 2 GiB native fallback) | `crates/rom-weaver-containers/src/handlers/sevenz.rs` | Memory budget that caps the LZMA2 multi-thread count for 7z create. Invalid text is ignored. |
 | `ROM_WEAVER_7Z_ENCODER` | `liblzma` | 7-Zip SDK encoder | `handlers/sevenz.rs` planner and `archive_write_set_format_7zip.c` writer (raw `getenv`) | Selects the seeded parallel-block liblzma LZMA2 encoder for 7z create instead of the default 7-Zip SDK one. Output is slightly smaller than 7zz's, at a large time cost on inputs bigger than the dictionary; any other value keeps the SDK encoder. Native builds only - the wasm build never compiles the SDK encoder in, so it always uses liblzma and ignores this. |
@@ -44,7 +44,7 @@ Not for production use.
 
 ## Browser / PWA runtime handles (`window.*` globals)
 
-> **Not env vars:** these are diagnostic and service-worker handles exposed by the webapp at runtime, **not** process environment variables.
+These JavaScript globals expose diagnostics and service-worker controls. They are separate from process environment variables.
 
 | Global | Direction | Set/read at | Purpose |
 | --- | --- | --- | --- |
