@@ -8,7 +8,6 @@ use super::*;
 
 use crate::cheats::{
     self, CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatWrite, RomLayout,
-    uses_big_endian_words,
 };
 
 /// Summary of a cheat-code resolution, used to enrich operation labels.
@@ -129,22 +128,9 @@ fn serialize_cheat_ips32(writes: &[CheatWrite], system: CheatSystem) -> Result<V
 }
 
 fn cheat_write_data(write: &CheatWrite, system: CheatSystem) -> Result<Vec<u8>> {
-    let bytes = if uses_big_endian_words(system) {
-        write.value.to_be_bytes()
-    } else {
-        write.value.to_le_bytes()
-    };
-    match write.width {
-        1 => Ok(vec![write.value as u8]),
-        2 => {
-            let start = if uses_big_endian_words(system) { 2 } else { 0 };
-            Ok(bytes[start..start + 2].to_vec())
-        }
-        4 => Ok(bytes.to_vec()),
-        other => Err(RomWeaverError::Validation(format!(
-            "unsupported cheat write width {other}"
-        ))),
-    }
+    cheats::write_bytes(write, system).map_err(|_| {
+        RomWeaverError::Validation(format!("unsupported cheat write width {}", write.width))
+    })
 }
 
 fn serialize_cheat_patch(
@@ -289,7 +275,7 @@ impl CliApp {
             let classified = cheats::classify_record(rom, record);
             match classified.resolution {
                 CheatResolution::RomBakeable { writes: resolved } => {
-                    record_writes.push((record.id.clone(), resolved.clone()));
+                    record_writes.push((record.id.clone(), record.system, resolved.clone()));
                     writes.extend(resolved);
                 }
                 CheatResolution::Unsupported { reason } => {

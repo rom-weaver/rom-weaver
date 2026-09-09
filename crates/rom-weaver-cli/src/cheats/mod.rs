@@ -707,17 +707,23 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
 }
 
 /// Find differing byte writes. Equal overlaps are compatible and omitted.
-pub fn detect_write_conflicts(entries: &[(String, Vec<CheatWrite>)]) -> Vec<CheatWriteConflict> {
+///
+/// Each entry carries its own [`CheatSystem`] because the byte order of a
+/// multi-byte write decides which byte lands on which offset; comparing the
+/// wrong bytes both misses real conflicts and misreports the values.
+pub fn detect_write_conflicts(
+    entries: &[(String, CheatSystem, Vec<CheatWrite>)],
+) -> Vec<CheatWriteConflict> {
     use std::collections::BTreeMap;
 
     let mut seen: BTreeMap<usize, (String, u8)> = BTreeMap::new();
     let mut conflicts = Vec::new();
-    for (id, writes) in entries {
+    for (id, system, writes) in entries {
         for write in writes {
-            let bytes = match write.width {
-                1 => vec![write.value as u8],
-                2 => vec![(write.value >> 8) as u8, write.value as u8],
-                _ => continue,
+            // An unsupported width cannot be applied either, so skipping it here
+            // never hides a byte that reaches the ROM.
+            let Ok(bytes) = write_bytes(write, *system) else {
+                continue;
             };
             for (relative, value) in bytes.into_iter().enumerate() {
                 let offset = write.offset + relative;
@@ -752,10 +758,36 @@ pub fn resolve_writes(
     layout::resolve_writes(rom, layout, decoded)
 }
 
+/// The exact bytes a write puts in the ROM, in the target system's byte order.
+/// Callers MUST use this rather than re-deriving the byte order, so applying,
+/// serializing, and conflict detection can never disagree about a write.
+pub fn write_bytes(write: &CheatWrite, system: CheatSystem) -> Result<Vec<u8>> {
+    let big_endian = uses_big_endian_words(system);
+    let bytes = if big_endian {
+        write.value.to_be_bytes()
+    } else {
+        write.value.to_le_bytes()
+    };
+    match write.width {
+        1 => Ok(vec![write.value as u8]),
+        2 => {
+            let start = if big_endian { 2 } else { 0 };
+            Ok(bytes[start..start + 2].to_vec())
+        }
+        4 => Ok(bytes.to_vec()),
+        other => Err(coded(
+            "cheat_bad_code",
+            "unsupported cheat write width",
+            &other.to_string(),
+        )),
+    }
+}
+
 /// Apply resolved writes into a mutable ROM buffer in place.
 pub fn apply_writes(rom: &mut [u8], system: CheatSystem, writes: &[CheatWrite]) -> Result<()> {
     for write in writes {
-        let end = write.offset.saturating_add(write.width as usize);
+        let bytes = write_bytes(write, system)?;
+        let end = write.offset.saturating_add(bytes.len());
         if end > rom.len() {
             return Err(coded(
                 "cheat_offset_out_of_range",
@@ -763,29 +795,7 @@ pub fn apply_writes(rom: &mut [u8], system: CheatSystem, writes: &[CheatWrite]) 
                 &format!("offset={:#X} len={:#X}", write.offset, rom.len()),
             ));
         }
-        match write.width {
-            1 => rom[write.offset] = write.value as u8,
-            2 | 4 => {
-                let bytes = if uses_big_endian_words(system) {
-                    write.value.to_be_bytes()
-                } else {
-                    write.value.to_le_bytes()
-                };
-                let start = if write.width == 2 && uses_big_endian_words(system) {
-                    2
-                } else {
-                    0
-                };
-                rom[write.offset..end].copy_from_slice(&bytes[start..start + write.width as usize]);
-            }
-            other => {
-                return Err(coded(
-                    "cheat_bad_code",
-                    "unsupported cheat write width",
-                    &other.to_string(),
-                ));
-            }
-        }
+        rom[write.offset..end].copy_from_slice(&bytes);
         tracing::trace!(
             target: "rom_weaver_cheats",
             offset = format_args!("{:#X}", write.offset),
