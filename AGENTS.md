@@ -158,8 +158,9 @@ instructions do **not** apply here.
   source (~6.5 min). Re-dispatch any time to refresh an open release PR.
 - The dispatch takes an optional `release_as` input (wired to the action's
   `release-as`) to force a version without a `Release-As:` commit footer.
-- **Highlights are written by hand, not generated.** The `/release` skill
-  (`.claude/skills/release/SKILL.md`) drafts them from the commits since the
+- **Highlights are written by hand, not generated.** The `release` skill
+  (`.agents/skills/release/SKILL.md`; `/release` in Claude Code, `$release` in
+  Codex) drafts them from the commits since the
   last tag, gets them approved, and passes them as the dispatch's `highlights`
   input. `scripts/aggregate-release-changelog.mjs` puts them at the top of the
   changelog section and hides every generated entry except breaking changes
