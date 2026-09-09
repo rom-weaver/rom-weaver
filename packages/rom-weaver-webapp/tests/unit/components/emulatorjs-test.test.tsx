@@ -90,7 +90,7 @@ const stubUserActivation = (isActive: boolean) => {
 afterEach(() => {
   cleanup();
   while (getEmulatorSessionState().entries.length) disposeEntry(getEmulatorSessionState().entries[0].id);
-  window.history.replaceState(null, "", "/test");
+  window.history.replaceState(null, "", "/test-rom");
   Reflect.deleteProperty(window.navigator, "userActivation");
   delete (document as { hasFocus?: () => boolean }).hasFocus;
   vi.unstubAllGlobals();
@@ -110,7 +110,7 @@ describe("EmulatorTestView", () => {
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
-    expect(screen.getByRole("link", { name: "Start guided Test" }).getAttribute("href")).toBe("/test?guide=test");
+    expect(screen.getByRole("link", { name: "Start guided Test" }).getAttribute("href")).toBe("/test-rom?guide=test");
     const download = screen.getByRole("link", { name: "Download the sample ROM" });
     expect(download.getAttribute("href")).toBe("/hello-world.nes");
     expect(download.hasAttribute("download")).toBe(true);
@@ -197,7 +197,7 @@ describe("EmulatorTestView", () => {
   });
 
   it("starts the homebrew guide from the Test guide URL", async () => {
-    window.history.replaceState(null, "", "/test?guide=test");
+    window.history.replaceState(null, "", "/test-rom?guide=test");
     stubObjectUrls();
     stubReducedMotion();
     stubUserActivation(false);

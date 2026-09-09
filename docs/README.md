@@ -24,7 +24,7 @@ These pages are organised by what you need right now: learning, doing, looking u
 
 Start in the browser. Nothing to install, your files stay on your device, and the guided tours let you practise on tiny homebrew ROMs before you touch a game you care about.
 
-Take [your first patch](tutorials/first-patch.md), or open a tour directly: [apply two practice patches](https://rom-weaver.com/apply?guide=apply), [build a patch from two ROMs](https://rom-weaver.com/create?guide=create), or [package one as a release](https://rom-weaver.com/apply?guide=bundle).
+Take [your first patch](tutorials/first-patch.md), or open a tour directly: [apply two practice patches](https://rom-weaver.com/apply-patch?guide=apply), [build a patch from two ROMs](https://rom-weaver.com/create-patch?guide=create), or [package one as a release](https://rom-weaver.com/apply-patch?guide=bundle).
 
 ## Tutorials
 

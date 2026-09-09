@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://rom-weaver.com/apply">Open the webapp</a>
+  <a href="https://rom-weaver.com/apply-patch">Open the webapp</a>
   · <a href="https://github.com/sponsors/brandonocasey">Sponsor on GitHub</a>
   · <a href="https://ko-fi.com/brandonocasey">Support on Ko-fi</a>
 </p>
@@ -47,7 +47,7 @@ Choose the [webapp](#webapp), [self-hosting](#self-hosting), or [CLI](#cli) path
 
 ## Webapp
 
-Open [rom-weaver.com/apply](https://rom-weaver.com/apply). Add your ROM and patches, then download the result. Files are processed on your device. No install or account is needed.
+Open [rom-weaver.com/apply-patch](https://rom-weaver.com/apply-patch). Add your ROM and patches, then download the result. Files are processed on your device. No install or account is needed.
 
 Start with [your first patch](docs/tutorials/first-patch.md) to practise on supplied homebrew files. The [browser guides](docs/README.md#in-the-browser) cover applying, creating, bundling, and testing ROM patches.
 

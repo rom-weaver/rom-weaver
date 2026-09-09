@@ -5,7 +5,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   creator: Object.freeze({
     description:
       "Create ROM patches locally in your browser with format-aware settings, checksums, and distributable patch bundles. No uploads or account required.",
-    slug: "create",
+    slug: "create-patch",
     title: `${SITE_NAME} — Create ROM patches online`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
@@ -18,18 +18,18 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   identify: Object.freeze({
     description:
       "Identify a ROM's game, region, revision, and known dump name by checksum — locally in your browser. Nothing is uploaded.",
-    slug: "identify",
+    slug: "identify-rom",
     title: `${SITE_NAME} — Identify ROMs online`,
   }),
   patcher: Object.freeze({
     description:
       "Apply ROM patches privately in your browser with automatic format detection, checksum validation, and ordered patch chains. No uploads or account required.",
-    slug: "apply",
+    slug: "apply-patch",
     title: `${SITE_NAME} — Apply ROM patches online`,
   }),
   test: Object.freeze({
     description: "Test patched and local ROMs in EmulatorJS directly in your browser. No uploads or account required.",
-    slug: "test",
+    slug: "test-rom",
     title: `${SITE_NAME} — Test ROMs online`,
   }),
 });

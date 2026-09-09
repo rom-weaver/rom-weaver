@@ -98,7 +98,12 @@ describe("HomePage", () => {
   it("builds sub-path-safe workflow links and includes the public workflow copy", () => {
     const { container } = render(<HomePage baseUrl="https://example.com/tools/" />);
     const links = Array.from(container.querySelectorAll("a.home-flow")).map((link) => link.getAttribute("href"));
-    expect(links).toEqual(["/tools/apply", "/tools/apply?guide=bundle", "/tools/create", "/tools/test"]);
+    expect(links).toEqual([
+      "/tools/apply-patch",
+      "/tools/apply-patch?guide=bundle",
+      "/tools/create-patch",
+      "/tools/test-rom",
+    ]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
     expect(container.querySelectorAll(".home-flow")).toHaveLength(4);
     expect(container.textContent).toContain("All on your device.");
@@ -106,7 +111,7 @@ describe("HomePage", () => {
 
   it("falls back to root-relative routes when the base URL is invalid", () => {
     const { container } = render(<HomePage baseUrl="not a URL" />);
-    expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply");
-    expect(container.querySelector("a[href='/create']")).toBeTruthy();
+    expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply-patch");
+    expect(container.querySelector("a[href='/create-patch']")).toBeTruthy();
   });
 });

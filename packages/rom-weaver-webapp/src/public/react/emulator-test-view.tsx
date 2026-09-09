@@ -541,7 +541,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
             headerExtra={
               <div className="emulator-player-actions">
                 {currentGame?.source === "apply" ? (
-                  <a className="btn ghost slim" href="apply">
+                  <a className="btn ghost slim" href="apply-patch">
                     <ArrowLeft aria-hidden="true" /> Back to Apply
                   </a>
                 ) : null}

@@ -161,7 +161,7 @@ describe("the workbench shell", () => {
     const { container } = await renderRoot({ notFound: true });
 
     expect(container.querySelector(".not-found-page")).not.toBeNull();
-    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply");
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-patch");
     expect(container.querySelector("#panel-patcher")).toBeNull();
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
@@ -172,7 +172,7 @@ describe("the workbench shell", () => {
 
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
 
-    expect(assign).toHaveBeenCalledWith("/create");
+    expect(assign).toHaveBeenCalledWith("/create-patch");
   });
 });
 
@@ -345,7 +345,7 @@ describe("page metadata per view", () => {
   it("names the page for a view that has no SEO route of its own", async () => {
     await renderRoot({ currentView: "trim" });
 
-    expect(document.title).toBe("rom-weaver - Trim");
+    expect(document.title).toBe("rom-weaver - Trim ROM");
   });
 
   it("uses the marketing title for a view that has one", async () => {

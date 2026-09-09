@@ -27,7 +27,7 @@ describe("pages _headers matching", () => {
     });
   });
 
-  it.each(["/apply", "/docs/getting-started/", "/404.html"])("disables Link hints for %s", (pathname) => {
+  it.each(["/apply-patch", "/docs/getting-started/", "/404.html"])("disables Link hints for %s", (pathname) => {
     expect(matchPagesHeaders(rules, pathname).Link).toBeUndefined();
   });
 

@@ -14,7 +14,7 @@ A rom-weaver bundle packages an ordered patch recipe into one download. It helps
 
 <!-- END doctoc -->
 
-New to bundles? [What a bundle is](../explanation/bundles.md) covers what one contains and when it is worth making, and the [guided Bundle tour](https://rom-weaver.com/apply?guide=bundle) builds one from the homebrew practice files.
+New to bundles? [What a bundle is](../explanation/bundles.md) covers what one contains and when it is worth making, and the [guided Bundle tour](https://rom-weaver.com/apply-patch?guide=bundle) builds one from the homebrew practice files.
 
 ## Choose what to include
 
@@ -100,7 +100,7 @@ For an update, rebuild the recipe from the same clean Original and the new patch
 You can give users a link that preloads a public bundle:
 
 ```text
-https://rom-weaver.com/apply?bundle=https://example.com/release.zip
+https://rom-weaver.com/apply-patch?bundle=https://example.com/release.zip
 ```
 
 The bundle host must permit cross-origin browser downloads with CORS. The user's ROM still stays local. Relative patch URLs inside a remote recipe are resolved against the recipe URL.

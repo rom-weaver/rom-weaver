@@ -17,7 +17,7 @@ Give rom-weaver a clean ROM and your edited version. It downloads a patch that c
 
 **Original** is the clean, untouched game; **Modified** is your finished translation, fix, restoration, or hack. rom-weaver records what must change to turn one into the other, so the direction matters - swapping them creates a patch that undoes your work.
 
-Never done this before? The [guided Create tour](https://rom-weaver.com/create?guide=create) runs the same workflow on two tiny homebrew ROMs.
+Never done this before? The [guided Create tour](https://rom-weaver.com/create-patch?guide=create) runs the same workflow on two tiny homebrew ROMs.
 
 ## Prepare a clean release pair
 

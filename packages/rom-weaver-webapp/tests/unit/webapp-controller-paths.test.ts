@@ -115,7 +115,7 @@ describe("reloadPersistedSettings", () => {
 
 describe("selectView with a leave guard", () => {
   it("keeps the current view when the guard refuses", () => {
-    window.history.replaceState({}, "", "/apply");
+    window.history.replaceState({}, "", "/apply-patch");
     const onConfirmViewLeave = vi.fn(() => false);
     const controller = createController({ onConfirmViewLeave });
 
@@ -124,7 +124,7 @@ describe("selectView with a leave guard", () => {
     expect(view).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
     expect(onConfirmViewLeave).toHaveBeenCalledWith({ currentView: "patcher", nextView: "docs" });
-    expect(window.location.pathname).toBe("/apply");
+    expect(window.location.pathname).toBe("/apply-patch");
   });
 
   it("moves on when the guard agrees", () => {
@@ -136,7 +136,7 @@ describe("selectView with a leave guard", () => {
   });
 
   it("does not ask the guard when the view is unchanged", () => {
-    window.history.replaceState({}, "", "/apply");
+    window.history.replaceState({}, "", "/apply-patch");
     const onConfirmViewLeave = vi.fn(() => false);
     const controller = createController({ onConfirmViewLeave });
 
@@ -157,8 +157,20 @@ describe("the landing route at the app base", () => {
   it("resolves a bare app base to the landing page, and every workflow slug to its own view", () => {
     expect(readWorkflowViewFromPath("/")).toBe("home");
     expect(readWorkflowViewFromPath("/index.html")).toBe("home");
-    expect(readWorkflowViewFromPath("/apply")).toBe("patcher");
-    expect(readWorkflowViewFromPath("/create")).toBe("creator");
+    for (const [route, view] of [
+      ["/apply", "patcher"],
+      ["/apply-patch", "patcher"],
+      ["/create", "creator"],
+      ["/create-patch", "creator"],
+      ["/identify", "identify"],
+      ["/identify-rom", "identify"],
+      ["/test", "test"],
+      ["/test-rom", "test"],
+      ["/trim", "trim"],
+      ["/trim-rom", "trim"],
+    ] as const) {
+      expect(readWorkflowViewFromPath(route)).toBe(view);
+    }
     // A sub-path deployment's own base is indistinguishable from a missing page
     // by pathname alone, so it stays unresolved and falls back to Apply.
     expect(readWorkflowViewFromPath("/rom-weaver/")).toBeNull();
@@ -166,7 +178,7 @@ describe("the landing route at the app base", () => {
   });
 
   it("writes the app base back to the address bar when the landing page is selected", () => {
-    window.history.replaceState({}, "", "/rom-weaver/create");
+    window.history.replaceState({}, "", "/rom-weaver/create-patch");
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
 
@@ -175,6 +187,6 @@ describe("the landing route at the app base", () => {
     expect(window.location.pathname).toBe("/rom-weaver/");
 
     controller.selectView("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply");
+    expect(window.location.pathname).toBe("/rom-weaver/apply-patch");
   });
 });

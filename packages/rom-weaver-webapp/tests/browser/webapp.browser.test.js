@@ -162,8 +162,8 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(romInput).toBeInTheDocument();
 
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Apply Patch" })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Create Patch" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
@@ -174,7 +174,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await waitForInputStackFile("game.bin");
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
   // The output section (and its apply button) renders once the workflow has files.
-  await expect.element(page.getByRole("button", { name: /apply & download/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Apply & download" })).toBeInTheDocument();
 
   await page.getByRole("button", { name: "Clear ROM input" }).click();
   await expect
@@ -201,10 +201,10 @@ test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Test"]);
+    .toEqual(["Apply Patch", "Create Patch", "Test ROM"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Identify Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
 });
 
@@ -216,7 +216,7 @@ const dropOnPage = async (fileName) => {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 120));
 };
 
-/* Regression: Identify used to exist twice - once at /identify and once inside
+/* Regression: Identify used to exist twice - once at /identify-rom and once inside
    the old Tools page - so one page drop reached two forms and both wrote the
    same activity-store key. PPF undo mounts no IdentifyForm at all. */
 test("only one Identify workflow ever consumes a page drop", async () => {
@@ -251,7 +251,7 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
     await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
     // Identify is one click from More: it has its own route, so it never hid
     // behind the old Tools page.
-    await expect.element(page.getByRole("menuitem", { name: "Identify Beta" })).toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).toBeInTheDocument();
     await page.getByRole("menuitem", { name: "PPF undo Beta" }).click();
     // Only ONE Identify form can exist. PPF undo links nowhere near it, so a page
     // drop has exactly one consumer and the two cannot fight over the activity key.
@@ -452,8 +452,12 @@ test("the New here? beacon stays compact and its popover carries every start act
 
   chip.click();
   await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
-  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe("/apply?guide=apply");
-  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe("/apply?guide=bundle");
+  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
+    "/apply-patch?guide=apply",
+  );
+  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe(
+    "/apply-patch?guide=bundle",
+  );
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);

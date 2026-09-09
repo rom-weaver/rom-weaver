@@ -175,7 +175,7 @@ const renderForm = (props: Parameters<typeof ApplyPatchForm>[0] = {}) =>
   );
 
 describe("ApplyPatchForm - empty mount", () => {
-  beforeEach(() => window.history.replaceState(null, "", "/apply"));
+  beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
   afterEach(() => {
     vi.unstubAllGlobals();
     latestFakeWorkflow = null;
@@ -201,7 +201,7 @@ describe("ApplyPatchForm - empty mount", () => {
 });
 
 describe("ApplyPatchForm - staging a dropped ROM", () => {
-  beforeEach(() => window.history.replaceState(null, "", "/apply"));
+  beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
   afterEach(() => {
     vi.unstubAllGlobals();
     latestFakeWorkflow = null;

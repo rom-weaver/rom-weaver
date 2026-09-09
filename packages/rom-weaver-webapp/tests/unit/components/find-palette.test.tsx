@@ -13,9 +13,10 @@ const withSettings = (children: ReactNode) => (
 );
 
 const TABS = [
-  { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
-  { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
+  { href: "apply-patch", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply Patch" },
+  { href: "apply-patch#bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  { href: "create-patch", icon: <svg aria-hidden="true" />, id: "creator", label: "Create Patch" },
+  { href: "test-rom", icon: <svg aria-hidden="true" />, id: "test", label: "Test ROM" },
 ] satisfies WorkflowTab[];
 
 const props = {
@@ -40,10 +41,10 @@ describe("Find", () => {
       {
         beta: true,
         group: "tools" as const,
-        href: "trim",
+        href: "trim-rom",
         icon: <svg aria-hidden="true" />,
         id: "trim",
-        label: "Trim",
+        label: "Trim ROM",
         placement: "more" as const,
       },
     ];
@@ -56,7 +57,7 @@ describe("Find", () => {
     const labels = Array.from(getByRole("listbox", { name: "Find" }).querySelectorAll(".find-label")).map(
       (label) => label.textContent,
     );
-    expect(labels).not.toContain("Trim");
+    expect(labels).not.toContain("Trim ROM");
     fireEvent.keyDown(findInput(container), { key: "Escape" });
 
     const dialog = document.createElement("dialog");
@@ -77,7 +78,7 @@ describe("Find", () => {
 
     expect(document.activeElement).toBe(findInput(container));
     const options = getByRole("listbox", { name: "Find" }).querySelectorAll('[role="option"]');
-    expect(options[0]?.textContent).toContain("Apply");
+    expect(options[0]?.textContent).toContain("Apply Patch");
     expect(Array.from(options).map((option) => option.textContent)).toEqual(
       expect.arrayContaining([expect.stringContaining("Status"), expect.stringContaining("Settings")]),
     );
@@ -107,7 +108,7 @@ describe("Find", () => {
     fireEvent.keyDown(findInput(container), { key: "Escape" });
     fireEvent.click(container.querySelector(".desktop-find .mode-find") as HTMLButtonElement);
     expect(findInput(container).value).toBe("");
-    expect(container.querySelector(".find-option.is-active")?.textContent).toContain("Apply");
+    expect(container.querySelector(".find-option.is-active")?.textContent).toContain("Apply Patch");
     fireEvent.keyDown(findInput(container), { key: "Enter" });
     expect(onSelectTab).toHaveBeenCalledWith("patcher");
   });
@@ -119,12 +120,38 @@ describe("Find", () => {
     fireEvent.change(findInput(container), { target: { value: "crea" } });
 
     const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
-    expect(first?.textContent).toContain("Create");
+    expect(first?.textContent).toContain("Create Patch");
     expect(first?.querySelector(".find-kind")?.textContent).toBe("Tool");
     fireEvent.keyDown(findInput(container), { key: "Enter" });
 
     expect(onSelectTab).toHaveBeenCalledWith("creator");
     expect(container.querySelector(".find-palette")).toBeNull();
+  });
+
+  it("opens the bundle drawer through Apply Patch", () => {
+    const onSelectTab = vi.fn();
+    const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
+    fireEvent.click(container.querySelector(".desktop-find .mode-find") as HTMLButtonElement);
+    fireEvent.change(findInput(container), { target: { value: "bundle" } });
+
+    const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
+    expect(first?.textContent).toContain("Bundles — Apply Patch");
+    fireEvent.keyDown(findInput(container), { key: "Enter" });
+
+    expect(onSelectTab).toHaveBeenCalledWith("bundle");
+  });
+
+  it("uses the guide link for a CLI-only command", () => {
+    const onSelectTab = vi.fn();
+    const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
+    fireEvent.click(container.querySelector(".desktop-find .mode-find") as HTMLButtonElement);
+    fireEvent.change(findInput(container), { target: { value: "inspect" } });
+
+    const guide = getByRole("listbox", { name: "Find" }).querySelector('a[role="option"]') as HTMLAnchorElement;
+    expect(guide.getAttribute("href")).toBe("/docs/identify-and-hash-files");
+    fireEvent.click(guide);
+
+    expect(onSelectTab).not.toHaveBeenCalled();
   });
 
   it("deep-links a setting through the field handler", () => {

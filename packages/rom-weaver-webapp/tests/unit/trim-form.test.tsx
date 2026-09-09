@@ -82,7 +82,7 @@ const renderForm = (props: Record<string, unknown> = {}) =>
   );
 
 beforeEach(() => {
-  window.history.replaceState(null, "", "/trim");
+  window.history.replaceState(null, "", "/trim-rom");
   latest = null;
 });
 

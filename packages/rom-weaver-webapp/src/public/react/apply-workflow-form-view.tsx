@@ -1616,12 +1616,36 @@ const BundleSecondaryJob = ({
   disabled: boolean;
 }) => {
   const localizer = useUiLocalizer();
+  const [open, setOpen] = useState(false);
+  const headingRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let frameId: number | undefined;
+    const revealBundleStep = () => {
+      if (window.location.hash.toLowerCase() !== "#bundle") return;
+      setOpen(true);
+      frameId = window.requestAnimationFrame(() => {
+        frameId = undefined;
+        headingRef.current?.scrollIntoView({ block: "start" });
+        headingRef.current?.focus();
+      });
+    };
+    revealBundleStep();
+    window.addEventListener("hashchange", revealBundleStep);
+    return () => {
+      window.removeEventListener("hashchange", revealBundleStep);
+      if (frameId !== undefined) window.cancelAnimationFrame(frameId);
+    };
+  }, []);
   return (
     <div id="rom-weaver-bundle-job">
       <Drawer
         bodyClassName="bundle-job-content"
         className="bundle-job"
+        headingRef={headingRef}
         label={localizer.message("ui.bundleExport.shareTitle")}
+        onToggle={setOpen}
+        open={open}
         readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
       >
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
