@@ -147,16 +147,19 @@ fn serialize_cheat_patch(
 
 impl CliApp {
     /// Resolve the cheat system from an explicit override or by detecting the
-    /// ROM header.
+    /// ROM header. `flag` names the option the caller took `override_id` from,
+    /// so the error tells the user which spelling to correct.
     pub(super) fn cheat_system_for(
         &self,
         source: &Path,
         override_id: Option<&str>,
+        flag: &str,
     ) -> Result<CheatSystem> {
         if let Some(id) = override_id.map(str::trim).filter(|id| !id.is_empty()) {
             return CheatSystem::parse(id).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
-                    "unknown --code-system `{id}`; expected nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gba, or psx"
+                    "unknown {flag} `{id}`; expected nes, snes, genesis, 32x, sms, gamegear, \
+                     sg1000, gameboy, gameboy-color, gba, or psx"
                 ))
             });
         }
@@ -168,7 +171,7 @@ impl CliApp {
                 cheat_system_from_header(matched.header, source)?.ok_or_else(
                     || {
                         RomWeaverError::Validation(format!(
-                            "could not map detected ROM header ({}) for `{}` to a cheat system; pass --code-system",
+                            "could not map detected ROM header ({}) for `{}` to a cheat system; pass {flag}",
                             matched.profile_name(),
                             source.display()
                         ))
@@ -223,7 +226,7 @@ impl CliApp {
             context,
             temp_paths,
         } = request;
-        let system = self.cheat_system_for(source, system_override)?;
+        let system = self.cheat_system_for(source, system_override, "--code-system")?;
         // Read-on-main: a single full read of the source ROM (safe for wasm/OPFS;
         // no spawned threads open the file).
         let rom = fs::read(source)?;
@@ -349,7 +352,7 @@ impl CliApp {
         kind_id: &str,
         dest: &Path,
     ) -> Result<CheatApplySummary> {
-        let system = self.cheat_system_for(source, system_override)?;
+        let system = self.cheat_system_for(source, system_override, "--code-system")?;
         let mut rom = fs::read(source)?;
         trace!(
             source = %source.display(),

@@ -654,3 +654,28 @@ fn conflicting_rom_cheats_fail_until_allowed() {
     let patched = fs::read(output.path()).expect("output");
     assert_eq!(patched[0x3D96], 0x4A);
 }
+
+#[test]
+fn an_unknown_cheat_system_names_the_flag_that_set_it() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.nes");
+    fs::write(input.path(), nes_rom()).expect("fixture");
+    let input_s = input.path().to_str().expect("path").to_owned();
+
+    let report = parse_single_json_line(&command_stdout(
+        &[
+            "cheat",
+            "list",
+            "--input",
+            &input_s,
+            "--cheat-system",
+            "bogus",
+            "--json",
+        ],
+        1,
+    ));
+    let label = report["label"].as_str().expect("label");
+    assert!(label.contains("--cheat-system"), "{label}");
+    assert!(!label.contains("--code-system"), "{label}");
+    assert!(label.contains("gameboy-color"), "{label}");
+}

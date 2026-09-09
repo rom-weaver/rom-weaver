@@ -59,7 +59,8 @@ impl CliApp {
         args: &CheatSelectionArgs,
         context: &OperationContext,
     ) -> Result<ResolvedCheats> {
-        let system = self.cheat_system_for(rom_path, args.cheat_system.as_deref())?;
+        let system =
+            self.cheat_system_for(rom_path, args.cheat_system.as_deref(), "--cheat-system")?;
         let rom = fs::read(rom_path)?;
         trace!(
             rom = %rom_path.display(),

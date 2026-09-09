@@ -2998,10 +2998,7 @@ pub struct CheatCommand {
     // generated TypeScript exactly as the webapp already sees them.
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(
-            value_name = "ACTION",
-            help = "list: print the matched game's cheats"
-        )
+        arg(value_name = "ACTION", help = "list: print the matched game's cheats")
     )]
     #[serde(skip)]
     #[cfg_attr(feature = "typescript-types", ts(skip))]
