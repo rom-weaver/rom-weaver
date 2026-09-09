@@ -625,7 +625,7 @@
   padding-block: clamp(12px, 2.4svh, 28px);
 }
 /* The hero MUST reserve space for its visible checksum form. */
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash) {
+.rw-app .step.is-input.is-empty:has(> .step-body .identify-hash) {
   --hero-extra-h: 100px;
 }
 .rw-app .step.is-input.is-empty .step-body {

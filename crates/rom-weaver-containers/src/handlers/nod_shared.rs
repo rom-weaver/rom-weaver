@@ -131,11 +131,8 @@ impl NodHandlerCore {
             };
         }
 
-        // Create has two internal worker consumers: the preloader (reads, and for compressed
-        // sources decompresses, the input) and the processor (compresses the output). The
-        // processor is the throughput bottleneck for disc create - especially at high zstd levels,
-        // where compression dwarfs reading a raw source - so an even split parks ~half the budget
-        // on a largely idle preloader. Bias toward processors (~3/4), keeping >=1 processor.
+        // Create splits workers between the preloader and output processor.
+        // Reserve most workers for compression while keeping a preloader active.
         //
         // Keep >=1 preloader thread whenever there is more than one thread to split: with zero of
         // them nod's preloader serves every processor from a single shared loader, which is both a

@@ -37,8 +37,7 @@ export function commandArgsToRunRequest(args, { includeJson = false } = {}) {
         ...(parsed.flags.has('split-bin') ? { split_bin: true } : {}),
         ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
         ...(parsed.flags.has('no-nested-extract') ? { no_nested_extract: true } : {}),
-        // Old default allowed overwrite; `--no-overwrite` opted into failing.
-        // The new wire field inverts that: force overwrite unless opted out.
+        // The benchmark wrapper keeps overwrite enabled unless --no-overwrite is set.
         force: !parsed.flags.has('no-overwrite'),
       });
       break;

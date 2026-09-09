@@ -133,52 +133,8 @@ worker.terminate();
 
 ## Build and package
 
-The [development guide](../../../../docs/development/development.md#build-and-run-the-webapp) owns the WASM build and dev-server procedure. Build artifacts are written to this directory by default.
-
-If you built artifacts to a custom directory (`ROM_WEAVER_WASM_OUT_DIR`), `build-wasm` syncs them in automatically. To sync a pre-built directory manually (run from `packages/rom-weaver-webapp`):
-
-```bash
-ARTIFACT_DIR="/path/to/wasm-artifacts"
-npm run prepare:dist -- "$ARTIFACT_DIR"
-```
+The [development guide](../../../../docs/development/development.md#build-and-run-the-webapp) covers building and synchronizing WASM artifacts. The default output directory is `packages/rom-weaver-webapp/src/wasm/`.
 
 ## Browser benchmarks
 
-Run all browser-worker benchmarks with Vitest bench mode (from `packages/rom-weaver-webapp`):
-
-```bash
-npm run test:browser:wasm:bench
-```
-
-Run suites that mirror the Python benchmark scripts:
-
-```bash
-npm run test:browser:wasm:bench:command-paths
-npm run test:browser:wasm:bench:checksum-threading
-```
-
-Optional environment knobs:
-
-- Shared Vitest bench timing:
-  - `ROM_WEAVER_WASM_BENCH_TIME_MS` (default `50`)
-  - `ROM_WEAVER_WASM_BENCH_ITERATIONS` (default `1`)
-  - `ROM_WEAVER_WASM_BENCH_WARMUP_TIME_MS` (default `0`)
-  - `ROM_WEAVER_WASM_BENCH_WARMUP_ITERATIONS` (default `0`)
-  - `ROM_WEAVER_WASM_BENCH_OUTPUT_JSON` (optional output JSON path)
-  - `ROM_WEAVER_WASM_BENCH_CLEAR_FIXTURE_CACHE` (`1` clears the persistent OPFS fixture cache before setup)
-- `bench-command-paths.py` parity suite (`tests/wasm/browser-worker-client.bench.mjs`):
-  - `ROM_WEAVER_WASM_BENCH_COMMANDS` (default `compress,extract,checksum,patch-create,patch-apply`)
-  - `ROM_WEAVER_WASM_BENCH_CONTAINER_FORMATS` (default `chd,rvz,7z,zip,tar,tar.gz,tar.bz2,tar.xz,z3ds,gz,bz2,xz,zst`)
-  - `ROM_WEAVER_WASM_BENCH_PATCH_FORMATS` (default `all`)
-  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_ALGOS` (default `all`)
-  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_MODES` (default `raw`)
-  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_COMBO_ALGOS` (default `crc32,md5,sha1`, `none` to disable)
-  - `ROM_WEAVER_WASM_BENCH_SOURCE_MIB` (default `128`)
-  - `ROM_WEAVER_WASM_BENCH_PATCH_SOURCE_MIB` (default `128`)
-  - `ROM_WEAVER_WASM_BENCH_THREADS` (default `4`)
-- `bench-checksum-threading.py` parity suite (`tests/wasm/browser-checksum-threading.bench.mjs`):
-  - `ROM_WEAVER_WASM_BENCH_THREADING_ALGORITHMS` (default `crc32c,crc16,adler32`)
-  - `ROM_WEAVER_WASM_BENCH_THREADING_SIZES_MIB` (default `128`)
-  - `ROM_WEAVER_WASM_BENCH_THREADING_SEQUENTIAL_THREADS` (default `1`)
-  - `ROM_WEAVER_WASM_BENCH_THREADING_PARALLEL_THREADS` (default `4`)
-  - `ROM_WEAVER_WASM_BENCH_THREADING_STRIDE_MIB` (default `2`)
+The [performance guide](../../../../docs/development/performance.md#browser-benchmarks) contains the browser benchmark commands, suites, and environment variables.

@@ -42,7 +42,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | --- | --- |
 | `probe` | Identify a file: its format, its platform, and any header it carries. |
 | `extract` | Unpack an archive or single-payload compressed format. |
-| `identify` | Match a ROM checksum to an exact dump name in local title data. |
+| `identify` | Match a ROM checksum, or a game name, to an exact dump name in local title data. |
 | `checksum` | Hash a file, a byte range, or a ROM inside an archive. |
 | `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
@@ -138,6 +138,8 @@ Native identify performs no network access.
 - `--hash HEX` identifies from a checksum instead of a file. The algorithm comes from the length: 8 characters for CRC32, 32 for MD5, 40 for SHA-1, 64 for SHA-256. Repeatable, one value per algorithm. Give exactly one of `--input` or `--hash`.
 - `--size BYTES` gives the exact byte size to pair with `--hash`, narrowing the lookup to records of that size. It only applies with `--hash`.
 - `--database PACK` searches a local RWFP1 pack instead of the built-in data and the installed packs. The pack may be raw or Brotli compressed (`.pack.br`, as the packaged data ships it). Repeatable.
+- `--name QUERY` searches the database for games whose name matches `QUERY`, instead of identifying a file or a checksum. It needs a pack selection, so give `--system` or `--database` with it; without one it is an error. It cannot be combined with `--input` or `--hash`. Matching ignores case, punctuation, and accents (`asterix` matches `Astérix`), every query word must match, and the search covers each record's name, its alternate names, and its dump tags.
+- `--limit N` caps the number of matches `--name` returns. The default is 50. `N` must be at least 1, and `--limit` without `--name` is an error.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
@@ -271,7 +273,7 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ### Extras
 
-- `--code` bakes a Game Genie, GameShark/Pro Action Replay, or raw Xploder code into the ROM, as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|32x|sms|gamegear|sg1000|gameboy|gba|psx` names the console when the ROM header does not. `--code-kind auto|game-genie|gameshark|xploder` pins the scheme instead of inferring it from the code's shape. Xploder supports raw GBA ROM-patch codes and plain PlayStation constant writes into PS-X EXE files. Codes whose address resolves to runtime memory, conditional codes, and encrypted codes are rejected. The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
+- `--code` bakes a Game Genie, GameShark/Pro Action Replay, or raw Xploder code into the ROM, as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|32x|sms|gamegear|sg1000|gameboy|gba|psx` names the console when the ROM header does not. `--code-kind auto|game-genie|gameshark|xploder` pins the scheme instead of inferring it from the code's shape. Xploder supports raw GBA ROM-patch codes and plain PlayStation constant writes into PS-X EXE files. Codes whose address resolves to runtime memory, conditional codes, and encrypted codes are rejected. One value may hold several codes joined with `+`, commas, or newlines. Codes are applied after the last `--patch`, and cannot be combined with `--patch-header strip` or `--n64-byte-order`. `patch create` takes the same three flags in place of `--modified` and writes a patch holding only the codes' byte writes. The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run: the ROM's checksums, the patches in order, and the result. It runs the same code as `bundle create`, so the file is byte-identical to the equivalent `bundle create` call. It carries no per-patch names or authors; for those use `bundle create`, `bundle create --from`, or `--tui`.
 - `--tui` asks for each patch's name, version, author, and optional state plus an output name, then applies and writes the bundle. It needs a terminal, and for now it needs explicit `--patch` files; re-opening a bundle is not supported yet.
 
@@ -285,7 +287,7 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 ## Patch creation metadata
 
-SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. These options require SOLID output and cannot be combined with `--plan`.
+SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. When `--code` supplies the changes and the extended header has no `--solid-comment`, the comment records the codes. These options require SOLID output and cannot be combined with `--plan`.
 
 [Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.
 
@@ -362,22 +364,15 @@ error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 (`/roms/game.iso` is mode 0600 owned by 0:0; this process runs as 1000:1000)
 ```
 
-Read that as three facts: what was refused, who owns it, and who asked. Only a genuinely missing path is reported as `input path does not exist`. A file that exists but cannot be reached, including one behind a directory you cannot traverse, is always reported as a denial rather than as a typo. The fixes for each case are in [Fix a permission error](../how-to/fix-permission-errors.md).
+The message identifies what was refused, who owns it, and which identity made the request. Only a genuinely missing path is reported as `input path does not exist`. A file that exists but cannot be reached, including one behind a directory without search permission, is reported as a denial. [Fix a permission error](../how-to/fix-permission-errors.md) gives the corrective steps.
 
 Permission failures exit `1`. Under `--json` they arrive as a terminal event with `"status": "failed"`, carrying `"stage": "validate"` when the preflight caught them.
 
 ## Man pages
 
 
-The pages under `docs/man` come from the same Clap definitions as `--help`, so they always match it. They are generated during release packaging. Homebrew, the macOS/Linux install script, and global npm installs install them on Unix. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
+The pages under `docs/man` come from the same Clap definitions as `--help`. Release packaging generates them. `rom-weaver man [COMMAND...]` prints a page. `rom-weaver man --install [COMMAND...]` writes all pages, or the named page, to the configured man directory. `--man-dir DIR` and `ROM_WEAVER_MAN_DIR` select that directory.
 
-The installed CLI can render a page or install every page:
+On Unix, the default install directory is `$XDG_DATA_HOME/man/man1`, with `~/.local/share/man/man1` as the fallback. On Windows, it is `%LOCALAPPDATA%\rom-weaver\docs\man`. Homebrew, the macOS/Linux install script, and global npm installs add the pages to a Unix manpath. Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install only the executable. Docker stores the pages under `/usr/local/share/man/man1`, but its distroless image has no `man(1)` program.
 
-```bash
-rom-weaver man extract
-rom-weaver man --install
-```
-
-`rom-weaver man --install` writes every page to `$XDG_DATA_HOME/man/man1` or `~/.local/share/man/man1` on Unix. Add a command path to install one page. Set `ROM_WEAVER_MAN_DIR` to choose another directory. On Windows it writes to `%LOCALAPPDATA%\rom-weaver\docs\man`. Use `man ./docs/man/rom-weaver.1` from a source checkout when the pages are not installed system-wide. Do not edit the generated `.1` files manually.
-
-[Generate man pages](../development/development.md#generated-files) covers source builds. [Install shell completions](../how-to/install-cli.md#install-shell-completions) covers shell integration.
+[Install the CLI](../how-to/install-cli.md) covers man-page installation. [Generate man pages](../development/development.md#generated-files) covers source builds.

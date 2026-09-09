@@ -1,6 +1,6 @@
 # Bake cheat codes into a ROM
 
-Write Game Genie, GameShark/Pro Action Replay, or raw Xploder codes permanently into a ROM with `rom-weaver patch apply --code`, so the effect is there without a cheat device or an emulator cheat list.
+Write Game Genie, GameShark/Pro Action Replay, or raw Xploder codes permanently into a ROM with `rom-weaver patch apply --code`, so the effect is there without a cheat device or an emulator cheat list. To share the same change as a patch file instead, see [Share a cheat as a patch](#share-a-cheat-as-a-patch).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -9,6 +9,7 @@ Write Game Genie, GameShark/Pro Action Replay, or raw Xploder codes permanently 
 - [Bake several codes](#bake-several-codes)
 - [Say which console or scheme a code is for](#say-which-console-or-scheme-a-code-is-for)
 - [Combine codes with a patch](#combine-codes-with-a-patch)
+- [Share a cheat as a patch](#share-a-cheat-as-a-patch)
 - [Use the cheat database instead of typing codes](#use-the-cheat-database-instead-of-typing-codes)
 - [Build a patch from database cheats](#build-a-patch-from-database-cheats)
 - [Prove what you produced](#prove-what-you-produced)
@@ -34,6 +35,12 @@ rom-weaver patch apply \
   --code SXIOPO \
   --code AEKPTZ \
   --output game-coded.nes
+```
+
+One flag also takes a list. Codes joined with `+`, commas, or newlines are split into single codes, so a saved list works as it is:
+
+```bash
+rom-weaver patch apply --input game.nes --code "$(cat codes.txt)" --output game-coded.nes
 ```
 
 ## Say which console or scheme a code is for
@@ -81,6 +88,32 @@ rom-weaver patch apply \
   --output game-final.nes
 ```
 
+The codes are applied after the last patch. A patch that carries a source checksum still sees the ROM it was built for, and a code wins over a patch that changes the same byte. Code offsets are computed against the input ROM, so `--code` cannot be combined with `--patch-header strip` or `--n64-byte-order`.
+
+## Share a cheat as a patch
+
+`patch create` accepts the same `--code`, `--code-system`, and `--code-kind` flags in place of `--modified`. The result is an ordinary patch that holds only the cheat's byte writes, so it can be shared without the ROM and applied by any patcher:
+
+```bash
+rom-weaver patch create \
+  --original game.nes \
+  --code SXIOPO \
+  --output infinite-lives.ips
+```
+
+The format follows the output extension, or `--format`. Applying the patch to the clean ROM gives the same bytes as baking the code directly.
+
+An extended SOLID header records the codes in its comment when you do not write one, so the patch says what it does:
+
+```bash
+rom-weaver patch create \
+  --original game.nes \
+  --code SXIOPO \
+  --solid-game "Example Game" \
+  --solid-hack "Infinite lives" \
+  --solid-extended \
+  --output infinite-lives.solid
+```
 ## Use the cheat database instead of typing codes
 
 Install the shards once:
@@ -135,6 +168,7 @@ Keep the clean ROM. A patch author's checksum refers to the unbaked file, so a l
 
 - [CLI reference](../reference/cli.md#cheats): the `cheat` command and the shared cheat flags.
 - [CLI reference](../reference/cli.md#extras): `--code` beside the other patching extras.
+- [Create patches from the CLI](cli-create.md): the rest of the create workflow.
 - [Cheat database reference](../reference/cheat-database.md): the directory layout, delivery classes, and match classes.
 - [Apply patches from the CLI](cli-apply.md): the rest of the apply workflow.
 - [How patching works](../explanation/how-patching-works.md): why the exact starting bytes matter.

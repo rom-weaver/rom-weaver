@@ -341,29 +341,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     const stage = this.createInitialSource("patch", patch, patchIndex);
     stage.outputLabel = createPatchOutputLabel(stage.state.fileName);
     this.patches.push(stage);
-    // Eager staging runs OUTSIDE the mutation queue so the patch's I/O overlaps the ROM's setInput,
-    // and the pick surfaces immediately (single-modal mutex keeps it from racing setInput's ROM prompt)
-    // instead of waiting for the ROM's extract/checksum. The state-mutating apply + validation still
-    // run in the queued addPatch mutation below, serialized after setInput.
-    const stagedPromise = this.stageSource(stage, { deferBlockingSelection: true })
-      .then((staged) => {
-        // The queued addPatch mutation waits behind the ROM's setInput; until validation begins the
-        // row would keep its stale staging label, so show "waiting on the ROM" instead.
-        this.emitPatchAwaitingInputProgress(staged);
-        return staged;
-      })
-      .then(async (staged) => {
-        // Open the multi-select dialog as soon as the archive is staged (mutex-gated behind any ROM
-        // prompt); the pick is stashed for the queued mutation. Re-emit "waiting on the ROM" so the
-        // row shows the apply is blocked on the input, not on a pending pick.
-        await this.resolvePatchSelectionChoice(staged);
-        this.emitPatchAwaitingInputProgress(staged);
-        return staged;
-      })
-      .catch((error) => {
-        throw toRomWeaverError(error);
-      });
-    void stagedPromise.catch(() => undefined);
+    const stagedPromise = this.stagePatchEagerly(stage);
     return this.mutate("addPatch", async () => {
       try {
         const staged = await stagedPromise;
@@ -404,20 +382,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     // Swap the loading stage in immediately so the row reflects it; the detached previous stage is
     // released once the new one is applied.
     this.patches[index] = stage;
-    const stagedPromise = this.stageSource(stage, { deferBlockingSelection: true })
-      .then((staged) => {
-        this.emitPatchAwaitingInputProgress(staged);
-        return staged;
-      })
-      .then(async (staged) => {
-        await this.resolvePatchSelectionChoice(staged);
-        this.emitPatchAwaitingInputProgress(staged);
-        return staged;
-      })
-      .catch((error) => {
-        throw toRomWeaverError(error);
-      });
-    void stagedPromise.catch(() => undefined);
+    const stagedPromise = this.stagePatchEagerly(stage);
     return this.mutate("replacePatchAt", async () => {
       try {
         const staged = await stagedPromise;
@@ -437,6 +402,26 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         throw error;
       }
     });
+  }
+
+  // Patch I/O and selection MUST start outside the mutation queue to overlap ROM staging.
+  // Handle early rejections until the queued mutation can await the same promise.
+  private stagePatchEagerly(stage: StagedSource<TSource>): Promise<StagedSource<TSource>> {
+    const stagedPromise = this.stageSource(stage, { deferBlockingSelection: true })
+      .then((staged) => {
+        this.emitPatchAwaitingInputProgress(staged);
+        return staged;
+      })
+      .then(async (staged) => {
+        await this.resolvePatchSelectionChoice(staged);
+        this.emitPatchAwaitingInputProgress(staged);
+        return staged;
+      })
+      .catch((error) => {
+        throw toRomWeaverError(error);
+      });
+    void stagedPromise.catch(() => undefined);
+    return stagedPromise;
   }
 
   private async addFannedOutPatch(

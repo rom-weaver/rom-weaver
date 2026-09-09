@@ -74,9 +74,7 @@ jobs:
         with:
           subject-path: target/rom-weaver-identify-data*.tar.br
 
-  # The three matrices below all fan out over the same target list, and CI
-  # builds it too. It lives in .github/cli-platforms.json; a matrix can only be
-  # fed by an upstream job's output, so it is resolved once here.
+  # Resolve the shared CI and release platform matrix once; downstream matrices require job output.
   plan:
     name: Resolve platform matrix
     runs-on: ubuntu-24.04
@@ -114,9 +112,7 @@ jobs:
           name: identify-release-data
           path: target
 
-      # Same action CI builds with, against the same per-platform cargo cache,
-      # so a release restores what CI already built rather than compiling a
-      # second, differently-configured copy.
+      # Build with CI's action and per-platform cache so releases reuse tested outputs.
       - uses: ./.github/actions/build-cli-platform
         with:
           package: ${{ matrix.package }}
@@ -128,8 +124,7 @@ jobs:
           cache-save: ${{ inputs.cache-save }}
           registry-url: https://registry.npmjs.org
 
-      # Keep the compiled package outside the publish job. A failed npm or
-      # release-asset step can then rerun without rebuilding Rust.
+      # Preserve compiled packages so publish retries do not rebuild Rust.
       - name: Upload platform package
         uses: actions/upload-artifact@v7
         with:
@@ -139,8 +134,7 @@ jobs:
           overwrite: true
           retention-days: 7
 
-      # The CLI image is multi-platform and consumes these exact binaries
-      # rather than compiling the workspace a second time.
+      # The multi-platform CLI image consumes these binaries without recompiling the workspace.
       - name: Upload Linux x64 binary for the container build
         if: matrix.package == 'linux-x64-gnu'
         uses: actions/upload-artifact@v7
@@ -241,7 +235,9 @@ jobs:
           package-manager-cache: false
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config zip
+        env:
+          APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config zip
+        run: node scripts/ci/install-system-dependencies.mjs
 
       - name: Prepare ROM identify data
         uses: ./.github/actions/identify-data

@@ -1,18 +1,6 @@
 #!/usr/bin/env node
-//
-// Post the required `CLA Signed` commit status for a pull request, and record
-// signatures given by comment.
-//
-// This replaces the hosted CLA Assistant app, which only ever posted in
-// response to a `pull_request` event and left a force-pushed head permanently
-// without a status - an unmergeable pull request with no re-run button
-// anywhere. A workflow reruns on demand, fires on `synchronize` (which
-// force-pushes emit), and always targets the current head SHA.
-//
-// Policy (the allowlist) lives on the default branch where it is review-gated;
-// signature data lives on the unprotected SIGNATURES_BRANCH, because the
-// ruleset on the default branch forbids direct pushes and grants no bypass
-// actors.
+// The status MUST target the current pull request head, including after a force push.
+// The allowlist stays review-gated on the default branch; signatures use SIGNATURES_BRANCH because direct pushes to the default branch are forbidden.
 //
 // Required env:
 //   GH_TOKEN            token with statuses:write, pull-requests:write, contents:write
@@ -43,21 +31,13 @@ const {
   CLA_REF = "",
 } = process.env;
 
-// Section 6 promises the record names the version and links to that exact text.
-// A `blob/main` link cannot keep that promise: publishing a new version silently
-// repoints every past record at wording its signer never read. The workflow
-// checks out the pull request's base commit, so `CLA_REF` pins the link to the
-// commit whose text the contributor was actually shown - immutable by
-// construction, and the same URL the gate quotes back in its comment.
+// CLA.md section 6 requires each signature to identify the agreed text.
+// The workflow MUST supply CLA_REF from the pull request's base commit to keep that link immutable.
 const CLA_DOCUMENT =
   process.env.CLA_DOCUMENT ??
   `${GITHUB_SERVER_URL}/${REPO}/blob/${CLA_REF || "main"}/${CLA_FILE}`;
-// The `Version X.Y` line under the title. The URL alone is a weaker record: a
-// reader has to fetch it to learn what was signed, and a moved or renamed
-// repository breaks it, whereas the version stands on its own. Unreadable is
-// fatal rather than merely unrecorded - section 6 promises every signature
-// names its version, and a gate that cannot keep that promise should go red
-// instead of quietly recording signatures against nothing.
+// CLA.md section 6 requires a readable version in each signature record.
+// A missing version MUST stop the gate before it records signatures.
 const CLA_VERSION = readClaVersion();
 
 function readClaVersion() {
@@ -75,16 +55,11 @@ function readClaVersion() {
   }
   return version;
 }
-// Quoted verbatim in CLA.md section 7. Changing it here without changing it
-// there leaves contributors typing a phrase this gate will not accept.
+// This phrase MUST match CLA.md section 7 so the documented signature is accepted.
 const SIGN_PHRASE = "I have read and agree to the CLA";
 const COMMENT_MARKER = "<!-- rom-weaver-cla-gate -->";
 const STATUS_CONTEXT = "CLA Signed";
-// The verdict at a glance, the way the CLA Assistant comment carried one.
-// shields.io is already the badge service the README uses, and these are static
-// URLs - they encode no repository, pull request or contributor, so GitHub's
-// image proxy has nothing about this pull request to leak upstream. Colours are
-// the README's palette rather than shields' defaults.
+// Static badge URLs contain no repository, pull request, or contributor data.
 const BADGE = {
   required: "![CLA: signature required](https://img.shields.io/badge/CLA-signature%20required-c1440e)",
   signed: "![CLA: signed](https://img.shields.io/badge/CLA-signed-4a6d63)",
@@ -157,19 +132,8 @@ const authors = [
 let { sha: signaturesSha, signatures } = await readSignatures();
 const hasSigned = (login) => signatures.some((entry) => entry.login === login);
 
-// The phrase must still be a line of its own - a substring match signed anyone
-// who quoted it while asking how signing works - but exact equality rejected a
-// trailing full stop, a capital letter, or the emphasis GitHub's editor adds,
-// and rejected it in total silence. Deliberately NOT stripped: a leading `>`.
-// Accepting a quoted line would turn "quote the request, then ask what it
-// means" into a signature, and the quote-reply flow does not need it - the text
-// you type under the quote is unquoted already.
-// The two classes are kept identical on purpose. They drifted once - the
-// trailing one carried a backtick and a `-` bullet that the leading one did
-// not - so a phrase pasted back inside a code span was rejected while the same
-// phrase in bold signed, and that is the shape of silent rejection this
-// normalizing exists to end. The gate offers the phrase in a fenced block, so
-// backticks are precisely what a contributor has to hand.
+// A signature MUST occupy a complete, unquoted line; surrounding Markdown delimiters, case, and trailing punctuation are normalized.
+// Leading > characters MUST remain so quoted requests cannot count as signatures.
 const DELIMITERS = String.raw`\s*_\-\``;
 const normalize = (line) =>
   line
@@ -180,11 +144,7 @@ const normalize = (line) =>
 const wanted = normalize(SIGN_PHRASE);
 const signedByComment = COMMENT_BODY.split("\n").some((line) => normalize(line) === wanted);
 
-// Said the words, but not as the whole line: extra words around them, or a
-// quote-reply. Neither signs - but both used to fall through in silence, and a
-// contributor who believes they have signed is exactly who this gate owes an
-// answer. The `>` is stripped only to recognise the near miss, never to accept
-// one.
+// Quoted or extended phrases receive correction guidance but MUST NOT count as signatures.
 const nearMiss =
   !signedByComment &&
   COMMENT_BODY.split("\n").some((line) => normalize(line.replace(/^[\s>]+/, "")).includes(wanted));
