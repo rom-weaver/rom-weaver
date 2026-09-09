@@ -53,6 +53,10 @@ const stageRom = async (container: HTMLElement) => {
 it("offers the optional ROM drop zone beside a checksum match", async () => {
   const { container } = render(<IdentifyForm />);
 
+  const hashSearch = container.querySelector(".identify-hash");
+  expect(hashSearch?.parentElement?.classList.contains("identify-hash-island")).toBe(true);
+  expect(hashSearch?.closest(".unified-drop-step")).toBeNull();
+
   await searchChecksum(container, "abcd1234");
 
   expect(container.textContent).toContain("Metroid Fusion (USA)");
