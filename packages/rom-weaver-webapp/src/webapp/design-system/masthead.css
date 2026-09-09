@@ -976,10 +976,13 @@ html.vt-theme .mode-rail .mode {
    above the dock handoff. */
 @media (min-width: 1000px) {
   /* Equal side tracks center the top rail against the app column rather than
-     against the leftover space between the brand and action group. The snug
-     band keeps its tighter tab padding below. */
+     against the leftover space between the brand and action group. The tracks
+     MUST floor at their content: a `0` floor lets a wide rail starve them, and
+     the brand's sub-row cannot shrink, so it paints under the rail. With the
+     floor the rail is what gives way (it scrolls). The snug band keeps its
+     tighter tab padding below. */
   .rw-app .masthead {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
   }
   .rw-app .brand {
     grid-column: 1;
