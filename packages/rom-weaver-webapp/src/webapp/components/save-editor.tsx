@@ -730,7 +730,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
           </p>
         }
         inputId="save-editor-input-picker"
-        lead={{ line1: "ui.hero.saveThesis", line2: "ui.hero.saveThesis2" }}
+        lead={{ line1: "ui.hero.saveThesis", line2: "ui.hero.saveThesis2", description: "ui.hero.saveDescription" }}
         multiple={false}
         num="0x01"
         onFiles={(files) => {

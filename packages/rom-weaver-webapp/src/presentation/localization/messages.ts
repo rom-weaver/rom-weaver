@@ -192,6 +192,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.toolsDescription",
     message: "Restore the original ROM with a PPF3 patch that includes undo data.",
   }),
+  "ui.hero.saveDescription": msg({
+    id: "ui.hero.saveDescription",
+    message: "Edit a game save in the browser and download it with every checksum recalculated.",
+  }),
   "ui.hero.testDescription": msg({
     id: "ui.hero.testDescription",
     message: "Add a supported ROM, raw or in an archive, to test the game in the browser emulator.",

@@ -415,6 +415,11 @@ msgstr "DVD Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.saveDescription"
+msgstr "Edit a game save in the browser and download it with every checksum recalculated."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
 msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
 

@@ -415,6 +415,11 @@ msgstr "Códecs DVD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.saveDescription"
+msgstr "Edita una partida guardada en el navegador y descárgala con cada suma de verificación recalculada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
 msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo de una partida guardada,"
 

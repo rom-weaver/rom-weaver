@@ -415,6 +415,11 @@ msgstr "DVD-Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.saveDescription"
+msgstr "Bearbeite einen Spielstand im Browser und lade ihn mit neu berechneten Prüfsummen herunter."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
 msgstr "Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spielstand bearbeiten,"
 
