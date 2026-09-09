@@ -68,43 +68,31 @@ The build drops, before packaging, every record that can never bake: structured 
 
 ## CLI database directory
 
-The CLI reads the same files the webapp serves, from a directory on disk. It reads only the uncompressed `<system>.json` shards; it carries no brotli decoder.
+The CLI reads the same shards the webapp serves, from a directory on disk.
 
 | Path | Contents |
 | --- | --- |
+| `nintendo-nintendo-entertainment-system.json.br` | Nintendo Entertainment System shard. |
+| `nintendo-super-nintendo-entertainment-system.json.br` | Super Nintendo Entertainment System shard. |
+| `sega-mega-drive-genesis.json.br` | Sega Genesis / Mega Drive shard. |
+| `sega-master-system-mark-iii.json.br` | Sega Master System shard. |
+| `sega-game-gear.json.br` | Sega Game Gear shard. |
+| `sega-32x.json.br` | Sega 32X shard. |
+| `nintendo-game-boy.json.br` | Game Boy shard. |
+| `nintendo-game-boy-color.json.br` | Game Boy Color shard. |
+| `nintendo-game-boy-advance.json.br` | Game Boy Advance shard. |
 | `manifest.json` | Source name, source revision, source URL, and license. Optional. |
-| `nes.json` | Nintendo Entertainment System shard. |
-| `snes.json` | Super Nintendo Entertainment System shard. |
-| `genesis.json` | Sega Genesis / Mega Drive shard. |
-| `gameboy.json` | Game Boy shard. |
-| `gameboy-color.json` | Game Boy Color shard. |
-| `gameboyadvance.json` | Game Boy Advance shard. |
-| `mastersystem.json` | Sega Master System shard. |
-| `gamegear.json` | Sega Game Gear shard. |
-| `sega32x.json` | Sega 32X shard. |
 
-The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABASE`, then a per-user default:
+Each shard may also be a plain `<slug>.json`, or carry the `cheats-<slug>` prefix the repository's own data directory uses. When several forms are present the CLI reads the `.json.br` copy.
 
-| Platform | Default |
-| --- | --- |
-| Linux and BSD | `$XDG_DATA_HOME/rom-weaver/cheats`, or `$HOME/.local/share/rom-weaver/cheats` |
-| macOS | `$HOME/Library/Application Support/rom-weaver/cheats` |
-| Windows | `%LOCALAPPDATA%\rom-weaver\cheats` |
+The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABASE`, then `cheats` inside the [identify database directory](cli.md#identify-database-directory). `ROM_WEAVER_DATA_DIR` moves the base the same way it moves the identify data.
 
-A missing shard is an error naming the file it looked for. The CLI downloads nothing.
+`rom-weaver setup` installs the shards there along with the identify packs; they travel in the same archive. A missing shard is an error naming the file it looked for and the command that installs it.
 
-Copy the shards from the repository:
+Regenerating them from a libretro checkout works too:
 
 ```bash
-mkdir -p ~/.local/share/rom-weaver/cheats
-cp packages/rom-weaver-webapp/public/cheats/manifest.json ~/.local/share/rom-weaver/cheats/
-cp packages/rom-weaver-webapp/public/cheats/*.json ~/.local/share/rom-weaver/cheats/
-```
-
-Or regenerate them from a libretro checkout:
-
-```bash
-node scripts/import-libretro-cheats.mjs --output-dir ~/.local/share/rom-weaver/cheats
+node scripts/import-libretro-cheats.mjs --output-dir ~/.local/share/rom-weaver/identify/cheats
 ```
 
 ## Storage and network behavior

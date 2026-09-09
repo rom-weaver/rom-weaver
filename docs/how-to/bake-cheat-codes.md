@@ -83,12 +83,13 @@ rom-weaver patch apply \
 
 ## Use the cheat database instead of typing codes
 
-Put the shards where the CLI looks for them once:
+Install the shards once:
 
 ```bash
-mkdir -p ~/.local/share/rom-weaver/cheats
-cp packages/rom-weaver-webapp/public/cheats/*.json ~/.local/share/rom-weaver/cheats/
+rom-weaver setup
 ```
+
+That puts them in `cheats` beside the identify packs, which is where every cheat flag looks by default. `--cheat-database DIR` and `$ROM_WEAVER_CHEAT_DATABASE` point somewhere else.
 
 See what the database has for a ROM:
 

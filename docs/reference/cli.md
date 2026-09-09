@@ -210,6 +210,8 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 
 `cheat list --input ROM` detects the ROM's system, reads that system's shard from the cheat-database directory, matches the game, and prints one row per cheat: ID, delivery, raw code, description. `--json` puts the same data in `details.cheat_list`.
 
+`rom-weaver setup` installs the shards along with the identify packs. A shard may be Brotli compressed (`<slug>.json.br`) or plain (`<slug>.json`); the compressed copy wins when both are present.
+
 Delivery is `rom` or `unsupported`. The match class is `exact` (a checksum matched), `title` (the file name matched a game title), or `manual` (`--game`). Every run prints the CC-BY-SA-4.0 attribution line once.
 
 The shared flags below are also on `patch apply` and `patch create`, under the `Cheats` help heading.
@@ -217,8 +219,8 @@ The shared flags below are also on `patch apply` and `patch create`, under the `
 | Flag | Meaning |
 | --- | --- |
 | `--cheat ID_OR_DESCRIPTION` | Select one cheat by record ID or by exact description. Repeatable. A description that matches more than one entry fails with `cheat_selector_ambiguous`. |
-| `--cheat-database DIR` | The directory holding `manifest.json` and the `<system>.json` shards. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then the per-user data directory. |
-| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
+| `--cheat-database DIR` | The directory holding the shards. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then `<identify database directory>/cheats`. |
+| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
 | `--game ID` | Use this database game ID instead of matching by checksum or title. |
 | `--allow-cheat-conflicts` | Let a later cheat overwrite an earlier one at the same offset. Without it, two `rom` cheats writing different values to one byte fail with `cheat_write_conflict`. |
 
