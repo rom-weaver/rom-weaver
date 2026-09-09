@@ -345,12 +345,14 @@ const IdentifyForm = ({
           if (selected) selectFile(selected);
         }}
         supported={IDENTIFY_SUPPORTED_FILES}
+        afterDropZone={
+          heroShown ? (
+            <div className="identify-hash-island">
+              <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
+            </div>
+          ) : null
+        }
       />
-      {heroShown ? (
-        <div className="identify-hash-island">
-          <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
-        </div>
-      ) : null}
       {file ? (
         <WorkflowRomInputStep
           beforeItems={

@@ -639,19 +639,18 @@
   border-end-start-radius: 0;
   border-end-end-radius: 0;
 }
-/* Identify presents the checksum route as a separate companion surface, so it
-   reads as a second choice beside the ROM drop target. */
-.rw-app .identify-panel > .identify-hash-island {
+/* Identify presents the checksum route as a separate companion surface in the
+   ROM input rail, so it reads as a second choice without joining the dropzone. */
+.rw-app .identify-panel .unified-drop-step > .step-body > .identify-hash-island {
   position: relative;
   width: min(100%, 760px);
-  margin: var(--sp-l) 0 0 auto;
+  margin: var(--sp-m) 0 0 auto;
   overflow: clip;
-  background: var(--plate);
+  background: var(--empty-fill);
   border: 1px solid var(--seam);
   border-radius: var(--r-l);
-  box-shadow: 0 16px 28px -26px rgb(0 0 0 / 0.65);
 }
-.rw-app .identify-panel > .identify-hash-island::before {
+.rw-app .identify-panel .unified-drop-step > .step-body > .identify-hash-island::before {
   position: absolute;
   inset: 0 var(--sp-l) auto;
   height: 2px;
@@ -660,14 +659,14 @@
   background: linear-gradient(90deg, transparent, var(--thread) 32% 68%, transparent);
   opacity: 0.65;
 }
-.rw-app .identify-panel > .identify-hash-island .identify-hash--hero {
-  padding: var(--sp-l);
+.rw-app .identify-panel .unified-drop-step > .step-body > .identify-hash-island .identify-hash--hero {
+  padding: var(--sp-m) var(--sp-l);
   margin: 0;
-  background: var(--warp-lines), var(--plate-2);
+  background: var(--warp-lines), var(--empty-fill);
   border: 0;
   border-radius: inherit;
 }
-.rw-app .identify-panel > .identify-hash-island .identify-hash-label {
+.rw-app .identify-panel .unified-drop-step > .step-body > .identify-hash-island .identify-hash-label {
   font-size: 0.88rem;
 }
 .rw-app .identify-hash--compact {

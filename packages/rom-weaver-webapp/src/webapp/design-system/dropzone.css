@@ -624,10 +624,8 @@
      margin that keeps the headline off the seam instead of flush against it. */
   padding-block: clamp(12px, 2.4svh, 28px);
 }
-/* The hero MUST reserve space for its visible checksum form, whether the
-   Identify companion surface is inside the step or beside it. */
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash),
-.rw-app .identify-panel > .step.is-input.is-empty {
+/* The hero MUST reserve space for its visible checksum form. */
+.rw-app .step.is-input.is-empty:has(> .step-body .identify-hash) {
   --hero-extra-h: 100px;
 }
 .rw-app .step.is-input.is-empty .step-body {
