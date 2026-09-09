@@ -10,3 +10,7 @@ src/wasm/WEBAPP_NOTICE
 src/wasm/notices.md
 src/wasm/third_party/
 vendor/emulatorjs/data/
+
+# Compiled from the .po files beside them by the Vite plugin in
+# scripts/compile-lingui-catalogs.mjs; the .po files are the source.
+src/presentation/localization/locales/*.ts

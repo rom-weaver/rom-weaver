@@ -1,5 +1,6 @@
 import { coverageConfigDefaults, defineConfig } from "vitest/config";
 import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
+import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 
 // Coverage is collected by the v8 provider in browser mode (V8 precise coverage
@@ -38,7 +39,7 @@ export default defineConfig({
     },
   },
   // The docs route imports its rendered guides from `virtual:rom-weaver-docs`.
-  plugins: [docsVirtualModule(), brandMarkAssets()],
+  plugins: [compileLinguiCatalogs(), docsVirtualModule(), brandMarkAssets()],
   publicDir: false,
   test: {
     hookTimeout: 60000,
