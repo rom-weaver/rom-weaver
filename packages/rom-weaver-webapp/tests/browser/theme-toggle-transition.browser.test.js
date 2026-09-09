@@ -74,7 +74,7 @@ const renderMasthead = async () => {
       { settings: {} },
       createElement(Masthead, {
         currentTab: "patcher",
-        onOpenChangelog: noop,
+        onOpenWhatsNew: noop,
         onOpenLog: noop,
         onOpenSettings: noop,
         onOpenStatus: noop,

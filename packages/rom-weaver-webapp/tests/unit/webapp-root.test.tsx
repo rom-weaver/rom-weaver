@@ -224,14 +224,14 @@ describe("the unified dialog", () => {
     expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("sends the Status control to the changelog while an update is waiting", async () => {
-    const { container } = await renderRoot({ updateReady: true });
+  it("sends the Status control to What's new while an update is waiting", async () => {
+    const { called, container } = await renderRoot({ updateReady: true });
 
     openFromMore(container, "Status");
 
-    await waitFor(() =>
-      expect(container.querySelector('[data-logtab="changelog"]')?.getAttribute("aria-selected")).toBe("true"),
-    );
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    // No dialog opens for this path - it is a route switch, not a tab.
+    expect(container.querySelector("dialog.log-dlg")).toBeNull();
   });
 
   it("opens on Storage and on Logs", async () => {
@@ -288,6 +288,48 @@ describe("the update banner", () => {
     const second = await renderRoot({ updateReady: true });
 
     expect(second.container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
+  });
+
+  it("sends its What's new link to the whats-new route", async () => {
+    const { called, container } = await renderRoot({ updateReady: true });
+
+    fireEvent.click(container.querySelector(".updates.update-ready .updates-ver") as HTMLButtonElement);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+  });
+});
+
+describe("the What's new route", () => {
+  it("mounts the changelog panel with no panel-head gear", async () => {
+    const { container } = await renderRoot({ currentView: "whats-new" });
+
+    const panel = container.querySelector("#panel-whats-new");
+    expect(panel).not.toBeNull();
+    expect(panel?.hasAttribute("hidden")).toBe(false);
+    expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
+    expect(document.title).toBe("rom-weaver - What's new");
+  });
+
+  it("reaches the route from the version chip", async () => {
+    const { called, container } = await renderRoot();
+
+    // A dev/nightly checkout wears the channel badge instead of the plain
+    // version chip; either button opens What's new.
+    fireEvent.click(container.querySelector(".build-tag button") as HTMLButtonElement);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+  });
+
+  it("reaches the route from the More menu's Project group", async () => {
+    const { called, container } = await renderRoot();
+
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    const item = Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((entry) =>
+      entry.textContent?.includes("What’s new"),
+    );
+    fireEvent.click(item as HTMLElement);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
   });
 });
 

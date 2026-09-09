@@ -49,7 +49,7 @@ const mastheadProps = {
   currentTab: "patcher",
   homeHref: "/apply",
   githubHref: "https://example.com/repo",
-  onOpenChangelog: () => undefined,
+  onOpenWhatsNew: () => undefined,
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onOpenStatus: () => undefined,
@@ -162,6 +162,7 @@ describe("Masthead", () => {
     expect(getByRole("group", { name: "Tools" })).toBeTruthy();
     expect(getByRole("group", { name: "Docs" })).toBeTruthy();
     expect(getByRole("group", { name: "Project" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "What\u2019s new" })).toBeTruthy();
     // The head row keeps the app's own surfaces one tap away on desktop too.
     expect(getByRole("menuitem", { name: "Settings" }).classList.contains("more-head-item")).toBe(true);
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
@@ -175,6 +176,24 @@ describe("Masthead", () => {
     expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
   });
 
+  it("marks More current on What's new, which has no rail tab of its own", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="whats-new" />));
+    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
+    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
+  });
+
+  it("keeps the What's new row a real link so a modified click opens it normally", () => {
+    const onSelectTab = vi.fn();
+    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    const row = getByRole("menuitem", { name: "What\u2019s new" }) as HTMLAnchorElement;
+    expect(row.getAttribute("href")).toBe("whats-new");
+    fireEvent.click(row, { ctrlKey: true });
+    expect(onSelectTab).not.toHaveBeenCalled();
+    fireEvent.click(row);
+    expect(onSelectTab).toHaveBeenCalledWith("whats-new");
+  });
+
   it("activates a tab with Space as well as Enter", () => {
     const onSelectTab = vi.fn();
     const { getAllByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
@@ -186,7 +205,7 @@ describe("Masthead", () => {
   });
 
   it("carries the build, thread count and runtime state on the brand sub-line", () => {
-    const onOpenChangelog = vi.fn();
+    const onOpenWhatsNew = vi.fn();
     const onOpenSettings = vi.fn();
     const onOpenStatus = vi.fn();
     const { container, rerender } = render(
@@ -195,7 +214,7 @@ describe("Masthead", () => {
           {...mastheadProps}
           commitsSinceVersion={3}
           dirty
-          onOpenChangelog={onOpenChangelog}
+          onOpenWhatsNew={onOpenWhatsNew}
           offlineProgress={{ cachedBytes: 1, ready: true, totalBytes: 1 }}
           onOpenSettings={onOpenSettings}
           onOpenStatus={onOpenStatus}
@@ -206,7 +225,7 @@ describe("Masthead", () => {
     const buildTag = container.querySelector(".build-tag .sub-link") as HTMLButtonElement;
     expect(buildTag.textContent).toBe("v1.2.3+3*");
     fireEvent.click(buildTag);
-    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
 
     const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
     expect(threads.textContent).toBe("8 Threads");
@@ -254,7 +273,7 @@ describe("Masthead", () => {
     expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
-  it("links pull request build tags to their pull request and channels to the changelog", () => {
+  it("links pull request build tags to their pull request and channels to What's new", () => {
     const { container, getByRole, rerender } = render(
       withSettings(<Masthead {...mastheadProps} channelBadge="pr-123" />),
     );
@@ -365,24 +384,24 @@ describe("Reveal", () => {
 describe("UpdateBanner", () => {
   it("offers reload, release notes, and dismissal", () => {
     const onDismiss = vi.fn();
-    const onOpenChangelog = vi.fn();
+    const onOpenWhatsNew = vi.fn();
     const onReload = vi.fn();
     const { container } = render(
       withSettings(
         <UpdateBanner
           onDismiss={onDismiss}
-          onOpenChangelog={onOpenChangelog}
+          onOpenWhatsNew={onOpenWhatsNew}
           onReload={onReload}
           open
           title="A newer app version is ready."
         />,
       ),
     );
-    const changelogButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
-    expect(changelogButton.textContent).toBe("What’s new");
-    expect(changelogButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
-    fireEvent.click(changelogButton);
-    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    const whatsNewButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
+    expect(whatsNewButton.textContent).toBe("What’s new");
+    expect(whatsNewButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
+    fireEvent.click(whatsNewButton);
+    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
     expect(onReload).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);

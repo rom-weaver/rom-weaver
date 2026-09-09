@@ -345,7 +345,7 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
-for (const beta of ["trim-rom", "ppf-undo"]) {
+for (const beta of ["trim-rom", "ppf-undo", "whats-new"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),
@@ -440,6 +440,7 @@ for (const slug of [
   "ppf-undo",
   "tools",
   "trim-rom",
+  "whats-new",
 ]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
 }

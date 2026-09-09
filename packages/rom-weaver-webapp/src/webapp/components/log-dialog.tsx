@@ -5,7 +5,6 @@ import {
   Copy,
   Download,
   HardDrive,
-  Newspaper,
   RefreshCw,
   RotateCcw,
   Save,
@@ -31,7 +30,6 @@ import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
 import { queryOfflineCachedFiles } from "../pwa/offline-warmup-client.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import type { OfflineCachedFile } from "../offline-warmup.ts";
-import { ChangelogPanel } from "./changelog-panel.tsx";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
   describeWarmupUnit,
@@ -207,20 +205,18 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
  * header, so there is no title. Settings leads because it is the tab people
  * come here for; the rest are diagnostics. Storage hosts the OPFS inspector.
  */
-const DIALOG_TABS = ["settings", "status", "logs", "storage", "changelog"] as const;
+const DIALOG_TABS = ["settings", "status", "logs", "storage"] as const;
 type LogDialogTab = (typeof DIALOG_TABS)[number];
 const TAB_MESSAGES: Record<
   LogDialogTab,
-  "ui.settings.title" | "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage" | "ui.log.tabChangelog"
+  "ui.settings.title" | "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage"
 > = {
-  changelog: "ui.log.tabChangelog",
   logs: "ui.log.tabLogs",
   settings: "ui.settings.title",
   status: "ui.log.tabStatus",
   storage: "ui.log.tabStorage",
 };
 const TAB_ICONS = {
-  changelog: Newspaper,
   logs: ScrollText,
   settings: Settings,
   status: Activity,
@@ -1002,7 +998,6 @@ const LogDialog = ({
   level,
   onLevelChange,
   initialTab = "status",
-  onReload,
   onRestoreDefaults,
   onSaveSettings,
   onTabChange,
@@ -1017,7 +1012,6 @@ const LogDialog = ({
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
-  onReload?: () => void;
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
@@ -1233,24 +1227,6 @@ const LogDialog = ({
             />
             <OfflineLegend current={runtimeState} localizer={localizer} />
             <AboutLink localizer={localizer} />
-          </div>
-        ) : null}
-        {tab === "changelog" ? (
-          <div
-            aria-labelledby="logtab-changelog"
-            className="dlg-body status-panel"
-            id="logpanel-changelog"
-            role="tabpanel"
-          >
-            {/* The tab lists what has shipped, and - while a deploy is waiting -
-                leads with the same data asked the other question: what that
-                deploy would bring. */}
-            <ChangelogPanel
-              active={tab === "changelog"}
-              localizer={localizer}
-              onReload={onReload}
-              updateReady={updateReady}
-            />
           </div>
         ) : null}
         {tab === "logs" || tab === "storage" ? (
