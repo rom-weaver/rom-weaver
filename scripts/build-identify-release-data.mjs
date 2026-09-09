@@ -24,7 +24,7 @@ const defaultOut = join(repoRoot, "target", "identify-release");
 const defaultArchive = join(repoRoot, "target", "rom-weaver-identify-data.tar.br");
 const dataRelativeDir = join("share", "rom-weaver", "identify", "v1");
 
-const parseArgs = (argv) => {
+export const parseArgs = (argv) => {
   const options = { archive: defaultArchive, input: defaultInput, out: defaultOut, tree: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];

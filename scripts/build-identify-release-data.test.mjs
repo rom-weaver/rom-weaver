@@ -5,7 +5,7 @@ import os from "node:os";
 import { brotliCompressSync } from "node:zlib";
 import { join } from "node:path";
 import test from "node:test";
-import { buildIdentifyReleaseData } from "./build-identify-release-data.mjs";
+import { buildIdentifyReleaseData, parseArgs } from "./build-identify-release-data.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -108,6 +108,12 @@ test("tree-only builds the share trees and no archive", () => {
   assert.ok(existsSync(join(result.dataDir, "index.json")));
   assert.ok(existsSync(join(result.optional[0].dataDir, "index.json")));
   assert.equal(existsSync(join(root, "target")), false);
+});
+
+test("--tree-only is the CI spelling of the tree option", () => {
+  assert.equal(parseArgs(["--tree-only"]).tree, true);
+  assert.equal(parseArgs([]).tree, false);
+  assert.throws(() => parseArgs(["--tree"]), /unknown argument: --tree/);
 });
 
 test("separates default packs from complete optional group archives", () => {
