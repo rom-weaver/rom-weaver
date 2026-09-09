@@ -813,6 +813,7 @@ fn name_search_title_match(
                 md5: component.md5.clone(),
                 sha1: component.sha1.clone(),
                 sha256: component.sha256.clone(),
+                track: component.track,
             })
             .collect(),
         game_id: game.game_id.clone(),
