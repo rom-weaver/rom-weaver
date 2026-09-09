@@ -265,6 +265,11 @@ msgstr "Códecs CD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformChange"
+msgstr "Cambiar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
 msgstr "Cambia tu forma de jugar."
 
@@ -282,6 +287,16 @@ msgstr "La validación de la suma de comprobación falló."
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalidChars"
 msgstr "Las sumas de verificación solo usan los caracteres hexadecimales 0-9 y a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformFirst"
+msgstr "Elija primero una plataforma"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameResults"
+msgstr "Elija el ROM que necesita"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -415,6 +430,11 @@ msgstr "Introduce 8 (CRC32), 32 (MD5) o 40 (SHA-1) caracteres hexadecimales."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameTooShort"
+msgstr "Escriba al menos 2 caracteres del nombre del juego."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Entorno"
 
@@ -475,6 +495,11 @@ msgstr "Corregir cabecera ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlaceholder"
+msgstr "Nombre del juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.kindGuide"
 msgstr "Guía"
 
@@ -492,6 +517,11 @@ msgstr "Identificar"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashDisclosure"
 msgstr "Identificar por suma de verificación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameDisclosure"
+msgstr "Buscar por nombre del juego"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -685,6 +715,16 @@ msgstr "No hay archivos sin conexión en caché."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformEmpty"
+msgstr "Ninguna plataforma coincide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameNoMatch"
+msgstr "Ningún ROM en los datos de esta plataforma tiene ese nombre."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No se encontró ningún archivo seleccionable."
 
@@ -802,6 +842,11 @@ msgstr "Parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.patchesIgnored"
 msgstr "Los parches corresponden a Aplicar y se ignoraron."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformLabel"
+msgstr "Plataforma"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -950,12 +995,22 @@ msgstr "Buscar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameSearch"
+msgstr "Buscar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.hashSearchAgain"
 msgstr "Buscar de nuevo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashSearching"
+msgstr "Buscando…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameSearching"
 msgstr "Buscando…"
 
 #. js-lingui-explicit-id
@@ -1115,8 +1170,23 @@ msgstr "El servidor de archivos debe permitir descargas de origen cruzado (CORS)
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameUnavailable"
+msgstr "Los datos de identificación de esta plataforma no están disponibles en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameFailed"
+msgstr "La búsqueda por nombre falló."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "El destino del parche no coincide con la entrada seleccionada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformsFailed"
+msgstr "No se pudo cargar la lista de plataformas."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1228,6 +1298,11 @@ msgstr "Prueba tu ROM."
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Activar todos"
 
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformPlaceholder"
+msgstr "Escriba para filtrar plataformas"
+
 #~ msgid "ui.find.kindSetting"
 #~ msgstr "Ajuste"
 
@@ -1291,6 +1366,11 @@ msgstr "Qué significan los estados sin conexión"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Novedades"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameLabel"
+msgstr "¿Qué juego necesita?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -94,69 +94,45 @@ type BrowserWasmAssetSelection = {
 
 type RunnerCreateOptions = { threads?: RuntimeValue };
 
-// Warm idle runners kept for reuse between operations, scaled to the machine: about half the thread
-// budget, floored at 2 so reuse always works and capped so a high-core machine doesn't hold an
-// unbounded number of idle wasm heaps. How many operations actually run at once is bounded separately
-// by the thread budget (the scheduler's maxConcurrency below).
+// Keep about half the thread budget as idle runners, with a floor of two and this cap.
+// The scheduler separately limits active operations by the thread budget.
 const MAX_WARM_IDLE_RUNNERS = 8;
 const resolveWarmIdleRunners = (): number => {
-  // Every idle runner holds a wasm heap that only ever grew, and no engine returns that memory to the
-  // OS, so on a phone each extra one is dead weight against a tight ceiling. Apple mobile WebKit is
-  // the worst case - it also reserves each worker's full shared-memory `maximum` (~1 GiB on mobile)
-  // up front - but Android is on the same budget and was previously treated as desktop, keeping up to
-  // 8 warm runners on a device with far less headroom than one. Keep at most one warm runner on any
-  // mobile runtime: enough for a burst of back-to-back light ops to reuse a warm worker, evicted
-  // quickly once idle (see scheduleMobileIdleRunnerEviction).
+  // WASM heaps never shrink. Mobile keeps one runner because shared-memory reservations leave little headroom.
   if (isMobileRuntime()) return 1;
   return Math.max(2, Math.min(MAX_WARM_IDLE_RUNNERS, Math.ceil(getDefaultBrowserThreadCount() / 2)));
 };
 
-// Seed forwarded to freshly created runners so their initial worker-shell pool matches the resolved
-// "auto" thread count; set by warmup and reused for on-demand runner creation.
+// New runners use warmup's resolved auto thread count, so their worker-shell pools are ready for the first command.
 let runnerCreateThreads: RuntimeValue | undefined;
 let runnerWarmupPromise: Promise<RomWeaverRunnerReadyMetadata> | null = null;
 
 let runnerPool: RunnerPool<RomWeaverRunner, RunnerCreateOptions> | null = null;
 let operationScheduler: OperationScheduler | null = null;
 
-// Upper bound on waiting for a worker to acknowledge a graceful dispose before terminating it
-// anyway. A worker stuck in a synchronous wait (abandoned selection prompt, wedged op) never
-// replies, and dispose must not hang resets behind it.
+// Bound graceful disposal so a worker blocked in a synchronous wait cannot block a reset.
 const RUNNER_DISPOSE_GRACE_MS = 2000;
 
-// The WASM heap only grows, so warmup can leave a runner near its cap and force
-// first-op recycling. These toggles keep recycling off the critical path and
-// remain individually switchable for performance comparisons.
+// WASM heaps only grow. These switches keep warmup cleanup outside the first operation.
 const PRE_EXTRACT_GAP = {
-  // #4: compile the wasm module once on the main/page thread, cache it, and hand the precompiled
-  //     WebAssembly.Module to every (re)created runner worker so worker recycles skip the fetch+compile.
-  //     The module is reusable across instances and is already transferred to thread workers, so the
-  //     thread pool benefits too. (Compile is moved off the worker onto the page thread, paid once.)
+  // Compile once on the page thread and reuse the module across runner and thread workers.
   cacheCompiledWasmModule: true,
-  // #2: when a run OOMs, hard-terminate the exhausted worker immediately instead of waiting for the next
-  //     dispatch to *gracefully* dispose it (graceful dispose of a wedged worker can block for seconds;
-  //     terminate() is instant and the browser releases its OPFS handles on worker teardown).
+  // Terminate an exhausted worker immediately to release its OPFS handles.
   hardTerminateStaleOnOom: true,
-  // #1: after warmup, keep only the runner that exercised extraction. This preserves first-drop worker/JIT
-  //     state while releasing the rest of the preload pool's shared heaps and address-space reservations.
+  // Keep the runner that warmed extraction state and release the other warm heaps.
   recycleRunnerAfterWarmup: true,
 };
 
-// Page-thread cache of the compiled wasm module (#4), keyed by wasm URL so a changed asset recompiles.
+// Page-thread cache entries are keyed by URL so a changed asset recompiles.
 let cachedBrowserWasmModule: { module: WebAssembly.Module; wasmUrl: string } | null = null;
 
-// Single-flight guard for the page-thread compile (#4b). Concurrent runner consumers can otherwise
-// both miss the still-empty cache and compile the full ~6 MB module. Coalesce first compiles for the
-// same URL onto one in-flight promise.
+// Coalesce concurrent first compiles for the same URL.
 let inflightBrowserWasmCompile: { promise: Promise<WebAssembly.Module>; wasmUrl: string } | null = null;
 
 const nowMs = () =>
   typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 
-// Trace for the wasm module cache (#4), so the cache's behaviour is visible in trace captures. The cache
-// runs on the page/main thread where configureLogger has applied the user's log level setting, so it logs
-// through the shared logger (gated by that setting). A "cache hit" line on the second-and-later worker
-// (re)creation is the proof the precompiled module is being reused.
+// Cache events use the page-thread logger, where the user's log-level setting applies.
 const logger = createLogger("rom-weaver-runner");
 const emitWasmCacheTrace = (message: string, details?: Record<string, unknown>) => logger.trace(message, details);
 
@@ -175,8 +151,7 @@ const compileBrowserWasmModule = async (wasmUrl: string): Promise<WebAssembly.Mo
   return WebAssembly.compile(await response.arrayBuffer());
 };
 
-// Returns the cached compiled module for this wasm URL, compiling+caching it on first use. Returns
-// undefined (so init falls back to the worker compiling from wasmUrl) if disabled or compilation fails.
+// Compile and cache the module on first use. A failure leaves the worker-side wasmUrl fallback available.
 const getCachedBrowserWasmModule = async (wasmUrl?: string): Promise<WebAssembly.Module | undefined> => {
   if (!PRE_EXTRACT_GAP.cacheCompiledWasmModule) return undefined;
   if (!wasmUrl) return undefined;
@@ -184,8 +159,7 @@ const getCachedBrowserWasmModule = async (wasmUrl?: string): Promise<WebAssembly
     emitWasmCacheTrace("wasm module cache hit (skipping fetch+compile)", { wasmUrl });
     return cachedBrowserWasmModule.module;
   }
-  // A compile for this URL is already running (parallel preload): await the shared one instead of
-  // kicking a second full compile of the same module.
+  // Concurrent preload shares the in-flight compile.
   if (inflightBrowserWasmCompile?.wasmUrl === wasmUrl) {
     emitWasmCacheTrace("wasm module compile in flight; awaiting shared page-thread compile", { wasmUrl });
     try {
@@ -289,8 +263,7 @@ const resolveBrowserWasmAsset = async (): Promise<BrowserWasmAssetSelection> => 
 };
 
 const normalizeRunnerDefaultThreads = (threads?: RuntimeValue) => {
-  // Seed the thread-worker warm-up pool with the same count "auto" resolves to at run time
-  // (max(4, hardwareConcurrency)) so the first command does not have to spawn extra worker shells.
+  // Seed the warm worker pool with the same auto count that commands resolve at run time.
   if (threads === undefined || threads === null) return getDefaultBrowserThreadCount();
   const raw = String(threads).trim();
   if (!raw || raw.toLowerCase() === "auto") return getDefaultBrowserThreadCount();
@@ -308,7 +281,7 @@ const createBrowserRunnerInitOptions = (
   const sharedMemoryMaximumPages = resolveAppleMobileSharedMemoryMaximumPages();
   return {
     runtimeMounts: [WORKER_OPFS_MOUNTPOINT],
-    // Pass the precompiled module when cached (#4); keep wasmUrl as the worker-side compile fallback.
+    // Pass a cached module when available. wasmUrl remains the worker-side compile fallback.
     ...(wasmModule ? { module: wasmModule } : {}),
     ...(wasmAsset.wasmUrl ? { wasmUrl: wasmAsset.wasmUrl } : {}),
     ...(wasmAsset.threadWorkerUrl ? { threadWorkerUrl: wasmAsset.threadWorkerUrl } : {}),
@@ -342,8 +315,7 @@ const createBrowserRunner = async (options?: { threads?: RuntimeValue }): Promis
     });
     return {
       dispose: async () => {
-        // Bound graceful cleanup because a worker blocked in a synchronous wait cannot acknowledge it;
-        // always terminate afterward to release its grow-only wasm heap.
+        // Always terminate after the bounded cleanup to release the grown WASM heap.
         const graceful = client.dispose?.().catch(() => undefined);
         if (graceful) {
           await Promise.race([graceful, new Promise((resolve) => setTimeout(resolve, RUNNER_DISPOSE_GRACE_MS))]);
@@ -378,18 +350,12 @@ const getRunnerPool = (): RunnerPool<RomWeaverRunner, RunnerCreateOptions> => {
 
 const getOperationScheduler = (): OperationScheduler => {
   if (!operationScheduler) {
-    // Bound the operation count by the available thread budget: every operation needs at least one
-    // thread, and the thread gate already keeps the summed request within the budget, so this scales
-    // concurrency with the machine's cores without oversubscribing them. Heavy (full-budget) operations
-    // still run alone; only light operations pack together.
+    // Limit operations by the thread budget. The thread gate keeps their total request within it, so full-budget work runs alone.
     const threadBudget = getDefaultBrowserThreadCount();
     operationScheduler = createOperationScheduler({
       maxConcurrency: threadBudget,
       memoryCeiling: resolveMemoryCeilingBytes(),
-      // I/O ops (extract/ingest/checksum) are admitted by the shared Rust planner: the browser passes
-      // only its own (mobile-capped) memory ceiling and thread budget plus each job's source size; Rust
-      // owns the multiplier, the memory fit, and which jobs overlap. `plan-extract-batch` is dispatched
-      // outside the scheduler (see the dispatch below), so this call cannot re-enter it.
+      // Rust plans I/O batches from browser memory, thread limits, and source sizes. Its planner command bypasses this scheduler.
       planBatch: (jobSizes, planOptions) =>
         invokeRomWeaverPlanExtractBatchWorker({
           jobSizes,
@@ -402,16 +368,12 @@ const getOperationScheduler = (): OperationScheduler => {
   return operationScheduler;
 };
 
-// Declare a simultaneous I/O drop (its source sizes) so the scheduler's first plan call sees the whole
-// batch even though each file reaches the scheduler staggered (staged independently). Called by the
-// drop/staging layer, which alone knows every file's size up front.
+// The staging layer records all simultaneous source sizes before admission, so the first plan sees the full drop.
 const noteRomWeaverIoBatch = (jobSizes: number[]) => {
   getOperationScheduler().noteIoBatch(Array.isArray(jobSizes) ? jobSizes : []);
 };
 
-// #1: Keep the most recently released runner (the one that performed extraction) and dispose every other
-// idle preload runner. Borrowing it before disposeIdle avoids a pool reset, so the first real operation
-// reuses its worker/JIT/thread-pool state instead of crossing a soft reset and rebuilding on the critical path.
+// Keep the extraction runner and release the other idle warmup runners without resetting its worker or thread-pool state.
 const recycleWarmRomWeaverRunner = async (threads?: RuntimeValue) => {
   if (!PRE_EXTRACT_GAP.recycleRunnerAfterWarmup) return;
   if (!isBrowserRuntime()) return;
@@ -423,9 +385,7 @@ const recycleWarmRomWeaverRunner = async (threads?: RuntimeValue) => {
   warmLease.release();
 };
 
-// After a heavy op, recycle during the next idle gap so the following action
-// gets a clean, prewarmed heap. Debounce avoids recycling mid-burst; light ops
-// rely on reactive OOM handling.
+// Recycle after a heavy operation during an idle gap. Debouncing preserves light-operation bursts, which rely on OOM handling.
 const IDLE_RECYCLE_DEBOUNCE_MS = 600;
 const IDLE_RECYCLE_MIN_OP_BYTES = 32 * 1024 * 1024;
 let idleRecycleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -447,9 +407,7 @@ const scheduleIdleRecycle = (operationBytes: number) => {
   }, IDLE_RECYCLE_DEBOUNCE_MS);
 };
 
-// Apple mobile reuses a runner during light bursts but evicts it at idle to
-// release the large shared-memory reservation that can trigger WebKit reloads.
-// Busy or queued work re-arms the debounce.
+// Mobile evicts idle runners to release their shared-memory reservation. Queued work re-arms the debounce.
 const MOBILE_IDLE_EVICTION_DEBOUNCE_MS = 250;
 let mobileIdleEvictionTimer: ReturnType<typeof setTimeout> | null = null;
 const scheduleMobileIdleRunnerEviction = () => {
@@ -458,8 +416,7 @@ const scheduleMobileIdleRunnerEviction = () => {
     mobileIdleEvictionTimer = null;
     const pool = runnerPool;
     if (!pool || pool.idleCount === 0) return;
-    // Momentary pool idleness can occur between queued staging ops. Wait for the
-    // scheduler to drain, then dispose only idle runners so racing creation survives.
+    // Pool idleness can occur between staging operations. Wait for queued work, then dispose only idle runners.
     const scheduler = operationScheduler;
     const schedulerDrained = !scheduler || (scheduler.inFlightCount === 0 && scheduler.waitingCount === 0);
     if (pool.busyCount !== 0 || !schedulerDrained) {
@@ -478,11 +435,7 @@ const scheduleMobileIdleRunnerEviction = () => {
   }, MOBILE_IDLE_EVICTION_DEBOUNCE_MS);
 };
 
-// The wasm runner's linear memory only ever grows, so the browser surfaces an exhausted heap as an
-// out-of-memory error. V8 reports it as `RangeError: Out of memory`, but the wasi/Emscripten layer
-// can also surface "cannot enlarge memory", "ENOMEM", etc. - reuse the canonical matcher so every
-// OOM phrasing triggers a clean-heap worker recycle, while still catching a RangeError mentioning
-// memory whose exact wording the shared regex might not enumerate.
+// WASM heaps only grow. Match shared WASI/Emscripten OOM messages and V8 memory RangeErrors so the affected runner is recycled.
 const isRunnerOutOfMemoryError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false;
   if (OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message)) return true;
@@ -496,9 +449,7 @@ const createRunnerAbortError = () => {
   return error;
 };
 
-// The wasm-reported command duration we surface in the UI: the elapsed time
-// carried by the run's terminal event. Used to compare against the main-thread
-// round-trip wall clock so the JS/worker/OPFS overhead is visible.
+// Read the terminal event's WASM duration for the UI and compare it with round-trip time to expose browser overhead.
 const readWasmReportedElapsedMs = (result: RomWeaverRunnerRunJsonResult): number | undefined => {
   const events = Array.isArray(result?.events) ? result.events : [];
   for (let index = events.length - 1; index >= 0; index -= 1) {
@@ -516,7 +467,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
   const scopedActiveVirtualFiles = selectActiveVirtualFilesForRun(activeVirtualFiles, commandOrRequest, options);
   const configuredVirtualFiles = runOptionOverrides.virtualFiles;
-  // Cached OPFS mounts hold sync access handles; release them before UI-side VFS writes/downloads.
+  // Cached OPFS mounts hold sync access handles. Release them before UI-side VFS writes and downloads.
   const defaultInvalidateMountCacheAfterRun = true;
   const runOptions: RomWeaverRunnerRunJsonOptions =
     scopedActiveVirtualFiles.length > 0
@@ -533,8 +484,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   if (!Object.hasOwn(runOptions, "invalidateMountCacheAfterRun")) {
     runOptions.invalidateMountCacheAfterRun = defaultInvalidateMountCacheAfterRun;
   }
-  // Let the app prompt (via the host selection callback) when a container has multiple selectable
-  // entries and no explicit selection. Commands that pass an explicit `--select` never reach it.
+  // The app prompts when a container has multiple entries and the command has no explicit selection.
   if (!Object.hasOwn(runOptions, "interactiveSelectionEnabled")) {
     (runOptions as { interactiveSelectionEnabled?: boolean }).interactiveSelectionEnabled = true;
   }
@@ -548,28 +498,23 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   );
   const command = readRomWeaverRunInputCommand(commandOrRequest);
   const operationPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
-  // Surface how long this command's OPFS inputs took to stage (recorded on the main thread by
-  // createBrowserOpfsSourceRef) so it lands on the runner's [perf] command timings line alongside
-  // setup/compute/teardown. Undefined when no referenced input was staged (e.g. virtual-Blob inputs).
+  // Include the source preparation time recorded on the page thread when a referenced input was staged.
   const stagedInputMs = getStagedInputMs(operationPaths);
   if (typeof stagedInputMs === "number") {
     (runOptions as { stagingMs?: number }).stagingMs = stagedInputMs;
   }
   const threadBudget = getDefaultBrowserThreadCount();
-  // probe/list spawn no workers (0 budget). Threaded commands request "auto" (the full budget), but
-  // most do not use every core - gate the scheduler on the threads the operation will realistically use
-  // (a single-threaded apply reserves 1, not all of them) so light operations can overlap.
+  // Probe and list reserve no workers. Estimate other commands so a single-threaded operation does not reserve the full budget.
   const requestedThreads = readRomWeaverRequestedThreadCount(commandOrRequest, { defaultThreads: threadBudget });
   const requested = romWeaverCommandSupportsThreads(command) ? (requestedThreads ?? threadBudget) : 0;
   const inputBytes = describeVirtualFilesForTrace(scopedActiveVirtualFiles).totalBytes;
   const operationThreads = estimateScheduledThreads(command, inputBytes, requested);
-  // Estimate the working set from the staged input sizes so the scheduler can refuse to overlap two
-  // operations whose combined memory would exhaust the device.
+  // Reserve the estimated working set from staged input sizes to prevent overlap that exhausts device memory.
   const operationBytes = estimateOpWorkingSetBytes(command, inputBytes);
 
   const dispatchRun = async (assignedThreads: number): Promise<RomWeaverRunnerRunJsonResult> => {
     if (signal?.aborted) throw createRunnerAbortError();
-    // Warmup releases its lease when ready, allowing the first real operation to reuse that runner.
+    // Wait for warmup to release its lease so the first operation can reuse that runner.
     await runnerWarmupPromise?.catch(() => undefined);
     if (signal?.aborted) throw createRunnerAbortError();
     const lease = await getRunnerPool().acquire({ threads: runnerCreateThreads });
@@ -588,8 +533,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         const abortRun = () => {
           if (settled) return;
           settled = true;
-          // Terminate only this operation's runner - a sibling operation on another pooled runner keeps
-          // running, unlike the previous singleton where any abort tore down the shared worker.
+          // Abort only this operation's runner. Pooled siblings retain their workers and keep running.
           emitRunnerTraceLine(options, "runJson aborted; terminating active runner");
           lease.terminate();
           reject(createRunnerAbortError());
@@ -598,8 +542,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           signal.addEventListener("abort", abortRun, { once: true });
           removeAbortListener = () => signal.removeEventListener("abort", abortRun);
         }
-        // Force the scheduler's per-op thread allotment unless it equals the full
-        // budget. This keeps concurrent WASI pools from each claiming everything.
+        // Force the scheduler's per-operation allotment so concurrent WASI pools do not each claim the full budget.
         const forcedThreads = Math.max(1, Math.floor(assignedThreads));
         const dispatchInput =
           romWeaverCommandSupportsThreads(command) && forcedThreads < threadBudget
@@ -615,8 +558,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           (result) => {
             if (settled) return;
             settled = true;
-            // Wasm reported the run finished: open the perceived-latency tail measured to the result
-            // paint (see lib/perf/op-perf-marks.ts → romweaver:after-finish).
+            // Start the perceived-latency tail that ends when the result paints.
             markWasmFinished();
             resolve(result);
           },
@@ -628,12 +570,10 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         );
       });
     } catch (error) {
-      // A long-lived worker can exhaust its (only-ever-growing) wasm heap after several heavy ops and
-      // fail with an out-of-memory error. Only this runner's heap is affected; the pool stands up a
-      // fresh clean-heap runner on the next acquire.
+      // A long-lived worker can exhaust its grown heap. Only that runner is replaced on the next acquire.
       if (isRunnerOutOfMemoryError(error)) {
         if (PRE_EXTRACT_GAP.hardTerminateStaleOnOom) {
-          // #2: hard-terminate the exhausted worker now to release its OPFS handles immediately.
+          // Release the exhausted worker's OPFS handles immediately.
           emitRunnerTraceLine(options, "runJson out-of-memory; terminating exhausted runner");
           lease.terminate();
         } else {
@@ -645,9 +585,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
     } finally {
       removeAbortListener?.();
       if (isMobileRuntime()) {
-        // No engine reclaims a grown wasm heap or its thread-pool memory, and a phone has no headroom
-        // to carry one between operations. Terminate after heavy/threaded work; keep light runners for
-        // the burst, then let idle eviction release them.
+        // Mobile releases runners after heavy or threaded work. Light-operation runners remain for a short burst, then idle eviction releases them.
         const mobileHeavyOp = operationBytes >= IDLE_RECYCLE_MIN_OP_BYTES || operationThreads > 1;
         if (mobileHeavyOp) {
           emitRunnerTraceLine(
@@ -664,24 +602,18 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
           scheduleMobileIdleRunnerEviction();
         }
       } else {
-        // No-op if the runner was terminated above; otherwise returns the warm runner to the pool (or
-        // disposes it when marked stale).
+        // Return a usable runner to the pool. A terminated or stale runner is disposed.
         lease.release();
-        // After a heavy op, restore the clean-heap baseline during the next idle gap (debounced) so a
-        // following op starts as fast as the first instead of on a heap left near its cap.
+        // Restore a clean-heap baseline during the next idle gap so the next heavy operation does not start near its cap.
         scheduleIdleRecycle(operationBytes);
       }
     }
   };
 
-  // Stamp the perceived-latency start on the main thread: `submittedAtMs` is when
-  // the command enters the scheduler; the measure fires when the worker replies.
-  // A thread-capable command is the heavy work the user is waiting on, so it (not
-  // a preceding probe `list`) closes the drop -> done arc.
+  // Measure perceived latency from scheduler admission until the worker reply. A thread-capable command closes the user-facing drop-to-done interval.
   const submittedAtMs = perfNow();
   const threadCapable = romWeaverCommandSupportsThreads(command);
-  // The batch-plan command bypasses its calling scheduler to avoid reentrant
-  // deadlock. Extract/ingest/checksum use that Rust plan for memory and overlap.
+  // Batch planning bypasses the scheduler to avoid re-entry. Extract, ingest, and checksum use its Rust plan for memory and overlap.
   const ioCommand = command.type === "extract" || command.type === "ingest" || command.type === "checksum";
   const result =
     command.type === "plan-extract-batch"
@@ -742,9 +674,7 @@ const parseRomWeaverBatchPlan = (details: unknown): RomWeaverBatchPlan | undefin
   return { waves };
 };
 
-// Ask the shared Rust planner to group jobs from browser limits and source sizes.
-// Lives here to avoid a runner↔command module cycle and runs outside the
-// scheduler because the scheduler calls it during admission.
+// Run Rust batch planning outside the scheduler because scheduler admission calls it. Keeping it here avoids a runner-to-command module cycle.
 const invokeRomWeaverPlanExtractBatchWorker = async (input: {
   jobSizes: number[];
   logLevel?: LogLevel | string;
@@ -785,18 +715,14 @@ const invokeRomWeaverPlanExtractBatchWorker = async (input: {
   return plan;
 };
 
-// Normalize a worker-threads seed so "auto"/numbers/undefined compare by surface value; used only to
-// detect a thread-budget *change* between warmups.
+// Normalize a warmup thread seed for change detection.
 const normalizeThreadsSeed = (value: RuntimeValue | undefined): string =>
   value == null ? "" : String(value).trim().toLowerCase();
 
 const warmupRomWeaverRunner = (threads?: RuntimeValue) => {
   const warmupPromise = (async () => {
     if (!isBrowserRuntime()) throw new Error("rom-weaver wasm runner is only available in browser runtimes");
-    // A thread-budget change must not silently reuse the old warm pool: getRunnerPool().acquire reuses a
-    // warm idle runner regardless of the requested thread count, so without this the next op keeps the
-    // stale-sized pool and grows it on demand. Drop the pooled runners when the seed changes so a fresh
-    // runner is created at the new budget and self-pre-warms to it - keeping ops warm after a thread change.
+    // A changed thread budget MUST replace idle runners because acquire otherwise reuses their old-sized pools.
     const seedChanged = normalizeThreadsSeed(runnerCreateThreads) !== normalizeThreadsSeed(threads);
     runnerCreateThreads = threads;
     if (seedChanged) markRomWeaverRunnerStale();

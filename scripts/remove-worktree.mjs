@@ -6,8 +6,7 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 export function removeWorktree(worktreeDir, extra = []) {
-  // Exactly one, as the shell required: silently ignoring a second path is how
-  // you remove one worktree while believing you removed two.
+  // Callers MUST supply exactly one path so extra arguments cannot leave worktrees unprocessed.
   if (!worktreeDir || extra.length) throw Object.assign(new Error("usage: node scripts/remove-worktree.mjs <worktree>"), { code: 2 });
   if (!existsSync(worktreeDir)) throw new Error(`remove-worktree: not a directory: ${worktreeDir}`);
   const resolved = realpathSync(worktreeDir);

@@ -86,7 +86,7 @@ pub(super) fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
     // Discard `len` bytes by streaming them into a sink instead of allocating a
     // `len`-sized buffer, so an attacker-controlled section length cannot trigger
     // an out-of-memory abort. `io::copy` stops short at EOF, so verify the full
-    // span was actually present (matching the old `read_exact` semantics).
+    // span was actually present.
     let copied = std::io::copy(&mut (&mut *reader).take(len), &mut std::io::sink())?;
     if copied != len {
         return Err(RomWeaverError::Validation(format!(

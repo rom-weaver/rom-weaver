@@ -77,10 +77,11 @@ Then start the HTTPS development server:
 npm run dev
 ```
 
-The server prints its local URL. To choose another port:
+The server prints its local URL. Choose an unused port for each worktree and export it before starting the server:
 
 ```bash
-npm run dev -- --port 5174
+export PORT=5174
+npm run dev
 ```
 
 The local certificate may need a one-time browser exception. HTTPS and the server's COOP/COEP headers are required to exercise the same `SharedArrayBuffer` runtime used in production.
@@ -97,6 +98,12 @@ The build synchronizes the artifacts back into the webapp package when the custo
 
 ```bash
 mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1-threads
+```
+
+To synchronize an existing artifact directory without rebuilding, run this command from `packages/rom-weaver-webapp`:
+
+```bash
+npm run prepare:dist -- /path/to/wasm-artifacts
 ```
 
 See the [WASM runtime notes](../../packages/rom-weaver-webapp/src/wasm/README.md) for the browser OPFS and worker API.
@@ -199,7 +206,7 @@ New crates must resolve to an already-allowed license. When one does not, prefer
 `bzip2` exposes two backends and picks one with `#[cfg(feature = "bzip2-sys")]`: the C `bzip2-sys` library, or the pure-Rust `libbz2-rs-sys`. The workspace pins `bzip2` to `default-features = false,
 features = ["bzip2-sys"]`, which keeps every build on the C backend.
 
-**That pin is load-bearing.** Cargo unions features across the graph, and upstream `qbsdiff` depends on `bzip2` with default features on, so `libbz2-rs-sys` is present in the dependency graph regardless. The workspace pin is the only thing keeping `bzip2-sys` selected; drop it and the bzip2 implementation underneath BDF patch output silently swaps.
+The `bzip2-sys` feature selects the C backend. Cargo combines features across the dependency graph, and `qbsdiff` enables bzip2's default features. Removing the workspace's `bzip2-sys` feature therefore selects the Rust backend and can change BDF patch output.
 
 As a result, `libbz2-rs-sys` compiles but is never linked. Keep the scoped `.config/deny.toml` exception for its `bzip2-1.0.6` license. If `qbsdiff` later exposes a feature that disables its default bzip2 backend, remove the extra backend and the exception together.
 
@@ -211,7 +218,7 @@ After creating a linked worktree, run its setup helper before building or testin
 node scripts/setup-worktree.mjs
 ```
 
-It installs package dependencies, copies existing WASM artifacts when available, and warms the two Cargo target dirs the pre-commit hook builds into (`target/hook-typegen` and `target/hook-wasm`). That last step takes a few minutes and roughly 1.7 GB; pass `--no-prime` to skip it and let the first Rust commit in the worktree pay for it instead.
+The helper installs package dependencies, copies available WASM artifacts, and primes the pre-commit Cargo directories `target/hook-typegen` and `target/hook-wasm`. Pass `--no-prime` to leave those builds to the first Rust commit. Each worktree must use its own Cargo target directories; sharing them between checkouts can reuse stale staged C sources.
 
 After verifying that a worktree has no real changes, remove it from the main checkout with:
 

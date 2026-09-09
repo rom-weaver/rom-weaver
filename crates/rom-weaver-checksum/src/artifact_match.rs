@@ -131,7 +131,10 @@ fn matched_component(component: &PackComponent) -> MatchedComponent {
     }
 }
 
-fn pack_component_role(role: PackComponentRole) -> ComponentRole {
+/// The reported role of one pack component. Public so a caller that reads pack
+/// records directly (the identify name search) reports the same roles a
+/// checksum match does.
+pub fn pack_component_role(role: PackComponentRole) -> ComponentRole {
     match role {
         PackComponentRole::PrimaryPayload => ComponentRole::PrimaryPayload,
         PackComponentRole::DataTrack => ComponentRole::DataTrack,

@@ -1,10 +1,7 @@
 //! Adjacent-run coalescing shared by the byte-diff create paths.
 //!
-//! The per-chunk scanners emit runs of consecutive changed output bytes;
-//! merging the per-chunk run vectors fuses runs that abut across a chunk
-//! boundary. The merge loop was previously duplicated byte-for-byte across the
-//! IPS, APS-N64, and MOD/PMSR create paths (only the run type and its payload
-//! field name differed).
+//! Per-chunk scanners emit runs of consecutive changed output bytes. Merging
+//! fuses runs that meet at a chunk boundary.
 
 use rom_weaver_core::Result;
 
@@ -18,9 +15,7 @@ pub(crate) trait AdjacentRun: Sized {
     fn append(&mut self, next: Self);
 }
 
-/// Concatenates the per-chunk run vectors in order, fusing each run into the
-/// previous one when it begins exactly where the previous run ends. Identical
-/// to the per-format loops it replaces, so create output is unchanged.
+/// Concatenate per-chunk runs in order and fuse adjacent runs.
 pub(crate) fn merge_adjacent_runs<R: AdjacentRun>(chunk_runs: Vec<Vec<R>>) -> Result<Vec<R>> {
     let mut merged = Vec::<R>::new();
     for runs in chunk_runs {

@@ -115,12 +115,8 @@ fn matches_wildcard_segment(pattern: &str, candidate: &str) -> bool {
     matches_wildcard_segment_inner(&pattern_chars, &candidate_chars)
 }
 
-/// Greedy two-pointer wildcard match with a single backtrack anchor on the most
-/// recent `*` group. Runs in O(pattern * candidate) time and O(1) extra space, so an
-/// adversarial multi-star archive entry name cannot drive it into the exponential
-/// recursion the previous implementation allowed. `?`, literals, and `[...]` classes
-/// each consume exactly one candidate char, so the standard wildcard greedy algorithm
-/// keeps the original matching semantics intact.
+/// Greedy two-pointer wildcard match with one backtrack anchor for the most
+/// recent `*` group. It uses O(pattern * candidate) time and O(1) extra space.
 fn matches_wildcard_segment_inner(pattern: &[char], candidate: &[char]) -> bool {
     let mut pattern_index = 0usize;
     let mut candidate_index = 0usize;

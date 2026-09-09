@@ -21,6 +21,7 @@ import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
+import { preloadCatalog } from "../presentation/localization/index.ts";
 import { getDefaultSettings, LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
 import { captureShellClicks, replayShellClicks } from "./shell-click-replay.ts";
 import {
@@ -228,8 +229,13 @@ applicationStatusReady = true;
 // docs page cache. A failed load resolves anyway - the route's Suspense
 // boundary owns the error.
 const preloadInitialWorkflowRoute = async (): Promise<unknown> => {
-  const view = webappController.getState().currentView;
-  await preloadWorkflowRoute(view);
+  const { currentView: view, settings } = webappController.getState();
+  // The message catalog is fetched alongside the route chunk so the first
+  // render is already translated. Hydration reads the browser locale (it
+  // renders with default settings), later renders the Language setting; both
+  // are warmed. English is in the main bundle and resolves at once.
+  const catalogs = [preloadCatalog(), preloadCatalog(settings.language)];
+  await Promise.all([preloadWorkflowRoute(view), ...catalogs]);
   if (view === "docs") await preloadDocsRouteHtml();
   return undefined;
 };

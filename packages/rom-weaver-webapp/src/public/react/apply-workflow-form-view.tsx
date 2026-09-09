@@ -1,5 +1,5 @@
 import { Archive, Disc3, Download, Gamepad2, ListChecks, Share2, TriangleAlert } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import {
   postApplyDownloadBehaviorOption,
@@ -29,8 +29,10 @@ import { FileCard } from "./components/ds/file-card.tsx";
 import {
   databaseOnlyChecks,
   ROM_HASH_LOOKUP_MESSAGES,
+  ROM_NAME_LOOKUP_MESSAGES,
   RomExpectationCard,
   RomHashSearch,
+  RomNameSearch,
   type RomExpectation,
 } from "./components/ds/rom-expectation-card.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
@@ -81,6 +83,7 @@ import {
 } from "./use-apply-download-orchestration.ts";
 import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
 import { useRomHashLookup } from "./use-rom-hash-lookup.ts";
+import { useRomNameLookup } from "./use-rom-name-lookup.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -1944,13 +1947,25 @@ function ApplyWorkflowFormView({
   // already declares one answers the question, so the search stays out of the
   // way and its own result is dropped.
   const romHashLookup = useRomHashLookup(ROM_HASH_LOOKUP_MESSAGES(localizer));
+  // Searching by game name is the second door to the same expectation: a name
+  // cannot be routed to a pack, so it asks for a platform where the checksum
+  // path asks for nothing. The checksum result wins when both hold one, which
+  // no user action reaches today because the first result unmounts both
+  // searches and only the checksum search reopens.
+  const romNameLookup = useRomNameLookup(ROM_NAME_LOOKUP_MESSAGES(localizer));
   const canSearchRomHash = romInputs.length === 0 && !hasExpectedChecks;
   const { clear: clearRomHashLookup } = romHashLookup;
-  const staleRomHash = !canSearchRomHash && !!(romHashLookup.text || romHashLookup.result);
+  const { clear: clearRomNameLookup } = romNameLookup;
+  const clearManualRomLookup = useCallback(() => {
+    clearRomHashLookup();
+    clearRomNameLookup();
+  }, [clearRomHashLookup, clearRomNameLookup]);
+  const staleRomHash =
+    !canSearchRomHash && !!(romHashLookup.text || romHashLookup.result || romNameLookup.text || romNameLookup.result);
   useEffect(() => {
-    if (staleRomHash) clearRomHashLookup();
-  }, [clearRomHashLookup, staleRomHash]);
-  const manualRomLookup = canSearchRomHash ? romHashLookup.result : undefined;
+    if (staleRomHash) clearManualRomLookup();
+  }, [clearManualRomLookup, staleRomHash]);
+  const manualRomLookup = canSearchRomHash ? (romHashLookup.result ?? romNameLookup.result) : undefined;
   const romExpectation: RomExpectation | undefined =
     romInputs.length === 0 && hasExpectedChecks
       ? {
@@ -2046,10 +2061,18 @@ function ApplyWorkflowFormView({
   // just when the whole workflow is - so loading only a ROM (or only patches)
   // still shows the other section's "add it in 0x01" prompt instead of a bare
   // header.
+  /* Patches without a ROM leave 0x02 empty and the hero gone, so the checksum
+     search the hero carried follows the gap here: the ROM can still be named
+     before it exists. It leaves once a match or a derived check answers. */
   const romNeedsInput = (
-    <NeedsInput onClick={openUnifiedPicker}>
-      Add ROM in <b className="hexref mono">0x01</b> or click for any input
-    </NeedsInput>
+    <>
+      <NeedsInput onClick={openUnifiedPicker}>
+        Add ROM in <b className="hexref mono">0x01</b> or click for any input
+      </NeedsInput>
+      {canSearchRomHash && !manualRomLookup ? (
+        <RomHashSearch localizer={localizer} lookup={romHashLookup} variant="section" />
+      ) : null}
+    </>
   );
   const patchesNeedsInput = (
     <NeedsInput onClick={openUnifiedPicker}>
@@ -2118,7 +2141,12 @@ function ApplyWorkflowFormView({
             />
             {/* Apply keeps checksum lookup available without competing with the
                 primary file-drop action. The form moves to 0x02 after a match. */}
-            {canSearchRomHash && workflowEmpty ? <RomHashSearch localizer={localizer} lookup={romHashLookup} /> : null}
+            {canSearchRomHash && workflowEmpty ? (
+              <>
+                <RomHashSearch localizer={localizer} lookup={romHashLookup} />
+                <RomNameSearch localizer={localizer} lookup={romNameLookup} />
+              </>
+            ) : null}
           </>
         }
         big={workflowEmpty}
@@ -2159,7 +2187,7 @@ function ApplyWorkflowFormView({
                     expectation={romExpectation}
                     identification={manualRomLookup?.identification ?? expectedRomIdentification}
                     {...(manualRomLookup
-                      ? { onRemove: romHashLookup.clear, removeLabel: "Clear the expected ROM" }
+                      ? { onRemove: clearManualRomLookup, removeLabel: "Clear the expected ROM" }
                       : {})}
                   />
                   {/* A pasted checksum is the user's guess, so the search stays

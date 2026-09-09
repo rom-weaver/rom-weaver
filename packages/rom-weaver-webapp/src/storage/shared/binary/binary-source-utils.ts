@@ -8,6 +8,7 @@ import {
   isFileSystemFileHandleLike,
   isRecord,
   materializeByteSourceRecord,
+  normalizeReadIntoRequest as normalizeSharedReadIntoRequest,
   normalizeRange,
   readBinaryObjectRange,
   toArrayBufferViewUint8Array,
@@ -88,21 +89,14 @@ const normalizeReadIntoRequest = ({
   fileOffset?: number;
   fileSize: number;
   invalidLabel?: string;
-}) => {
-  const target = toUint8Array(buffer, invalidLabel || "Invalid read target");
-  const targetOffset = typeof bufferOffset === "number" && bufferOffset > 0 ? Math.floor(bufferOffset) : 0;
-  const sourceOffset = typeof fileOffset === "number" && fileOffset > 0 ? Math.floor(fileOffset) : 0;
-  const readLength =
-    typeof len === "number"
-      ? Math.max(0, Math.min(Math.floor(len), target.byteLength - targetOffset, fileSize - sourceOffset))
-      : Math.max(0, Math.min(target.byteLength - targetOffset, fileSize - sourceOffset));
-  return {
-    readLength,
-    sourceOffset,
-    target,
-    targetOffset,
-  };
-};
+}) =>
+  normalizeSharedReadIntoRequest({
+    bufferOffset,
+    fileOffset,
+    fileSize,
+    len,
+    target: toUint8Array(buffer, invalidLabel || "Invalid read target"),
+  });
 
 const readRangeIntoTarget = async ({
   buffer,

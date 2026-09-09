@@ -718,12 +718,9 @@ fn collect_ppf_diff_runs_parallel(
     pool: &SharedThreadPool,
 ) -> Result<Vec<PpfDiffRun>> {
     let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    // Empty modified inputs scan zero chunks (matching the old `step_by`
-    // ranges), not the one floor chunk `chunk_count_for_len` would plan.
+    // Empty modified inputs have no chunks to scan.
     let chunk_count = usize::try_from(modified_len.div_ceil(chunk_size)).unwrap_or(usize::MAX);
-    // Each chunk scan is wrapped in `Ok(...)` so the shared fail-fast collect
-    // never engages: PPF keeps collecting every chunk and surfaces scan
-    // errors in chunk order from the merge loop below, exactly as before.
+    // Collect all chunk results so the merge loop reports scan errors in order.
     let per_chunk_runs = scan_create_chunks(chunk_count, pool, |chunk_index| {
         let start = chunk_index as u64 * chunk_size;
         let end = start.saturating_add(chunk_size).min(modified_len);
@@ -736,12 +733,11 @@ fn collect_ppf_diff_runs_parallel(
         ))
     })?;
 
-    // Fully fuse contiguous runs across chunk boundaries (no 255 cap) so the
-    // merged runs are independent of how many chunks the scan used; the writer
-    // then re-splits them into maximal 255-byte records (matching serial).
+    // Fuse runs across chunk boundaries before the writer splits them into
+    // 255-byte records.
     let mut chunk_runs = Vec::with_capacity(per_chunk_runs.len());
     for runs in per_chunk_runs {
-        // Surface scan errors in chunk order, exactly as the previous loop did.
+        // Report scan errors in chunk order.
         chunk_runs.push(runs?);
     }
     merge_adjacent_runs(chunk_runs)

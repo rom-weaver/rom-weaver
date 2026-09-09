@@ -1268,8 +1268,9 @@ describe("webapp responsive navigation", () => {
     await setViewport(VIEWPORTS[0]);
     await renderPage(emptyApplyPage(), "light");
 
-    // The hero MUST leave room for navigation and the visible checksum form.
-    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("333px");
+    // 485px of navigation chrome, less the 116px the joined checksum footer
+    // takes (--hero-search-h), so the page footer still clears the dock.
+    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("369px");
   });
 
   test("keeps the workflow gutter fluid without a narrow desktop cap", async () => {

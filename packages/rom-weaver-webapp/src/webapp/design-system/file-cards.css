@@ -615,9 +615,8 @@
   overflow-wrap: anywhere;
 }
 /* Manual checksum search: the file-free alternative to the drop zone. In the
-   hero it is the quiet second door after the drop target: a footer joined to
-   the hero's frame across a dashed seam, so the two read as one surface. In
-   0x02 it is the one-line refine row under an expectation card. */
+   Apply hero it is the quiet second door after the drop target. In 0x02 it is
+   the one-line refine row under an expectation card. */
 .rw-app .identify-hash {
   display: flex;
   flex-wrap: wrap;
@@ -635,10 +634,52 @@
   border-end-start-radius: var(--r-l);
   border-end-end-radius: var(--r-l);
 }
-/* The hero hands its bottom corners to the footer it is joined to. */
+/* Apply's hero hands its bottom corners to the shared footer. */
 .rw-app .step.is-input:has(> .step-body > .identify-hash--hero) .drop.hero {
   border-end-start-radius: 0;
   border-end-end-radius: 0;
+}
+/* Identify keeps the checksum companion separate, but the hero MUST NOT show
+   another rounded lower edge directly above that companion surface. */
+.rw-app .unified-drop-step:has(> .step-body > .identify-hash-island) .drop.hero {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+/* Identify presents the checksum route as a separate companion surface in the
+   ROM input rail, so it reads as a second choice without joining the dropzone. */
+.rw-app .identify-hash-island {
+  position: relative;
+  width: min(100%, 760px);
+  margin: var(--sp-m) 0 0 auto;
+  overflow: clip;
+  background: var(--empty-fill);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
+}
+.rw-app .identify-hash-island::before {
+  position: absolute;
+  inset: 0 var(--sp-l) auto;
+  height: 2px;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, transparent, var(--thread) 32% 68%, transparent);
+  opacity: 0.65;
+}
+.rw-app .identify-hash-island .identify-hash--hero {
+  padding: var(--sp-m) var(--sp-l);
+  margin: 0;
+  background: var(--warp-lines), var(--empty-fill);
+  border: 0;
+  border-radius: inherit;
+}
+.rw-app .identify-hash-island .identify-hash-label {
+  font-size: 0.88rem;
+}
+.rw-app .identify-hash--section {
+  margin-block-start: var(--sp-m);
+  background: var(--warp-lines) var(--empty-fill);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
 }
 .rw-app .identify-hash--compact {
   padding: var(--sp-xs) 0 var(--sp-m);
@@ -672,4 +713,96 @@
   flex-basis: 100%;
   margin: 0;
   color: var(--fault);
+}
+/* Manual name search: the same second door as the checksum row, but a name
+   cannot be routed to a pack, so a platform picker leads and the query input
+   stays inert until one is chosen. Stacked, because the picker, its filtered
+   list, the query, and the results are four rows, not one. */
+.rw-app .identify-name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  padding: var(--sp-s) 0 0;
+}
+.rw-app .identify-name-heading {
+  margin: 0;
+  font-weight: 650;
+}
+.rw-app .identify-name-platform {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+}
+.rw-app .identify-name-platform-input {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.rw-app .identify-name-platform-change {
+  flex: none;
+}
+/* The catalog holds more platforms than a list can show, so the filtered list
+   scrolls inside a bounded box rather than pushing the query out of view. */
+.rw-app .identify-name-platform-list {
+  max-height: 11rem;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .identify-name-platform-option {
+  display: block;
+}
+.rw-app .identify-name-platform-btn,
+.rw-app .identify-name-result-btn {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: baseline;
+  justify-content: flex-start;
+  width: 100%;
+  text-align: start;
+  border: 0;
+  border-radius: 0;
+}
+.rw-app .identify-name-platform-empty {
+  padding: var(--sp-s);
+  color: var(--ink-3);
+}
+.rw-app .identify-name-results-label {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.rw-app .identify-name-results {
+  max-height: 16rem;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .identify-name-result {
+  display: block;
+}
+.rw-app .identify-name-result-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rw-app .identify-name-result-meta {
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+@media (hover: hover) {
+  .rw-app .identify-name-platform-btn:hover,
+  .rw-app .identify-name-result-btn:hover {
+    background: var(--plate-2);
+  }
+}
+/* Touch browsers get no hover, so the press itself supplies the feedback. */
+.rw-app .identify-name-platform-btn:active,
+.rw-app .identify-name-result-btn:active {
+  background: var(--plate-2);
 }
