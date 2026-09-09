@@ -24,6 +24,11 @@ impl CheatApplySummary {
             self.write_count
         )
     }
+
+    /// Human-readable record of the raw codes for patch metadata.
+    pub(super) fn comment(&self, codes: &[String]) -> String {
+        format!("cheat codes ({}): {}", self.system.id(), codes.join(" + "))
+    }
 }
 
 fn cheat_system_from_header(header: KnownRomHeader) -> Option<CheatSystem> {

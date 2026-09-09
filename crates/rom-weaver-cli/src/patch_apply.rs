@@ -695,9 +695,12 @@ impl CliApp {
             }
         };
 
-        // Bake cheat codes into a synthetic IPS patch applied before the explicit
-        // patches. Resolved against the resolved input ROM bytes (header strip /
-        // N64 byte-order rewrite are rejected above so offsets stay valid).
+        // Bake cheat codes into a synthetic IPS patch applied after the explicit
+        // patches, so a cheat wins over a patch that touches the same byte and a
+        // checksum-carrying patch still sees the ROM it was built for. Offsets
+        // are resolved against the input ROM bytes (header strip / N64
+        // byte-order rewrite are rejected above so they stay valid), which is
+        // the same basis the browser workflow uses.
         let mut cheat_summary = None;
         if !codes.is_empty() {
             match self.synthesize_cheat_ips(
@@ -710,7 +713,7 @@ impl CliApp {
             ) {
                 Ok((cheat_patch, summary)) => {
                     cheat_summary = Some(summary);
-                    resolved_patches.insert(0, (cheat_patch.clone(), cheat_patch));
+                    resolved_patches.push((cheat_patch.clone(), cheat_patch));
                 }
                 Err(error) => {
                     Self::cleanup_temp_paths(&temp_paths);

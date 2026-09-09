@@ -37,6 +37,8 @@ rom-weaver patch create \
   --solid-author "Example Team"
 ```
 
+To create a patch from cheat codes instead of a changed ROM, see [Share a cheat as a patch](bake-cheat-codes.md#share-a-cheat-as-a-patch).
+
 ## Test what you built
 
 Apply the created patch to the clean Original, then compare the rebuilt file with Modified:
