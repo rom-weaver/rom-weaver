@@ -194,9 +194,8 @@ const RomExpectationCard = ({
  * Paste a checksum to find the ROM this run needs, without having the file.
  * Shared by the apply and identify pages - one lookup, one wording - so the
  * only difference is where its answer lands. The `hero` variant belongs to
- * empty input steps. `compact`
- * is the refine row 0x02 keeps under an expectation card until a real ROM
- * makes it concrete.
+ * empty input steps. The `section` variant stands beside the empty ROM
+ * prompt. The `compact` variant refines an existing expectation.
  */
 const RomHashSearch = ({
   idPrefix = "rom-weaver-rom",
@@ -208,7 +207,7 @@ const RomHashSearch = ({
   idPrefix?: string;
   lookup: ReturnType<typeof useRomHashLookup>;
   localizer: ReturnType<typeof useUiLocalizer>;
-  variant?: "compact" | "hero";
+  variant?: "compact" | "hero" | "section";
 }) => {
   const inputId = `${idPrefix}-hash`;
   const compact = variant === "compact";

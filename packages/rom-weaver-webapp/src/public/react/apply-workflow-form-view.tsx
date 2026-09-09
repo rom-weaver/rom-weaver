@@ -2059,10 +2059,18 @@ function ApplyWorkflowFormView({
   // just when the whole workflow is - so loading only a ROM (or only patches)
   // still shows the other section's "add it in 0x01" prompt instead of a bare
   // header.
+  /* Patches without a ROM leave 0x02 empty and the hero gone, so the checksum
+     search the hero carried follows the gap here: the ROM can still be named
+     before it exists. It leaves once a match or a derived check answers. */
   const romNeedsInput = (
-    <NeedsInput onClick={openUnifiedPicker}>
-      Add ROM in <b className="hexref mono">0x01</b> or click for any input
-    </NeedsInput>
+    <>
+      <NeedsInput onClick={openUnifiedPicker}>
+        Add ROM in <b className="hexref mono">0x01</b> or click for any input
+      </NeedsInput>
+      {canSearchRomHash && !manualRomLookup ? (
+        <RomHashSearch localizer={localizer} lookup={romHashLookup} variant="section" />
+      ) : null}
+    </>
   );
   const patchesNeedsInput = (
     <NeedsInput onClick={openUnifiedPicker}>

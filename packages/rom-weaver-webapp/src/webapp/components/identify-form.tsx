@@ -324,14 +324,9 @@ const IdentifyForm = ({
   ) : null;
 
   return (
-    <section className="panel" id={containerId}>
+    <section className="panel identify-panel" id={containerId}>
       <UnifiedDropZone
         addLabel={file ? "Replace the ROM" : expectation ? "Add the ROM to verify it" : "Add a ROM to identify it"}
-        /* The search is the hero's quiet second door, after the drop target;
-           once a match fills 0x02 it moves there as the refine row. */
-        afterDropZone={
-          heroShown ? <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} /> : null
-        }
         big={heroShown}
         disabled={busy}
         {...(!file && expectation ? { hint: "Optional - the match above stands on its own" } : {})}
@@ -350,6 +345,13 @@ const IdentifyForm = ({
           if (selected) selectFile(selected);
         }}
         supported={IDENTIFY_SUPPORTED_FILES}
+        afterDropZone={
+          heroShown ? (
+            <div className="identify-hash-island">
+              <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
+            </div>
+          ) : null
+        }
       />
       {file ? (
         <WorkflowRomInputStep
