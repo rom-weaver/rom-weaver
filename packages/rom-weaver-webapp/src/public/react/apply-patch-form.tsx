@@ -23,6 +23,7 @@ import {
   type ApplyWorkflowSessionInput,
   type ApplyWorkflowSyncState,
   createBaseApplyWorkflowSettings,
+  createPatchStageInfoMapper,
   createWorkflowOutputOverridesKey,
   createWorkflowPreparationSettingsKey,
   createWorkflowSettingsKey,
@@ -78,17 +79,8 @@ const buildEagerPatchStageInfo = (
   if (!patch || patch.status !== "ready") return null;
   const patchSource = workflow.getPatchSources().filter(isReactBinarySource)[order];
   const fileName = getReactBinarySourceFileName(patchSource ?? snapshot.patches[order] ?? null, `Patch ${order + 1}`);
-  const inputLabelById = new Map(
-    toStagedInputInfos(workflow.getInput(), snapshot.inputs).map((entry) => [
-      entry.id || "",
-      entry.fileName || "Input",
-    ]),
-  );
-  const targetName =
-    patch.targetInputFileName ||
-    (patch.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
-    "None selected";
-  return toPatchStageInfo(patch, fileName, order, `Target: ${targetName}`);
+  const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(workflow.getInput(), snapshot.inputs));
+  return buildInfo(patch, order, fileName);
 };
 
 const getApplyOutputVerification = ({
@@ -1195,19 +1187,16 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           if (!input.patches.length) {
             const implicitPatchSources = workflow.getPatchSources().filter(isReactBinarySource);
             if (implicitPatchSources.length) {
-              const inputLabelById = new Map(infos.map((entry) => [entry.id || "", entry.fileName || "Input"]));
-              const implicitPatchInfos = workflow.getPatches().map((patch, index) => {
-                const targetName =
-                  patch?.targetInputFileName ||
-                  (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
-                  "None selected";
-                return toPatchStageInfo(
-                  patch,
-                  getReactBinarySourceFileName(implicitPatchSources[index] || null, `Patch ${index + 1}`),
-                  index,
-                  `Target: ${targetName}`,
+              const buildInfo = createPatchStageInfoMapper(infos);
+              const implicitPatchInfos = workflow
+                .getPatches()
+                .map((patch, index) =>
+                  buildInfo(
+                    patch,
+                    index,
+                    getReactBinarySourceFileName(implicitPatchSources[index] || null, `Patch ${index + 1}`),
+                  ),
                 );
-              });
               handlers.onImplicitPatches?.(implicitPatchSources, implicitPatchInfos);
             }
           }
@@ -1248,16 +1237,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         async ({ input: stagedInput, patches, workflow }) => {
           preparedWorkflowRef.current = workflow;
           bundleSourcesRef.current = workflow.getBundleExportSources();
-          const inputLabelById = new Map(
-            toStagedInputInfos(stagedInput, input.inputs).map((entry) => [entry.id || "", entry.fileName || "Input"]),
-          );
-          const buildInfo = (patch: (typeof patches)[number], index: number, fileName: string): PatchStageInfo => {
-            const targetName =
-              patch?.targetInputFileName ||
-              (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
-              "None selected";
-            return toPatchStageInfo(patch, fileName, index, `Target: ${targetName}`);
-          };
+          const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(stagedInput, input.inputs));
           // A nested patch archive with several patches fans out into N independent leaf sources;
           // surface them so React grows its patch stack instead of showing only the dropped archive.
           const fannedPatchSources = workflow.getPatchSources().filter(isReactBinarySource);
@@ -1313,9 +1293,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           },
         },
         async ({ input: stagedInput, workflow }) => {
-          const inputLabelById = new Map(
-            toStagedInputInfos(stagedInput, input.inputs).map((entry) => [entry.id || "", entry.fileName || "Input"]),
-          );
+          const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(stagedInput, input.inputs));
           const buildInfos = () => {
             const patchSources = workflow.getPatchSources().filter(isReactBinarySource);
             return workflow.getPatches().map((patch, index) => {
@@ -1323,11 +1301,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
                 patchSources[index] || null,
                 originalNames[index] || `Patch ${index + 1}`,
               );
-              const targetName =
-                patch?.targetInputFileName ||
-                (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
-                "None selected";
-              return toPatchStageInfo(patch, fileName, index, `Target: ${targetName}`);
+              return buildInfo(patch, index, fileName);
             });
           };
           onVerifying?.(buildInfos());
@@ -1369,24 +1343,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();
           setApplyReady(workflow.getSnapshot().ready && refreshedPatches.length === input.patches.length);
-          const inputLabelById = new Map(
-            toStagedInputInfos(refreshedInput || stagedInput, input.inputs).map((entry) => [
-              entry.id || "",
-              entry.fileName || "Input",
-            ]),
+          const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(refreshedInput || stagedInput, input.inputs));
+          return refreshedPatches.map((patch, index) =>
+            buildInfo(patch, index, originalNames[index] || `Patch ${index + 1}`),
           );
-          return refreshedPatches.map((patch, index) => {
-            const targetName =
-              patch?.targetInputFileName ||
-              (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
-              "None selected";
-            return toPatchStageInfo(
-              patch,
-              originalNames[index] || `Patch ${index + 1}`,
-              index,
-              `Target: ${targetName}`,
-            );
-          });
         },
       );
     },
@@ -1440,24 +1400,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           }
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();
-          const inputLabelById = new Map(
-            toStagedInputInfos(refreshedInput || stagedInput, input.inputs).map((entry) => [
-              entry.id || "",
-              entry.fileName || "Input",
-            ]),
+          const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(refreshedInput || stagedInput, input.inputs));
+          return refreshedPatches.map((patch, index) =>
+            buildInfo(patch, index, originalNames[index] || `Patch ${index + 1}`),
           );
-          return refreshedPatches.map((patch, index) => {
-            const targetName =
-              patch?.targetInputFileName ||
-              (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
-              "None selected";
-            return toPatchStageInfo(
-              patch,
-              originalNames[index] || `Patch ${index + 1}`,
-              index,
-              `Target: ${targetName}`,
-            );
-          });
         },
       );
     },

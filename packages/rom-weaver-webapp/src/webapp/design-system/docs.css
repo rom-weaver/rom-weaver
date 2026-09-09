@@ -930,25 +930,6 @@ html:has(.docs-workbench) {
   color: var(--ink);
   white-space: nowrap;
 }
-.rw-app .docs-step:focus-visible,
-.rw-app .docs-to-top:focus-visible {
-  outline: 2px solid var(--thread);
-  outline-offset: 3px;
-}
-@media (hover: hover) {
-  .rw-app .docs-step:hover,
-  .rw-app .docs-to-top:hover {
-    color: var(--ink);
-    border-color: var(--ink-4);
-    transform: translateY(-1px);
-  }
-}
-.rw-app .docs-step:active,
-.rw-app .docs-to-top:active {
-  color: var(--ink);
-  border-color: var(--ink-4);
-  transform: translateY(0) scale(0.99);
-}
 .rw-app .docs-source-link {
   display: flex;
   align-items: center;
@@ -971,17 +952,23 @@ html:has(.docs-workbench) {
     color 0.18s,
     transform 0.15s var(--ease);
 }
+.rw-app .docs-step:focus-visible,
+.rw-app .docs-to-top:focus-visible,
 .rw-app .docs-source-link:focus-visible {
   outline: 2px solid var(--thread);
   outline-offset: 3px;
 }
 @media (hover: hover) {
+  .rw-app .docs-step:hover,
+  .rw-app .docs-to-top:hover,
   .rw-app .docs-source-link:hover {
     color: var(--ink);
     border-color: var(--ink-4);
     transform: translateY(-1px);
   }
 }
+.rw-app .docs-step:active,
+.rw-app .docs-to-top:active,
 .rw-app .docs-source-link:active {
   color: var(--ink);
   border-color: var(--ink-4);
