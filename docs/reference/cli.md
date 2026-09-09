@@ -40,7 +40,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | --- | --- |
 | `probe` | Identify a file: its format, its platform, and any header it carries. |
 | `extract` | Unpack an archive or single-payload compressed format. |
-| `identify` | Match a ROM checksum to an exact dump name in local title data. |
+| `identify` | Match a ROM checksum, or a game name, to an exact dump name in local title data. |
 | `checksum` | Hash a file, a byte range, or a ROM inside an archive. |
 | `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
@@ -135,6 +135,8 @@ Native identify performs no network access.
 - `--hash HEX` identifies from a checksum instead of a file. The algorithm comes from the length: 8 characters for CRC32, 32 for MD5, 40 for SHA-1, 64 for SHA-256. Repeatable, one value per algorithm. Give exactly one of `--input` or `--hash`.
 - `--size BYTES` gives the exact byte size to pair with `--hash`, narrowing the lookup to records of that size. It only applies with `--hash`.
 - `--database PACK` searches a local RWFP1 pack instead of the built-in data and the installed packs. The pack may be raw or Brotli compressed (`.pack.br`, as the packaged data ships it). Repeatable.
+- `--name QUERY` searches the database for games whose name matches `QUERY`, instead of identifying a file or a checksum. It needs a pack selection, so give `--system` or `--database` with it; without one it is an error. It cannot be combined with `--input` or `--hash`. Matching ignores case, punctuation, and accents (`asterix` matches `Astérix`), every query word must match, and the search covers each record's name, its alternate names, and its dump tags.
+- `--limit N` caps the number of matches `--name` returns. The default is 50. `N` must be at least 1, and `--limit` without `--name` is an error.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.

@@ -671,6 +671,28 @@ pub struct IdentifyCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "name",
+            value_name = "QUERY",
+            help = "Search the database for games whose name matches QUERY, instead of identifying a file or checksum"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub name: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "limit",
+            value_name = "N",
+            help = "Maximum number of matches --name returns [default: 50]"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub limit: Option<u32>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             help = "Assert that identify performs no network access (it never does natively; this flag records the guarantee)"
         )

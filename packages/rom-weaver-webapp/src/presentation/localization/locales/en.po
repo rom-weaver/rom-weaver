@@ -265,6 +265,11 @@ msgstr "CD Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformChange"
+msgstr "Change"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
 msgstr "Change how you play."
 
@@ -282,6 +287,16 @@ msgstr "Checksum validation failed."
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalidChars"
 msgstr "Checksums use only the hex characters 0-9 and a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformFirst"
+msgstr "Choose a platform first"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameResults"
+msgstr "Choose the ROM you need"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -415,6 +430,11 @@ msgstr "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameTooShort"
+msgstr "Enter at least 2 characters of the game name."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Environment"
 
@@ -475,6 +495,11 @@ msgstr "Fix ROM header"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlaceholder"
+msgstr "Game name"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.kindGuide"
 msgstr "Guide"
 
@@ -492,6 +517,11 @@ msgstr "Identify"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashDisclosure"
 msgstr "Identify by checksum"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameDisclosure"
+msgstr "Identify by game name"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -685,6 +715,16 @@ msgstr "No offline files are cached."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformEmpty"
+msgstr "No platform matches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameNoMatch"
+msgstr "No ROM in this platform's data has that name."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No selectable file was found."
 
@@ -802,6 +842,11 @@ msgstr "Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.patchesIgnored"
 msgstr "Patches belong in Apply and were ignored."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformLabel"
+msgstr "Platform"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -950,12 +995,22 @@ msgstr "Search"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameSearch"
+msgstr "Search"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.hashSearchAgain"
 msgstr "Search again"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashSearching"
+msgstr "Searching…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameSearching"
 msgstr "Searching…"
 
 #. js-lingui-explicit-id
@@ -1115,8 +1170,23 @@ msgstr "The file host must allow cross-origin downloads (CORS)."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameUnavailable"
+msgstr "The identification data for this platform is not available on this device."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameFailed"
+msgstr "The name search failed."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "The patch target did not match the selected input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformsFailed"
+msgstr "The platform list could not be loaded."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1228,6 +1298,11 @@ msgstr "Try your ROM."
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Turn all on"
 
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformPlaceholder"
+msgstr "Type to filter platforms"
+
 #~ msgid "ui.find.kindSetting"
 #~ msgstr "Setting"
 
@@ -1291,6 +1366,11 @@ msgstr "What the offline states mean"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "What’s new"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameLabel"
+msgstr "Which game do you need?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

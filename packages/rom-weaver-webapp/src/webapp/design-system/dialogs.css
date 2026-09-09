@@ -63,14 +63,6 @@
   padding: var(--sp-l);
   border-block-end: 1px solid var(--seam-soft);
 }
-.dlg-title {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
 .dlg-actions {
   display: inline-flex;
   gap: var(--sp-s);
@@ -148,9 +140,6 @@
   row-gap: var(--sp-m);
   align-items: flex-end;
   padding-block-end: 0;
-}
-.rw-app .log-dlg .dlg-title {
-  flex: 0 1 auto;
 }
 /* Close shares the rail's row but not its baseline - sitting it on the rule
    would read as one more tab. Every other control moved to the bar below.

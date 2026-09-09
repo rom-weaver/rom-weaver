@@ -11,6 +11,7 @@ Use `probe` to inspect the file type. Use `checksum` to prove which bytes it hol
 - [Install the default identify data](#install-the-default-identify-data)
 - [Install an optional group](#install-an-optional-group)
 - [Force a system](#force-a-system)
+- [Find a game by name](#find-a-game-by-name)
 - [Inspect a file](#inspect-a-file)
 - [Hash a file](#hash-a-file)
 - [Hash the ROM inside an archive](#hash-the-rom-inside-an-archive)
@@ -84,6 +85,22 @@ rom-weaver identify --input dump.bin --system psx
 ```
 
 Use it when detection picks the wrong platform, or when a headerless dump detects nothing. `rom-weaver identify database list` prints the accepted names.
+
+## Find a game by name
+
+Search one system's pack for a title, without having the file:
+
+```bash
+rom-weaver identify --system snes --name "super mario world"
+```
+
+`--name` needs a pack to search, so give `--system` or `--database` with it. Matching ignores case, punctuation, and accents, and every word in the query must match. The search also reads the alternate names and the dump tags of each record. Dump tags are GoodTools codes, so give the code or its label: `--name "zelda verified"` keeps only the records tagged `!`.
+
+Show more than the first 50 results:
+
+```bash
+rom-weaver identify --system snes --name zelda --limit 200
+```
 
 ## Inspect a file
 
