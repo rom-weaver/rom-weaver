@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { MESSAGE_CATALOGS } from "../../src/presentation/localization/catalog.ts";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { loadCatalog, MESSAGE_CATALOGS, SHIPPED_LOCALES } from "../../src/presentation/localization/catalog.ts";
 import {
   createBrowserLocalizer,
   createLocalizer,
@@ -8,6 +8,12 @@ import {
   negotiateLocale,
 } from "../../src/presentation/localization/index.ts";
 import { SETTINGS_FIELD_METADATA } from "../../src/webapp/settings/settings-metadata.ts";
+
+// Every catalog but English is a lazy chunk; the contract tests below read
+// the translations synchronously, so land them all first.
+beforeAll(async () => {
+  await Promise.all(SHIPPED_LOCALES.map((locale) => loadCatalog(locale)));
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

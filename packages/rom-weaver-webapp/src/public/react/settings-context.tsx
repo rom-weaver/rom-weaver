@@ -1,8 +1,13 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, useSyncExternalStore } from "react";
 import { resolveCompressionLevels } from "../../lib/compression/compression-settings.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { normalizeByteUnitSystem } from "../../presentation/formatting/index.ts";
-import { createBrowserLocalizer, type Localizer } from "../../presentation/localization/index.ts";
+import {
+  createBrowserLocalizer,
+  getCatalogVersion,
+  type Localizer,
+  subscribeCatalogs,
+} from "../../presentation/localization/index.ts";
 import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import type {
   ApplyPatchFormSettings,
@@ -46,6 +51,8 @@ type WorkflowLogRecord = {
   message?: string;
   namespace?: string;
 };
+
+const uiLocalizerLogger = createLogger("ui-localizer");
 
 const workflowLoggerByNamespace = new Map<string, ReturnType<typeof createLogger>>();
 
@@ -106,7 +113,13 @@ const useUiLocalizer = (): Localizer => {
       ? ((settings as { language?: string }).language as string)
       : undefined;
   const byteUnits = normalizeByteUnitSystem((settings as { byteUnits?: unknown }).byteUnits);
-  return useMemo(() => createBrowserLocalizer(language, byteUnits), [byteUnits, language]);
+  // A catalog that was still loading when this rendered lands later; the
+  // version bump re-issues the localizer so memoized consumers see a new one.
+  const catalogVersion = useSyncExternalStore(subscribeCatalogs, getCatalogVersion, getCatalogVersion);
+  return useMemo(() => {
+    uiLocalizerLogger.trace("Issuing UI localizer", { byteUnits, catalogVersion, language });
+    return createBrowserLocalizer(language, byteUnits);
+  }, [byteUnits, catalogVersion, language]);
 };
 
 const normalizeDefaultCompression = (value: RuntimeValue, fallback: DefaultCompressionMode = "auto") => {
