@@ -10,8 +10,11 @@ target/*
 **/dist
 **/.vitest-attachments
 **/__screenshots__
-crates/rom-weaver-cli/data/identify/v1/*.pack
-crates/rom-weaver-cli/data/identify/v1/index.json
+# The built identify tree is generated, never a build input: both images build
+# it inside the image or copy it from `target/` with `IDENTIFY_DATA=prebuilt`.
+# Left in, a pack change would invalidate the `COPY . .` layer and the whole
+# wasm compile behind it.
+crates/rom-weaver-cli/data/identify/v1/*
 prototype
 third_party
 *.log
