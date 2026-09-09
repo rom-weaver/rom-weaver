@@ -607,6 +607,7 @@ fn conflict_detection_reports_different_values_only() {
     let entries = vec![
         (
             "first".to_string(),
+            CheatSystem::Genesis,
             vec![CheatWrite {
                 offset: 10,
                 value: 0x1234,
@@ -615,6 +616,7 @@ fn conflict_detection_reports_different_values_only() {
         ),
         (
             "same".to_string(),
+            CheatSystem::Genesis,
             vec![CheatWrite {
                 offset: 10,
                 value: 0x12,
@@ -623,6 +625,7 @@ fn conflict_detection_reports_different_values_only() {
         ),
         (
             "conflict".to_string(),
+            CheatSystem::Genesis,
             vec![CheatWrite {
                 offset: 11,
                 value: 0xff,
@@ -844,5 +847,89 @@ fn cheat_system_serde_names_match_the_database_shards() {
             system
         );
         assert_eq!(CheatSystem::parse(system.id()), Some(system));
+    }
+}
+
+#[test]
+fn conflict_detection_uses_the_system_byte_order() {
+    // GBA writes little-endian, so 0x9934 puts 0x34 - not 0x99 - on offset
+    // 0x100, where the byte-write of 0x99 lands.
+    let entries = vec![
+        (
+            "word".to_string(),
+            CheatSystem::GameBoyAdvance,
+            vec![CheatWrite {
+                offset: 0x100,
+                value: 0x9934,
+                width: 2,
+            }],
+        ),
+        (
+            "byte".to_string(),
+            CheatSystem::GameBoyAdvance,
+            vec![CheatWrite {
+                offset: 0x100,
+                value: 0x99,
+                width: 1,
+            }],
+        ),
+    ];
+    assert_eq!(
+        detect_write_conflicts(&entries),
+        vec![CheatWriteConflict {
+            first_id: "word".to_string(),
+            second_id: "byte".to_string(),
+            offset: 0x100,
+            first_value: 0x34,
+            second_value: 0x99,
+        }]
+    );
+}
+
+#[test]
+fn conflict_detection_covers_four_byte_writes() {
+    let entries = vec![
+        (
+            "first".to_string(),
+            CheatSystem::PlayStation,
+            vec![CheatWrite {
+                offset: 0x200,
+                value: 0x1111_1111,
+                width: 4,
+            }],
+        ),
+        (
+            "second".to_string(),
+            CheatSystem::PlayStation,
+            vec![CheatWrite {
+                offset: 0x202,
+                value: 0x2222_2222,
+                width: 4,
+            }],
+        ),
+    ];
+    let conflicts = detect_write_conflicts(&entries);
+    assert_eq!(
+        conflicts
+            .iter()
+            .map(|conflict| conflict.offset)
+            .collect::<Vec<_>>(),
+        vec![0x202, 0x203]
+    );
+}
+
+#[test]
+fn apply_writes_and_conflict_detection_agree_on_the_bytes() {
+    // Both paths route through `write_bytes`, so a write that conflict
+    // detection reads as byte N is the byte `apply_writes` puts at offset N.
+    for system in [CheatSystem::GameBoyAdvance, CheatSystem::Genesis] {
+        let write = CheatWrite {
+            offset: 4,
+            value: 0xABCD,
+            width: 2,
+        };
+        let mut rom = vec![0u8; 8];
+        apply_writes(&mut rom, system, &[write]).unwrap();
+        assert_eq!(&rom[4..6], write_bytes(&write, system).unwrap().as_slice());
     }
 }

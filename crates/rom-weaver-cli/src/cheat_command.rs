@@ -40,7 +40,7 @@ impl CliApp {
             .iter()
             .filter_map(|entry| match &entry.resolution {
                 CheatResolution::RomBakeable { writes } => {
-                    Some((entry.record.id.clone(), writes.clone()))
+                    Some((entry.record.id.clone(), entry.record.system, writes.clone()))
                 }
                 CheatResolution::Unsupported { .. } => None,
             })
