@@ -1,3 +1,4 @@
+import { resolveBundleChecks } from "../../src/lib/bundle/bundle-targets.ts";
 import { createElement } from "react";
 import { expect, test, vi } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
@@ -156,7 +157,8 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // than intercepting the browser download.
   const result = await waitForState(() => exported, 60000);
   expect(result).not.toBeNull();
-  expect(result.bundle.version).toBe(1);
+  expect(result.bundle.version).toBe(2);
+  expect(result.bundle.patchBasis).toBe("auto");
   // Bundles carry no display name; the export name feeds output naming only.
   expect(result.bundle.name).toBeUndefined();
   expect(result.bundle.output?.name).toBe("Exported Hack");
@@ -167,7 +169,11 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(result.bundle.rom?.path ?? null).toBeNull();
   expect(result.bundle.rom?.url ?? null).toBeNull();
   expect(result.bundle.rom?.name).toBe(RAW_ROM.split("/").pop());
-  expect(Object.keys(result.bundle.rom?.checks?.checksums || {}).length).toBeGreaterThan(0);
+  expect(
+    Object.keys(
+      resolveBundleChecks(result.bundle, result.bundle.rom?.checks, result.bundle.rom?.checksRef)?.checksums || {},
+    ).length,
+  ).toBeGreaterThan(0);
   expect(result.bundle.patches).toHaveLength(1);
   const patchEntry = result.bundle.patches[0];
   expect(patchEntry.id).toBeTruthy();
@@ -178,8 +184,12 @@ test("export bundle bundles the session from main-page options with a checks-onl
   expect(patchEntry.author).toBe("Weaver");
   expect(patchEntry.description).toBe("Adds the change");
   // The hand-typed crc32 differs from the rom checks, so the entry keeps its
-  // own inputChecks instead of relying on rom.checks.
-  expect(patchEntry.inputChecks?.checksums?.crc32).toBe("deadbeef");
+  // own check-state reference instead of relying on the ROM state.
+  expect(resolveBundleChecks(result.bundle, patchEntry.inputChecks, patchEntry.inputChecksRef)?.checksums?.crc32).toBe(
+    "deadbeef",
+  );
+  expect(patchEntry.inputChecksRef).toBeDefined();
+  expect(patchEntry.inputChecks).toBeUndefined();
   // Export does not invent a final output check; only explicit/user-entered
   // checks are retained.
   expect(patchEntry.outputChecks).toBeUndefined();
@@ -194,9 +204,27 @@ test("export bundle bundles the session from main-page options with a checks-onl
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
   }, 30000);
   expect(downloadButton.textContent).toContain("Download");
-  downloadButton.click();
-  await expect.poll(() => saveAs.mock.calls.length).toBe(2);
-  await expect.poll(() => downloadButton.disabled).toBe(false);
+  const firstResult = exported;
+  setFormControlValue(await waitForState(() => document.getElementById("rom-weaver-patch-basis-0")), "base");
+  const shareButton = await waitForState(() => {
+    const button = document.getElementById("rom-weaver-button-export-bundle");
+    return button instanceof HTMLButtonElement && !button.disabled && button.textContent?.includes("Share")
+      ? button
+      : null;
+  });
+  shareButton.click();
+  const updatedResult = await waitForState(() => (exported === firstResult ? null : exported), 60000);
+  expect(updatedResult.bundle.patches[0]?.basis).toBe("base");
+
+  const updatedDownloadButton = await waitForState(() => {
+    const button = document.getElementById("rom-weaver-button-export-bundle");
+    return button instanceof HTMLButtonElement && !button.disabled && button.textContent?.includes("Download")
+      ? button
+      : null;
+  });
+  updatedDownloadButton.click();
+  await expect.poll(() => saveAs.mock.calls.length).toBe(3);
+  await expect.poll(() => updatedDownloadButton.disabled).toBe(false);
   saveAs.mockRestore();
 });
 

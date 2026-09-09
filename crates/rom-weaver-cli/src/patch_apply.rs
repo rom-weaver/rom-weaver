@@ -1,7 +1,7 @@
 use super::*;
 
 use super::bundle_apply::BundleApplyResolution;
-use super::bundle_parse::bundle_validation;
+use super::bundle_parse::{bundle_validation, normalized_member_path};
 use super::patch_apply_disc::DiscContext;
 use super::patch_basis_decision::ChecksumBasisProof;
 use super::patch_commands::{
@@ -25,6 +25,117 @@ fn path_is_occupied(path: &Path) -> Result<bool> {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(RomWeaverError::Io(error)),
+    }
+}
+
+fn validate_patch_step_selectors(
+    inputs: &[Option<BundlePatchInput>],
+    targets: &[Option<BundlePatchInput>],
+    ids: &[Option<String>],
+) -> Result<()> {
+    if inputs.len() != targets.len() || inputs.len() != ids.len() {
+        return Err(RomWeaverError::Validation(
+            "patch inputs, targets, and IDs must align with the patch list".to_string(),
+        ));
+    }
+    let mut producers = BTreeSet::new();
+    for (index, ((input, target), id)) in inputs.iter().zip(targets).zip(ids).enumerate() {
+        for (kind, selector) in [("input", input), ("target", target)] {
+            let Some(selector) = selector else {
+                continue;
+            };
+            match selector {
+                BundlePatchInput::Rom { rom, member } => {
+                    if !rom {
+                        return Err(RomWeaverError::Validation(format!(
+                            "patch {kind} at index {index} has rom=false"
+                        )));
+                    }
+                    if let Some(member) = member
+                        && normalized_member_path(member, "patch member").is_err()
+                    {
+                        return Err(RomWeaverError::Validation(format!(
+                            "patch {kind} at index {index} has an invalid member selector"
+                        )));
+                    }
+                }
+                BundlePatchInput::Patch { patch, member } => {
+                    if patch.trim().is_empty() || !producers.contains(patch) {
+                        return Err(RomWeaverError::Validation(format!(
+                            "patch {kind} at index {index} must reference an earlier patch ID"
+                        )));
+                    }
+                    if let Some(member) = member
+                        && normalized_member_path(member, "patch member").is_err()
+                    {
+                        return Err(RomWeaverError::Validation(format!(
+                            "patch {kind} at index {index} has an invalid member selector"
+                        )));
+                    }
+                }
+            }
+        }
+        if let Some(id) = id
+            && (id.trim().is_empty() || !producers.insert(id.clone()))
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "patch ID at index {index} must be unique and non-empty"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Direct JSON/WASM selectors bypass bundle parsing, so normalize their member
+/// keys before they become lane-map keys. Invalid values remain for the shared
+/// validator to report with the command's normal error shape.
+fn normalize_patch_step_member_selectors(selectors: &mut [Option<BundlePatchInput>]) {
+    for selector in selectors.iter_mut().flatten() {
+        let member = match selector {
+            BundlePatchInput::Rom { member, .. } | BundlePatchInput::Patch { member, .. } => member,
+        };
+        if let Some(value) = member
+            && let Ok(normalized) = normalized_member_path(value, "patch member")
+        {
+            *value = normalized;
+        }
+    }
+}
+
+struct DirectPatchStepSelectors {
+    inputs: Vec<Option<BundlePatchInput>>,
+    targets: Vec<Option<BundlePatchInput>>,
+    ids: Vec<Option<String>>,
+}
+
+fn prepare_direct_patch_step_selectors(
+    mut inputs: Vec<Option<BundlePatchInput>>,
+    mut targets: Vec<Option<BundlePatchInput>>,
+    ids: Vec<String>,
+    patch_count: usize,
+) -> DirectPatchStepSelectors {
+    let count = if inputs.is_empty() && targets.is_empty() && ids.is_empty() {
+        0
+    } else {
+        patch_count
+    };
+    if inputs.is_empty() {
+        inputs.resize(count, None);
+    }
+    if targets.is_empty() {
+        targets.resize(count, None);
+    }
+    let ids = if ids.is_empty() {
+        vec![None; count]
+    } else {
+        ids.into_iter().map(Some).collect()
+    };
+    normalize_patch_step_member_selectors(&mut inputs);
+    normalize_patch_step_member_selectors(&mut targets);
+    DirectPatchStepSelectors {
+        inputs,
+        targets,
+        ids,
     }
 }
 
@@ -68,8 +179,12 @@ fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
 struct EmitBundleInputs {
     input: PathBuf,
     patches: Vec<PathBuf>,
+    ids: Vec<Option<String>>,
+    patch_inputs: Vec<Option<BundlePatchInput>>,
+    patch_targets: Vec<Option<BundlePatchInput>>,
     headers: Vec<PatchApplyHeaderMode>,
     bases: Vec<PatchBasisMode>,
+    default_basis: PatchBasisMode,
     output: Option<PathBuf>,
     threads: ThreadBudget,
 }
@@ -174,7 +289,14 @@ impl CliApp {
             {
                 return outcome;
             }
-            return self.run_patch_apply_resolved(args, None, original_input, None, &mut None);
+            return self.run_patch_apply_resolved(
+                args,
+                None,
+                original_input,
+                None,
+                &mut None,
+                None,
+            );
         }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -240,11 +362,27 @@ impl CliApp {
             return outcome;
         }
         let emit_bundle = args.emit_bundle.clone();
-        let emit_inputs = emit_bundle.as_ref().map(|_| EmitBundleInputs {
+        let mut emit_inputs = emit_bundle.as_ref().map(|_| EmitBundleInputs {
             input: args.input.clone(),
             patches: args.patches.clone(),
+            ids: bundle_resolution
+                .as_ref()
+                .map(|resolution| resolution.step_ids.clone())
+                .unwrap_or_else(|| args.patch_id.iter().cloned().map(Some).collect()),
+            patch_inputs: bundle_resolution
+                .as_ref()
+                .map(|resolution| resolution.step_inputs.clone())
+                .unwrap_or_else(|| args.patch_input.clone()),
+            patch_targets: bundle_resolution
+                .as_ref()
+                .map(|resolution| resolution.step_targets.clone())
+                .unwrap_or_else(|| args.patch_target.clone()),
             headers: args.patch_header.clone(),
             bases: args.patch_basis.clone(),
+            default_basis: bundle_resolution
+                .as_ref()
+                .map(|resolution| resolution.patch_basis)
+                .unwrap_or(args.default_patch_basis.unwrap_or(PatchBasisMode::Auto)),
             output: args.output.clone(),
             threads: args.threads,
         });
@@ -261,6 +399,7 @@ impl CliApp {
                 original_input,
                 local_bundle,
                 &mut final_output,
+                emit_inputs.as_mut().map(|inputs| &mut inputs.bases),
             )
         };
         // --emit-bundle failures don't undo the already-written apply; warn
@@ -296,6 +435,9 @@ impl CliApp {
             .enumerate()
             .map(|(index, path)| BundleCreatePatchSpec {
                 path: path.clone(),
+                id: inputs.ids.get(index).cloned().flatten(),
+                input: inputs.patch_inputs.get(index).cloned().flatten(),
+                target: inputs.patch_targets.get(index).cloned().flatten(),
                 header: inputs.headers.get(index).copied(),
                 basis: inputs.bases.get(index).and_then(|mode| mode.declared()),
                 ..BundleCreatePatchSpec::default()
@@ -317,6 +459,7 @@ impl CliApp {
             .and_then(|name| name.to_str())
             .map(str::to_owned);
         let create = BundleCreateCommand {
+            default_patch_basis: Some(inputs.default_basis),
             rom: Some(inputs.input),
             output: emit_path.to_path_buf(),
             output_name,
@@ -328,6 +471,32 @@ impl CliApp {
         self.bundle_create_inner(&create, &context)?;
         trace!(bundle = %emit_path.display(), "emitted bundle from apply");
         Ok(())
+    }
+
+    fn update_emit_bundle_bases(
+        emit_bases: Option<&mut Vec<PatchBasisMode>>,
+        resolved_patches: &[(PathBuf, PathBuf)],
+        step_verifications: &[patch_plan::PatchStepVerification],
+    ) {
+        let Some(emit_bases) = emit_bases else {
+            return;
+        };
+        if step_verifications.len() != resolved_patches.len() {
+            return;
+        }
+        let Some(bases) = step_verifications
+            .iter()
+            .map(|step| {
+                step.basis.map(|basis| match basis {
+                    patch_plan::PatchInputBasis::Base => PatchBasisMode::Base,
+                    patch_plan::PatchInputBasis::Previous => PatchBasisMode::Previous,
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+        *emit_bases = bases;
     }
 
     /// Preflight every path `patch apply` is about to touch: each patch must be
@@ -368,6 +537,7 @@ impl CliApp {
         original_input: PathBuf,
         local_bundle: Option<PathBuf>,
         final_output: &mut Option<PathBuf>,
+        emit_bases: Option<&mut Vec<PatchBasisMode>>,
     ) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -392,6 +562,12 @@ impl CliApp {
             expect_in,
             patch_header,
             patch_basis,
+            patch_id,
+            patch_input,
+            patch_target,
+            patch_input_check,
+            patch_output_check,
+            default_patch_basis,
             output_header,
             repair_checksum,
             n64_byte_order,
@@ -406,6 +582,31 @@ impl CliApp {
             dry_run,
             threads,
         } = args;
+        let bundle_rom_member = bundle_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.rom_member.as_ref());
+        let DirectPatchStepSelectors {
+            inputs: direct_step_inputs,
+            targets: direct_step_targets,
+            ids: direct_step_ids,
+        } = prepare_direct_patch_step_selectors(patch_input, patch_target, patch_id, patches.len());
+        let input_select = bundle_rom_member
+            .map(std::slice::from_ref)
+            .unwrap_or(&select);
+        let (bundle_step_inputs, bundle_step_targets, bundle_step_ids) = bundle_resolution
+            .as_ref()
+            .map(|resolution| {
+                (
+                    resolution.step_inputs.as_slice(),
+                    resolution.step_targets.as_slice(),
+                    resolution.step_ids.as_slice(),
+                )
+            })
+            .unwrap_or((
+                direct_step_inputs.as_slice(),
+                direct_step_targets.as_slice(),
+                direct_step_ids.as_slice(),
+            ));
         let discover_implicit_patches = patches.is_empty() && codes.is_empty() && !no_extract;
         let input_kind_filter =
             Self::archive_entry_kind_filter(rom_filter || discover_implicit_patches, false);
@@ -586,7 +787,7 @@ impl CliApp {
             } else {
                 let resolved = match self.resolve_source_with_auto_extract(
                     &input,
-                    &select,
+                    input_select,
                     &context,
                     AutoExtractResolutionLabels {
                         command: "patch-apply",
@@ -668,6 +869,69 @@ impl CliApp {
             context.seed_checksums(&resolved_input, &cached_input_checksums);
         }
         let mut temp_paths = input_cleanup_paths;
+        let mut rom_member_inputs = BTreeMap::new();
+        let explicit_rom_members: BTreeSet<&str> = bundle_step_inputs
+            .iter()
+            .chain(bundle_step_targets.iter())
+            .filter_map(|input| match input.as_ref() {
+                Some(BundlePatchInput::Rom {
+                    member: Some(member),
+                    ..
+                }) => Some(member.as_str()),
+                _ => None,
+            })
+            .collect();
+        for member in explicit_rom_members {
+            if let Some(disc) = disc_context.as_ref() {
+                match self.disc_member_path(disc, member) {
+                    Ok(path) => {
+                        rom_member_inputs.insert(member.to_owned(), path);
+                        continue;
+                    }
+                    Err(error) => {
+                        return self.finish("patch-apply", fail("prepare", error.to_string()));
+                    }
+                }
+            }
+            if bundle_rom_member.is_some_and(|root_member| root_member == member) {
+                rom_member_inputs.insert(member.to_owned(), resolved_input.clone());
+                continue;
+            }
+            let resolved = match self.resolve_exact_member_source(
+                &input,
+                member,
+                &context,
+                AutoExtractResolutionLabels {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: None,
+                    source_label: "bundle ROM member",
+                    temp_prefix: "patch-apply-bundle-rom-member",
+                },
+                AutoExtractResolutionFlags {
+                    no_extract,
+                    no_ignore,
+                    kind_filter: input_kind_filter,
+                    stop_on_single_payload_codec: false,
+                },
+            ) {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    return self.finish("patch-apply", fail("prepare", error.to_string()));
+                }
+            };
+            if resolved.extracted_archives == 0 {
+                return self.finish(
+                    "patch-apply",
+                    fail(
+                        "prepare",
+                        format!("bundle ROM input has no extractable member `{member}`"),
+                    ),
+                );
+            }
+            temp_paths.extend(resolved.cleanup_paths);
+            rom_member_inputs.insert(member.to_owned(), resolved.source);
+        }
         temp_paths.extend(discovered_sidecars.cleanup_paths);
         let (mut resolved_patches, extracted_patch_notes) = match self.resolve_patches(
             &patches,
@@ -694,6 +958,30 @@ impl CliApp {
                 return self.finish("patch-apply", fail("prepare", error.to_string()));
             }
         };
+        if (!bundle_step_inputs.is_empty() || !bundle_step_targets.is_empty())
+            && (bundle_step_inputs.len() != resolved_patches.len()
+                || bundle_step_targets.len() != resolved_patches.len()
+                || bundle_step_ids.len() != resolved_patches.len())
+        {
+            Self::cleanup_temp_paths(&temp_paths);
+            return self.finish(
+                "patch-apply",
+                fail(
+                    "prepare",
+                    "bundle patch targets require one resolved file per selected patch".to_string(),
+                ),
+            );
+        }
+        if (!bundle_step_inputs.is_empty() || !bundle_step_targets.is_empty())
+            && let Err(error) = validate_patch_step_selectors(
+                bundle_step_inputs,
+                bundle_step_targets,
+                bundle_step_ids,
+            )
+        {
+            Self::cleanup_temp_paths(&temp_paths);
+            return self.finish("patch-apply", fail("validate", error.to_string()));
+        }
 
         // Bake cheat codes into a synthetic IPS patch applied after the explicit
         // patches, so a cheat wins over a patch that touches the same byte and a
@@ -828,22 +1116,16 @@ impl CliApp {
                 // Resolve every step's input basis (CLI flag > bundle declaration >
                 // inference against the prepared input) and verify declared
                 // base-basis steps against the base once, before the chain runs.
-                let step_verifications = match self.plan_apply_step_verifications(
-                    &resolved_patches,
-                    usize::from(!codes.is_empty()),
+                let bundle_steps = match merge_apply_step_declarations(
                     bundle_resolution
                         .as_ref()
                         .map(|resolution| resolution.step_verifications.clone())
                         .unwrap_or_default(),
-                    &patch_basis,
-                    PatchApplyBaseInputs {
-                        prepared: apply_input.as_path(),
-                        original: resolved_input.as_path(),
-                        prepared_headerless: header_state.headerless.then_some(true),
-                        prepared_n64_byte_order: n64_order.map(|order| order.from),
-                        original_n64_byte_order: n64_order.map(|order| order.to),
-                    },
-                    &context,
+                    &patch_input_check,
+                    &patch_output_check,
+                    resolved_patches
+                        .len()
+                        .saturating_sub(usize::from(!codes.is_empty())),
                 ) {
                     Ok(steps) => steps,
                     Err(error) => {
@@ -856,16 +1138,81 @@ impl CliApp {
                         );
                     }
                 };
+                let shared_patch_basis = bundle_resolution
+                    .as_ref()
+                    .map(|resolution| resolution.patch_basis)
+                    .unwrap_or(default_patch_basis.unwrap_or(PatchBasisMode::Auto));
+                // A target lane may begin from another ROM member or from a
+                // generated output. Plan it only after that seed is available;
+                // using the command's root input here would verify its authored
+                // base checks against unrelated bytes.
+                let target_lanes_present = bundle_step_targets.iter().any(Option::is_some);
+                let planned = if target_lanes_present {
+                    Ok(bundle_steps.clone())
+                } else {
+                    self.plan_apply_step_verifications(
+                        &resolved_patches,
+                        usize::from(!codes.is_empty()),
+                        PatchApplyBasisInputs {
+                            bundle_steps,
+                            shared: shared_patch_basis,
+                            cli: &patch_basis,
+                        },
+                        PatchApplyBaseInputs {
+                            prepared: apply_input.as_path(),
+                            original: resolved_input.as_path(),
+                            prepared_headerless: header_state.headerless.then_some(true),
+                            prepared_n64_byte_order: n64_order.map(|order| order.from),
+                            original_n64_byte_order: n64_order.map(|order| order.to),
+                        },
+                        &context,
+                    )
+                };
+                let step_verifications = match planned {
+                    Ok(steps) => steps,
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "validate",
+                            error.to_string(),
+                            context.single_thread_execution(),
+                        );
+                    }
+                };
+                if !target_lanes_present {
+                    Self::update_emit_bundle_bases(
+                        emit_bases,
+                        &resolved_patches,
+                        &step_verifications,
+                    );
+                }
 
                 let PatchApplyLoopOutcome {
                     mut report,
                     applied_formats,
+                    disc_track_replacements,
                 } = match self.run_patch_apply_loop(RunPatchApplyLoopInputs {
                     resolved_patches: &resolved_patches,
                     apply_input,
                     staged_output: &staged_output,
                     chain_header_modes: &chain_header_modes,
                     step_verifications: &step_verifications,
+                    plan_target_lanes: target_lanes_present,
+                    shared_patch_basis,
+                    cli_patch_basis: &patch_basis,
+                    step_inputs: bundle_step_inputs,
+                    step_targets: bundle_step_targets,
+                    step_ids: bundle_step_ids,
+                    step_input_offset: usize::from(!codes.is_empty()),
+                    rom_member_inputs: &rom_member_inputs,
+                    generated_member_flags: AutoExtractResolutionFlags {
+                        no_extract,
+                        no_ignore,
+                        kind_filter: input_kind_filter,
+                        stop_on_single_payload_codec: false,
+                    },
+                    disc: disc_context.as_ref(),
                     header_state: &mut header_state,
                     chain_n64_modes: &chain_n64_modes,
                     n64_order: &mut n64_order,
@@ -971,22 +1318,7 @@ impl CliApp {
                             if output_was_inferred {
                                 terminal_output_source = raw_ready_output.clone();
                             }
-                            if finalized.repaired_profiles.len() == 1 {
-                                report.label = format!(
-                                    "{}; repaired checksum ({})",
-                                    report.label, finalized.repaired_profiles[0]
-                                );
-                            } else if !finalized.repaired_profiles.is_empty() {
-                                report.label = format!(
-                                    "{}; repaired headers ({})",
-                                    report.label,
-                                    finalized.repaired_profiles.join(", ")
-                                );
-                            }
-                            if let Some(repair_warning) = finalized.repair_warning {
-                                report.label =
-                                    format!("{}; warning={repair_warning}", report.label);
-                            }
+                            Self::append_patch_apply_repair_notes(&mut report, finalized);
                         }
                         Err(error) => {
                             return OperationReport::failed(
@@ -1013,9 +1345,8 @@ impl CliApp {
                         report.label = format!("{}; {}", report.label, warning);
                     }
                     if compression_options.enabled {
-                        match self.disc_target_track_override(disc, &staged_output, &mut temp_paths)
-                        {
-                            Ok(track_override) => disc_track_overrides.push(track_override),
+                        match self.disc_track_overrides(disc, &disc_track_replacements) {
+                            Ok(track_overrides) => disc_track_overrides = track_overrides,
                             Err(error) => {
                                 return OperationReport::failed(
                                     OperationFamily::Patch,
@@ -1028,9 +1359,9 @@ impl CliApp {
                         }
                         raw_ready_output = self.primary_disc_sheet(disc).to_path_buf();
                     } else {
-                        let staged_sheet = match self.stage_disc_directory(
+                        let staged_sheet = match self.stage_disc_directory_with_tracks(
                             disc,
-                            &staged_output,
+                            &disc_track_replacements,
                             &context,
                             &mut temp_paths,
                         ) {
@@ -2866,11 +3197,13 @@ struct PreparedApplyInput {
 struct PatchApplyLoopOutcome {
     report: OperationReport,
     applied_formats: Vec<&'static str>,
+    disc_track_replacements: BTreeMap<PathBuf, PathBuf>,
 }
 
 /// The ROM copier-header state threaded through the patch chain: whether the
 /// bytes currently feeding the next patch are headerless, plus the header
 /// captured at the first strip (for mid-chain restores and the output re-add).
+#[derive(Clone)]
 struct ChainHeaderState {
     headerless: bool,
     stripped_header: Option<Vec<u8>>,
@@ -2897,18 +3230,103 @@ struct PatchApplyBaseInputs<'a> {
     original_n64_byte_order: Option<N64ByteOrder>,
 }
 
+struct PatchApplyBasisInputs<'a> {
+    bundle_steps: Vec<patch_plan::PatchStepVerification>,
+    shared: PatchBasisMode,
+    cli: &'a [PatchBasisMode],
+}
+
+/// Merge JSON-wire per-step checks into bundle declarations. These values are
+/// authored requirements only; execution inputs are selected separately.
+fn merge_apply_step_declarations(
+    mut bundle_steps: Vec<patch_plan::PatchStepVerification>,
+    input_checks: &[String],
+    output_checks: &[String],
+    patch_count: usize,
+) -> Result<Vec<patch_plan::PatchStepVerification>> {
+    if input_checks.is_empty() && output_checks.is_empty() {
+        return Ok(bundle_steps);
+    }
+    for (name, checks) in [
+        ("patch_input_check", input_checks),
+        ("patch_output_check", output_checks),
+    ] {
+        if checks.len() != patch_count {
+            return Err(RomWeaverError::Validation(format!(
+                "{name} must contain one value per patch (or be omitted); got {} value(s) for {patch_count} patch(es)",
+                checks.len()
+            )));
+        }
+    }
+    if bundle_steps.is_empty() {
+        bundle_steps = vec![patch_plan::PatchStepVerification::default(); patch_count];
+    } else if bundle_steps.len() != patch_count {
+        return Err(RomWeaverError::Validation(
+            "bundle patch declarations do not align with the resolved patches".to_string(),
+        ));
+    }
+    for index in 0..patch_count {
+        if !input_checks[index].trim().is_empty() {
+            let parsed =
+                parse_expect_tokens(&[input_checks[index].clone()], "patch_input_check", true)?;
+            bundle_steps[index].declared_input = Some(patch_plan::PlanState {
+                checksums: parsed.checksums,
+                size: parsed.size,
+            });
+        }
+        if !output_checks[index].trim().is_empty() {
+            let parsed =
+                parse_expect_tokens(&[output_checks[index].clone()], "patch_output_check", true)?;
+            bundle_steps[index].declared_output = Some(patch_plan::PlanState {
+                checksums: parsed.checksums,
+                size: parsed.size,
+            });
+        }
+    }
+    Ok(bundle_steps)
+}
+
 struct RunPatchApplyLoopInputs<'a> {
     resolved_patches: &'a [(PathBuf, PathBuf)],
     apply_input: PathBuf,
     staged_output: &'a Path,
     chain_header_modes: &'a [PatchApplyHeaderMode],
     step_verifications: &'a [patch_plan::PatchStepVerification],
+    plan_target_lanes: bool,
+    shared_patch_basis: PatchBasisMode,
+    cli_patch_basis: &'a [PatchBasisMode],
+    step_inputs: &'a [Option<BundlePatchInput>],
+    step_targets: &'a [Option<BundlePatchInput>],
+    step_ids: &'a [Option<String>],
+    step_input_offset: usize,
+    rom_member_inputs: &'a BTreeMap<String, PathBuf>,
+    generated_member_flags: AutoExtractResolutionFlags,
+    disc: Option<&'a DiscContext>,
     header_state: &'a mut ChainHeaderState,
     chain_n64_modes: &'a [PatchN64ByteOrderMode],
     n64_order: &'a mut Option<N64ByteOrderTransform>,
     probe_threads: &'a Option<ThreadExecution>,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
+}
+
+struct LaneVerificationInputs<'a> {
+    index: usize,
+    patch_count: usize,
+    resolved_patches: &'a [(PathBuf, PathBuf)],
+    step_input_offset: usize,
+    step_targets: &'a [Option<BundlePatchInput>],
+    step_verifications: &'a [patch_plan::PatchStepVerification],
+    plan_target_lanes: bool,
+    lane_key: &'a Option<BundlePatchInput>,
+    lane_seeds: &'a BTreeMap<Option<BundlePatchInput>, ProducedPatchOutput>,
+    lane_plans: &'a mut BTreeMap<
+        Option<BundlePatchInput>,
+        BTreeMap<usize, patch_plan::PatchStepVerification>,
+    >,
+    shared_patch_basis: PatchBasisMode,
+    cli_patch_basis: &'a [PatchBasisMode],
+    context: &'a OperationContext,
 }
 
 struct PreparePatchApplyInputInputs<'a> {
@@ -2957,6 +3375,27 @@ pub(super) struct N64TargetResolution {
 }
 
 impl CliApp {
+    fn append_patch_apply_repair_notes(
+        report: &mut OperationReport,
+        finalized: PatchApplyFinalizeResult,
+    ) {
+        if finalized.repaired_profiles.len() == 1 {
+            report.label = format!(
+                "{}; repaired checksum ({})",
+                report.label, finalized.repaired_profiles[0]
+            );
+        } else if !finalized.repaired_profiles.is_empty() {
+            report.label = format!(
+                "{}; repaired headers ({})",
+                report.label,
+                finalized.repaired_profiles.join(", ")
+            );
+        }
+        if let Some(repair_warning) = finalized.repair_warning {
+            report.label = format!("{}; warning={repair_warning}", report.label);
+        }
+    }
+
     /// Apply the resolved chain through temporary intermediates into
     /// `staged_output`. Errors carry the failing operation report.
     fn run_patch_apply_loop(
@@ -2969,6 +3408,16 @@ impl CliApp {
             staged_output,
             chain_header_modes,
             step_verifications,
+            plan_target_lanes,
+            shared_patch_basis,
+            cli_patch_basis,
+            step_inputs,
+            step_targets,
+            step_ids,
+            step_input_offset,
+            rom_member_inputs,
+            generated_member_flags,
+            disc,
             header_state,
             chain_n64_modes,
             n64_order,
@@ -2978,7 +3427,31 @@ impl CliApp {
         } = inputs;
         let patch_count = resolved_patches.len();
         let mut current_input = apply_input;
+        let initial_input = current_input.clone();
+        let initial_header_state = header_state.clone();
+        let initial_n64_order = *n64_order;
+        let mut producer_outputs: BTreeMap<String, ProducedPatchOutput> = BTreeMap::new();
+        let mut target_outputs: BTreeMap<BundlePatchInput, ProducedPatchOutput> = BTreeMap::new();
+        let mut lane_seeds: BTreeMap<Option<BundlePatchInput>, ProducedPatchOutput> =
+            BTreeMap::from([(
+                None,
+                ProducedPatchOutput {
+                    path: initial_input.clone(),
+                    header_state: initial_header_state.clone(),
+                    n64_order: initial_n64_order,
+                },
+            )]);
+        let mut lane_plans: BTreeMap<
+            Option<BundlePatchInput>,
+            BTreeMap<usize, patch_plan::PatchStepVerification>,
+        > = BTreeMap::new();
+        let mut legacy_output = ProducedPatchOutput {
+            path: initial_input.clone(),
+            header_state: initial_header_state.clone(),
+            n64_order: initial_n64_order,
+        };
         let mut applied_formats = Vec::with_capacity(patch_count);
+        let mut disc_track_replacements = BTreeMap::new();
         let mut report = OperationReport::failed(
             OperationFamily::Patch,
             None,
@@ -2988,6 +3461,224 @@ impl CliApp {
         );
 
         for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
+            let user_index = index.checked_sub(step_input_offset);
+            let explicit_input = user_index
+                .and_then(|index| step_inputs.get(index))
+                .and_then(Option::as_ref);
+            let target = user_index
+                .and_then(|index| step_targets.get(index))
+                .and_then(Option::as_ref);
+            if let Some(target) = target {
+                let selected = if let Some(output) = target_outputs.get(target) {
+                    output.clone()
+                } else {
+                    match target {
+                        BundlePatchInput::Rom { member, .. } => match member {
+                            Some(member) => {
+                                let path = rom_member_inputs.get(member).cloned().ok_or_else(|| {
+                                    RomWeaverError::ValidationCode(
+                                        ValidationCodeError::new("bundle.patch.target.rom.member.unavailable")
+                                            .with_message("target ROM member was not resolved from the bundle input")
+                                            .with_field("member", member.clone()),
+                                    )
+                                })
+                                .map_err(|error| Box::new(OperationReport::failed(
+                                    OperationFamily::Patch, None, "validate", error.to_string(),
+                                    context.single_thread_execution(),
+                                )))?;
+                                self.produced_patch_output_for_source(path)
+                                    .map_err(|error| {
+                                        Box::new(OperationReport::failed(
+                                            OperationFamily::Patch,
+                                            None,
+                                            "prepare",
+                                            error.to_string(),
+                                            context.single_thread_execution(),
+                                        ))
+                                    })?
+                            }
+                            None => ProducedPatchOutput {
+                                path: initial_input.clone(),
+                                header_state: initial_header_state.clone(),
+                                n64_order: initial_n64_order,
+                            },
+                        },
+                        BundlePatchInput::Patch { patch, member } => {
+                            let producer = producer_outputs
+                                .get(patch)
+                                .ok_or_else(|| {
+                                    RomWeaverError::ValidationCode(
+                                        ValidationCodeError::new(
+                                            "bundle.patch.target.patch.unavailable",
+                                        )
+                                        .with_message(
+                                            "target patch producer has not produced bytes",
+                                        )
+                                        .with_field("patch", patch.clone()),
+                                    )
+                                })
+                                .map_err(|error| {
+                                    Box::new(OperationReport::failed(
+                                        OperationFamily::Patch,
+                                        None,
+                                        "validate",
+                                        error.to_string(),
+                                        context.single_thread_execution(),
+                                    ))
+                                })?;
+                            match member {
+                                Some(member) => self
+                                    .resolve_generated_patch_output_member(
+                                        producer,
+                                        member,
+                                        generated_member_flags,
+                                        context,
+                                        temp_paths,
+                                    )
+                                    .map_err(|error| {
+                                        Box::new(OperationReport::failed(
+                                            OperationFamily::Patch,
+                                            None,
+                                            "prepare",
+                                            error.to_string(),
+                                            context.single_thread_execution(),
+                                        ))
+                                    })?,
+                                None => producer.clone(),
+                            }
+                        }
+                    }
+                };
+                current_input = selected.path.clone();
+                *header_state = selected.header_state.clone();
+                *n64_order = selected.n64_order;
+                lane_seeds.entry(Some(target.clone())).or_insert(selected);
+            } else {
+                current_input = legacy_output.path.clone();
+                *header_state = legacy_output.header_state.clone();
+                *n64_order = legacy_output.n64_order;
+            }
+            if let Some(input) = explicit_input {
+                match input {
+                    BundlePatchInput::Rom { member, .. } => {
+                        let selected = match member {
+                            Some(member) => {
+                                let path = rom_member_inputs.get(member).cloned().ok_or_else(|| {
+                                    Box::new(OperationReport::failed(
+                                        OperationFamily::Patch,
+                                        None,
+                                        "validate",
+                                        RomWeaverError::ValidationCode(
+                                            ValidationCodeError::new("bundle.patch.input.rom.member.unavailable")
+                                                .with_message("input ROM member was not resolved from the bundle input")
+                                                .with_field("member", member.clone()),
+                                        ).to_string(),
+                                        context.single_thread_execution(),
+                                    ))
+                                })?;
+                                self.produced_patch_output_for_source(path)
+                                    .map_err(|error| {
+                                        Box::new(OperationReport::failed(
+                                            OperationFamily::Patch,
+                                            None,
+                                            "prepare",
+                                            error.to_string(),
+                                            context.single_thread_execution(),
+                                        ))
+                                    })?
+                            }
+                            None => ProducedPatchOutput {
+                                path: initial_input.clone(),
+                                header_state: initial_header_state.clone(),
+                                n64_order: initial_n64_order,
+                            },
+                        };
+                        current_input = selected.path;
+                        *header_state = selected.header_state;
+                        *n64_order = selected.n64_order;
+                    }
+                    BundlePatchInput::Patch { patch, member } => {
+                        let Some(produced) = producer_outputs.get(patch) else {
+                            return Err(Box::new(OperationReport::failed(
+                                OperationFamily::Patch,
+                                None,
+                                "validate",
+                                RomWeaverError::ValidationCode(
+                                    ValidationCodeError::new(
+                                        "bundle.patch.input.patch.unavailable",
+                                    )
+                                    .with_message("patch input producer has not produced bytes")
+                                    .with_field("patch", patch.clone()),
+                                )
+                                .to_string(),
+                                context.single_thread_execution(),
+                            )));
+                        };
+                        let selected = match member {
+                            Some(member) => self
+                                .resolve_generated_patch_output_member(
+                                    produced,
+                                    member,
+                                    generated_member_flags,
+                                    context,
+                                    temp_paths,
+                                )
+                                .map_err(|error| {
+                                    Box::new(OperationReport::failed(
+                                        OperationFamily::Patch,
+                                        None,
+                                        "prepare",
+                                        error.to_string(),
+                                        context.single_thread_execution(),
+                                    ))
+                                })?,
+                            None => produced.clone(),
+                        };
+                        current_input = selected.path;
+                        *header_state = selected.header_state;
+                        *n64_order = selected.n64_order;
+                    }
+                }
+            }
+            let lane_key = target.cloned();
+            let lane_position = (0..=index)
+                .filter(|candidate| {
+                    candidate
+                        .checked_sub(step_input_offset)
+                        .and_then(|user_index| step_targets.get(user_index))
+                        .cloned()
+                        .flatten()
+                        == lane_key
+                })
+                .count()
+                .saturating_sub(1);
+            let step = self
+                .resolve_lane_step_verification(LaneVerificationInputs {
+                    index,
+                    patch_count,
+                    resolved_patches,
+                    step_input_offset,
+                    step_targets,
+                    step_verifications,
+                    plan_target_lanes,
+                    lane_key: &lane_key,
+                    lane_seeds: &lane_seeds,
+                    lane_plans: &mut lane_plans,
+                    shared_patch_basis,
+                    cli_patch_basis,
+                    context,
+                })
+                .map_err(|error| {
+                    Box::new(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    ))
+                })?;
+            let step = step.as_ref();
+
             let handler = self.probe_patch_handler(
                 patch_path,
                 resolved_patch_path,
@@ -2997,12 +3688,11 @@ impl CliApp {
             )?;
             applied_formats.push(handler.descriptor().name);
             let patch_start_percent = patch_progress_segment_start(index, patch_count);
-            let step = step_verifications.get(index);
 
             // Later chain steps may need a different header state than the previous
             // patch left behind (explicit per-patch mode, or auto evidence from this
             // patch's embedded source checksum).
-            if index > 0
+            if lane_position > 0
                 && let Err(error) = self.chain_header_transition(
                     ChainHeaderTransitionPlan {
                         mode: chain_header_modes.get(index).copied().unwrap_or_default(),
@@ -3029,7 +3719,7 @@ impl CliApp {
                     context.single_thread_execution(),
                 )));
             }
-            if index > 0
+            if lane_position > 0
                 && let Err(error) = self.transition_n64_byte_order(
                     ChainN64TransitionPlan {
                         mode: chain_n64_modes.get(index).copied().unwrap_or_default(),
@@ -3105,7 +3795,7 @@ impl CliApp {
                 None,
             );
 
-            let step_is_base = index > 0
+            let step_is_base = lane_position > 0
                 && step.and_then(|step| step.basis) == Some(patch_plan::PatchInputBasis::Base);
             let step_declares_base = step_is_base
                 && step.and_then(|step| step.basis_source)
@@ -3114,8 +3804,8 @@ impl CliApp {
             // intermediate even when embedded evidence independently infers
             // Base. Only an explicit Base declaration verifies once up front.
             if context.strict_patch_checksums()
-                && !step_declares_base
-                && index > 0
+                && !(step_declares_base && explicit_input.is_none())
+                && (lane_position > 0 || explicit_input.is_some())
                 && let Some(declared) = step.and_then(|step| step.declared_input.as_ref())
                 && let Err(error) = Self::verify_chain_step_state(&current_input, declared, context)
             {
@@ -3259,18 +3949,19 @@ impl CliApp {
                 );
             }
 
-            // A declared mid-chain output (bundle entry outputChecks) verifies
-            // against the real intermediate when this step ends an exact
-            // authored chain prefix. The final step keeps the existing
-            // finalized-output gate instead (intermediates are raw bytes).
-            if context.strict_patch_checksums()
-                && !is_last
-                && let Some(step) = step
-                && step.is_chain_prefix
-                && let Some(declared) = step.declared_output.as_ref()
-                && let Err(error) = Self::verify_chain_step_state(&apply_output, declared, context)
-            {
-                return Err(Box::new(OperationReport::failed(
+            // A declared target-lane endpoint describes this raw lane output,
+            // even when another lane runs later and owns the command output.
+            // The legacy final step retains its finalized-output gate.
+            self.verify_declared_chain_output(
+                context,
+                target,
+                is_last,
+                step,
+                explicit_input,
+                &apply_output,
+            )
+            .map_err(|error| {
+                Box::new(OperationReport::failed(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "validate",
@@ -3285,15 +3976,192 @@ impl CliApp {
                     )
                     .to_string(),
                     context.single_thread_execution(),
-                )));
-            }
+                ))
+            })?;
 
             current_input = apply_output;
+            let output_state = ProducedPatchOutput {
+                path: current_input.clone(),
+                header_state: header_state.clone(),
+                n64_order: *n64_order,
+            };
+            if let Some(target) = target {
+                target_outputs.insert(target.clone(), output_state.clone());
+            } else {
+                legacy_output = output_state.clone();
+            }
+            if let Some(disc) = disc
+                && let Some(source_track) =
+                    self.disc_target_path(disc, target).map_err(|error| {
+                        Box::new(OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "prepare",
+                            error.to_string(),
+                            context.single_thread_execution(),
+                        ))
+                    })?
+            {
+                disc_track_replacements.insert(source_track, output_state.path.clone());
+            }
+            if let Some(id) = user_index
+                .and_then(|index| step_ids.get(index))
+                .and_then(|id| id.as_ref())
+            {
+                producer_outputs.insert(id.clone(), output_state);
+            }
         }
 
         Ok(PatchApplyLoopOutcome {
             report,
             applied_formats,
+            disc_track_replacements,
+        })
+    }
+
+    fn resolve_lane_step_verification(
+        &self,
+        inputs: LaneVerificationInputs<'_>,
+    ) -> Result<Option<patch_plan::PatchStepVerification>> {
+        let LaneVerificationInputs {
+            index,
+            patch_count,
+            resolved_patches,
+            step_input_offset,
+            step_targets,
+            step_verifications,
+            plan_target_lanes,
+            lane_key,
+            lane_seeds,
+            lane_plans,
+            shared_patch_basis,
+            cli_patch_basis,
+            context,
+        } = inputs;
+        if !plan_target_lanes {
+            return Ok(step_verifications.get(index).cloned());
+        }
+        if !lane_plans.contains_key(lane_key) {
+            let lane_indices = (0..patch_count)
+                .filter(|candidate| {
+                    candidate
+                        .checked_sub(step_input_offset)
+                        .and_then(|user_index| step_targets.get(user_index))
+                        .cloned()
+                        .flatten()
+                        == lane_key.clone()
+                })
+                .collect::<Vec<_>>();
+            let lane_patches = lane_indices
+                .iter()
+                .map(|index| resolved_patches[*index].clone())
+                .collect::<Vec<_>>();
+            let lane_bundle_steps = lane_indices
+                .iter()
+                .filter_map(|index| {
+                    index
+                        .checked_sub(step_input_offset)
+                        .and_then(|user_index| step_verifications.get(user_index))
+                        .cloned()
+                })
+                .collect::<Vec<_>>();
+            let lane_cli_basis = lane_indices
+                .iter()
+                .filter_map(|index| {
+                    index
+                        .checked_sub(step_input_offset)
+                        .and_then(|user_index| cli_patch_basis.get(user_index))
+                        .copied()
+                })
+                .collect::<Vec<_>>();
+            let lane_cheat_steps = lane_indices
+                .iter()
+                .take_while(|index| **index < step_input_offset)
+                .count();
+            let lane_seed = lane_seeds.get(lane_key).expect("lane seed initialized");
+            let planned = self.plan_apply_step_verifications(
+                &lane_patches,
+                lane_cheat_steps,
+                PatchApplyBasisInputs {
+                    bundle_steps: lane_bundle_steps,
+                    shared: shared_patch_basis,
+                    cli: &lane_cli_basis,
+                },
+                PatchApplyBaseInputs {
+                    prepared: &lane_seed.path,
+                    original: &lane_seed.path,
+                    prepared_headerless: lane_seed.header_state.headerless.then_some(true),
+                    prepared_n64_byte_order: lane_seed.n64_order.map(|order| order.from),
+                    original_n64_byte_order: lane_seed.n64_order.map(|order| order.from),
+                },
+                context,
+            )?;
+            lane_plans.insert(
+                lane_key.clone(),
+                lane_indices.into_iter().zip(planned).collect(),
+            );
+        }
+        Ok(lane_plans
+            .get(lane_key)
+            .and_then(|plan| plan.get(&index))
+            .cloned())
+    }
+
+    fn resolve_generated_patch_output_member(
+        &self,
+        producer: &ProducedPatchOutput,
+        member: &str,
+        flags: AutoExtractResolutionFlags,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<ProducedPatchOutput> {
+        let resolved = self.resolve_exact_member_source(
+            &producer.path,
+            member,
+            context,
+            AutoExtractResolutionLabels {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                format: None,
+                source_label: "generated patch output member",
+                temp_prefix: "patch-apply-generated-output-member",
+            },
+            flags,
+        )?;
+        temp_paths.extend(resolved.cleanup_paths);
+        let output = self.produced_patch_output_for_source(resolved.source)?;
+        trace!(
+            producer = %producer.path.display(),
+            member,
+            selected = %output.path.display(),
+            headerless = output.header_state.headerless,
+            n64_order = ?output.n64_order,
+            "resolved generated patch output member"
+        );
+        Ok(output)
+    }
+
+    fn produced_patch_output_for_source(&self, path: PathBuf) -> Result<ProducedPatchOutput> {
+        let has_header = Self::detect_known_rom_header(&path)?.is_some();
+        let n64_order =
+            Self::detect_n64_byte_order_path(&path)?.map(|order| N64ByteOrderTransform {
+                from: order,
+                to: order,
+            });
+        trace!(
+            source = %path.display(),
+            has_header,
+            n64_order = ?n64_order,
+            "recomputed selected source representation"
+        );
+        Ok(ProducedPatchOutput {
+            path,
+            header_state: ChainHeaderState {
+                headerless: false,
+                stripped_header: None,
+                stripped_header_match: None,
+            },
+            n64_order,
         })
     }
 
@@ -3320,6 +4188,30 @@ impl CliApp {
         Ok(())
     }
 
+    fn verify_declared_chain_output(
+        &self,
+        context: &OperationContext,
+        target: Option<&BundlePatchInput>,
+        is_last: bool,
+        step: Option<&patch_plan::PatchStepVerification>,
+        explicit_input: Option<&BundlePatchInput>,
+        output: &Path,
+    ) -> Result<()> {
+        let Some(step) = step else {
+            return Ok(());
+        };
+        if !(context.strict_patch_checksums()
+            && (target.is_some() || !is_last)
+            && (step.is_chain_prefix || explicit_input.is_some()))
+        {
+            return Ok(());
+        }
+        let Some(declared) = step.declared_output.as_ref() else {
+            return Ok(());
+        };
+        Self::verify_chain_step_state(output, declared, context)
+    }
+
     /// Assemble apply's declarations, then use the same whole-file endpoint
     /// planner as `patch validate --plan` to resolve every step's basis.
     /// Declared base steps still verify against the base before the chain;
@@ -3329,11 +4221,15 @@ impl CliApp {
         &self,
         resolved_patches: &[(PathBuf, PathBuf)],
         cheat_steps: usize,
-        bundle_steps: Vec<patch_plan::PatchStepVerification>,
-        cli_basis: &[PatchBasisMode],
+        basis_inputs: PatchApplyBasisInputs<'_>,
         base_inputs: PatchApplyBaseInputs<'_>,
         context: &OperationContext,
     ) -> Result<Vec<patch_plan::PatchStepVerification>> {
+        let PatchApplyBasisInputs {
+            bundle_steps,
+            shared,
+            cli,
+        } = basis_inputs;
         let original_representation = Self::base_representation(
             base_inputs.original,
             None,
@@ -3364,28 +4260,32 @@ impl CliApp {
         // or archive expansion can change the resolved count, in which case
         // declarations cannot be attributed and only inference applies.
         let aligned = |declared_len: usize| declared_len == user_count;
+        let mut bundle_steps_applied = false;
         if !bundle_steps.is_empty() && aligned(bundle_steps.len()) {
             for (user_index, bundle_step) in bundle_steps.into_iter().enumerate() {
                 steps[cheat_steps + user_index] = bundle_step;
             }
+            bundle_steps_applied = true;
         }
-        if !cli_basis.is_empty() {
-            if !aligned(cli_basis.len()) {
+        if !bundle_steps_applied {
+            for step in steps.iter_mut().skip(cheat_steps) {
+                step.basis = shared.declared();
+                step.basis_source = step.basis.map(|_| PatchBasisSource::Declared);
+            }
+        }
+        if !cli.is_empty() {
+            if !aligned(cli.len()) {
                 return Err(RomWeaverError::Validation(format!(
                     "--patch-basis must be given once per --patch (or not at all); got {} value(s) for {user_count} patch(es)",
-                    cli_basis.len()
+                    cli.len()
                 )));
             }
-            for (user_index, mode) in cli_basis.iter().enumerate() {
+            for (user_index, mode) in cli.iter().enumerate() {
                 let step = &mut steps[cheat_steps + user_index];
                 step.basis = mode.declared();
                 step.basis_source = step.basis.map(|_| PatchBasisSource::Declared);
             }
         }
-        if step_count <= 1 && context.strict_patch_checksums() {
-            return Ok(steps);
-        }
-
         let mut base_endpoint_matches = vec![Vec::new(); step_count];
         let plan_inputs: Vec<patch_plan::PlanPatchInput> = resolved_patches
             .iter()
@@ -3481,7 +4381,7 @@ impl CliApp {
             }
         }
 
-        for index in 1..step_count {
+        for index in 0..step_count {
             let (patch_path, _) = &resolved_patches[index];
             let required_base_failed = resolved.per_patch[index].input_verdict
                 == patch_plan::PatchInputVerdict::Failed
@@ -3898,6 +4798,13 @@ impl CliApp {
             n64_order_note,
         })
     }
+}
+
+#[derive(Clone)]
+struct ProducedPatchOutput {
+    path: PathBuf,
+    header_state: ChainHeaderState,
+    n64_order: Option<N64ByteOrderTransform>,
 }
 
 #[cfg(test)]

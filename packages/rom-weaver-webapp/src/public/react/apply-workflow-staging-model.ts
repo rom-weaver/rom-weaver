@@ -1,3 +1,4 @@
+import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
 import { resolveAutomaticCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
@@ -29,6 +30,11 @@ import { formatChecksumTiming } from "./workflow-form-utils.ts";
  * re-stage: a filtered run (disabled patches stripped) rebuilds the workflow
  * stages from scratch, so the run replays these onto the fresh stages. */
 type ApplyPatchRunOptions = {
+  id?: string;
+  input?: ParsedBundlePatchInput;
+  target?: ParsedBundlePatchInput;
+  inputChecks?: string;
+  outputChecks?: string;
   basis?: "base" | "previous";
   header?: "keep" | "strip";
   n64ByteOrder?: "keep" | "big-endian" | "little-endian" | "byte-swapped";
@@ -42,6 +48,7 @@ type ApplyWorkflowSessionInput = {
   patches: BinarySource[];
   /** Index-aligned with `patches`. */
   patchOptions?: ApplyPatchRunOptions[];
+  defaultPatchBasis?: "auto" | "base" | "previous";
   options: ApplyPatchFormSettings & {
     output: NonNullable<ApplyPatchFormSettings["output"]> & {
       compression: "auto" | CompressionFormat;

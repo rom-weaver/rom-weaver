@@ -19,7 +19,7 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
-import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
+import type { CompressionProbeResult, PatchInputRef } from "../../types/workflow-runtime-types.ts";
 import type { CompressionLevelProfile, PatchBasisMode, PatchValidationPlan } from "../../wasm/index.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import {
@@ -447,6 +447,8 @@ const perPatchMetadataArgs = (fields: {
   patchDescriptions?: string[];
   patchHeaders?: BundleHeaderMode[];
   patchIds?: string[];
+  patchInputs?: Array<PatchInputRef | null>;
+  patchTargets?: Array<PatchInputRef | null>;
   patchInputChecks?: string[];
   patchLabels?: string[];
   patchNames?: string[];
@@ -456,6 +458,8 @@ const perPatchMetadataArgs = (fields: {
 }) => ({
   ...(fields.patchNames ? { patch_name: fields.patchNames } : {}),
   ...(fields.patchIds ? { patch_id: fields.patchIds } : {}),
+  ...(fields.patchInputs ? { patch_input: fields.patchInputs } : {}),
+  ...(fields.patchTargets ? { patch_target: fields.patchTargets } : {}),
   ...(fields.patchDescriptions ? { patch_description: fields.patchDescriptions } : {}),
   ...(fields.patchVersions ? { patch_version: fields.patchVersions } : {}),
   ...(fields.patchAuthors ? { patch_author: fields.patchAuthors } : {}),
@@ -474,6 +478,7 @@ const toTrimmedList = (value: unknown): string[] =>
 /** Only the flags the caller actually set reach the CLI command. */
 const buildPatchValidateCommand = (args: {
   checksumCache: string[];
+  defaultPatchBasis?: PatchBasisMode;
   effectiveThreadArg: ReturnType<typeof toThreadBudget> | null;
   expectIn: string[];
   ignoreChecksumValidation: boolean;
@@ -488,6 +493,7 @@ const buildPatchValidateCommand = (args: {
 }) =>
   createRomWeaverCommand("patch-validate", {
     ...(args.checksumCache.length ? { assume_in: args.checksumCache } : {}),
+    ...(args.defaultPatchBasis ? { default_patch_basis: args.defaultPatchBasis } : {}),
     ...(args.independent ? { independent: true } : {}),
     ...(args.plan ? { plan: true } : {}),
     ...(args.patchBasis.length ? { patch_basis: args.patchBasis } : {}),
@@ -545,6 +551,7 @@ const readPatchValidateOptions = (options: RuntimePatchValidateWorkerInput["opti
   const sourceCrc32 = toOptionalUint32Hex(requirements?.sourceCrc32 ?? requirements?.source_crc32);
   return {
     checksumCache: normalizePatchValidationChecksumEntries(record?.checksumCache ?? record?.checksum_cache),
+    defaultPatchBasis: normalizePatchBasisMode(record?.defaultPatchBasis ?? record?.default_patch_basis),
     ignoreChecksumValidation: isPatchValidationChecksumIgnored(options),
     independent: Boolean(record?.independent),
     n64ByteOrder: normalizeN64ByteOrder(record?.n64ByteOrder ?? record?.n64_byte_order),
@@ -574,6 +581,7 @@ const invokeRomWeaverPatchValidateWorker = async (
 }> => {
   const {
     checksumCache,
+    defaultPatchBasis,
     ignoreChecksumValidation,
     independent,
     n64ByteOrder,
@@ -601,6 +609,7 @@ const invokeRomWeaverPatchValidateWorker = async (
   const expectIn = expectInTokens(validateWithChecksums, validateWithSize, validateWithMinSize);
   const command = buildPatchValidateCommand({
     checksumCache,
+    defaultPatchBasis,
     effectiveThreadArg,
     expectIn,
     ignoreChecksumValidation,
@@ -681,6 +690,9 @@ const getPatchApplyN64ByteOrders = (options: Record<string, unknown> | null) => 
 const normalizePatchApplyHeaderMode = (mode: unknown): "keep" | "strip" | "auto" =>
   mode === "keep" || mode === "strip" || mode === "auto" ? mode : "auto";
 
+const normalizePatchBasisMode = (mode: unknown): PatchBasisMode | undefined =>
+  mode === "auto" || mode === "base" || mode === "previous" ? mode : undefined;
+
 const getPatchApplyHeaderModes = (options: Record<string, unknown> | null, removeHeader: boolean) => {
   if (removeHeader) return ["strip"] as ("keep" | "strip" | "auto")[];
   const rawModes = Array.isArray(options?.headerModes) ? options.headerModes : [];
@@ -707,10 +719,36 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
       (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true,
     n64ByteOrders: getPatchApplyN64ByteOrders(options).map((mode) => normalizeN64ByteOrder(mode) || "auto"),
     outputHeader: getPatchApplyOutputHeader(options, removeHeader, addHeader),
+    defaultPatchBasis: normalizePatchApplyDefaultBasis(input.options),
     patchBasis: Array.isArray(options?.patchBasis)
       ? (options.patchBasis as PatchBasisMode[])
       : Array.isArray(options?.patch_basis)
         ? (options.patch_basis as PatchBasisMode[])
+        : [],
+    patchIds: Array.isArray(options?.patchIds)
+      ? options.patchIds.map((value) => String(value || ""))
+      : Array.isArray(options?.patch_id)
+        ? options.patch_id.map((value) => String(value || ""))
+        : [],
+    patchInputs: Array.isArray(options?.patchInputs)
+      ? options.patchInputs
+      : Array.isArray(options?.patch_input)
+        ? options.patch_input
+        : [],
+    patchTargets: Array.isArray(options?.patchTargets)
+      ? options.patchTargets
+      : Array.isArray(options?.patch_target)
+        ? options.patch_target
+        : [],
+    patchInputChecks: Array.isArray(options?.patchInputChecks)
+      ? options.patchInputChecks.map((value) => String(value || ""))
+      : Array.isArray(options?.patch_input_check)
+        ? options.patch_input_check.map((value) => String(value || ""))
+        : [],
+    patchOutputChecks: Array.isArray(options?.patchOutputChecks)
+      ? options.patchOutputChecks.map((value) => String(value || ""))
+      : Array.isArray(options?.patch_output_check)
+        ? options.patch_output_check.map((value) => String(value || ""))
         : [],
     repairChecksum: Boolean((input.options as { fixChecksum?: unknown } | undefined)?.fixChecksum),
     requestedThreadArg: toThreadBudget((input.options as { threads?: unknown } | undefined)?.threads),
@@ -721,6 +759,11 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
       options?.validateWithOutputChecksums ?? options?.validate_with_output_checksums,
     ),
   };
+};
+
+const normalizePatchApplyDefaultBasis = (options: RuntimePatchApplyWorkerInput["options"]) => {
+  const record = asRecord(options);
+  return normalizePatchBasisMode(record?.defaultPatchBasis ?? record?.default_patch_basis);
 };
 
 type RomWeaverJsonResult = Awaited<ReturnType<typeof runRomWeaverJson>>;
@@ -782,7 +825,13 @@ const getPatchApplyExecution = (input: RuntimePatchApplyWorkerInput, outputPath:
     ignore_checksum_validation: commandOptions.ignoreChecksumValidation,
     input: input.romFilePath,
     output_header: commandOptions.outputHeader,
+    ...(commandOptions.defaultPatchBasis ? { default_patch_basis: commandOptions.defaultPatchBasis } : {}),
     ...(commandOptions.patchBasis.length ? { patch_basis: commandOptions.patchBasis } : {}),
+    ...(commandOptions.patchIds.length ? { patch_id: commandOptions.patchIds } : {}),
+    ...(commandOptions.patchInputs.length ? { patch_input: commandOptions.patchInputs } : {}),
+    ...(commandOptions.patchTargets.length ? { patch_target: commandOptions.patchTargets } : {}),
+    ...(commandOptions.patchInputChecks.length ? { patch_input_check: commandOptions.patchInputChecks } : {}),
+    ...(commandOptions.patchOutputChecks.length ? { patch_output_check: commandOptions.patchOutputChecks } : {}),
     ...(commandOptions.n64ByteOrders.length ? { n64_byte_order: commandOptions.n64ByteOrders } : {}),
     no_compress: true,
     output: outputPath,
@@ -1361,11 +1410,14 @@ const getAlignedOptionalFlags = (values: boolean[] | undefined, length: number) 
 };
 
 type BundleCreateMetadataInput = {
+  patchBasis?: "auto" | "base" | "previous";
   patchAuthors?: string[];
   patchBases?: Array<"auto" | "base" | "previous">;
   patchDescriptions?: string[];
   patchHeaders?: BundleHeaderMode[];
   patchIds?: string[];
+  patchInputs?: Array<PatchInputRef | null>;
+  patchTargets?: Array<PatchInputRef | null>;
   patchInputChecks?: string[];
   patchLabels?: string[];
   patchNames?: string[];
@@ -1395,6 +1447,10 @@ const createAlignedBundleMetadata = (input: BundleCreateMetadataInput, patchCoun
     patchDescriptions: alignedStrings(input.patchDescriptions),
     patchHeaders,
     patchIds: alignedStrings(input.patchIds),
+    patchInputs:
+      input.patchInputs?.length === patchCount && input.patchInputs.some(Boolean) ? input.patchInputs : undefined,
+    patchTargets:
+      input.patchTargets?.length === patchCount && input.patchTargets.some(Boolean) ? input.patchTargets : undefined,
     patchInputChecks: alignedStrings(input.patchInputChecks),
     patchLabels: alignedStrings(input.patchLabels),
     patchNames: alignedStrings(input.patchNames),
@@ -1415,16 +1471,21 @@ const invokeRomWeaverBundleCreateWorker = async (
     outputCheck?: string;
     outputHeader?: BundleHeaderMode;
     romChecksums?: string;
+    romMember?: string;
     romName?: string;
     romSize?: number;
     outputName?: string;
     outputPath: string;
+    /** Shared v2 bundle input rule. */
+    patchBasis?: "auto" | "base" | "previous";
     /** Index-aligned declared input basis per patch ("auto" entries stay unwritten). */
     patchBases?: Array<"auto" | "base" | "previous">;
     patchAuthors?: string[];
     patchDescriptions?: string[];
     patchHeaders?: BundleHeaderMode[];
     patchIds?: string[];
+    patchInputs?: Array<PatchInputRef | null>;
+    patchTargets?: Array<PatchInputRef | null>;
     /** Index-aligned per-patch expected pre-apply checksums ("algo=hex", comma-separable; empty for none). */
     patchInputChecks?: string[];
     patchLabels?: string[];
@@ -1454,6 +1515,8 @@ const invokeRomWeaverBundleCreateWorker = async (
     patchDescriptions,
     patchHeaders,
     patchIds,
+    patchInputs,
+    patchTargets,
     patchInputChecks,
     patchLabels,
     patchNames,
@@ -1466,6 +1529,7 @@ const invokeRomWeaverBundleCreateWorker = async (
     output: outputPath,
     patch: patchPaths,
     ...(romPath ? { rom: romPath } : {}),
+    ...(input.romMember ? { rom_member: input.romMember } : {}),
     ...(bundlePath ? { bundle: bundlePath } : {}),
     ...(bundleRomPath ? { bundle_rom: bundleRomPath } : {}),
     ...bundleOutputNamingArgs(input),
@@ -1477,6 +1541,8 @@ const invokeRomWeaverBundleCreateWorker = async (
       patchDescriptions,
       patchHeaders,
       patchIds,
+      patchInputs,
+      patchTargets,
       patchInputChecks,
       patchLabels,
       patchNames,
@@ -1484,6 +1550,7 @@ const invokeRomWeaverBundleCreateWorker = async (
       patchOutputChecks,
       patchVersions,
     }),
+    ...(input.patchBasis ? { default_patch_basis: input.patchBasis } : {}),
     ...(input.noBundleRom ? { no_bundle_rom: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson bundle-create dispatch", {
@@ -1530,6 +1597,7 @@ export {
   invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,
+  normalizePatchApplyDefaultBasis,
   resolvePatchApplyThreadArg,
   runRomWeaverIngestSidecarsWorker,
   runRomWeaverProbeWorker,

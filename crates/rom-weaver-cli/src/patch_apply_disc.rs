@@ -1,8 +1,7 @@
 //! Disc-aware support for `patch apply`.
 //!
-//! Resolves one `--target` track from a `.cue`/`.gdi`, patches it, and stages the
-//! full disc with untouched tracks and sheets for optional compression. Also
-//! reports unreferenced data files beside the sheet.
+//! Resolves tracks from a `.cue`/`.gdi` and reassembles patched tracks with the
+//! untouched tracks and sheets. Reports unreferenced data files beside the sheet.
 
 use super::patch_filename_checksum::parse_filename_requirements;
 use super::*;
@@ -362,6 +361,74 @@ impl CliApp {
         &disc.sheet_paths[0]
     }
 
+    pub(super) fn disc_target_path(
+        &self,
+        disc: &DiscContext,
+        target: Option<&BundlePatchInput>,
+    ) -> Result<Option<PathBuf>> {
+        match target {
+            Some(BundlePatchInput::Rom {
+                member: Some(member),
+                ..
+            }) => self.disc_member_path(disc, member).map(Some),
+            Some(BundlePatchInput::Rom { member: None, .. }) | None => {
+                Ok(Some(disc.target_file.clone()))
+            }
+            Some(BundlePatchInput::Patch { .. }) => Ok(None),
+        }
+    }
+
+    pub(super) fn disc_member_path(&self, disc: &DiscContext, member: &str) -> Result<PathBuf> {
+        let member = member.replace('\\', "/");
+        let mut matches = disc
+            .files
+            .iter()
+            .filter(|file| file.name.replace('\\', "/") == member);
+        let matched = matches.next();
+        match (matched, matches.next()) {
+            (Some(file), None) => Ok(file.path.clone()),
+            _ => Err(RomWeaverError::Validation(format!(
+                "disc member `{member}` must identify exactly one referenced track"
+            ))),
+        }
+    }
+
+    fn validate_disc_replacements(
+        disc: &DiscContext,
+        replacements: &BTreeMap<PathBuf, PathBuf>,
+    ) -> Result<()> {
+        for path in replacements.keys() {
+            if !disc.files.iter().any(|file| file.path == *path) {
+                return Err(RomWeaverError::Validation(format!(
+                    "replacement track `{}` is not referenced by this disc",
+                    path.display()
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Multiple target results MUST remain file-backed until compression ends
+    /// so memory use does not grow with the combined size of patched tracks.
+    pub(super) fn disc_track_overrides(
+        &self,
+        disc: &DiscContext,
+        replacements: &BTreeMap<PathBuf, PathBuf>,
+    ) -> Result<Vec<CreateInputOverride>> {
+        Self::validate_disc_replacements(disc, replacements)?;
+        trace!(
+            tracks = replacements.len(),
+            "using patched disc track files"
+        );
+        Ok(replacements
+            .iter()
+            .map(|(original_path, path)| CreateInputOverride {
+                original_path: original_path.clone(),
+                source: CreateInputSource::Path(path.clone()),
+            })
+            .collect())
+    }
+
     /// Build the single create input override that redirects the disc's target
     /// track to a freshly produced track at `track_path` (the patched or
     /// `.dcp`-rebuilt track temp). When the track fits under the in-memory cap
@@ -417,12 +484,28 @@ impl CliApp {
         context: &OperationContext,
         temp_paths: &mut Vec<PathBuf>,
     ) -> Result<PathBuf> {
+        self.stage_disc_directory_with_tracks(
+            disc,
+            &BTreeMap::from([(disc.target_file.clone(), patched_target.to_path_buf())]),
+            context,
+            temp_paths,
+        )
+    }
+
+    pub(super) fn stage_disc_directory_with_tracks(
+        &self,
+        disc: &DiscContext,
+        replacements: &BTreeMap<PathBuf, PathBuf>,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<PathBuf> {
+        Self::validate_disc_replacements(disc, replacements)?;
         let stage_dir = context
             .temp_paths()
             .next_path("patch-apply-disc-stage", None);
         fs::create_dir_all(&stage_dir)?;
         temp_paths.push(stage_dir.clone());
-        trace!(stage_dir = %stage_dir.display(), "staging patched disc");
+        trace!(stage_dir = %stage_dir.display(), tracks = replacements.len(), "staging patched disc");
 
         let mut primary_sheet = None;
         for (index, sheet) in disc.sheet_paths.iter().enumerate() {
@@ -446,11 +529,7 @@ impl CliApp {
             {
                 fs::create_dir_all(parent)?;
             }
-            let source = if file.path == disc.target_file {
-                patched_target
-            } else {
-                file.path.as_path()
-            };
+            let source = replacements.get(&file.path).unwrap_or(&file.path);
             fs::copy(source, &dest)?;
         }
 

@@ -12,6 +12,7 @@ import type { InputParentCompression } from "../input/input-assets.ts";
 import { fetchRemoteFiles } from "../remote/remote-file-fetch.ts";
 import type { BundleApplySession, BundleApplySessionEntry } from "./bundle-session-model.ts";
 import { bundleChainEndpointChecks, bundleRomExpectation, bundleSessionDisplayName } from "./bundle-session-model.ts";
+import { resolveBundleChecks } from "./bundle-targets.ts";
 
 // The archive-nesting chain a fanned-out leaf patch carries on its File so a re-stage still renders
 // the "extract section"; a bundle-extracted patch rides the same channel (see apply-prepared-metadata).
@@ -154,8 +155,20 @@ function buildBundleApplySession(
   const romExpectation = romFile ? undefined : bundleRomExpectation(result.bundle);
   return {
     chainEndpointChecks: bundleChainEndpointChecks(result.bundle),
-    entries: result.bundle.patches.map((patch, index) => toBundleSessionEntry(patch, patchFiles[index], index)),
+    ...(result.bundle.rom?.member ? { romMember: result.bundle.rom.member } : {}),
+    entries: result.bundle.patches.map((patch, index) =>
+      toBundleSessionEntry(
+        {
+          ...patch,
+          inputChecks: resolveBundleChecks(result.bundle, patch.inputChecks, patch.inputChecksRef),
+          outputChecks: resolveBundleChecks(result.bundle, patch.outputChecks, patch.outputChecksRef),
+        },
+        patchFiles[index],
+        index,
+      ),
+    ),
     key: `local:${bundleFile.name}:${bundleFile.size}:${bundleFile.lastModified}`,
+    patchBasis: result.bundle.version >= 2 ? result.bundle.patchBasis || "auto" : "auto",
     ...(name ? { name } : {}),
     outputDefaults: {
       ...(output?.name ? { name: output.name } : {}),
@@ -209,6 +222,8 @@ function toBundleSessionEntry(
     ...(patch.label ? { label: patch.label } : {}),
     ...(patch.header ? { header: patch.header } : {}),
     ...(patch.basis ? { basis: patch.basis } : {}),
+    ...(patch.input ? { input: patch.input } : {}),
+    ...(patch.target ? { target: patch.target } : {}),
     ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
     ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
   };

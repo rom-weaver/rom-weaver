@@ -11,6 +11,7 @@ import type {
   ParsedBundleOutput,
   ParsedBundleParseResult,
   ParsedBundlePatchEntry,
+  ParsedBundlePatchInput,
   ParsedBundlePatchSource,
   ParsedBundleRom,
   ParsedBundleSourceRef,
@@ -52,6 +53,21 @@ const parseChecks = (value: unknown): ParsedBundleChecks | undefined => {
   return Object.keys(checks).length ? checks : undefined;
 };
 
+const parsePatchInput = (value: unknown): ParsedBundlePatchInput | undefined => {
+  if (value === undefined || value === null) return undefined;
+  const record = asRecord(value);
+  if (record?.rom === true && record.patch === undefined) {
+    const member = toStringValue(record.member);
+    return { rom: true, ...(member ? { member } : {}) };
+  }
+  const patch = toStringValue(record?.patch);
+  if (patch && record?.rom === undefined) {
+    const member = toStringValue(record?.member);
+    return { patch, ...(member ? { member } : {}) };
+  }
+  throw new Error("Bundle patch input is invalid");
+};
+
 const parseSourceRef = (value: unknown): ParsedBundleSourceRef | undefined => {
   const record = asRecord(value);
   if (!record) return undefined;
@@ -68,6 +84,10 @@ const parseBundleRom = (value: unknown): ParsedBundleRom | undefined => {
   const record = asRecord(value) as WireRecord<BundleRom> | undefined;
   if (!record) return undefined;
   const rom: ParsedBundleRom = {};
+  const member = toStringValue(record.member);
+  if (member) rom.member = member;
+  const checksRef = toStringValue(record.checksRef);
+  if (checksRef) rom.checksRef = checksRef;
   const name = toStringValue(record.name);
   if (name !== undefined) rom.name = name;
   const url = toStringValue(record.url);
@@ -82,6 +102,14 @@ const parseBundleRom = (value: unknown): ParsedBundleRom | undefined => {
 const parseBundlePatchEntry = (value: unknown): ParsedBundlePatchEntry => {
   const record = (asRecord(value) || {}) as WireRecord<BundlePatchEntry>;
   const entry: ParsedBundlePatchEntry = {};
+  const input = parsePatchInput(record.input);
+  if (input) entry.input = input;
+  const target = parsePatchInput(record.target);
+  if (target) entry.target = target;
+  const inputChecksRef = toStringValue(record.inputChecksRef);
+  if (inputChecksRef) entry.inputChecksRef = inputChecksRef;
+  const outputChecksRef = toStringValue(record.outputChecksRef);
+  if (outputChecksRef) entry.outputChecksRef = outputChecksRef;
   const id = toStringValue(record.id);
   if (id !== undefined) entry.id = id;
   const version = toStringValue(record.version);
@@ -113,6 +141,8 @@ const parseBundleOutput = (value: unknown): ParsedBundleOutput | undefined => {
   const record = asRecord(value) as WireRecord<BundleOutput> | undefined;
   if (!record) return undefined;
   const output: ParsedBundleOutput = {};
+  const checksRef = toStringValue(record.checksRef);
+  if (checksRef) output.checksRef = checksRef;
   const name = toStringValue(record.name);
   if (name !== undefined) output.name = name;
   const header = parseHeaderMode(record.header);
@@ -131,6 +161,18 @@ const parseBundle = (value: unknown): ParsedBundle | undefined => {
     patches: Array.isArray(record.patches) ? record.patches.map(parseBundlePatchEntry) : [],
     version,
   };
+  if (Array.isArray(record.checkStates)) {
+    bundle.checkStates = record.checkStates.map((value) => {
+      const state = asRecord(value);
+      const id = toStringValue(state?.id);
+      const checks = parseChecks(state?.checks);
+      if (!(id && checks)) throw new Error("Bundle check state is invalid");
+      return { id, checks };
+    });
+  }
+  if (record.patchBasis === "auto" || record.patchBasis === "base" || record.patchBasis === "previous") {
+    bundle.patchBasis = record.patchBasis;
+  }
   const rom = parseBundleRom(record.rom);
   if (rom) bundle.rom = rom;
   const output = parseBundleOutput(record.output);

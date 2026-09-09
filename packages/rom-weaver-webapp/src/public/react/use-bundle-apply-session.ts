@@ -2,7 +2,7 @@ import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedBundleChecks, ParsedBundlePatchInput } from "../../types/bundle.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
@@ -10,6 +10,8 @@ const logger = createLogger("bundle-apply-session");
 
 /** Per-patch bundle metadata kept for the cards (label/description) and export round-trips. */
 type BundlePatchMeta = {
+  input?: ParsedBundlePatchInput;
+  target?: ParsedBundlePatchInput;
   /** Stable author-facing identity carried through bundle exports. */
   id?: string;
   /** Author-controlled patch release version; distinct from the schema version. */
@@ -71,6 +73,8 @@ const createBundlePatchMetadata = (
         basis: entry.basis,
         description: entry.description,
         id: entry.id,
+        input: entry.input,
+        target: entry.target,
         inputChecks: entry.inputChecks,
         label: entry.label,
         name: entry.name,
@@ -230,6 +234,9 @@ const useBundleApplySession = ({
             const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
             await Promise.resolve(
               controllersRef.current.patchStack?.setPatchOption?.(index, {
+                ...(entry.id ? { id: entry.id } : {}),
+                ...(entry.input ? { input: entry.input } : {}),
+                ...(entry.target ? { target: entry.target } : {}),
                 ...(entry.basis ? { basis: entry.basis } : {}),
                 ...(entry.header === "keep" || entry.header === "strip" ? { header: entry.header } : {}),
                 ...(validateInputChecksum ? { validateInputChecksum } : {}),

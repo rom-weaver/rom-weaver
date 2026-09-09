@@ -24,6 +24,27 @@ describe("parseBundleParseResult", () => {
     });
   });
 
+  it("retains fixed and producer-member target selectors", () => {
+    const parsed = parseBundleParseResult({
+      bundle: {
+        bundle: {
+          patches: [
+            { input: { member: "disc/track01.bin", rom: true }, target: { member: "disc/track01.bin", rom: true } },
+            { target: { member: "generated/track01.bin", patch: "first" } },
+          ],
+          version: 2,
+        },
+        source_kind: "json",
+        warnings: [],
+      },
+    });
+
+    expect(parsed?.bundle.patches).toEqual([
+      { input: { member: "disc/track01.bin", rom: true }, target: { member: "disc/track01.bin", rom: true } },
+      { target: { member: "generated/track01.bin", patch: "first" } },
+    ]);
+  });
+
   it("rejects arrays where a strict wire record is required", () => {
     expect(parseBundleParseResult({ bundle: { bundle: [], source_kind: "json", warnings: [] } })).toBeUndefined();
     expect(

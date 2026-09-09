@@ -385,7 +385,7 @@ Print the rom-weaver-bundle.json JSON Schema to stdout.
 Save it and point your editor at it, and the editor will check and autocomplete
 a bundle as you write it:
 
-  rom-weaver bundle schema > rom-weaver-bundle-v1.schema.json
+  rom-weaver bundle schema > rom-weaver-bundle-v2.schema.json
 
 Then `bundle create --from <your file>` turns what you wrote into a finished
 bundle with the checksums filled in."
@@ -1452,8 +1452,8 @@ use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_require
 
 mod bundle_schema;
 pub use bundle_schema::{
-    BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_VERSION, BundleChecks, BundleOutput,
-    BundlePatchEntry, BundleRom, RomWeaverBundle,
+    BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_VERSION, BundleCheckState, BundleChecks,
+    BundleOutput, BundlePatchEntry, BundlePatchInput, BundleRom, RomWeaverBundle,
 };
 
 mod patch_plan;

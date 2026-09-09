@@ -71,7 +71,7 @@ Facts to look up. No advice, no steps.
 - [Supported formats](reference/formats.md): the full patch, container, codec, checksum, trim, and header support tables.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
-- [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): the machine-readable bundle format.
+- [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v2.schema.json): the machine-readable bundle format.
 - [Runtime configuration](hosting/env-vars.md): environment variables and browser diagnostic handles.
 - [Webapp masthead metadata](hosting/webapp-runtime-status.md): version, SHA, thread, PWA, and service-worker labels.
 

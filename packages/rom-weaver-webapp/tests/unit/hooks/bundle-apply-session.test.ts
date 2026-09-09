@@ -94,10 +94,11 @@ describe("useBundleApplySession", () => {
     expect(setPatchOption).toHaveBeenNthCalledWith(1, 0, {
       basis: "base",
       header: "strip",
+      id: "bundle-first",
       revalidate: false,
       validateInputChecksum: "1234abcd",
     });
-    expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, { revalidate: true });
+    expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, { id: "bundle-second", revalidate: true });
     expect(setDisplayFileName).toHaveBeenCalledWith("Bundle result");
     expect(setOutputHeader).toHaveBeenCalledWith("keep");
     expect((patches[0] as { _generatedPatchName?: string })._generatedPatchName).toBeTruthy();

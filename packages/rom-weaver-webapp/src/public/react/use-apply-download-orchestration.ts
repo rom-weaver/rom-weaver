@@ -102,6 +102,7 @@ interface ApplyRunRequest {
   canStartApply: boolean;
   checksumOverrideChecked: boolean;
   containerInputsEnabled?: boolean;
+  defaultPatchBasis: "auto" | "base" | "previous";
   effectiveInputs: BinarySource[];
   effectiveResolvedOutputName: string;
   hasPendingDownload: boolean;
@@ -546,6 +547,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           canStartApply,
           checksumOverrideChecked,
           containerInputsEnabled,
+          defaultPatchBasis,
           effectiveInputs,
           effectiveResolvedOutputName,
           hasPendingDownload,
@@ -664,6 +666,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
               },
             },
             patches: activePatches,
+            defaultPatchBasis,
             ...(activePatchOptions ? { patchOptions: activePatchOptions } : {}),
           });
           const completedAt = Date.now();

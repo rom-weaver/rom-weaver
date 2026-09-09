@@ -128,6 +128,7 @@ const makePatchContext = () => {
   const actions = {
     createStageSnapshot: vi.fn(() => ({ patches: [first, second] })),
     getPatchKey: vi.fn((value: File) => `key:${value.name}`),
+    invalidatePatchDependentOutput: vi.fn(),
     onError: vi.fn(),
     setPatchInfoByKey,
     setPatchOption: vi.fn(),

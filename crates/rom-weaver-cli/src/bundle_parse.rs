@@ -72,7 +72,7 @@ pub(crate) fn parse_bundle_bytes(bytes: &[u8]) -> Result<RomWeaverBundle> {
 }
 
 fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
-    if bundle.version != BUNDLE_VERSION {
+    if !matches!(bundle.version, 1 | BUNDLE_VERSION) {
         return Err(RomWeaverError::ValidationCode(
             ValidationCodeError::new("bundle.version.unsupported")
                 .with_message("unsupported bundle version")
@@ -80,11 +80,54 @@ fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
                 .with_field("supported", BUNDLE_VERSION),
         ));
     }
+    match bundle.version {
+        1 if bundle.patch_basis.is_some() => {
+            return Err(bundle_validation(
+                "bundle.patch_basis.unsupported",
+                "version 1 bundles cannot declare patchBasis",
+            ));
+        }
+        BUNDLE_VERSION if bundle.patch_basis.is_none() => {
+            return Err(bundle_validation(
+                "bundle.patch_basis.missing",
+                "version 2 bundles must declare patchBasis",
+            ));
+        }
+        _ => {}
+    }
     if bundle.patches.is_empty() {
         return Err(bundle_validation(
             "bundle.patches.empty",
             "bundle defines no patches",
         ));
+    }
+    let mut check_states = BTreeSet::new();
+    for (index, state) in bundle.check_states.iter_mut().enumerate() {
+        let id = state.id.trim();
+        if id.is_empty() {
+            return Err(bundle_validation(
+                "bundle.check_state.id.empty",
+                "bundle checkStates entries need a non-empty id",
+            ));
+        }
+        if !check_states.insert(id.to_owned()) {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("bundle.check_state.id.duplicate")
+                    .with_message("bundle checkStates IDs must be unique")
+                    .with_field("id", id.to_owned()),
+            ));
+        }
+        state.id = id.to_owned();
+        normalize_checksum_map(
+            &mut state.checks.checksums,
+            &format!("checkStates[{index}].checks"),
+        )?;
+        if state.checks.checksums.is_empty() && state.checks.size.is_none() {
+            return Err(bundle_validation(
+                "bundle.check_state.checks.empty",
+                "bundle checkStates entries need checksums or a size",
+            ));
+        }
     }
     if let Some(rom) = &mut bundle.rom {
         // A rom entry may be sourceless (checks/name only): the user supplies
@@ -102,7 +145,24 @@ fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
         if let Some(checks) = &mut rom.checks {
             normalize_checksum_map(&mut checks.checksums, "rom.checks")?;
         }
+        validate_check_reference(&rom.checks, &rom.checks_ref, &check_states, "rom.checksRef")?;
+        normalize_member(&mut rom.member, "rom.member")?;
     }
+    let mut patch_ids = BTreeSet::new();
+    for patch in &mut bundle.patches {
+        let id = patch.id.take().map(|id| id.trim().to_owned());
+        patch.id = id.filter(|id| !id.is_empty());
+        if let Some(id) = patch.id.as_deref()
+            && !patch_ids.insert(id.to_owned())
+        {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("bundle.patch.id.duplicate")
+                    .with_message("bundle patch IDs must be unique when target references use them")
+                    .with_field("id", id.to_owned()),
+            ));
+        }
+    }
+    let mut prior_patch_ids = BTreeSet::new();
     for (index, patch) in bundle.patches.iter_mut().enumerate() {
         let entry = format!("patches[{index}]");
         validate_source_ref(&patch.url, &patch.path, &entry)?;
@@ -113,13 +173,140 @@ fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
         if let Some(checks) = &mut patch.output_checks {
             normalize_checksum_map(&mut checks.checksums, &format!("{entry}.outputChecks"))?;
         }
+        validate_check_reference(
+            &patch.input_checks,
+            &patch.input_checks_ref,
+            &check_states,
+            &format!("{entry}.inputChecksRef"),
+        )?;
+        validate_check_reference(
+            &patch.output_checks,
+            &patch.output_checks_ref,
+            &check_states,
+            &format!("{entry}.outputChecksRef"),
+        )?;
+        for (selector_name, selector) in
+            [("input", &mut patch.input), ("target", &mut patch.target)]
+        {
+            let Some(input) = selector else {
+                continue;
+            };
+            match input {
+                BundlePatchInput::Rom { rom, member } => {
+                    if !*rom {
+                        return Err(bundle_validation(
+                            if selector_name == "input" {
+                                "bundle.patch.input.rom.invalid"
+                            } else {
+                                "bundle.patch.target.rom.invalid"
+                            },
+                            "patch input or target rom must be true",
+                        ));
+                    }
+                    normalize_member(member, &format!("{entry}.{selector_name}.member"))?;
+                }
+                BundlePatchInput::Patch {
+                    patch: producer,
+                    member,
+                } => {
+                    let producer_id = producer.trim().to_owned();
+                    if producer_id.is_empty() || !prior_patch_ids.contains(&producer_id) {
+                        return Err(RomWeaverError::ValidationCode(
+                            ValidationCodeError::new(if selector_name == "input" {
+                                "bundle.patch.input.patch.unresolved"
+                            } else {
+                                "bundle.patch.target.patch.unresolved"
+                            })
+                            .with_message(
+                                "patch selector must reference an earlier patch with a stable id",
+                            )
+                            .with_field("entry", entry)
+                            .with_field("patch", producer_id),
+                        ));
+                    }
+                    *producer = producer_id;
+                    normalize_member(member, &format!("{entry}.{selector_name}.member"))?;
+                }
+            }
+        }
+        if let Some(id) = patch
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        {
+            prior_patch_ids.insert(id.to_owned());
+        }
     }
-    if let Some(output) = &mut bundle.output
-        && let Some(checks) = &mut output.checks
-    {
-        normalize_checksum_map(&mut checks.checksums, "output.checks")?;
+    if let Some(output) = &mut bundle.output {
+        if let Some(checks) = &mut output.checks {
+            normalize_checksum_map(&mut checks.checksums, "output.checks")?;
+        }
+        validate_check_reference(
+            &output.checks,
+            &output.checks_ref,
+            &check_states,
+            "output.checksRef",
+        )?;
     }
     Ok(())
+}
+
+fn validate_check_reference(
+    inline: &Option<BundleChecks>,
+    reference: &Option<String>,
+    states: &BTreeSet<String>,
+    entry: &str,
+) -> Result<()> {
+    let Some(reference) = reference else {
+        return Ok(());
+    };
+    let reference = reference.trim();
+    if inline.is_some() {
+        return Err(RomWeaverError::ValidationCode(
+            ValidationCodeError::new("bundle.checks.reference.conflict")
+                .with_message("a checks reference cannot also carry inline checks")
+                .with_field("entry", entry.to_owned()),
+        ));
+    }
+    if reference.is_empty() || !states.contains(reference) {
+        return Err(RomWeaverError::ValidationCode(
+            ValidationCodeError::new("bundle.checks.reference.unresolved")
+                .with_message("checks reference matches no bundle checkStates id")
+                .with_field("entry", entry.to_owned())
+                .with_field("ref", reference.to_owned()),
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_member(member: &mut Option<String>, entry: &str) -> Result<()> {
+    if let Some(value) = member {
+        *value = normalized_member_path(value, entry)?;
+    }
+    Ok(())
+}
+
+pub(super) fn normalized_member_path(value: &str, entry: &str) -> Result<String> {
+    let value = value.trim().replace('\\', "/");
+    if value.is_empty()
+        || value.starts_with('/')
+        || value.as_bytes().get(1) == Some(&b':')
+        || value.contains('\0')
+        || value.split('/').any(|part| part == "..")
+        || value.split('/').all(|part| part.is_empty() || part == ".")
+    {
+        return Err(RomWeaverError::ValidationCode(
+            ValidationCodeError::new("bundle.member.invalid")
+                .with_message("bundle member selectors must be non-empty relative paths")
+                .with_field("entry", entry.to_owned()),
+        ));
+    }
+    Ok(value
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".")
+        .collect::<Vec<_>>()
+        .join("/"))
 }
 
 /// Exactly one of `url` / `path` must carry a non-empty value.
@@ -227,11 +414,10 @@ mod tests {
 
     #[test]
     fn parses_minimal_bundle() {
-        // Version 1 is the only public bundle version.
         let bundle =
             parse_bundle_bytes(br#"{ "version": 1, "patches": [ { "path": "patches/x.bps" } ] }"#)
                 .expect("minimal bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, 1);
         assert_eq!(bundle.patches.len(), 1);
         assert!(!bundle.patches[0].optional);
         assert_eq!(bundle.patches[0].header, None);
@@ -249,7 +435,7 @@ mod tests {
             ] }"#,
         )
         .expect("v1 bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, 1);
         assert_eq!(bundle.patches[0].basis, Some(PatchInputBasis::Base));
         assert_eq!(bundle.patches[1].basis, Some(PatchInputBasis::Previous));
         assert_eq!(bundle.patches[2].basis, None);
@@ -261,10 +447,81 @@ mod tests {
             br#"{ "version": 1, "patches": [ { "id": "main", "version": "1.4.0", "author": "Weaver", "path": "main.bps" } ] }"#,
         )
         .expect("v1 bundle parses");
-        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.version, 1);
         assert_eq!(bundle.patches[0].id.as_deref(), Some("main"));
         assert_eq!(bundle.patches[0].version.as_deref(), Some("1.4.0"));
         assert_eq!(bundle.patches[0].author.as_deref(), Some("Weaver"));
+    }
+
+    #[test]
+    fn parses_v2_shared_patch_basis() {
+        let bundle = parse_bundle_bytes(
+            br#"{ "version": 2, "patchBasis": "previous", "patches": [ { "path": "a.ips" } ] }"#,
+        )
+        .expect("v2 bundle parses");
+        assert_eq!(bundle.version, BUNDLE_VERSION);
+        assert_eq!(bundle.patch_basis, Some(PatchBasisMode::Previous));
+    }
+
+    #[test]
+    fn parses_explicit_execution_targets_and_shared_check_states() {
+        let bundle = parse_bundle_bytes(
+            br#"{
+                "version": 2,
+                "patchBasis": "base",
+                "checkStates": [
+                    { "id": "rom", "checks": { "checksums": { "crc32": "aabbccdd" } } },
+                    { "id": "patch:translation:output", "checks": { "size": 8 } }
+                ],
+                "rom": { "path": "game.zip", "member": "disc/track01.bin", "checksRef": "rom" },
+                "patches": [
+                    { "id": "translation", "path": "translation.ips", "input": { "rom": true, "member": "disc/track01.bin" }, "outputChecksRef": "patch:translation:output" },
+                    { "id": "fix", "path": "fix.ips", "input": { "patch": "translation" }, "inputChecksRef": "patch:translation:output" }
+                ],
+                "output": { "checksRef": "patch:translation:output" }
+            }"#,
+        )
+        .expect("bundle parses");
+        assert_eq!(bundle.check_states.len(), 2);
+        assert_eq!(
+            bundle.rom.and_then(|rom| rom.member).as_deref(),
+            Some("disc/track01.bin")
+        );
+        assert!(matches!(
+            bundle.patches[1].input,
+            Some(BundlePatchInput::Patch { ref patch, member: None }) if patch == "translation"
+        ));
+        assert_eq!(
+            bundle.patches[1].input_checks_ref.as_deref(),
+            Some("patch:translation:output")
+        );
+    }
+
+    #[test]
+    fn rejects_later_execution_producer() {
+        assert_eq!(
+            parse_err(
+                r#"{ "version": 2, "patchBasis": "previous", "patches": [
+                    { "id": "fix", "path": "fix.ips", "input": { "patch": "translation" } },
+                    { "id": "translation", "path": "translation.ips" }
+                ] }"#
+            ),
+            "bundle.patch.input.patch.unresolved"
+        );
+    }
+
+    #[test]
+    fn rejects_patch_basis_on_v1_and_missing_patch_basis_on_v2() {
+        assert_eq!(
+            parse_err(
+                r#"{ "version": 1, "patchBasis": "base", "patches": [ { "path": "x.ips" } ] }"#
+            ),
+            "bundle.patch_basis.unsupported"
+        );
+        assert_eq!(
+            parse_err(r#"{ "version": 2, "patches": [ { "path": "x.ips" } ] }"#),
+            "bundle.patch_basis.missing"
+        );
     }
 
     #[test]
@@ -311,7 +568,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_version() {
-        for version in [2, 3, 4] {
+        for version in [3, 4] {
             assert_eq!(
                 parse_err(&format!(
                     r#"{{ "version": {version}, "patches": [ {{ "path": "x.ips" }} ] }}"#
@@ -441,14 +698,18 @@ mod tests {
         let bundle = RomWeaverBundle {
             schema: None,
             version: BUNDLE_VERSION,
+            patch_basis: Some(PatchBasisMode::Base),
+            check_states: Vec::new(),
             rom: Some(BundleRom {
                 name: Some("Game (USA).sfc".to_owned()),
                 url: Some("https://example.test/game.sfc".to_owned()),
                 path: None,
+                member: None,
                 checks: Some(BundleChecks {
                     checksums: BTreeMap::from([("crc32".to_owned(), "aabbccdd".to_owned())]),
                     size: Some(1_048_576),
                 }),
+                checks_ref: None,
             }),
             patches: vec![BundlePatchEntry {
                 id: Some("main".to_owned()),
@@ -460,11 +721,15 @@ mod tests {
                 label: Some("stable".to_owned()),
                 url: None,
                 path: Some("patches/main.bps".to_owned()),
+                input: None,
+                target: None,
                 input_checks: Some(BundleChecks {
                     checksums: BTreeMap::from([("crc32".to_owned(), "aabbccdd".to_owned())]),
                     size: None,
                 }),
+                input_checks_ref: None,
                 output_checks: None,
+                output_checks_ref: None,
                 header: Some(PatchApplyHeaderMode::Strip),
                 basis: Some(PatchInputBasis::Base),
             }],
@@ -478,6 +743,7 @@ mod tests {
                     )]),
                     size: None,
                 }),
+                checks_ref: None,
             }),
         };
         let json = serde_json::to_vec_pretty(&bundle).expect("bundle serializes");

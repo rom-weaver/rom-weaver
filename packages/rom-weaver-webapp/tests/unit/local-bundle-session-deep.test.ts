@@ -29,7 +29,9 @@ describe("loadLocalBundleSession acquisition", () => {
       ]),
       result: {
         bundle: {
+          checkStates: [{ checks: { checksums: { crc32: "b" } }, id: "patch:fix-id:output" }],
           output: { header: "strip", name: "Patched Game", checks: { size: 12 } },
+          patchBasis: "base",
           patches: [
             {
               author: "Author",
@@ -41,12 +43,12 @@ describe("loadLocalBundleSession acquisition", () => {
               label: "1.0",
               name: "Fix",
               optional: true,
-              outputChecks: { checksums: { crc32: "b" } },
+              outputChecksRef: "patch:fix-id:output",
               version: "1.0.0",
             },
           ],
-          rom: { checks: { checksums: { crc32: "rom" }, size: 10 }, name: "Expected.bin" },
-          version: 1,
+          rom: { checks: { checksums: { crc32: "rom" }, size: 10 }, member: "disc/track01.bin", name: "Expected.bin" },
+          version: 2,
         },
         patchSources: [
           {
@@ -83,6 +85,7 @@ describe("loadLocalBundleSession acquisition", () => {
       name: "Patched Game",
       outputDefaults: { header: "strip", name: "Patched Game" },
       romFileName: "game.bin",
+      romMember: "disc/track01.bin",
       warnings: ["manifest warning"],
     });
     expect((patch as File & { __nestedParentCompressions?: unknown[] }).__nestedParentCompressions).toEqual([

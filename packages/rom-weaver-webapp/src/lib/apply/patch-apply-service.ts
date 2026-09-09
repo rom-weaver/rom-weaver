@@ -1,7 +1,7 @@
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import type { ParsedPatchDescriptor } from "../../types/ingest.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
-import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import type { PatchInputRef, PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { ParsedPatchLike } from "../../workers/protocol/patch-engine.ts";
 import {
   getPatchFileCleanup,
@@ -267,17 +267,93 @@ const resolvePatchTarget = async (
   throw new Error(`Patch ${index + 1} does not match exactly one input; pass patchTargets[${index}]`);
 };
 
+const describeAssetLeaf = (asset: InputAsset) =>
+  `${asset.kind === "track" ? "track" : "member"} ${asset.member || asset.fileName}`;
+
+const findMemberTarget = (index: number, member: string, patchableAssets: InputAsset[]): InputAsset | undefined => {
+  const matches = patchableAssets.filter((asset) => {
+    if (asset.member === member) return true;
+    if (asset.discGroupId && asset.trackNumber !== undefined)
+      return `${asset.discGroupId}:${asset.trackNumber}` === member;
+    return false;
+  });
+  if (matches.length > 1) throw new Error(`Patch ${index + 1} ROM member is ambiguous: ${member}`);
+  return matches[0];
+};
+
+const resolveMemberTarget = (index: number, member: string, patchableAssets: InputAsset[]): InputAsset => {
+  const match = findMemberTarget(index, member, patchableAssets);
+  if (!match) throw new Error(`Patch ${index + 1} ROM member was not found: ${member}`);
+  return match;
+};
+
 const resolvePatchTargets = async (
   assets: InputAsset[],
   patches: ParsedPatchLike[],
   patchTargets: Array<"auto" | string> | undefined,
+  patchInputs?: Array<PatchInputRef | undefined>,
+  patchIds?: Array<string | undefined>,
+  patchTargetRefs?: Array<PatchInputRef | undefined>,
 ): Promise<InputAsset[]> => {
   const patchableAssets = assets.filter((asset) => asset.patchable);
   if (!patchableAssets.length) throw new Error("No patchable input was provided");
 
   const targets: InputAsset[] = [];
+  const patchIndexById = new Map<string, number>();
   for (let index = 0; index < patches.length; index++) {
+    const id = patchIds?.[index]?.trim();
+    if (!id) continue;
+    if (patchIndexById.has(id)) throw new Error(`Patch id is duplicated: ${id}`);
+    patchIndexById.set(id, index);
+  }
+  for (let index = 0; index < patches.length; index++) {
+    const targetRef = patchTargetRefs?.[index];
+    const laneRef = targetRef || patchInputs?.[index];
+    const referenceKind = targetRef ? "target" : "input";
+    if (laneRef && "patch" in laneRef) {
+      const producerIndex = patchIndexById.get(laneRef.patch);
+      if (producerIndex === undefined || producerIndex >= index)
+        throw new Error(`Patch ${index + 1} ${referenceKind} producer is unavailable: ${laneRef.patch}`);
+      const producerTarget = targets[producerIndex];
+      if (!producerTarget)
+        throw new Error(`Patch ${index + 1} ${referenceKind} producer has no resolved ROM target: ${laneRef.patch}`);
+      targets.push(producerTarget);
+      continue;
+    }
+    if (laneRef && "rom" in laneRef && laneRef.member) {
+      targets.push(resolveMemberTarget(index, laneRef.member, patchableAssets));
+      continue;
+    }
     targets.push(await resolvePatchTarget(index, patches[index], patchableAssets, patchTargets?.[index]));
+  }
+
+  for (let index = 0; index < patches.length; index++) {
+    const targetRef = patchTargetRefs?.[index];
+    const inputRef = patchInputs?.[index];
+    if (!(targetRef && inputRef)) continue;
+    const writeTarget = targets[index];
+    if (!writeTarget) throw new Error(`Patch ${index + 1} target was not resolved`);
+    let readTarget: InputAsset | undefined;
+    if ("patch" in inputRef) {
+      const producerIndex = patchIndexById.get(inputRef.patch);
+      if (producerIndex === undefined || producerIndex >= index)
+        throw new Error(`Patch ${index + 1} input producer is unavailable: ${inputRef.patch}`);
+      readTarget = targets[producerIndex];
+      if (!readTarget)
+        throw new Error(`Patch ${index + 1} input producer has no resolved ROM target: ${inputRef.patch}`);
+    } else if (inputRef.member) {
+      // An unknown member stays with the worker, which resolves members
+      // against the leaf it receives.
+      readTarget = findMemberTarget(index, inputRef.member, patchableAssets);
+    }
+    if (!readTarget || readTarget.id === writeTarget.id) continue;
+    // The worker receives one leaf file per target, so a read from another
+    // known leaf can only fail inside the worker. Reject it here instead.
+    throw new Error(
+      `Patch ${index + 1} source ${describeAssetLeaf(readTarget)} and target ${describeAssetLeaf(
+        writeTarget,
+      )} are different; the browser cannot apply this reference`,
+    );
   }
   return targets;
 };

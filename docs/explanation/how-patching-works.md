@@ -53,9 +53,13 @@ Overrides exist for authors doing controlled research and recovery. For normal u
 
 ## Why patch order matters
 
-When several patches build on one another, patch 2 does not read your original ROM. It reads patch 1's result. Run them in the wrong order and patch 2 is looking at bytes that are not where it expects them, so it either refuses or corrupts the file.
+Patch sets use two relationships. Independent patches are made from the same original ROM. Dependent patches are made from the result of an earlier patch.
 
-Only the author knows the intended order. It travels in the release notes, or in a bundle, which records the order so nobody has to retype it.
+By default, rom-weaver applies both kinds to one accumulated result. It uses the authored basis to verify each patch against the state that its author used. A bundle can scope an accumulated chain to a specific track or select a fixed earlier output. [Bundle execution targets](bundles.md#why-the-order-lives-in-the-file) explains those relationships.
+
+Order still matters. Later changes can overlap earlier changes, and a dependent patch must follow the result it expects.
+
+Only the author knows the intended rule and order. A bundle records both values so users do not reconstruct them from filenames.
 
 ## Compression changes the bytes
 

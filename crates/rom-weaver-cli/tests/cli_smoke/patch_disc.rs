@@ -20,7 +20,7 @@ fn apply_ips_literal(mut data: Vec<u8>, offset: usize, patch: &[u8]) -> Vec<u8> 
 
 /// Write a two-track CD disc (`track01.bin` MODE1 + `track02.bin` AUDIO) plus
 /// `disc.cue` into `dir`, returning the two tracks' original bytes.
-fn write_two_track_cd(dir: &TempDir) -> (Vec<u8>, Vec<u8>) {
+pub(super) fn write_two_track_cd(dir: &TempDir) -> (Vec<u8>, Vec<u8>) {
     let track01 = (0..(8 * 2352)).map(|i| (i % 211) as u8).collect::<Vec<_>>();
     let track02 = (0..(8 * 2352)).map(|i| (i % 173) as u8).collect::<Vec<_>>();
     fs::write(dir.child("track01.bin").path(), &track01).expect("track01");

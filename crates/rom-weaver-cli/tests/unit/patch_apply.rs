@@ -74,6 +74,12 @@ fn apply_command(input: &Path, patches: Vec<PathBuf>) -> PatchApplyCommand {
         expect_in: Vec::new(),
         patch_header: Vec::new(),
         patch_basis: Vec::new(),
+        patch_id: Vec::new(),
+        patch_input: Vec::new(),
+        patch_target: Vec::new(),
+        patch_input_check: Vec::new(),
+        patch_output_check: Vec::new(),
+        default_patch_basis: None,
         output_header: None,
         repair_checksum: false,
         n64_byte_order: Vec::new(),
@@ -239,6 +245,32 @@ fn patch_apply_dry_run_without_an_output_path_is_rejected() {
     assert_eq!(outcome.status, OperationStatus::Failed);
     assert!(terminal.label.contains("--dry-run requires --output"));
     assert!(!input.with_file_name("game-patched.sfc").exists());
+}
+
+#[test]
+fn direct_patch_target_without_inputs_aligns_to_the_patch_list() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let input = temp.path().join("game.sfc");
+    fs::write(&input, b"rom bytes").expect("rom fixture");
+    let patch = temp.path().join("fix.ips");
+    fs::write(&patch, ips_patch(&[(0, b"X")])).expect("patch fixture");
+    let output = temp.path().join("out.sfc");
+    let mut args = apply_command(&input, vec![patch]);
+    args.patch_target = vec![Some(BundlePatchInput::Rom {
+        rom: true,
+        member: None,
+    })];
+    args.output = Some(output.clone());
+
+    let (outcome, terminal) = run_apply(args);
+
+    assert_eq!(
+        outcome.status,
+        OperationStatus::Succeeded,
+        "{}",
+        terminal.label
+    );
+    assert_eq!(fs::read(output).expect("output"), b"Xom bytes");
 }
 
 #[test]
@@ -1558,10 +1590,15 @@ fn bundle_resolution(
     output_checks: Option<(String, FilenameRequirements)>,
 ) -> BundleApplyResolution {
     BundleApplyResolution {
+        patch_basis: PatchBasisMode::Auto,
         checks,
         expected_rom_name: None,
         output_checks,
         step_verifications: Vec::new(),
+        step_inputs: Vec::new(),
+        step_targets: Vec::new(),
+        step_ids: Vec::new(),
+        rom_member: None,
     }
 }
 

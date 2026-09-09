@@ -1,3 +1,4 @@
+import { validatePatchDependencies } from "../../lib/bundle/bundle-targets.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getCompressionOutputExtension,
@@ -11,11 +12,12 @@ import {
 } from "../../presentation/workflow-presentation.ts";
 import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { ApplyWorkflowBundleSources } from "../../types/apply-workflow.ts";
-import type { BundleHeaderMode, ParsedBundleCreateResult } from "../../types/bundle.ts";
+import type { BundleHeaderMode, ParsedBundleCreateResult, ParsedBundlePatchInput } from "../../types/bundle.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import { resolvePatchInputBases, type PatchInputBasis } from "./patch-input-basis.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
 /**
@@ -25,6 +27,8 @@ import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
  */
 
 type BundleExportRow = {
+  input?: ParsedBundlePatchInput;
+  target?: ParsedBundlePatchInput;
   /** Leaf patch file name (what gets exported/bundled). */
   fileName: string;
   /** Source archive the leaf lives in, when it arrived inside one. */
@@ -42,10 +46,7 @@ type BundleExportRow = {
   outputChecks: string;
   label?: string;
   header?: BundleHeaderMode;
-  /** Declared input basis, frozen at export: a user pin verbatim, or "base"
-   * when the chain plan inferred it - so the applying side never has to
-   * re-infer with possibly different evidence. Previous stays unwritten
-   * (it is the schema default). */
+  /** Per-patch input override. The v2 bundle stores the shared rule once. */
   basis?: "base" | "previous";
 };
 
@@ -98,6 +99,14 @@ const parseChecks = (value: string, label: string): Record<string, string> => {
     const [rawAlgorithm, rawValue, ...extra] = token.split("=");
     const algorithm = rawAlgorithm?.trim().toLowerCase().replace("sha-1", "sha1");
     const checksum = rawValue?.trim().toLowerCase();
+    if (algorithm === "size" && checksum && !extra.length) {
+      const size = Number(checksum);
+      if (!(/^\d+$/.test(checksum) && Number.isSafeInteger(size)) || size < 0) {
+        throw new Error(`${label} size must be a nonnegative safe integer`);
+      }
+      checks.size = String(size);
+      continue;
+    }
     if (extra.length || !algorithm || !checksum || !CHECK_ALGORITHMS.includes(algorithm as never)) {
       throw new Error(`${label} contains an invalid checksum entry`);
     }
@@ -111,7 +120,8 @@ const parseChecks = (value: string, label: string): Record<string, string> => {
 };
 
 const formatChecks = (checks: Record<string, string>) =>
-  CHECK_ALGORITHMS.map((algorithm) => (checks[algorithm] ? `${algorithm}=${checks[algorithm]}` : ""))
+  [...CHECK_ALGORITHMS, "size"]
+    .map((algorithm) => (checks[algorithm] ? `${algorithm}=${checks[algorithm]}` : ""))
     .filter(Boolean)
     .join(",");
 
@@ -142,6 +152,7 @@ type UseBundleExportOptions = {
   disabledPatchIds: ReadonlySet<string>;
   /** Originating per-patch metadata (name/label/description round-trips). */
   bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
+  patchBasis: PatchInputBasis;
   initialBundleRom?: boolean;
   initialFormat?: string;
   ready: boolean;
@@ -153,6 +164,9 @@ const stripFileExtension = (fileName: string): string => {
   const dotIndex = trimmed.lastIndexOf(".");
   return dotIndex > 0 ? trimmed.slice(0, dotIndex) : trimmed;
 };
+
+const bundleMetadataSignature = (metadata: ReadonlyMap<string, BundlePatchMeta>): string =>
+  JSON.stringify([...metadata.entries()]);
 
 /** Turn a bundle name into a safe bundle file base name. */
 const slugFileName = (value: string): string =>
@@ -167,40 +181,60 @@ const buildBundleExportRows = ({
   disabledPatchIds,
   getPatchIds,
   getStackItems,
+  patchBasis,
   patches,
 }: {
   bundleMetaById: ReadonlyMap<string, BundlePatchMeta>;
   disabledPatchIds: ReadonlySet<string>;
   getPatchIds: () => string[];
   getStackItems: () => PatchStackItemState[];
+  patchBasis: PatchInputBasis;
   patches: ApplyWorkflowBundleSources["patches"];
 }): BundleExportRow[] => {
   const items = getStackItems();
   const ids = getPatchIds();
+  const resolvedBases = resolvePatchInputBases({
+    disabled: ids.map((id) => disabledPatchIds.has(id)),
+    mode: patchBasis,
+    overrides: ids.map((id) => bundleMetaById.get(id)?.basis),
+  });
   return patches.map((patch, index) => {
-    const id = ids[index] || "";
+    const id = ids[index] || `patch-${index + 1}`;
     const meta = id ? bundleMetaById.get(id) : undefined;
     const item = items[index];
+    const stableId = meta?.id || id;
+    const sourceTarget = patch.target;
+    // An explicit input resets the bytes this entry reads. Target only partitions
+    // automatic output lanes, so optional entries can be toggled after import.
+    const target = sourceTarget || meta?.target;
     const fileName = item?.fileName?.trim() || patch.fileName || `patch-${index + 1}.bin`;
     const archiveFileName = item?.archiveFileName?.trim();
     const headerChoice = item?.headerChoice;
-    const checks = Object.entries(meta?.inputChecks?.checksums || {})
+    const checks = Object.entries({
+      ...meta?.inputChecks?.checksums,
+      ...(meta?.inputChecks?.size === undefined ? {} : { size: String(meta.inputChecks.size) }),
+    })
       .filter(([, value]) => value.trim())
       .map(([algorithm, value]) => `${algorithm}=${value.trim()}`)
       .join(",");
-    const outputChecks = Object.entries(meta?.outputChecks?.checksums || {})
+    const outputChecks = Object.entries({
+      ...meta?.outputChecks?.checksums,
+      ...(meta?.outputChecks?.size === undefined ? {} : { size: String(meta.outputChecks.size) }),
+    })
       .filter(([, value]) => value.trim())
       .map(([algorithm, value]) => `${algorithm}=${value.trim()}`)
       .join(",");
-    const chainVerdict = item?.chainVerdict;
-    const basis =
-      meta?.basis ??
-      (chainVerdict?.basis === "base" && chainVerdict.basisSource === "inferred_base" ? ("base" as const) : undefined);
+    // v2 carries the shared rule at the bundle root. Entries retain only an
+    // explicit exception, which keeps the exported recipe compact.
+    const resolvedBasis = resolvedBases[index];
+    const basis = meta?.basis && (resolvedBasis === "base" || resolvedBasis === "previous") ? resolvedBasis : undefined;
     return {
       fileName,
       ...(archiveFileName && archiveFileName !== fileName ? { archiveFileName } : {}),
       default: !disabledPatchIds.has(id),
-      id: meta?.id || id,
+      id: stableId,
+      input: meta?.input,
+      ...(target ? { target } : {}),
       ...(meta?.version ? { version: meta.version } : {}),
       ...(meta?.author ? { author: meta.author } : {}),
       ...(meta?.name ? { name: meta.name } : {}),
@@ -221,6 +255,8 @@ const buildBundlePatchInputs = (patches: ApplyWorkflowBundleSources["patches"], 
       fileName: patch.fileName,
       source: patch.source,
       ...(row?.id ? { id: row.id } : {}),
+      ...(row?.input ? { input: row.input } : {}),
+      ...(row?.target ? { target: row.target } : {}),
       ...(row?.version?.trim() ? { version: row.version.trim() } : {}),
       ...(row?.author?.trim() ? { author: row.author.trim() } : {}),
       ...(row?.default === false ? { optional: true } : {}),
@@ -274,6 +310,13 @@ const preparePackagedRom = async ({
   if (!bundleRom) return undefined;
   if (!wantsBundle) return undefined;
   const originalName = getReactBinarySourceFileName(rom.originalSource as BinarySource, rom.fileName);
+  if (rom.member) {
+    const extension = getFileNameExtension(originalName);
+    if (extension === "cue" || extension === "gdi") {
+      throw new Error("To include this disc, add an archive containing its descriptor and tracks, then export again");
+    }
+    return { fileName: originalName, source: rom.originalSource };
+  }
   const recommendedRomFormat = rom.recommendedFormat?.trim().toLowerCase();
   const targetMetadata = getRomSpecificCompressionFormatRegistration(recommendedRomFormat);
   const targetFormat = targetMetadata?.format;
@@ -314,6 +357,7 @@ const useBundleExport = ({
   getOutputHeader,
   disabledPatchIds,
   bundleMetaById,
+  patchBasis,
   initialBundleRom = false,
   initialFormat = "zip",
   ready,
@@ -328,6 +372,8 @@ const useBundleExport = ({
   const [downloadableOutput, setDownloadableOutput] = useState<PublicOutput | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const downloadableOutputRef = useRef<PublicOutput | null>(null);
+  const bundleMetaByIdRef = useRef(bundleMetadataSignature(bundleMetaById));
+  const patchBasisRef = useRef(patchBasis);
   // The sources captured when the export ran, so the run stays aligned even if
   // the bench changes underneath it.
   const sourcesRef = useRef<BundleExportSources>({ patches: [], rom: null });
@@ -367,6 +413,10 @@ const useBundleExport = ({
     }
     const exportName = getName?.().trim() || "";
     const sources = getSessionSources();
+    if (sources.error) {
+      setError(sources.error);
+      return;
+    }
     sourcesRef.current = { patches: sources.patches.slice(), rom: sources.rom };
     const { rom, patches } = sources;
     const items = getStackItems();
@@ -385,6 +435,7 @@ const useBundleExport = ({
       disabledPatchIds,
       getPatchIds: () => patchIds,
       getStackItems: () => items,
+      patchBasis,
       patches,
     });
     const stepProgress = (label: string) =>
@@ -406,6 +457,15 @@ const useBundleExport = ({
     abortControllerRef.current = abortController;
     try {
       validateBundleRows(exportRows, items);
+      const dependencyError = validatePatchDependencies(
+        exportRows.map((row) => ({
+          id: row.id || "",
+          input: row.input,
+          target: row.target,
+          enabled: row.default,
+        })),
+      );
+      if (dependencyError) throw new Error(dependencyError);
       stepProgress("Writing bundle");
       const bundleFileName = `${slugFileName(exportName) || "rw-bundle"}.${format}`;
       const packagedRom = await preparePackagedRom({
@@ -428,6 +488,8 @@ const useBundleExport = ({
         ...(Object.keys(romChecksums).length ? { romChecksums: formatChecks(romChecksums) } : {}),
         ...(typeof romSize === "number" ? { romSize } : {}),
         ...(outputHeader === "keep" || outputHeader === "strip" ? { outputHeader } : {}),
+        patchBasis,
+        ...(exportRom.member ? { romMember: exportRom.member } : {}),
         // The ROM is never distributed unless explicitly bundled: its bundle
         // entry keeps checks only and the applying user supplies the file.
         ...(bundleRom ? {} : { noBundleRom: true }),
@@ -473,6 +535,7 @@ const useBundleExport = ({
     getName,
     getOutputHeader,
     bundleMetaById,
+    patchBasis,
     onComplete,
     downloadExport,
     getPatchIds,
@@ -490,6 +553,15 @@ const useBundleExport = ({
     setDownloadableOutput(null);
     disposeBundleOutput(output);
   }, []);
+  useEffect(() => {
+    if (patchBasisRef.current !== patchBasis) clearDownloadable();
+    patchBasisRef.current = patchBasis;
+  }, [clearDownloadable, patchBasis]);
+  useEffect(() => {
+    const metadataSignature = bundleMetadataSignature(bundleMetaById);
+    if (bundleMetaByIdRef.current !== metadataSignature) clearDownloadable();
+    bundleMetaByIdRef.current = metadataSignature;
+  }, [bundleMetaById, clearDownloadable]);
   const selectFormat = useCallback(
     (value: string) => {
       clearDownloadable();
@@ -528,4 +600,4 @@ const useBundleExport = ({
   };
 };
 
-export { preparePackagedRom, useBundleExport };
+export { buildBundleExportRows, buildBundlePatchInputs, preparePackagedRom, useBundleExport };

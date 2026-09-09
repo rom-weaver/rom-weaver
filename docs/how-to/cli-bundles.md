@@ -41,8 +41,9 @@ Rather than pass every flag, hand-author a `rom-weaver-bundle.json` spec with lo
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json",
-  "version": 1,
+  "$schema": "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json",
+  "version": 2,
+  "patchBasis": "auto",
   "rom": { "path": "original.sfc" },
   "patches": [
     { "path": "translation.bps", "name": "English translation" },

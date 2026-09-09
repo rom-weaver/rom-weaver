@@ -5,6 +5,9 @@ import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser
 import { resetRomWeaverRunner, warmupRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
 
 const POSIX_DIRECTORY_PREFIX_REGEX = /^.*\//;
+const readUint16Le = (bytes, offset) => bytes[offset] | (bytes[offset + 1] << 8);
+const readUint32Le = (bytes, offset) =>
+  (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
 export const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 export const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
 export const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
@@ -62,6 +65,29 @@ export const loadFixtureFile = async (filePath, type = "application/octet-stream
     fixtureByteCache.set(filePath, bytes);
   }
   return new File([bytes], fileNameFromPath(filePath), { type });
+};
+
+export const readStoredZipEntries = (bytes) => {
+  const entries = [];
+  const decoder = new TextDecoder();
+  for (let offset = 0; offset <= bytes.length - 46; offset += 1) {
+    if (readUint32Le(bytes, offset) !== 0x02014b50) continue;
+    const fileNameLength = readUint16Le(bytes, offset + 28);
+    const extraLength = readUint16Le(bytes, offset + 30);
+    const commentLength = readUint16Le(bytes, offset + 32);
+    const fileNameStart = offset + 46;
+    const localHeaderOffset = readUint32Le(bytes, offset + 42);
+    const localFileNameLength = readUint16Le(bytes, localHeaderOffset + 26);
+    const localExtraLength = readUint16Le(bytes, localHeaderOffset + 28);
+    const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength;
+    const size = readUint32Le(bytes, offset + 20);
+    entries.push({
+      bytes: bytes.slice(dataStart, dataStart + size),
+      fileName: decoder.decode(bytes.subarray(fileNameStart, fileNameStart + fileNameLength)),
+    });
+    offset = fileNameStart + fileNameLength + extraLength + commentLength - 1;
+  }
+  return entries;
 };
 
 export const selectFileInputs = (input, files) => {

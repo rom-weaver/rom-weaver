@@ -42,6 +42,10 @@ type InputAsset = {
   preparation?: InputPreparationMetrics;
   file: PatchFileInstance;
   groupId?: string;
+  /** Stable source member/track locator for persisted bundle targets. */
+  member?: string;
+  trackNumber?: number;
+  discGroupId?: string;
   patchable: boolean;
   // Sidecar patches bundled alongside this ROM in the source archive, harvested from the same ingest
   // pass that produced this asset. Set on the primary ROM asset of a mixed ROM+patch archive only.
@@ -113,7 +117,7 @@ const makeTrackAsset = (
   fileName: string,
   file: PatchFileInstance,
   groupId: string,
-  reference: { trackNumber?: number; mode?: string; patchable?: boolean },
+  reference: { trackNumber?: number; mode?: string; patchable?: boolean; member?: string },
   disc: { cueText?: string; gdiText?: string; splitBinAvailable?: boolean } = {},
 ): InputAsset => {
   // `reference.mode`/`reference.trackNumber` (cue track mode + reference order) are never read and
@@ -124,6 +128,7 @@ const makeTrackAsset = (
     ...(disc.gdiText ? { gdiText: disc.gdiText } : {}),
     ...(typeof disc.splitBinAvailable === "boolean" ? { splitBinAvailable: disc.splitBinAvailable } : {}),
   };
+  const discGroupId = (file.metadata as { discGroupId?: unknown } | undefined)?.discGroupId;
   return {
     file,
     fileName,
@@ -131,6 +136,9 @@ const makeTrackAsset = (
     id,
     identification: (file as PatchFileInstance & { identification?: ParsedIdentifyResolution }).identification,
     kind: "track",
+    ...(typeof reference.trackNumber === "number" ? { trackNumber: reference.trackNumber } : {}),
+    ...(typeof discGroupId === "string" ? { discGroupId } : {}),
+    ...(typeof reference.member === "string" ? { member: reference.member } : {}),
     patchable: reference.patchable !== false,
     size: file.fileSize,
   };
@@ -145,6 +153,9 @@ const makeRomAsset = (id: string, file: PatchFileInstance): InputAsset => {
     id,
     identification: (file as PatchFileInstance & { identification?: ParsedIdentifyResolution }).identification,
     kind: "rom",
+    ...((file.metadata as { member?: unknown } | undefined)?.member
+      ? { member: String((file.metadata as { member: unknown }).member) }
+      : {}),
     patchable: true,
     size: file.fileSize,
   };

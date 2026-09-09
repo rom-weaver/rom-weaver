@@ -17,6 +17,9 @@ use super::*;
 /// input-ROM requirements enforced after the CLI checksum flags parse, and
 /// the expected checksums of the final output for this selection.
 pub(super) struct BundleApplyResolution {
+    /// Effective shared rule for the resolved bundle. Version 1 forces auto;
+    /// version 2 supplies `patchBasis`; an explicit CLI shared rule wins.
+    pub patch_basis: PatchBasisMode,
     /// `(source label, requirements)`, merged in order after CLI flags.
     pub checks: Vec<(String, FilenameRequirements)>,
     /// Advisory file-name expectation for a ROM supplied separately from the
@@ -29,6 +32,16 @@ pub(super) struct BundleApplyResolution {
     /// Per selected patch (apply order): declared basis and mid-chain
     /// declared checks, consumed by the apply chain loop.
     pub step_verifications: Vec<patch_plan::PatchStepVerification>,
+    /// Concrete selected inputs, index-aligned with the resolved bundle patch
+    /// list. Omitted inputs retain the legacy sequential execution path.
+    pub step_inputs: Vec<Option<BundlePatchInput>>,
+    /// Cumulative selected execution lanes, index-aligned with step inputs.
+    pub step_targets: Vec<Option<BundlePatchInput>>,
+    /// Stable producer IDs for concrete patch-output inputs.
+    pub step_ids: Vec<Option<String>>,
+    /// Bundle-authored ROM member selector. It applies only while resolving
+    /// the ROM source; patch archives keep the caller's selections.
+    pub rom_member: Option<String>,
 }
 
 enum BundleApplySource {
@@ -76,6 +89,13 @@ impl CliApp {
         };
         let source = self.load_bundle_apply_source(source, args, context)?;
         let bundle = parse_bundle_bytes(&source.loaded.bytes)?;
+        let patch_basis = args.default_patch_basis.unwrap_or_else(|| {
+            if bundle.version == 1 {
+                PatchBasisMode::Auto
+            } else {
+                bundle.patch_basis.unwrap_or(PatchBasisMode::Auto)
+            }
+        });
         let expected_rom_name = matches!(source.mode, BundleApplySourceKind::Explicit)
             .then(|| {
                 bundle
@@ -88,6 +108,7 @@ impl CliApp {
                     .map(str::to_owned)
             })
             .flatten();
+        let rom_member = bundle.rom.as_ref().and_then(|rom| rom.member.clone());
         for warning in &source.loaded.warnings {
             warn!(bundle = %source.archive_source.display(), "{warning}");
         }
@@ -118,14 +139,58 @@ impl CliApp {
         // the bundle still contributes rom checks and output defaults.
         let mut output_checks: Option<(String, FilenameRequirements)> = None;
         let mut step_verifications: Vec<patch_plan::PatchStepVerification> = Vec::new();
+        let mut step_inputs: Vec<Option<BundlePatchInput>> = Vec::new();
+        let mut step_targets: Vec<Option<BundlePatchInput>> = Vec::new();
+        let mut step_ids: Vec<Option<String>> = Vec::new();
         if args.patches.is_empty() {
             let selected =
                 self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
+            let selected_set: BTreeSet<usize> = selected.iter().copied().collect();
             if selected.is_empty() {
                 return Err(RomWeaverError::Validation(
                     "no bundle patches selected (all are optional or disabled); pass --with <glob> to include some"
                         .to_string(),
                 ));
+            }
+            let selected_ids: BTreeMap<&str, usize> = selected
+                .iter()
+                .enumerate()
+                .filter_map(|(position, index)| {
+                    bundle.patches[*index]
+                        .id
+                        .as_deref()
+                        .map(|id| (id, position))
+                })
+                .collect();
+            for (position, index) in selected.iter().enumerate() {
+                for (selector_name, selector) in [
+                    ("input", bundle.patches[*index].input.as_ref()),
+                    ("target", bundle.patches[*index].target.as_ref()),
+                ] {
+                    let Some(BundlePatchInput::Patch {
+                        patch: producer, ..
+                    }) = selector
+                    else {
+                        continue;
+                    };
+                    if selected_ids
+                        .get(producer.as_str())
+                        .is_none_or(|producer_position| *producer_position >= position)
+                    {
+                        return Err(RomWeaverError::ValidationCode(
+                            ValidationCodeError::new(match selector_name {
+                                "input" => "bundle.patch.input.patch.unavailable",
+                                "target" => "bundle.patch.target.patch.unavailable",
+                                _ => unreachable!("only input and target selectors are checked"),
+                            })
+                            .with_message(
+                                "patch selector references an earlier patch that is not selected",
+                            )
+                            .with_field("entry", format!("patches[{index}]"))
+                            .with_field("patch", producer.clone()),
+                        ));
+                    }
+                }
             }
             let mut header_modes = Vec::with_capacity(selected.len());
             for (position, index) in selected.iter().enumerate() {
@@ -148,8 +213,22 @@ impl CliApp {
                 // supplied ROM; without its own inputChecks it relies on
                 // rom.checks (already merged). Later patches' inputChecks are
                 // mid-chain states, validated by construction of the chain.
+                let input_checks = resolve_bundle_checks(
+                    &bundle,
+                    entry.input_checks.as_ref(),
+                    entry.input_checks_ref.as_deref(),
+                )?;
+                let input_is_root_rom = entry.target.is_none()
+                    && match entry.input.as_ref() {
+                        None => true,
+                        Some(BundlePatchInput::Rom { member, .. }) => {
+                            member == &bundle.rom.as_ref().and_then(|rom| rom.member.clone())
+                        }
+                        Some(BundlePatchInput::Patch { .. }) => false,
+                    };
                 if position == 0
-                    && let Some(entry_checks) = &entry.input_checks
+                    && input_is_root_rom
+                    && let Some(entry_checks) = &input_checks
                 {
                     checks.push((
                         format!("bundle {entry_label}.inputChecks"),
@@ -165,9 +244,22 @@ impl CliApp {
                 if position > 0
                     && let Some(previous_output) = selected
                         .get(position - 1)
-                        .and_then(|previous| bundle.patches[*previous].output_checks.as_ref())
-                    && let Some(entry_input) = &entry.input_checks
-                    && !bundle_checks_agree(previous_output, entry_input)
+                        .map(|previous| &bundle.patches[*previous])
+                        .map(|previous| {
+                            resolve_bundle_checks(
+                                &bundle,
+                                previous.output_checks.as_ref(),
+                                previous.output_checks_ref.as_deref(),
+                            )
+                        })
+                        .transpose()?
+                        .flatten()
+                    && let Some(entry_input) = resolve_bundle_checks(
+                        &bundle,
+                        entry.input_checks.as_ref(),
+                        entry.input_checks_ref.as_deref(),
+                    )?
+                    && !bundle_checks_agree(&previous_output, &entry_input)
                 {
                     warn!(
                         entry = %entry_label,
@@ -175,86 +267,60 @@ impl CliApp {
                     );
                 }
                 header_modes.push(entry.header.unwrap_or_default());
-                // Position k consumes exactly the authored chain prefix when
-                // every earlier bundle patch is selected too.
-                let is_chain_prefix = *index == position;
+                // A declared state gates only when every earlier entry in its
+                // own execution lane is selected. Other ROM/member lanes do
+                // not change these bytes.
+                let is_chain_prefix = (0..=*index)
+                    .filter(|candidate| bundle.patches[*candidate].target == entry.target)
+                    .all(|candidate| selected_set.contains(&candidate));
+                let entry_basis = entry.basis.map(|basis| match basis {
+                    PatchInputBasis::Base => PatchBasisMode::Base,
+                    PatchInputBasis::Previous => PatchBasisMode::Previous,
+                });
+                let bundle_basis = (bundle.version != 1)
+                    .then_some(bundle.patch_basis)
+                    .flatten();
+                let effective_basis = args
+                    .default_patch_basis
+                    .or(entry_basis)
+                    .or(bundle_basis)
+                    .unwrap_or(PatchBasisMode::Auto);
+                let output_checks = resolve_bundle_checks(
+                    &bundle,
+                    entry.output_checks.as_ref(),
+                    entry.output_checks_ref.as_deref(),
+                )?;
                 step_verifications.push(patch_plan::PatchStepVerification {
                     execution: None,
                     base_variant: None,
                     base_representation: None,
-                    basis: entry.basis,
-                    basis_source: entry.basis.map(|_| PatchBasisSource::Declared),
-                    declared_input: entry
-                        .input_checks
+                    basis: effective_basis.declared(),
+                    basis_source: effective_basis
+                        .declared()
+                        .map(|_| PatchBasisSource::Declared),
+                    declared_input: input_checks
                         .as_ref()
                         .map(patch_plan::PlanState::from_bundle_checks),
-                    declared_output: entry
-                        .output_checks
+                    declared_output: output_checks
                         .as_ref()
                         .map(patch_plan::PlanState::from_bundle_checks),
                     is_chain_prefix,
                 });
+                step_inputs.push(entry.input.clone());
+                step_targets.push(entry.target.clone());
+                step_ids.push(entry.id.clone());
                 trace!(
                     patch = %resolved.display(),
                     optional = entry.optional,
                     header = ?entry.header,
-                    basis = ?entry.basis,
+                    basis = ?effective_basis,
                     is_chain_prefix,
                     "selected bundle patch"
                 );
                 args.patches.push(resolved);
             }
-            // The last applied patch pins the expected output; a patch without
-            // its own outputChecks ends the full chain, whose result is the
-            // bundle's output.checks.
-            if let Some(last) = selected.last() {
-                let last_entry = &bundle.patches[*last];
-                // An entry's outputChecks describe the state after applying the
-                // chain UP TO it - every earlier patch included. `selected` is
-                // ascending, so the selection is that prefix exactly when its
-                // length reaches the entry's position.
-                let is_chain_prefix = selected.len() == *last + 1;
-                let (label, entry_checks) = match &last_entry.output_checks {
-                    Some(entry_checks) if is_chain_prefix => (
-                        format!("bundle patches[{last}].outputChecks"),
-                        Some(entry_checks),
-                    ),
-                    // Skipping an earlier optional produces a different,
-                    // legitimate result the recorded hash does not describe.
-                    Some(_) => {
-                        debug!(
-                            entry = *last,
-                            selected = selected.len(),
-                            "bundle outputChecks skipped: selection is not the chain prefix ending at this patch"
-                        );
-                        (String::new(), None)
-                    }
-                    // output.checks describes the FULL chain: it only gates
-                    // when every bundle patch is selected - a partial
-                    // selection that happens to end on the final entry (some
-                    // optionals skipped) produces a different, legitimate
-                    // result.
-                    None if selected.len() == bundle.patches.len() => (
-                        "bundle output.checks".to_string(),
-                        bundle
-                            .output
-                            .as_ref()
-                            .and_then(|output| output.checks.as_ref()),
-                    ),
-                    // A partial chain without a declared endpoint has no
-                    // recorded result to verify against.
-                    None => (String::new(), None),
-                };
-                if let Some(entry_checks) = entry_checks {
-                    output_checks = Some((
-                        label,
-                        FilenameRequirements {
-                            checksums: entry_checks.checksums.clone(),
-                            size: entry_checks.size,
-                        },
-                    ));
-                }
-            }
+            output_checks =
+                resolve_selected_bundle_output_check(&bundle, &selected, &selected_set)?;
             // Only pin per-patch header modes when the bundle sets any;
             // otherwise the all-auto default (empty list) applies. Explicit
             // --patch-header flags win untouched.
@@ -284,10 +350,15 @@ impl CliApp {
         }
 
         Ok(Some(BundleApplyResolution {
+            patch_basis,
             checks,
             expected_rom_name,
             output_checks,
             step_verifications,
+            step_inputs,
+            step_targets,
+            step_ids,
+            rom_member,
         }))
     }
 
@@ -310,7 +381,9 @@ impl CliApp {
             }
             return Ok(());
         };
-        if let Some(rom_checks) = &rom.checks {
+        if let Some(rom_checks) =
+            resolve_bundle_checks(bundle, rom.checks.as_ref(), rom.checks_ref.as_deref())?
+        {
             checks.push((
                 "bundle rom.checks".to_string(),
                 FilenameRequirements {
@@ -353,7 +426,9 @@ impl CliApp {
         {
             coded.push_field("expected_name", name.to_owned());
         }
-        if let Some(rom_checks) = &rom.checks {
+        if let Some(rom_checks) =
+            resolve_bundle_checks(bundle, rom.checks.as_ref(), rom.checks_ref.as_deref())?
+        {
             if !rom_checks.checksums.is_empty() {
                 coded.push_field(
                     "expected_checksums",
@@ -363,7 +438,7 @@ impl CliApp {
             if let Some(size) = rom_checks.size {
                 coded.push_field("expected_size", size);
             }
-            describe_expected_rom(rom_checks, &mut coded);
+            describe_expected_rom(&rom_checks, &mut coded);
         }
         Err(RomWeaverError::ValidationCode(coded))
     }
@@ -647,6 +722,32 @@ impl CliApp {
     }
 }
 
+fn resolve_bundle_checks(
+    bundle: &RomWeaverBundle,
+    inline: Option<&BundleChecks>,
+    reference: Option<&str>,
+) -> Result<Option<BundleChecks>> {
+    if let Some(checks) = inline {
+        return Ok(Some(checks.clone()));
+    }
+    let Some(reference) = reference else {
+        return Ok(None);
+    };
+    bundle
+        .check_states
+        .iter()
+        .find(|state| state.id == reference)
+        .map(|state| state.checks.clone())
+        .map(Some)
+        .ok_or_else(|| {
+            RomWeaverError::ValidationCode(
+                ValidationCodeError::new("bundle.checks.reference.unresolved")
+                    .with_message("checks reference matches no bundle checkStates id")
+                    .with_field("ref", reference.to_owned()),
+            )
+        })
+}
+
 /// Which resolution mode the bundle came from (mirrors
 /// [`BundleApplySource`] after the source value has been consumed).
 #[derive(Clone, Copy)]
@@ -680,6 +781,69 @@ fn bundle_checks_agree(left: &BundleChecks, right: &BundleChecks) -> bool {
         _ => true,
     };
     checksums_agree && sizes_agree
+}
+
+fn resolve_selected_bundle_output_check(
+    bundle: &RomWeaverBundle,
+    selected: &[usize],
+    selected_set: &BTreeSet<usize>,
+) -> Result<Option<(String, FilenameRequirements)>> {
+    let Some(last) = selected.last() else {
+        return Ok(None);
+    };
+    let last_entry = &bundle.patches[*last];
+    let is_chain_prefix = (0..=*last)
+        .filter(|candidate| bundle.patches[*candidate].target == last_entry.target)
+        .all(|candidate| selected_set.contains(&candidate));
+    let last_output_checks = resolve_bundle_checks(
+        bundle,
+        last_entry.output_checks.as_ref(),
+        last_entry.output_checks_ref.as_deref(),
+    )?;
+    let resolved = match last_output_checks {
+        // Target-lane endpoint checks verify inside the apply loop against raw
+        // lane bytes. They must not become a check on the command output.
+        Some(checks) if is_chain_prefix && last_entry.target.is_none() => {
+            Some((format!("bundle patches[{last}].outputChecks"), checks))
+        }
+        Some(_) if last_entry.target.is_some() && selected.len() == bundle.patches.len() => bundle
+            .output
+            .as_ref()
+            .map(|output| {
+                resolve_bundle_checks(bundle, output.checks.as_ref(), output.checks_ref.as_deref())
+            })
+            .transpose()?
+            .flatten()
+            .map(|checks| ("bundle output.checks".to_string(), checks)),
+        Some(_) if last_entry.target.is_some() => None,
+        Some(_) => {
+            debug!(
+                entry = *last,
+                selected = selected.len(),
+                "bundle outputChecks skipped: selection is not the chain prefix ending at this patch"
+            );
+            None
+        }
+        None if selected.len() == bundle.patches.len() => bundle
+            .output
+            .as_ref()
+            .map(|output| {
+                resolve_bundle_checks(bundle, output.checks.as_ref(), output.checks_ref.as_deref())
+            })
+            .transpose()?
+            .flatten()
+            .map(|checks| ("bundle output.checks".to_string(), checks)),
+        None => None,
+    };
+    Ok(resolved.map(|(label, checks)| {
+        (
+            label,
+            FilenameRequirements {
+                checksums: checks.checksums,
+                size: checks.size,
+            },
+        )
+    }))
 }
 
 fn parent_dir(path: &Path) -> PathBuf {

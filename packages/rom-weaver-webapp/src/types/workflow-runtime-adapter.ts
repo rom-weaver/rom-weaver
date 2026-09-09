@@ -25,6 +25,7 @@ import type {
   CompressionProbeResult,
   CreatePatchResult,
   PublicOutput,
+  PatchInputRef,
   TrimResult,
 } from "./workflow-runtime-types.ts";
 
@@ -243,6 +244,18 @@ type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "outpu
   outputName?: string | null | undefined;
   /** One declared input basis per patch in chain order. */
   patchBasis?: PatchApplyCommand["patch_basis"];
+  /** Stable patch slot identity per patch in chain order. */
+  patchIds?: string[];
+  /** Concrete execution input per patch in chain order. */
+  patchInputs?: Array<PatchInputRef | null>;
+  /** Cumulative output lane per patch in chain order. */
+  patchTargets?: Array<PatchInputRef | null>;
+  /** Index-aligned authored input checks for each patch. */
+  patchInputChecks?: string[];
+  /** Index-aligned authored output checks for each patch. */
+  patchOutputChecks?: string[];
+  /** Shared input rule. Per-patch `patchBasis` values override this default. */
+  defaultPatchBasis?: PatchBasisMode;
   removeHeader?: boolean;
   requireInputChecksumMatch?: boolean;
   validateWithChecksums?: PatchApplyCommand["expect_in"];
@@ -259,6 +272,8 @@ type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | 
   n64ByteOrder?: PatchValidateCommand["n64_byte_order"];
   /** Declared basis per patch, index-aligned with `patches` (auto entries defer to inference). */
   patchBasis?: PatchBasisMode[];
+  /** Shared input rule. Per-patch `patchBasis` values override this default. */
+  defaultPatchBasis?: PatchBasisMode;
   /** Declared input checks per patch (comma-separable `algo=hex`, empty skips), index-aligned. */
   patchInputChecks?: string[];
   /** Declared output checks per patch, index-aligned. */
@@ -498,6 +513,8 @@ type WorkflowRuntimeBundle = {
       source: unknown;
       fileName?: string;
       id?: string;
+      input?: PatchInputRef;
+      target?: PatchInputRef;
       version?: string;
       author?: string;
       name?: string;
@@ -515,8 +532,12 @@ type WorkflowRuntimeBundle = {
     }>;
     outputName?: string;
     outputHeader?: BundleHeaderMode;
+    /** Shared input rule emitted in the v2 bundle root. */
+    patchBasis?: "auto" | "base" | "previous";
     /** Advisory logical ROM file name written to bundle `rom.name`. */
     romName?: string;
+    /** Exact logical ROM member/track locator written to bundle `rom.member`. */
+    romMember?: string;
     /** Cached checksums from apply staging; Rust hashes only when this is absent. */
     romChecksums?: string;
     /** Cached prepared ROM byte size. */

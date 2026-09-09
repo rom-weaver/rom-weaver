@@ -50,13 +50,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.find.cliIdentifyAndHash"
-#~ msgstr "ROMs identifizieren und hashen (CLI)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.find.applyPatchHint"
-#~ msgstr "Apply Patch öffnet ein Bundle und führt dessen gespeicherte Patch-Reihenfolge aus."
+#~ msgid "ui.hero.accent"
+#~ msgstr "in nativer Geschwindigkeit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -175,6 +170,11 @@ msgstr "Diesen Patch anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.execution"
+msgstr "Anwenden auf — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Anwenden-Tool"
 
@@ -182,6 +182,16 @@ msgstr "Anwenden-Tool"
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
 msgstr "Das Anwenden des Patches ist fehlgeschlagen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.input"
+msgstr "Erstellte Eingabeprüfungen — {basis}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.explanation"
+msgstr "Erstellte Eingabeprüfungen beschreiben die Patch-Quelle. Jeder Patch läuft auf der aktuellen Stapel-Eingabe."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -202,6 +212,16 @@ msgstr "auto (Basis-ROM)"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoPrevious"
 msgstr "auto (vorheriger)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.auto"
+msgstr "Automatisch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.automatic"
+msgstr "Automatische Erkennung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -280,6 +300,11 @@ msgstr "Kanal"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.deferred"
+msgstr "Prüft beim Anwenden — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
 
@@ -355,6 +380,11 @@ msgstr "Erstellen-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.currentStackInput"
+msgstr "Aktuelle Stapel-Eingabe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.dark"
 msgstr "Dunkel"
 
@@ -412,6 +442,11 @@ msgstr "DVD"
 #: src/presentation/localization/messages.ts
 msgid "settings.chdCreateDvdCodecs"
 msgstr "DVD-Codecs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.embeddedOutput"
+msgstr "Eingebettete Ausgabeprüfungen — Einzelnes Patch-Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -680,6 +715,11 @@ msgstr "passt zu deiner ROM ({variant})"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.executionMember"
+msgstr "Dateipfad im Container"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.modified"
 msgstr "Modifiziert"
 
@@ -727,6 +767,11 @@ msgstr "Kein ROM in den Daten dieser Plattform hat diesen Namen."
 #: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "Keine wählbare Datei gefunden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unknown"
+msgstr "Noch nicht geprüft — {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -790,6 +835,21 @@ msgstr "Original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.original"
+msgstr "Original-ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoBase"
+msgstr "Original-ROM (automatisch)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.originalRom"
+msgstr "Original-ROM{member}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.output"
 msgstr "Ausgabe"
 
@@ -797,6 +857,11 @@ msgstr "Ausgabe"
 #: src/presentation/localization/messages.ts
 msgid "error.OUTPUT_WRITE_FAILED"
 msgstr "Die Ausgabe konnte nicht geschrieben werden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchOutput"
+msgstr "Ausgabe von {patch}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -822,6 +887,11 @@ msgstr "Die Ausgabe wird nicht überprüft - die Patches sind in falscher Reihen
 #: src/presentation/localization/messages.ts
 msgid "ui.log.viewLabel"
 msgstr "Angezeigtes Protokoll"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchNumber"
+msgstr "Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -857,6 +927,16 @@ msgstr "Vorschau-Build"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "vorherige Ausgabe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.previous"
+msgstr "Ausgabe des vorherigen Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoPrevious"
+msgstr "Ausgabe des vorherigen Patches (automatisch)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -922,6 +1002,11 @@ msgstr "Eingabe-Übereinstimmung erzwingen"
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_UNAVAILABLE"
 msgstr "Die erforderliche Worker-Unterstützung fehlt."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.expects"
+msgstr "Erfordert zuerst {patch}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1050,6 +1135,11 @@ msgstr "Teile deine Änderungen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.sharedInput"
+msgstr "Gemeinsame Eingabeprüfungen — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.error"
 msgstr "Download der geteilten Sitzung fehlgeschlagen"
 
@@ -1067,6 +1157,11 @@ msgstr "Zum Hauptinhalt springen"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesSortBy"
 msgstr "Nach {column} sortieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.stackOutput"
+msgstr "Stapel-Ausgabeprüfungen — Kombiniertes Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1117,6 +1212,11 @@ msgstr "Wechselt den Tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tippen, um Dateien zu wählen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.targetRom"
+msgstr "Ziel-ROM — {target}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1319,6 +1419,11 @@ msgstr "Mache den Patch rückgängig."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unknownPatchOutput"
+msgstr "Unbekannte Patch-Ausgabe ({patch})"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.unusedInputs"
 msgstr "Nicht verwendete Eingaben: {names}{count, plural, =0 {} one { und eine weitere} other { und # weitere}}."
 
@@ -1341,6 +1446,16 @@ msgstr "Doppelte ROMs verwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "Doppelte ROMs verwenden?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.executionMemberTitle"
+msgstr "Verwende den genauen Dateipfad innerhalb des ausgewählten ROMs oder Patch-Ergebnisses."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.verified"
+msgstr "Geprüft — {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
