@@ -3302,12 +3302,29 @@ pub struct IdentifyDatabaseUpdateCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveIdentifyCommand {
-    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "SAVE", help = "Save file to read")
+    )]
     pub input: PathBuf,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GAME_ID",
+            help = "Force a game id instead of detecting one"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub game: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "SHA1",
+            help = "SHA-1 of the matching ROM, used to pick a game"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom_sha1: Option<String>,
 }
@@ -3316,12 +3333,29 @@ pub struct SaveIdentifyCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveInspectCommand {
-    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "SAVE", help = "Save file to read")
+    )]
     pub input: PathBuf,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GAME_ID",
+            help = "Force a game id instead of detecting one"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub game: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "SHA1",
+            help = "SHA-1 of the matching ROM, used to pick a game"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom_sha1: Option<String>,
 }
@@ -3330,14 +3364,34 @@ pub struct SaveInspectCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveGetCommand {
-    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "SAVE", help = "Save file to read")
+    )]
     pub input: PathBuf,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "FIELD"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "FIELD", help = "Field id to read, such as trainer.money")
+    )]
     pub field: String,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GAME_ID",
+            help = "Force a game id instead of detecting one"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub game: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "SHA1",
+            help = "SHA-1 of the matching ROM, used to pick a game"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom_sha1: Option<String>,
 }
@@ -3346,11 +3400,19 @@ pub struct SaveGetCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveSetCommand {
-    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "SAVE", help = "Save file to read")
+    )]
     pub input: PathBuf,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(value_name = "FIELD=VALUE", required = true, num_args = 1..)
+        arg(
+            value_name = "FIELD=VALUE",
+            required = true,
+            num_args = 1..,
+            help = "Field assignments to apply, such as trainer.money=999999"
+        )
     )]
     pub assignments: Vec<String>,
     #[cfg_attr(
@@ -3364,10 +3426,24 @@ pub struct SaveSetCommand {
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output: Option<PathBuf>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GAME_ID",
+            help = "Force a game id instead of detecting one"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub game: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "SHA1",
+            help = "SHA-1 of the matching ROM, used to pick a game"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom_sha1: Option<String>,
     #[cfg_attr(
@@ -3394,13 +3470,33 @@ pub struct SaveSetCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveExportSchemaCommand {
-    #[cfg_attr(not(target_arch = "wasm32"), arg(value_name = "SAVE"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            value_name = "SAVE",
+            help = "Save file to read. Omit it and pass --game instead"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub input: Option<PathBuf>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "GAME_ID"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GAME_ID",
+            help = "Force a game id instead of detecting one"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub game: Option<String>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long, value_name = "SHA1"))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "SHA1",
+            help = "SHA-1 of the matching ROM, used to pick a game"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom_sha1: Option<String>,
 }
