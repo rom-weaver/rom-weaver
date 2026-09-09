@@ -639,6 +639,12 @@
   border-end-start-radius: 0;
   border-end-end-radius: 0;
 }
+/* Identify keeps the checksum companion separate, but the hero MUST NOT show
+   another rounded lower edge directly above that companion surface. */
+.rw-app .identify-panel .unified-drop-step:has(> .step-body > .identify-hash-island) .drop.hero {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
 /* Identify presents the checksum route as a separate companion surface in the
    ROM input rail, so it reads as a second choice without joining the dropzone. */
 .rw-app .identify-panel .unified-drop-step > .step-body > .identify-hash-island {
