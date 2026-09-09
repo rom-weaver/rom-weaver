@@ -171,7 +171,7 @@ jobs:
           file: ${{ matrix.file }}
           build-args: |
             ${{ matrix.build_arg }}=${{ steps.source.outputs.value }}
-            IDENTIFY_DATA=${{ steps.identify-data.outcome == 'success' && 'prebuilt' || 'source' }}
+            IDENTIFY_DATA=${{ matrix.name == 'CLI' && steps.identify-data.outcome == 'success' && 'prebuilt' || 'source' }}
             DOCS=${{ matrix.name == 'CLI' && steps.docs.outcome == 'success' && 'prebuilt' || 'source' }}
           labels: ${{ steps.metadata.outputs.labels }}
           arch: ${{ matrix.arch }}
