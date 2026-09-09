@@ -9,6 +9,13 @@ on:
         description: Version to release as (e.g. 0.9.0, 0.9.0-alpha.1). Blank = computed from the commits.
         required: false
         type: string
+      # Written by whoever dispatches the run (the `/release` skill drafts them
+      # from the commits since the last tag). Blank keeps the highlights an
+      # earlier dispatch stored on the release pull request.
+      highlights:
+        description: Release highlights, one per line. Blank = keep the ones already on the release PR.
+        required: false
+        type: string
   # A merged release PR has passed required checks, so its close event creates the draft release.
   pull_request:
     types: [closed]
@@ -187,12 +194,17 @@ jobs:
           git commit -m "chore(release): sync generated metadata"
           git push origin "HEAD:$RELEASE_PR_BRANCH"
 
-      - name: Aggregate prerelease changelog
+      # Lays the section out as highlights plus a collapsed full list, folds
+      # prerelease sections into a stable one, and mirrors the result into the
+      # pull request body - which is what Release Please copies into the GitHub
+      # release when the pull request merges.
+      - name: Aggregate release changelog
         if: steps.release-pr.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           RELEASE_PR: ${{ steps.release-pr.outputs.number }}
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
+          RELEASE_HIGHLIGHTS: ${{ inputs.highlights }}
         run: node scripts/aggregate-release-changelog.mjs
 
       # Commit screenshots to the release pull request and reuse its tested WASM artifact.
