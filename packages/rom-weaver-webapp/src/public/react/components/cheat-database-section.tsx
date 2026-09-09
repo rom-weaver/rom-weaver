@@ -81,7 +81,7 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
     ? { badge: "ROM cheat", short: "ROM", text: "Baked into output" }
     : { badge: "Unsupported", short: "N/A", text: "Cannot be baked into the ROM" };
 
-const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
+export const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
 
 const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -334,7 +334,7 @@ type AddCheatsDialogProps = {
  * by description or raw code, with the manual-code entry point below the list.
  * Rows added here become cards in the step.
  */
-const AddCheatsDialog = ({
+export const AddCheatsDialog = ({
   open,
   onClose,
   title,

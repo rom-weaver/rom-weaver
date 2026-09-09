@@ -100,6 +100,7 @@ const makeFakeWorkflow = () => {
         source instanceof File ? sourceState(source.name, "original") : sourceState("original.nes", "original");
     }),
     setOutputName: vi.fn(async () => undefined),
+    setCheatCodes: vi.fn(async () => undefined),
     setPatchType: vi.fn(async () => undefined),
     setSettings: vi.fn(async () => undefined),
     swap: vi.fn(async () => {

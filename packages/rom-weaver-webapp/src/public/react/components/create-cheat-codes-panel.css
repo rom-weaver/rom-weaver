@@ -1,0 +1,55 @@
+@layer style, foundation, drawers, controls, readouts, docs, overrides;
+
+@layer controls {
+  .rw-app .create-cheat-codes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-s);
+  }
+
+  .rw-app .create-cheat-codes-input {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-xs);
+  }
+
+  .rw-app .create-cheat-codes-input textarea {
+    width: 100%;
+    resize: vertical;
+  }
+}
+
+@layer readouts {
+  .rw-app .create-cheat-codes-detected {
+    margin: 0;
+    color: var(--ink-2);
+  }
+
+  .rw-app .create-cheat-codes-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-xs);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .rw-app .create-cheat-code {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-s);
+    align-items: baseline;
+  }
+
+  .rw-app .create-cheat-code-writes,
+  .rw-app .create-cheat-code-write {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs);
+    align-items: baseline;
+  }
+
+  .rw-app .create-cheat-code-blocked {
+    color: var(--ink-2);
+  }
+}
