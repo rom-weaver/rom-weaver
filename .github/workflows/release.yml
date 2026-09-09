@@ -340,7 +340,9 @@ jobs:
           package-manager-cache: false
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
+        env:
+          APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config
+        run: node scripts/ci/install-system-dependencies.mjs
 
       - name: Prepare ROM identify data
         uses: ./.github/actions/identify-data
@@ -770,7 +772,8 @@ jobs:
   # gating it; see the comment on publish-homebrew.
   publish-release:
     name: Publish draft release
-    needs: [release, semver-check, cargo-publish-dry-run, static-webapp, publish-npm, publish-containers]
+    needs:
+      [release, semver-check, cargo-publish-dry-run, static-webapp, publish-npm, publish-containers]
     if: >-
       always() &&
       needs.release.outputs.release_created == 'true' &&

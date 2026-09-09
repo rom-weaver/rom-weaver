@@ -42,7 +42,9 @@ jobs:
         uses: rust-lang/crates-io-auth-action@v1
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
+        env:
+          APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config
+        run: node scripts/ci/install-system-dependencies.mjs
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2

@@ -235,7 +235,9 @@ jobs:
           package-manager-cache: false
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config zip
+        env:
+          APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config zip
+        run: node scripts/ci/install-system-dependencies.mjs
 
       - name: Prepare ROM identify data
         uses: ./.github/actions/identify-data
