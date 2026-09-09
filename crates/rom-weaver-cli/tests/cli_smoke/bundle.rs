@@ -2957,6 +2957,262 @@ fn bundle_generated_output_members_support_fixed_and_cumulative_inputs() {
     }
 }
 
+/// Install one packaged per-track disc record under a temp data directory.
+/// The record names the disc's real first track; `track02_crc32` lets a test
+/// describe a second track the disc does or does not have.
+fn install_two_track_pack(
+    data_dir: &TempDir,
+    track01: &[u8],
+    track02_crc32: &str,
+    track02_size: u64,
+) -> (String, u64) {
+    use rom_weaver_checksum::identify_catalog::IdentifySource;
+    use rom_weaver_checksum::identify_pack_types::{
+        PackComponent, PackComponentRole, PackGame, UpstreamSource,
+    };
+    let track = |ordinal: u32, role, filename: &str, size: u64, crc32: &str| PackComponent {
+        role,
+        ordinal,
+        hash_scope: "track_file".to_string(),
+        filename: Some(filename.to_string()),
+        size,
+        crc32: Some(crc32.to_string()),
+        md5: None,
+        sha1: None,
+        sha256: None,
+        required: true,
+        discriminating: true,
+        track: Some(ordinal + 1),
+        session: None,
+    };
+    let track01_crc32 = crc32_hex(track01);
+    let game = PackGame {
+        name: "Two Track Quest (USA)".to_string(),
+        alternate_names: Vec::new(),
+        platform: "Test Disc System".to_string(),
+        source: IdentifySource::Redump,
+        upstream_source: UpstreamSource::Redump,
+        provenance: Vec::new(),
+        legacy_variant: false,
+        dump_tags: Vec::new(),
+        game_id: None,
+        region: Some("USA".to_string()),
+        language: None,
+        disc_number: None,
+        revision: None,
+        parent: None,
+        components: vec![
+            track(
+                0,
+                PackComponentRole::DataTrack,
+                "Two Track Quest (USA) (Track 1).bin",
+                track01.len() as u64,
+                &track01_crc32,
+            ),
+            track(
+                1,
+                PackComponentRole::AudioTrack,
+                "Two Track Quest (USA) (Track 2).bin",
+                track02_size,
+                track02_crc32,
+            ),
+        ],
+    };
+    let pack = rom_weaver_checksum::identify_pack_v1::encode(
+        "Test Disc System",
+        IdentifySource::Redump,
+        "redump-cd-track-v1",
+        &serde_json::json!([]),
+        vec![game],
+    )
+    .expect("RWFP1 pack");
+    let mut compressed = Vec::new();
+    {
+        let mut encoder = brotli::CompressorWriter::new(&mut compressed, 4096, 5, 22);
+        std::io::Write::write_all(&mut encoder, &pack).expect("brotli pack");
+    }
+    let root = data_dir.path().join("identify/full-v1");
+    let packs = root.join("packs");
+    fs::create_dir_all(&packs).expect("packs dir");
+    fs::write(packs.join("test-disc-system.pack.br"), &compressed).expect("pack fixture");
+    // The packaged reader verifies every pack against `index.json`.
+    let sha256 = |bytes: &[u8]| {
+        let mut checksum = rom_weaver_checksum::StreamingChecksum::new(&["sha256".to_string()])
+            .expect("sha256 setup")
+            .expect("sha256 support");
+        checksum.update(bytes).expect("sha256 update");
+        checksum
+            .finalize()
+            .expect("sha256 finalize")
+            .remove("sha256")
+            .expect("sha256 result")
+    };
+    fs::write(
+        root.join("index.json"),
+        serde_json::json!({
+            "systems": [{
+                "slug": "test-disc-system",
+                "file": "packs/test-disc-system.pack",
+                "rawBytes": pack.len(),
+                "sha256": sha256(&pack),
+                "brotliFile": "packs/test-disc-system.pack.br",
+                "brotliBytes": compressed.len(),
+                "brotliSha256": sha256(&compressed),
+            }]
+        })
+        .to_string(),
+    )
+    .expect("index fixture");
+    (track01_crc32, track01.len() as u64)
+}
+
+/// The bundle names the first track; the database record then supplies the
+/// second track's checks to the lane that patches it.
+fn two_track_bundle(temp: &TempDir, track01_crc32: &str, track01_size: u64) -> PathBuf {
+    write_offset_ips(temp, "first.ips", 100, 0xAA);
+    write_offset_ips(temp, "second.ips", 100, 0xBB);
+    let bundle = temp.child("rom-weaver-bundle.json");
+    fs::write(
+        bundle.path(),
+        format!(
+            r#"{{
+        "version":2,"patchBasis":"auto",
+        "rom":{{"member":"track01.bin","checks":{{"checksums":{{"crc32":"{track01_crc32}"}},"size":{track01_size}}}}},
+        "patches":[
+            {{"id":"first","path":"first.ips","target":{{"rom":true,"member":"track01.bin"}}}},
+            {{"id":"second","path":"second.ips","target":{{"rom":true,"member":"track02.bin"}}}}
+        ]
+    }}"#
+        ),
+    )
+    .expect("bundle");
+    bundle.path().to_path_buf()
+}
+
+#[test]
+fn bundle_member_lane_checks_filled_from_identify_data_pass_on_the_real_track() {
+    let source = setup_temp_dir();
+    let (mut expected_first, mut expected_second) = super::patch_disc::write_two_track_cd(&source);
+    let data_dir = setup_temp_dir();
+    let (track01_crc32, track01_size) = install_two_track_pack(
+        &data_dir,
+        &expected_first,
+        &crc32_hex(&expected_second),
+        expected_second.len() as u64,
+    );
+    let temp = setup_temp_dir();
+    let bundle = two_track_bundle(&temp, &track01_crc32, track01_size);
+    let output = temp.child("raw/disc.cue");
+    let events = run_json_events_with_env(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            source.child("disc.cue").path().to_str().expect("path"),
+            "--bundle",
+            bundle.to_str().expect("path"),
+            "--target",
+            "track01.bin",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        &[(
+            "ROM_WEAVER_DATA_DIR",
+            data_dir.path().to_str().expect("path"),
+        )],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    expected_first[100] = 0xAA;
+    expected_second[100] = 0xBB;
+    assert_eq!(
+        fs::read(temp.child("raw/track01.bin").path()).expect("first track"),
+        expected_first
+    );
+    assert_eq!(
+        fs::read(temp.child("raw/track02.bin").path()).expect("second track"),
+        expected_second
+    );
+}
+
+#[test]
+fn bundle_member_lane_checks_filled_from_identify_data_name_the_expected_title() {
+    let source = setup_temp_dir();
+    let (expected_first, expected_second) = super::patch_disc::write_two_track_cd(&source);
+    let data_dir = setup_temp_dir();
+    // The record's second track is not the one on this disc.
+    let (track01_crc32, track01_size) = install_two_track_pack(
+        &data_dir,
+        &expected_first,
+        "deadbeef",
+        expected_second.len() as u64,
+    );
+    let temp = setup_temp_dir();
+    let bundle = two_track_bundle(&temp, &track01_crc32, track01_size);
+    let events = run_json_events_with_env(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            source.child("disc.cue").path().to_str().expect("path"),
+            "--bundle",
+            bundle.to_str().expect("path"),
+            "--target",
+            "track01.bin",
+            "--output",
+            temp.child("raw/disc.cue").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        &[(
+            "ROM_WEAVER_DATA_DIR",
+            data_dir.path().to_str().expect("path"),
+        )],
+        1,
+    );
+    let terminal = events.last().expect("terminal");
+    assert_eq!(terminal["status"], "failed");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(
+        label.contains("patch.chain.input_mismatch") && label.contains("second.ips"),
+        "expected the second lane's input gate to fail: {label}"
+    );
+    assert!(
+        label.contains("Two Track Quest (USA)") && label.contains("Test Disc System"),
+        "expected the database title behind the declared checks: {label}"
+    );
+
+    // Without a database the lane has no filled check, so the same run passes.
+    let empty_data_dir = setup_temp_dir();
+    let events = run_json_events_with_env(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            source.child("disc.cue").path().to_str().expect("path"),
+            "--bundle",
+            bundle.to_str().expect("path"),
+            "--target",
+            "track01.bin",
+            "--output",
+            temp.child("raw-no-db/disc.cue")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        &[(
+            "ROM_WEAVER_DATA_DIR",
+            empty_data_dir.path().to_str().expect("path"),
+        )],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+}
+
 #[test]
 fn bundle_disc_targets_preserve_all_tracks_and_chd_parity() {
     let source = setup_temp_dir();

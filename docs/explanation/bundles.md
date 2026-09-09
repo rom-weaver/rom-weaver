@@ -60,6 +60,8 @@ The authored basis describes the source against which a patch was made. Its exec
 
 Version 2 records a shared authored basis rule, with per-patch exceptions. Automatic inference uses available checks. Version 1 remains readable with its automatic behavior.
 
+The identify database can stand in for checks a recipe does not declare. When the expected ROM's checks name a multi-track disc record, each track chain that starts from the ROM without checks of its own inherits that track's checks from the record, and a failed check names the title the declared state belongs to. The recipe itself is not changed; the database only adds evidence at apply time. The exact rules are in the [CLI reference](../reference/cli.md#bundle-execution-targets).
+
 ### Shared data and repeated evidence
 
 A check state can have several consumers. The recipe stores its values once and uses references from each consumer. The interface can show that same evidence on the ROM, each consuming patch, and a result without copying those values into the recipe. Equal digests alone do not make two separately authored states the same state.

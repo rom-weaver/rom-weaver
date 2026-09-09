@@ -115,6 +115,7 @@ pub struct MatchedComponent {
     pub md5: Option<String>,
     pub sha1: Option<String>,
     pub sha256: Option<String>,
+    pub track: Option<u32>,
 }
 
 fn matched_component(component: &PackComponent) -> MatchedComponent {
@@ -128,6 +129,7 @@ fn matched_component(component: &PackComponent) -> MatchedComponent {
         md5: component.md5.clone(),
         sha1: component.sha1.clone(),
         sha256: component.sha256.clone(),
+        track: component.track,
     }
 }
 

@@ -368,7 +368,11 @@ export type IdentifyComponent = { role: ComponentRole, ordinal: number, size: bi
  * Only set on a database record's component; the input's own components
  * are always hashed whole.
  */
-hash_scope?: string, filename?: string, crc32?: string, md5?: string, sha1?: string, sha256?: string, };
+hash_scope?: string, filename?: string, crc32?: string, md5?: string, sha1?: string, sha256?: string,
+/**
+ * One-based disc track number on a per-track database record.
+ */
+track?: number, };
 
 export type IdentifyDatabaseInfo = { source?: string, upstream_sources?: Array<string>, revision?: string, pack_format: string, canonicalization_profile?: string, };
 

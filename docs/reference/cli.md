@@ -193,7 +193,7 @@ The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON re
 - `matches[].provenance`: every source that contributed the matched hash record.
 - `matches[].legacy_variant`: true for an OpenGood-only record.
 - `matches[].dump_tags`: preserved GoodTools status tags for a legacy variant.
-- `matches[].expected_components`: the matched record's own components - `size` and every checksum the database holds, plus `filename` and `hash_scope`. A partial check reads the checksums it does not itself carry from here.
+- `matches[].expected_components`: the matched record's own components - `size` and every checksum the database holds, plus `filename`, `hash_scope`, and the one-based `track` on a per-track disc record. A partial check reads the checksums it does not itself carry from here.
 - `matches[].game_id`, `matches[].region`, `matches[].language`, `matches[].disc_number`, `matches[].revision`, `matches[].parent`: record metadata, each present when the pack holds it.
 - `evidence`: `required_components_matched`, `required_components_total`, and `layout_matched`.
 
@@ -245,6 +245,8 @@ A version 2 patch entry accepts `target` and `input`. Both use either a ROM refe
 | `input` | Reads the exact referenced bytes, including a named producer's output. It does not follow optional changes to an accumulated chain. |
 | Both | Reads `input` and records the result in the chain identified by `target`. |
 | Neither | Retains the ordinary accumulated execution order. |
+
+When the identify database is installed, `rom.checks` that match a per-track disc record supply the first selected step of every ROM-member lane that declares no `input` and no `inputChecks` with that member's checks from the record: `crc32`, `md5`, `sha1`, and `size`. The member matches a record component by file name, then by track number. A chain check failure (`patch.chain.input_mismatch`, `patch.chain.output_mismatch`, `patch.base.input_mismatch`) also carries the database's `expected_title`, `expected_platform`, `expected_region`, and `expected_revision` for the declared state when the database knows it. Both are best effort: a missing database changes nothing.
 
 A named producer must be selected and precede its consumer. Member selection applies to both ROM sources and generated outputs. A producer reference identifies the intermediate bytes after that patch, before final output compression or disc reassembly. `basis` and `patchBasis` describe authored verification requirements; they do not choose execution bytes. `checkStates` and the check-reference fields share authored state values across entries. Output compression remains an apply-time option.
 

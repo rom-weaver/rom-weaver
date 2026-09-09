@@ -148,6 +148,10 @@ pub struct IdentifyComponent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub sha256: Option<String>,
+    /// One-based disc track number on a per-track database record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub track: Option<u32>,
 }
 
 /// Which database produced the match.
@@ -355,9 +359,17 @@ impl IdentifyDatabaseSet {
                     routed_checksums
                         .entry("crc32".to_string())
                         .or_insert(route_crc32);
-                    let outcome =
+                    // A pack may route a hash whose record has no size; that
+                    // route cannot form a fingerprint and is not a match.
+                    let Some(outcome) =
                         match_single_blob(database_name, pack, Some(size), &routed_checksums)?
-                            .expect("a positive RWFP1 hash size produces a fingerprint");
+                    else {
+                        trace!(
+                            database = database_name,
+                            size, "skipping a routed hash with no size"
+                        );
+                        continue;
+                    };
                     push_artifact_matches(database_name, variant, outcome, seen, output);
                 }
                 continue;
@@ -693,6 +705,7 @@ fn identify_title_match(
                 md5: component.md5,
                 sha1: component.sha1,
                 sha256: component.sha256,
+                track: component.track,
             })
             .collect(),
         game_id: game_match.game_id,
@@ -1143,6 +1156,7 @@ impl CliApp {
                 md5: checksums.get("md5").cloned(),
                 sha1: checksums.get("sha1").cloned(),
                 sha256: checksums.get("sha256").cloned(),
+                track: None,
             }],
             None => Vec::new(),
         };

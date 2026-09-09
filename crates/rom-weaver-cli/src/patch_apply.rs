@@ -3800,29 +3800,42 @@ impl CliApp {
             let step_declares_base = step_is_base
                 && step.and_then(|step| step.basis_source)
                     == Some(patch_plan::PatchBasisSource::Declared);
+            // A ROM-member lane has no base gate of its own, so its first
+            // step verifies the member bytes against the declared input here.
+            let member_lane_start = lane_position == 0
+                && matches!(
+                    target,
+                    Some(BundlePatchInput::Rom {
+                        member: Some(_),
+                        ..
+                    })
+                );
             // An unbased bundle input check still describes the real
             // intermediate even when embedded evidence independently infers
             // Base. Only an explicit Base declaration verifies once up front.
             if context.strict_patch_checksums()
                 && !(step_declares_base && explicit_input.is_none())
-                && (lane_position > 0 || explicit_input.is_some())
+                && (lane_position > 0 || explicit_input.is_some() || member_lane_start)
                 && let Some(declared) = step.and_then(|step| step.declared_input.as_ref())
                 && let Err(error) = Self::verify_chain_step_state(&current_input, declared, context)
             {
+                let mut coded = ValidationCodeError::new("patch.chain.input_mismatch")
+                    .with_message(
+                        "chain step input does not match the patch's declared input checks",
+                    )
+                    .with_field("patch_index", index as u64)
+                    .with_field("patch", patch_path.display().to_string())
+                    .with_field("detail", error.to_string());
+                super::bundle_apply::describe_expected_state(
+                    &declared.checksums,
+                    declared.size,
+                    &mut coded,
+                );
                 return Err(Box::new(OperationReport::failed(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "validate",
-                    RomWeaverError::ValidationCode(
-                        ValidationCodeError::new("patch.chain.input_mismatch")
-                            .with_message(
-                                "chain step input does not match the patch's declared input checks",
-                            )
-                            .with_field("patch_index", index as u64)
-                            .with_field("patch", patch_path.display().to_string())
-                            .with_field("detail", error.to_string()),
-                    )
-                    .to_string(),
+                    RomWeaverError::ValidationCode(coded).to_string(),
                     context.single_thread_execution(),
                 )));
             }
@@ -3961,20 +3974,25 @@ impl CliApp {
                 &apply_output,
             )
             .map_err(|error| {
+                let mut coded = ValidationCodeError::new("patch.chain.output_mismatch")
+                    .with_message(
+                        "chain step output does not match the patch's declared output checks",
+                    )
+                    .with_field("patch_index", index as u64)
+                    .with_field("patch", patch_path.display().to_string())
+                    .with_field("detail", error.to_string());
+                if let Some(declared) = step.and_then(|step| step.declared_output.as_ref()) {
+                    super::bundle_apply::describe_expected_state(
+                        &declared.checksums,
+                        declared.size,
+                        &mut coded,
+                    );
+                }
                 Box::new(OperationReport::failed(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "validate",
-                    RomWeaverError::ValidationCode(
-                        ValidationCodeError::new("patch.chain.output_mismatch")
-                            .with_message(
-                                "chain step output does not match the patch's declared output checks",
-                            )
-                            .with_field("patch_index", index as u64)
-                            .with_field("patch", patch_path.display().to_string())
-                            .with_field("detail", error.to_string()),
-                    )
-                    .to_string(),
+                    RomWeaverError::ValidationCode(coded).to_string(),
                     context.single_thread_execution(),
                 ))
             })?;
@@ -4395,15 +4413,20 @@ impl CliApp {
                 && steps[index].basis_source == Some(patch_plan::PatchBasisSource::Declared)
                 && required_base_failed
             {
-                return Err(RomWeaverError::ValidationCode(
-                    ValidationCodeError::new("patch.base.input_mismatch")
-                        .with_message(
-                            "patch declares basis base but its input checks do not match the ROM",
-                        )
-                        .with_field("patch_index", index as u64)
-                        .with_field("patch", patch_path.display().to_string())
-                        .with_field("detail", resolved.per_patch[index].message.clone()),
-                ));
+                let mut coded = ValidationCodeError::new("patch.base.input_mismatch")
+                    .with_message(
+                        "patch declares basis base but its input checks do not match the ROM",
+                    )
+                    .with_field("patch_index", index as u64)
+                    .with_field("patch", patch_path.display().to_string())
+                    .with_field("detail", resolved.per_patch[index].message.clone());
+                let declared = &plan_inputs[index].declared_input;
+                super::bundle_apply::describe_expected_state(
+                    &declared.checksums,
+                    declared.size,
+                    &mut coded,
+                );
+                return Err(RomWeaverError::ValidationCode(coded));
             }
             if resolved.per_patch[index].basis_source == patch_plan::PatchBasisSource::InferredBase
             {

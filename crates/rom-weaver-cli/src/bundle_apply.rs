@@ -319,6 +319,12 @@ impl CliApp {
                 );
                 args.patches.push(resolved);
             }
+            fill_member_lane_checks(
+                &bundle,
+                &step_targets,
+                &step_inputs,
+                &mut step_verifications,
+            )?;
             output_checks =
                 resolve_selected_bundle_output_check(&bundle, &selected, &selected_set)?;
             // Only pin per-patch header modes when the bundle sets any;
@@ -438,7 +444,7 @@ impl CliApp {
             if let Some(size) = rom_checks.size {
                 coded.push_field("expected_size", size);
             }
-            describe_expected_rom(&rom_checks, &mut coded);
+            describe_expected_state(&rom_checks.checksums, rom_checks.size, &mut coded);
         }
         Err(RomWeaverError::ValidationCode(coded))
     }
@@ -933,47 +939,80 @@ fn matches_bundle_entry(matcher: &mut Option<SelectionMatcher>, entry: &BundlePa
     bundle_entry_file_name(entry).is_some_and(|name| matcher.matches(name))
 }
 
-/// Look the bundle's rom checks up in the local identify data and add what the
-/// database knows to the "provide this ROM yourself" failure: the title, and
-/// the checksums and size the manifest itself did not carry. Best effort - a
-/// missing, unreadable, or ambiguous database leaves the manifest's own fields
-/// standing alone and never turns into a second failure.
+/// Look a declared state up in the local identify data and add what the
+/// database knows to a failure that names it: the title, and the checksums
+/// and size the declaration itself did not carry. Best effort - a missing,
+/// unreadable, or ambiguous database leaves the declared fields standing
+/// alone and never turns into a second failure.
 ///
 /// A bare checksum routes to no platform, so this loads every installed pack.
-/// It runs only on the terminal "no ROM to patch" failure, never on a path that
+/// Callers MUST reach it only from a terminal failure, never from a path that
 /// goes on to do work.
-fn describe_expected_rom(rom_checks: &BundleChecks, coded: &mut ValidationCodeError) {
-    if rom_checks.checksums.is_empty() {
+pub(super) fn describe_expected_state(
+    checksums: &BTreeMap<String, String>,
+    size: Option<u64>,
+    coded: &mut ValidationCodeError,
+) {
+    if checksums.is_empty() {
         return;
     }
-    let Ok(Some(databases)) = IdentifyDatabaseSet::load(&[]) else {
-        trace!("expected-rom lookup skipped: no identify database is available");
+    let Some(databases) = load_installed_identify_databases("expected-state lookup") else {
         return;
     };
-    push_expected_rom_fields(rom_checks, &databases, coded);
+    let checks = BundleChecks {
+        checksums: checksums.clone(),
+        size,
+    };
+    push_expected_state_fields(&checks, &databases, coded);
 }
 
-/// The lookup half of [`describe_expected_rom`], split out so a test can drive
-/// it with a pack of its own.
-fn push_expected_rom_fields(
-    rom_checks: &BundleChecks,
+/// Every installed identify pack, or nothing when there is none or one fails
+/// to load. A broken pack is logged, not raised: these lookups only decorate
+/// a failure or add a check, and MUST NOT fail an apply on their own.
+fn load_installed_identify_databases(purpose: &str) -> Option<IdentifyDatabaseSet> {
+    match IdentifyDatabaseSet::load(&[]) {
+        Ok(Some(databases)) => Some(databases),
+        Ok(None) => {
+            trace!(purpose, "skipped: no identify database is available");
+            None
+        }
+        Err(error) => {
+            debug!(purpose, %error, "skipped: the identify database failed to load");
+            None
+        }
+    }
+}
+
+/// The one title a declared state resolves to, or nothing when the database
+/// does not know it or cannot settle on one record.
+fn lookup_expected_title(
+    checks: &BundleChecks,
+    databases: &IdentifyDatabaseSet,
+) -> Option<super::identify_command::IdentifyTitleMatch> {
+    let variants = vec![serde_json::json!({
+        "id": "bundle-checks",
+        "label": "Bundle checks",
+        "checksums": checks.checksums,
+    })];
+    let Ok(lookup) = databases.resolve_variants(&variants, checks.size) else {
+        trace!("expected-state lookup failed; reporting the declared checks only");
+        return None;
+    };
+    if lookup.status != IdentifyStatus::Matched {
+        trace!(status = ?lookup.status, "expected-state lookup did not settle on one title");
+        return None;
+    }
+    lookup.matches.into_iter().next()
+}
+
+/// The lookup half of [`describe_expected_state`], split out so a test can
+/// drive it with a pack of its own.
+fn push_expected_state_fields(
+    checks: &BundleChecks,
     databases: &IdentifyDatabaseSet,
     coded: &mut ValidationCodeError,
 ) {
-    let variants = vec![serde_json::json!({
-        "id": "bundle-rom-checks",
-        "label": "Bundle rom.checks",
-        "checksums": rom_checks.checksums,
-    })];
-    let Ok(lookup) = databases.resolve_variants(&variants, rom_checks.size) else {
-        trace!("expected-rom lookup failed; reporting the manifest's own checks only");
-        return;
-    };
-    if lookup.status != IdentifyStatus::Matched {
-        trace!(status = ?lookup.status, "expected-rom lookup did not settle on one title");
-        return;
-    }
-    let Some(matched) = lookup.matches.first() else {
+    let Some(matched) = lookup_expected_title(checks, databases) else {
         return;
     };
     coded.push_field("expected_title", matched.name.clone());
@@ -988,8 +1027,8 @@ fn push_expected_rom_fields(
             coded.push_field(field, value.to_owned());
         }
     }
-    // Only one component can describe "the ROM"; a multi-track disc record has
-    // no single expected file, so its extra checksums would be misleading here.
+    // Only one component can describe "the state"; a multi-track disc record
+    // has no single expected file, so its extra checksums would be misleading.
     let [component] = matched.expected_components.as_slice() else {
         return;
     };
@@ -1001,7 +1040,7 @@ fn push_expected_rom_fields(
     ]
     .into_iter()
     .filter_map(|(algorithm, value)| value.map(|value| (algorithm, value)))
-    .filter(|(algorithm, _)| !rom_checks.checksums.contains_key(*algorithm))
+    .filter(|(algorithm, _)| !checks.checksums.contains_key(*algorithm))
     .collect();
     if !known.is_empty() {
         let rendered = known
@@ -1011,9 +1050,168 @@ fn push_expected_rom_fields(
             .join(", ");
         coded.push_field("database_checksums", rendered);
     }
-    if rom_checks.size.is_none() && component.size > 0 {
+    if checks.size.is_none() && component.size > 0 {
         coded.push_field("database_size", component.size);
     }
+}
+
+/// Give the first selected step of every ROM-member lane that declares no
+/// input checks the checks the identify database holds for that member. The
+/// bundle's rom checks name the title; a per-track record then describes
+/// every other track of the disc. Best effort: no database, no single match,
+/// a single-file record, or a member the record does not list leaves the step
+/// as authored.
+fn fill_member_lane_checks(
+    bundle: &RomWeaverBundle,
+    step_targets: &[Option<BundlePatchInput>],
+    step_inputs: &[Option<BundlePatchInput>],
+    step_verifications: &mut [patch_plan::PatchStepVerification],
+) -> Result<()> {
+    let mut seen_lanes: BTreeSet<Option<&BundlePatchInput>> = BTreeSet::new();
+    let mut pending: Vec<(&str, usize)> = Vec::new();
+    for (position, target) in step_targets.iter().enumerate() {
+        if !seen_lanes.insert(target.as_ref()) {
+            continue;
+        }
+        let Some(BundlePatchInput::Rom {
+            member: Some(member),
+            ..
+        }) = target
+        else {
+            continue;
+        };
+        if step_inputs.get(position).is_some_and(Option::is_some)
+            || step_verifications
+                .get(position)
+                .is_none_or(|step| step.declared_input.is_some())
+        {
+            continue;
+        }
+        pending.push((member.as_str(), position));
+    }
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let Some(rom) = &bundle.rom else {
+        return Ok(());
+    };
+    let Some(rom_checks) =
+        resolve_bundle_checks(bundle, rom.checks.as_ref(), rom.checks_ref.as_deref())?
+    else {
+        return Ok(());
+    };
+    if rom_checks.checksums.is_empty() {
+        return Ok(());
+    }
+    let Some(databases) = load_installed_identify_databases("member lane check fill") else {
+        return Ok(());
+    };
+    fill_member_lane_checks_from(&rom_checks, &databases, &pending, step_verifications);
+    Ok(())
+}
+
+/// The database half of [`fill_member_lane_checks`], split out so a test can
+/// drive it with a pack of its own.
+fn fill_member_lane_checks_from(
+    rom_checks: &BundleChecks,
+    databases: &IdentifyDatabaseSet,
+    pending: &[(&str, usize)],
+    step_verifications: &mut [patch_plan::PatchStepVerification],
+) {
+    let Some(matched) = lookup_expected_title(rom_checks, databases) else {
+        return;
+    };
+    if matched.expected_components.len() < 2 {
+        trace!(
+            title = %matched.name,
+            "member lane check fill skipped: the matched record is not a multi-track disc"
+        );
+        return;
+    }
+    for (member, position) in pending {
+        let Some(component) = member_component(&matched.expected_components, member) else {
+            debug!(
+                member,
+                title = %matched.name,
+                "member lane check fill skipped: the record lists no such track"
+            );
+            continue;
+        };
+        let Some(state) = component_plan_state(component) else {
+            continue;
+        };
+        debug!(
+            member,
+            title = %matched.name,
+            checksums = state.checksums.len(),
+            "filled the ROM member lane's input checks from the identify database"
+        );
+        step_verifications[*position].declared_input = Some(state);
+    }
+}
+
+/// The record component a bundle member names: by file name first, then by
+/// track number, so a renamed track file still finds its record.
+fn member_component<'a>(
+    components: &'a [super::identify_command::IdentifyComponent],
+    member: &str,
+) -> Option<&'a super::identify_command::IdentifyComponent> {
+    let wanted = member_file_name(member);
+    let by_name = components.iter().find(|component| {
+        component
+            .filename
+            .as_deref()
+            .map(member_file_name)
+            .is_some_and(|name| name.eq_ignore_ascii_case(wanted))
+    });
+    if by_name.is_some() {
+        return by_name;
+    }
+    let track = member_track_number(wanted)?;
+    components
+        .iter()
+        .find(|component| component.track == Some(track))
+}
+
+fn member_file_name(member: &str) -> &str {
+    member.rsplit(['/', '\\']).next().unwrap_or(member)
+}
+
+/// The N after the first `track` word in a name, case-insensitive, with any
+/// spacing before the digits: `track01.bin`, `Game (Track 2).bin`.
+fn member_track_number(name: &str) -> Option<u32> {
+    let lower = name.to_ascii_lowercase();
+    let after = &lower[lower.find("track")? + "track".len()..];
+    let digits: String = after
+        .trim_start_matches(|character: char| {
+            character == ' ' || character == '_' || character == '-'
+        })
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok()
+}
+
+/// The bundle-verifiable part of a record component: the algorithms a bundle
+/// check may carry, plus the size.
+fn component_plan_state(
+    component: &super::identify_command::IdentifyComponent,
+) -> Option<patch_plan::PlanState> {
+    let checksums: BTreeMap<String, String> = [
+        ("crc32", component.crc32.as_deref()),
+        ("md5", component.md5.as_deref()),
+        ("sha1", component.sha1.as_deref()),
+    ]
+    .into_iter()
+    .filter_map(|(algorithm, value)| value.map(|value| (algorithm.to_owned(), value.to_owned())))
+    .collect();
+    if checksums.is_empty() {
+        return None;
+    }
+    Some(patch_plan::PlanState {
+        checksums,
+        size: (component.size > 0).then_some(component.size),
+    })
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -1088,7 +1286,7 @@ mod tests {
         };
         let mut coded = ValidationCodeError::new("bundle.rom.missing");
 
-        push_expected_rom_fields(&checks, &databases, &mut coded);
+        push_expected_state_fields(&checks, &databases, &mut coded);
 
         let rendered = fields(&coded);
         assert!(rendered.contains("Hello World (USA)"), "{rendered}");
@@ -1105,6 +1303,59 @@ mod tests {
         assert!(!rendered.contains("database_size"), "{rendered}");
     }
 
+    fn component(
+        track: u32,
+        filename: &str,
+        crc32: &str,
+    ) -> super::super::identify_command::IdentifyComponent {
+        super::super::identify_command::IdentifyComponent {
+            role: rom_weaver_core::ComponentRole::DataTrack,
+            ordinal: track - 1,
+            size: 2352,
+            hash_scope: Some("track_file".to_string()),
+            filename: Some(filename.to_string()),
+            crc32: Some(crc32.to_string()),
+            md5: None,
+            sha1: None,
+            sha256: None,
+            track: Some(track),
+        }
+    }
+
+    #[test]
+    fn member_component_matches_by_file_name_then_by_track_number() {
+        let components = vec![
+            component(1, "Game (USA) (Track 1).bin", "11111111"),
+            component(2, "Game (USA) (Track 2).bin", "22222222"),
+        ];
+        let by_name = member_component(&components, "discs\\game (usa) (track 2).bin");
+        assert_eq!(by_name.and_then(|c| c.crc32.as_deref()), Some("22222222"));
+        let by_track = member_component(&components, "track02.bin");
+        assert_eq!(by_track.and_then(|c| c.crc32.as_deref()), Some("22222222"));
+        assert!(member_component(&components, "track03.bin").is_none());
+        assert!(member_component(&components, "disc.cue").is_none());
+    }
+
+    #[test]
+    fn member_track_number_reads_common_spellings() {
+        assert_eq!(member_track_number("track01.bin"), Some(1));
+        assert_eq!(member_track_number("Game (Track 12).bin"), Some(12));
+        assert_eq!(member_track_number("Track_3.raw"), Some(3));
+        assert_eq!(member_track_number("data.bin"), None);
+        assert_eq!(member_track_number("soundtrack.bin"), None);
+    }
+
+    #[test]
+    fn component_plan_state_keeps_only_bundle_algorithms() {
+        let mut component = component(1, "a.bin", "11111111");
+        component.sha256 = Some("ff".to_string());
+        let state = component_plan_state(&component).expect("state");
+        assert_eq!(state.checksums.keys().collect::<Vec<_>>(), vec!["crc32"]);
+        assert_eq!(state.size, Some(2352));
+        component.crc32 = None;
+        assert!(component_plan_state(&component).is_none());
+    }
+
     #[test]
     fn expected_rom_fields_stay_silent_when_nothing_matches() {
         let temp = TempDir::new().expect("temp dir");
@@ -1117,7 +1368,7 @@ mod tests {
         };
         let mut coded = ValidationCodeError::new("bundle.rom.missing");
 
-        push_expected_rom_fields(&checks, &databases, &mut coded);
+        push_expected_state_fields(&checks, &databases, &mut coded);
 
         assert!(!fields(&coded).contains("expected_title"));
     }
