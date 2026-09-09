@@ -462,7 +462,7 @@ impl CliApp {
         original_input: PathBuf,
         local_bundle: Option<PathBuf>,
         final_output: &mut Option<PathBuf>,
-        applied_cheats: &mut Vec<BundleCheatEntry>,
+        _applied_cheats: &mut Vec<BundleCheatEntry>,
     ) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -826,7 +826,7 @@ impl CliApp {
         ) {
             Ok(cheats) => {
                 cheat_records.extend(cheats.rom_records);
-                applied_cheats.extend(cheats.applied);
+                _applied_cheats.extend(cheats.applied);
                 cheats.skipped
             }
             Err(error) => {

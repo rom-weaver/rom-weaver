@@ -30,6 +30,7 @@ pub(super) struct BundleApplyResolution {
     /// declared checks, consumed by the apply chain loop.
     pub step_verifications: Vec<patch_plan::PatchStepVerification>,
     /// The bundle's cheat entries, resolved once the input ROM is known.
+    #[cfg(not(target_arch = "wasm32"))]
     pub cheats: Vec<BundleCheatEntry>,
 }
 
@@ -294,6 +295,7 @@ impl CliApp {
             output_checks,
             step_verifications,
             // `--without-cheats` runs the patch chain alone.
+            #[cfg(not(target_arch = "wasm32"))]
             cheats: if args.without_cheats {
                 Vec::new()
             } else {
