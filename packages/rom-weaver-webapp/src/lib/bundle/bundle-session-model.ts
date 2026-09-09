@@ -86,6 +86,12 @@ type BundleChainEndpointChecks = {
  * `output.checks`). These verify the ROM and the run's output - they are NOT
  * attributed to individual patches: a patch's card only shows checks the
  * patch itself declared.
+ *
+ * A last patch that declares a `target` writes into one lane (a ROM member or
+ * track), so its `outputChecks` describe that lane's raw bytes and not the
+ * reassembled run output. The endpoint MUST then come from `output.checks`
+ * alone; the lane checks stay per-step verification. `bundle_apply.rs`
+ * (`resolve_selected_bundle_output_check`) makes the same distinction.
  */
 const bundleChainEndpointChecks = (bundle: ParsedBundle): BundleChainEndpointChecks => {
   const first = bundle.patches[0];
@@ -93,9 +99,10 @@ const bundleChainEndpointChecks = (bundle: ParsedBundle): BundleChainEndpointChe
   const input =
     resolveBundleChecks(bundle, first?.inputChecks, first?.inputChecksRef) ||
     resolveBundleChecks(bundle, bundle.rom?.checks, bundle.rom?.checksRef);
-  const output =
-    resolveBundleChecks(bundle, last?.outputChecks, last?.outputChecksRef) ||
-    resolveBundleChecks(bundle, bundle.output?.checks, bundle.output?.checksRef);
+  const bundleOutput = resolveBundleChecks(bundle, bundle.output?.checks, bundle.output?.checksRef);
+  const output = last?.target
+    ? bundleOutput
+    : resolveBundleChecks(bundle, last?.outputChecks, last?.outputChecksRef) || bundleOutput;
   return { ...(input ? { input } : {}), ...(output ? { output } : {}) };
 };
 

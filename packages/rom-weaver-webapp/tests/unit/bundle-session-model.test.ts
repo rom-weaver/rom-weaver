@@ -178,6 +178,39 @@ describe("buildBundleApplySessionPlan", () => {
     ]);
   });
 
+  it("keeps a targeted last patch's lane checks out of the final-output endpoint", () => {
+    const romChecks = { checksums: { crc32: "aaaaaaaa" } };
+    const trackOneChecks = { checksums: { crc32: "bbbbbbbb" } };
+    const trackTwoChecks = { checksums: { crc32: "cccccccc" } };
+    const discChecks = { checksums: { crc32: "dddddddd" }, size: 700 };
+    const bundle = {
+      output: { checks: discChecks },
+      patches: [
+        // Lane 1 writes Track 1; its outputChecks describe that track's raw bytes.
+        { outputChecks: trackOneChecks, target: { member: "track01.bin", rom: true as const } },
+        // Lane 2 is last and also targeted, so its outputChecks are Track 2's
+        // bytes - not the reassembled disc the run produces.
+        { outputChecks: trackTwoChecks, target: { member: "track02.bin", rom: true as const } },
+      ],
+      rom: { checks: romChecks },
+      version: 2,
+    };
+    expect(bundleChainEndpointChecks(bundle)).toEqual({ input: romChecks, output: discChecks });
+    // With no bundle-level output.checks a targeted last patch leaves the
+    // endpoint unset rather than promoting the lane checks.
+    expect(bundleChainEndpointChecks({ ...bundle, output: undefined })).toEqual({ input: romChecks });
+    const plan = buildBundleApplySessionPlan(
+      parsedResult({
+        bundle,
+        patchSources: [{ source: { kind: "url", url: "t1.ips" } }, { source: { kind: "url", url: "t2.ips" } }],
+      }),
+      BUNDLE_URL,
+    );
+    expect(plan.chainEndpointChecks).toEqual({ input: romChecks, output: discChecks });
+    // The lane checks survive as per-step verification on their own entries.
+    expect(plan.entries.map((entry) => entry.outputChecks)).toEqual([trackOneChecks, trackTwoChecks]);
+  });
+
   it("surfaces the expected ROM when the bundle ships none", () => {
     const plan = buildBundleApplySessionPlan(
       parsedResult({
