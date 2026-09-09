@@ -675,6 +675,12 @@
 .rw-app .identify-panel .unified-drop-step > .step-body > .identify-hash-island .identify-hash-label {
   font-size: 0.88rem;
 }
+.rw-app .identify-hash--section {
+  margin-block-start: var(--sp-m);
+  background: var(--warp-lines) var(--empty-fill);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
+}
 .rw-app .identify-hash--compact {
   padding: var(--sp-xs) 0 var(--sp-m);
 }
