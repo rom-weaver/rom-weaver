@@ -1,4 +1,4 @@
-import { Check, Plus, Search, WandSparkles, X } from "lucide-react";
+import { Check, Download, Plus, Search, WandSparkles, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { IdentifyCatalog } from "../../../lib/identify/identify-catalog.ts";
 import {
@@ -18,6 +18,7 @@ import {
   type ManualCheatKindOverride,
   type ManualCheatResult,
 } from "../../../lib/cheats/index.ts";
+import { getCheatPatchStatus, getRomCheats } from "../cheat-patch-export-model.ts";
 import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer, DrawerReadout } from "./ds/drawer.tsx";
 import { FileCard } from "./ds/file-card.tsx";
@@ -485,6 +486,13 @@ export type CheatDatabaseSectionProps = {
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
   onSelectionChange?: (records: ClassifiedCheatRecord[]) => void;
+  /**
+   * Bake the ROM cheats that are On into a standalone patch and download it.
+   * Resolves with the created file name. Absent when the workflow cannot run
+   * one (no ROM staged yet). The system is the one the database lookup routed
+   * the ROM to, so the caller does not resolve it a second time.
+   */
+  onSaveAsPatch?: (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => Promise<string>;
   outputSummary?: { rom: number };
   validationMessage?: string;
   /** Localized step heading. */
@@ -504,6 +512,7 @@ export const CheatDatabaseSection = ({
   classifyManualCode,
   classifyDatabaseCheats,
   onSelectionChange,
+  onSaveAsPatch,
   outputSummary,
   validationMessage,
   title,
@@ -511,6 +520,9 @@ export const CheatDatabaseSection = ({
   woven,
 }: CheatDatabaseSectionProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [savingPatch, setSavingPatch] = useState(false);
+  const [patchStatus, setPatchStatus] = useState("");
+  const [patchError, setPatchError] = useState("");
   // Cards on show. Selection is the subset whose switch is On, so a card can
   // stay in the stack while excluded from the run.
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
@@ -576,6 +588,11 @@ export const CheatDatabaseSection = ({
     [addedIds, records],
   );
   const copy = matchCopy(match);
+  const selectedRecords = useMemo(
+    () => records.filter(({ record }) => selectedIds.has(record.id)),
+    [records, selectedIds],
+  );
+  const selectedRomCheats = useMemo(() => getRomCheats(selectedRecords), [selectedRecords]);
 
   const publish = (nextSelected: Set<string>, source = records) => {
     setSelectedIds(nextSelected);
@@ -680,6 +697,33 @@ export const CheatDatabaseSection = ({
               selected={selectedIds.has(entry.record.id)}
             />
           ))}
+        </div>
+      ) : null}
+
+      {onSaveAsPatch ? (
+        <div className="cheat-actions">
+          <button
+            className="btn cheat-save-patch"
+            disabled={savingPatch || !selectedRomCheats.length}
+            onClick={() => {
+              setPatchError("");
+              setPatchStatus("");
+              setSavingPatch(true);
+              void onSaveAsPatch(selectedRecords, manualSystem)
+                .then((fileName) => setPatchStatus(getCheatPatchStatus(fileName, selectedRomCheats.length)))
+                .catch((reason: unknown) =>
+                  setPatchError(reason instanceof Error ? reason.message : "The cheat patch could not be created."),
+                )
+                .finally(() => setSavingPatch(false));
+            }}
+            title={selectedRomCheats.length ? undefined : "Turn on at least one ROM cheat to bake it into a patch."}
+            type="button"
+          >
+            <Download aria-hidden="true" />
+            {savingPatch ? "Creating patch…" : "Save as patch"}
+          </button>
+          {patchStatus ? <p role="status">{patchStatus}</p> : null}
+          {patchError ? <p role="alert">{patchError}</p> : null}
         </div>
       ) : null}
 
