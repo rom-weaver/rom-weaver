@@ -1,12 +1,17 @@
 // @vitest-environment happy-dom
 import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { loadCatalog } from "../../../src/presentation/localization/catalog.ts";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import {
   compareRomExpectation,
   RomExpectationCard,
 } from "../../../src/public/react/components/ds/rom-expectation-card.tsx";
 import type { ParsedIdentifyResolution } from "../../../src/types/identify.ts";
+
+beforeAll(async () => {
+  await loadCatalog("es");
+});
 
 const matched = (expectedComponents: Record<string, string | number>[]): ParsedIdentifyResolution => ({
   matches: [

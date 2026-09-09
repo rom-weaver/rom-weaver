@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { loadCatalog } from "../../src/presentation/localization/catalog.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { HomeLoom } from "../../src/webapp/components/home-loom.tsx";
 import { HomePage } from "../../src/webapp/components/home-page.tsx";
@@ -24,6 +25,10 @@ const makeContext = () =>
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+beforeAll(async () => {
+  await Promise.all([loadCatalog("de"), loadCatalog("es")]);
 });
 
 describe("HomeLoom", () => {

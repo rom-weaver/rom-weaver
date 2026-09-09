@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
 import { render } from "@testing-library/react";
-import { expect, it } from "vitest";
+import { beforeAll, expect, it } from "vitest";
+import { loadCatalog } from "../../src/presentation/localization/catalog.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { SourceInfoList } from "../../src/public/react/components/ds/source-info-list.tsx";
+
+beforeAll(async () => {
+  await loadCatalog("de");
+});
 
 it("keeps the ROM name out of the Checks drawer", () => {
   const { container } = render(
