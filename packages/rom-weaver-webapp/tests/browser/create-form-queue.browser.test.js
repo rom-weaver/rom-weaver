@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, test } from "vitest";
 import { CreatePatchForm } from "../../src/public/react/create-patch-form.tsx";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 
 const workflowMockState = {
@@ -233,6 +234,10 @@ const queueCreate = async () => {
   createButton.click();
   await expect.poll(getOutputWaitingText).toContain("Waiting for other actions");
 };
+
+// Spanish is a lazy chunk in the app (the boot gate preloads it there); the
+// assertions below read translated text synchronously, so land it first.
+beforeAll(() => preloadCatalog("es"));
 
 beforeEach(() => {
   mountedRoot?.unmount?.();

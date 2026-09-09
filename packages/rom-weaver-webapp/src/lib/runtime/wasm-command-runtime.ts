@@ -1304,6 +1304,67 @@ const invokeRomWeaverIdentifyHashWorker = async (
   return { ...parsed, timing: getRunResultTiming(result) };
 };
 
+/**
+ * Search one staged pack by game name through the `identify` command. Pack
+ * selection is the caller's: a name cannot be routed to a pack the way a
+ * checksum can, so `databasePaths` MUST already name the single pack of the
+ * platform the user chose. The result is the same shape the hash path returns,
+ * with the matches sorted best-first and cut to `limit`.
+ */
+const invokeRomWeaverIdentifyNameWorker = async (
+  input: {
+    databasePaths?: string[];
+    knownInputPaths?: string[];
+    /** Most matches to return; the command defaults to 50. */
+    limit?: number;
+    logLevel?: LogLevel | string;
+    name: string;
+    signal?: AbortSignal;
+  },
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<ParsedIdentifyCommandResult & { timing: ReturnType<typeof getRunResultTiming> }> => {
+  const name = input.name.trim();
+  if (!name) throw new Error("Identify name is required");
+  const database = toTrimmedList(input.databasePaths);
+  if (!database.length) throw new Error("Identify by name needs a database pack");
+  const limit =
+    typeof input.limit === "number" && Number.isFinite(input.limit) && input.limit > 0
+      ? Math.floor(input.limit)
+      : undefined;
+  const command = createRomWeaverCommand("identify", {
+    database,
+    ...(limit === undefined ? {} : { limit }),
+    name,
+  });
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson identify name dispatch", {
+    command,
+    databaseCount: database.length,
+    limit,
+    name,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      onEvent: relaySimpleProgress(onProgress),
+      onLog,
+      signal: input.signal,
+    }),
+  );
+  if (!(result.ok && result.exitCode === 0)) {
+    await throwRomWeaverFailureWithBrowserOutputContext(result, "Identify failed", `identify \`${name}\``);
+  }
+  const terminal = getLastEvent(result);
+  const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
+  const parsed = parseIdentifyCommandResult(details);
+  if (!parsed) {
+    throw withRomWeaverFailureKind(new Error("Identify result was missing or malformed"), result);
+  }
+  return { ...parsed, timing: getRunResultTiming(result) };
+};
+
 // Parse a rom-weaver-bundle.json bundle (plain, compressed, or bundled in an archive) via the `bundle parse`
 // command. Bundled ROM/patch members are extracted into `extractDirPath`; the parsed result's
 // `extracted` source refs point at those leaves.
@@ -1522,6 +1583,7 @@ export {
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverIdentifyHashWorker,
+  invokeRomWeaverIdentifyNameWorker,
   invokeRomWeaverIngestWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,

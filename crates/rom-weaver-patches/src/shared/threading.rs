@@ -1,9 +1,7 @@
 //! Thread-capability planning helpers shared by the patch format handlers.
 //!
-//! These were previously duplicated byte-for-byte (or near so) across the
-//! per-format modules. Per-format chunk-size constants and overflow error
-//! strings stay in the format modules and are passed in by each call site so
-//! behavior remains identical per format.
+//! Callers supply per-format chunk sizes and overflow errors so diagnostics
+//! keep their format-specific wording.
 
 use std::{
     fs::File,

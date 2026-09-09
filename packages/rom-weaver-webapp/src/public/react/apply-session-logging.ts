@@ -1,28 +1,13 @@
 import { createLogger } from "../../lib/logging.ts";
+import { getBinarySourceTraceKind } from "../../storage/shared/binary/source-shared.ts";
 import { getBinarySourceFileName, getBinarySourceSize } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 
 const logger = createLogger("ui");
 
-const getTraceSourceKind = (source: unknown) => {
-  if (typeof File !== "undefined" && source instanceof File) return "file";
-  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
-  if (source instanceof Uint8Array) return "uint8array";
-  if (source instanceof ArrayBuffer) return "arraybuffer";
-  if (
-    source &&
-    typeof source === "object" &&
-    "getFile" in source &&
-    typeof (source as { getFile?: unknown }).getFile === "function"
-  )
-    return "file-handle";
-  if (source && typeof source === "object") return "object";
-  return typeof source;
-};
-
 const getTraceSourceSummary = (source: unknown, fallback: string) => ({
   fileName: getBinarySourceFileName(source as BinarySource, fallback),
-  kind: getTraceSourceKind(source),
+  kind: getBinarySourceTraceKind(source),
   size: getBinarySourceSize(source as BinarySource) ?? undefined,
 });
 

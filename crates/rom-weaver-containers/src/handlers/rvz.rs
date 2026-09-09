@@ -34,12 +34,9 @@ impl RvzContainerHandler {
             .min(default_buffer_size as u64) as usize
     }
 
-    /// Reads from `reader` into `buffer` until it is full or the reader is exhausted, returning the
-    /// number of bytes filled. The disc reader returns short reads (~1.3 MiB), so writing each one
-    /// directly lands every `write_all` just under the host file shim's direct-write threshold,
-    /// forcing a full-size staging-buffer copy on the OPFS/wasm side. Coalescing the short reads into
-    /// one large buffer here lets each downstream write clear that threshold and skip the copy -
-    /// without adding a copy of our own, since each read writes straight into `buffer` at its offset.
+    /// Read until `buffer` is full or the reader ends, and return the byte count.
+    /// Coalescing short reads keeps downstream writes above the OPFS direct-write
+    /// threshold without an extra copy.
     fn fill_extract_buffer<R: Read>(reader: &mut R, buffer: &mut [u8]) -> Result<usize> {
         let mut filled = 0;
         while filled < buffer.len() {

@@ -137,19 +137,3 @@
     rotate: 360deg;
   }
 }
-@keyframes dl-bob {
-  0%,
-  16%,
-  100% {
-    transform: translateY(0);
-  }
-  4% {
-    transform: translateY(2.4px);
-  }
-  8% {
-    transform: translateY(-0.6px);
-  }
-  12% {
-    transform: translateY(1.6px);
-  }
-}

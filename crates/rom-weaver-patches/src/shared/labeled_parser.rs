@@ -1,12 +1,9 @@
 //! Streaming, length-checked file parser shared by the simple record-based
 //! patch formats (APS N64, APS GBA, PMSR/MOD).
 //!
-//! These formats each previously carried a byte-for-byte identical cursor that
-//! tracked the consumed offset against the known file length and refused reads
-//! that ran past the end. The only per-format differences were the format name
-//! and the (cosmetic, unreachable on 64-bit targets) overflow wording in the
-//! error strings, so both are passed in by the call site to keep every reported
-//! message identical per format.
+//! The parser tracks the consumed offset against the known file length and
+//! rejects reads past the end. Callers supply their format-specific labels for
+//! validation errors.
 
 use std::io::Read;
 

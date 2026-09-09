@@ -287,6 +287,46 @@ describe("apply workflow view - empty bench", () => {
     expect((container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement).value).toBe("");
   });
 
+  it("keeps the checksum search open in 0x02 while patches wait for a ROM", async () => {
+    lookupExpectedRom.mockResolvedValue({
+      matches: [
+        {
+          algorithm: "crc32",
+          database: "No-Intro",
+          name: "Metroid Fusion (USA)",
+          platform: "Nintendo - Game Boy Advance",
+          variant: "raw",
+        },
+      ],
+      status: "matched",
+    });
+    const { container } = renderView({ patches: [patchItem("change.ips")], ui: createEmptyPatcherUiState() });
+    // Patches alone retire the hero, so the search lives in the empty ROM step.
+    expect(container.querySelector(".drop.hero")).toBeNull();
+    const romStep = container.querySelector("#rom-weaver-row-file-rom") as HTMLElement;
+    expect(romStep.textContent).toContain("Add ROM in");
+    const search = romStep.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
+    expect(search).toBeTruthy();
+    // The search stands open, as in the hero: no drawer to click first.
+    expect(search.closest(".cks-body")).toBeNull();
+    expect(romStep.querySelector(".identify-hash-disclosure")).toBeNull();
+    expect(search.querySelector(".identify-hash-label")?.textContent).toBeTruthy();
+
+    const input = romStep.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "3610a686" } });
+      fireEvent.submit(search);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
+    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
+      "Metroid Fusion (USA)",
+    );
+    // The match replaces the open search with the refine row - one search per step.
+    const forms = romStep.querySelectorAll("#rom-weaver-rom-hash-search");
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.classList.contains("identify-hash--compact")).toBe(true);
+  });
+
   it("loads the sample into the existing drop pipeline without navigating", async () => {
     const onUnifiedDrop = vi.fn();
     const fetchMock = vi.fn().mockResolvedValue({

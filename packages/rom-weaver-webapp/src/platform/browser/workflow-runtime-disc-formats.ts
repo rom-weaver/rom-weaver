@@ -14,6 +14,7 @@ import type { RomSpecificRuntimeAdapter } from "../../lib/runtime/workflow-runti
 import type { RuntimeWorkerIo } from "../../types/workflow-runtime-adapter.ts";
 import {
   EXTRACT_CHECKSUM_ALGORITHMS,
+  type ExtractedFileEntry,
   getPathDerivedFileName,
   joinPath,
   normalizeRomSpecificEntryNameForSource,
@@ -24,6 +25,51 @@ import { browserVfs, selectPreferredExtractedFile, waitForBrowserVfsPath } from 
 
 const RVZ_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.rvz;
 const Z3DS_ROM_SPECIFIC_FORMAT = ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY.z3ds;
+
+const createExtractedRomSpecificOutput = async ({
+  actualOutputFileName,
+  failureMessage,
+  outputName,
+  outputScope,
+  primaryFile,
+  sourceFileName,
+  stagedSourceFileName,
+  workerIo,
+}: {
+  actualOutputFileName: string;
+  failureMessage: string;
+  outputName?: string;
+  outputScope: ReturnType<typeof createRomWeaverOutputScope>;
+  primaryFile: ExtractedFileEntry | null;
+  sourceFileName: string;
+  stagedSourceFileName: string;
+  workerIo: RuntimeWorkerIo;
+}) => {
+  // The emitted file name determines the saved extension. The Rust extract truncates its own output,
+  // so this path needs no pre-clear or preopen step.
+  const emittedOutputFileName = primaryFile
+    ? normalizeRomSpecificEntryNameForSource(
+        getPathBaseName(String(primaryFile.fileName || primaryFile.path || "")),
+        stagedSourceFileName,
+        sourceFileName,
+      )
+    : "";
+  const outputFileName = outputName || emittedOutputFileName || actualOutputFileName;
+  const outputFilePath = primaryFile?.path || joinPath(outputScope.rootPath, outputFileName);
+  const [cleanup] = await outputScope.createOutputCleanups([outputFilePath], (filePath) => browserVfs.remove(filePath));
+  return workerIo.createWorkerOutput(
+    {
+      checksums: primaryFile?.checksums,
+      cleanup,
+      fileName: outputFileName,
+      filePath: outputFilePath,
+      romType: romTypeFromEmittedFile(primaryFile ?? undefined),
+      size: primaryFile?.sizeBytes,
+    },
+    outputFileName,
+    failureMessage,
+  );
+};
 
 const createBrowserDiscFormatsRuntime = (
   workerIo: RuntimeWorkerIo,
@@ -168,33 +214,16 @@ const createBrowserDiscFormatsRuntime = (
         preferredEntryNames: [outputName, actualOutputFileName, stagedOutputFileName],
         traceLabel: "rvz",
       });
-      // Name the output from the file the container handler actually emitted (rebased onto the logical
-      // source name), so the saved name matches the bytes written. The Rust extract truncates its own
-      // output, so no pre-clear/preopen is needed.
-      const emittedOutputFileName = primaryFile
-        ? normalizeRomSpecificEntryNameForSource(
-            getPathBaseName(String(primaryFile.fileName || primaryFile.path || "")),
-            stagedSourceFileName,
-            sourceFileName,
-          )
-        : "";
-      const outputFileName = outputName || emittedOutputFileName || actualOutputFileName;
-      const outputFilePath = primaryFile?.path || joinPath(outDirPath, outputFileName);
-      const [cleanup] = await outputScope.createOutputCleanups([outputFilePath], (filePath) =>
-        browserVfs.remove(filePath),
-      );
-      const output = await workerIo.createWorkerOutput(
-        {
-          checksums: primaryFile?.checksums,
-          cleanup,
-          fileName: outputFileName,
-          filePath: outputFilePath,
-          romType: romTypeFromEmittedFile(primaryFile ?? undefined),
-          size: primaryFile?.sizeBytes,
-        },
-        outputFileName,
-        "RVZ extraction worker did not return browser output",
-      );
+      const output = await createExtractedRomSpecificOutput({
+        actualOutputFileName,
+        failureMessage: "RVZ extraction worker did not return browser output",
+        outputName,
+        outputScope,
+        primaryFile,
+        sourceFileName,
+        stagedSourceFileName,
+        workerIo,
+      });
       outputScopeAdopted = true;
       return output;
     } finally {
@@ -244,33 +273,16 @@ const createBrowserDiscFormatsRuntime = (
         preferredEntryNames: [outputName, actualOutputFileName, stagedOutputFileName],
         traceLabel: "z3ds",
       });
-      // Name the output from the file the handler actually emitted (rebased onto the logical source
-      // name). The emitted name already carries the authoritative extension (e.g. `.zcci` -> `.cci`),
-      // and the Rust extract truncates its own output, so no pre-clear/preopen is needed.
-      const emittedOutputFileName = primaryFile
-        ? normalizeRomSpecificEntryNameForSource(
-            getPathBaseName(String(primaryFile.fileName || primaryFile.path || "")),
-            stagedSourceFileName,
-            sourceFileName,
-          )
-        : "";
-      const outputFileName = outputName || emittedOutputFileName || actualOutputFileName;
-      const outputFilePath = primaryFile?.path || joinPath(outDirPath, outputFileName);
-      const [cleanup] = await outputScope.createOutputCleanups([outputFilePath], (filePath) =>
-        browserVfs.remove(filePath),
-      );
-      const output = await workerIo.createWorkerOutput(
-        {
-          checksums: primaryFile?.checksums,
-          cleanup,
-          fileName: outputFileName,
-          filePath: outputFilePath,
-          romType: romTypeFromEmittedFile(primaryFile ?? undefined),
-          size: primaryFile?.sizeBytes,
-        },
-        outputFileName,
-        "Z3DS extraction worker did not return browser output",
-      );
+      const output = await createExtractedRomSpecificOutput({
+        actualOutputFileName,
+        failureMessage: "Z3DS extraction worker did not return browser output",
+        outputName,
+        outputScope,
+        primaryFile,
+        sourceFileName,
+        stagedSourceFileName,
+        workerIo,
+      });
       outputScopeAdopted = true;
       return output;
     } finally {

@@ -2065,11 +2065,8 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         let source = request.source.clone();
         let progress_context = context.clone();
         let progress_execution = execution.clone();
-        // Each worker opens its own reader over the source and extracts its assigned entries. In
-        // the browser the OPFS proxy worker owns every SyncAccessHandle, so a spawned wasm thread's
-        // `path_open` is marshalled to it and succeeds - the old "read the whole archive on the main
-        // thread first" workaround for `os error 44` is no longer needed. Peak memory is one entry's
-        // working set per worker rather than the whole compressed archive.
+        // Each worker opens its own reader and extracts its assigned entries. The
+        // OPFS proxy owns the source handle and serves spawned WASM threads.
         trace!(
             format = format_name,
             used_parallelism = execution.used_parallelism,

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ApplyWorkflowInputState } from "../../src/types/apply-workflow.ts";
 import {
   createBaseApplyWorkflowSettings,
+  createPatchStageInfoMapper,
   createWorkflowOutputOverridesKey,
   createWorkflowPreparationSettingsKey,
   createWorkflowSettingsKey,
@@ -90,6 +91,34 @@ describe("apply workflow staging model", () => {
 
     expect(info?.validationValues).toContain("in rom=Advance Wars (USA)");
     expect(info?.validationState).toBe("unknown");
+  });
+
+  it("keeps patch target labels and source names consistent across refreshes", () => {
+    const buildInfo = createPatchStageInfoMapper([
+      { id: "rom-1", fileName: "first.sfc" },
+      { id: "rom-2", fileName: "second.sfc" },
+      { id: "unnamed" },
+    ]);
+    const patch = {
+      candidates: [],
+      id: "patch-1",
+      parentCompressions: [],
+      status: "ready" as const,
+      targetInputId: "rom-2",
+      warnings: [],
+    };
+
+    expect(buildInfo(patch, 3, "hack.ips")).toMatchObject({
+      fileName: "hack.ips",
+      order: 3,
+      targetLabel: "Target: second.sfc",
+    });
+    expect(buildInfo({ ...patch, targetInputFileName: "selected.sfc" }, 3, "hack.ips")?.targetLabel).toBe(
+      "Target: selected.sfc",
+    );
+    expect(buildInfo({ ...patch, targetInputId: "unnamed" }, 3, "hack.ips")?.targetLabel).toBe("Target: Input");
+    expect(buildInfo({ ...patch, targetInputId: "removed" }, 3, "hack.ips")?.targetLabel).toBe("Target: None selected");
+    expect(buildInfo(undefined, 3, "hack.ips")).toBeNull();
   });
 
   it("derives output identity and settings keys from the current sources", () => {

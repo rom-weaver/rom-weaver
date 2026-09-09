@@ -66,9 +66,10 @@ jobs:
       # `7zz` name is upstream's and Homebrew's. scripts/parity-check.mjs
       # accepts either, so this installs the package and prints what it got.
       - name: Install archive reference tool (7-Zip)
+        env:
+          APT_PACKAGES: 7zip
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes 7zip
+          node scripts/ci/install-system-dependencies.mjs
           7z i | head -2
 
       # The disc reference tools are cross-platform npm packages (chdman from

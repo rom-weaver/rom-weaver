@@ -10,14 +10,8 @@ import { createWasmSourceFingerprint } from "./wasm/wasm-source-fingerprint.mjs"
 
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
-// The pre-commit hook runs typegen-check and wasm-check in their own target
-// dirs so the three cargo commands stop serializing on Cargo's build lock (see
-// .config/lefthook.yml). A fresh worktree starts with both empty, which turns
-// its first Rust commit into a multi-minute build. Warm them here instead.
-//
-// The env has to match the hook's exactly or the fingerprints differ and the
-// warm-up buys nothing; setup-worktree.test.mjs asserts these stay in sync with
-// the hook. Primed in parallel - separate target dirs is the whole point.
+// Separate Cargo target directories let the pre-commit checks build in parallel.
+// Priming MUST use the environment from .config/lefthook.yml so Cargo reuses the artifacts.
 export const HOOK_CARGO_PRIMES = [
   { task: "typegen-check", targetDir: "target/hook-typegen", rustflags: "" },
   { task: "wasm-check", targetDir: "target/hook-wasm", rustflags: "" },
@@ -29,8 +23,7 @@ export function primeHookTargets(root, primes = HOOK_CARGO_PRIMES) {
     delete env.__MISE_DIFF;
     if (prime.rustflags) env.RUSTFLAGS = `${process.env.RUSTFLAGS ?? ""} ${prime.rustflags}`.trim();
     execFile("mise", ["run", prime.task], { cwd: root, env }, (error) => {
-      // Advisory: wasm-check needs the WASI SDK, and a worktree is still usable
-      // without it. Failing setup here would strand a checkout that works.
+      // Priming failures are advisory because native work can continue without the WASI SDK.
       process.stdout.write(error ? `  ${prime.task} could not be primed (${error.message.split("\n")[0]})\n` : `  primed ${prime.targetDir}\n`);
       done();
     }).stderr?.pipe(process.stderr);
@@ -54,9 +47,7 @@ export async function main(cwd = process.cwd(), { prime = true } = {}) {
   const source = join(mainRoot, "packages/rom-weaver-webapp/src/wasm");
   const destination = join(root, "packages/rom-weaver-webapp/src/wasm");
   mkdirSync(destination, { recursive: true });
-  // notices.md belongs here with the other generated license files: vite.config.mjs
-  // reads it while *loading the config*, so a worktree without it cannot run vitest,
-  // lint, or the dev server at all.
+  // Vite reads notices.md while loading its config, before lint, tests, or the dev server can start.
   for (const artifact of ["rom-weaver-app.wasm", "rom-weaver-app.wasm.br", "rom-weaver-app.wasm.source.sha256", "NOTICE", "WEBAPP_NOTICE", "notices.md"]) {
     if (!existsSync(join(source, artifact))) continue;
     cpSync(join(source, artifact), join(destination, artifact));

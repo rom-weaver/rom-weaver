@@ -262,6 +262,9 @@ fn render_identify(surface: &Surface, event: &ProgressEvent) {
     else {
         return render_details_or_label(surface, event);
     };
+    if is_name_search(identify) {
+        return render_name_search(surface, identify);
+    }
     let names = identify_names(identify);
     let mut pairs = Vec::new();
     if !names.is_empty() {
@@ -272,6 +275,81 @@ fn render_identify(surface: &Surface, event: &ProgressEvent) {
         return label_line(surface, event);
     }
     surface.key_values(&pairs);
+}
+
+/// A name search reports every match it found, so the flattened key/value form
+/// would print one JSON blob per result. `--name` sets `algorithm` to `name`
+/// on each match, which is what tells the two report shapes apart.
+fn is_name_search(identify: &Map<String, Value>) -> bool {
+    identify
+        .get("matches")
+        .and_then(Value::as_array)
+        .and_then(|matches| matches.first())
+        .and_then(|entry| entry.get("algorithm"))
+        .and_then(Value::as_str)
+        == Some("name")
+}
+
+/// One row per match: the name, then the fields that tell two dumps of the
+/// same title apart. A reader picks a result from this table and looks it up
+/// again by checksum, so the row carries the CRC32 of the primary payload.
+fn render_name_search(surface: &Surface, identify: &Map<String, Value>) {
+    let Some(matches) = identify.get("matches").and_then(Value::as_array) else {
+        return;
+    };
+    let mut rows = vec![vec![
+        "Name".to_string(),
+        "Region".to_string(),
+        "Revision".to_string(),
+        "Tags".to_string(),
+        "Crc32".to_string(),
+    ]];
+    for entry in matches {
+        let text = |key: &str| {
+            entry
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string()
+        };
+        let tags = entry
+            .get("dump_tags")
+            .and_then(Value::as_array)
+            .map(|tags| {
+                tags.iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .unwrap_or_default();
+        let crc32 = entry
+            .get("expected_components")
+            .and_then(Value::as_array)
+            .and_then(|components| components.first())
+            .and_then(|component| component.get("crc32"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        rows.push(vec![
+            text("name"),
+            text("region"),
+            text("revision"),
+            tags,
+            crc32,
+        ]);
+    }
+    surface.rows(&rows);
+    surface.key_values(&[
+        (
+            "Input".to_string(),
+            identify
+                .get("input")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+        ),
+        ("Matches".to_string(), (rows.len() - 1).to_string()),
+    ]);
 }
 
 fn identify_names(identify: &Map<String, Value>) -> Vec<String> {

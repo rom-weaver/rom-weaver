@@ -677,6 +677,58 @@ const loadIdentifyPackSelection = async (
   return { packs };
 };
 
+/** One platform a name search can be scoped to: its pack slug and display name. */
+type IdentifyPlatformOption = {
+  platform: string;
+  slug: string;
+};
+
+/**
+ * Every platform that owns a loadable pack, sorted by display name. A name
+ * query carries no checksum, so it cannot be routed the way a digest is; the
+ * user MUST pick one of these first and the search then loads that pack alone.
+ */
+const listIdentifyPlatforms = async (): Promise<IdentifyPlatformOption[]> => {
+  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
+  const bySlug = new Map<string, IdentifyPlatformOption>();
+  for (const system of index.systems) bySlug.set(system.slug, { platform: system.platform, slug: system.slug });
+  for (const entry of catalog?.platforms || []) {
+    if (!bySlug.has(entry.packSlug)) {
+      bySlug.set(entry.packSlug, { platform: entry.canonicalPlatform, slug: entry.packSlug });
+    }
+  }
+  return [...bySlug.values()].sort((left, right) => left.platform.localeCompare(right.platform));
+};
+
+/**
+ * The single pack a chosen platform owns, by catalog pack slug or by any
+ * platform name the catalog aliases. Sibling widening MUST NOT apply here: a
+ * name search that pulled a family would load megabytes the user did not ask
+ * for, and the platform is an explicit choice rather than a header guess.
+ */
+const loadIdentifyPackForPlatform = async (
+  platform: string,
+  onSelected?: (platforms: string[]) => void,
+): Promise<BrowserIdentifyPack> => {
+  const wanted = platform.trim();
+  if (!wanted) throw new IdentifyDataUnavailableError("A platform is required to search the ROM identify data by name");
+  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
+  const resolved = resolveCatalogPlatform(catalog, wanted);
+  let system: IdentifySystem | undefined;
+  for (const slug of [resolved?.packSlug, wanted, slugifyPlatform(wanted)]) {
+    if (!slug) continue;
+    system = systemForSlug(index, catalog, slug);
+    if (system) break;
+  }
+  if (!system) {
+    logger.error("identify index has no database for platform", { indexSystems: index.systems.length, platform });
+    throw new IdentifyDataUnavailableError(`The ROM identify index has no database for ${wanted}`);
+  }
+  logger.debug("identify pack selection", { selected: system.slug, source: "platform" });
+  onSelected?.([system.platform]);
+  return loadPack(system);
+};
+
 /** Back-compat wrapper over {@link loadIdentifyPackSelection} that returns the packs alone. */
 const loadIdentifyPacks = async (
   hints: IdentifyPackHints,
@@ -688,7 +740,9 @@ export {
   identifyGroupIdsForHints,
   IdentifyDataUnavailableError,
   installIdentifyPackGroup,
+  listIdentifyPlatforms,
   listOptionalIdentifyPackGroups,
+  loadIdentifyPackForPlatform,
   loadIdentifyIndexAndCatalog,
   loadIdentifyPacks,
   loadIdentifyPackSelection,
@@ -696,4 +750,4 @@ export {
   selectIdentifySlugs,
   setIdentifyPackGroupWanted,
 };
-export type { BrowserIdentifyPack, IdentifyPackGroupState };
+export type { BrowserIdentifyPack, IdentifyPackGroupState, IdentifyPlatformOption };

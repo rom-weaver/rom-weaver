@@ -256,6 +256,80 @@ const identifyChecks = async (
   }
 };
 
+/** Options for a name search; `limit` caps how many titles come back. */
+type BrowserIdentifyNameOptions = BrowserIdentifyHashOptions & { limit?: number };
+
+/**
+ * Search the identify data by game name inside ONE platform. A name carries no
+ * checksum, so the router cannot narrow it and a bare query would pull tens of
+ * megabytes of packs; the caller MUST name the platform, and exactly the pack
+ * that platform owns is loaded. An unloadable database reports `unavailable`,
+ * never a false "no match".
+ */
+const identifyName = async (
+  /** A catalog pack slug, or any platform name the catalog aliases. */
+  platform: string,
+  query: string,
+  options: BrowserIdentifyNameOptions = {},
+): Promise<ParsedIdentifyResult> => {
+  const normalized = query.trim();
+  if (!normalized) throw new Error("Identify needs a name to search for.");
+  const workerIo = browserRuntime.workerIo;
+  if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
+  const { IdentifyDataUnavailableError, loadIdentifyPackForPlatform } = await import("./identify-packs.ts");
+  let pack: Awaited<ReturnType<typeof loadIdentifyPackForPlatform>>;
+  try {
+    pack = await loadIdentifyPackForPlatform(platform, (platforms) => {
+      options.onProgress?.({ message: `Loading identification data for ${platforms.join(", ")}…` });
+    });
+  } catch (error) {
+    if (!(error instanceof IdentifyDataUnavailableError)) throw error;
+    return {
+      candidates: [{ checksumVariants: [], checksums: {}, matches: [], path: normalized, status: "unavailable" }],
+      input: normalized,
+      status: "unavailable",
+      unavailableReason: error.message,
+    };
+  }
+  const { invokeRomWeaverIdentifyNameWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
+  const staged = await workerIo.stageSources([
+    {
+      fallbackFileName: pack.fileName,
+      pathPrefix: "identify-pack-1",
+      pathPrefixInPath: true as const,
+      scope: "checksum" as const,
+      source: pack.blob,
+    },
+  ]);
+  try {
+    const result = await invokeRomWeaverIdentifyNameWorker(
+      {
+        databasePaths: staged.map((entry) => entry.filePath),
+        knownInputPaths: staged.map((entry) => entry.filePath),
+        name: normalized,
+        signal: options.signal,
+        ...(typeof options.limit === "number" && Number.isFinite(options.limit) ? { limit: options.limit } : {}),
+      },
+      options.onProgress,
+    );
+    return {
+      candidates: [
+        {
+          checksumVariants: result.checksumVariants,
+          checksums: result.checksums,
+          matches: result.matches,
+          path: result.input || normalized,
+          status: result.status,
+        },
+      ],
+      input: result.input || normalized,
+      status: result.status,
+    };
+  } finally {
+    await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
+  }
+};
+
 /** The single-digest entry point the identify page pastes into. */
 const identifyHash = (hash: string, options: BrowserIdentifyHashOptions = {}): Promise<ParsedIdentifyResult> =>
   identifyChecks({ checksums: { hash } }, options);
@@ -395,6 +469,7 @@ export {
   getIngestOutputBlob,
   identifyChecks,
   identifyHash,
+  identifyName,
   identifyRom,
   ingestRom,
   preloadBrowserRuntime,
