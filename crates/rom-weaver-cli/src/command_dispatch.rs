@@ -76,6 +76,10 @@ impl CliApp {
                 BundleCommands::Parse(args) => self.run_bundle_parse(args),
                 BundleCommands::Schema => self.run_bundle_schema(),
             },
+            Commands::Save(SaveCommands::Set(mut args)) => {
+                args.dry_run |= self.dry_run;
+                self.run_save_set(args)
+            }
             Commands::Save(command) => self.run_save(command),
             Commands::Tools(command) => self.run_tools(command),
             Commands::PlanExtractBatch(args) => self.run_plan_extract_batch(args),

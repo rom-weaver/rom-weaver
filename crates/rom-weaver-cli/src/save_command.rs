@@ -154,7 +154,7 @@ impl CliApp {
         )
     }
 
-    fn run_save_set(&self, args: SaveSetCommand) -> AppRunOutcome {
+    pub(super) fn run_save_set(&self, args: SaveSetCommand) -> AppRunOutcome {
         let command = "save-set";
         let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
