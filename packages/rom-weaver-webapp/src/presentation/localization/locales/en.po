@@ -251,7 +251,7 @@ msgstr "AGPL-3.0 licensed. Read the code, build it yourself, or host the webapp 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.titleEmphasis"
-msgstr "Nothing leaves your machine."
+msgstr "All on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -311,7 +311,7 @@ msgstr "Apply a patch"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Apply patches to any ROM, compressed or raw,"
+msgstr "Apply a patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -361,7 +361,7 @@ msgstr "Apply tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.lede"
-msgstr "rom-weaver reads every common cartridge and disc container, chains patches in the order you choose, and saves the whole recipe as a bundle: patch order, checksums, and output names, so anyone can replay it exactly. Use it in the browser or in the terminal."
+msgstr "Apply translations, combine patches, and create patches of your own. Work with ROMs and disc images, compressed or raw, in your browser or terminal. Save your patch order and checksums in a reusable bundle so others can apply the same changes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -626,7 +626,7 @@ msgstr "Change"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "and download the result or a shareable bundle —"
+msgstr "Change how you play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -891,7 +891,7 @@ msgstr "Create a sharable bundle"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowCreate"
-msgstr "Create"
+msgstr "Create Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1286,7 +1286,7 @@ msgstr "Find a tool, guide, or setting"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
-msgstr "with a database that stays local —"
+msgstr "Find its exact match."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1546,7 +1546,7 @@ msgstr "Keep header: the patched output carries the ROM header."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
-msgstr "Strip padding and junk blocks from ROM dumps,"
+msgstr "Keep the game."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1556,7 +1556,7 @@ msgstr "Keep these offline. Unticked databases are still downloaded on demand wh
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Match a ROM to its exact dump name,"
+msgstr "Know your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1671,12 +1671,12 @@ msgstr "Looking this ROM up in the title database. The rows below fill in once i
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis2"
-msgstr "and shrink them for storage —"
+msgstr "Lose the padding."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
-msgstr "Turn an original ROM and its modified version, whether compressed or raw,"
+msgstr "Make a patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2316,7 +2316,7 @@ msgstr "reads and writes"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis2"
-msgstr "using the patch's own undo data —"
+msgstr "Recover the original."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2506,7 +2506,7 @@ msgstr "RomWeaver is unpacking one tiny ROM and two patches, then checking what 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
-msgstr "All local, in your browser — files never leave your machine."
+msgstr "Runs in your browser. Your files stay on this device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2566,7 +2566,7 @@ msgstr "Sections"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
-msgstr "with saves that stay on this device —"
+msgstr "See your changes in play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2611,7 +2611,7 @@ msgstr "Share this patch recipe (for patch creators)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "into a compressed, shareable patch others can apply —"
+msgstr "Share your changes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3086,7 +3086,7 @@ msgstr "Trim tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
-msgstr "Play a patched ROM in an emulator, right in the browser,"
+msgstr "Try your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3125,7 +3125,7 @@ msgstr "Unchanged"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis"
-msgstr "Revert a patched ROM to its original dump,"
+msgstr "Undo the patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3300,12 +3300,12 @@ msgstr "Your collection is yours. The tool should act like it."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.eyebrow"
-msgstr "Local-first ROM and disc image toolkit"
+msgstr "Your ROM and disc image toolkit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.title"
-msgstr "Patch, pack, and prove your ROMs."
+msgstr "Your ROMs. Your changes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

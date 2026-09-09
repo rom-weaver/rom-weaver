@@ -139,9 +139,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("#home-title")?.textContent).toContain(
-      "Tus ROM. Tus cambios.",
-    );
+    expect(container.querySelector("#home-title")?.textContent).toContain("Tus ROM. Tus cambios.");
     expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Aplicar parche");
     expect(container.textContent).toContain("Línea de comandos");
   });
