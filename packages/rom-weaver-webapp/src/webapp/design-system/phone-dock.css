@@ -110,7 +110,7 @@
     white-space: nowrap;
     clip-path: inset(50%);
   }
-  .rw-app .identify-panel .unified-drop-step > .step-body > .identify-hash-island {
+  .rw-app .identify-hash-island {
     width: 100%;
     margin-top: var(--sp-m);
   }
