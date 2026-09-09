@@ -371,6 +371,10 @@ const AddCheatsDialog = ({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      // Each open starts on the full list: a search left over from the last
+      // visit would hide rows the user never filtered out this time.
+      setQuery("");
+      setPage(0);
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
     } else if (!open && dialog.open) {
