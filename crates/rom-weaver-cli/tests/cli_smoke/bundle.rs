@@ -3035,6 +3035,24 @@ fn install_two_track_pack(
     let packs = root.join("packs");
     fs::create_dir_all(&packs).expect("packs dir");
     fs::write(packs.join("test-disc-system.pack.br"), &compressed).expect("pack fixture");
+    // The member lane fill loads only the packs the catalog marks per-track.
+    fs::write(
+        root.join("catalog.json"),
+        serde_json::json!({
+            "format": "rom-weaver-identify-catalog-v1",
+            "platforms": [{
+                "canonicalPlatform": "Test Disc System",
+                "aliases": ["tds"],
+                "source": "redump",
+                "mediaProfiles": ["redump-cd-track-v1"],
+                "packSlug": "test-disc-system",
+                "packFormat": "RWFP1",
+                "canonicalizationVersion": 1,
+            }]
+        })
+        .to_string(),
+    )
+    .expect("catalog fixture");
     // The packaged reader verifies every pack against `index.json`.
     let sha256 = |bytes: &[u8]| {
         let mut checksum = rom_weaver_checksum::StreamingChecksum::new(&["sha256".to_string()])

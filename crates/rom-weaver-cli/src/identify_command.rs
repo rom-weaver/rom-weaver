@@ -292,6 +292,36 @@ impl IdentifyDatabaseSet {
         Ok(Some(Self { packs }))
     }
 
+    /// The installed packs whose catalog profile stores per-track disc hashes.
+    /// Only they can hold a multi-track record, so a caller after one skips
+    /// the cartridge packs, which are most of the database.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn load_track_packs() -> Result<Option<Self>> {
+        let provider = IdentifyPackProvider::new(None)?;
+        let mut packs = Vec::new();
+        for entry in provider.catalog_entries() {
+            if !entry
+                .media_profiles
+                .iter()
+                .any(|profile| profile_needs_tracks(profile))
+            {
+                continue;
+            }
+            let Some(pack) = provider.take_pack_for_slug(&entry.pack_slug)? else {
+                trace!(slug = %entry.pack_slug, "per-track identify pack is not installed");
+                continue;
+            };
+            trace!(slug = %entry.pack_slug, "loaded per-track identify pack");
+            packs.push((pack.name, pack.file));
+        }
+        Ok((!packs.is_empty()).then_some(Self { packs }))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(super) fn load_track_packs() -> Result<Option<Self>> {
+        Ok(None)
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn from_builtin_packs() -> Result<Self> {
         let database_dir = super::identify_database::default_database_dir()?;

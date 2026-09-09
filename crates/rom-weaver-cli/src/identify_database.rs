@@ -352,6 +352,21 @@ impl IdentifyPackProvider {
         Ok(Some(pack))
     }
 
+    /// Load one slug's pack and hand it over without keeping it cached, for a
+    /// caller that assembles a pack set of its own.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn take_pack_for_slug(&self, slug: &str) -> Result<Option<LoadedPack>> {
+        let Some(pack) = self.pack_for_slug(slug)? else {
+            return Ok(None);
+        };
+        self.cache.borrow_mut().remove(slug);
+        Rc::try_unwrap(pack).map(Some).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "ROM identify pack `{slug}` is still in use and cannot be handed over"
+            ))
+        })
+    }
+
     /// Every available pack: each installed `*.pack` in the database dir plus
     /// every builtin pack whose slug the dir does not shadow. Sorted by name.
     pub(super) fn all_packs(&self) -> Result<Vec<Rc<LoadedPack>>> {

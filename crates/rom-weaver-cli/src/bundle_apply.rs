@@ -957,7 +957,9 @@ pub(super) fn describe_expected_state(
     if checksums.is_empty() {
         return;
     }
-    let Some(databases) = load_installed_identify_databases("expected-state lookup") else {
+    let Some(databases) = load_installed_identify_databases("expected-state lookup", || {
+        IdentifyDatabaseSet::load(&[])
+    }) else {
         return;
     };
     let checks = BundleChecks {
@@ -967,11 +969,14 @@ pub(super) fn describe_expected_state(
     push_expected_state_fields(&checks, &databases, coded);
 }
 
-/// Every installed identify pack, or nothing when there is none or one fails
-/// to load. A broken pack is logged, not raised: these lookups only decorate
-/// a failure or add a check, and MUST NOT fail an apply on their own.
-fn load_installed_identify_databases(purpose: &str) -> Option<IdentifyDatabaseSet> {
-    match IdentifyDatabaseSet::load(&[]) {
+/// The identify packs `load` selects, or nothing when there is none or one
+/// fails to load. A broken pack is logged, not raised: these lookups only
+/// decorate a failure or add a check, and MUST NOT fail an apply on their own.
+fn load_installed_identify_databases(
+    purpose: &str,
+    load: impl FnOnce() -> Result<Option<IdentifyDatabaseSet>>,
+) -> Option<IdentifyDatabaseSet> {
+    match load() {
         Ok(Some(databases)) => Some(databases),
         Ok(None) => {
             trace!(purpose, "skipped: no identify database is available");
@@ -1104,7 +1109,12 @@ fn fill_member_lane_checks(
     if rom_checks.checksums.is_empty() {
         return Ok(());
     }
-    let Some(databases) = load_installed_identify_databases("member lane check fill") else {
+    // Only a per-track pack can hold a multi-track record, and loading every
+    // installed pack here would tax every disc apply.
+    let Some(databases) = load_installed_identify_databases(
+        "member lane check fill",
+        IdentifyDatabaseSet::load_track_packs,
+    ) else {
         return Ok(());
     };
     fill_member_lane_checks_from(&rom_checks, &databases, &pending, step_verifications);
