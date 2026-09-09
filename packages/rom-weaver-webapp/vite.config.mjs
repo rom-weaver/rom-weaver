@@ -12,6 +12,7 @@ import { resolveIdentifyPackGroups } from "../../scripts/identify-pack-groups.mj
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
+import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
@@ -1325,6 +1326,7 @@ export default defineConfig(({ command, mode }) => {
       ],
     },
     plugins: [
+      compileLinguiCatalogs(),
       docsVirtualModule(DOC_ROUTES),
       brandMarkAssets(),
       shareWorkerRuntimeChunks(),
