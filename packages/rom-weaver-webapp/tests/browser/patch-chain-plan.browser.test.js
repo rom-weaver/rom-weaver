@@ -65,7 +65,7 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified — game.bin");
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply — chain-step-a.bps");
   const basisSelect = await getPatchInputSelect(1);
-  expect(basisSelect.options[0]?.textContent).toBe("auto (previous)");
+  expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
   expect(basisSelect.getAttribute("aria-describedby")).toBe("rom-weaver-patch-checks-help-1");
   expect(patchCheckHeadings(0)).toEqual([
     "Authored input checks — Original ROM (automatic)",
@@ -134,7 +134,7 @@ test("a patch input selector re-plans that patch", async () => {
 
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.value).toBe("auto");
-  expect(basisSelect.options[0]?.textContent).toBe("auto (base ROM)");
+  expect(basisSelect.options[0]?.textContent).toBe("auto (Original ROM)");
 
   // Pinning "previous output" overrides the inference: the re-plan stops
   // verifying this patch against the ROM and defers it to apply (where the
