@@ -1,30 +1,11 @@
-// Reusable dedicated Workers for *nested* WASI thread spawns (a spawned thread spawning its own
-// children). See browser-wasi-thread-spawner.ts for the top-level pooled path.
-//
-// Why nested spawns cannot draw from the shared pool
-// --------------------------------------------------
-// A parent blocks in Atomics.wait on its children's control words. If a nested spawn had to wait for
-// a free slot in the runner's bounded pool - a pool whose slots are held by those very blocked
-// parents - the run deadlocks: every slot waits for a child that can never be scheduled. That is why
-// the nested path runs with `allowWorkerPool: false`.
-//
-// Why *this* free list is deadlock-safe
-// -------------------------------------
-// 1. `acquire` never blocks and never fails for lack of capacity: it either takes a worker this realm
-//    already parked or creates a new one. The list is unbounded, so it is not a contended resource
-//    and cannot appear in any wait-for cycle. The only thing a spawner ever waits on is its own
-//    child's start acknowledgement, which that child can always satisfy.
-// 2. The list is owned by exactly one realm (one JavaScript thread). Only the owning parent mutates
-//    it, so there is no cross-realm mutual exclusion to deadlock over.
-// 3. A worker is parked only after its child reached IDLE, so a parked worker is never a live child's
-//    worker; peak worker count therefore equals this realm's peak *simultaneous* children - exactly
-//    what the previous create-one-per-spawn code allocated at the same instant. Reuse removes the
-//    churn between rounds, it does not raise the ceiling.
-//
-// The list is realm-scoped rather than spawner-scoped on purpose: the many-entries fan-out runs one
-// short-lived parent WASI thread per archive entry, so a per-spawner list would still create a fresh
-// worker per entry. It is keyed by the identity of the run payload and drained when that changes, so
-// a parked worker is never handed a stale module/memory/runtime.
+/** Reusable dedicated workers for nested WASI thread spawns. Nested spawns MUST bypass the runner's
+ * bounded pool: parents block on their children while holding its slots, which would deadlock.
+ *
+ * This free list belongs to one realm, which is its only mutator, and never blocks: acquire takes an
+ * IDLE worker or creates one. A worker is parked only after its child is IDLE, so reuse does not
+ * exceed the realm's peak simultaneous children.
+ * The list is keyed by run-payload identity and drained when that changes, so workers never retain a
+ * stale module, memory, or runtime. */
 
 import type { ThreadWorkerSlot, TraceLine } from "./browser-opfs-runtime-types.ts";
 import { basenameForTrace, formatErrorForTrace } from "./browser-opfs-stdio-events.ts";
@@ -133,8 +114,7 @@ export function acquireNestedThreadWorkerList(options: NestedThreadWorkerOptions
   if (currentList && keysMatch(currentList.key, key)) return currentList.list;
   if (currentList) {
     options.trace?.("[browser-opfs] nested thread workers draining stale list");
-    // Fire-and-forget: the previous command is already finished, and `acquire` must stay synchronous
-    // because the guest calls thread-spawn synchronously.
+    // `acquire` MUST stay synchronous because the guest calls thread-spawn synchronously.
     void currentList.list.drain();
   }
   const list = createNestedThreadWorkerList({ ...options, threadWorkerUrl: key.threadWorkerUrl });
@@ -231,9 +211,7 @@ function createNestedThreadWorkerList({
       slot.resolveDone();
     });
 
-    // `pool-command` mode: the worker primes its runtime once and then services thread requests off
-    // the control word in a loop. That loop is what makes the worker reusable - the retired
-    // one-shot mode rebuilt the whole realm (wasm instantiate + OPFS mounts) per spawn.
+    // pool-command primes one runtime, then serves requests from the control word loop without rebuilding WASM or OPFS mounts.
     const payload: ThreadWorkerPoolCommandMessage = {
       __streamBroadcastChannelName: streamBroadcastChannelName,
       __streamRequestId: streamRequestId,
@@ -259,7 +237,7 @@ function createNestedThreadWorkerList({
     while (idleSlots.length > 0) {
       const slot = idleSlots.pop();
       if (!slot) continue;
-      // Skip anything that failed or was shut down while parked; those are already retired.
+      // Skip slots that failed or shut down while parked.
       if (!allSlots.has(slot) || slot.failure) continue;
       if (loadThreadSlotState(slot.control) !== THREAD_SLOT_STATE_IDLE) continue;
       return slot;
@@ -270,14 +248,12 @@ function createNestedThreadWorkerList({
   const shutdownSlot = (slot: NestedThreadWorkerSlot) => {
     allSlots.delete(slot);
     const state = loadThreadSlotState(slot.control);
-    // A command-loop worker waits on FAILED until the owner changes the control word. Always advance
-    // failed workers to SHUTDOWN too, or their queued shutdown message can never be processed.
+    // A command-loop worker waits on FAILED. Failed slots MUST advance to SHUTDOWN so queued shutdown can run.
     if (state !== THREAD_SLOT_STATE_SHUTDOWN) {
       signalThreadStartState(slot.control, THREAD_SLOT_STATE_SHUTDOWN);
     }
     try {
-      // Queued behind the loop's exit: the worker disposes its mount cache and closes itself, which
-      // releases its OPFS handles the same way the old one-shot workers did.
+      // The worker handles this after its loop exits, then disposes its mount cache and releases OPFS handles.
       slot.worker?.postMessage({ mode: "shutdown" } satisfies ThreadWorkerShutdownMessage);
     } catch (error) {
       trace?.(
@@ -315,8 +291,7 @@ function createNestedThreadWorkerList({
       });
       await Promise.race([Promise.allSettled(slots.map((slot) => slot.done)).then(() => undefined), bounded]);
       if (timer) clearTimeout(timer);
-      // Terminate unconditionally afterwards: a worker that acknowledged shutdown has already closed
-      // itself, and terminating a closed worker is a no-op. One that did not must not be left behind.
+      // Always terminate after the bounded wait. Closing twice is safe, and an unresponsive worker MUST NOT remain.
       for (const slot of slots) {
         try {
           slot.worker?.terminate();
@@ -341,9 +316,7 @@ function createNestedThreadWorkerList({
       if (!allSlots.has(slot)) return;
       trace?.(`[browser-opfs] nested thread worker retired index=${slot.index}`);
       allSlots.delete(slot);
-      // A sibling can still be inside wasi_thread_start when another thread fails. A graceful
-      // shutdown message cannot run until that call returns, and the command loop would then write
-      // IDLE over SHUTDOWN and park forever. Stop failed/abandoned workers immediately instead.
+      // A sibling can still run wasi_thread_start. Terminate failed slots now because delayed shutdown can be overwritten by IDLE.
       signalThreadStartState(slot.control, THREAD_SLOT_STATE_SHUTDOWN);
       try {
         slot.worker?.terminate();

@@ -190,11 +190,8 @@ pub struct ContainerExtractRequest {
     /// that is `containing_archive` (conflating the two made nested CHDs try to open their
     /// containing archive as a parent CHD).
     pub parent: Option<PathBuf>,
-    /// The containing archive this source was extracted from, when it is a nested-archive
-    /// intermediate written during this run (top-level inputs leave this `None`). Handlers use
-    /// `containing_archive.is_some()` to know the source is run-local: in the browser only the main
-    /// runner thread can open such a file, so a parallel extract must read it on the main thread and
-    /// hand the bytes to workers (a top-level input is already synced to workers).
+    /// The archive that produced this run-local intermediate.
+    /// Top-level inputs leave this `None`.
     pub containing_archive: Option<PathBuf>,
 }
 
@@ -202,8 +199,7 @@ impl ContainerExtractRequest {
     /// Validate the single-output extract case: record the lone `output_name`
     /// against the requested selections, require that every selection matched it,
     /// and apply the kind filter. Shared by the seekable single-file extract
-    /// handlers (cso/z3ds/xiso/nod/chd), which all emit exactly one output and
-    /// previously inlined this same selection + kind-filter preamble.
+    /// handlers (cso/z3ds/xiso/nod/chd), which all emit exactly one output.
     pub fn ensure_single_output_selected(&self, output_name: &str) -> Result<()> {
         let mut selections = SelectionMatcher::new(&self.selections);
         selections.matches(output_name);

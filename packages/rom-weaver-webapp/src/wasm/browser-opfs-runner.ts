@@ -143,11 +143,6 @@ const getRunThreadWorkerPool = (
   threadWorkerPool: ReturnType<typeof createBrowserWasiThreadWorkerPool> | null,
 ) => (runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl ? null : threadWorkerPool);
 
-/**
- * Everything a run derives by layering this call's overrides over the runner's
- * own options. Kept together so `run` reads as a sequence of steps rather than
- * a wall of fallback chains.
- */
 const resolveRunSettings = (options: BrowserOpfsCreateOptions, runOptions: BrowserOpfsRunOptions) => ({
   debugWasi: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
   knownInputPaths: normalizeKnownInputPaths([

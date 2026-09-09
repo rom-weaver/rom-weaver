@@ -90,18 +90,8 @@ runs:
       run: |
         node scripts/ci/install-system-dependencies.mjs
 
-    # Before every mise step on purpose. `.config/mise.toml` resolves CC, CXX
-    # and CMAKE_C_COMPILER_LAUNCHER with `command -v ccache` and leaves them
-    # empty when it is absent, and the wasm compiler wrappers make the same
-    # check, so ccache has to be on PATH by the time any of them is rendered -
-    # otherwise the job installs a cache nothing routes through.
-    #
-    # CCACHE_DIR is pinned rather than left to the platform default
-    # (~/.cache/ccache on Linux, ~/Library/Caches/ccache on macOS) so the cache
-    # steps below name one path on every runner. CCACHE_BASEDIR and
-    # CCACHE_NOHASHDIR - which are what make these objects replay at all - come
-    # from `.config/mise.toml`; the basedir resolves through
-    # `git rev-parse --git-common-dir` and lands on the workspace checkout.
+    # ccache MUST be on PATH before mise resolves compiler wrappers.
+    # A fixed CCACHE_DIR gives cache steps one path on every runner; mise config supplies its base-dir hashing.
     - name: Install ccache
       if: inputs.ccache == 'true'
       shell: bash
@@ -125,15 +115,8 @@ runs:
           echo "CCACHE_MAXSIZE=$CCACHE_MAXSIZE_INPUT"
         } >> "$GITHUB_ENV"
 
-    # Same restore-everywhere/save-on-main split as the cargo cache, for the
-    # same budget reason - hence the two steps: `actions/cache` saves in a post
-    # step (after the build), while `actions/cache/save` here would write an
-    # empty store before any compile has run.
-    #
-    # restore-keys is safe on a content-addressed store: a prefix hit serves
-    # objects keyed by preprocessed source and compiler identity, so a stale
-    # generation can only miss, never return a wrong object. That is what keeps
-    # a Cargo.lock or toolchain bump from rebuilding ~2000 C objects everywhere.
+    # Restore on every ref but save only from main after compilation.
+    # Prefix restores are safe because ccache keys objects by preprocessed source and compiler identity.
     - name: Cache ccache objects
       if: inputs.ccache == 'true' && inputs.cache-save == 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache@v6
@@ -152,17 +135,13 @@ runs:
         restore-keys: |
           ccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-
 
-    # After the restore, because the counters travel inside the store: this
-    # makes a `ccache --show-stats` added after a build step report that build
-    # rather than everything the restored cache ever served. It clears
-    # counters only - no cached object is dropped.
+    # Reset restored counters so later statistics describe this job; cached objects remain.
     - name: Zero ccache statistics
       if: inputs.ccache == 'true'
       shell: bash
       run: ccache --zero-stats
 
-    # Written to GITHUB_ENV rather than passed to mise-action, so every later
-    # `mise run` step in the job sees the same restriction the install did.
+    # GITHUB_ENV gives every later `mise run` step the selected-tool restriction.
     - name: Select mise tools
       if: inputs.tools != ''
       shell: bash
@@ -175,9 +154,7 @@ runs:
       with:
         install: true
 
-    # mise pins the toolchain (.config/mise.toml [tools] rust) and exports
-    # RUSTUP_TOOLCHAIN, so components must be added to *that* toolchain rather
-    # than to whatever rustup defaults to - `mise exec` supplies the pin.
+    # mise pins RUSTUP_TOOLCHAIN, so components MUST be added through `mise exec`.
     - name: Install Rust components
       if: inputs.rust-components != ''
       shell: bash
@@ -188,33 +165,15 @@ runs:
       shell: bash
       run: mise exec -- rustup target add ${{ inputs.rust-targets }}
 
-    # sccache is deliberately absent: .config/mise.toml resolves RUSTC_WRAPPER to
-    # whatever is on PATH and leaves it empty otherwise, and nothing here
-    # persists ~/.cache/sccache between runs. Installing it would reintroduce
-    # the wrapper overhead for a cache that starts empty every time;
-    # Swatinem/rust-cache does the caching that actually survives for Rust
-    # units, and the ccache concern above covers the C ones it cannot help -
-    # a Cargo.lock or toolchain bump invalidates this whole cache and takes
-    # every vendored C object with it. The cache is
-    # keyed per job, so the wasm job's wasm-release artifacts and the rust
-    # job's host-profile artifacts no longer evict each other.
+    # Do not install sccache: this action does not persist its object store.
+    # rust-cache persists Rust artifacts and ccache covers vendored C compilation.
     - name: Cache cargo artifacts
       if: inputs.cargo-cache == 'true'
       uses: Swatinem/rust-cache@v2
       with:
-        # Default is false, so a failing job saves nothing - a red pipeline
-        # then rebuilds from cold every run, which is exactly when the cache
-        # is worth most. The key already covers rustc + Cargo.lock, so a
-        # cache written by a failed run is still valid for the next one.
+        # Save failed jobs because the key covers the toolchain and Cargo.lock.
         cache-on-failure: true
-        # Restore everywhere, save only on main. A branch run writes ~450 MB
-        # per Rust job into a branch-local scope that nothing else can ever
-        # read, and once the branch is gone it is pure ballast against the
-        # repository's 10 GiB budget - six closed dependabot PRs had 5.1 GB
-        # parked this way, evicting the main-branch caches that cold runs
-        # depend on. Branch runs give up nothing in practice: rust-cache has
-        # never reported better than `full match: false` here, so they were
-        # already restoring main's cache and rebuilding the delta.
+        # Restore on every ref but save only from main to avoid branch-local cache waste.
         save-if: ${{ github.ref == 'refs/heads/main' && inputs.cache-save == 'true' }}
 
     # The SDK ships one archive per host platform; resolve which one this

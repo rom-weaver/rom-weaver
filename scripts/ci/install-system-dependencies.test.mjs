@@ -17,7 +17,7 @@ test("recognizes when every requested apt package is installed", () => {
   ]);
 });
 
-test("updates and installs when an apt package is missing", () => {
+test("updates and installs from Ubuntu when an apt package is missing", () => {
   const calls = [];
   const run = (command, args) => {
     calls.push([command, args]);
@@ -28,8 +28,37 @@ test("updates and installs when an apt package is missing", () => {
   };
 
   assert.equal(installAptPackages(["cmake", "ninja-build"], run), true);
+  const sourceOptions = [
+    "-o",
+    "Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources",
+    "-o",
+    "Dir::Etc::sourceparts=-",
+  ];
   assert.deepEqual(calls.slice(-2), [
-    ["sudo", ["apt-get", "update"]],
-    ["sudo", ["apt-get", "install", "--yes", "cmake", "ninja-build"]],
+    ["sudo", ["apt-get", ...sourceOptions, "update"]],
+    ["sudo", ["apt-get", ...sourceOptions, "install", "--yes", "cmake", "ninja-build"]],
   ]);
+});
+
+test("does not refresh sources when every requested apt package is installed", () => {
+  const run = (command) => {
+    assert.equal(command, "dpkg-query");
+    return "install ok installed";
+  };
+
+  assert.equal(installAptPackages(["cmake", "ninja-build"], run), false);
+});
+
+test("does not install packages after an Ubuntu index failure", () => {
+  const failure = new Error("Hash Sum mismatch");
+  const run = (command, args) => {
+    if (command === "dpkg-query") return "unknown ok not-installed";
+    assert.equal(args.at(-1), "update");
+    throw failure;
+  };
+
+  assert.throws(
+    () => installAptPackages(["cmake"], run),
+    (error) => error === failure,
+  );
 });

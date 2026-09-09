@@ -5,22 +5,12 @@ Use the failed job name to choose a local check. Use the broad gate when you nee
 <!-- START doctoc -->
 ## Table of contents
 
-- [Run the broad gate first](#run-the-broad-gate-first)
 - [Match a specific job](#match-a-specific-job)
 - [Reproduce the Docker jobs](#reproduce-the-docker-jobs)
+- [Check the complete change](#check-the-complete-change)
 - [Still red in CI but green locally?](#still-red-in-ci-but-green-locally)
 
 <!-- END doctoc -->
-
-## Run the broad gate first
-
-```bash
-mise run ci
-```
-
-The pre-commit hooks select lint checks from your staged paths. CI reuses those same tasks over the whole tree, then adds tests, builds, publishability checks, and the macOS and Windows Rust legs. `mise run ci` is the local stand-in for that.
-
-For a known failure, run the matching command below first. The broad gate checks the complete change after that failure is fixed.
 
 ## Match a specific job
 
@@ -58,6 +48,18 @@ The performance gates need the production WASM artifact and the webapp build fir
 
 `docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle staged under `prebuilt/`. The CLI job uses `BINARY=prebuilt` when its packaging inputs change.
 
+<a id="run-the-broad-gate-first"></a>
+
+## Check the complete change
+
+After the matching check passes, run the complete local gate:
+
+```bash
+mise run ci
+```
+
+The pre-commit hooks select lint checks from staged paths. CI uses the same tasks, then adds tests, builds, publishability checks, and macOS and Windows Rust jobs. `mise run ci` runs the local checks; it does not reproduce those other operating systems.
+
 ## Still red in CI but green locally?
 
-Check the [gotchas](ci.md#gotchas) first - most of them describe a difference between a local run and a CI runner, including the `RUSTFLAGS` trap in the wasm job and the `cargo publish --dry-run` gate that exits 0 on a `publish = false` package.
+Check the [CI constraints](ci.md#gotchas), including Cargo target-flag replacement and the publishability check for packages with `publish = false`. Compare the failed job's toolchain, environment variables, and command with the local run.

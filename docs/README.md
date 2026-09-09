@@ -35,7 +35,7 @@ Guided practice runs. Follow them start to finish; everything you need is suppli
 
 ## How-to guides
 
-Recipes for a real job you already have in front of you.
+Procedures for specific tasks.
 
 ### In the browser
 
@@ -77,11 +77,11 @@ Facts to look up. No advice, no steps.
 
 ## Explanation
 
-Background that makes the rest make sense.
+Background on the engine, formats, and design decisions.
 
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
-- [Why your files stay on your device](explanation/local-first.md): what local-first buys you and what it costs.
-- [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
+- [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
+- [Choosing a patch format](explanation/patch-formats.md): differences between BPS, IPS, xdelta, PPF, and other patch formats.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.

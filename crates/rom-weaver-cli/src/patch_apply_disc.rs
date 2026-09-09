@@ -36,12 +36,10 @@ const DISC_TRACK_IN_MEMORY_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 
 /// Effective in-memory cap for a single patched/rebuilt disc track. Defaults to
 /// [`DISC_TRACK_IN_MEMORY_LIMIT_BYTES`]; override via
-/// `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` (in bytes, `0` forces the on-disk
-/// path) for regression/parity runs. Only ever bounds one track, never the disc.
+/// `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` in bytes. A value of `0` selects the
+/// on-disk path. The cap applies to one track, not the full disc.
 fn disc_track_in_memory_limit_bytes() -> u64 {
-    // Goes through the shared env helper so a malformed override is logged
-    // (a silent parse-fail-to-default hides typos in parity/regression runs)
-    // rather than swallowed; `0` still parses and forces the on-disk path.
+    // The shared helper logs malformed values; `0` selects the on-disk path.
     env_u64(
         "ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT",
         DISC_TRACK_IN_MEMORY_LIMIT_BYTES,

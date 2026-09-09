@@ -1,13 +1,7 @@
 name: Publish Cargo crates
 
-# Triggered by the release tag rather than called from release.yml: neither
-# event release.yml runs on is one crates.io Trusted Publishing accepts.
-# Ordinary commits reach it through `workflow_run` ("Trusted Publishing does not
-# support the 'workflow_run' event trigger due to security concerns"), and the
-# runs that set release_created arrive through `pull_request`, which it will not
-# accept either. A job inherits its workflow's event. The tag only appears once
-# release.yml publishes the draft, so this still runs strictly after the rest of
-# the release succeeded.
+# The tag push supplies the event used for crates.io Trusted Publishing.
+# The tag exists only after release.yml publishes the draft.
 on:
   push:
     tags:
@@ -48,7 +42,9 @@ jobs:
         uses: rust-lang/crates-io-auth-action@v1
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
+        env:
+          APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config
+        run: node scripts/ci/install-system-dependencies.mjs
 
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
@@ -56,10 +52,7 @@ jobs:
           shared-key: cargo-publish
           cache-on-failure: true
 
-      # The cargo-semver-checks gate that used to sit here now runs in
-      # release.yml, before the draft is published. By the time this workflow's
-      # tag exists the release is immutable and the version is spent, so a
-      # break found here could not be acted on.
+      # release.yml runs the semver gate before publication makes the release immutable.
       - name: Publish workspace crates
         shell: bash
         run: |

@@ -1307,7 +1307,6 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   color: var(--weft);
 }
 
-/* phones: the inspector and settings take the whole screen */
 @media (max-width: 719px) {
   .rw-app .log-dlg {
     max-width: 100vw;

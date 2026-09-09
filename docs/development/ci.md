@@ -318,7 +318,7 @@ Maps changed paths to the Rust, webapp, direct WASM-runtime, dependency-scanning
 
 Three of its outputs exist to keep a Docker job from running for a change it cannot report on. `docker_cli_arm64` and `docker_webapp_arm64` select each image's second architecture separately, so a pull request that changed only an image's compile inputs pays one release compile instead of two; editing an image definition, and every event other than a pull request, still selects both. `docker_prebuilt` gates the webapp prebuilt smoke, which needs a bundle on any ref and an image-side change as well on a pull request - see [`docker-prebuilt`](#jobs).
 
-The **release pull request** is the one pull request nothing narrows. Its tree is main's tree plus version strings and a changelog, and merging it is what ships, so classifying its diff handed the commit that ships less coverage than the commit it was cut from - it skipped `Rust (macOS)`, `Rust (Windows)`, the `CLI target runtime (aarch64-unknown-linux-musl)` leg, eight of the nine CLI targets, and the prebuilt webapp image's arm64 leg. `scripts/ci/release-pr.mjs` recognizes it from the `release-please--branches--main--components--` head-ref prefix rather than from its `autorelease: pending` label, because the head ref arrives in the event payload while the label needs an API call that can fail; `release.yml` keys its own release-pull-request jobs off the same prefix. The classifier turns every flag on for it, `cli-platform-matrix.mjs` keeps all nine targets, and the `changes` job publishes a `full_matrix` output that the jobs gating on the event name rather than on a path flag read instead. The cost is that every refresh of that pull request re-runs the whole matrix, and each dispatch force-pushes two or three commits.
+The **release pull request** selects the full matrix because merging it starts publication. `scripts/ci/release-pr.mjs` recognizes its `release-please--branches--main--components--` head-ref prefix, which is available in the event payload without a label lookup. `release.yml` uses the same prefix. The classifier enables every flag, `cli-platform-matrix.mjs` includes all nine targets, and the `changes` job exposes `full_matrix` for jobs that otherwise select by event name. Each release pull request update therefore repeats the full matrix.
 
 Changes to CI, coverage, toolchain setup, or the classifier fail open by selecting every stack. So does the event name: only `pull_request` narrows anything, so an absent `EVENT_NAME` costs time rather than coverage - the same default, for the same reason, as `scripts/ci/cli-platform-matrix.mjs`.
 
@@ -405,15 +405,15 @@ A draft release has no tag until it is published, so every job builds from `need
 
 `cargo-publish.yml` is triggered by the resulting `v*` tag push instead of being called by `release.yml`, so no crates.io publish ever runs inside the release fan-out - the fan-out holds no registry credentials and cannot half-publish on failure. Keying off the tag also orders it naturally last: the tag only exists once the draft has been published.
 
-`cargo-semver-checks` runs in `release.yml` as the `semver-check` job, not in `cargo-publish.yml` where it used to live. By the time the tag exists the release is published and immutable and the version can never be re-cut, so a break found there could not be acted on; as a gate on `publish-release` a failure leaves a deletable draft instead. It publishes nothing, so it needs no registry credentials and runs alongside the publishing jobs.
+`cargo-semver-checks` runs as the `semver-check` job in `release.yml` and gates `publish-release`. A compatibility failure leaves the draft unpublished, while the version can still be corrected. The check needs no registry credentials and runs alongside the publishing jobs.
 
 It runs per-crate rather than `--workspace` so a crate with no published baseline (a first release, or a newly added crate) is skipped instead of failing the whole job.
 
 ### Package managers publish last
 
-`publish-homebrew` and `publish-scoop` run **after** `publish-release`, not as gates on it. Both write a manifest whose download URL is `releases/download/vX.Y.Z/...`, and a draft release's assets are not publicly downloadable - pushing them earlier put a live formula in the tap and a live manifest in the bucket whose URLs 404 until the draft was published.
+`publish-homebrew` and `publish-scoop` run after `publish-release`. Their manifests use public `releases/download/vX.Y.Z/...` URLs, which are unavailable while the release is a draft.
 
-The ordering means that a tap failure no longer holds the draft, but that is an acceptable trade. These two are the only publishes in the fan-out that are trivially retryable: a git push to a repository we own, with no registry state to reconcile. Rerunning the job fixes it. Everything that *is* irreversible - npm, the container registry, the release itself - still gates `publish-release`, and crates.io still runs after the tag for the same reason.
+A Homebrew or Scoop failure can be retried by rerunning its job. These jobs update Git repositories and do not gate release publication. npm and container publication gate `publish-release`; crates.io publication starts after the tag exists.
 
 ### Prerelease routing
 
@@ -505,7 +505,7 @@ Permissions are declared per workflow and widened per job rather than granted wo
 
 ## Gotchas
 
-- **Never set `RUSTFLAGS` in the wasm build job.** Cargo *replaces* configured target flags instead of extending them, silently dropping shared memory, LTO, and exports. Overriding it for `wasm-check` is safe because nothing is linked.
+- **Never set `RUSTFLAGS` in the wasm build job.** Cargo *replaces* configured target flags instead of extending them, silently dropping shared memory, LTO, and exports. The same restriction applies to `wasm-check`: replacing the configured flags checks a different target configuration even when no linking occurs.
 - **`cargo publish --dry-run` exits 0 when a package sets `publish = false`**, so that CI gate becomes a silent no-op rather than an error.
 - **A glob of `*[bot]` does not match a bot login.** In a bash `[[ ]]` pattern `[bot]` is a character class, so it matches a trailing b, o or t - never the literal `[bot]` every GitHub App account ends with. `cla-gate.mjs` escapes the brackets before matching; any new glob-matching code needs the same.
 - **The root `package-lock.json` needs generated `@rom-weaver/*` optional entries.** The scope is not fully published when Release Please opens a new release PR, so `scripts/sync-version.mjs` writes local platform-package lock entries without registry `resolved`/`integrity` fields. A lefthook `root-lock-sync` hook guards this.

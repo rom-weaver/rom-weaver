@@ -18,9 +18,8 @@ Hash the file and ask GitHub whether this repository's release workflow built ex
 ```bash
 file=rom-weaver-linux-x64-gnu.tar.gz
 
-# sha256sum on Linux; macOS ships shasum instead. Probed rather than tried and
-# fallen back from: `$(missing | cut)` exits 0, so a fallback keyed on the exit
-# status never runs and the digest silently comes out empty.
+# macOS ships shasum rather than sha256sum. Probe the command because a failed
+# command in this pipeline can still leave the pipeline with a zero status.
 if command -v sha256sum >/dev/null 2>&1; then
   digest=$(sha256sum "$file" | cut -d ' ' -f 1)
 else
@@ -43,12 +42,10 @@ $file = 'rom-weaver-win32-x64-msvc.tar.gz'
 $digest = (Get-FileHash -Path $file -Algorithm SHA256).Hash.ToLower()
 $uri = "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${digest}" +
   '?predicate_type=https://slsa.dev/provenance/v1'
-# A repository with no attestations at all answers 404, which Invoke-RestMethod
-# raises rather than returns - uncaught, it ends the script before the
-# not-verified message it was written for. Unlike the install scripts, this does
-# not tell that apart from an unreachable API; both report NOT VERIFIED here.
-# The property is checked before it is read because `@($null).Count` is 1, so
-# reading a missing one blind would count an unrelated 200 as verified.
+# GitHub returns 404 when no attestation exists. This script reports that and
+# an unreachable API as NOT VERIFIED.
+# Check for the property first: `@($null).Count` is 1, which would otherwise
+# treat an unrelated successful response as verified.
 $count = 0
 try {
   $response = Invoke-RestMethod -Uri $uri

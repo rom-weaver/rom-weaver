@@ -112,9 +112,7 @@ export interface BrowserWasiThreadWorkerPool {
   resolvedThreadWorkerUrl: string;
 }
 
-// The two thread-spawner factories were split into ./browser-wasi-thread-spawner.ts; re-export the
-// public surface here (see the import + export below) so existing importers of this module keep
-// resolving.
+// Re-export the thread-spawner public surface so existing importers keep resolving.
 
 export function createBrowserWasiThreadWorkerPool({
   initialSize,
@@ -124,9 +122,7 @@ export function createBrowserWasiThreadWorkerPool({
   const workers: ThreadPoolShell[] = [];
   let disposed = false;
   let nextCommandId = 1;
-  // Eager non-blocking self-pre-warm. `ready` resolves once the pool has pre-warmed to `initialSize`;
-  // it is informational - nothing blocks on it (threaded runs negotiate their own shells via
-  // createCommand -> ensureSize), so the pre-warm is only a head start for the next op.
+  // Prewarm is non-blocking. `ready` only reports progress; threaded runs still create shells on demand.
   let resolvePrewarm: () => void = () => undefined;
   const ready: Promise<void> = new Promise<void>((resolve) => {
     resolvePrewarm = resolve;
@@ -144,8 +140,7 @@ export function createBrowserWasiThreadWorkerPool({
       `[browser-opfs] thread pool shell failed index=${shell.index}` +
         ` online=${shell.online} hadCommand=${Boolean(shell.currentCommand)} ${formatErrorForTrace(error)}`,
     );
-    // A shell that never came online failed to *load*, and the event carries no cause. Probe once
-    // per runtime for what the host served and whether nested module workers work here at all.
+    // A shell that never came online failed to load without a cause. Probe the runtime once for its worker support and served asset.
     if (!shell.online) probeThreadWorkerLoadFailure(resolvedThreadWorkerUrl, shell.trace ?? undefined);
     shell.terminated = true;
     try {
@@ -325,7 +320,7 @@ export function createBrowserWasiThreadWorkerPool({
     trace: ThreadPoolShell["trace"];
   }) => {
     const { lastFailure, maxReplacementCount, targetSize, trace } = input;
-    // Missing or dead slots, capped at the batch size.
+    // Start or replace missing slots up to the batch cap.
     const pending: number[] = [];
     for (let index = 0; index < targetSize && pending.length < SHELL_CREATE_BATCH_SIZE; index += 1) {
       const shell = workers[index];
@@ -371,8 +366,7 @@ export function createBrowserWasiThreadWorkerPool({
         ` online=${onlineCount()} batchSize=${SHELL_CREATE_BATCH_SIZE} maxReplacements=${maxReplacementCount}`,
     );
     let pass = 0;
-    // Bound concurrent worker-script loads for hosts with small connection pools; the replacement
-    // budget separately prevents endless retries on genuine failures.
+    // Bound concurrent worker-script loads. The replacement budget prevents endless retries on genuine failures.
     while (true) {
       pass += 1;
       const {
@@ -645,11 +639,7 @@ export function createBrowserWasiThreadWorkerPool({
     workers.length = 0;
   };
 
-  // Pre-warm the pool to `initialSize` immediately (non-blocking). Runner init does not wait on it and
-  // threaded runs grow the pool on demand via createCommand, so this is purely a head start that lets a
-  // freshly created runner - at boot, after a reset/thread-change, or after an idle recycle between ops
-  // - be warm for the next op. No artificial delay: the sooner the pool warms, the sooner an op that
-  // arrives mid-warm-up benefits.
+  // Start non-blocking prewarm immediately. Runner init does not wait, and createCommand grows the pool on demand.
   const startPrewarm = () => {
     if (disposed || initialSize <= 0) {
       resolvePrewarm();

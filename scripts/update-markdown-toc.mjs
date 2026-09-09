@@ -22,18 +22,14 @@ const isDirectory = (file) => {
   try { return statSync(file).isDirectory(); } catch { return false; }
 };
 
-// A document with no level-2 heading has no table of contents to build, and
-// `--toc-location before` has nothing to sit before - doctoc parks empty markers
-// at the very top of the file, above its title. Short pages (an index, a stub)
-// are left alone instead.
+// Without a level-2 heading, doctoc inserts empty markers above the title.
+// Short pages therefore keep their existing content.
 const hasTocHeadings = (file) => {
   try { return /^##\s+/m.test(readFileSync(file, "utf8")); } catch { return true; }
 };
 
-// doctoc only filters by extension when it walks a directory; an explicit file
-// argument is rewritten whatever it is. lefthook hands us the staged paths under
-// docs/, so without this guard a staged docs/*.json gets TOC markers appended
-// and stops being valid JSON.
+// doctoc filters directory entries by extension but rewrites explicit file arguments.
+// Staged JSON files MUST be excluded so TOC markers cannot corrupt them.
 export function tocFiles(files, directory = isDirectory, headings = hasTocHeadings) {
   const readme = files.includes("README.md");
   const other = files.filter(

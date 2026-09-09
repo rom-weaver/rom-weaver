@@ -61,10 +61,8 @@ use ups::UpsPatchHandler;
 
 pub(crate) const IN_MEMORY_APPLY_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 
-/// Effective in-memory apply/buffer cap. Defaults to [`IN_MEMORY_APPLY_LIMIT_BYTES`]
-/// but is overridable via `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` (in bytes) so the
-/// streaming path can be forced on smaller inputs for regression/benchmark runs
-/// before buffering is removed entirely.
+/// Effective in-memory apply cap. Defaults to [`IN_MEMORY_APPLY_LIMIT_BYTES`]
+/// and accepts `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` in bytes.
 pub(crate) fn in_memory_apply_limit_bytes() -> u64 {
     rom_weaver_core::env_u64(
         "ROM_WEAVER_PATCH_IN_MEMORY_LIMIT",
@@ -87,12 +85,8 @@ pub(crate) fn can_apply_in_memory(a: u64, b: u64) -> bool {
     a <= limit && b <= limit
 }
 
-/// Apply-path gate: use the in-memory fast path when the source and target both fit under the cap
-/// (default [`IN_MEMORY_APPLY_LIMIT_BYTES`], overridable via `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT`;
-/// set it to `0` to force streaming for benchmarks). The streaming fallback exists for over-cap
-/// inputs, but it is far slower for action-heavy patches - each action is a seek+read+write on an
-/// unbuffered file versus an in-memory copy (~15x on a 33 MiB BPS apply). Buffering the whole source
-/// on the calling thread also avoids worker OPFS opens (`os error 44`) on wasm.
+/// Select the in-memory path when the source and target fit the configured cap.
+/// A value of `0` selects the streaming path.
 pub(crate) fn can_apply_in_memory_on_apply(context: &OperationContext, a: u64, b: u64) -> bool {
     let limit = context
         .patch_apply_in_memory_limit()
@@ -100,9 +94,8 @@ pub(crate) fn can_apply_in_memory_on_apply(context: &OperationContext, a: u64, b
     a <= limit && b <= limit
 }
 
-/// Reads a chunk of bytes from both `original_path` and `modified_path` on the calling
-/// (main) thread. `original_bytes` is zero-filled past `original_len`. Caller must
-/// ensure `end <= modified_len`.
+/// Read a chunk from both paths. `original_bytes` is zero-filled past
+/// `original_len`. Callers MUST ensure `end <= modified_len`.
 pub(crate) fn read_original_modified_chunk(
     original_path: &Path,
     original_len: u64,
@@ -314,9 +307,7 @@ pub(crate) fn patch_success_report(
     )
 }
 
-/// Create `path` (truncating any existing file) after ensuring its parent directory exists,
-/// returning a buffered writer. Every apply/create handler funnels its final patch or patched
-/// ROM through this same `create_dir_all(parent)` → `File::create` → `BufWriter` sequence.
+/// Create `path`, truncating an existing file, after creating its parent directory.
 pub(crate) fn create_buffered_output(path: &Path) -> Result<BufWriter<File>> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
