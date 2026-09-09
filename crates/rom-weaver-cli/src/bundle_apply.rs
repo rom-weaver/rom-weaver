@@ -305,6 +305,7 @@ impl CliApp {
                         .as_ref()
                         .map(patch_plan::PlanState::from_bundle_checks),
                     is_chain_prefix,
+                    lane_source_input: false,
                 });
                 step_inputs.push(entry.input.clone());
                 step_targets.push(entry.target.clone());
@@ -1146,7 +1147,9 @@ fn fill_member_lane_checks_from(
             checksums = state.checksums.len(),
             "filled the ROM member lane's input checks from the identify database"
         );
-        step_verifications[*position].declared_input = Some(state);
+        let step = &mut step_verifications[*position];
+        step.declared_input = Some(state);
+        step.lane_source_input = true;
     }
 }
 

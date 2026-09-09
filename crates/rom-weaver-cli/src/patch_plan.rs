@@ -318,6 +318,10 @@ pub(crate) struct PatchStepVerification {
     /// Whether the selection up to and including this step is exactly the
     /// bundle's chain prefix ending here.
     pub is_chain_prefix: bool,
+    /// `declared_input` describes the lane's own source bytes (filled from the
+    /// identify database), so it verifies at the lane start even when earlier
+    /// optional entries of the lane are deselected.
+    pub lane_source_input: bool,
 }
 
 /// The planner's resolution before dry-run results are merged in.

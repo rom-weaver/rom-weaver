@@ -47,6 +47,16 @@ describe("memberTrackNumber", () => {
 
   it("reports no track for a name without one", () => {
     expect(memberTrackNumber("data.bin")).toBeUndefined();
+    expect(memberTrackNumber("soundtrack.bin")).toBeUndefined();
+  });
+
+  // The CLI reads the first `track` word only and rejects numbers beyond u32;
+  // both sides must fill the same lanes for the same bundle.
+  it("matches the CLI parser on names with several track words", () => {
+    expect(memberTrackNumber("Soundtrack Bonus (Track 2).bin")).toBeUndefined();
+    expect(memberTrackNumber("Bonus Track - Track 02.bin")).toBeUndefined();
+    expect(memberTrackNumber("Track\t2.bin")).toBeUndefined();
+    expect(memberTrackNumber("track99999999999.bin")).toBeUndefined();
   });
 });
 
@@ -76,9 +86,10 @@ describe("componentChecks", () => {
     ).toEqual({ checksums: { crc32: "1234abcd", md5: "0".repeat(32) }, size: 2048 });
   });
 
-  it("drops a zero size and reports nothing for a component with no usable value", () => {
+  it("drops a zero size and reports nothing for a component without a usable checksum", () => {
     expect(componentChecks(component({ crc32: "1234abcd", size: 0 }))).toEqual({ checksums: { crc32: "1234abcd" } });
     expect(componentChecks(component({ sha256: "f".repeat(64), size: 0 }))).toBeUndefined();
+    expect(componentChecks(component({ size: 2048 }))).toBeUndefined();
   });
 });
 

@@ -167,6 +167,10 @@ const useBundleApplySession = ({
   const [bundleMetaById, setBundleMetaById] = useState<ReadonlyMap<string, BundlePatchMeta>>(new Map());
   const [bundleDefaultsPending, setBundleDefaultsPending] = useState(false);
   const seedGenerationRef = useRef(0);
+  // Apply-time input checks per patch id, filled from the identify record the
+  // bundle's rom checks name. Kept out of `bundleMetaById` on purpose: the form
+  // rebuilds run options from that metadata, and an export must not carry these.
+  const memberLaneChecksRef = useRef<ReadonlyMap<string, string>>(new Map());
   const activeSeedPatchNamesRef = useRef<readonly string[] | null>(null);
 
   useEffect(
@@ -235,6 +239,7 @@ const useBundleApplySession = ({
       );
       const meta = createBundlePatchMetadata(patches, session.entries, ids);
       setBundleMetaById(meta);
+      memberLaneChecksRef.current = new Map();
       // The controller work runs task-chained straight from the match, so everything lands while the
       // patches are still staging - well before the apply button arms. Deferring longer would race a
       // fast apply click: any settings commit cancels a queued apply (by design for real user edits).
@@ -257,6 +262,13 @@ const useBundleApplySession = ({
           }
           const memberLaneChecks = await resolveMemberLaneChecks(session);
           if (!isCurrent()) return;
+          memberLaneChecksRef.current = new Map(
+            [...memberLaneChecks].flatMap(([index, checks]) => {
+              const id = ids[index];
+              const tokens = bundleCheckTokens(checks);
+              return id && tokens ? [[id, tokens] as const] : [];
+            }),
+          );
           // Seed header modes through normal options. The bundle's ROM checksum
           // belongs only to the chain input; reactive sync owns the chain output
           // because it applies only while the full bundle chain remains intact.
@@ -340,6 +352,7 @@ const useBundleApplySession = ({
     bundleDefaultsPending,
     bundleMetaById,
     handleBundlePatchesChange,
+    memberLaneChecksRef,
     updateBundleMeta,
     updateBundleMetaForIds,
   };

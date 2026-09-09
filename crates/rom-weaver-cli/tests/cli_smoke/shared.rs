@@ -126,6 +126,22 @@ pub(crate) fn run_json_events(args: &[&str], expected_code: i32) -> Vec<Value> {
     parse_json_lines(&command_stdout(args, expected_code))
 }
 
+/// The child's full output (stdout and stderr) with extra environment
+/// variables, for tests that read log lines.
+pub(crate) fn command_output_with_env(
+    args: &[&str],
+    envs: &[(&str, &str)],
+    expected_code: i32,
+) -> std::process::Output {
+    let normalized_args = normalize_cli_args(args);
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    command.args(&normalized_args);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.assert().code(expected_code).get_output().clone()
+}
+
 pub(crate) fn run_json_events_with_env(
     args: &[&str],
     envs: &[(&str, &str)],

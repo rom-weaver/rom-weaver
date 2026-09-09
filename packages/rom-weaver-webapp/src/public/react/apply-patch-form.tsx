@@ -354,13 +354,19 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     setPatchInputBasis(activeBundleSession?.patchBasis || "auto");
   }, [activeBundleSession]);
   const bundleControllersRef = useRef<BundleSessionControllers>({ output: null, patchStack: null });
-  const { bundleDefaultsPending, handleBundlePatchesChange, bundleMetaById, updateBundleMeta, updateBundleMetaForIds } =
-    useBundleApplySession({
-      bundleSession: activeBundleSession,
-      controllersRef: bundleControllersRef,
-      getPatchIds,
-      seedPatchEnablement,
-    });
+  const {
+    bundleDefaultsPending,
+    handleBundlePatchesChange,
+    bundleMetaById,
+    memberLaneChecksRef,
+    updateBundleMeta,
+    updateBundleMetaForIds,
+  } = useBundleApplySession({
+    bundleSession: activeBundleSession,
+    controllersRef: bundleControllersRef,
+    getPatchIds,
+    seedPatchEnablement,
+  });
 
   useEffect(() => {
     if (!bundleMetaById.size) return;
@@ -387,7 +393,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             await bundleControllersRef.current.patchStack?.setPatchOption?.(index, {
               id: meta?.id || patchId,
               input: meta?.input,
-              inputChecks: bundleCheckTokens(meta?.inputChecks),
+              // A lane with no authored input checks keeps the ones the
+              // identify record supplied at session load.
+              inputChecks: bundleCheckTokens(meta?.inputChecks) ?? memberLaneChecksRef.current.get(patchId),
               outputChecks: bundleCheckTokens(meta?.outputChecks),
               revalidate: index === ids.length - 1,
             });
@@ -395,7 +403,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         })();
       }
     },
-    [getPatchIds, updateBundleMeta],
+    [getPatchIds, memberLaneChecksRef, updateBundleMeta],
   );
   const updateBundleMetaForIdsImmediately = useCallback(
     (ids: readonly string[], updates: Partial<BundlePatchMeta>) => {
@@ -1114,13 +1122,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       // filtered re-stage can replay them onto its fresh stages.
       const patchIds = getPatchIds();
       const runOptions = rawInput.patches.map((_patch, index) => {
-        const meta = bundleMetaRef.current.get(patchIds[index] || "");
+        const patchId = patchIds[index] || "";
+        const meta = bundleMetaRef.current.get(patchId);
         const basis = meta?.basis;
         return {
-          id: meta?.id || patchIds[index],
+          id: meta?.id || patchId,
           ...(meta?.input ? { input: meta.input } : {}),
           ...(meta?.target ? { target: meta.target } : {}),
-          inputChecks: bundleCheckTokens(meta?.inputChecks),
+          inputChecks: bundleCheckTokens(meta?.inputChecks) ?? memberLaneChecksRef.current.get(patchId),
           outputChecks: bundleCheckTokens(meta?.outputChecks),
           ...rawInput.patchOptions?.[index],
           ...(basis ? { basis } : {}),
@@ -1253,6 +1262,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       prepareWorkflow,
       filterEnabledPatchRun,
       getPatchIds,
+      memberLaneChecksRef,
       patchInputBasis,
       workflowHandle,
     ],

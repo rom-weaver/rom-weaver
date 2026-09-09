@@ -3802,6 +3802,8 @@ impl CliApp {
                     == Some(patch_plan::PatchBasisSource::Declared);
             // A ROM-member lane has no base gate of its own, so its first
             // step verifies the member bytes against the declared input here.
+            // An authored declaration only describes the raw member when no
+            // earlier lane entry was deselected; a database fill always does.
             let member_lane_start = lane_position == 0
                 && matches!(
                     target,
@@ -3809,7 +3811,8 @@ impl CliApp {
                         member: Some(_),
                         ..
                     })
-                );
+                )
+                && step.is_some_and(|step| step.is_chain_prefix || step.lane_source_input);
             // An unbased bundle input check still describes the real
             // intermediate even when embedded evidence independently infers
             // Base. Only an explicit Base declaration verifies once up front.

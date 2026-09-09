@@ -1137,11 +1137,13 @@ const IdentifiedCheckTitle = ({ checks, enabled }: { checks?: ParsedBundleChecks
   const identification = useExpectedRomIdentification(hasChecksums ? checks : undefined, enabled && hasChecksums);
   const match = identification?.status === "matched" ? identification.matches[0] : undefined;
   if (!match) return null;
-  // Redump-style names already end in the region, so it is only appended when
-  // the name does not carry it.
+  // Redump-style names already carry the region as its own word or bracketed
+  // tag, so it is only appended when the name has no such word.
   const region = match.region?.trim();
-  const title =
-    region && !match.name.toLowerCase().includes(region.toLowerCase()) ? `${match.name} (${region})` : match.name;
+  const carriesRegion =
+    !!region &&
+    new RegExp(`(^|[\\s(,])${region.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[\\s),])`, "i").test(match.name);
+  const title = region && !carriesRegion ? `${match.name} (${region})` : match.name;
   return (
     <span className="ck-group-title">
       {localizer.message("ui.patchChecks.identified", { platform: match.platform, title })}

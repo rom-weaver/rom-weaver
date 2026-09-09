@@ -14,15 +14,21 @@ const MEMBER_CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
 const memberBaseName = (name: string): string => name.split(/[/\\]/).pop() || name;
 
 /**
- * Track number a member or component file name declares: the digits after the
- * first case-insensitive `track` word, ignoring spaces, `_` and `-` between the
- * word and the number. `data.bin` names no track.
+ * Track number a member file name declares: the digits after the first
+ * case-insensitive `track` word, with any spaces, `_` or `-` before them.
+ * `data.bin` names no track, and so does a name whose first `track` word has
+ * no number (`Soundtrack Bonus (Track 2).bin`). The rule MUST stay identical to
+ * `member_track_number` in the CLI's bundle apply, so both sides fill the same
+ * lanes; numbers beyond u32 are rejected for the same reason.
  */
 const memberTrackNumber = (name: string): number | undefined => {
-  const match = /track[\s_-]*(\d+)/i.exec(memberBaseName(name));
+  const base = memberBaseName(name).toLowerCase();
+  const at = base.indexOf("track");
+  if (at < 0) return undefined;
+  const match = /^[ _-]*(\d+)/.exec(base.slice(at + "track".length));
   if (!match?.[1]) return undefined;
   const value = Number.parseInt(match[1], 10);
-  return Number.isFinite(value) ? value : undefined;
+  return value <= 0xff_ff_ff_ff ? value : undefined;
 };
 
 /**
@@ -42,26 +48,21 @@ const memberComponent = (
   if (named) return named;
   const track = memberTrackNumber(member);
   if (track === undefined) return undefined;
-  return components.find(
-    (component) =>
-      component.track === track ||
-      (component.track === undefined && !!component.filename && memberTrackNumber(component.filename) === track),
-  );
+  return components.find((component) => component.track === track);
 };
 
-/** The checks a component can prove a staged track against. */
+/**
+ * The checks a component can prove a staged track against. A component with
+ * no checksum yields nothing: a size alone is not a gate the CLI would set.
+ */
 const componentChecks = (component: ParsedIdentifyExpectedComponent): ParsedBundleChecks | undefined => {
   const checksums: Record<string, string> = {};
   for (const algorithm of MEMBER_CHECK_ALGORITHMS) {
     const value = component[algorithm];
     if (value) checksums[algorithm] = value;
   }
-  const size = component.size > 0 ? component.size : undefined;
-  if (!(Object.keys(checksums).length || size !== undefined)) return undefined;
-  return {
-    ...(Object.keys(checksums).length ? { checksums } : {}),
-    ...(size === undefined ? {} : { size }),
-  };
+  if (!Object.keys(checksums).length) return undefined;
+  return { checksums, ...(component.size > 0 ? { size: component.size } : {}) };
 };
 
 /** Lane identity: the target selector decides which entries share a lane. */

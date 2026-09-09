@@ -3103,7 +3103,7 @@ fn bundle_member_lane_checks_filled_from_identify_data_pass_on_the_real_track() 
     let temp = setup_temp_dir();
     let bundle = two_track_bundle(&temp, &track01_crc32, track01_size);
     let output = temp.child("raw/disc.cue");
-    let events = run_json_events_with_env(
+    let run = command_output_with_env(
         &[
             "patch",
             "apply",
@@ -3117,6 +3117,8 @@ fn bundle_member_lane_checks_filled_from_identify_data_pass_on_the_real_track() 
             output.path().to_str().expect("path"),
             "--no-compress",
             "--json",
+            "--log-level",
+            "debug",
         ],
         &[(
             "ROM_WEAVER_DATA_DIR",
@@ -3124,7 +3126,14 @@ fn bundle_member_lane_checks_filled_from_identify_data_pass_on_the_real_track() 
         )],
         0,
     );
+    let events = parse_json_lines(&run.stdout);
     assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    let stderr = String::from_utf8_lossy(&run.stderr);
+    assert!(
+        stderr.contains("filled the ROM member lane's input checks")
+            && stderr.contains("track02.bin"),
+        "expected the second lane to take its checks from the database: {stderr}"
+    );
     expected_first[100] = 0xAA;
     expected_second[100] = 0xBB;
     assert_eq!(
@@ -3211,6 +3220,79 @@ fn bundle_member_lane_checks_filled_from_identify_data_name_the_expected_title()
         0,
     );
     assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+}
+
+/// An authored check on a member lane's first step describes the lane's
+/// chain prefix, so deselecting an optional earlier entry must not verify a
+/// post-patch state against the untouched track.
+#[test]
+fn bundle_member_lane_authored_checks_skip_when_an_earlier_optional_entry_is_off() {
+    let source = setup_temp_dir();
+    let (_expected_first, mut expected_second) = super::patch_disc::write_two_track_cd(&source);
+    let temp = setup_temp_dir();
+    write_offset_ips(&temp, "first.ips", 100, 0xAA);
+    write_offset_ips(&temp, "second.ips", 200, 0xBB);
+    let mut after_first = expected_second.clone();
+    after_first[100] = 0xAA;
+    let after_first_crc32 = crc32_hex(&after_first);
+    let bundle = temp.child("rom-weaver-bundle.json");
+    fs::write(
+        bundle.path(),
+        format!(
+            r#"{{
+        "version":2,"patchBasis":"auto",
+        "rom":{{"member":"track01.bin"}},
+        "patches":[
+            {{"id":"first","path":"first.ips","optional":true,"target":{{"rom":true,"member":"track02.bin"}}}},
+            {{"id":"second","path":"second.ips","target":{{"rom":true,"member":"track02.bin"}},
+             "inputChecks":{{"checksums":{{"crc32":"{after_first_crc32}"}}}}}}
+        ]
+    }}"#
+        ),
+    )
+    .expect("bundle");
+    let disc = source.child("disc.cue");
+    let common = [
+        "patch",
+        "apply",
+        "--input",
+        disc.path().to_str().expect("path"),
+        "--bundle",
+        bundle.path().to_str().expect("path"),
+        "--target",
+        "track01.bin",
+        "--no-compress",
+        "--json",
+    ];
+    // With the optional entry on, the declared state is the real intermediate.
+    let mut args = common.to_vec();
+    let output = temp.child("full/disc.cue");
+    args.extend([
+        "--with",
+        "first.ips",
+        "--output",
+        output.path().to_str().expect("path"),
+    ]);
+    let events = run_json_events(&args, 0);
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    expected_second[100] = 0xAA;
+    expected_second[200] = 0xBB;
+    assert_eq!(
+        fs::read(temp.child("full/track02.bin").path()).expect("second track"),
+        expected_second
+    );
+    // Off (its default), the declaration no longer describes what the step reads.
+    let mut args = common.to_vec();
+    let output = temp.child("partial/disc.cue");
+    args.extend(["--output", output.path().to_str().expect("path")]);
+    let events = run_json_events(&args, 0);
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    // Byte 100 of the fixture track is 100 % 173, untouched with the entry off.
+    expected_second[100] = 100;
+    assert_eq!(
+        fs::read(temp.child("partial/track02.bin").path()).expect("second track"),
+        expected_second
+    );
 }
 
 #[test]
