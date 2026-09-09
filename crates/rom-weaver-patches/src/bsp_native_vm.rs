@@ -276,9 +276,8 @@ struct BspVm<'pool> {
     file_buffer: VmFileBuffer,
     current_file_pointer: u32,
     current_file_pointer_locked: bool,
-    /// The frame currently executing. A frame always exists, so frame access is
-    /// infallible - the "empty stack" state the VM previously guarded with a
-    /// panic is unrepresentable by construction.
+    /// The frame currently executing. A frame always exists, so the empty-stack
+    /// state is unrepresentable.
     current_frame: Frame,
     /// Frames suspended by a nested BSP patch (`bsppatch`), innermost last. Each
     /// carries the `waiting_var` that receives the child's exit code on return.

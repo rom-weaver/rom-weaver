@@ -177,6 +177,8 @@ fn identify_args(input: Option<PathBuf>, database: Vec<PathBuf>) -> IdentifyComm
         size: None,
         database,
         system: None,
+        name: None,
+        limit: None,
         offline: false,
         database_dir: None,
         exhaustive_database_search: false,
@@ -1220,4 +1222,127 @@ fn identify_database_subcommand_is_dispatched_from_the_identify_command() {
     ));
     assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
     assert_eq!(last_label(&sink), temp.path().to_string_lossy());
+}
+
+// ---------------------------------------------------------------------------
+// Name search
+// ---------------------------------------------------------------------------
+
+/// A pack of plainly named games, written to `dir`, for the name search tests.
+fn name_search_pack(dir: &Path, names: &[&str]) -> PathBuf {
+    let path = dir.join("names.pack");
+    let games = names
+        .iter()
+        .map(|name| game(name, "P", vec![component(4, "aabbccdd")]))
+        .collect();
+    fs::write(&path, pack_bytes("P", "nointro-single-image-v1", games)).expect("pack fixture");
+    path
+}
+
+#[test]
+fn identify_by_name_requires_a_pack_selection() {
+    let (app, sink) = recording_app();
+    let mut args = identify_args(None, Vec::new());
+    args.name = Some("mario".to_string());
+    assert_eq!(app.run_identify(args).status, OperationStatus::Failed);
+    let label = last_label(&sink);
+    assert!(label.contains("--system"), "got: {label}");
+    assert!(label.contains("--database"), "got: {label}");
+}
+
+#[test]
+fn identify_by_name_rejects_a_hash_or_an_input() {
+    let (app, sink) = recording_app();
+    let mut args = identify_args(None, vec![PathBuf::from("p.pack")]);
+    args.name = Some("mario".to_string());
+    args.hash = vec!["aabbccdd".to_string()];
+    assert_eq!(app.run_identify(args).status, OperationStatus::Failed);
+    assert!(last_label(&sink).contains("cannot be combined with --input or --hash"));
+
+    let (app, sink) = recording_app();
+    let mut args = identify_args(
+        Some(PathBuf::from("rom.bin")),
+        vec![PathBuf::from("p.pack")],
+    );
+    args.name = Some("mario".to_string());
+    assert_eq!(app.run_identify(args).status, OperationStatus::Failed);
+    assert!(last_label(&sink).contains("cannot be combined with --input or --hash"));
+}
+
+#[test]
+fn identify_by_name_rejects_a_zero_limit() {
+    // A zero limit truncated every hit away and reported `unknown`, which
+    // denies a title the database holds.
+    let (app, sink) = recording_app();
+    let mut args = identify_args(None, vec![PathBuf::from("p.pack")]);
+    args.name = Some("mario".to_string());
+    args.limit = Some(0);
+    assert_eq!(app.run_identify(args).status, OperationStatus::Failed);
+    assert!(last_label(&sink).contains("--limit must be at least 1"));
+}
+
+#[test]
+fn identify_rejects_a_limit_without_a_name() {
+    let (app, sink) = recording_app();
+    let mut args = identify_args(None, vec![PathBuf::from("p.pack")]);
+    args.hash = vec!["aabbccdd".to_string()];
+    args.limit = Some(3);
+    assert_eq!(app.run_identify(args).status, OperationStatus::Failed);
+    assert!(last_label(&sink).contains("--limit applies to --name only"));
+}
+
+#[test]
+fn identify_by_name_ranks_and_reports_the_record() {
+    let temp = assert_fs::TempDir::new().expect("temporary directory");
+    let pack = name_search_pack(temp.path(), &["Super Mario World (USA)", "Mario Kart"]);
+
+    let (app, sink) = recording_app();
+    let mut args = identify_args(None, vec![pack]);
+    args.name = Some("mario world!".to_string());
+    assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
+
+    let details = identify_details(&sink);
+    assert_eq!(details["status"], json!("matched"));
+    assert_eq!(details["input"], json!("mario world!"));
+    assert_eq!(details["matches"].as_array().expect("matches").len(), 1);
+    assert_eq!(
+        details["matches"][0]["name"],
+        json!("Super Mario World (USA)")
+    );
+    assert_eq!(details["matches"][0]["platform"], json!("P"));
+    assert_eq!(
+        details["matches"][0]["expected_components"][0]["crc32"],
+        json!("aabbccdd")
+    );
+    assert_eq!(
+        details["matches"][0]["expected_components"][0]["size"],
+        json!(4)
+    );
+}
+
+#[test]
+fn identify_by_name_truncates_to_the_limit_and_reports_no_hit() {
+    let temp = assert_fs::TempDir::new().expect("temporary directory");
+    let pack = name_search_pack(temp.path(), &["Mario Bros", "Mario Kart", "Mario Party"]);
+
+    let (app, sink) = recording_app();
+    let mut args = identify_args(None, vec![pack.clone()]);
+    args.name = Some("mario".to_string());
+    args.limit = Some(2);
+    assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
+    assert_eq!(
+        identify_details(&sink)["matches"]
+            .as_array()
+            .expect("matches")
+            .len(),
+        2
+    );
+
+    let (app, sink) = recording_app();
+    let mut args = identify_args(None, vec![pack]);
+    args.name = Some("zelda".to_string());
+    assert_eq!(app.run_identify(args).status, OperationStatus::Succeeded);
+    let details = identify_details(&sink);
+    assert_eq!(details["status"], json!("unknown"));
+    assert!(details["matches"].as_array().expect("matches").is_empty());
 }

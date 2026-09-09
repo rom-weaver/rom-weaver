@@ -22,10 +22,8 @@ use crate::rom_headers::{
 };
 use crate::{StreamingChecksum, StreamingChecksumTiming};
 
-/// Largest prefix the `fix-header` variant will buffer in memory to keep the
-/// hash single-pass. Beyond this the variant is deferred to the caller. Sized
-/// well above the largest real Genesis cart (~10 MiB) and the N64 boot window
-/// (~1 MiB) so the deferral path is a safety valve, not a routine case.
+/// Largest prefix the `fix-header` variant buffers to keep hashing in one pass.
+/// Larger inputs defer the variant to the caller.
 pub const FIX_HEADER_PREFIX_CAP: u64 = 64 * 1024 * 1024;
 
 const PLAN_SCAN_BYTES: u64 = ROM_HEADER_SCAN_BYTES as u64;

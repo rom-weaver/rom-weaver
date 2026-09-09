@@ -49,8 +49,7 @@ pub(crate) fn read_varint(mut read_byte: impl FnMut() -> Result<u8>, label: &str
     // iteration count keeps a malformed all-continuation stream from looping forever.
     for _ in 0..VARINT_MAX_LEN {
         let byte = u64::from(read_byte()?);
-        // `checked_mul` folds the data-byte contribution into the overflow check; the
-        // old unchecked `(byte & 0x7f) * shift` could wrap before any guard ran.
+        // Check the scaled data contribution before adding it to the result.
         let addend = (byte & 0x7f).checked_mul(shift).ok_or_else(|| {
             RomWeaverError::Validation(format!("{label} varint overflowed available range"))
         })?;

@@ -713,8 +713,8 @@ mod wasm_host_prompt {
         ) -> i32;
     }
 
-    /// Prompter that delegates list selection to the browser host. Confirmation prompts are declined
-    /// (matching the historical headless behavior); only candidate selection is interactive.
+    /// Prompter that delegates list selection to the browser host. Confirmation
+    /// prompts are declined; only candidate selection is interactive.
     pub struct WasmHostPrompter;
 
     impl SelectionPrompter for WasmHostPrompter {
@@ -1387,6 +1387,9 @@ pub use identify_command::{
     IdentifyProvenance, IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
 };
 
+#[path = "identify_name_search.rs"]
+mod identify_name_search;
+
 #[path = "identify_builtin.rs"]
 mod identify_builtin;
 
@@ -1426,9 +1429,8 @@ mod compress_trim_batch;
 #[path = "extract_batch_plan.rs"]
 mod extract_batch_plan;
 
-// Native-only: the executor spawns OS threads (`std::thread::scope`) per job. The wasm runtime's
-// concurrency model differs (WASI threads via the JS spawner, plus the OPFS read-on-main rule), so
-// the browser drives the shared planner (above) over its existing multi-worker pool instead.
+// Native-only: the executor spawns OS threads (`std::thread::scope`) per job.
+// The browser uses the shared planner with its command worker pool.
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "extract_batch.rs"]
 mod extract_batch;

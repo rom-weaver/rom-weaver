@@ -30,9 +30,8 @@ use crate::varint::push_varint;
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
 const COPY_BUFFER_SIZE: usize = 32 * 1024;
-/// Heap buffer for the serial streaming apply's source-copy loop. Sized above the
-/// ~2 MiB OPFS write-staging threshold so wasm/OPFS does bulk reads/writes instead
-/// of many small ones (the default serial path on wasm); native is unaffected.
+/// Heap buffer for the serial streaming apply source-copy loop. Its size keeps
+/// WASM writes above the OPFS write-coalescing threshold.
 const APPLY_STREAM_BUFFER_SIZE: usize = 4 * 1024 * 1024;
 const BPS_NO_OFFSET: u32 = u32::MAX;
 const BPS_MIN_COPY_LENGTH: usize = 4;

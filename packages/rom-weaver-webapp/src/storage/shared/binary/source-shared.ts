@@ -18,6 +18,13 @@ type ByteSourceRecordLike = {
   readIntoAt?: (buffer: Uint8Array, bufferOffset?: number, len?: number, fileOffset?: number) => number | undefined;
 };
 
+type ReadIntoTarget = {
+  readLength: number;
+  sourceOffset: number;
+  target: Uint8Array;
+  targetOffset: number;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && (typeof value === "object" || typeof value === "function");
 
@@ -84,6 +91,45 @@ const toByteSourceUint8Array = (source: unknown, invalidLabel = "Invalid byte so
   throw new Error(invalidLabel);
 };
 
+const normalizeReadIntoRequest = ({
+  bufferOffset,
+  fileOffset,
+  fileSize,
+  len,
+  target,
+}: {
+  bufferOffset?: number;
+  fileOffset?: number;
+  fileSize: number;
+  len?: number;
+  target: Uint8Array;
+}): ReadIntoTarget => {
+  const targetOffset = typeof bufferOffset === "number" && bufferOffset > 0 ? Math.floor(bufferOffset) : 0;
+  const sourceOffset = typeof fileOffset === "number" && fileOffset > 0 ? Math.floor(fileOffset) : 0;
+  const readLength =
+    typeof len === "number"
+      ? Math.max(0, Math.min(Math.floor(len), target.byteLength - targetOffset, fileSize - sourceOffset))
+      : Math.max(0, Math.min(target.byteLength - targetOffset, fileSize - sourceOffset));
+  return { readLength, sourceOffset, target, targetOffset };
+};
+
+const getBinarySourceTraceKind = (source: unknown, stringKind = "string") => {
+  if (typeof File !== "undefined" && source instanceof File) return "file";
+  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
+  if (source instanceof Uint8Array) return "uint8array";
+  if (source instanceof ArrayBuffer) return "arraybuffer";
+  if (
+    source &&
+    typeof source === "object" &&
+    "getFile" in source &&
+    typeof (source as { getFile?: unknown }).getFile === "function"
+  )
+    return "file-handle";
+  if (typeof source === "string") return stringKind;
+  if (source && typeof source === "object") return "object";
+  return typeof source;
+};
+
 const materializeByteSourceRecord = (
   record: ByteSourceRecordLike,
   invalidLabel = "Invalid byte source",
@@ -118,10 +164,12 @@ export type { BinaryObjectLike, ByteSourceRecordLike };
 export {
   DEFAULT_SOURCE_FILE_NAME,
   getBaseName,
+  getBinarySourceTraceKind,
   isBinaryObjectLike,
   isFileSystemFileHandleLike,
   isRecord,
   materializeByteSourceRecord,
+  normalizeReadIntoRequest,
   normalizeRange,
   readBinaryObjectRange,
   toArrayBufferViewUint8Array,

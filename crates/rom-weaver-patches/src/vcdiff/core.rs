@@ -20,9 +20,8 @@ pub(super) const DELTA_ADDR_COMP: u8 = 0x04;
 pub(super) const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELTA_ADDR_COMP;
 pub(super) const NATIVE_CHUNK_SIZE: usize = 64 * 1024;
 
-/// Output buffer for the windowed VCDIFF apply paths: coalesces the ~16 KiB per-window writes
-/// (measured ~27k → ~270 syscalls on a 443 MiB apply) and drops the per-window seek. 1 MiB matched
-/// 4 MiB on browser wall time at a quarter of the memory (browser writes are bandwidth-bound).
+/// Output buffer for windowed VCDIFF apply paths. It coalesces per-window
+/// writes and avoids a seek for each window.
 pub(super) const APPLY_OUTPUT_BUFFER_BYTES: usize = 1024 * 1024;
 pub(super) const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
 pub(super) const XDELTA_SECONDARY_MIN_SAVINGS: usize = 2;

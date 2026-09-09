@@ -189,11 +189,9 @@
      stopped once it was not. */
   font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
 }
-/* No box: the heading band stays type, and the control says what it is by
-   turning fault-coloured under the finger - it throws the bench away. Wearing
-   the shared `.btn` box made it the one framed thing in the band, reading as a
-   form control dropped into a headline. */
-.rw-app .reset-btn {
+/* Heading actions use text-only styling to match the section titles. */
+.rw-app .reset-btn,
+.rw-app .panel-settings-btn {
   position: relative;
   display: inline-flex;
   gap: 5px;
@@ -202,7 +200,6 @@
      itself - and axe measures the element, not a halo drawn over it. */
   min-block-size: 24px;
   padding: 0;
-  margin-inline-end: 4px;
   font: inherit;
   font-size: 0.74rem;
   font-weight: 650;
@@ -215,13 +212,18 @@
   border: 0;
   transition: color 0.18s;
 }
-.rw-app .reset-btn svg {
+.rw-app .reset-btn {
+  margin-inline-end: 4px;
+}
+.rw-app .reset-btn svg,
+.rw-app .panel-settings-btn svg {
   flex: none;
   width: 13px;
   height: 13px;
 }
 /* the halo is on top of that floor, for the finger rather than the audit */
-.rw-app .reset-btn::after {
+.rw-app .reset-btn::after,
+.rw-app .panel-settings-btn::after {
   position: absolute;
   inset: -4px -8px;
   content: "";
@@ -233,36 +235,6 @@
 }
 .rw-app .reset-btn:active {
   color: var(--fault);
-}
-/* Keep Settings beside the workflow reset action at every viewport width. */
-.rw-app .panel-settings-btn {
-  position: relative;
-  display: inline-flex;
-  gap: 5px;
-  align-items: center;
-  min-block-size: 24px;
-  padding: 0;
-  font: inherit;
-  font-size: 0.74rem;
-  font-weight: 650;
-  color: var(--ink-3);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  appearance: none;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  transition: color 0.18s;
-}
-.rw-app .panel-settings-btn svg {
-  flex: none;
-  width: 13px;
-  height: 13px;
-}
-.rw-app .panel-settings-btn::after {
-  position: absolute;
-  inset: -4px -8px;
-  content: "";
 }
 @media (hover: hover) {
   .rw-app .panel-settings-btn:hover {

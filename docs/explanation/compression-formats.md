@@ -31,7 +31,7 @@ A compressed disc image such as CHD or RVZ is a purpose-built container for one 
 
 rom-weaver's parity suite checks that chdman and dolphin-tool can extract its CHD and RVZ outputs byte for byte, and that rom-weaver can extract the reference tools' outputs. The compressed container bytes and sizes may differ.
 
-To change a format rom-weaver can open but not create, such as GCZ, WIA, WBFS, or CSO, extract it first and then create a format your emulator supports.
+rom-weaver reads GCZ, WIA, WBFS, and CSO but does not create them. [Extract, convert, and compress archives](../how-to/work-with-archives.md) covers conversion to a format the emulator supports.
 
 ## 3DS ROM compression: Z3DS
 

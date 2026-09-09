@@ -316,7 +316,7 @@ impl CliApp {
     }
 
     /// Resolve the default patch-apply output mode after the selected ROM leaf
-    /// is known. An explicit compression flag keeps its historical precedence;
+    /// is known. An explicit compression flag takes precedence;
     /// otherwise a registered container extension means compression and the
     /// leaf's own extension means raw output.
     pub(super) fn resolve_patch_apply_compression_options(

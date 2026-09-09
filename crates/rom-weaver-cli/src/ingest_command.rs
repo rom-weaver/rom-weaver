@@ -122,7 +122,6 @@ pub struct IngestRomAsset {
 
 /// A consolidated patch descriptor: format + embedded source/target metadata (where the format
 /// carries it) + checksum/size requirements parsed from the file name + libretro sidecar order.
-/// Aggregates what the webapp previously assembled across several TS modules.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct PatchDescriptor {
@@ -282,11 +281,9 @@ impl CliApp {
                 .map(|algorithm| algorithm.to_ascii_lowercase())
                 .collect()
         };
-        // Hash ROM leaves INLINE during extraction with the shared variant engine (rom-only, so patch
-        // leaves and disc sheets are not hashed), so a fully-extracted ROM leaf carries its checksums +
-        // variants + identity in a single decode pass. `ingest_rom_leaves` reuses those; whatever the
-        // inline pass skipped (sheets, or a handler with no known output length) still falls back to a
-        // single checksum read - never the two reads (decode-write then re-hash) this used to do.
+        // Hash ROM leaves during extraction so an extracted leaf carries checksums,
+        // variants, and identity after one decode pass. Leaves without inline
+        // checksums use one checksum read after extraction.
         let context = self
             .context(threads)
             .with_extract_checksum_algorithms(algorithms.clone())
