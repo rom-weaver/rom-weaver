@@ -3,8 +3,11 @@
   .rw-app {
     --ctl: 48px;
     --mobile-input-head-h: 38px;
-    /* The height reserve MUST include the format disclosure and fixed dock. */
-    --hero-chrome: calc(var(--mobile-input-head-h) + 269px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+    /* Includes the first-weave action below the hero so the empty bench still
+       occupies one phone viewport. */
+    --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+    /* The joined checksum footer: label, then a 40px input row. */
+    --hero-search-h: 116px;
   }
 
   /* Enough scroll room below the form that the last card (the run/progress/
@@ -76,40 +79,37 @@
     /* Mobile browsers keep 100vh on the stable layout viewport while their
        visible chrome expands and contracts. The hero MUST not resize during
        that scroll-driven chrome change. */
-    min-height: max(300px, calc(100vh - var(--hero-chrome) - var(--hero-extra-h, 0px)));
+    min-height: max(300px, calc(100vh - var(--hero-chrome)));
   }
-  /* The chip's row is real flow height, so the hero gives it up to keep the
-     empty bench inside one phone viewport. A dismissed chip is hidden but still
-     in the DOM, so the guard matches the one on `.first-weave-demo` itself. */
-  html:not([data-onboarding-enabled="false"]) .rw-app .step.is-input.is-empty:has(> .step-body > .first-weave-demo) {
-    --hero-extra-h: 44px;
+  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
+    min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
+  }
+  /* On the apply page the New here? chip rides the seam between hero and
+     footer: half above, half below. Both sides pad for it only while the chip
+     is there - the identify page has no chip and keeps the plain seam. */
+  html:not([data-onboarding-enabled="false"])
+    .rw-app
+    .step.is-input.is-empty:has(> .step-body > .identify-hash--hero):has(> .step-body > .first-weave-demo)
+    .drop.hero {
+    padding-block-end: 24px;
   }
   html:not([data-onboarding-enabled="false"])
     .rw-app
-    .step.is-input.is-empty:has(> .step-body > .identify-hash):has(> .step-body > .first-weave-demo) {
-    --hero-extra-h: 144px;
+    .step.is-input.is-empty:has(> .step-body > .first-weave-demo)
+    > .step-body
+    > .identify-hash--hero {
+    padding-block-start: 20px;
   }
-  /* A phone hero has no free corner - the format marquee runs the full width of
-     its lower edge - so the chip leaves the corner and takes its own centred row
-     in the seam below the hero. `--hero-chrome` already budgets that row. */
-  .rw-app .first-weave-demo {
-    justify-content: center;
-    height: auto;
-    padding-block: 8px;
+  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .sample-tutorial-start-chip {
+    bottom: -14px;
   }
+  /* A phone gives the chip a whole corner of a 390px hero, so it shrinks to
+     the size of the hint it is - the seam offsets above are half of this
+     28px height. */
   .rw-app .sample-tutorial-start-chip {
-    position: static;
     gap: 5px;
     padding: 4px 10px 4px 5px;
     font-size: 0.74rem;
-  }
-  /* The popover opens upward over the hero and is centred on the row's chip. */
-  .rw-app .sample-tutorial-start-pop {
-    right: auto;
-    bottom: 100%;
-    left: 50%;
-    width: min(300px, calc(100vw - 2 * var(--sp-m)));
-    translate: -50% 0;
   }
   .rw-app .sample-tutorial-start-beacon {
     width: 18px;

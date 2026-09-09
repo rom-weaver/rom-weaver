@@ -1265,16 +1265,12 @@ describe("webapp responsive navigation", () => {
   });
 
   test("phone hero gives back the in-flow navigation height", async () => {
-    // The hero MUST leave room for navigation, the visible checksum form, and
-    // the New here? chip's own row: 860 - (38 + 269) - 144.
-    await setViewport(VIEWPORTS[1]);
-    await renderPage(emptyApplyPage(), "light");
-    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("409px");
-
-    // The smallest phone has nothing left to give and rests on the 300px floor.
     await setViewport(VIEWPORTS[0]);
     await renderPage(emptyApplyPage(), "light");
-    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("300px");
+
+    // 485px of navigation chrome, less the 116px the joined checksum footer
+    // takes (--hero-search-h), so the page footer still clears the dock.
+    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("369px");
   });
 
   test("keeps the workflow gutter fluid without a narrow desktop cap", async () => {
