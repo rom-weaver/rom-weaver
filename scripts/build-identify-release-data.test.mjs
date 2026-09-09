@@ -93,6 +93,23 @@ test("creates a missing release archive directory", () => {
   assert.ok(readFileSync(archive).length > 0);
 });
 
+test("tree-only builds the share trees and no archive", () => {
+  const { input, root } = fixture({ grouped: true });
+  const archive = join(root, "target", "rom-weaver-identify-data.tar.br");
+  const result = buildIdentifyReleaseData({
+    archive,
+    input,
+    out: join(root, "release"),
+    tree: true,
+  });
+  assert.equal(result.archive, null);
+  assert.equal(result.sha256, null);
+  assert.equal(result.optional[0].archive, null);
+  assert.ok(existsSync(join(result.dataDir, "index.json")));
+  assert.ok(existsSync(join(result.optional[0].dataDir, "index.json")));
+  assert.equal(existsSync(join(root, "target")), false);
+});
+
 test("separates default packs from complete optional group archives", () => {
   const { input, root } = fixture({ grouped: true });
   const result = buildIdentifyReleaseData({

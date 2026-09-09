@@ -74,7 +74,7 @@ An identify run that needs a pack outside the installed groups fetches that sing
 
 ## Native installation
 
-`scripts/build-identify-release-data.mjs` copies each verified Brotli pack into the native release tree. It wraps that tree in a Brotli-compressed tar archive and creates one default archive plus one archive for each optional group.
+`scripts/build-identify-release-data.mjs` copies each verified Brotli pack into the native release tree. It wraps that tree in a Brotli-compressed tar archive and creates one default archive plus one archive for each optional group. With `--tree-only` it writes the trees and skips the archives; CI uses that on every platform runner, because the archive step needs GNU tar.
 
 Release archives, npm platform packages, Homebrew, Scoop, and container images install the same static tree under `share/rom-weaver/identify/v1`. The CLI decompresses only the packs it reads.
 
