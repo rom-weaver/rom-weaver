@@ -1269,7 +1269,7 @@ jobs:
           path: packages/rom-weaver-webapp/dist
 
       # The gate compares this build against the last one on the default branch, so it needs no
-      # hand-maintained numbers - see docs/development/performance.md. Only main writes the
+      # hand-maintained numbers - see the Performance budgets section of docs/development/ci.md. Only main writes the
       # baseline, which is why the restore below carries no exact-key hit and never fails closed:
       # a pull request with no cached baseline reports its sizes and passes.
       - name: Restore size baseline

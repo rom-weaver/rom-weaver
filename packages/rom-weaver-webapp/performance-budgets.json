@@ -28,7 +28,8 @@
     "drift": {
       "warnPercent": 1,
       "maxPercent": 3,
-      "floorBytes": 1024
+      "floorBytes": 1024,
+      "noiseBytes": 512
     }
   },
   "cssCoverage": {

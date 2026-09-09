@@ -24,7 +24,7 @@ import { summarizeCssCoverage } from "../packages/rom-weaver-webapp/scripts/css-
 import { brotliCompressBuffer, brotliCompressFile } from "./wasm/brotli-compress.mjs";
 
 test("size drift warns and fails against the baseline, and skips without one", () => {
-  const drift = { warnPercent: 1, maxPercent: 3, floorBytes: 0 };
+  const drift = { warnPercent: 1, maxPercent: 3, floorBytes: 0, noiseBytes: 0 };
   const baseline = { rawBytes: 1000, brotliBytes: 1000 };
   assert.equal(evaluateSizeBudget(drift, { rawBytes: 1010, brotliBytes: 900 }, baseline), "pass");
   assert.equal(evaluateSizeBudget(drift, { rawBytes: 1011, brotliBytes: 900 }, baseline), "warning");
@@ -32,11 +32,22 @@ test("size drift warns and fails against the baseline, and skips without one", (
   assert.equal(evaluateSizeBudget(drift, { rawBytes: 9e9, brotliBytes: 9e9 }, null), "unknown");
 });
 
-test("the drift floor absorbs churn that the percentage alone would fail", () => {
-  const baseline = { rawBytes: 1000, brotliBytes: 1000 };
-  const measured = { rawBytes: 1040, brotliBytes: 1000 };
-  assert.equal(evaluateSizeBudget({ warnPercent: 1, maxPercent: 3, floorBytes: 0 }, measured, baseline), "error");
-  assert.equal(evaluateSizeBudget({ warnPercent: 1, maxPercent: 3, floorBytes: 64 }, measured, baseline), "pass");
+test("a baseline missing the measured fields is unusable, not a pass", () => {
+  const drift = { warnPercent: 1, maxPercent: 3, floorBytes: 0, noiseBytes: 0 };
+  const measured = { rawBytes: 9e9, brotliBytes: 9e9 };
+  assert.equal(evaluateSizeBudget(drift, measured, {}), "unknown");
+  assert.equal(evaluateSizeBudget(drift, measured, { rawBytes: 10 }), "unknown");
+});
+
+test("the drift floors absorb churn and still leave a warning band on a small asset", () => {
+  const drift = { warnPercent: 1, maxPercent: 3, floorBytes: 1024, noiseBytes: 512 };
+  const baseline = { rawBytes: 8000, brotliBytes: 8000 };
+  const at = (grown) => evaluateSizeBudget(drift, { rawBytes: 8000 + grown, brotliBytes: 8000 }, baseline);
+  // Both percentages fall under the floors here, so the floors alone must keep the tiers apart.
+  assert.equal(at(512), "pass");
+  assert.equal(at(513), "warning");
+  assert.equal(at(1024), "warning");
+  assert.equal(at(1025), "error");
 });
 
 test("a written baseline keys every budget by name", () => {

@@ -142,25 +142,36 @@ export function measureSizeBudget(distDir, budget, brotliQuality) {
 }
 
 /** Growth a baseline size may absorb before it counts. The percentage carries the intent; the floor
- * keeps a small asset from tripping on a few bytes of hash or minifier churn. */
-const allowance = (baselineBytes, percent, drift) =>
-  baselineBytes + Math.max((baselineBytes * percent) / 100, drift.floorBytes);
+ * keeps a small asset from tripping on a few bytes of hash or minifier churn. Each tier has its own
+ * floor and `noiseBytes` MUST stay below `floorBytes`: one shared floor collapses the warning band to
+ * nothing for every asset small enough that the floor outweighs both percentages. */
+const allowance = (baselineBytes, percent, floorBytes) =>
+  baselineBytes + Math.max((baselineBytes * percent) / 100, floorBytes);
+
+/** A baseline generation older than the current schema is not a baseline. Treating a missing field as
+ * zero growth would pass every size silently, which is the one failure this gate cannot report. */
+const comparable = (baseline) => Number.isFinite(baseline?.rawBytes) && Number.isFinite(baseline?.brotliBytes);
 
 /** Sizes are judged against the last build of the default branch, never against a number in the
- * config file. A missing baseline (first run of a budget, evicted cache) reports and does not fail:
- * a gate that cannot see what it compares against MUST NOT block the pull request. */
+ * config file. A missing or unreadable baseline (first run of a budget, evicted cache) reports and
+ * does not fail: a gate that cannot see what it compares against MUST NOT block the pull request. */
 export function evaluateSizeBudget(drift, measured, baseline) {
-  if (!baseline) return "unknown";
-  const over = (percent) =>
-    measured.rawBytes > allowance(baseline.rawBytes, percent, drift) ||
-    measured.brotliBytes > allowance(baseline.brotliBytes, percent, drift);
-  if (over(drift.maxPercent)) return "error";
-  if (over(drift.warnPercent)) return "warning";
+  if (!comparable(baseline)) return "unknown";
+  const over = (percent, floorBytes) =>
+    measured.rawBytes > allowance(baseline.rawBytes, percent, floorBytes) ||
+    measured.brotliBytes > allowance(baseline.brotliBytes, percent, floorBytes);
+  if (over(drift.maxPercent, drift.floorBytes)) return "error";
+  if (over(drift.warnPercent, drift.noiseBytes)) return "warning";
   return "pass";
 }
 
 const kib = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
-const difference = (actual, baseline) => `${actual >= baseline ? "+" : ""}${kib(actual - baseline)}`;
+// Sub-KiB in bytes: the tiers act on growth far below the 0.1 KiB this rounds to, so a KiB-only
+// delta would report "+0.0 KiB" beside the annotation that just failed the build.
+const difference = (actual, baseline) => {
+  const grown = actual - baseline;
+  return `${grown >= 0 ? "+" : "-"}${Math.abs(grown) < 1024 ? `${Math.abs(grown)} B` : kib(Math.abs(grown))}`;
+};
 
 export function runSizeBudget(config, distDir = DIST_DIR, baseline = null) {
   const { drift } = config.assetSizes;
@@ -241,7 +252,17 @@ const optionValue = (argv, name) => {
 };
 
 const readBaseline = (baselinePath) => {
-  if (baselinePath && fs.existsSync(baselinePath)) return JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+  if (baselinePath && fs.existsSync(baselinePath)) {
+    try {
+      return JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+    } catch (error) {
+      // A corrupt cache entry must not block every pull request until someone deletes it by hand.
+      process.stdout.write(
+        `::warning title=Asset size drift::Ignoring an unreadable size baseline at ${baselinePath}: ${error.message}\n`,
+      );
+      return null;
+    }
+  }
   process.stdout.write(`No size baseline at ${baselinePath ?? "<unset>"}; reporting sizes without a gate.\n`);
   return null;
 };
