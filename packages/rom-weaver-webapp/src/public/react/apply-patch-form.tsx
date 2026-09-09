@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import {
   cheatDelivery,
-  type CheatDatabaseSystem,
+  type CheatManualSystem,
   type ClassifiedCheatRecord,
   type DatabaseCheatClassifier,
   type ManualCheatClassifier,
@@ -138,7 +138,7 @@ const getApplyOutputVerification = ({
   return null;
 };
 
-const manualCheatId = (system: CheatDatabaseSystem, code: string, kind: string): string => {
+const manualCheatId = (system: CheatManualSystem, code: string, kind: string): string => {
   let hash = 2_166_136_261;
   for (const character of `${system}\0${kind}\0${code}`) {
     hash ^= character.codePointAt(0) || 0;
