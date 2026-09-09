@@ -493,7 +493,10 @@ impl CliApp {
         // the flag - not the (still empty) record list - decides whether this
         // run has database cheats.
         let native_cheat_selection = !cheat_selection.cheats.is_empty();
+        #[cfg(not(target_arch = "wasm32"))]
         let mut cheat_records = cheat_records;
+        #[cfg(target_arch = "wasm32")]
+        let cheat_records = cheat_records;
         let has_database_cheats = !cheat_records.is_empty() || native_cheat_selection;
         let has_cheats = has_manual_cheats || has_database_cheats;
         let discover_implicit_patches = patches.is_empty() && !has_cheats && !no_extract;
@@ -788,6 +791,7 @@ impl CliApp {
         // Resolve `--cheat` against the resolved input ROM. The bakeable entries
         // join `cheat_records` and are applied after the patch chain, like the
         // webapp's.
+        #[cfg(not(target_arch = "wasm32"))]
         if native_cheat_selection {
             match self.resolve_cheat_selection(&resolved_input, &cheat_selection, &context) {
                 Ok(resolved) => {

@@ -76,6 +76,7 @@ impl CliApp {
 }
 
 /// One row of `cheat list`.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CheatListEntry {
     pub id: String,
@@ -85,6 +86,7 @@ pub(crate) struct CheatListEntry {
 }
 
 /// The `cheat_list` details block, mirrored by the terminal table.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct CheatListDetails {
     pub system: String,

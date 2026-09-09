@@ -485,10 +485,12 @@ impl CliApp {
         // a temp file under the context's temp namespace, which the diff-based
         // create below treats like any other; the namespace is reclaimed when the
         // context drops, so no explicit cleanup is needed.
+        #[cfg(not(target_arch = "wasm32"))]
         let native_cheat_selection = !args.cheat_selection.cheats.is_empty();
         let PatchCreateModifiedSource {
             modified_path,
             cheat_summary,
+            #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
             skipped_cheats,
         } = match self.resolve_patch_create_modified(&args, &context) {
             Ok(source) => source,
@@ -650,6 +652,7 @@ impl CliApp {
         {
             report.label = format!("{}; {}", report.label, summary.label());
         }
+        #[cfg(not(target_arch = "wasm32"))]
         if report.status == OperationStatus::Succeeded && native_cheat_selection {
             report = Self::annotate_patch_create_cheats(report, &create_output, &skipped_cheats);
         }
@@ -667,6 +670,9 @@ impl CliApp {
         args: &PatchCreateCommand,
         context: &OperationContext,
     ) -> std::result::Result<PatchCreateModifiedSource, (&'static str, String)> {
+        // Native-only: the cheat database lives on disk and `cheat_selection`
+        // is `serde(skip)`, so a wasm run never carries a selection.
+        #[cfg(not(target_arch = "wasm32"))]
         if !args.cheat_selection.cheats.is_empty() {
             let plan = self
                 .plan_patch_create_cheats(crate::cheat_resolution::PatchCreateCheatRequest {

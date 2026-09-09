@@ -319,6 +319,7 @@ impl CliApp {
 
     /// Bake selected database records into a copy of `source`, writing the
     /// patched ROM to `dest`.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(super) fn write_database_cheat_patched_rom(
         source: &Path,
         records: &[CheatRecord],
