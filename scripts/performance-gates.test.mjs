@@ -7,6 +7,7 @@ import test from "node:test";
 import zlib from "node:zlib";
 
 import {
+  baselineFromRows,
   evaluateSizeBudget,
   measureSizeBudget,
 } from "../packages/rom-weaver-webapp/scripts/check-size-budget.mjs";
@@ -22,16 +23,30 @@ import {
 import { summarizeCssCoverage } from "../packages/rom-weaver-webapp/scripts/css-coverage.mjs";
 import { brotliCompressBuffer, brotliCompressFile } from "./wasm/brotli-compress.mjs";
 
-test("size budgets warn at the expected value and fail at the maximum", () => {
-  const budget = {
-    expectedRawBytes: 10,
-    maxRawBytes: 20,
-    expectedBrotliBytes: 10,
-    maxBrotliBytes: 20,
-  };
-  assert.equal(evaluateSizeBudget(budget, { rawBytes: 10, brotliBytes: 10 }), "pass");
-  assert.equal(evaluateSizeBudget(budget, { rawBytes: 11, brotliBytes: 10 }), "warning");
-  assert.equal(evaluateSizeBudget(budget, { rawBytes: 10, brotliBytes: 21 }), "error");
+test("size drift warns and fails against the baseline, and skips without one", () => {
+  const drift = { warnPercent: 1, maxPercent: 3, floorBytes: 0 };
+  const baseline = { rawBytes: 1000, brotliBytes: 1000 };
+  assert.equal(evaluateSizeBudget(drift, { rawBytes: 1010, brotliBytes: 900 }, baseline), "pass");
+  assert.equal(evaluateSizeBudget(drift, { rawBytes: 1011, brotliBytes: 900 }, baseline), "warning");
+  assert.equal(evaluateSizeBudget(drift, { rawBytes: 900, brotliBytes: 1031 }, baseline), "error");
+  assert.equal(evaluateSizeBudget(drift, { rawBytes: 9e9, brotliBytes: 9e9 }, null), "unknown");
+});
+
+test("the drift floor absorbs churn that the percentage alone would fail", () => {
+  const baseline = { rawBytes: 1000, brotliBytes: 1000 };
+  const measured = { rawBytes: 1040, brotliBytes: 1000 };
+  assert.equal(evaluateSizeBudget({ warnPercent: 1, maxPercent: 3, floorBytes: 0 }, measured, baseline), "error");
+  assert.equal(evaluateSizeBudget({ warnPercent: 1, maxPercent: 3, floorBytes: 64 }, measured, baseline), "pass");
+});
+
+test("a written baseline keys every budget by name", () => {
+  const rows = [
+    { budget: { name: "CSS" }, rawBytes: 10, brotliBytes: 4, fileCount: 1 },
+    { budget: { name: "WASM" }, rawBytes: 20, brotliBytes: 8, fileCount: 1 },
+  ];
+  const written = baselineFromRows(rows, "abc123");
+  assert.equal(written.commit, "abc123");
+  assert.deepEqual(written.budgets, { CSS: { brotliBytes: 4, rawBytes: 10 }, WASM: { brotliBytes: 8, rawBytes: 20 } });
 });
 
 test("size measurement totals every matching built asset", () => {

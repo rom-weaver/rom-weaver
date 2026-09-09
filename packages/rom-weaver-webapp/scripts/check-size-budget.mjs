@@ -141,46 +141,79 @@ export function measureSizeBudget(distDir, budget, brotliQuality) {
   };
 }
 
-export function evaluateSizeBudget(budget, measured) {
-  if (measured.rawBytes > budget.maxRawBytes || measured.brotliBytes > budget.maxBrotliBytes) return "error";
-  if (measured.rawBytes > budget.expectedRawBytes || measured.brotliBytes > budget.expectedBrotliBytes)
-    return "warning";
+/** Growth a baseline size may absorb before it counts. The percentage carries the intent; the floor
+ * keeps a small asset from tripping on a few bytes of hash or minifier churn. */
+const allowance = (baselineBytes, percent, drift) =>
+  baselineBytes + Math.max((baselineBytes * percent) / 100, drift.floorBytes);
+
+/** Sizes are judged against the last build of the default branch, never against a number in the
+ * config file. A missing baseline (first run of a budget, evicted cache) reports and does not fail:
+ * a gate that cannot see what it compares against MUST NOT block the pull request. */
+export function evaluateSizeBudget(drift, measured, baseline) {
+  if (!baseline) return "unknown";
+  const over = (percent) =>
+    measured.rawBytes > allowance(baseline.rawBytes, percent, drift) ||
+    measured.brotliBytes > allowance(baseline.brotliBytes, percent, drift);
+  if (over(drift.maxPercent)) return "error";
+  if (over(drift.warnPercent)) return "warning";
   return "pass";
 }
 
 const kib = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
-const difference = (actual, expected) => `${actual >= expected ? "+" : ""}${kib(actual - expected)}`;
+const difference = (actual, baseline) => `${actual >= baseline ? "+" : ""}${kib(actual - baseline)}`;
 
-export function runSizeBudget(config, distDir = DIST_DIR) {
+export function runSizeBudget(config, distDir = DIST_DIR, baseline = null) {
+  const { drift } = config.assetSizes;
   const rows = [];
   let failures = 0;
   for (const budget of config.assetSizes.budgets) {
     const measured = measureSizeBudget(distDir, budget, config.assetSizes.brotliQuality);
-    const severity = evaluateSizeBudget(budget, measured);
-    const detail =
-      `raw ${kib(measured.rawBytes)} (${difference(measured.rawBytes, budget.expectedRawBytes)}), ` +
-      `brotli ${kib(measured.brotliBytes)} (${difference(measured.brotliBytes, budget.expectedBrotliBytes)})`;
-    rows.push({ ...measured, budget, detail, severity });
+    const baselineEntry = baseline?.budgets?.[budget.name] ?? null;
+    const severity = evaluateSizeBudget(drift, measured, baselineEntry);
+    const detail = baselineEntry
+      ? `raw ${kib(measured.rawBytes)} (${difference(measured.rawBytes, baselineEntry.rawBytes)}), ` +
+        `brotli ${kib(measured.brotliBytes)} (${difference(measured.brotliBytes, baselineEntry.brotliBytes)})`
+      : `raw ${kib(measured.rawBytes)}, brotli ${kib(measured.brotliBytes)}, no baseline to compare against`;
+    rows.push({ ...measured, baseline: baselineEntry, budget, detail, severity });
     process.stdout.write(`${severity.toUpperCase().padEnd(7)} ${budget.name}: ${detail}\n`);
     if (severity === "warning")
-      process.stdout.write(`::warning title=Asset size budget::${budget.name} exceeded its expected size; ${detail}\n`);
+      process.stdout.write(
+        `::warning title=Asset size drift::${budget.name} grew more than ${drift.warnPercent}% ` +
+          `over ${baseline.commit ?? "the baseline"}; ${detail}\n`,
+      );
     if (severity === "error") {
       failures += 1;
-      process.stdout.write(`::error title=Asset size budget::${budget.name} exceeded its maximum size; ${detail}\n`);
+      process.stdout.write(
+        `::error title=Asset size drift::${budget.name} grew more than ${drift.maxPercent}% ` +
+          `over ${baseline.commit ?? "the baseline"}; ${detail}\n`,
+      );
     }
   }
   return { failures, rows };
 }
 
-const summary = (rows) =>
+export function baselineFromRows(rows, commit) {
+  return {
+    budgets: Object.fromEntries(
+      rows.map(({ brotliBytes, budget, rawBytes }) => [budget.name, { brotliBytes, rawBytes }]),
+    ),
+    commit,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+const summary = (rows, baseline) =>
   [
     "### Asset size budgets",
     "",
-    "| Asset | Files | Raw | Brotli | Result |",
-    "| --- | ---: | ---: | ---: | --- |",
+    baseline?.commit ? `Compared against \`${baseline.commit}\` on the default branch.` : "No baseline available.",
+    "",
+    "| Asset | Files | Raw | Brotli | Change | Result |",
+    "| --- | ---: | ---: | ---: | ---: | --- |",
     ...rows.map(
-      ({ brotliBytes, budget, fileCount, rawBytes, severity }) =>
-        `| ${budget.name} | ${fileCount} | ${kib(rawBytes)} | ${kib(brotliBytes)} | ${severity} |`,
+      ({ baseline: entry, brotliBytes, budget, fileCount, rawBytes, severity }) =>
+        `| ${budget.name} | ${fileCount} | ${kib(rawBytes)} | ${kib(brotliBytes)} | ` +
+        `${entry ? difference(brotliBytes, entry.brotliBytes) : "-"} | ${severity} |`,
     ),
     "",
   ].join("\n");
@@ -199,11 +232,33 @@ export function reportWorkerRuntimeChunk(distDir = DIST_DIR) {
   return failures;
 }
 
-export function main() {
+const optionValue = (argv, name) => {
+  const index = argv.indexOf(name);
+  if (index === -1) return null;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} needs a file path`);
+  return value;
+};
+
+const readBaseline = (baselinePath) => {
+  if (baselinePath && fs.existsSync(baselinePath)) return JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+  process.stdout.write(`No size baseline at ${baselinePath ?? "<unset>"}; reporting sizes without a gate.\n`);
+  return null;
+};
+
+export function main(argv = process.argv.slice(2)) {
   const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-  const result = runSizeBudget(config);
+  const baseline = readBaseline(optionValue(argv, "--baseline"));
+  const result = runSizeBudget(config, DIST_DIR, baseline);
   const chunkFailures = reportWorkerRuntimeChunk();
-  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary(result.rows));
+  if (process.env.GITHUB_STEP_SUMMARY)
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary(result.rows, baseline));
+  const writePath = optionValue(argv, "--write-baseline");
+  if (writePath) {
+    fs.mkdirSync(path.dirname(writePath), { recursive: true });
+    fs.writeFileSync(writePath, `${JSON.stringify(baselineFromRows(result.rows, process.env.GITHUB_SHA), null, 2)}\n`);
+    process.stdout.write(`Wrote size baseline to ${writePath}\n`);
+  }
   return result.failures + chunkFailures === 0 ? 0 : 1;
 }
 
