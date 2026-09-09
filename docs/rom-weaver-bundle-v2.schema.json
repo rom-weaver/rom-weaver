@@ -45,12 +45,13 @@
       }
     },
     "checkState": {
+      "description": "One named checksum state shared by every field that references its id.",
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "checks"],
       "properties": {
         "id": { "description": "Stable state identity referenced by checksRef fields.", "type": "string", "minLength": 1 },
-        "checks": { "$ref": "#/$defs/checks" }
+        "checks": { "description": "The checksums and/or size this state stands for.", "$ref": "#/$defs/checks" }
       }
     },
     "patchInput": {
@@ -61,7 +62,7 @@
           "additionalProperties": false,
           "required": ["rom"],
           "properties": {
-            "rom": { "const": true },
+            "rom": { "description": "Marks the selector as the bundle's ROM source.", "const": true },
             "member": { "description": "Exact archive member or disc track.", "type": "string", "minLength": 1 }
           }
         },
@@ -82,6 +83,7 @@
       "enum": ["auto", "keep", "strip"]
     },
     "rom": {
+      "description": "The one ROM the chain starts from: where to get it and how to recognize it. Omit it for a patch-only bundle whose user supplies the ROM.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -95,6 +97,7 @@
       "not": { "required": ["url", "path"] }
     },
     "patch": {
+      "description": "One patch step: its source, display metadata, execution selectors, and declared checks. Exactly one of url or path.",
       "type": "object",
       "additionalProperties": false,
       "oneOf": [{ "required": ["url"] }, { "required": ["path"] }],
@@ -108,7 +111,7 @@
         "label": { "description": "Maturity or display label.", "type": "string" },
         "url": { "description": "Download URL for the patch. Mutually exclusive with path.", "type": "string" },
         "path": { "description": "Bundle-relative patch path. Mutually exclusive with url.", "type": "string" },
-        "input": { "$ref": "#/$defs/patchInput" },
+        "input": { "description": "Fixed execution input: the exact ROM/member bytes or a named producer's output. Omitted reads the current accumulated result of its target.", "$ref": "#/$defs/patchInput" },
         "target": { "description": "Cumulative execution lane. Omitted uses the legacy ordered lane; a patch target seeds its lane from the producer when first used.", "$ref": "#/$defs/patchInput" },
         "inputChecks": { "description": "Expected pre-apply state when it differs from rom checks.", "$ref": "#/$defs/checks" },
         "inputChecksRef": { "description": "Named authored pre-apply state. Cannot be combined with inputChecks.", "type": "string", "minLength": 1 },
@@ -123,6 +126,7 @@
       }
     },
     "output": {
+      "description": "Defaults and expected result for the final patched output. Compression stays an apply-time choice.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
