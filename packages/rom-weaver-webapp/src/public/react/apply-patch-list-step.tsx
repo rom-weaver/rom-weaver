@@ -40,6 +40,7 @@ import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx"
 import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
+import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
 import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 import type { PatcherStackController } from "./patcher-form.ts";
@@ -973,7 +974,7 @@ const PatchChecksDrawer = ({
       side === "input" && isChainInput && !invalidChecks[`${side}:${field}`]
         ? matchInputCheck(field, userValue(field), romActuals)
         : undefined;
-    return { addableFields, builtInRows, editableFields, markFor, side, userValue };
+    return { addableFields, builtInRows, editableFields, markFor, metaField, side, userValue };
   });
   const hasUserChecks = sides.some((entry) => entry.editableFields.length > 0);
   // A user-entered input check that disagrees with the real ROM fails the drawer
@@ -1028,7 +1029,7 @@ const PatchChecksDrawer = ({
           {localizer.message("ui.patchChecks.targetRom", { target: targetRom })}
         </p>
       ) : null}
-      {sides.map(({ addableFields, builtInRows, editableFields, markFor, side, userValue }) => {
+      {sides.map(({ addableFields, builtInRows, editableFields, markFor, metaField, side, userValue }) => {
         const inputHeading =
           side === "input"
             ? localizer.message("ui.patchChecks.input", {
@@ -1077,6 +1078,7 @@ const PatchChecksDrawer = ({
               <div className="ck-group-head">
                 <span>{side === "output" ? localizer.message("ui.patchChecks.stackOutput") : inputHeading}</span>
               </div>
+              <IdentifiedCheckTitle checks={meta?.[metaField]} enabled={!disabled} />
               {side === "input"
                 ? builtInRows.map((row) => (
                     <ChecksumRow key={`${side}:${row.label}:${row.value}`} label={row.label} value={row.value} />
@@ -1107,6 +1109,7 @@ const PatchChecksDrawer = ({
               {localizer.message("ui.patchChecks.sharedInput", { input: sharedInputLabel || executionInput })}
             </span>
           </div>
+          <IdentifiedCheckTitle checks={sharedInputChecks} enabled={!disabled} />
           {sharedInputRows.map((row) => (
             <ChecksumRow key={`shared:${row.label}:${row.value}`} label={row.label} value={row.value} />
           ))}
@@ -1119,6 +1122,30 @@ const PatchChecksDrawer = ({
         </p>
       ) : null}
     </ChecksumList>
+  );
+};
+
+/**
+ * The database title behind a declared check state, so a drawer group names the
+ * ROM its checksums describe. A per-track check matches a multi-track record
+ * only partially, and the title is still the right one, so any `matched`
+ * resolution is shown.
+ */
+const IdentifiedCheckTitle = ({ checks, enabled }: { checks?: ParsedBundleChecks; enabled: boolean }) => {
+  const localizer = useUiLocalizer();
+  const hasChecksums = !!Object.keys(checks?.checksums || {}).length;
+  const identification = useExpectedRomIdentification(hasChecksums ? checks : undefined, enabled && hasChecksums);
+  const match = identification?.status === "matched" ? identification.matches[0] : undefined;
+  if (!match) return null;
+  // Redump-style names already end in the region, so it is only appended when
+  // the name does not carry it.
+  const region = match.region?.trim();
+  const title =
+    region && !match.name.toLowerCase().includes(region.toLowerCase()) ? `${match.name} (${region})` : match.name;
+  return (
+    <span className="ck-group-title">
+      {localizer.message("ui.patchChecks.identified", { platform: match.platform, title })}
+    </span>
   );
 };
 

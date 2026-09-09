@@ -85,6 +85,11 @@ msgstr "{count} warning(s)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.identified"
+msgstr "{title} — {platform}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.sevenZipCodec"
 msgstr "7z"
 

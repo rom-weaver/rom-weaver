@@ -464,6 +464,13 @@
   mask-image: var(--weave-mask);
   mask-size: 7px 7px;
 }
+.rw-app .ck-group-title {
+  display: block;
+  padding-inline: 9px;
+  margin-block: -2px 6px;
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
 .rw-app .patch-checks-explanation {
   grid-column: 1 / -1;
   padding-inline: 9px;

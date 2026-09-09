@@ -52,10 +52,12 @@ const parseExpectedComponents = (value: unknown): ParsedIdentifyExpectedComponen
       if (!(size || crc32 || md5 || sha1 || sha256)) return undefined;
       const hashScope = toStringValue(record.hash_scope);
       const filename = toStringValue(record.filename);
+      const track = toNumberValue(record.track);
       return {
         role: toStringValue(record.role) || "primary_payload",
         ordinal: toNumberValue(record.ordinal) ?? 0,
         size,
+        ...(track === undefined ? {} : { track }),
         ...(hashScope ? { hashScope } : {}),
         ...(filename ? { filename } : {}),
         ...(crc32 ? { crc32 } : {}),

@@ -1,5 +1,8 @@
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
+import { fillMemberLaneChecks } from "../../lib/bundle/bundle-member-checks.ts";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import { bundleCheckTokens } from "../../lib/bundle/bundle-targets.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
 import type { ParsedBundleChecks, ParsedBundlePatchInput } from "../../types/bundle.ts";
@@ -105,6 +108,33 @@ const restoreBundlePatchMetadata = (
 const stripOutputNameExtension = (name: string): string => {
   const stripped = name.replace(/\.[a-z0-9]{1,5}$/i, "").trim();
   return stripped || name.trim();
+};
+
+/**
+ * Per-track input checks for the bundle's ROM-member lanes, taken from the
+ * identify record its `rom` checks name. Apply-time only: the values are handed
+ * to the patch options, never merged into the exported bundle metadata.
+ */
+const resolveMemberLaneChecks = async (
+  session: BundleApplySession,
+): Promise<ReadonlyMap<number, ParsedBundleChecks>> => {
+  const empty = new Map<number, ParsedBundleChecks>();
+  const needsFill = session.entries.some(
+    (entry) => !!(entry.target && "rom" in entry.target && entry.target.member) && !(entry.input || entry.inputChecks),
+  );
+  if (!needsFill) return empty;
+  const romChecks = session.romExpectation?.checks || session.chainEndpointChecks.input;
+  if (!romChecks) return empty;
+  try {
+    const identification = await lookupExpectedRom(romChecks);
+    const fills = fillMemberLaneChecks(session.entries, identification);
+    if (fills.size) logger.debug("bundle session filled member lane checks", { entries: [...fills.keys()] });
+    return fills;
+  } catch {
+    // A ROM the identify database cannot name is not an apply error; the lanes
+    // simply keep the checks the bundle itself declared.
+    return empty;
+  }
 };
 
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -225,6 +255,8 @@ const useBundleApplySession = ({
             }
             await new Promise<void>((resolve) => setTimeout(resolve, 20));
           }
+          const memberLaneChecks = await resolveMemberLaneChecks(session);
+          if (!isCurrent()) return;
           // Seed header modes through normal options. The bundle's ROM checksum
           // belongs only to the chain input; reactive sync owns the chain output
           // because it applies only while the full bundle chain remains intact.
@@ -240,6 +272,9 @@ const useBundleApplySession = ({
                 ...(entry.basis ? { basis: entry.basis } : {}),
                 ...(entry.header === "keep" || entry.header === "strip" ? { header: entry.header } : {}),
                 ...(validateInputChecksum ? { validateInputChecksum } : {}),
+                ...(memberLaneChecks.has(index)
+                  ? { inputChecks: bundleCheckTokens(memberLaneChecks.get(index)) || "" }
+                  : {}),
                 // A local bundle can finish staging before its session metadata lands. Its option update
                 // clears the earlier verdict, so revalidate once after the final seeded entry.
                 revalidate: index === session.entries.length - 1,

@@ -59,6 +59,8 @@ type ParsedIdentifyExpectedComponent = {
   role: string;
   ordinal: number;
   size: number;
+  /** Disc track number this component covers, when the record names one. */
+  track?: number;
   hashScope?: string;
   filename?: string;
   crc32?: string;

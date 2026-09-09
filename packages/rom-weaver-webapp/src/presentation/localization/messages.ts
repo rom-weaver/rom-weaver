@@ -80,6 +80,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patchInputs.auto": msg({ id: "ui.patchInputs.auto", message: "Automatic" }),
   "ui.patchInputs.original": msg({ id: "ui.patchInputs.original", message: "Original ROM" }),
   "ui.patchInputs.previous": msg({ id: "ui.patchInputs.previous", message: "Previous patch output" }),
+  "ui.patchChecks.identified": msg({ id: "ui.patchChecks.identified", message: "{title} — {platform}" }),
   "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Authored input checks — {basis}" }),
   "ui.patchChecks.explanation": msg({
     id: "ui.patchChecks.explanation",
