@@ -675,3 +675,4 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
 };
 
 export { SaveEditor };
+export type { SaveEditorProps };
