@@ -78,11 +78,38 @@
        that scroll-driven chrome change. */
     min-height: max(300px, calc(100vh - var(--hero-chrome) - var(--hero-extra-h, 0px)));
   }
-  /* The sample chip MUST fit inside the hero corner at phone widths. */
+  /* The chip's row is real flow height, so the hero gives it up to keep the
+     empty bench inside one phone viewport. A dismissed chip is hidden but still
+     in the DOM, so the guard matches the one on `.first-weave-demo` itself. */
+  html:not([data-onboarding-enabled="false"]) .rw-app .step.is-input.is-empty:has(> .step-body > .first-weave-demo) {
+    --hero-extra-h: 44px;
+  }
+  html:not([data-onboarding-enabled="false"])
+    .rw-app
+    .step.is-input.is-empty:has(> .step-body > .identify-hash):has(> .step-body > .first-weave-demo) {
+    --hero-extra-h: 144px;
+  }
+  /* A phone hero has no free corner - the format marquee runs the full width of
+     its lower edge - so the chip leaves the corner and takes its own centred row
+     in the seam below the hero. `--hero-chrome` already budgets that row. */
+  .rw-app .first-weave-demo {
+    justify-content: center;
+    height: auto;
+    padding-block: 8px;
+  }
   .rw-app .sample-tutorial-start-chip {
+    position: static;
     gap: 5px;
     padding: 4px 10px 4px 5px;
     font-size: 0.74rem;
+  }
+  /* The popover opens upward over the hero and is centred on the row's chip. */
+  .rw-app .sample-tutorial-start-pop {
+    right: auto;
+    bottom: 100%;
+    left: 50%;
+    width: min(300px, calc(100vw - 2 * var(--sp-m)));
+    translate: -50% 0;
   }
   .rw-app .sample-tutorial-start-beacon {
     width: 18px;

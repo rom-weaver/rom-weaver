@@ -1265,11 +1265,16 @@ describe("webapp responsive navigation", () => {
   });
 
   test("phone hero gives back the in-flow navigation height", async () => {
+    // The hero MUST leave room for navigation, the visible checksum form, and
+    // the New here? chip's own row: 860 - (38 + 269) - 144.
+    await setViewport(VIEWPORTS[1]);
+    await renderPage(emptyApplyPage(), "light");
+    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("409px");
+
+    // The smallest phone has nothing left to give and rests on the 300px floor.
     await setViewport(VIEWPORTS[0]);
     await renderPage(emptyApplyPage(), "light");
-
-    // The hero MUST leave room for navigation and the visible checksum form.
-    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("333px");
+    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("300px");
   });
 
   test("keeps the workflow gutter fluid without a narrow desktop cap", async () => {
