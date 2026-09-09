@@ -1527,9 +1527,8 @@ pub use command_args::{
     IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
     IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
     PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveExportSchemaCommand,
-    SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand, SaveSetCommand, SetupCommand,
-    TrimCommand,
+    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveExportSchemaCommand, SaveGetCommand,
+    SaveIdentifyCommand, SaveInspectCommand, SaveSetCommand, SetupCommand, TrimCommand,
 };
 
 mod expect_tokens;

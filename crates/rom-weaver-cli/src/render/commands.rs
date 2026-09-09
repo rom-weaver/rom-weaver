@@ -124,7 +124,8 @@ fn render_save_inspect(surface: &Surface, event: &ProgressEvent) {
         return label_line(surface, event);
     };
     let Some(fields) = document.get("fields").and_then(Value::as_array) else {
-        return render_object(surface, document);
+        render_object(surface, document);
+        return;
     };
     let mut current_group = String::new();
     for field in fields {
