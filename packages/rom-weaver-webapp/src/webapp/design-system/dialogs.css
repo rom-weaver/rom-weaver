@@ -184,11 +184,6 @@
   flex: 0 1 auto;
   min-inline-size: max-content;
 }
-.rw-app .log-actions .log-icon-btn {
-  flex: 0 0 30px;
-  inline-size: 30px;
-  padding-inline: 0;
-}
 .rw-app .log-actions .btn.copied {
   color: var(--verified);
   border-color: color-mix(in oklab, var(--verified) 55%, transparent);
@@ -458,6 +453,7 @@
   border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam));
   border-radius: var(--r-s);
 }
+.rw-app .log-actions .log-icon-btn,
 .rw-app .log-refresh {
   flex: 0 0 30px;
   inline-size: 30px;
