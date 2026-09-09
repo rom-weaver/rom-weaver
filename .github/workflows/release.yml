@@ -1,22 +1,15 @@
 name: Release
 
 on:
-  # Opening or refreshing the release pull request is a deliberate act, not a
-  # consequence of merging. Automating it on every push to main meant each merge
-  # force-pushed the release branch two or three times, and every one of those
-  # started a full CI matrix on a pull request nobody had decided to merge yet -
-  # 20 runs on the 0.8.0 pull request, 17 of them cancelled by the next push.
-  # Run this by hand when a release is actually wanted; until then main just
-  # accumulates commits and the pull request does not exist.
+  # Opening or refreshing a release pull request is a deliberate action.
+  # This workflow MUST NOT run on every main push: each release-branch update starts a full CI matrix.
   workflow_dispatch:
     inputs:
       release_as:
         description: Version to release as (e.g. 0.9.0, 0.9.0-alpha.1). Blank = computed from the commits.
         required: false
         type: string
-  # A merged release PR already passed required checks, so use its close event
-  # instead of waiting for a duplicate full CI run on the merge commit. This is
-  # the path that actually cuts the draft release.
+  # A merged release PR has passed required checks, so its close event creates the draft release.
   pull_request:
     types: [closed]
 
@@ -27,10 +20,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # A release pull request must describe a commit that already cleared the
-  # full main push matrix. Wait here instead of relying on the operator to
-  # inspect Actions first; the exact SHA matters because the release workflow
-  # can be dispatched while main is moving.
+  # A dispatched release MUST target a commit with a successful main CI run.
+  # Check the exact SHA because main can advance while this workflow waits.
   verify-main-ci:
     name: Verify main CI
     if: github.event_name == 'workflow_dispatch'
@@ -99,8 +90,7 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
-      # release-please reports the commit the release targets. For merged
-      # release PRs this is the merge commit, not necessarily the PR head.
+      # For merged release PRs, release-please reports the merge commit rather than the PR head.
       sha: ${{ steps.release.outputs.sha }}
       artifact_sha: ${{ steps.artifact-sha.outputs.sha }}
     steps:
@@ -110,16 +100,8 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           target-branch: main
           skip-github-pull-request: ${{ github.event_name == 'pull_request' }}
-          # No `skip-github-release` guard, on either path. It existed to stop
-          # the push path cutting a release from an untested commit, and that
-          # path is gone. Release Please only cuts a release for a merged
-          # release commit it has not already tagged, so a manual run can only
-          # refresh the pull request - or recover a release whose `pull_request`
-          # run failed. It cannot cut one early.
-          #
-          # Empty string on the `pull_request` path, where the `inputs` context
-          # is unset - which is Release Please's "compute the version from the
-          # commits" default.
+          # Release Please creates releases only for merged, untagged release commits.
+          # An empty pull-request input uses Release Please's commit-derived version.
           release-as: ${{ inputs.release_as }}
 
       - name: Resolve reusable artifact commit
@@ -153,10 +135,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --prerelease
 
-      # Deliberately not gated on prs_created: a run that finds the pull request
-      # already up to date reports prs_created=false, and the follow-up work
-      # below still belongs to it. This is how a re-dispatch refreshes the
-      # metadata and screenshots of a release pull request opened earlier.
+      # Refresh an existing release pull request even when Release Please made no new one.
       - name: Find release pull request
         id: release-pr
         if: github.event_name != 'pull_request'
@@ -216,11 +195,8 @@ jobs:
           RELEASE_PR_BRANCH: ${{ steps.release-pr.outputs.branch }}
         run: node scripts/aggregate-release-changelog.mjs
 
-      # These screenshots belong in the release PR so the merge contains the exact
-      # captures the release will ship. Capturing them reuses the production
-      # WASM artifact from main's CI run for this commit. The verify-main-ci job
-      # above guarantees the run is complete; the fallback remains for a green
-      # run that did not build WASM for its changed-path classification.
+      # Commit screenshots to the release pull request and reuse its tested WASM artifact.
+      # The fallback covers a successful CI run that skipped the WASM build.
       - name: Set up screenshot capture
         if: steps.release-pr.outputs.found == 'true'
         uses: ./.github/actions/setup-build-env
@@ -337,24 +313,8 @@ jobs:
           git commit -m "docs(screenshots): refresh release captures"
           git push origin "HEAD:$RELEASE_PR_BRANCH"
 
-  # Lives here rather than in cargo-publish.yml, where it used to run, because
-  # there it was too late to act on: cargo-publish.yml is triggered by the
-  # release tag, which only exists once the draft has been published and made
-  # immutable. A break found at that point left the release out, the crates
-  # unpublished, and the version unrepeatable. Here it gates publish-release, so
-  # a failure leaves a deletable draft and the version free to be cut again.
-  #
-  # Safe to run alongside the publishing jobs: it publishes nothing, so it needs
-  # no registry credentials and cannot half-release anything on failure.
-  # `!cancelled()` here and on every other job downstream of `release` is
-  # load-bearing, not decoration. `release` needs `verify-main-ci`, which is
-  # skipped on the `pull_request` path - and a skip propagates down the whole
-  # dependency chain, past `release`'s own `always()`, unless each descendant
-  # opts out of it. Without this the entire fan-out skipped on a run that cut
-  # the draft release and reported success, leaving v0.10.0 a draft with no
-  # assets. Every job that gains it also asserts the `result` of the needs it
-  # actually depends on, because opting out of skip propagation means failed
-  # and skipped ancestors no longer stop it either.
+  # Gate draft publication on semver checks so a failure leaves a deletable draft.
+  # `!cancelled()` prevents a skipped verify-main-ci dependency from skipping this fan-out.
   semver-check:
     name: Check for breaking API changes
     needs: release
@@ -365,8 +325,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      # Cache reservation needs a writable scope; contents:read alone is denied
-      # by the cache service ("token has no writable scopes").
+      # Cache reservation requires Actions write access.
       actions: write
     steps:
       - uses: actions/checkout@v7
@@ -381,7 +340,9 @@ jobs:
           package-manager-cache: false
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install --yes clang cmake libclang-dev ninja-build pkg-config
+        env:
+          APT_PACKAGES: clang cmake libclang-dev ninja-build pkg-config
+        run: node scripts/ci/install-system-dependencies.mjs
 
       - name: Prepare ROM identify data
         uses: ./.github/actions/identify-data
@@ -395,9 +356,7 @@ jobs:
       - name: Install cargo-semver-checks
         uses: taiki-e/install-action@cargo-semver-checks
 
-      # semver-checks builds rustdoc for each crate's published baseline before
-      # it can diff. Baselines only change when a version is released, so this
-      # survives across releases even though the current-tree half does not.
+      # Cache published rustdoc baselines, which change only when a crate is released.
       - name: Cache cargo-semver-checks baselines
         uses: actions/cache@v6
         with:
@@ -408,11 +367,8 @@ jobs:
 
       - name: Check for accidental breaking API changes
         shell: bash
-        # Runs per-crate rather than --workspace so a crate with no published
-        # baseline (first release, or a newly added crate) is skipped instead of
-        # failing the whole job. cargo-semver-checks compares the working tree
-        # against the latest release on crates.io; a major-version bump is the
-        # intended way to land a genuine break.
+        # Run per crate so unpublished crates have no baseline to fail against.
+        # cargo-semver-checks compares each crate with its latest crates.io release.
         run: |
           mapfile -t names < <(
             cargo metadata --no-deps --format-version 1 |
@@ -464,19 +420,12 @@ jobs:
         uses: ./.github/actions/identify-data
 
       - name: Dry-run publish workspace crates
-        # Package each crate exactly as cargo publish would, without uploading.
-        # This intentionally does not authenticate with crates.io: release.yml
-        # is not an accepted Trusted Publishing workflow for real Cargo
-        # publishes, but dry-run validation does not need a registry token.
-        # The CI Rust jobs already compile the local dependency graph. Skip
-        # cargo's per-package verification here because it resolves same-version
-        # workspace dependencies from crates.io, which may still contain the
-        # previous release graph.
+        # Package without uploading or credentials.
+        # Skip verification because same-version workspace dependencies can still resolve to the previous registry graph.
         run: cargo publish --workspace --locked --dry-run --no-verify --allow-dirty
 
       - name: Check packaged crates include their embedded files
-        # cargo's own verification is skipped above, so nothing else compiles
-        # the packaged tarball before a real publish.
+        # Check the packaged files because cargo verification is skipped above.
         run: node scripts/ci/check-package-includes.mjs
 
   # Package the static site beside the registry publishes rather than making all
@@ -749,11 +698,12 @@ jobs:
             printf '%s  %s\n' "$(sha256sum "$asset" | cut -d ' ' -f 1)" "$asset" > \
               "checksums/$asset.sha256"
           done
-          curl --fail --location --retry 5 --retry-delay 2 --output rom-weaver-identify-data.tar.br \
-            "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/rom-weaver-identify-data.tar.br"
-          printf '%s  rom-weaver-identify-data.tar.br\n' \
-            "$(sha256sum rom-weaver-identify-data.tar.br | cut -d ' ' -f 1)" > \
-            checksums/rom-weaver-identify-data.tar.br.sha256
+          for asset in rom-weaver-identify-data.tar.br rom-weaver-cli-assets.zip; do
+            curl --fail --location --retry 5 --retry-delay 2 --output "$asset" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/v${{ needs.release.outputs.version }}/$asset"
+            printf '%s  %s\n' "$(sha256sum "$asset" | cut -d ' ' -f 1)" "$asset" > \
+              "checksums/$asset.sha256"
+          done
 
       - name: Checkout Scoop bucket
         uses: actions/checkout@v7
@@ -822,7 +772,8 @@ jobs:
   # gating it; see the comment on publish-homebrew.
   publish-release:
     name: Publish draft release
-    needs: [release, semver-check, cargo-publish-dry-run, static-webapp, publish-npm, publish-containers]
+    needs:
+      [release, semver-check, cargo-publish-dry-run, static-webapp, publish-npm, publish-containers]
     if: >-
       always() &&
       needs.release.outputs.release_created == 'true' &&

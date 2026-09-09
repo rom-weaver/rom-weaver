@@ -15,6 +15,7 @@
 # rather than compiling it. See the `wasm-prebuilt` stage below.
 ARG DIST=source
 ARG WASM=source
+ARG IDENTIFY_DATA=source
 
 FROM node:22-bookworm AS builder
 
@@ -155,8 +156,25 @@ RUN set -eux; \
       test -s "$dir/$file" || { echo "WASM=prebuilt but $file is missing from the build context" >&2; exit 1; }; \
     done
 
+# `--build-arg IDENTIFY_DATA=prebuilt` copies the built identify packs out of
+# `target/identify-data/v1` in the build context, for a caller that already has
+# the current tree. `npm run build` below validates the tree against the pinned
+# source revisions and pack list, so a stale copy is rebuilt rather than
+# shipped. Building the packs from the source archives takes ~6 min, and CI
+# restores the same tree from its Actions cache in seconds.
 # hadolint ignore=DL3006
-FROM wasm-${WASM} AS app
+FROM wasm-${WASM} AS identify-source
+
+# hadolint ignore=DL3006
+FROM wasm-${WASM} AS identify-prebuilt
+COPY target/identify-data/v1 /app/crates/rom-weaver-cli/data/identify/v1
+# A missing index means the caller asked for `prebuilt` without staging the
+# tree; refuse rather than silently rebuilding inside the image.
+RUN test -s /app/crates/rom-weaver-cli/data/identify/v1/index.json \
+    || { echo "IDENTIFY_DATA=prebuilt but target/identify-data/v1 is missing from the build context" >&2; exit 1; }
+
+# hadolint ignore=DL3006
+FROM identify-${IDENTIFY_DATA} AS app
 RUN node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp \
     && npm --prefix packages/rom-weaver-webapp run build
 

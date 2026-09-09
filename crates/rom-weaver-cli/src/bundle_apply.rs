@@ -689,7 +689,7 @@ fn parent_dir(path: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn bundle_ref_as_url(path: &Path) -> Option<&str> {
+pub(super) fn bundle_ref_as_url(path: &Path) -> Option<&str> {
     let value = path.to_str()?;
     (value.starts_with("http://") || value.starts_with("https://")).then_some(value)
 }

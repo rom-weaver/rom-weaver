@@ -69,7 +69,7 @@ describe("DocsPage", () => {
     setSeoMetadata(
       "rom-weaver — Create ROM patches online",
       "Create ROM patches locally in your browser.",
-      "https://rom-weaver.com/create",
+      "https://rom-weaver.com/create-patch",
     );
     rerender(<DocsPage active slug="docs" />);
 
@@ -683,5 +683,22 @@ Fixture description.
     // one meta description on two routes.
     const descriptions = DOC_ROUTES.map((route) => route.description);
     expect(new Set(descriptions).size).toBe(descriptions.length);
+  });
+
+  it("mounts the related-links strip in the article footer, resolving its tool row through onSelectTab", () => {
+    const onSelectTab = vi.fn();
+    render(<DocsPage active onSelectTab={onSelectTab} slug="docs/cli-trim" />);
+    const footer = document.querySelector(".docs-footer");
+    const strip = footer?.querySelector("nav.related-strip");
+    expect(strip).not.toBeNull();
+    const toolButton = strip?.querySelector(".related-row-tool") as HTMLButtonElement;
+    expect(toolButton.textContent).toContain("Trim tool");
+    fireEvent.click(toolButton);
+    expect(onSelectTab).toHaveBeenCalledWith("trim");
+  });
+
+  it("does not mount the related-links strip without an onSelectTab handler", () => {
+    render(<DocsPage active slug="docs/cli-trim" />);
+    expect(document.querySelector(".docs-footer nav.related-strip")).toBeNull();
   });
 });

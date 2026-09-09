@@ -35,6 +35,11 @@ impl CheatApplySummary {
             self.write_count
         )
     }
+
+    /// Human-readable record of the raw codes for patch metadata.
+    pub(super) fn comment(&self, codes: &[String]) -> String {
+        format!("cheat codes ({}): {}", self.system.id(), codes.join(" + "))
+    }
 }
 
 fn cheat_system_from_header(header: KnownRomHeader) -> Option<CheatSystem> {
@@ -228,8 +233,6 @@ impl CliApp {
             temp_paths,
         } = request;
         let system = self.cheat_system_for(source, system_override)?;
-        // Read-on-main: a single full read of the source ROM (safe for wasm/OPFS;
-        // no spawned threads open the file).
         let rom = fs::read(source)?;
         trace!(
             source = %source.display(),

@@ -142,18 +142,8 @@ const DropZone = ({
   const [reading, setReading] = useState(false);
   const formatsRef = useRef<HTMLSpanElement>(null);
   const showFormats = Boolean(big && formats?.length);
-  // Phase-lock the extension ticker (`formats-ticker`) to wall-clock time via a
-  // negative animation-delay derived from --wall-clock (see dropzone.css), so a
-  // page reload resumes the marquee where a continuously-running one would sit
-  // instead of restarting at 0. The head script in index.html seeds :root with
-  // the load-time epoch, which the prerendered shell's ticker inherits.
-  //
-  // Hydration keeps the FIRST ticker and its inherited :root value, so its
-  // animation clock continues untouched. A later remount (tab switch back to an
-  // empty hero) has no prerendered counterpart, so stamp the current epoch to
-  // resume in real-time phase rather than snap back to the load-time position.
-  // useLayoutEffect is client-only and keyed on the ticker's presence, so plain
-  // re-renders never re-stamp.
+  // Hydration MUST preserve the clock seeded in index.html.
+  // Later mounts refresh it so the ticker resumes at the current phase.
   useLayoutEffect(() => {
     if (!showFormats) return;
     const lane = formatsRef.current;
@@ -161,11 +151,19 @@ const DropZone = ({
     tickerHasMounted = true;
   }, [showFormats]);
   const formatSplit = Math.ceil((formats?.length || 0) / 2);
-  const formatRows = formats?.length
-    ? formats.length < 4
-      ? [Array.from({ length: 12 }, (_, index) => formats[index % formats.length])]
-      : [formats.slice(0, formatSplit), formats.slice(formatSplit)]
-    : [];
+  const formatRows: { format: string; key: string }[][] = [];
+  if (formats?.length) {
+    if (formats.length < 4) {
+      const row: { format: string; key: string }[] = [];
+      for (let repeat = 0; repeat < 12 / formats.length; repeat += 1) {
+        for (const format of formats) row.push({ format, key: `${repeat}-${format}` });
+      }
+      formatRows.push(row);
+    } else {
+      const entries = formats.map((format) => ({ format, key: format }));
+      formatRows.push(entries.slice(0, formatSplit), entries.slice(formatSplit));
+    }
+  }
 
   const emit = (list: FileList | null) => {
     if (!list || list.length === 0) return;
@@ -201,12 +199,12 @@ const DropZone = ({
     big && formats?.length ? (
       <span aria-hidden="true" className="formats" ref={formatsRef}>
         {formatRows.map((row) => (
-          <span className="formats-lane" key={row.join("|")}>
+          <span className="formats-lane" key={row.map((entry) => entry.format).join("|")}>
             <span className="formats-track">
               {[0, 1].map((copy) => (
                 <span className="formats-set" key={copy}>
-                  {row.map((format) => (
-                    <span className="fmt mono" key={`${copy}-${format}`}>
+                  {row.map(({ format, key }) => (
+                    <span className="fmt mono" key={key}>
                       {format}
                     </span>
                   ))}

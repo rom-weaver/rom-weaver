@@ -429,6 +429,10 @@ PPF3 format. Without it there is nothing to reverse from."
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct RomWeaverRunRequest {
     pub command: Commands,
+    /// Plan a command without changing files or downloading data.
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub dry_run: bool,
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub output: RomWeaverRunOutputOptions,
@@ -497,6 +501,7 @@ pub struct AppRunOptions {
     pub emit_progress_events: bool,
     pub interactive_selection_enabled: bool,
     pub assume_yes: bool,
+    pub dry_run: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -515,12 +520,13 @@ impl RomWeaverApp {
         prompter: Arc<dyn SelectionPrompter>,
     ) -> AppRunOutcome {
         let reporter = Arc::new(TimingProgressSink::new(reporter));
-        let app = CliApp::new(
+        let app = CliApp::new_with_dry_run(
             reporter,
             prompter,
             options.emit_progress_events,
             options.interactive_selection_enabled,
             options.assume_yes,
+            options.dry_run,
         );
         app.run(command)
     }
@@ -534,6 +540,7 @@ pub struct RunCommandOptions {
     pub emit_progress_events: bool,
     pub interactive_selection_enabled: bool,
     pub assume_yes: bool,
+    pub dry_run: bool,
 }
 
 impl RunCommandOptions {
@@ -545,6 +552,7 @@ impl RunCommandOptions {
             emit_progress_events: output.emit_progress_events(stdout_is_tty),
             interactive_selection_enabled: output.interactive_selection_enabled,
             assume_yes: output.assume_yes,
+            dry_run: false,
         }
     }
 }
@@ -708,8 +716,8 @@ mod wasm_host_prompt {
         ) -> i32;
     }
 
-    /// Prompter that delegates list selection to the browser host. Confirmation prompts are declined
-    /// (matching the historical headless behavior); only candidate selection is interactive.
+    /// Prompter that delegates list selection to the browser host. Confirmation
+    /// prompts are declined; only candidate selection is interactive.
     pub struct WasmHostPrompter;
 
     impl SelectionPrompter for WasmHostPrompter {
@@ -775,13 +783,17 @@ mod wasm_host_prompt {
 /// interactive selection back to the browser host; elsewhere it never prompts.
 pub fn run_request(request: RomWeaverRunRequest, stdout_is_tty: bool) -> ExitCode {
     let output = request.output;
+    let dry_run = request.dry_run;
     #[cfg(target_arch = "wasm32")]
     let prompter: Arc<dyn SelectionPrompter> = wasm_host_prompt::prompter();
     #[cfg(not(target_arch = "wasm32"))]
     let prompter: Arc<dyn SelectionPrompter> = Arc::new(rom_weaver_core::NoninteractivePrompter);
     run_command(
         request.command,
-        RunCommandOptions::from_output(output, stdout_is_tty),
+        RunCommandOptions {
+            dry_run,
+            ..RunCommandOptions::from_output(output, stdout_is_tty)
+        },
         Arc::new(JsonProgressSink),
         prompter,
     )
@@ -822,6 +834,7 @@ pub fn run_command_outcome(
             emit_progress_events: options.emit_progress_events,
             interactive_selection_enabled: options.interactive_selection_enabled,
             assume_yes: options.assume_yes,
+            dry_run: options.dry_run,
         },
         reporter,
         prompter,
@@ -1009,6 +1022,7 @@ struct CliApp {
     emit_progress_events: bool,
     interactive_selection_enabled: bool,
     assume_yes: bool,
+    dry_run: bool,
     containers: ContainerRegistry,
     patches: PatchRegistry,
     checksum: NativeChecksumEngine,
@@ -1357,6 +1371,9 @@ pub enum FilterKind {
 #[path = "command_dispatch.rs"]
 mod command_dispatch;
 
+#[path = "dry_run.rs"]
+mod dry_run;
+
 #[path = "probe_command.rs"]
 mod probe_command;
 
@@ -1372,6 +1389,9 @@ pub use identify_command::{
     IdentifyComponent, IdentifyDatabaseInfo, IdentifyEvidence, IdentifyLookupResult, IdentifyMedia,
     IdentifyProvenance, IdentifyResult, IdentifyStatus, IdentifyTitleMatch,
 };
+
+#[path = "identify_name_search.rs"]
+mod identify_name_search;
 
 #[path = "identify_builtin.rs"]
 mod identify_builtin;
@@ -1412,9 +1432,8 @@ mod compress_trim_batch;
 #[path = "extract_batch_plan.rs"]
 mod extract_batch_plan;
 
-// Native-only: the executor spawns OS threads (`std::thread::scope`) per job. The wasm runtime's
-// concurrency model differs (WASI threads via the JS spawner, plus the OPFS read-on-main rule), so
-// the browser drives the shared planner (above) over its existing multi-worker pool instead.
+// Native-only: the executor spawns OS threads (`std::thread::scope`) per job.
+// The browser uses the shared planner with its command worker pool.
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "extract_batch.rs"]
 mod extract_batch;

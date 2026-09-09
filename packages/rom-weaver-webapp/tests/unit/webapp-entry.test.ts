@@ -149,7 +149,7 @@ const loadWebapp = async (options?: {
 }) => {
   vi.resetModules();
   mocks.renders.length = 0;
-  window.history.replaceState({}, "", options?.url ?? "/apply");
+  window.history.replaceState({}, "", options?.url ?? "/apply-patch");
   document.documentElement.dataset.page = options?.notFound ? "not-found" : "app";
   document.documentElement.dataset.betaToolsEnabled = options?.betaTools ? "true" : "false";
   document.body.innerHTML = `<div id="webapp-root" aria-busy="true">${
@@ -233,7 +233,7 @@ describe("boot", () => {
   });
 
   it("hydrates the prerendered shell with the served document's view and settings", async () => {
-    await loadWebapp({ betaTools: true, prerendered: true, url: "/create" });
+    await loadWebapp({ betaTools: true, prerendered: true, url: "/create-patch" });
 
     const hydrationProps = mocks.renders[0];
     expect(hydrationProps?.state.currentView).toBe("creator");
@@ -245,7 +245,7 @@ describe("boot", () => {
   });
 
   it("hydrates a view without a prerendered shell as the patcher", async () => {
-    await loadWebapp({ prerendered: true, url: "/trim" });
+    await loadWebapp({ prerendered: true, url: "/trim-rom" });
 
     expect(mocks.renders[0]?.state.currentView).toBe("patcher");
   });
@@ -285,14 +285,14 @@ describe("boot", () => {
   });
 
   it("logs the url session warnings it parsed at boot", async () => {
-    await loadWebapp({ url: "/apply?bundle=notaurl&rom=/rom.sfc" });
+    await loadWebapp({ url: "/apply-patch?bundle=notaurl&rom=/rom.sfc" });
 
     expect(consoleText()).toContain("url session: bundle= takes precedence; rom=/patch= params are ignored");
     expect(latest().urlSession?.warnings).toContain("bundle= takes precedence; rom=/patch= params are ignored");
   });
 
   it("hands a parsed url session request to the root", async () => {
-    await loadWebapp({ url: "/apply?rom=/roms/rom.sfc&patch=/patches/a.ips" });
+    await loadWebapp({ url: "/apply-patch?rom=/roms/rom.sfc&patch=/patches/a.ips" });
 
     expect(latest().urlSession?.request).toMatchObject({ kind: "direct" });
     expect(latest().state.currentView).toBe("patcher");
@@ -655,7 +655,7 @@ describe("routing", () => {
     await flush();
 
     expect(latest().state.currentView).toBe("creator");
-    expect(window.location.pathname).toBe("/create");
+    expect(window.location.pathname).toBe("/create-patch");
   });
 
   it("starts a guided sample on its own view", async () => {
@@ -677,12 +677,12 @@ describe("routing", () => {
     const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
     await loadWebapp();
 
-    clickAnchor("/create");
+    clickAnchor("/create-patch");
     await flush();
     await nextFrame();
 
     expect(latest().state.currentView).toBe("creator");
-    expect(window.location.pathname).toBe("/create");
+    expect(window.location.pathname).toBe("/create-patch");
     expect(scrollTo).toHaveBeenCalledWith({ behavior: "auto", left: 0, top: 0 });
   });
 
@@ -708,14 +708,14 @@ describe("routing", () => {
     const anchor = clickAnchor("/not-a-route");
     await flush();
 
-    expect(window.location.pathname).toBe("/apply");
+    expect(window.location.pathname).toBe("/apply-patch");
     expect(anchor.isConnected).toBe(true);
   });
 
   it("follows back and forward navigation", async () => {
     await loadWebapp();
 
-    window.history.pushState({}, "", "/create");
+    window.history.pushState({}, "", "/create-patch");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 
@@ -725,12 +725,12 @@ describe("routing", () => {
   it("rewrites the address bar when the requested view is unavailable", async () => {
     await loadWebapp();
 
-    window.history.pushState({}, "", "/trim");
+    window.history.pushState({}, "", "/trim-rom");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 
     expect(latest().state.currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply");
+    expect(window.location.pathname).toBe("/apply-patch");
   });
 
   it("starts the guide named in the address bar after a navigation", async () => {
@@ -740,7 +740,7 @@ describe("routing", () => {
       started.push(String((event as CustomEvent<string>).detail));
     });
 
-    window.history.pushState({}, "", "/apply?guide=bundle");
+    window.history.pushState({}, "", "/apply-patch?guide=bundle");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 
@@ -750,7 +750,7 @@ describe("routing", () => {
   it("does not soft-navigate from the not-found document", async () => {
     await loadWebapp({ notFound: true, url: "/nope" });
 
-    clickAnchor("/create");
+    clickAnchor("/create-patch");
     await flush();
 
     expect(window.location.pathname).toBe("/nope");

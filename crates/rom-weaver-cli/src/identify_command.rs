@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use rom_weaver_checksum::artifact_match::{
     ArtifactFingerprint, ArtifactGameMatch, ArtifactMatchOutcome, ArtifactMatchQuality,
-    ArtifactMatchStatus, ArtifactPackReader, match_artifact,
+    ArtifactMatchStatus, ArtifactPackReader, match_artifact, pack_component_role,
 };
 use rom_weaver_checksum::identify_catalog::{
     IdentifyCatalog, IdentifyPlatformCatalogEntry, IdentifySource,
@@ -15,6 +15,7 @@ use rom_weaver_core::{
 };
 
 use super::identify_database::{IdentifyPackProvider, LoadedPack};
+use super::identify_name_search::{NameQuery, search_packs};
 use super::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -727,7 +728,82 @@ fn push_artifact_matches(
     }
 }
 
+/// The default `--limit` for a name search when the caller states none.
+const DEFAULT_NAME_SEARCH_LIMIT: u32 = 50;
+
+/// Report one name-search hit with the same fields the checksum path fills, so
+/// a reader renders both kinds of match from one shape.
+fn name_search_title_match(
+    database: &str,
+    game: &rom_weaver_checksum::identify_pack_types::PackGame,
+) -> IdentifyTitleMatch {
+    IdentifyTitleMatch {
+        name: game.name.clone(),
+        platform: game.platform.clone(),
+        algorithm: "name".to_string(),
+        variant: "name".to_string(),
+        database: database.to_string(),
+        provenance: game
+            .provenance
+            .iter()
+            .map(|item| IdentifyProvenance {
+                source: item.source.clone(),
+                source_name: item.source_name.clone(),
+                source_url: item.source_url.clone(),
+                source_commit: item.source_commit.clone(),
+                license: item.license.clone(),
+            })
+            .collect(),
+        legacy_variant: game.legacy_variant,
+        dump_tags: game.dump_tags.clone(),
+        alternate_names: game.alternate_names.clone(),
+        expected_components: game
+            .components
+            .iter()
+            .map(|component| IdentifyComponent {
+                role: pack_component_role(component.role),
+                ordinal: component.ordinal,
+                size: component.size,
+                hash_scope: Some(component.hash_scope.clone()),
+                filename: component.filename.clone(),
+                crc32: component.crc32.clone(),
+                md5: component.md5.clone(),
+                sha1: component.sha1.clone(),
+                sha256: component.sha256.clone(),
+            })
+            .collect(),
+        game_id: game.game_id.clone(),
+        region: game.region.clone(),
+        language: game.language.clone(),
+        disc_number: game.disc_number,
+        revision: game.revision.clone(),
+        parent: game.parent.clone(),
+    }
+}
+
 impl CliApp {
+    /// Runs the `--name` search, or rejects `--limit` on a path that cannot
+    /// use it. Returns `None` when the command is an ordinary file or checksum
+    /// lookup and `run_identify` should continue.
+    fn run_identify_name_branch(
+        &self,
+        args: &mut IdentifyCommand,
+        identify_failed: &dyn Fn(String, Option<ThreadExecution>) -> OperationReport,
+    ) -> Option<AppRunOutcome> {
+        if let Some(query) = args.name.take() {
+            return Some(self.finish_identify_by_name(&query, args));
+        }
+        // `--limit` only caps a name search, so accepting it silently on the
+        // file and checksum paths would promise a cap that never applies.
+        if args.limit.is_some() {
+            return Some(self.finish(
+                "identify",
+                identify_failed("--limit applies to --name only".to_string(), None),
+            ));
+        }
+        None
+    }
+
     pub(super) fn run_identify(&self, mut args: IdentifyCommand) -> AppRunOutcome {
         if let Some(IdentifySubcommands::Database(command)) = args.subcommand.take() {
             return self.run_identify_database(command);
@@ -741,6 +817,9 @@ impl CliApp {
                 thread_execution,
             )
         };
+        if let Some(outcome) = self.run_identify_name_branch(&mut args, &identify_failed) {
+            return outcome;
+        }
         let has_hash = !args.hash.is_empty();
         if args.input.is_some() == has_hash {
             return self.finish(
@@ -817,6 +896,8 @@ impl CliApp {
             input: _,
             hash: _,
             size: _,
+            name: _,
+            limit: _,
             database,
             system,
             offline: _,
@@ -1220,6 +1301,151 @@ impl CliApp {
         );
         report.details = Some(json!({ "identify": result }));
         self.finish("identify", report)
+    }
+
+    /// Report a name search, turning any validation failure into the standard
+    /// failed identify report.
+    fn finish_identify_by_name(&self, query: &str, args: &IdentifyCommand) -> AppRunOutcome {
+        match self.identify_by_name(query, args) {
+            Ok(report) => self.finish("identify", report),
+            Err(error) => self.finish(
+                "identify",
+                OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("identify".to_string()),
+                    "identify",
+                    error.to_string(),
+                    None,
+                ),
+            ),
+        }
+    }
+
+    /// Search the selected packs by game name. The packs MUST be chosen
+    /// explicitly: an unscoped search would load every installed pack.
+    fn identify_by_name(&self, query: &str, args: &IdentifyCommand) -> Result<OperationReport> {
+        if args.input.is_some() || !args.hash.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "--name searches the database by title, so it cannot be combined with --input or \
+                 --hash"
+                    .to_string(),
+            ));
+        }
+        if args.database.is_empty() && args.system.is_none() {
+            return Err(RomWeaverError::Validation(
+                "--name needs an explicit pack selection: pass --system <SYSTEM> or --database \
+                 <PACK>"
+                    .to_string(),
+            ));
+        }
+        // A zero limit would report `unknown` for a query that does match, so
+        // the report would deny a title the database holds.
+        if args.limit == Some(0) {
+            return Err(RomWeaverError::Validation(
+                "--limit must be at least 1".to_string(),
+            ));
+        }
+        let selected = Self::packs_for_name_search(args)?;
+        let parsed = NameQuery::new(query)?;
+        let games: Vec<&[rom_weaver_checksum::identify_pack_types::PackGame]> = selected
+            .iter()
+            .map(|selected| {
+                let IdentifyPackFile::V1(pack) = &selected.pack.file;
+                pack.games()
+            })
+            .collect();
+        let limit = args.limit.unwrap_or(DEFAULT_NAME_SEARCH_LIMIT) as usize;
+        trace!(
+            query,
+            packs = games.len(),
+            candidates = games.iter().map(|games| games.len()).sum::<usize>(),
+            limit,
+            "starting identify name search"
+        );
+        let mut hits = search_packs(&parsed, &games);
+        hits.truncate(limit);
+        let matches: Vec<IdentifyTitleMatch> = hits
+            .iter()
+            .map(|hit| {
+                name_search_title_match(&selected[hit.pack].pack.name, &games[hit.pack][hit.game])
+            })
+            .collect();
+        let status = if matches.is_empty() {
+            IdentifyStatus::Unknown
+        } else {
+            IdentifyStatus::Matched
+        };
+        let label = match status {
+            IdentifyStatus::Unknown => format!("no title name matched `{query}`"),
+            _ => format!("found {} titles matching `{query}`", matches.len()),
+        };
+        let result = IdentifyResult {
+            status,
+            input: query.to_string(),
+            detected_platform: None,
+            checksums: BTreeMap::new(),
+            checksum_variants: Vec::new(),
+            matches,
+            quality: None,
+            platform_candidates: Vec::new(),
+            media: None,
+            components: Vec::new(),
+            database: None,
+            evidence: None,
+            condition: None,
+            hint: None,
+        };
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("identify".to_string()),
+            "identify",
+            label,
+            Some(100.0),
+            None,
+        );
+        report.details = Some(json!({ "identify": result }));
+        Ok(report)
+    }
+
+    /// The packs a name search reads: the explicit `--database` packs, else the
+    /// one pack `--system` routes to.
+    fn packs_for_name_search(args: &IdentifyCommand) -> Result<Vec<SelectedPack>> {
+        if !args.database.is_empty() {
+            return Self::load_explicit_packs(&args.database);
+        }
+        let system = args.system.as_deref().expect("--system is present");
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = system;
+            Err(RomWeaverError::Validation(
+                "the browser identify command requires a staged --database pack".to_string(),
+            ))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let provider = IdentifyPackProvider::new(args.database_dir.clone())?;
+            let entry = provider
+                .resolve_entry(system)
+                .or_else(|| IdentifyCatalog::builtin().resolve_platform(system).cloned())
+                .ok_or_else(|| {
+                    RomWeaverError::Validation(format!(
+                        "unknown system `{system}`: it is not in the identify catalog. Run \
+                         `rom-weaver identify database list` to see the known platform names and \
+                         aliases"
+                    ))
+                })?;
+            let pack = provider.pack_for_slug(&entry.pack_slug)?.ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "no identify pack is installed for {}; this install shipped no identify \
+                     database, or pass `--database-dir` with an existing one",
+                    entry.canonical_platform
+                ))
+            })?;
+            Ok(vec![SelectedPack {
+                pack,
+                entry: Some(entry),
+            }])
+        }
     }
 
     /// Parse the packs named by `--database`. Any parse failure fails the

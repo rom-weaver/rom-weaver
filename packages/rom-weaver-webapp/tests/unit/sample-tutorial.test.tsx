@@ -105,13 +105,13 @@ describe("sample tutorial start", () => {
         downloadLabel="Download a test bundle"
         downloadName="first-weave.zip"
         error=""
-        guideHref="/apply?guide=apply"
+        guideHref="/apply-patch?guide=apply"
         label="Start guided Apply"
         loading={false}
         onStart={onStart}
         onSecondaryStart={onSecondaryStart}
         secondaryLabel="Create a sharable bundle"
-        secondaryHref="/apply?guide=bundle"
+        secondaryHref="/apply-patch?guide=bundle"
       />,
     );
 
@@ -121,18 +121,18 @@ describe("sample tutorial start", () => {
     expect(download.hasAttribute("download")).toBe(true);
 
     const guidedApply = screen.getByRole("link", { name: /Start guided Apply/ });
-    expect(guidedApply.getAttribute("href")).toBe("/apply?guide=apply");
+    expect(guidedApply.getAttribute("href")).toBe("/apply-patch?guide=apply");
     fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
     const guidedBundle = screen.getByRole("link", { name: /Create a sharable bundle/ });
-    expect(guidedBundle.getAttribute("href")).toBe("/apply?guide=bundle");
+    expect(guidedBundle.getAttribute("href")).toBe("/apply-patch?guide=bundle");
     fireEvent.click(guidedBundle);
     expect(onSecondaryStart).toHaveBeenCalledOnce();
   });
 });
 
 it("removes the guide query when the tutorial ends", () => {
-  window.history.replaceState(null, "", "/apply?guide=apply");
+  window.history.replaceState(null, "", "/apply-patch?guide=apply");
   const onClose = vi.fn();
   render(
     <div className="rw-app">
@@ -212,9 +212,11 @@ describe("sample tutorial", () => {
     const region = document.querySelector("[aria-live]");
     expect(region?.textContent).toContain("First section");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    // The card commits the new step when its exit animation settles, so the
+    // text lands a frame later than the click.
+    await waitFor(() => expect(region?.textContent).toContain("Second section"));
     // Same node, new content - a region inserted alongside its content never announces.
     expect(document.querySelector("[aria-live]")).toBe(region);
-    expect(region?.textContent).toContain("Second section");
   });
 
   it("moves focus into the guide so it is reachable once the trigger unmounts", () => {

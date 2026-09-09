@@ -2,7 +2,7 @@
 
 Use the Test page to play a local ROM or check an Apply result. The ROM stays on your device.
 
-If you need a practice file, open [guided Test](https://rom-weaver.com/test?guide=test). It loads a tiny homebrew NES ROM from this project.
+If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?guide=test). It loads a tiny homebrew NES ROM from this project.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -24,6 +24,8 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test?guid
 3. Use the controls inside the emulator player.
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
+
+A PlayStation, Saturn, or Mega Drive / Sega CD disc image in CHD opens without extraction. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform is extracted first.
 
 [Browser emulator support](../reference/formats.md#browser-emulator-support) lists the platforms with bundled cores.
 

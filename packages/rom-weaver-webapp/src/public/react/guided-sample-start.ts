@@ -8,10 +8,10 @@ const GUIDED_SAMPLE_VIEWS = {
 type GuidedSample = keyof typeof GUIDED_SAMPLE_VIEWS;
 
 const GUIDED_SAMPLE_HREFS = {
-  apply: "/apply?guide=apply",
-  bundle: "/apply?guide=bundle",
-  create: "/create?guide=create",
-  test: "/test?guide=test",
+  apply: "/apply-patch?guide=apply",
+  bundle: "/apply-patch?guide=bundle",
+  create: "/create-patch?guide=create",
+  test: "/test-rom?guide=test",
 } as const;
 
 const readGuidedSampleFromSearch = (search: string): GuidedSample | null => {

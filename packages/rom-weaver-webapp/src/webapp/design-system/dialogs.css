@@ -63,14 +63,6 @@
   padding: var(--sp-l);
   border-block-end: 1px solid var(--seam-soft);
 }
-.dlg-title {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
 .dlg-actions {
   display: inline-flex;
   gap: var(--sp-s);
@@ -149,9 +141,6 @@
   align-items: flex-end;
   padding-block-end: 0;
 }
-.rw-app .log-dlg .dlg-title {
-  flex: 0 1 auto;
-}
 /* Close shares the rail's row but not its baseline - sitting it on the rule
    would read as one more tab. Every other control moved to the bar below.
    It also drops the box every other dialog's close wears: in a rail of bare
@@ -183,11 +172,6 @@
 .rw-app .log-actions > * {
   flex: 0 1 auto;
   min-inline-size: max-content;
-}
-.rw-app .log-actions .log-icon-btn {
-  flex: 0 0 30px;
-  inline-size: 30px;
-  padding-inline: 0;
 }
 .rw-app .log-actions .btn.copied {
   color: var(--verified);
@@ -458,6 +442,7 @@
   border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam));
   border-radius: var(--r-s);
 }
+.rw-app .log-actions .log-icon-btn,
 .rw-app .log-refresh {
   flex: 0 0 30px;
   inline-size: 30px;
@@ -1210,9 +1195,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   color: var(--verified);
   border-color: color-mix(in oklab, var(--verified) 35%, transparent);
 }
-/* A cache standing by is not a cache in use, and one tint of green apart was not
-   telling anyone that. Stored, not serving: no colour of its own, and the glyph
-   is a box rather than a cloud. */
+/* Stored caches use a neutral color to distinguish them from the serving cache. */
 .rw-app .sw-chip[data-sw="ready"] {
   color: var(--ink-2);
 }
@@ -1324,7 +1307,6 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   color: var(--weft);
 }
 
-/* phones: the inspector and settings take the whole screen */
 @media (max-width: 719px) {
   .rw-app .log-dlg {
     max-width: 100vw;

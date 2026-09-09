@@ -4,12 +4,17 @@
 target/*
 !target/identify-release
 !target/identify-release/**
+!target/identify-data
+!target/identify-data/**
 **/node_modules
 **/dist
 **/.vitest-attachments
 **/__screenshots__
-crates/rom-weaver-cli/data/identify/v1/*.pack
-crates/rom-weaver-cli/data/identify/v1/index.json
+# The built identify tree is generated, never a build input: both images build
+# it inside the image or copy it from `target/` with `IDENTIFY_DATA=prebuilt`.
+# Left in, a pack change would invalidate the `COPY . .` layer and the whole
+# wasm compile behind it.
+crates/rom-weaver-cli/data/identify/v1/*
 prototype
 third_party
 *.log
@@ -49,4 +54,10 @@ docs/*
 !docs/screenshots/**
 !docs/legal
 !docs/legal/**
+# The release image copies the generated man pages and completions from here
+# (`docs-prebuilt` in the Dockerfile) after docker-publish.yml extracts them.
+!docs/man
+!docs/man/**
+!docs/completions
+!docs/completions/**
 packages/rom-weaver-webapp/tests

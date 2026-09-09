@@ -1126,6 +1126,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
 
   const createModel = (): CreatePatchFormViewModel => ({
+    done: !!completedOutput,
+    onSelectTab: props.onSelectTab,
     dialog: (
       <>
         {candidateSelectionDialog}
@@ -1187,8 +1189,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       ) : null,
       big: createSourcesEmpty,
       disabled: uploadDisabled,
-      heroLabel: "Drop or click to add the original and modified ROMs",
-      heroLabelCoarse: "Tap to add the original and modified ROMs",
+      heroLabel: "Drop or click to add original and modified ROMs or archives",
+      heroLabelCoarse: "Tap to add original and modified ROMs or archives",
       id: "patch-builder-row-unified-drop",
       inputId: "patch-builder-input-file-unified",
       onFiles: handleUnifiedDrop,

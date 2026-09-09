@@ -162,8 +162,8 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(romInput).toBeInTheDocument();
 
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /apply/i })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: /create/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Apply Patch" })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Create Patch" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
@@ -174,7 +174,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await waitForInputStackFile("game.bin");
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
   // The output section (and its apply button) renders once the workflow has files.
-  await expect.element(page.getByRole("button", { name: /apply & download/i })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Apply & download" })).toBeInTheDocument();
 
   await page.getByRole("button", { name: "Clear ROM input" }).click();
   await expect
@@ -193,19 +193,19 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
   mountWebappRoot();
-  // Docs is reference rather than a workflow, but it rides in the rail so the
-  // readers it is written for do not have to go hunting for it.
+  // The rail holds the three workflows; Docs is reference and files under More
+  // with the beta tools, which stay hidden while the setting is off.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply", "Create", "Docs", "Test"]);
+    .toEqual(["Apply Patch", "Create Patch", "Test ROM"]);
   await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Identify" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
 });
 
 const dropOnPage = async (fileName) => {
@@ -216,7 +216,7 @@ const dropOnPage = async (fileName) => {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 120));
 };
 
-/* Regression: Identify used to exist twice - once at /identify and once inside
+/* Regression: Identify used to exist twice - once at /identify-rom and once inside
    the old Tools page - so one page drop reached two forms and both wrote the
    same activity-store key. PPF undo mounts no IdentifyForm at all. */
 test("only one Identify workflow ever consumes a page drop", async () => {
@@ -248,11 +248,11 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
     mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
     await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
-    await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
     // Identify is one click from More: it has its own route, so it never hid
     // behind the old Tools page.
-    await expect.element(page.getByRole("menuitem", { name: "Identify" })).toBeInTheDocument();
-    await page.getByRole("menuitem", { name: "PPF undo" }).click();
+    await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).toBeInTheDocument();
+    await page.getByRole("menuitem", { name: "PPF undo Beta" }).click();
     // Only ONE Identify form can exist. PPF undo links nowhere near it, so a page
     // drop has exactly one consumer and the two cannot fight over the activity key.
     expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
@@ -270,14 +270,14 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
       // than tooltipped like the actions cluster it left. The label is a flex
       // item inside `.mode-more`, so its computed display blockifies - that it
       // is not `none` is the assertion, alongside the missing tooltip.
-      const moreLabel = document.querySelector(".mode-more .tool-text");
+      const moreLabel = document.querySelector(".desktop-more .mode-more .tool-text");
       expect(getComputedStyle(moreLabel).display).not.toBe("none");
       expect(moreLabel.textContent).toBe("More");
-      expect(document.querySelector(".mode-more .tip")).toBeNull();
+      expect(document.querySelector(".desktop-more .mode-more .tip")).toBeNull();
       await page.getByRole("button", { name: "Settings" }).first().hover();
       await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
     }
-    await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
   }
   await page.viewport(1280, 900);
@@ -452,8 +452,12 @@ test("the New here? beacon stays compact and its popover carries every start act
 
   chip.click();
   await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
-  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe("/apply?guide=apply");
-  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe("/apply?guide=bundle");
+  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
+    "/apply-patch?guide=apply",
+  );
+  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe(
+    "/apply-patch?guide=bundle",
+  );
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);
@@ -516,7 +520,7 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
 
   const rail = document.querySelector(".log-dlg .dialog-subrail");
   const tabs = Array.from(document.querySelectorAll(".log-dlg .dialog-subrail .subtab"));
-  expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage", "Changelog"]);
+  expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage"]);
   expect(new Set(tabs.map((tab) => tab.getBoundingClientRect().top)).size).toBe(1);
   expect(rail?.scrollHeight).toBe(rail?.clientHeight);
   expect(document.querySelector('[data-logtab="test"]')).toBeNull();

@@ -109,9 +109,9 @@ The matrix requests a screen wake lock while a run is active, releases it when t
 
 Each command uses a shared `WebAssembly.Memory`. On real iOS hardware, creating successive memories in one long-lived worker retained enough address-space reservations that the seventh command failed before WASM started. Reusing one memory across fresh WASI CLI instances was also invalid because allocator and process state cannot be restarted safely in the old heap.
 
-The workaround is deliberately limited to Apple mobile WebKit (all iPhone and iPad browsers): cap shared WASM memory at the existing 1 GiB mobile ceiling and terminate a worker after its command. Fresh workers still reuse the compiled `WebAssembly.Module`, browser asset cache, and OPFS data. There is no run-count threshold or delay because the WebAssembly API provides no explicit memory disposal operation.
+The command runner in `src/workers/rom-weaver/rom-weaver-runner.ts` terminates a mobile runner after work whose estimated memory is at least 32 MiB or whose scheduled thread count exceeds one. This applies to Android and Apple mobile browsers. Light commands can reuse one idle runner during a short burst. After 250 ms, idle eviction releases it once the pool and operation scheduler have no active or queued work.
 
-Android keeps worker reuse enabled. The retained-reservation failure is documented in WebKit, not Chromium/V8, and the reused-worker exhaustive matrix passes under Chromium. Android still uses the general 1 GiB mobile operation ceiling to prevent concurrent jobs from overcommitting device memory.
+Apple mobile WebKit also caps each shared WASM memory at 1 GiB. All mobile runtimes use a 1 GiB operation memory ceiling. Fresh workers can reuse the compiled `WebAssembly.Module`, browser asset cache, and OPFS data without retaining the previous worker's heap. The WebAssembly API has no explicit memory disposal operation.
 
 References:
 

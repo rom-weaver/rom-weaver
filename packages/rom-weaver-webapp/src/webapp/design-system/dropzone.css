@@ -65,7 +65,7 @@
    panel and presses flat against its edges. The svh term is what makes it shrink
    instead. */
 .rw-app .drop.hero {
-  gap: clamp(20px, min(4.8vw, 7svh), 62px);
+  gap: clamp(20px, min(4vw, 5.2svh), 48px);
   justify-content: center;
   min-height: 0;
   padding: 0;
@@ -183,7 +183,7 @@
 .rw-app .drop.hero .drop-base {
   display: flex;
   flex-direction: column;
-  gap: clamp(12px, min(2.6vw, 3.8svh), 34px);
+  gap: clamp(12px, min(2.2vw, 2.8svh), 26px);
   align-items: center;
   align-self: stretch;
 }
@@ -275,26 +275,29 @@
   display: none;
 }
 .rw-app .hero-lead .lead-title {
-  /* System UI fonts have no portable width axis. Expand the layout width to
-     keep wrapping aligned with the visually condensed title. */
-  --hero-title-scale: 0.86;
-  width: min(calc(97% / var(--hero-title-scale)), calc(1160px / var(--hero-title-scale)));
-  max-width: none;
+  width: 100%;
+  max-width: 52rem;
   margin-inline: 0;
-  font-size: clamp(1.2rem, min(3.25vw, 7.2svh), 2.5rem);
+  font-size: clamp(1.75rem, min(4.5vw, 8svh), 3.5rem);
   font-weight: 760;
   line-height: 1.14;
   color: var(--ink);
   letter-spacing: -0.018em;
   text-wrap: balance;
-  transform: scaleX(var(--hero-title-scale));
-  transform-origin: center;
 }
 .rw-app .hero-lead .lead-line {
-  display: inline;
+  display: block;
 }
 .rw-app .hero-lead .lead-accent {
   color: var(--thread-text);
+}
+.rw-app .hero-lead .lead-description {
+  max-width: 48ch;
+  font-size: clamp(0.85rem, 1.2vw, 1rem);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--ink-2);
+  text-wrap: pretty;
 }
 .rw-app .hero-lead .lead-sub {
   display: inline-flex;
@@ -394,6 +397,37 @@
   .rw-app .drop.hero .formats-set + .formats-set {
     display: none;
   }
+}
+.rw-app .hero-formats-help {
+  padding: 0 var(--pad) var(--sp-s);
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  text-align: center;
+}
+.rw-app .hero-formats-help > summary {
+  width: fit-content;
+  min-height: 44px;
+  padding: 12px 8px;
+  margin-inline: auto;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.rw-app .hero-formats-help > summary:active {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .hero-formats-help > summary:hover {
+    color: var(--thread-text);
+  }
+}
+.rw-app .hero-formats-help > .info-support {
+  padding: var(--sp-m);
+  text-align: start;
+  overflow-wrap: anywhere;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
 }
 
 .rw-app .drop.staging {
@@ -584,20 +618,15 @@
    claims a healthy share of the viewport, capped so the thesis + ghost steps
    below still fit above the fold */
 .rw-app .step.is-input.is-empty .drop.hero {
-  min-height: clamp(360px, calc(100svh - var(--hero-chrome)), 920px);
+  min-height: clamp(360px, calc(100svh - var(--hero-chrome) - var(--hero-extra-h, 0px)), 920px);
   /* Border-box padding, so at comfortable heights the min-height still governs
      and this only absorbs slack. Once the stack outgrows the panel it is the
      margin that keeps the headline off the seam instead of flush against it. */
   padding-block: clamp(12px, 2.4svh, 28px);
 }
-/* The checksum footer is part of the hero's frame, so the hero gives up the
-   footer's height to keep the thesis and the ghost steps above the fold. */
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero {
-  gap: clamp(16px, min(4vw, 5.2svh), 48px);
-  min-height: clamp(300px, calc(100svh - var(--hero-chrome) - var(--hero-search-h)), 920px);
-}
-.rw-app .step.is-input.is-empty:has(> .step-body > .identify-hash--hero) .drop.hero .drop-base {
-  gap: clamp(10px, min(2.2vw, 2.8svh), 26px);
+/* The hero MUST reserve space for its visible checksum form. */
+.rw-app .step.is-input.is-empty:has(> .step-body .identify-hash) {
+  --hero-extra-h: 100px;
 }
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;

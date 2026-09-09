@@ -1,9 +1,7 @@
 //! Checksum and varint I/O helpers shared by the patch format handlers.
 //!
-//! These were previously duplicated byte-for-byte (or near so) inside the BPS
-//! and UPS modules. Per-format constants (buffer sizes, footer sizes, error
-//! strings) stay in the format modules and are passed in by each call site so
-//! behavior remains identical per format.
+//! Callers supply per-format constants and error strings so diagnostics keep
+//! their format-specific wording.
 
 use std::{
     fs::File,

@@ -27,7 +27,7 @@ describe("readDocsSlugFromPathname", () => {
   });
 
   it("falls back to docs root when there is no docs segment", () => {
-    expect(readDocsSlugFromPathname("/apply")).toBe("docs");
+    expect(readDocsSlugFromPathname("/apply-patch")).toBe("docs");
   });
 
   it("falls back to docs root for an empty pathname", () => {

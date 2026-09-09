@@ -7,6 +7,7 @@ type EmulatorDocumentOptions = {
 
 type EmulatorGameIdentityInput = {
   checksum: string;
+  fileName?: string;
 };
 
 const hashString = (value: string): number => {
@@ -18,14 +19,25 @@ const hashString = (value: string): number => {
   return hash >>> 0 || 1;
 };
 
-const createEmulatorGameIdentity = ({ checksum }: EmulatorGameIdentityInput) => {
+/**
+ * EmulatorJS names the file it writes into the core's filesystem after
+ * `EJS_gameName` whenever the game URL is a blob URL, which ours always is. A
+ * CHD MUST therefore keep its extension on that name: the disc cores dispatch
+ * the CHD reader on it (yabause matches `.CHD`, genesis_plus_gx `.chd`), and an
+ * extensionless file is read as a raw image instead. No other input gets a
+ * suffix - the name keys saved games and states, so changing it for a format
+ * that already works would orphan every save made under the bare checksum.
+ * `gameId` stays keyed by the checksum alone for the same reason.
+ */
+const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentityInput) => {
   const normalizedChecksum = checksum.replace(/[^a-f0-9]/gi, "").toLowerCase();
   if (!/^[a-f0-9]{40}$/.test(normalizedChecksum)) {
     throw new Error("The emulator game identity requires a SHA-1 checksum.");
   }
+  const suffix = /\.chd$/i.test((fileName || "").trim()) ? ".chd" : "";
   return {
     gameId: hashString(normalizedChecksum),
-    gameName: normalizedChecksum,
+    gameName: `${normalizedChecksum}${suffix}`,
   };
 };
 

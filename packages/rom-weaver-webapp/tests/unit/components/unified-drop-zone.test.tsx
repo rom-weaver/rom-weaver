@@ -43,6 +43,26 @@ describe("UnifiedDropZone", () => {
     expect(step?.classList.contains("is-empty")).toBe(false);
     expect(step?.querySelector(".drop.hero")).toBeNull();
     expect(step?.querySelector(".drop .main.btnish")).toBeTruthy();
+    expect(step?.querySelector(".hero-formats-help")).toBeNull();
+  });
+
+  it("keeps the full supported list outside the file-picker label", () => {
+    const { container } = render(
+      <UnifiedDropZone
+        big
+        addLabel="Add files"
+        heroLabel="Drop files"
+        heroLabelCoarse="Tap to add files"
+        onFiles={() => undefined}
+        supported={[{ label: "ROMs", extensions: ["sfc", "nes", "iso", "bin", "gba", "nds"] }]}
+      />,
+    );
+    expect(container.querySelectorAll(".formats-set:first-child .fmt")).toHaveLength(6);
+    const disclosure = container.querySelector("details.hero-formats-help");
+    expect(disclosure?.hasAttribute("open")).toBe(false);
+    expect(disclosure?.querySelector("summary")?.textContent).toBe("Supported formats");
+    expect(disclosure?.textContent).toContain("sfc, nes, iso, bin, gba, nds");
+    expect(disclosure?.closest("label")).toBeNull();
   });
 
   it("opens the existing file input from the Inputs heading action", () => {

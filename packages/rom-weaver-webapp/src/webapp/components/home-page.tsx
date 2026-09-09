@@ -64,9 +64,9 @@ const buildFlows = (route: (slug: string) => string): Flow[] => [
   {
     bring: "A ROM and one or more patches, in any order you choose.",
     get: "The patched ROM with checksums checked. Save the chain as a bundle to replay or share it.",
-    href: route("apply"),
+    href: route("apply-patch"),
     primary: true,
-    title: "Apply",
+    title: "Apply Patch",
   },
   {
     bring: (
@@ -75,20 +75,20 @@ const buildFlows = (route: (slug: string) => string): Flow[] => [
       </>
     ),
     get: "One file that pins patch order, expected checksums, and output names. Open it and the workflow is ready to run.",
-    href: `${route("apply")}?guide=bundle`,
+    href: `${route("apply-patch")}?guide=bundle`,
     title: "Bundle",
   },
   {
     bring: "An original file and your modified copy.",
     get: "A patch in the format you choose, small enough to share.",
-    href: route("create"),
-    title: "Create",
+    href: route("create-patch"),
+    title: "Create Patch",
   },
   {
     bring: "A ROM you just patched, or one from disk.",
     get: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
-    href: route("test"),
-    title: "Test",
+    href: route("test-rom"),
+    title: "Test ROM",
   },
 ];
 
@@ -106,20 +106,20 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
     <section aria-labelledby="home-title" className="home-page" id="panel-home">
       <div className="home-wrap home-hero">
         <div className="home-hero-head">
-          <p className="home-eyebrow">Local-first ROM and disc image toolkit</p>
+          <p className="home-eyebrow">Your ROM and disc image toolkit</p>
           <h1 id="home-title">
-            Patch, pack, and prove your ROMs. <em>Nothing leaves your machine.</em>
+            Your ROMs. Your changes. <em>All on your device.</em>
           </h1>
         </div>
         <div className="home-hero-body">
           <p className="home-lede">
-            rom-weaver reads every common cartridge and disc container, chains patches in the order you choose, and
-            saves the whole recipe as a bundle: patch order, checksums, and output names, so anyone can replay it
-            exactly. Use it in the browser or in the terminal.
+            Apply translations, combine patches, and create patches of your own. Work with ROMs and disc images,
+            compressed or raw, in your browser or terminal. Save your patch order and checksums in a reusable bundle so
+            others can apply the same changes.
           </p>
           <div className="home-cta">
-            <a className="btn primary lg" href={route("apply")}>
-              Open the webapp
+            <a className="btn primary lg" href={route("apply-patch")}>
+              Apply a patch
               <ArrowIcon />
             </a>
             <a className="btn ghost lg" href="#home-cli">

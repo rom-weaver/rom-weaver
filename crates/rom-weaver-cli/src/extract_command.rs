@@ -282,8 +282,8 @@ impl CliApp {
     /// any nested containers among the outputs, and return the bottom/leaf `emitted_files` detail
     /// objects (folding in disc-group structure) plus the count of nested containers descended.
     /// Shared by `extract` (which wraps the leaves into its report) and `ingest` (which checksums
-    /// each leaf). Reuses [`Self::extract_nested_archives`] so nested provenance/read-on-main rules
-    /// are preserved identically.
+    /// each leaf). Reuses [`Self::extract_nested_archives`] so nested provenance
+    /// is preserved identically.
     pub(super) fn assemble_extracted_leaves(
         &self,
         inputs: AssembleExtractedLeavesInputs<'_>,

@@ -137,7 +137,7 @@ test("cancelling active apply clears apply-time extraction progress without reru
       return (
         applyButton instanceof HTMLButtonElement &&
         !applyButton.disabled &&
-        /apply/i.test(applyButton.textContent || "")
+        (applyButton.textContent || "").includes("Apply & download")
       );
     })
     .toBe(true);

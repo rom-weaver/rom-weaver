@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { Masthead, Reveal, SiteFooter, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 
 /**
  * App-shell contract: the masthead tablist and the phone dock (both named
@@ -22,17 +23,33 @@ const withSettings = (children: ReactNode) => (
 const TABS = [
   { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
-  { href: "ppf-undo", icon: <svg aria-hidden="true" />, id: "ppf-undo", label: "PPF undo" },
-];
+  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: <svg aria-hidden="true" />,
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "ppf-undo",
+    icon: <svg aria-hidden="true" />,
+    id: "ppf-undo",
+    label: "PPF undo",
+    placement: "more",
+  },
+] satisfies WorkflowTab[];
 
 const mastheadProps = {
   currentTab: "patcher",
   homeHref: "/apply",
   githubHref: "https://example.com/repo",
-  onOpenChangelog: () => undefined,
+  onOpenWhatsNew: () => undefined,
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onOpenStatus: () => undefined,
@@ -62,11 +79,12 @@ describe("Masthead", () => {
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
 
     for (const [list, selectedClass, labels] of [
-      [rail, "mode", ["Apply", "Create", "Docs", "Test"]],
-      [dock, "dock-tab", ["Apply", "Create", "Docs", "Test"]],
+      [rail, "mode", ["Apply", "Create", "Test"]],
+      [dock, "dock-tab", ["Apply", "Create", "Test"]],
     ] as const) {
       const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
       expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
+      expect(list?.querySelector('[data-mode="docs"]')).toBeNull();
       expect(list?.querySelector('[data-mode="trim"]')).toBeNull();
       expect(list?.querySelector('[data-mode="ppf-undo"]')).toBeNull();
       expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
@@ -112,7 +130,7 @@ describe("Masthead", () => {
 
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
-    const { container, getByRole, queryByRole } = render(
+    const { container, getByRole } = render(
       withSettings(
         <Masthead
           {...mastheadProps}
@@ -134,12 +152,46 @@ describe("Masthead", () => {
     expect(menuStatus.classList.contains("more-status")).toBe(true);
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
-    expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
-    expect(getByRole("menuitem", { name: "Trim" })).toBeTruthy();
-    expect(getByRole("menuitem", { name: "PPF undo" })).toBeTruthy();
+    // Docs and the beta tools file under their own headed groups.
+    // Real links: a middle-click or "open in new tab" still reaches the route.
+    expect(getByRole("menuitem", { name: "Docs" }).getAttribute("href")).toBe("docs");
+    // With the selected workflow in the rail, More is not "you are here".
+    expect(more.classList.contains("is-current")).toBe(false);
+    expect(getByRole("menuitem", { name: "Trim Beta" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "PPF undo Beta" })).toBeTruthy();
+    expect(getByRole("group", { name: "Tools" })).toBeTruthy();
+    expect(getByRole("group", { name: "Docs" })).toBeTruthy();
+    expect(getByRole("group", { name: "Project" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "What\u2019s new" })).toBeTruthy();
+    // The head row keeps the app's own surfaces one tap away on desktop too.
+    expect(getByRole("menuitem", { name: "Settings" }).classList.contains("more-head-item")).toBe(true);
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
     expect(more.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("marks More current when the selected workflow lives inside it", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
+    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
+    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
+  });
+
+  it("marks More current on What's new, which has no rail tab of its own", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="whats-new" />));
+    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
+    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
+  });
+
+  it("keeps the What's new row a real link so a modified click opens it normally", () => {
+    const onSelectTab = vi.fn();
+    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    const row = getByRole("menuitem", { name: "What\u2019s new" }) as HTMLAnchorElement;
+    expect(row.getAttribute("href")).toBe("whats-new");
+    fireEvent.click(row, { ctrlKey: true });
+    expect(onSelectTab).not.toHaveBeenCalled();
+    fireEvent.click(row);
+    expect(onSelectTab).toHaveBeenCalledWith("whats-new");
   });
 
   it("activates a tab with Space as well as Enter", () => {
@@ -153,7 +205,7 @@ describe("Masthead", () => {
   });
 
   it("carries the build, thread count and runtime state on the brand sub-line", () => {
-    const onOpenChangelog = vi.fn();
+    const onOpenWhatsNew = vi.fn();
     const onOpenSettings = vi.fn();
     const onOpenStatus = vi.fn();
     const { container, rerender } = render(
@@ -162,7 +214,7 @@ describe("Masthead", () => {
           {...mastheadProps}
           commitsSinceVersion={3}
           dirty
-          onOpenChangelog={onOpenChangelog}
+          onOpenWhatsNew={onOpenWhatsNew}
           offlineProgress={{ cachedBytes: 1, ready: true, totalBytes: 1 }}
           onOpenSettings={onOpenSettings}
           onOpenStatus={onOpenStatus}
@@ -173,7 +225,7 @@ describe("Masthead", () => {
     const buildTag = container.querySelector(".build-tag .sub-link") as HTMLButtonElement;
     expect(buildTag.textContent).toBe("v1.2.3+3*");
     fireEvent.click(buildTag);
-    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
 
     const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
     expect(threads.textContent).toBe("8 Threads");
@@ -221,7 +273,7 @@ describe("Masthead", () => {
     expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
-  it("links pull request build tags to their pull request and channels to the changelog", () => {
+  it("links pull request build tags to their pull request and channels to What's new", () => {
     const { container, getByRole, rerender } = render(
       withSettings(<Masthead {...mastheadProps} channelBadge="pr-123" />),
     );
@@ -266,7 +318,7 @@ describe("Masthead", () => {
       withSettings(
         <>
           <Masthead {...mastheadProps} />
-          <SiteFooter donateHref="https://example.com/donate" githubHref="https://example.com/repo" />
+          <SiteFooter docsHref="docs" donateHref="https://example.com/donate" githubHref="https://example.com/repo" />
         </>,
       ),
     );
@@ -276,6 +328,8 @@ describe("Masthead", () => {
     expect(getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe("https://example.com/repo");
     expect(getByRole("link", { name: "Support" }).closest(".site-footer")).toBe(footer);
     expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
+    // The one crawlable path to the guides now that the rail has no Docs tab.
+    expect(getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
     expect(container.querySelector(".masthead-tools a")).toBeNull();
   });
 
@@ -330,24 +384,24 @@ describe("Reveal", () => {
 describe("UpdateBanner", () => {
   it("offers reload, release notes, and dismissal", () => {
     const onDismiss = vi.fn();
-    const onOpenChangelog = vi.fn();
+    const onOpenWhatsNew = vi.fn();
     const onReload = vi.fn();
     const { container } = render(
       withSettings(
         <UpdateBanner
           onDismiss={onDismiss}
-          onOpenChangelog={onOpenChangelog}
+          onOpenWhatsNew={onOpenWhatsNew}
           onReload={onReload}
           open
           title="A newer app version is ready."
         />,
       ),
     );
-    const changelogButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
-    expect(changelogButton.textContent).toBe("What’s new");
-    expect(changelogButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
-    fireEvent.click(changelogButton);
-    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    const whatsNewButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
+    expect(whatsNewButton.textContent).toBe("What’s new");
+    expect(whatsNewButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
+    fireEvent.click(whatsNewButton);
+    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
     expect(onReload).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);

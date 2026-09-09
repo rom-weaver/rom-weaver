@@ -1,36 +1,11 @@
 name: Cache cleanup
 
-# GitHub gives a repository 10 GiB of Actions cache and evicts least-recently-
-# used entries once that fills. Two kinds of dead weight fill it:
-#
-# A closed pull request's caches can never be read again - cache scopes are
-# branch-local, so nothing outside that ref may restore them - yet they keep
-# occupying the budget until eviction reaches them. Left alone they push out
-# the main-branch caches that every cold run actually depends on: six closed
-# dependabot PRs had 5.1 GB parked this way, putting the repository 7% over
-# the cap with the 4 MB wasm-prod entry (worth ~6.5 min a run) competing
-# against 450 MB Rust caches for what was left.
-#
-# Superseded generations of the keyed caches. rust-cache and the other keyed
-# caches append content hashes (Cargo.lock, env, commit) to their keys, so
-# every hash bump strands the previous generation: restores prefix-match to
-# the newest entry, which makes an older sibling unreachable in practice while
-# it still occupies the budget. After the CLI platform matrix landed, one full
-# main generation is ~6.5 GB - two generations exceed the cap by themselves,
-# and the resulting LRU eviction shows up only as unexplained 15-minute cold
-# Windows builds.
-#
-# Deliberately scheduled rather than triggered by `pull_request: closed`.
-# Workflows triggered by Dependabot or by a fork receive a read-only
-# GITHUB_TOKEN, so a close-triggered job could not delete anything for the
-# exact traffic that produces most of the garbage. A scheduled run always
-# carries the base repository's token, and it reaps orphans no close event
-# would have covered.
+# Reclaim branch-local caches from closed pull requests and older keyed cache
+# generations before they evict live main-branch caches from the 10 GiB budget.
+# This runs on a schedule because Dependabot and fork close events have a read-only token.
 on:
   schedule:
-    # Every six hours: a single Cargo.lock bump on main writes a whole new
-    # cache generation (~6.5 GB), so a daily sweep left the repository at the
-    # cap - and silently evicting live caches - for most of a working day.
+    # A Cargo.lock change can add a full cache generation, so clean before a daily sweep would run.
     - cron: "0 3,9,15,21 * * *"
   workflow_dispatch:
 
@@ -46,8 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
-      # Deleting caches is an Actions write; nothing here reads repository
-      # contents, and no checkout step exists to need it.
+      # Cache deletion needs Actions write access; this job does not check out repository contents.
       actions: write
       pull-requests: read
     steps:
@@ -112,21 +86,8 @@ jobs:
             echo "Deleted **${deleted}** cache entries belonging to closed pull requests."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # The second kind of garbage from the header comment: entries whose key
-      # family has a newer generation in the same ref scope. The family is the
-      # key with its trailing hex hash segments stripped, so
-      # v0-rust-rust-host-Linux-x64-9a8bd51e-3ba8bfda and ...-9a8bd51e-b78a21c6
-      # are two generations of one family; a key with no hash suffix
-      # (playwright-Linux-1.61.1-chromium) is a family of one and never deleted
-      # here. Grouping includes the ref, so an open pull request's own caches
-      # are only ever measured against that same pull request's newer saves.
-      #
-      # wasm-prod is exempt: it restores by exact fingerprint key, so an older
-      # generation is still precisely what a branch based on an older main
-      # commit will ask for, it is worth ~6.5 min per hit, and at ~4 MB it
-      # costs the budget nothing. Every other family either prefix-restores
-      # (rust-cache, codeql-trap) or rebuilds in about a minute (node-modules),
-      # while the stranded generations run to hundreds of megabytes each.
+      # Retain only the newest hash-suffixed key generation in each ref scope.
+      # wasm-prod is exempt because it restores only an exact commit fingerprint.
       - name: Delete superseded cache generations
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -50,19 +50,33 @@ const countVisibleWords = (source) =>
     .trim()
     .split(/\s+/).length;
 
-// index.html is the apex landing page; the patcher lives at apply.html.
+// index.html is the apex landing page; the patcher lives at apply-patch.html.
 const homeHtml = read("index.html");
-const applyHtml = read("apply.html");
+const applyHtml = read("apply-patch.html");
 const notFoundHtml = read("404.html");
-const createHtml = read("create.html");
-const identifyHtml = read("identify.html");
-const testHtml = read("test.html");
+const createHtml = read("create-patch.html");
+const identifyHtml = read("identify-rom.html");
+const testHtml = read("test-rom.html");
 const headers = read("_headers");
 const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
-for (const route of ["apply", "create", "identify", "test", "trim", "ppf-undo", "tools", "weave"]) {
+for (const route of [
+  "apply-patch",
+  "create-patch",
+  "identify-rom",
+  "test-rom",
+  "trim-rom",
+  "ppf-undo",
+  "apply",
+  "create",
+  "identify",
+  "test",
+  "trim",
+  "tools",
+  "weave",
+]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
@@ -94,7 +108,7 @@ assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 ro
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
 assertIncludes(notFoundHtml, '<header class="masthead"', "404 app masthead");
-assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply"', "404 home action");
+assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply-patch"', "404 home action");
 assertIncludes(notFoundHtml, 'class="btn ghost not-found-docs" href="/docs"', "404 docs action");
 assertIncludes(notFoundHtml, "That page is not here.", "404 recovery heading");
 assertIncludes(notFoundHtml, 'aria-selected="false" class="mode" data-mode="patcher"', "404 inactive workflow tab");
@@ -103,13 +117,13 @@ if (notFoundHtml.includes('aria-selected="true" class="mode"')) {
 }
 if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em dash");
 for (const source of ["/weave", "/weave/", "/weave.html", "/weave/index.html"]) {
-  assertIncludes(redirects, `${source} /apply 301`, `${source} compatibility redirect`);
+  assertIncludes(redirects, `${source} /apply-patch 301`, `${source} compatibility redirect`);
 }
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
-  "https://rom-weaver.com/apply",
-  "https://rom-weaver.com/create",
-  "https://rom-weaver.com/identify",
+  "https://rom-weaver.com/apply-patch",
+  "https://rom-weaver.com/create-patch",
+  "https://rom-weaver.com/identify-rom",
   "https://rom-weaver.com/docs",
   "https://rom-weaver.com/docs/apply-rom-patches",
   "https://rom-weaver.com/docs/cli",
@@ -147,12 +161,12 @@ assertIncludes(
 assertIncludes(homeHtml, 'href="https://rom-weaver.com/"', "home canonical");
 assertIncludes(homeHtml, WORKFLOW_SEO_ROUTES.home.description, "home description");
 assertIncludes(homeHtml, 'id="panel-home"', "home prerendered landing page");
-assertIncludes(homeHtml, "Patch, pack, and prove your ROMs.", "home headline");
+assertIncludes(homeHtml, "Your ROMs. Your changes.", "home headline");
 // The masthead brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
-assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply"', "home Apply card");
-assertIncludes(homeHtml, 'href="/create"', "home Create card");
+assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply-patch"', "home Apply card");
+assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/supported-formats"', "home formats reference link");
 // The landing page is the one route with no workflow form, so no tab is current.
 if (homeHtml.includes('aria-selected="true" class="mode"')) {
@@ -213,8 +227,10 @@ assertIncludes(
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
   "home robots metadata",
 );
-assertIncludes(homeHtml, 'data-mode="docs"', "home guides tab");
-assertIncludes(createHtml, 'data-mode="docs"', "create guides tab");
+// Docs sits under More, which the static shell does not expand; the footer
+// carries the crawlable link instead.
+assertIncludes(applyHtml, 'class="footer-link footer-docs" href="docs"', "apply guides link");
+assertIncludes(createHtml, 'class="footer-link footer-docs" href="docs"', "create guides link");
 
 for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
@@ -242,7 +258,7 @@ assertIncludes(homeHtml, `"alternateName":${JSON.stringify(SITE_ALTERNATE_NAMES)
 assertIncludes(applyHtml, '"@type":"SoftwareApplication"', "apply SoftwareApplication JSON-LD");
 if (applyHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 assertIncludes(createHtml, '"@type":"SoftwareApplication"', "create SoftwareApplication JSON-LD");
-assertIncludes(createHtml, '"url":"https://rom-weaver.com/create"', "create JSON-LD canonical url");
+assertIncludes(createHtml, '"url":"https://rom-weaver.com/create-patch"', "create JSON-LD canonical url");
 if (createHtml.includes('"@type":"WebSite"')) throw new Error("WebSite JSON-LD belongs on the home route only");
 
 for (const route of DOC_ROUTES) {
@@ -258,7 +274,7 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(docsHtml, 'aria-selected="true" class="mode" data-mode="docs"', `${route.slug} selected guides tab`);
+  assertIncludes(docsHtml, 'class="mode-more is-current"', `${route.slug} More marked current for the guides`);
   assertIncludes(
     docsHtml,
     '<button aria-label="Switch to light theme" class="tool"',
@@ -272,9 +288,9 @@ for (const route of DOC_ROUTES) {
   // closing on the same three buttons made it furniture. Each guide still reaches
   // the samples through the prose links its own author wrote.
   if (route.slug === "docs") {
-    assertIncludes(docsHtml, 'href="/apply?guide=apply"', `${route.slug} guided Apply link`);
-    assertIncludes(docsHtml, 'href="/create?guide=create"', `${route.slug} guided Create link`);
-    assertIncludes(docsHtml, 'href="/apply?guide=bundle"', `${route.slug} guided Bundle link`);
+    assertIncludes(docsHtml, 'href="/apply-patch?guide=apply"', `${route.slug} guided Apply link`);
+    assertIncludes(docsHtml, 'href="/create-patch?guide=create"', `${route.slug} guided Create link`);
+    assertIncludes(docsHtml, 'href="/apply-patch?guide=bundle"', `${route.slug} guided Bundle link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
     assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
@@ -329,7 +345,7 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
-for (const beta of ["trim", "ppf-undo"]) {
+for (const beta of ["trim-rom", "ppf-undo", "whats-new"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),
@@ -337,12 +353,25 @@ for (const beta of ["trim", "ppf-undo"]) {
     `${beta} self canonical`,
   );
 }
+for (const [legacy, canonical] of Object.entries({
+  apply: "apply-patch",
+  create: "create-patch",
+  identify: "identify-rom",
+  test: "test-rom",
+  trim: "trim-rom",
+  weave: "apply-patch",
+})) {
+  for (const file of [`${legacy}.html`, `${legacy}/index.html`]) {
+    assertIncludes(read(file), 'name="robots" content="noindex,follow"', `${file} noindex`);
+    assertIncludes(read(file), `rel="canonical" href="https://rom-weaver.com/${canonical}"`, `${file} canonical`);
+  }
+}
 // The retired /weave/ slug serves the patcher, whose shell it must hydrate as.
 // index.html is the landing page, so a host that applies neither the redirect
 // nor this document would serve landing markup to a patcher route.
 for (const weave of ["weave/index.html", "weave.html"]) {
   assertIncludes(read(weave), 'aria-selected="true" class="mode" data-mode="patcher"', `${weave} patcher shell`);
-  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply"', `${weave} canonical`);
+  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply-patch"', `${weave} canonical`);
 }
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");
@@ -357,8 +386,8 @@ if (production) {
   assertIncludes(robots, "Allow: /", "production robots.txt");
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
   assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/</loc>", "home sitemap entry");
-  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create", "sitemap");
-  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify", "sitemap");
+  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-patch", "sitemap");
+  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify-rom", "sitemap");
   for (const route of DOC_ROUTES) {
     assertIncludes(read("sitemap.xml"), `https://rom-weaver.com/${route.slug}`, `${route.slug} sitemap entry`);
   }
@@ -410,7 +439,8 @@ for (const slug of [
   "identify",
   "ppf-undo",
   "tools",
-  "trim",
+  "trim-rom",
+  "whats-new",
 ]) {
   assertIncludes(precacheManifest, `"${slug}/index.html"`, `${slug} precache entry`);
 }

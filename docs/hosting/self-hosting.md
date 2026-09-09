@@ -80,19 +80,19 @@ location = /rom-weaver {
 }
 
 location = /rom-weaver/weave {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location = /rom-weaver/weave/ {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location = /rom-weaver/weave.html {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location = /rom-weaver/weave/index.html {
-    return 301 /rom-weaver/apply$is_args$args;
+    return 301 /rom-weaver/apply-patch$is_args$args;
 }
 
 location /rom-weaver/ {
@@ -169,7 +169,7 @@ npm --prefix packages/rom-weaver-webapp run build
 
 Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host. Preserve the directory structure. The build includes raw assets and `.br` sidecars for compressible immutable assets. Configure your host to serve a sidecar with `Content-Encoding: br` when the client accepts Brotli, and the raw asset otherwise. Docker and the Cloudflare Pages integration handle this negotiation. A generic host can instead compress the raw assets itself.
 
-The build includes directory-index pages for its workflow and documentation routes, so ordinary static servers can resolve direct visits and refreshes without rewrite configuration. A server that disables directory indexes must instead fall back to `index.html` for those navigation requests. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History API routes, and the service-worker scope resolve consistently. Explicit directory-document URLs such as `/apply/index.html` are normalized in the browser to the clean `/apply` route without another request. The old `/weave` forms are permanent-redirected to `/apply` by the Docker image and Cloudflare Pages build; configure the equivalent redirect on other static hosts.
+The build includes directory-index pages for its workflow and documentation routes, so ordinary static servers can resolve direct visits and refreshes without rewrite configuration. A server that disables directory indexes must instead fall back to `index.html` for those navigation requests. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History API routes, and the service-worker scope resolve consistently. Explicit directory-document URLs such as `/apply-patch/index.html` are normalized in the browser to the clean `/apply-patch` route without another request. The old `/weave` forms are permanent-redirected to `/apply-patch` by the Docker image and Cloudflare Pages build; configure the equivalent redirect on other static hosts.
 
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, the equivalent cache policy is:
 
@@ -200,7 +200,7 @@ These headers can be scoped to the rom-weaver subpath. They do not need to be ap
 
 When a static host cannot set these headers, rom-weaver's service worker can add them for responses within its scope. See [Service worker and subpaths](#service-worker-and-subpaths) for the bounded reload and fallback behavior.
 
-After deployment, open the browser console and confirm:
+After deployment, open the browser console and check:
 
 ```js
 crossOriginIsolated === true

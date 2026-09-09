@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/cli",
-  "version": "0.14.1",
+  "version": "0.15.1",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
   "description": "Local-first toolkit for ROMs and disc images: inspect, extract, compress, and apply, create, or bundle patches. Offline via a browser service-worker PWA or CLI.",
@@ -77,15 +77,15 @@
     "node": ">=22"
   },
   "optionalDependencies": {
-    "@rom-weaver/darwin-arm64": "0.14.1",
-    "@rom-weaver/darwin-x64": "0.14.1",
-    "@rom-weaver/linux-arm64-musl": "0.14.1",
-    "@rom-weaver/linux-ia32-musl": "0.14.1",
-    "@rom-weaver/linux-x64-gnu": "0.14.1",
-    "@rom-weaver/linux-x64-musl": "0.14.1",
-    "@rom-weaver/win32-arm64-msvc": "0.14.1",
-    "@rom-weaver/win32-ia32-msvc": "0.14.1",
-    "@rom-weaver/win32-x64-msvc": "0.14.1"
+    "@rom-weaver/darwin-arm64": "0.15.1",
+    "@rom-weaver/darwin-x64": "0.15.1",
+    "@rom-weaver/linux-arm64-musl": "0.15.1",
+    "@rom-weaver/linux-ia32-musl": "0.15.1",
+    "@rom-weaver/linux-x64-gnu": "0.15.1",
+    "@rom-weaver/linux-x64-musl": "0.15.1",
+    "@rom-weaver/win32-arm64-msvc": "0.15.1",
+    "@rom-weaver/win32-ia32-msvc": "0.15.1",
+    "@rom-weaver/win32-x64-msvc": "0.15.1"
   },
   "scripts": {
     "docs:lint": "markdownlint-cli2",
@@ -108,9 +108,9 @@
     "@commitlint/config-conventional": "21.2.2",
     "cross-spawn": "7.0.6",
     "doctoc": "2.5.0",
-    "lefthook": "2.1.10",
+    "lefthook": "2.1.12",
     "markdownlint-cli2": "0.23.2",
-    "oxlint": "1.80.0",
+    "oxlint": "1.81.0",
     "tar": "7.5.22"
   }
 }

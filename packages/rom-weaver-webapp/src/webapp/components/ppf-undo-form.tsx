@@ -179,7 +179,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
         heroLabelCoarse="Tap to add a patched ROM and PPF patch"
         info={<p>A PPF3 patch must include undo data to restore the original ROM.</p>}
         inputId="ppf-undo-input-picker"
-        lead={{ line1: "ui.hero.toolsThesis", line2: "ui.hero.toolsThesis2" }}
+        lead={{ line1: "ui.hero.toolsThesis", line2: "ui.hero.toolsThesis2", description: "ui.hero.toolsDescription" }}
         onFiles={stageFiles}
         supported={[
           { extensions: ["rom"], label: "Patched ROMs" },

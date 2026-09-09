@@ -22,6 +22,7 @@ import { RomWeaverSettingsProvider } from "../../src/public/react/settings-conte
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
+import { WhatsNewPage } from "../../src/webapp/whats-new-page.tsx";
 import { Masthead, UpdateBanner } from "../../src/webapp/components/shell.tsx";
 import {
   getDefaultSettings,
@@ -415,7 +416,15 @@ const PAGE_TABS = [
   { href: "apply", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
   { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
   { href: "test", icon: createElement("span", { "aria-hidden": "true" }), id: "test", label: "Test" },
-  { href: "trim", icon: createElement("span", { "aria-hidden": "true" }), id: "trim", label: "Trim" },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: createElement("span", { "aria-hidden": "true" }),
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
 ];
 
 // Production page chrome (single <main className="workbench"> + one tabpanel)
@@ -433,8 +442,8 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
         createElement(Masthead, {
           ...mastheadProps,
           currentTab,
-          homeHref: "/apply",
-          onOpenChangelog: noop,
+          homeHref: "/apply-patch",
+          onOpenWhatsNew: noop,
           onOpenLog: noop,
           onOpenSettings: noop,
           onOpenStatus: noop,
@@ -750,7 +759,7 @@ const Banners = () =>
   createElement(
     RomWeaverSettingsProvider,
     { settings: {} },
-    createElement("div", { className: "rw-app" }, createElement(UpdateBanner, { onOpenChangelog: noop, open: true })),
+    createElement("div", { className: "rw-app" }, createElement(UpdateBanner, { onOpenWhatsNew: noop, open: true })),
   );
 
 // ── Modals / dialogs ─────────────────────────────────────────────────────────
@@ -802,15 +811,8 @@ const DIALOGS = {
       open: true,
       title: "Reload and lose changes?",
     }),
-  "update changelog": () =>
-    createElement(LogDialog, {
-      initialTab: "changelog",
-      onClose: noop,
-      onLevelChange: noop,
-      onReload: noop,
-      open: true,
-      updateReady: true,
-    }),
+  // The changelog is its own route now, not a dialog tab.
+  "whats new": () => createElement(WhatsNewPage, { active: true, onReload: noop, updateReady: true }),
   log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
   // Settings is the unified dialog's first tab now, not a Modal of its own.
   settings: () =>
@@ -902,8 +904,8 @@ describe("webapp keyboard navigation", () => {
           { className: "rw-app" },
           createElement(Masthead, {
             currentTab: "patcher",
-            homeHref: "/apply",
-            onOpenChangelog: noop,
+            homeHref: "/apply-patch",
+            onOpenWhatsNew: noop,
             onOpenLog: noop,
             onOpenSettings: noop,
             onOpenStatus: noop,
@@ -1068,22 +1070,16 @@ describe("accent dye-lot accessibility", () => {
             else await renderNode(node, theme);
             if (dense) await openAllDrawers(host);
 
-            // The badge surface must really render the re-dyed inline SVG.
             if (badge) {
               expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
-              // The logo is an <img> of a pre-tinted per-accent SVG asset
-              // (scripts/brand-mark-assets.mjs). If the virtual module ever
-              // resolved to the wrong accent or an empty string, the mark would
-              // silently render stock (or blank) and every scan above would
-              // pass on nothing - so fetch the asset and check the dye took.
               const markSrc = host.querySelector("img.brand-mark")?.getAttribute("src") || "";
               expect(markSrc).toMatch(new RegExp(`assets/brand-mark-${accent.value}-[0-9a-f]{8}\\.svg$`));
               const markSvg = await (await nativeFetch(markSrc)).text();
               expect(markSvg).toContain("<svg");
               expect(markSvg).toContain(accent.swatch);
-              expect(markSvg).toContain(accent.highlight);
-              // No madder left anywhere once a different dye is selected.
-              if (accent.value !== "madder") expect(markSvg).not.toContain("#d9690f");
+              expect(markSvg).toContain("#f6ecda");
+              expect(markSvg).toContain('stroke="#f6ecda" stroke-width="5"');
+              expect(markSvg).not.toContain("#88a9cb");
             }
 
             const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });
@@ -1104,8 +1100,23 @@ describe("webapp responsive navigation", () => {
   // second masthead row.
   const ALL_TABS = [
     ...PAGE_TABS,
-    { href: "docs", icon: createElement("span", { "aria-hidden": "true" }), id: "docs", label: "Docs" },
-    { href: "ppf-undo", icon: createElement("span", { "aria-hidden": "true" }), id: "ppf-undo", label: "PPF undo" },
+    {
+      group: "docs",
+      href: "docs",
+      icon: createElement("span", { "aria-hidden": "true" }),
+      id: "docs",
+      label: "Docs",
+      placement: "more",
+    },
+    {
+      beta: true,
+      group: "tools",
+      href: "ppf-undo",
+      icon: createElement("span", { "aria-hidden": "true" }),
+      id: "ppf-undo",
+      label: "PPF undo",
+      placement: "more",
+    },
   ];
 
   const renderMastheadOnly = async (tabs) =>
@@ -1121,8 +1132,8 @@ describe("webapp responsive navigation", () => {
             { className: "app" },
             createElement(Masthead, {
               currentTab: "patcher",
-              homeHref: "/apply",
-              onOpenChangelog: noop,
+              homeHref: "/apply-patch",
+              onOpenWhatsNew: noop,
               onOpenLog: noop,
               onOpenSettings: noop,
               onOpenStatus: noop,
@@ -1136,6 +1147,25 @@ describe("webapp responsive navigation", () => {
       ),
       "light",
     );
+
+  test("Find keeps keyboard selections visible on desktop and phone", async () => {
+    for (const width of [1280, 390]) {
+      await setViewport({ height: 430, width });
+      await renderMastheadOnly(ALL_TABS);
+      host.querySelector(width > 999 ? ".desktop-find button" : ".dock-find").click();
+      await settle();
+      const input = host.querySelector(".find-input");
+      const options = host.querySelectorAll(".find-option");
+      for (let index = 1; index < options.length; index += 1) {
+        input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
+        await settle();
+        const selected = host.querySelector(".find-option.is-active").getBoundingClientRect();
+        const list = host.querySelector(".find-results").getBoundingClientRect();
+        expect(selected.top).toBeGreaterThanOrEqual(list.top - 1);
+        expect(selected.bottom).toBeLessThanOrEqual(list.bottom + 1);
+      }
+    }
+  });
 
   test("the masthead is one row at every width it keeps the rail", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {

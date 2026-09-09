@@ -13,11 +13,8 @@
      kept that reset winning, so a boxed rule at this weight was dead; layer order
      would hand it the win instead and box the headline. */
   .rw-app .hero-lead .lead-title {
-    font-size: clamp(1.05rem, 4.6vw, 1.5rem);
+    font-size: clamp(1.5rem, 6.8vw, 2rem);
     line-height: 1.2;
-  }
-  .rw-app .hero-lead .lead-line {
-    display: inline;
   }
   .rw-app .hero-lead .lead-sub {
     padding: 1px 7px;
@@ -188,7 +185,7 @@
      navigation is in front reads as the same control. */
   .rw-app .log-dlg .dlg-head {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0;
     order: 2;
     /* Height comes from the same padding and column minimum the dock uses, not
@@ -202,12 +199,12 @@
   }
   .rw-app .log-dlg .dialog-subrail {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    grid-column: span 5;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-column: span 4;
     gap: 0;
     overflow: visible;
   }
-  /* One column apiece: five tabs and the way out. */
+  /* One column apiece: four tabs and the way out. */
   .rw-app .log-dlg .dialog-subrail .subtab,
   .rw-app .log-dlg .dlg-head > .dlg-x {
     position: relative;
@@ -222,9 +219,8 @@
     min-block-size: 48px;
     padding: 6px 2px 4px;
     margin: 0;
-    /* the one measurement that parts from the app dock, and only because this
-       bar splits the same width six ways instead of five: at the dock's
-       .62rem/.04em "Changelog" needs 61px of a 59px column and truncates */
+    /* Matches the app dock's own label size, column for column, so a tab here
+       and a dock item read as one control. */
     font-size: 0.58rem;
     font-weight: 650;
     color: var(--ink-3);

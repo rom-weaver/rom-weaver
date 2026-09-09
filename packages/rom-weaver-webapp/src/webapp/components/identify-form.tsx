@@ -19,6 +19,7 @@ import {
   RomHashSearch,
   type RomExpectation,
 } from "../../public/react/components/ds/rom-expectation-card.tsx";
+import { RelatedStrip } from "./related-strip.tsx";
 import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
@@ -41,6 +42,8 @@ const IDENTIFY_SUPPORTED_FILES = [
 type IdentifyFormProps = {
   containerId?: string;
   inputId?: string;
+  /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
+  onSelectTab?: (id: string) => void;
   pageDrop?: PageFileDrop | null;
 };
 
@@ -115,6 +118,7 @@ const CandidateResult = ({
 const IdentifyForm = ({
   containerId = "identify-container",
   inputId = "identify-input-picker",
+  onSelectTab,
   pageDrop,
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
@@ -320,14 +324,9 @@ const IdentifyForm = ({
   ) : null;
 
   return (
-    <section className="panel" id={containerId}>
+    <section className="panel identify-panel" id={containerId}>
       <UnifiedDropZone
         addLabel={file ? "Replace the ROM" : expectation ? "Add the ROM to verify it" : "Add a ROM to identify it"}
-        /* The search is the hero's quiet second door, after the drop target;
-           once a match fills 0x02 it moves there as the refine row. */
-        afterDropZone={
-          heroShown ? <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} /> : null
-        }
         big={heroShown}
         disabled={busy}
         {...(!file && expectation ? { hint: "Optional - the match above stands on its own" } : {})}
@@ -335,13 +334,24 @@ const IdentifyForm = ({
         heroLabelCoarse="Tap to add a ROM"
         info={<p>Identification runs locally. Your ROM never leaves this browser.</p>}
         inputId={inputId}
-        lead={{ line1: "ui.hero.identifyThesis", line2: "ui.hero.identifyThesis2" }}
+        lead={{
+          line1: "ui.hero.identifyThesis",
+          line2: "ui.hero.identifyThesis2",
+          description: "ui.hero.identifyDescription",
+        }}
         multiple={false}
         onFiles={(files) => {
           const selected = files.at(-1);
           if (selected) selectFile(selected);
         }}
         supported={IDENTIFY_SUPPORTED_FILES}
+        afterDropZone={
+          heroShown ? (
+            <div className="identify-hash-island">
+              <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
+            </div>
+          ) : null
+        }
       />
       {file ? (
         <WorkflowRomInputStep
@@ -439,6 +449,9 @@ const IdentifyForm = ({
       ) : (
         <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.step.rom") }]} />
       )}
+      {!busy && !!result && !unavailable && onSelectTab ? (
+        <RelatedStrip entryKey="identify" onSelectTab={onSelectTab} />
+      ) : null}
     </section>
   );
 };

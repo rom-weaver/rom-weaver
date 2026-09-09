@@ -31,10 +31,9 @@ pub struct ExtractBatchReport {
     pub waves: Vec<Vec<usize>>,
 }
 
-/// Build the app and run a batch of extractions with memory-/thread-aware concurrency. Native-only
-/// (the whole module is gated off wasm): the wasm command surface is single-command, and concurrent
-/// OS-thread scheduling is a native construct (the wasm equivalent would drive the same planner over
-/// WASI threads, respecting OPFS read-on-main).
+/// Build the app and run a batch of extractions with memory- and thread-aware
+/// concurrency. This native-only module schedules concurrent OS threads; the
+/// browser applies the same plan to its command worker pool.
 pub fn run_extract_batch(
     jobs: Vec<ExtractCommand>,
     options: ExtractBatchOptions,
@@ -198,6 +197,7 @@ mod tests {
                 assume_yes: false,
                 emit_progress_events: false,
                 interactive_selection_enabled: false,
+                dry_run: false,
             },
             reporter,
             prompter,

@@ -207,7 +207,7 @@ const renderView = ({
 };
 
 describe("apply workflow view - empty bench", () => {
-  beforeEach(() => window.history.replaceState(null, "", "/apply"));
+  beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
   afterEach(() => vi.unstubAllGlobals());
 
   it("renders only the 0x01 hero", () => {
@@ -228,7 +228,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
   });
 
-  it("keeps the hero while a checksum is typed, then fills the bench on a match", async () => {
+  it("shows checksum search immediately, then fills the bench on a match", async () => {
     lookupExpectedRom.mockResolvedValue({
       matches: [
         {
@@ -242,14 +242,15 @@ describe("apply workflow view - empty bench", () => {
       status: "matched",
     });
     const { container } = renderView({ ui: createEmptyPatcherUiState() });
-    // The search is the hero's second door: it follows the drop target and
-    // the sample chip inside 0x01.
+    // Apply keeps the optional checksum path out of the primary drop target.
     const step = container.querySelector("section.step.unified-drop-step") as HTMLElement;
     const search = step.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
     const drop = step.querySelector("#rom-weaver-row-unified-drop") as HTMLElement;
     expect(search).toBeTruthy();
     expect(search.compareDocumentPosition(drop) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(container.querySelector(".drop.hero")).toBeTruthy();
+    expect(search.closest(".cks-body")).toBeNull();
+    expect(search.querySelector("label")?.textContent).toBe("Identify by checksum");
 
     const input = container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
     await act(async () => {
@@ -286,6 +287,46 @@ describe("apply workflow view - empty bench", () => {
     expect((container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement).value).toBe("");
   });
 
+  it("keeps the checksum search open in 0x02 while patches wait for a ROM", async () => {
+    lookupExpectedRom.mockResolvedValue({
+      matches: [
+        {
+          algorithm: "crc32",
+          database: "No-Intro",
+          name: "Metroid Fusion (USA)",
+          platform: "Nintendo - Game Boy Advance",
+          variant: "raw",
+        },
+      ],
+      status: "matched",
+    });
+    const { container } = renderView({ patches: [patchItem("change.ips")], ui: createEmptyPatcherUiState() });
+    // Patches alone retire the hero, so the search lives in the empty ROM step.
+    expect(container.querySelector(".drop.hero")).toBeNull();
+    const romStep = container.querySelector("#rom-weaver-row-file-rom") as HTMLElement;
+    expect(romStep.textContent).toContain("Add ROM in");
+    const search = romStep.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
+    expect(search).toBeTruthy();
+    // The search stands open, as in the hero: no drawer to click first.
+    expect(search.closest(".cks-body")).toBeNull();
+    expect(romStep.querySelector(".identify-hash-disclosure")).toBeNull();
+    expect(search.querySelector(".identify-hash-label")?.textContent).toBeTruthy();
+
+    const input = romStep.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "3610a686" } });
+      fireEvent.submit(search);
+    });
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
+    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
+      "Metroid Fusion (USA)",
+    );
+    // The match replaces the open search with the refine row - one search per step.
+    const forms = romStep.querySelectorAll("#rom-weaver-rom-hash-search");
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.classList.contains("identify-hash--compact")).toBe(true);
+  });
+
   it("loads the sample into the existing drop pipeline without navigating", async () => {
     const onUnifiedDrop = vi.fn();
     const fetchMock = vi.fn().mockResolvedValue({
@@ -307,7 +348,7 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it("starts the sample tutorial from a guided Apply URL", async () => {
-    window.history.replaceState(null, "", "/apply?guide=apply");
+    window.history.replaceState(null, "", "/apply-patch?guide=apply");
     const onUnifiedDrop = vi.fn();
     vi.stubGlobal(
       "fetch",
@@ -344,7 +385,7 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it("starts the bundle tutorial and selects a patch-only ZIP from a guided Bundle URL", async () => {
-    window.history.replaceState(null, "", "/apply?guide=bundle");
+    window.history.replaceState(null, "", "/apply-patch?guide=bundle");
     const onUnifiedDrop = vi.fn();
     const setBundlePackage = vi.fn();
     vi.stubGlobal(
@@ -1228,6 +1269,58 @@ describe("apply workflow view - bundle controls", () => {
     );
     expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+  });
+
+  it("opens and focuses the bundle step for a direct hash URL", async () => {
+    window.location.hash = "#bundle";
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const toggle = container.querySelector("#rom-weaver-bundle-job .cks-head") as HTMLButtonElement;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
+    expect(document.activeElement).toBe(toggle);
+    window.location.hash = "";
+  });
+
+  it("reopens the bundle step when the same hash is selected again", () => {
+    window.location.hash = "";
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const toggle = container.querySelector("#rom-weaver-bundle-job .cks-head") as HTMLButtonElement;
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    act(() => {
+      window.location.hash = "#bundle";
+      window.dispatchEvent(new Event("hashchange"));
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    window.location.hash = "";
   });
 });
 

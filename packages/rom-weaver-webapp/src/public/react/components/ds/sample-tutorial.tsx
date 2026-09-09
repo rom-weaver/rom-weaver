@@ -132,6 +132,24 @@ type GuideRect = { bottom: number; height: number; left: number; top: number; wi
 
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/**
+ * Starts a guide-card animation with the cancel rejection already absorbed.
+ * Cancelling an animation rejects its `finished` promise with an `AbortError`,
+ * and every animation here is cancellable by the next move, so callers MUST go
+ * through this helper: an unobserved rejection surfaces as an unhandled promise
+ * rejection. Callers that need the settled result attach their own handler on
+ * top of this one.
+ */
+const startGuideMotion = (
+  element: HTMLElement,
+  keyframes: PropertyIndexedKeyframes,
+  options: KeyframeAnimationOptions,
+): Animation => {
+  const animation = element.animate(keyframes, options);
+  animation.finished.catch(() => undefined);
+  return animation;
+};
+
 const bindFinalCta = (cta: HTMLElement | null, final: boolean, onEnd: () => void) => {
   if (!(cta && final)) return null;
   cta.addEventListener("click", onEnd);
@@ -443,15 +461,25 @@ const SampleTutorial = ({
       return;
     }
     motionRef.current?.cancel();
-    arrivingRef.current = true;
     setMoving(true);
-    const exit = dialog.animate(
+    const exit = startGuideMotion(
+      dialog,
       { opacity: [1, 0] },
       { duration: GUIDE_EXIT_MS, easing: GUIDE_EXIT_EASE, fill: "forwards" },
     );
     motionRef.current = exit;
+    // The arriving flag MUST be raised with the commit, not with the exit: the
+    // placement effect re-runs while the card is still leaving, and an early
+    // flag lets it cancel this exit before it settles - which drops the commit
+    // and strands the guide on the step it was leaving.
     // A cancelled exit rejects; the run that cancelled it owns the card now.
-    exit.finished.then(commit, () => undefined);
+    exit.finished.then(
+      () => {
+        arrivingRef.current = true;
+        commit();
+      },
+      () => undefined,
+    );
   }, []);
 
   useEffect(() => {
@@ -591,7 +619,8 @@ const SampleTutorial = ({
       // Drifts in from the row's side, so the card reads as coming off the row
       // it explains rather than materialising in place.
       const rise = step?.placement === "top" ? -GUIDE_ENTER_RISE : GUIDE_ENTER_RISE;
-      motionRef.current = dialog.animate(
+      motionRef.current = startGuideMotion(
+        dialog,
         { opacity: [0, 1], translate: [`0 ${rise}px`, "0 0"] },
         { duration: GUIDE_ENTER_MS, easing: GUIDE_ENTER_EASE },
       );

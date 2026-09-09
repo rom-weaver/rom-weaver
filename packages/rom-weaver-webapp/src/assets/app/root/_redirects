@@ -25,14 +25,31 @@
 # a stub for versions built before this. A site URL moves with a line in this
 # file instead.
 
-# The patch workflow moved from /weave to /apply. Keep the old clean, trailing-
-# slash, and explicit static-host forms as permanent redirects. Cloudflare
-# Pages carries the incoming query string to the destination, so preloaded
-# bundles such as /weave?bundle=... keep working.
-/weave /apply 301
-/weave/ /apply 301
-/weave.html /apply 301
-/weave/index.html /apply 301
+# Legacy workflow links MUST retain query strings and redirect directly.
+/apply /apply-patch 301
+/apply/ /apply-patch 301
+/apply.html /apply-patch 301
+/apply/index.html /apply-patch 301
+/create /create-patch 301
+/create/ /create-patch 301
+/create.html /create-patch 301
+/create/index.html /create-patch 301
+/identify /identify-rom 301
+/identify/ /identify-rom 301
+/identify.html /identify-rom 301
+/identify/index.html /identify-rom 301
+/test /test-rom 301
+/test/ /test-rom 301
+/test.html /test-rom 301
+/test/index.html /test-rom 301
+/trim /trim-rom 301
+/trim/ /trim-rom 301
+/trim.html /trim-rom 301
+/trim/index.html /trim-rom 301
+/weave /apply-patch 301
+/weave/ /apply-patch 301
+/weave.html /apply-patch 301
+/weave/index.html /apply-patch 301
 
 # `how-to/work-with-archives.md` was published at /docs/formats, one letter away
 # from the reference page at /docs/supported-formats. The guide now matches its

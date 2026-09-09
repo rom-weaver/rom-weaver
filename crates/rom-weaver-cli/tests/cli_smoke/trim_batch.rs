@@ -362,6 +362,31 @@ fn trim_dry_run_does_not_write_outputs() {
 }
 
 #[test]
+fn trim_dry_run_does_not_create_output_directory() {
+    let temp = setup_temp_dir();
+    let source = temp.child("sample.nds");
+    let original = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
+    fs::write(source.path(), &original).expect("fixture");
+    let destination = temp.child("missing/output.nds");
+    let output = command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    let terminal = parse_single_json_line(&output);
+    assert_eq!(terminal["status"], "succeeded");
+    assert!(!temp.child("missing").path().exists());
+    assert_eq!(fs::read(source.path()).expect("source"), original);
+}
+
+#[test]
 fn trim_simulate_alias_does_not_write_outputs() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.nds");

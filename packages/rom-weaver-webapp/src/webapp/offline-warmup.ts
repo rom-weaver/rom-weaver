@@ -118,11 +118,8 @@ type OfflineWarmup = {
 // does not flood the message channel.
 const INTERIM_PROGRESS_MS = 200;
 
-// EmulatorJS files one pump downloads concurrently. Serial per-file pumps made
-// the many small files (translations, core reports) each cost a message
-// round-trip plus an idle wait, stretching the warm-up far past the network
-// time. Identify groups still install one at a time - their packs are large
-// and their installer is deliberately sequential.
+// Download small EmulatorJS files in one pump. Identify groups stay sequential
+// because their installer limits itself to one pack connection at a time.
 const EMULATORJS_BATCH_SIZE = 6;
 
 const EMULATORJS_COMPLETE_MARKER_PATH = "/__rom-weaver-emulatorjs-complete__";
@@ -296,14 +293,9 @@ const createOfflineWarmup = ({
   const isGroupWanted = (group: IdentifyOptionalPackGroup, wanted: ReadonlySet<string>) =>
     group.required === true || wanted.has(group.id);
 
-  /**
-   * Group ids the user keeps offline. Stored in the cache rather than in memory
-   * so it survives a worker restart, like every other warm-up fact. On the
-   * first read after this became opt-in the list is seeded from whatever is
-   * already installed, so an existing install is never silently dropped.
-   */
-  // getReadyState runs on every throttled progress tick, so the list is read
-  // from the cache once per worker and kept in memory until a write replaces it.
+  /** Store selected group ids in the cache so they survive worker restarts. Seed
+   * a missing preference from installed groups so existing offline data remains selected. */
+  // getReadyState reads this on every throttled progress update, so cache it in this worker until a write replaces it.
   let wantedPromise: Promise<Set<string>> | null = null;
 
   const readWantedGroupIds = (cache: Cache, installedGroups?: boolean[]): Promise<Set<string>> => {
@@ -397,8 +389,7 @@ const createOfflineWarmup = ({
           units.push({ kind: "emulatorjs-file", path: file.path, sizeBytes: file.sizeBytes });
         }
       }
-      // All files can already be cached (filled by the runtime route) with the
-      // marker still missing; runNextUnit writes the marker on an empty queue.
+      // Runtime requests can cache every file before this marker exists. An empty pump writes the marker.
     }
     const wanted = await readWantedGroupIds(identifyCache, installedGroups);
     for (const [index, group] of identifyOptionalGroups.entries()) {
@@ -469,8 +460,7 @@ const createOfflineWarmup = ({
         cachedBytes += cached.bytes;
         cachedFiles += cached.files;
         pendingUnits += manifest.files.length;
-        // Marker missing but every byte present still counts as pending: the
-        // next pump writes the marker and flips ready.
+        // A missing marker remains pending even when every file is cached. The next pump marks the set ready.
       }
     } catch (error) {
       // Offline with no cached manifest: readiness cannot improve right now.
@@ -482,10 +472,7 @@ const createOfflineWarmup = ({
     }
     const wanted = await readWantedGroupIds(identifyCache, installedGroups);
     for (const [index, group] of identifyOptionalGroups.entries()) {
-      // Only the groups the user keeps offline are part of the offline set.
-      // An unticked group counts in neither total nor cached - its packs may
-      // still sit in the cache from an on-demand identify fetch, but they are
-      // not progress towards being offline-ready.
+      // Only selected groups count toward offline readiness. On-demand cached packs remain outside these totals.
       if (!isGroupWanted(group, wanted)) continue;
       totalBytes += groupBytes(group);
       totalFiles += group.packs.length;
@@ -493,8 +480,7 @@ const createOfflineWarmup = ({
         cachedBytes += groupBytes(group);
         cachedFiles += group.packs.length;
       } else {
-        // Partially cached groups (on-demand pack fetches, an interrupted
-        // install) still credit their cached packs to the counters.
+        // Count packs cached by an interrupted install or an on-demand fetch.
         const cached = cachedGroupState(cachedIdentifyUrls || new Set(), group);
         cachedBytes += cached.bytes;
         cachedFiles += cached.files;
@@ -533,12 +519,10 @@ const createOfflineWarmup = ({
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
-    // Sequential on purpose: group installs also run as low-priority warm-up
-    // units and MUST NOT open one connection per pack.
+    // Group installs MUST stay sequential so a low-priority warmup does not open one connection per pack.
     for (const pack of group.packs) {
       if (await cache.match(new URL(pack.url, scope).href)) {
-        // Already-cached packs still advance the byte counter, or the bar
-        // would stall through a group resumed after a restart.
+        // Credit cached packs so a resumed group reports continuous progress.
         onBytes?.(pack.sizeBytes || 0);
         continue;
       }
@@ -550,8 +534,7 @@ const createOfflineWarmup = ({
     return { id: group.id, installed: true as const, label: group.label, packs: group.packs.length };
   };
 
-  // A user ticked the group in settings, so this one downloads at normal
-  // priority and the group joins the set kept offline.
+  // A user-selected group downloads at normal priority and joins the offline set.
   const installIdentifyGroup = async (groupId: string) => {
     const result = await installGroupWith(fetchForInteractive, groupId);
     const cache = await caches.open(identifyOptionalCacheName);
@@ -581,10 +564,7 @@ const createOfflineWarmup = ({
     );
   };
 
-  /**
-   * Tick or untick a group. Unticking deletes what it cached - the point of the
-   * control is to reclaim that space - while leaving on-demand fetches working.
-   */
+  /** Unticking a group deletes its cache to reclaim space. On-demand fetches remain available. */
   const setIdentifyGroupWanted = async (groupId: string, isWanted: boolean): Promise<IdentifyGroupState[]> => {
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
@@ -639,12 +619,8 @@ const createOfflineWarmup = ({
     log("emulatorjs warm-up complete", { version: emulatorJsVersion });
   };
 
-  /**
-   * Bytes of this unit already in its cache. The download callbacks credit
-   * already-cached files through onBytes, so interim math MUST subtract this
-   * share from the baseline or those bytes count twice and the percentage
-   * overshoots, then snaps back when the unit completes.
-   */
+  /** Download callbacks credit cached files through onBytes. Interim math MUST
+   * subtract them from its baseline to prevent double counting and percentage overshoot. */
   const cachedUnitBytes = async (units: WarmupUnit[]): Promise<number> => {
     let total = 0;
     if (units.some((unit) => unit.kind === "emulatorjs-file")) {
@@ -671,47 +647,35 @@ const createOfflineWarmup = ({
 
   const unitBytes = (unit: WarmupUnit) => (unit.kind === "emulatorjs-file" ? unit.sizeBytes : groupBytes(unit.group));
 
-  /**
-   * The units one pump processes together: a run of emulatorjs files up to the
-   * batch size, downloaded concurrently, or a single identify group. The
-   * detail line names the largest file of a batch - it is the one the user is
-   * actually waiting on.
-   */
+  /** A pump downloads one identify group or a bounded EmulatorJS batch. The
+   * detail line names the batch's largest file. */
   const nextBatch = (units: WarmupUnit[]): WarmupUnit[] => {
     if (units[0]?.kind !== "emulatorjs-file") return units.slice(0, 1);
     const batch = units.filter((unit) => unit.kind === "emulatorjs-file").slice(0, emulatorJsBatchSize);
     return batch.sort((left, right) => unitBytes(right) - unitBytes(left));
   };
 
-  // Serializes pumps: two clients (two open tabs, or a page retrying after its
-  // pump timeout) MUST NOT process the queue concurrently, or both would take
-  // the same head unit and the second removal would discard an unprocessed one.
+  // Pumps MUST run serially. Concurrent clients can take the same head unit and discard work when one removes it.
   let pumpChain: Promise<unknown> = Promise.resolve();
 
   const processNextUnit = async (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupUnit | undefined> => {
     const units = await getQueue();
     const unit = units[0];
     if (!unit) {
-      // Empty queue can still mean a missing emulatorjs marker (files were
-      // filled by the runtime route before the queue was built).
+      // Runtime requests can fill the queue's files before its completion marker exists.
       await finishEmulatorJsIfComplete();
       return unit;
     }
     const batch = nextBatch(units);
-    // The queue head exists, so the batch is never empty.
     const batchHead = batch[0] ?? unit;
-    // Interim events add the in-flight bytes onto a baseline taken once per
-    // batch, so the counter rises smoothly during the download instead of
-    // jumping once when the whole batch lands.
+    // Add in-flight bytes to one batch baseline so progress rises during the download.
     let onBytes: ((delta: number) => void) | undefined;
     if (onInterim) {
       const [baseline, batchCachedBytes] = await Promise.all([getReadyState(), cachedUnitBytes(batch)]);
       const detail = unitDetail(batchHead, batch.length);
       const label = unitLabel(batchHead);
       const unitTotalBytes = batch.reduce((sum, batchUnit) => sum + unitBytes(batchUnit), 0);
-      // The baseline already counts the batch's cached share, and onBytes
-      // credits that share again while the batch runs - keep only one copy so
-      // cachedBytes rises monotonically instead of overshooting per unit.
+      // onBytes credits the batch's cached share again. Remove it from the baseline so cachedBytes stays monotonic.
       const baseCachedBytes = Math.max(0, baseline.cachedBytes - batchCachedBytes);
       let loadedBytes = 0;
       let lastEmit = 0;
@@ -734,12 +698,10 @@ const createOfflineWarmup = ({
         lastEmit = now;
         emit();
       };
-      // One immediate event names the unit that just started downloading.
+      // Emit immediately so progress names the unit that started.
       emit();
     }
-    // Concurrent within the batch; every completed file is removed from the
-    // live queue by identity (a bump may have replaced or reordered the array
-    // while the download ran), so one failed file only re-queues itself.
+    // Remove completed files by identity because a priority bump can replace or reorder the live queue.
     await Promise.all(
       batch.map(async (batchUnit) => {
         if (batchUnit.kind === "emulatorjs-file") {
@@ -772,8 +734,7 @@ const createOfflineWarmup = ({
 
   const bumpPriority = (target: WarmupBumpTarget) => {
     if (!queue) {
-      // Queue not built yet: build it, then reorder. Fire-and-forget is fine -
-      // the follow-up pump awaits getQueue() before reading it.
+      // Build before reordering. The following pump awaits getQueue before it reads the queue.
       getQueue()
         .then(() => bumpPriority(target))
         .catch((error) => {
@@ -809,18 +770,13 @@ const createOfflineWarmup = ({
       log("identify pack is not in this worker's pack table", { url: requestUrl.pathname });
       return Response.error();
     }
-    // The table is matched by pathname alone, so the requested digest is the
-    // one piece of evidence that the page and this worker disagree on which
-    // data revision is current.
+    // The table matches by pathname, so log both digests to detect a page and worker revision mismatch.
     log("identify pack fetch", {
       requestedSha256: requestUrl.searchParams.get("sha256") || "none",
       tableSha256: pack.sha256,
       url: requestUrl.pathname,
     });
-    // On-demand single-pack fetch: an identify run must never fail because the
-    // group install has not happened yet. The group marker stays absent until
-    // a full install, so settings semantics are unchanged. The user is waiting
-    // on this response, so it fetches at normal priority.
+    // An identify run MAY fetch one pack before group installation. Keep the group marker absent and use interactive priority.
     const { request: packRequest, response } = await fetchVerifiedPack(pack, scope, fetchForInteractive);
     await cache.put(packRequest, response.clone());
     return response;

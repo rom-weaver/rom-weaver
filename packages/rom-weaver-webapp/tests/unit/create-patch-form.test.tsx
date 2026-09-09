@@ -144,7 +144,7 @@ const requireCreatePatchForm = () => {
 
 beforeEach(async () => {
   createPatchFormModule = await import("../../src/public/react/create-patch-form.tsx");
-  window.history.replaceState(null, "", "/create");
+  window.history.replaceState(null, "", "/create-patch");
   latest = null;
   nextOriginalError = null;
   nextModifiedError = null;

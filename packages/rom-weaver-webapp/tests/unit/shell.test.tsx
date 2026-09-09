@@ -12,6 +12,7 @@ import {
   readPwaState,
   SiteFooter,
 } from "../../src/webapp/components/shell.tsx";
+import type { WorkflowTab } from "../../src/webapp/components/shell.tsx";
 
 const withSettings = (children: ReactNode) => (
   <RomWeaverSettingsProvider settings={{}}>{children}</RomWeaverSettingsProvider>
@@ -20,16 +21,32 @@ const withSettings = (children: ReactNode) => (
 const TABS = [
   { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
-];
+  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  {
+    group: "tools",
+    href: "apply-patch#bundle",
+    icon: <svg aria-hidden="true" />,
+    id: "bundle",
+    label: "Bundles",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim",
+    icon: <svg aria-hidden="true" />,
+    id: "trim",
+    label: "Trim",
+    placement: "more",
+  },
+] satisfies WorkflowTab[];
 
 const mastheadProps = {
   currentTab: "patcher",
   githubHref: "https://example.com/repo",
-  homeHref: "/apply",
-  onOpenChangelog: () => undefined,
+  homeHref: "/apply-patch",
+  onOpenWhatsNew: () => undefined,
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onOpenStatus: () => undefined,
@@ -114,19 +131,12 @@ describe("More menu keyboard movement", () => {
 
 describe("More menu destinations", () => {
   it("routes each item to its handler and closes the menu", () => {
-    const onOpenChangelog = vi.fn();
     const onOpenLog = vi.fn();
     const onOpenStatus = vi.fn();
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(
       withSettings(
-        <Masthead
-          {...mastheadProps}
-          onOpenChangelog={onOpenChangelog}
-          onOpenLog={onOpenLog}
-          onOpenStatus={onOpenStatus}
-          onSelectTab={onSelectTab}
-        />,
+        <Masthead {...mastheadProps} onOpenLog={onOpenLog} onOpenStatus={onOpenStatus} onSelectTab={onSelectTab} />,
       ),
     );
 
@@ -139,12 +149,20 @@ describe("More menu destinations", () => {
     expect(onOpenLog).toHaveBeenCalledTimes(1);
 
     openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Changelog" }));
-    expect(onOpenChangelog).toHaveBeenCalledTimes(1);
+    fireEvent.click(getByRole("menuitem", { name: "What\u2019s new" }));
+    expect(onSelectTab).toHaveBeenCalledWith("whats-new");
 
     openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Trim" }));
+    fireEvent.click(getByRole("menuitem", { name: "Trim Beta" }));
     expect(onSelectTab).toHaveBeenCalledWith("trim");
+
+    openDesktopMore(container);
+    fireEvent.click(getByRole("menuitem", { name: "Docs" }));
+    expect(onSelectTab).toHaveBeenCalledWith("docs");
+
+    openDesktopMore(container);
+    fireEvent.click(getByRole("menuitem", { name: "Bundles" }));
+    expect(onSelectTab).toHaveBeenCalledWith("bundle");
   });
 
   it("falls back to the Log dialog when no Storage handler is given", () => {

@@ -35,8 +35,19 @@ export function areAptPackagesInstalled(packages, run = execFileSync) {
 
 export function installAptPackages(packages, run = execFileSync) {
   if (!packages.length || areAptPackagesInstalled(packages, run)) return false;
-  run("sudo", ["apt-get", "update"], { stdio: "inherit" });
-  run("sudo", ["apt-get", "install", "--yes", ...packages], { stdio: "inherit" });
+
+  // CI packages MUST use Ubuntu sources so unrelated repositories cannot block setup.
+  // See https://manpages.ubuntu.com/manpages/noble/man5/apt.conf.5.html for source selection.
+  const sourceOptions = [
+    "-o",
+    "Dir::Etc::sourcelist=/etc/apt/sources.list.d/ubuntu.sources",
+    "-o",
+    "Dir::Etc::sourceparts=-",
+  ];
+  run("sudo", ["apt-get", ...sourceOptions, "update"], { stdio: "inherit" });
+  run("sudo", ["apt-get", ...sourceOptions, "install", "--yes", ...packages], {
+    stdio: "inherit",
+  });
   return true;
 }
 

@@ -50,6 +50,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.find.cliIdentifyAndHash"
+#~ msgstr "Identificar y calcular hashes de ROM (CLI)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.find.applyPatchHint"
+#~ msgstr "Apply Patch abre un bundle y ejecuta su secuencia de parches guardada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
@@ -67,6 +77,11 @@ msgstr "{compressed} transferido · {uncompressed} almacenado"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.offCount"
 msgstr "{count, plural, one {# parche está desactivado - márcalo para incluirlo} other {# parches están desactivados - márcalos para incluirlos}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.resultCount"
+msgstr "{count} resultados"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -110,18 +125,23 @@ msgstr "Añadir una ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.local"
-msgstr "Todo local, en tu navegador — tus archivos nunca salen de tu equipo."
+msgid "ui.hero.applyDescription"
+msgstr "Añade una ROM y sus parches y descarga la ROM parcheada o un paquete reutilizable."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "y descarga el resultado o un paquete compartible —"
+msgid "ui.hero.testDescription"
+msgstr "Añade una ROM compatible, sin comprimir o en un archivo comprimido, para probar el juego en el emulador del navegador."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis2"
-msgstr "y redúcelos para almacenarlos —"
+msgid "ui.find.kindApp"
+msgstr "App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -135,18 +155,33 @@ msgstr "Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.applyAPatch"
+msgstr "Aplicar un parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Aplica parches a cualquier ROM, comprimida o sin comprimir,"
+msgstr "Aplica un parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.bundleHint"
+msgstr "Apply Patch gestiona bundles y ejecuta su secuencia de parches guardada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.applyThisPatch"
+msgstr "Aplicar este parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.applyTool"
+msgstr "Herramienta Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_APPLY_FAILED"
 msgstr "No se pudo aplicar el parche."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.accent"
-msgstr "a velocidad nativa"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -175,6 +210,11 @@ msgstr "ROM base"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.beta"
+msgstr "Beta"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.channel.beta"
 msgstr "Compilación beta"
 
@@ -195,8 +235,8 @@ msgstr "Pestaña del navegador"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis2"
-msgstr "por suma de verificación, aquí mismo en este navegador —"
+msgid "ui.find.bundlesApplyPatch"
+msgstr "Bundles — Apply Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -225,8 +265,13 @@ msgstr "Códecs CD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.tabChangelog"
-msgstr "Cambios"
+msgid "ui.identify.namePlatformChange"
+msgstr "Cambiar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "Cambia tu forma de jugar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -245,6 +290,16 @@ msgstr "Las sumas de verificación solo usan los caracteres hexadecimales 0-9 y 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformFirst"
+msgstr "Elija primero una plataforma"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameResults"
+msgstr "Elija el ROM que necesita"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.close"
 msgstr "Cerrar"
 
@@ -257,6 +312,11 @@ msgstr "Códec"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.commit"
 msgstr "Commit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createDescription"
+msgstr "Compara ROMs originales y modificadas, sin comprimir o en archivos comprimidos, para crear un parche que otros puedan aplicar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -275,6 +335,11 @@ msgstr "No se pudo cambiar {label}."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hashPlaceholder"
+msgstr "CRC32, MD5 o SHA-1"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "Crear bundle {format}"
 
@@ -282,6 +347,11 @@ msgstr "Crear bundle {format}"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Crear bundle {format} con ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.createTool"
+msgstr "Herramienta Crear"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -302,6 +372,11 @@ msgstr "Valores predeterminados"
 #: src/presentation/localization/messages.ts
 msgid "ui.channel.dev"
 msgstr "Compilación de desarrollo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.log.dialogLabel"
+msgstr "Diagnóstico"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -355,6 +430,11 @@ msgstr "Introduce 8 (CRC32), 32 (MD5) o 40 (SHA-1) caracteres hexadecimales."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameTooShort"
+msgstr "Escriba al menos 2 caracteres del nombre del juego."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Entorno"
 
@@ -390,6 +470,21 @@ msgstr "Filtrar el registro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.label"
+msgstr "Buscar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.placeholder"
+msgstr "Buscar una herramienta, guía o ajuste"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis2"
+msgstr "Encuentra su coincidencia exacta."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.fixOrder"
 msgstr "Corregir orden"
 
@@ -400,8 +495,43 @@ msgstr "Corregir cabecera ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlaceholder"
+msgstr "Nombre del juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.kindGuide"
+msgstr "Guía"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.kindGuide"
+msgstr "Guía"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.identify"
 msgstr "Identificar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashDisclosure"
+msgstr "Identificar por suma de verificación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameDisclosure"
+msgstr "Buscar por nombre del juego"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.identifyFile"
+msgstr "Identificar este archivo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.identifyTool"
+msgstr "Herramienta Identificar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -435,13 +565,18 @@ msgstr "Instalando la copia sin conexión — {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "en un parche comprimido y compartible que otros puedan aplicar —"
+msgid "ui.hero.trimThesis"
+msgstr "Conserva el juego."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacksNote"
 msgstr "Mantener sin conexión. Las bases de datos no marcadas se descargan a petición cuando un ROM las necesita; desmarcar una elimina su copia en caché."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyThesis"
+msgstr "Identifica tu ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,13 +650,23 @@ msgstr "¿Busca una ROM concreta?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.trimThesis2"
+msgstr "Elimina el relleno."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis"
+msgstr "Crea un parche."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionOptional"
 msgstr "Hacer todos opcionales"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis"
-msgstr "Relaciona una ROM con su juego, su región, su revisión y el nombre exacto de su volcado,"
+msgid "ui.hero.identifyDescription"
+msgstr "Compara la suma de verificación de tu ROM con la base de datos local para encontrar el nombre exacto del volcado."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -570,6 +715,16 @@ msgstr "No hay archivos sin conexión en caché."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformEmpty"
+msgstr "Ninguna plataforma coincide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameNoMatch"
+msgstr "Ningún ROM en los datos de esta plataforma tiene ese nombre."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No se encontró ningún archivo seleccionable."
 
@@ -577,6 +732,11 @@ msgstr "No se encontró ningún archivo seleccionable."
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashRefine"
 msgstr "¿No es la ROM que buscaba?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.empty"
+msgstr "Nada coincide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -607,6 +767,11 @@ msgstr "Soporte sin conexión desactivado"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.romDistributionWarning"
 msgstr "Incluye una ROM solo si tienes derecho a distribuirla. Compartir ROMs con derechos de autor puede ser ilegal."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.hintGuide"
+msgstr "Abre la guía"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -660,11 +825,6 @@ msgstr "Registro mostrado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashPlaceholder"
-msgstr "CRC32, MD5 o SHA-1"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.PATCH_CREATE_FAILED"
 msgstr "La creación del parche falló."
 
@@ -685,8 +845,8 @@ msgstr "Los parches corresponden a Aplicar y se ignoraron."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis"
-msgstr "Juega una ROM parcheada en un emulador, directamente en el navegador,"
+msgid "ui.identify.namePlatformLabel"
+msgstr "Plataforma"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -697,6 +857,11 @@ msgstr "Compilación de vista previa"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "salida anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.project"
+msgstr "Proyecto"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -712,6 +877,16 @@ msgstr "Vista previa del pull request"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.staging"
 msgstr "Leyendo archivos soltados…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.toolsThesis2"
+msgstr "Recupera el original."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.heading"
+msgstr "Relacionado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -735,6 +910,11 @@ msgstr "Recargar reemplaza la app en caché. Los trabajos en curso terminan prim
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.trimDescription"
+msgstr "Elimina el relleno sin usar de ROMs e imágenes de disco compatibles para ahorrar espacio."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.requireInputChecksumMatch"
 msgstr "Exigir coincidencia de entrada"
 
@@ -750,13 +930,13 @@ msgstr "Restablecer"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.common.retry"
-msgstr "Reintentar"
+msgid "ui.hero.toolsDescription"
+msgstr "Restaura la ROM original con un parche PPF3 que incluya datos para deshacer los cambios."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis"
-msgstr "Revierte una ROM parcheada a su volcado original,"
+msgid "ui.common.retry"
+msgstr "Reintentar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -785,6 +965,11 @@ msgstr "rom-weaver está en la caché de este navegador. La próxima visita carg
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.local"
+msgstr "Se ejecuta en tu navegador. Tus archivos se quedan en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.rvzCodec"
 msgstr "RVZ"
 
@@ -810,6 +995,11 @@ msgstr "Buscar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameSearch"
+msgstr "Buscar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.hashSearchAgain"
 msgstr "Buscar de nuevo"
 
@@ -820,18 +1010,28 @@ msgstr "Buscando…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameSearching"
+msgstr "Buscando…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.log.tabsLabel"
 msgstr "Secciones"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.settings.title"
-msgstr "Ajustes"
+msgid "ui.hero.testThesis2"
+msgstr "Ve tus cambios en el juego."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.log.dialogLabel"
-msgstr "Ajustes y estado"
+msgid "ui.find.kindSetting"
+msgstr "Ajuste"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.title"
+msgstr "Ajustes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -842,6 +1042,11 @@ msgstr "Compartir bundle"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.shareTitle"
 msgstr "Comparte esta receta de parches (para creadores de parches)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createThesis2"
+msgstr "Comparte tus cambios."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -885,13 +1090,13 @@ msgstr "Almacenado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis"
-msgstr "Elimina relleno y bloques basura de tus volcados de ROM,"
+msgid "ui.footer.donate"
+msgstr "Apoyar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.footer.donate"
-msgstr "Apoyar"
+msgid "ui.hero.supportedFormats"
+msgstr "Formatos compatibles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -905,6 +1110,11 @@ msgstr "Cambiar a tema claro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.hintTool"
+msgstr "Cambia de pestaña"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Toca para elegir archivos"
 
@@ -915,13 +1125,68 @@ msgstr "Prueba"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.testRom"
+msgstr "Probar esta ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.testTool"
+msgstr "Herramienta Probar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliArchiveHint"
+msgstr "La CLI puede extraer y comprimir archivos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliIdentifyAndHashHint"
+msgstr "La CLI puede inspeccionar archivos y calcular sumas de verificación."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliTrimRevertHint"
+msgstr "La CLI puede restaurar el relleno; la página Trim del navegador no."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliSetupHint"
+msgstr "La guía de la CLI trata la instalación y la configuración."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliPatchHint"
+msgstr "La guía de la CLI trata este comando de parches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.find.cliReferenceHint"
+msgstr "La referencia de la CLI enumera este comando."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.corsHint"
 msgstr "El servidor de archivos debe permitir descargas de origen cruzado (CORS)."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameUnavailable"
+msgstr "Los datos de identificación de esta plataforma no están disponibles en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.nameFailed"
+msgstr "La búsqueda por nombre falló."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "El destino del parche no coincide con la entrada seleccionada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.namePlatformsFailed"
+msgstr "No se pudo cargar la lista de plataformas."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1000,8 +1265,33 @@ msgstr "Hilos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.kindTool"
+msgstr "Herramienta"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.kindTool"
+msgstr "Herramienta"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
+msgstr "Herramientas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Transferido"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.trimTool"
+msgstr "Herramienta Recortar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testThesis"
+msgstr "Prueba tu ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1010,8 +1300,22 @@ msgstr "Activar todos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis"
-msgstr "Convierte una ROM original y su versión modificada, comprimidas o sin comprimir,"
+msgid "ui.identify.namePlatformPlaceholder"
+msgstr "Escriba para filtrar plataformas"
+
+#~ msgid "ui.find.kindSetting"
+#~ msgstr "Ajuste"
+
+#~ msgid "ui.find.label"
+#~ msgstr "Buscar"
+
+#~ msgid "ui.log.tabChangelog"
+#~ msgstr "Cambios"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.toolsThesis"
+msgstr "Deshaz el parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1040,11 +1344,6 @@ msgstr "¿Usar ROM duplicadas?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis2"
-msgstr "usando los datos de deshacer del propio parche —"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.chain.verifiedDuringWeave"
 msgstr "se verifica durante la aplicación"
 
@@ -1070,8 +1369,8 @@ msgstr "Novedades"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis2"
-msgstr "con partidas guardadas que permanecen en este dispositivo —"
+msgid "ui.identify.nameLabel"
+msgstr "¿Qué juego necesita?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

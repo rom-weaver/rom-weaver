@@ -1,3 +1,4 @@
+use super::cheats_apply::CheatApplySummary;
 use super::*;
 
 use rom_weaver_core::format_human_bytes;
@@ -34,6 +35,21 @@ fn solid_create_options(args: &PatchCreateCommand) -> Option<PatchCreateFormatOp
             extended,
         })
     })
+}
+
+/// An extended SOLID header with no comment gets the code list, so a cheat
+/// patch says what it does without a sidecar. A caller-supplied comment wins.
+fn fill_solid_comment_with_codes(
+    options: Option<&mut PatchCreateFormatOptions>,
+    summary: &CheatApplySummary,
+    codes: &[String],
+) {
+    if let Some(PatchCreateFormatOptions::Solid(metadata)) = options
+        && metadata.extended
+        && metadata.comment.is_none()
+    {
+        metadata.comment = Some(summary.comment(codes));
+    }
 }
 
 pub(super) fn normalize_create_patch_format(format: &str) -> String {
@@ -257,7 +273,7 @@ impl CliApp {
     }
 
     pub(super) fn run_patch_create(&self, args: PatchCreateCommand) -> AppRunOutcome {
-        let solid_options = solid_create_options(&args);
+        let mut solid_options = solid_create_options(&args);
         trace!(
             original = %args.original.display(),
             modified = ?args.modified,
@@ -489,6 +505,7 @@ impl CliApp {
                 &dest,
             ) {
                 Ok(summary) => {
+                    fill_solid_comment_with_codes(solid_options.as_mut(), &summary, &args.codes);
                     cheat_summary = Some(summary);
                     dest
                 }

@@ -429,7 +429,7 @@ export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabas
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 
-export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, name?: string, limit?: number, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
 
 export type IngestCommand = { input: string, output: string, database?: Array<string>, select?: Array<string>,
 /**
@@ -652,7 +652,11 @@ export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, lo
  */
 assume_yes?: boolean, };
 
-export type RomWeaverRunRequest = { command: Commands, output?: RomWeaverRunOutputOptions, };
+export type RomWeaverRunRequest = { command: Commands,
+/**
+ * Plan a command without changing files or downloading data.
+ */
+dry_run?: boolean, output?: RomWeaverRunOutputOptions, };
 
 export type RomWeaverCommand = Commands;
 

@@ -1,5 +1,25 @@
-import { BookOpen, Gamepad2, GitCompare, House, RotateCcw, ScanSearch, Scissors, Settings } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  BookOpen,
+  Gamepad2,
+  GitCompare,
+  House,
+  Package,
+  RotateCcw,
+  ScanSearch,
+  Scissors,
+  Settings,
+} from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useMemo,
+} from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
 import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
@@ -24,8 +44,9 @@ import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
+import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
-import type { OfflineWarmupDisplayProgress } from "./components/shell.tsx";
+import type { OfflineWarmupDisplayProgress, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
@@ -54,22 +75,54 @@ import {
   preloadWorkflowRoute,
   PpfUndoRouteForm,
   TrimPatchRoute,
+  WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
-const WORKFLOW_TABS = [
-  // "Apply": the tab both applies patch chains and edits/exports them as bundles.
-  { href: "apply", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
-  { href: "create", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
-  // Reference rather than a workflow. It stays direct in the desktop rail and
-  // moves into More on the phone dock.
-  { href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
-  { href: "test", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test" },
-  // Beta utility routes. The shell keeps these out of both primary navs and
-  // exposes them from More when the beta-tools setting is enabled.
-  { href: "identify", icon: <ScanSearch aria-hidden="true" />, id: "identify", label: "Identify" },
-  { href: "trim", icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
-  { href: "ppf-undo", icon: <RotateCcw aria-hidden="true" />, id: "ppf-undo", label: "PPF undo" },
+const WORKFLOW_TABS: WorkflowTab[] = [
+  // "Apply Patch": the tab both applies patch chains and edits/exports them as bundles.
+  { href: "apply-patch", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply Patch" },
+  { href: "create-patch", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create Patch" },
+  { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM" },
+  // Reference rather than a workflow: filed under Docs in More on both layouts.
+  { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  {
+    group: "tools",
+    href: "apply-patch#bundle",
+    icon: <Package aria-hidden="true" />,
+    id: "bundle",
+    label: "Bundles",
+    placement: "more",
+  },
+  // Beta utility routes. They stay behind the beta-tools setting and show up
+  // under Tools in More once it is on.
+  {
+    beta: true,
+    group: "tools",
+    href: "identify-rom",
+    icon: <ScanSearch aria-hidden="true" />,
+    id: "identify",
+    label: "Identify ROM",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "trim-rom",
+    icon: <Scissors aria-hidden="true" />,
+    id: "trim",
+    label: "Trim ROM",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "ppf-undo",
+    icon: <RotateCcw aria-hidden="true" />,
+    id: "ppf-undo",
+    label: "PPF undo",
+    placement: "more",
+  },
 ];
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
@@ -86,6 +139,10 @@ const logger = createLogger("webapp-root");
 
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
+  if (view === "whats-new") {
+    document.title = "rom-weaver - What's new";
+    return;
+  }
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
@@ -316,7 +373,9 @@ function WebappRoot({
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
     if (notFound) return;
-    setActiveSelectionForm(state.currentView === "docs" ? undefined : state.currentView);
+    setActiveSelectionForm(
+      state.currentView === "docs" || state.currentView === "whats-new" ? undefined : state.currentView,
+    );
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
@@ -433,31 +492,73 @@ function WebappRoot({
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
   }, []);
-  // Every changelog affordance - the version chip, the update notification, and
-  // the runtime chip while it is amber - lands on the one tab that holds every
-  // view of the changelog.
-  const openChangelogTab = useCallback(() => {
-    preloadLogDialog();
-    setLogTab("changelog");
-    setLogOpen(true);
-  }, [preloadLogDialog]);
+  // Every What's new affordance - the version chip, the update notification,
+  // and the runtime chip while it is amber - lands on the What's new route.
+  const openWhatsNew = useCallback(() => {
+    pendingViewRef.current = null;
+    selectViewWithTransition(() => actions.onSelectView("whats-new"));
+  }, [actions]);
   // The runtime chip reports a state, and Status is where that state is
   // explained - except in the one state that asks for an action. An amber chip
   // is an update waiting, so it goes where the update is described.
   const openStatusTab = useCallback(() => {
     if (pageUpdate.ready) {
-      openChangelogTab();
+      openWhatsNew();
       return;
     }
     preloadLogDialog();
     setLogTab("status");
     setLogOpen(true);
-  }, [openChangelogTab, pageUpdate.ready, preloadLogDialog]);
+  }, [openWhatsNew, pageUpdate.ready, preloadLogDialog]);
   const openStorageTab = useCallback(() => {
     preloadLogDialog();
     setLogTab("storage");
     setLogOpen(true);
   }, [preloadLogDialog]);
+  // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
+  const mastheadTabs = useMemo(
+    () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
+    [notFound],
+  );
+
+  // The nav's own tab switch. Shared with the related-links strips (workflow
+  // results, the docs footer, the not-found page) so every "go here next"
+  // affordance in the app resolves through this one router.
+  const handleSelectTab = useCallback(
+    (id: string) => {
+      if (notFound) {
+        // Not-found's More menu can also reach a tab with no rail entry
+        // (What's new), so it falls back to the id itself as the slug.
+        const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
+        if (href) window.location.assign(`/${href}`);
+        return;
+      }
+      if (id === "bundle") {
+        if (window.location.hash.toLowerCase() === "#bundle") window.dispatchEvent(new Event("hashchange"));
+        else window.location.hash = "bundle";
+        pendingViewRef.current = null;
+        selectViewWithTransition(() => actions.onSelectView("patcher"));
+        return;
+      }
+      const view = id as WebappRootProps["state"]["currentView"];
+      if (view === "test") requestEmulatorStartFromUserAction();
+      if (view === "docs") {
+        // Keep the current panel visible until the lazy Docs route is ready;
+        // switching first leaves its navigation bar absent for one frame.
+        const startingView = currentViewRef.current;
+        pendingViewRef.current = view;
+        void preloadWorkflowRoute(view).then(() => {
+          if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
+          pendingViewRef.current = null;
+          selectViewWithTransition(() => actions.onSelectView(view));
+        });
+        return;
+      }
+      pendingViewRef.current = null;
+      selectViewWithTransition(() => actions.onSelectView(view));
+    },
+    [actions, notFound],
+  );
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
   // page-level drop (classification and routing stay Rust/extension-driven).
@@ -502,7 +603,7 @@ function WebappRoot({
   // fires continuously, so a short debounce clears the flag once it stops (drag
   // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
   useEffect(() => {
-    if (notFound || state.currentView === "docs") {
+    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") {
       setPageDragging(false);
       return undefined;
     }
@@ -529,7 +630,7 @@ function WebappRoot({
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
-    if (notFound || state.currentView === "docs") return undefined;
+    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") return undefined;
     const handlePageDragOver = (event: DragEvent) => {
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
@@ -581,7 +682,7 @@ function WebappRoot({
         id={`panel-${view}`}
         role="tabpanel"
       >
-        {view === "docs" ? null : (
+        {view === "docs" || view === "whats-new" ? null : (
           <div className="workflow-panel-head">
             <PanelSettingsButton
               onOpenSettings={() => openSettingsTab()}
@@ -621,7 +722,7 @@ function WebappRoot({
             onAccentChange={actions.onAccentChange}
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
-            onOpenChangelog={openChangelogTab}
+            onOpenWhatsNew={openWhatsNew}
             onOpenLog={() => {
               setLogTab("logs");
               setLogOpen(true);
@@ -630,6 +731,7 @@ function WebappRoot({
             onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
+            onOpenSettingsField={openSettingsTab}
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
@@ -638,31 +740,9 @@ function WebappRoot({
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
-            onSelectTab={(id) => {
-              if (notFound) {
-                const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href;
-                if (href) window.location.assign(`/${href}`);
-                return;
-              }
-              const view = id as WebappRootProps["state"]["currentView"];
-              if (view === "test") requestEmulatorStartFromUserAction();
-              if (view === "docs") {
-                // Keep the current panel visible until the lazy Docs route is ready;
-                // switching first leaves its navigation bar absent for one frame.
-                const startingView = currentViewRef.current;
-                pendingViewRef.current = view;
-                void preloadWorkflowRoute(view).then(() => {
-                  if (pendingViewRef.current !== view || currentViewRef.current !== startingView) return;
-                  pendingViewRef.current = null;
-                  selectViewWithTransition(() => actions.onSelectView(view));
-                });
-                return;
-              }
-              pendingViewRef.current = null;
-              selectViewWithTransition(() => actions.onSelectView(view));
-            }}
+            onSelectTab={handleSelectTab}
             settingsOpen={logOpen && logTab === "settings"}
-            tabs={notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS}
+            tabs={mastheadTabs}
             tabsControlPanels={!notFound}
           />
           <UpdateBanner
@@ -670,7 +750,7 @@ function WebappRoot({
               setUpdateDismissed(true);
               writeUpdateDismissed();
             }}
-            onOpenChangelog={openChangelogTab}
+            onOpenWhatsNew={openWhatsNew}
             onReload={actions.onReloadUpdate}
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
@@ -691,7 +771,7 @@ function WebappRoot({
                   </h1>
                   <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
                   <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href="/apply">
+                    <a className="btn primary not-found-home" href="/apply-patch">
                       <House aria-hidden="true" />
                       Apply a patch
                     </a>
@@ -700,6 +780,7 @@ function WebappRoot({
                       Browse docs
                     </a>
                   </div>
+                  <RelatedStrip entryKey="not-found" onSelectTab={handleSelectTab} />
                 </div>
               </section>
             ) : (
@@ -721,6 +802,7 @@ function WebappRoot({
                     onBundlePackageChange={actions.onPatcherBundlePackageChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
+                    onSelectTab={handleSelectTab}
                     onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={pageDropFor("patcher")}
@@ -733,17 +815,33 @@ function WebappRoot({
                     onModifiedChange={actions.onCreatorModifiedChange}
                     onOriginalChange={actions.onCreatorOriginalChange}
                     onPatchTypeChange={actions.onCreatorPatchTypeChange}
+                    onSelectTab={handleSelectTab}
                     onSettingsChange={actions.onCreatorSettingsChange}
                     pageDrop={pageDropFor("creator")}
                   />,
                 )}
-                {workflowPanel("docs", <DocsPageRoute active={state.currentView === "docs"} slug={docsSlug} />)}
-                {workflowPanel("identify", <IdentifyRouteForm pageDrop={pageDropFor("identify")} />)}
+                {workflowPanel(
+                  "docs",
+                  <DocsPageRoute active={state.currentView === "docs"} onSelectTab={handleSelectTab} slug={docsSlug} />,
+                )}
+                {workflowPanel(
+                  "whats-new",
+                  <WhatsNewPageRoute
+                    active={state.currentView === "whats-new"}
+                    onReload={actions.onReloadUpdate}
+                    updateReady={pageUpdate.ready}
+                  />,
+                )}
+                {workflowPanel(
+                  "identify",
+                  <IdentifyRouteForm onSelectTab={handleSelectTab} pageDrop={pageDropFor("identify")} />,
+                )}
                 {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
                     onOutputFormatChange={actions.onTrimOutputFormatChange}
+                    onSelectTab={handleSelectTab}
                     onSettingsChange={actions.onTrimSettingsChange}
                     onSourceChange={actions.onTrimSourceChange}
                     pageDrop={pageDropFor("trim")}
@@ -756,12 +854,13 @@ function WebappRoot({
                     pageDrop={pageDropFor("ppf-undo")}
                   />,
                 )}
-                {state.currentView === "docs" ? null : <DropVeil />}
+                {state.currentView === "docs" || state.currentView === "whats-new" ? null : <DropVeil />}
               </>
             )}
           </main>
           <SiteFooter
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
+            docsHref={notFound ? "/docs" : "docs"}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
           />
@@ -777,7 +876,6 @@ function WebappRoot({
               level={state.settings.logLevel}
               onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}
-              onReload={actions.onReloadUpdate}
               onRestoreDefaults={actions.onRestoreDefaults}
               onSaveSettings={saveSettings}
               onTabChange={handleDialogTabChange}

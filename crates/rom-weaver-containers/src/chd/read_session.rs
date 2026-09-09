@@ -358,9 +358,8 @@ impl ChdReadSession {
         let source = source.to_path_buf();
         let parent_source = parent_source.map(Path::to_path_buf);
 
-        // Every wasm thread can do OPFS I/O through the proxy worker (it refcounts to a single
-        // handle per path), so worker threads open their own reader and read+decode directly --
-        // the same scoped-reader path native uses. No read-on-main producer is needed.
+        // WASM workers use the OPFS proxy to open and read their own readers.
+        // Native and browser use the same scoped-reader path.
         {
             let hunk_indices: Vec<u32> = (0..hunk_count).collect();
             let hunk_bytes_usize = usize::try_from(hunk_bytes)

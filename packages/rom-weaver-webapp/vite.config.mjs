@@ -12,6 +12,7 @@ import { resolveIdentifyPackGroups } from "../../scripts/identify-pack-groups.mj
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
+import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
@@ -77,11 +78,7 @@ const docsScreenshotSources = Object.fromEntries(
   DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
 
-// A manifest's icons are read at install time, so an installed PWA's icon can
-// only follow the build channel - unlike the in-app mark, which follows the
-// user's accent. scripts/generate-channel-icons.mjs pre-renders (and commits) a
-// tinted set per channel; channels defaulting to madder have no directory and
-// fall through to the stock icons.
+// Channels without generated assets MUST fall back to the stock icons.
 const channelAssetPath = (channel, name) => {
   const override = path.join(rootAssetDir, "channels", channel, name);
   return fs.existsSync(override) ? override : path.join(rootAssetDir, name);
@@ -278,10 +275,26 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   }
 };
 
+const LEGACY_WORKFLOW_ROUTES = {
+  apply: "apply-patch",
+  create: "create-patch",
+  identify: "identify-rom",
+  test: "test-rom",
+  trim: "trim-rom",
+  weave: "apply-patch",
+};
+
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
   const rootStaticAssetSources = rootStaticAssetSourcesForChannel(channel);
   middlewares.use((req, res, next) => {
     const requestPath = req.url ? req.url.split("?")[0] : "";
+    const legacySlug = requestPath.replace(/^\//, "").replace(/(?:\/index\.html|\/|\.html)$/, "");
+    const destination = Object.hasOwn(LEGACY_WORKFLOW_ROUTES, legacySlug) && LEGACY_WORKFLOW_ROUTES[legacySlug];
+    if (destination) {
+      res.writeHead(301, { Location: `/${destination}${req.url.slice(requestPath.length)}` });
+      res.end();
+      return;
+    }
     if (requestPath.startsWith("/cheats/")) {
       const relativePath = requestPath.slice("/cheats/".length);
       const segments = relativePath.split("/");
@@ -503,10 +516,10 @@ const createNotFoundHtml = (html, channel, channelLabel) => {
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/</loc></url>
-  <url><loc>https://rom-weaver.com/apply</loc></url>
-  <url><loc>https://rom-weaver.com/create</loc></url>
-  <url><loc>https://rom-weaver.com/identify</loc></url>
-  <url><loc>https://rom-weaver.com/test</loc></url>
+  <url><loc>https://rom-weaver.com/apply-patch</loc></url>
+  <url><loc>https://rom-weaver.com/create-patch</loc></url>
+  <url><loc>https://rom-weaver.com/identify-rom</loc></url>
+  <url><loc>https://rom-weaver.com/test-rom</loc></url>
 ${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
 </urlset>
 `;
@@ -606,9 +619,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         createWorkflowRouteHtml(patcherHtml, WORKFLOW_SEO_ROUTES.patcher, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.patcher,
       );
-      fs.writeFileSync(path.join(distDir, "apply.html"), applyHtml);
-      // The extensionless twin of the /weave/ alias below, for the same reason.
-      fs.writeFileSync(path.join(distDir, "weave.html"), makeBetaRouteNoindex(patcherHtml, "apply"));
       fs.writeFileSync(
         path.join(distDir, "404.html"),
         createNotFoundHtml(withShell("notFound"), channel, channelLabel),
@@ -618,7 +628,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         createWorkflowRouteHtml(creatorHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.creator,
       );
-      fs.writeFileSync(path.join(distDir, "create.html"), createHtml);
       const identifyHtml = injectLdJson(
         createWorkflowRouteHtml(
           withRoutePreloadLinks(withShell("identify"), routePreloadLinks.get("identify")),
@@ -628,7 +637,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ),
         WORKFLOW_SEO_ROUTES.identify,
       );
-      fs.writeFileSync(path.join(distDir, "identify.html"), identifyHtml);
       const testHtml = injectLdJson(
         createWorkflowRouteHtml(
           withRoutePreloadLinks(withShell("test"), routePreloadLinks.get("test")),
@@ -638,7 +646,6 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ),
         WORKFLOW_SEO_ROUTES.test,
       );
-      fs.writeFileSync(path.join(distDir, "test.html"), testHtml);
       for (const route of DOC_ROUTES) {
         const routeShellHtml = withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get("docs"));
         const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
@@ -650,32 +657,51 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         fs.writeFileSync(directoryIndexPath, docsHtml);
       }
       for (const [slug, html] of [
-        ["apply", applyHtml],
-        ["create", createHtml],
-        ["identify", identifyHtml],
-        ["test", testHtml],
-        ["trim", withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "trim"), routePreloadLinks.get("trim"))],
+        ["apply-patch", applyHtml],
+        ["create-patch", createHtml],
+        ["identify-rom", identifyHtml],
+        ["test-rom", testHtml],
+        [
+          "trim-rom",
+          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "trim-rom"), routePreloadLinks.get("trim")),
+        ],
         [
           "ppf-undo",
           withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
+        ],
+        // What's new needs a document of its own or the host serves 404.html,
+        // whose not-found flag hides the route on a direct load or reload. Its
+        // content is fetched release notes, so it stays out of the index.
+        [
+          "whats-new",
+          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "whats-new"), routePreloadLinks.get("whats-new")),
         ],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
         [
           "tools",
           withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
         ],
-        // Same for the old /weave/ URL, which canonicalizes to /apply. It needs a
-        // real document, not just the `_redirects` rule and the slug mapping: a
-        // host that applies neither serves index.html, and index.html is the
-        // landing page. The app still resolves /weave to the patcher, so the
-        // shell it hydrates has to be the patcher's or React drops it.
-        ["weave", withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "apply"), routePreloadLinks.get("patcher"))],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
+        fs.writeFileSync(path.join(distDir, `${slug}.html`), html);
         fs.writeFileSync(path.join(routeDir, "index.html"), html.replace("<head>", '<head>\n    <base href="../" />'));
       }
       fs.writeFileSync(path.join(distDir, "robots.txt"), createRobotsSource(channel));
+      // Static hosts without redirect rules MUST retain usable legacy documents.
+      for (const [legacy, destination] of Object.entries(LEGACY_WORKFLOW_ROUTES)) {
+        const canonicalHtml = fs.readFileSync(path.join(distDir, destination, "index.html"), "utf8");
+        const legacyHtml = canonicalHtml.replace(
+          /<meta name="robots" content="[^"]*"\s*\/?\s*>/,
+          '<meta name="robots" content="noindex,follow" />',
+        );
+        fs.mkdirSync(path.join(distDir, legacy), { recursive: true });
+        fs.writeFileSync(path.join(distDir, legacy, "index.html"), legacyHtml);
+        fs.writeFileSync(
+          path.join(distDir, `${legacy}.html`),
+          legacyHtml.replace('<base href="../" />', '<base href="./" />'),
+        );
+      }
       if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
       const thirdPartyDir = path.join(distDir, "third_party");
       fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), thirdPartyDir, {
@@ -936,17 +962,10 @@ const devPrerenderRoute = (url) => {
   if (segments.includes("docs")) return { docsSlug: readDocsSlugFromPathname(pathname), view: "docs" };
   // No route segment is the app base itself, which serves the landing page.
   if (!slug) return { docsSlug: "docs", view: "home" };
-  return {
-    docsSlug: "docs",
-    view:
-      slug === "create" || slug === "create.html"
-        ? "creator"
-        : slug === "identify" || slug === "identify.html"
-          ? "identify"
-          : slug === "test" || slug === "test.html"
-            ? "test"
-            : "patcher",
-  };
+  const routeSlug = slug.replace(/\.html$/, "");
+  const canonical = Object.hasOwn(LEGACY_WORKFLOW_ROUTES, routeSlug) ? LEGACY_WORKFLOW_ROUTES[routeSlug] : routeSlug;
+  const view = Object.entries(WORKFLOW_SEO_ROUTES).find(([, route]) => route.slug === canonical)?.[0] ?? "patcher";
+  return { docsSlug: "docs", view };
 };
 
 const prerenderWebappShell = (prerenderedShells) => ({
@@ -1040,6 +1059,7 @@ const WORKFLOW_ROUTE_MODULES = {
   test: "src/public/react/emulator-test-view.tsx",
   "ppf-undo": "src/webapp/components/ppf-undo-form.tsx",
   trim: "src/public/react/trim-form.tsx",
+  "whats-new": "src/webapp/whats-new-page.tsx",
 };
 
 const findChunkForModule = (bundle, moduleSuffix) =>
@@ -1337,6 +1357,7 @@ export default defineConfig(({ command, mode }) => {
       ],
     },
     plugins: [
+      compileLinguiCatalogs(),
       docsVirtualModule(DOC_ROUTES),
       brandMarkAssets(),
       shareWorkerRuntimeChunks(),

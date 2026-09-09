@@ -23,6 +23,7 @@ struct TrimBatchState {
     single_detail: Option<String>,
     irreversible_xiso: bool,
     irreversible_rvz_scrub: bool,
+    planned_outputs: Vec<String>,
 }
 
 impl CliApp {
@@ -88,13 +89,15 @@ impl CliApp {
                 return self.finish("compress", report);
             }
         }
-        if let Some(report) = self.require_writable_output_parent(
-            "compress",
-            OperationFamily::Container,
-            requested_format.clone(),
-            &output,
-            probe_threads.clone(),
-        ) {
+        if !dry_run
+            && let Some(report) = self.require_writable_output_parent(
+                "compress",
+                OperationFamily::Container,
+                requested_format.clone(),
+                &output,
+                probe_threads.clone(),
+            )
+        {
             return self.finish("compress", report);
         }
         if !dry_run && let Err(error) = ensure_output_available(&output, force) {
@@ -188,7 +191,7 @@ impl CliApp {
                 parent: None,
             };
             let estimated = handler.create_dry_run_size(&request, &context).ok();
-            let report = Self::compress_dry_run_report(
+            let mut report = Self::compress_dry_run_report(
                 &input,
                 &output,
                 &resolved_format,
@@ -197,6 +200,9 @@ impl CliApp {
                 estimated,
                 create_threads.clone(),
             );
+            if let Some(warning) = format_warning.as_deref() {
+                report.label = format!("{}; warning: {warning}", report.label);
+            }
             return self.finish("compress", report);
         }
         self.emit_running(
@@ -285,6 +291,14 @@ impl CliApp {
     ) -> OperationReport {
         let mut details = Map::new();
         details.insert("dry_run".to_string(), json!(true));
+        details.insert("command".to_string(), json!("compress"));
+        details.insert("writes".to_string(), json!([output.display().to_string()]));
+        details.insert("downloads".to_string(), json!([]));
+        details.insert("read_only".to_string(), json!(false));
+        details.insert(
+            "notes".to_string(),
+            json!(["destination write access is not validated during dry run"]),
+        );
         details.insert(
             "inputs".to_string(),
             json!(
@@ -408,30 +422,39 @@ impl CliApp {
 
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(&cleanup_paths);
-            return self.finish(
+            let mut report = OperationReport::succeeded(
+                OperationFamily::Command,
+                Some(report_format.clone()),
                 "trim",
-                OperationReport::succeeded(
-                    OperationFamily::Command,
-                    Some(report_format.clone()),
-                    "trim",
-                    format!(
-                        "no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"
-                    ),
-                    Some(100.0),
-                    thread_execution,
-                ),
+                format!("no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"),
+                Some(100.0),
+                thread_execution,
             );
+            if dry_run {
+                report.details = Some(json!({
+                    "dry_run": true,
+                    "command": "trim",
+                    "writes": [],
+                    "downloads": [],
+                    "read_only": false,
+                    "processed": 0,
+                    "skipped_unsupported": skipped_unsupported,
+                }));
+            }
+            return self.finish("trim", report);
         }
 
-        if let Some(report) = output.as_deref().and_then(|output| {
-            self.require_writable_output_parent(
-                "trim",
-                OperationFamily::Container,
-                Some(report_format.clone()),
-                output,
-                thread_execution.clone(),
-            )
-        }) {
+        if !dry_run
+            && let Some(report) = output.as_deref().and_then(|output| {
+                self.require_writable_output_parent(
+                    "trim",
+                    OperationFamily::Container,
+                    Some(report_format.clone()),
+                    output,
+                    thread_execution.clone(),
+                )
+            })
+        {
             Self::cleanup_temp_paths(&cleanup_paths);
             return self.finish("trim", report);
         }
@@ -510,42 +533,54 @@ impl CliApp {
         };
 
         Self::cleanup_temp_paths(&cleanup_paths);
-        self.finish(
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some(report_format.clone()),
             "trim",
-            OperationReport::succeeded(
-                OperationFamily::Command,
-                Some(report_format.clone()),
-                "trim",
-                match state.single_detail {
-                    Some(single_detail) => format!(
-                        "{single_detail}; {}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_unsupported={} mode_counts={}{}",
-                        operation.summary_label(dry_run),
-                        trim_sources.len(),
-                        state.trimmed_count,
-                        state.already_trimmed_count,
-                        state.trimmed_count,
-                        state.already_trimmed_count,
-                        skipped_unsupported,
-                        Self::format_mode_counts(&state.mode_counts),
-                        irreversible_warning,
-                    ),
-                    None => format!(
-                        "{}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_unsupported={} mode_counts={}{}",
-                        operation.summary_label(dry_run),
-                        trim_sources.len(),
-                        state.trimmed_count,
-                        state.already_trimmed_count,
-                        state.trimmed_count,
-                        state.already_trimmed_count,
-                        skipped_unsupported,
-                        Self::format_mode_counts(&state.mode_counts),
-                        irreversible_warning,
-                    ),
-                },
-                Some(100.0),
-                thread_execution,
-            ),
-        )
+            match state.single_detail {
+                Some(single_detail) => format!(
+                    "{single_detail}; {}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_unsupported={} mode_counts={}{}",
+                    operation.summary_label(dry_run),
+                    trim_sources.len(),
+                    state.trimmed_count,
+                    state.already_trimmed_count,
+                    state.trimmed_count,
+                    state.already_trimmed_count,
+                    skipped_unsupported,
+                    Self::format_mode_counts(&state.mode_counts),
+                    irreversible_warning,
+                ),
+                None => format!(
+                    "{}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_unsupported={} mode_counts={}{}",
+                    operation.summary_label(dry_run),
+                    trim_sources.len(),
+                    state.trimmed_count,
+                    state.already_trimmed_count,
+                    state.trimmed_count,
+                    state.already_trimmed_count,
+                    skipped_unsupported,
+                    Self::format_mode_counts(&state.mode_counts),
+                    irreversible_warning,
+                ),
+            },
+            Some(100.0),
+            thread_execution,
+        );
+        if dry_run {
+            report.details = Some(json!({
+                "dry_run": true,
+                "command": "trim",
+                "writes": state.planned_outputs,
+                "downloads": [],
+                "read_only": false,
+                "processed": trim_sources.len(),
+                "notes": ["destination write access is not validated during dry run"],
+                "would_change": state.trimmed_count,
+                "already_target": state.already_trimmed_count,
+                "skipped_unsupported": skipped_unsupported,
+            }));
+        }
+        self.finish("trim", report)
     }
 
     fn process_trim_source(
@@ -631,6 +666,18 @@ impl CliApp {
         };
         match trim_result {
             Ok(outcome) => {
+                if config.dry_run {
+                    let destination = trim_source
+                        .archive_origin
+                        .as_ref()
+                        .filter(|_| repack_root.is_some())
+                        .unwrap_or(&output_path)
+                        .display()
+                        .to_string();
+                    if !state.planned_outputs.contains(&destination) {
+                        state.planned_outputs.push(destination);
+                    }
+                }
                 // A finished output must leave the cancel registry, or a later
                 // Ctrl-C in this batch would delete it along with the file in
                 // flight.

@@ -161,7 +161,7 @@ describe("the workbench shell", () => {
     const { container } = await renderRoot({ notFound: true });
 
     expect(container.querySelector(".not-found-page")).not.toBeNull();
-    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply");
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-patch");
     expect(container.querySelector("#panel-patcher")).toBeNull();
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
@@ -172,7 +172,7 @@ describe("the workbench shell", () => {
 
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
 
-    expect(assign).toHaveBeenCalledWith("/create");
+    expect(assign).toHaveBeenCalledWith("/create-patch");
   });
 });
 
@@ -196,7 +196,10 @@ describe("tab selection", () => {
   it("waits for the lazy Docs route before switching to it", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector('.dock-tab[data-mode="docs"]') as HTMLAnchorElement);
+    // Docs lives under More on both layouts, not in the dock.
+    expect(container.querySelector('.dock-tab[data-mode="docs"]')).toBeNull();
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-more-workflow="docs"]') as HTMLButtonElement);
     expect(called("onSelectView")).not.toHaveBeenCalled();
 
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("docs"));
@@ -221,14 +224,14 @@ describe("the unified dialog", () => {
     expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("sends the Status control to the changelog while an update is waiting", async () => {
-    const { container } = await renderRoot({ updateReady: true });
+  it("sends the Status control to What's new while an update is waiting", async () => {
+    const { called, container } = await renderRoot({ updateReady: true });
 
     openFromMore(container, "Status");
 
-    await waitFor(() =>
-      expect(container.querySelector('[data-logtab="changelog"]')?.getAttribute("aria-selected")).toBe("true"),
-    );
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    // No dialog opens for this path - it is a route switch, not a tab.
+    expect(container.querySelector("dialog.log-dlg")).toBeNull();
   });
 
   it("opens on Storage and on Logs", async () => {
@@ -286,6 +289,48 @@ describe("the update banner", () => {
 
     expect(second.container.querySelector(".reveal.is-open .updates.update-ready")).toBeNull();
   });
+
+  it("sends its What's new link to the whats-new route", async () => {
+    const { called, container } = await renderRoot({ updateReady: true });
+
+    fireEvent.click(container.querySelector(".updates.update-ready .updates-ver") as HTMLButtonElement);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+  });
+});
+
+describe("the What's new route", () => {
+  it("mounts the changelog panel with no panel-head gear", async () => {
+    const { container } = await renderRoot({ currentView: "whats-new" });
+
+    const panel = container.querySelector("#panel-whats-new");
+    expect(panel).not.toBeNull();
+    expect(panel?.hasAttribute("hidden")).toBe(false);
+    expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
+    expect(document.title).toBe("rom-weaver - What's new");
+  });
+
+  it("reaches the route from the version chip", async () => {
+    const { called, container } = await renderRoot();
+
+    // A dev/nightly checkout wears the channel badge instead of the plain
+    // version chip; either button opens What's new.
+    fireEvent.click(container.querySelector(".build-tag button") as HTMLButtonElement);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+  });
+
+  it("reaches the route from the More menu's Project group", async () => {
+    const { called, container } = await renderRoot();
+
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    const item = Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((entry) =>
+      entry.textContent?.includes("What’s new"),
+    );
+    fireEvent.click(item as HTMLElement);
+
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+  });
 });
 
 describe("page-level drag and drop", () => {
@@ -342,7 +387,7 @@ describe("page metadata per view", () => {
   it("names the page for a view that has no SEO route of its own", async () => {
     await renderRoot({ currentView: "trim" });
 
-    expect(document.title).toBe("rom-weaver - Trim");
+    expect(document.title).toBe("rom-weaver - Trim ROM");
   });
 
   it("uses the marketing title for a view that has one", async () => {

@@ -6,10 +6,8 @@ import { pathToFileURL } from "node:url";
 import { DOC_SOURCES } from "../../packages/rom-weaver-webapp/src/webapp/docs-routing.mjs";
 import { isReleasePullRequest } from "./release-pr.mjs";
 
-// Editing a published guide changes the built site, so it has to rebuild the
-// webapp. Taking the set from the route table rather than a folder prefix keeps
-// that exact: `docs/development/` holds both published pages and maintainer
-// notes, and only the published ones belong in the trigger.
+// Published documentation MUST select the webapp build.
+// The route table distinguishes published pages from unpublished maintainer notes in the same folder.
 const PUBLISHED_DOCS = new Set(DOC_SOURCES.map((source) => `docs/${source.file}`));
 
 const EMPTY = {
@@ -36,33 +34,15 @@ const EMPTY = {
   full: false,
 };
 
-// Test, bench, and example sources are compiled by the Rust test jobs and by
-// nothing else: they never enter the production WASM module or the release CLI
-// binary. `.github/actions/wasm-cache` excludes the same set from its cache key
-// for that reason, so selecting the webapp stack for them only buys a guaranteed
-// cache hit followed by browser jobs that cannot observe the edit. Keep the
-// two lists identical - note `.*` rather than `[^/]*` under src/, because the
-// shell globs this replaced matched across directory separators.
-//
-// One carve-out, applied by the `wasm_runtime` block below rather than here:
-// the WASM browser suite reads a handful of Rust fixture trees directly, so
-// those paths do select webapp work. `wasm-runtime-coverage.test.mjs` derives
-// that set from the suite's own imports, so it cannot drift.
+// Test, bench, and example sources do not enter release binaries; this exclusion MUST match .github/actions/wasm-cache.
+// The wasm_runtime rules separately select Rust fixtures read by browser tests, as checked by wasm-runtime-coverage.test.mjs.
 const isReleaseInput = (path) =>
   !/(?:\/tests\/|\/test\/|\/examples\/|\/benches\/|\/src\/test[^/]*\.rs$|\/src\/.*\/test[^/]*\.rs$)/.test(
     path,
   );
 
-// `eventName` only ever narrows, and only for `pull_request`; an absent one
-// selects everything a push would. `scripts/ci/cli-platform-matrix.mjs` defaults
-// the same way for the same reason: a caller that forgets to pass the event has
-// to lose time, not coverage.
-//
-// `headRef` is the one thing that can un-narrow a pull request: the release
-// pull request carries main's tree plus version strings, so classifying its diff
-// would hand the commit that ships less coverage than the commit it was cut
-// from. Its cost is that every refresh of that pull request - and each dispatch
-// pushes metadata-sync and screenshot commits - re-runs the whole matrix.
+// Only ordinary pull requests narrow checks; missing event names and release pull requests preserve the full selected matrix.
+// The event default MUST agree with scripts/ci/cli-platform-matrix.mjs.
 export function classifyChanges(paths, all = false, eventName = undefined, headRef = undefined) {
   const result = { ...EMPTY };
   if (all || isReleasePullRequest(eventName, headRef)) {
@@ -252,8 +232,7 @@ export function formatChanges(result) {
 }
 
 export function main(argv = process.argv.slice(2), readStdin = () => readFileSync(0, "utf8")) {
-  // stdin is read lazily: as a default parameter it was consumed even for
-  // --all, which blocks forever on an interactive terminal.
+  // --all MUST avoid reading stdin so it cannot block on an interactive terminal.
   const all = argv[0] === "--all";
   process.stdout.write(formatChanges(classifyChanges(all ? [] : readStdin().split(/\r?\n/), all)));
 }

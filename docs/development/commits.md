@@ -24,7 +24,7 @@ type: description
 - `type` is required and must come from the list below.
 - `scope` is optional. Include the shortest useful scope when the affected area is clear; an unscoped title is also valid.
 - `description` is lower case, imperative, and no trailing full stop.
-- The whole header is capped at 150 characters - raised from the usual 100 so grouped Dependabot titles fit.
+- The complete header has a 150-character limit to allow grouped Dependabot titles.
 
 ```text
 fix(webapp): handle empty patch archives
@@ -33,7 +33,7 @@ perf(ci): build multi-arch images on native runners instead of QEMU
 
 ## Types
 
-Allowed types come from `.config/commitlint.config.mjs`, which is the single source of truth - the `PR Title Lint` check reads that same file, so this list cannot drift into being enforced.
+`.config/commitlint.config.mjs` defines the allowed types. The `PR Title Lint` check reads that file. `release-please-config.json` defines the changelog sections and release settings.
 
 | Type | Use it for | Release effect |
 | --- | --- | --- |

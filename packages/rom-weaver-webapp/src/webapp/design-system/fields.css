@@ -1,4 +1,3 @@
-/* Fields */
 .rw-app .input,
 .rw-app .select {
   width: 100%;
@@ -521,7 +520,6 @@
     flex: 1 1 0;
   }
 }
-/* Patch actions menu */
 .rw-app .patch-menu {
   position: relative;
   display: inline-block;

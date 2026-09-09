@@ -39,6 +39,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "trim",
   "ppf-undo",
   "test",
+  "whats-new",
 ];
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
@@ -52,18 +53,29 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
-  creator: "create",
+  creator: "create-patch",
   // The landing page is the app base itself, so its slug is empty and
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
   home: "",
   docs: "docs",
-  identify: "identify",
-  patcher: "apply",
+  identify: "identify-rom",
+  patcher: "apply-patch",
   "ppf-undo": "ppf-undo",
-  test: "test",
-  trim: "trim",
+  test: "test-rom",
+  trim: "trim-rom",
+  "whats-new": "whats-new",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
+  "apply-patch": "patcher",
+  "apply-patch.html": "patcher",
+  "create-patch": "creator",
+  "create-patch.html": "creator",
+  "identify-rom": "identify",
+  "identify-rom.html": "identify",
+  "test-rom": "test",
+  "test-rom.html": "test",
+  "trim-rom": "trim",
+  "trim-rom.html": "trim",
   apply: "patcher",
   "apply.html": "patcher",
   create: "creator",
@@ -76,6 +88,9 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   test: "test",
   "test.html": "test",
   trim: "trim",
+  "trim.html": "trim",
+  "whats-new": "whats-new",
+  "whats-new.html": "whats-new",
   // Keep old links usable when a host has not applied the server redirect.
   tools: "ppf-undo",
   weave: "patcher",
@@ -134,6 +149,7 @@ const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode
   if (view === "docs" && readRouteSegments().includes("docs")) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
+  if (view === "patcher" && window.location.hash.toLowerCase() === "#bundle") nextUrl.hash = "#bundle";
   if (nextUrl.href === window.location.href) return;
   window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
 };

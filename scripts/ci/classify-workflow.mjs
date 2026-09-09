@@ -1,10 +1,6 @@
 #!/usr/bin/env node
 
-// Turns the pushed range into the `changes` job's per-stack outputs.
-//
-// Fails open in both directions - a manual dispatch and an unreachable base
-// both classify everything - because under-selecting silently skips a stack the
-// change actually touched, while over-selecting only costs CI minutes.
+// Manual dispatches and unavailable base commits MUST select every stack to preserve CI coverage.
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -45,10 +41,7 @@ runMain(() => {
   });
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
-  // The jobs that narrow on the event name rather than on a path flag - the
-  // macOS, Windows, and arm64-runtime legs, and the second architecture of the
-  // prebuilt webapp image - read this instead, so the branch rule lives in one
-  // place rather than in four workflow expressions.
+  // Event-gated macOS, Windows, arm64 runtime, and prebuilt-image jobs share this full-matrix decision.
   const fullMatrix = eventName !== "pull_request" || releasePullRequest;
   const output = `${formatChanges(
     classifyChanges(paths ?? [], paths === null, eventName, headRef),

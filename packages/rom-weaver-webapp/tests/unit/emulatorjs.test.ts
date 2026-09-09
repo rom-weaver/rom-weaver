@@ -121,6 +121,18 @@ describe("emulator game identity", () => {
     expect(createEmulatorGameIdentity({ checksum }).gameName).toBe(checksum);
   });
 
+  it("keeps the .chd extension on the name EmulatorJS writes into the core", () => {
+    const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
+    const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.CHD" });
+    expect(identity.gameName).toBe(`${checksum}.chd`);
+    expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
+  });
+
+  it("leaves every other format on the bare checksum", () => {
+    const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
+    expect(createEmulatorGameIdentity({ checksum, fileName: "game.bin" }).gameName).toBe(checksum);
+  });
+
   it("rejects a non-SHA-1 identity", () => {
     expect(() => createEmulatorGameIdentity({ checksum: "12345678" })).toThrow(
       "The emulator game identity requires a SHA-1 checksum.",

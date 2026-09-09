@@ -19,7 +19,7 @@ license = "AGPL-3.0-or-later"
 publish = ["crates-io"]
 repository = "https://github.com/rom-weaver/rom-weaver"
 rust-version = "1.95"
-version = "0.14.1"
+version = "0.15.1"
 
 # Lint policy in the manifest rather than only in the `mise run clippy` flags,
 # so a bare `cargo clippy` and rust-analyzer's in-editor diagnostics enforce the
@@ -38,7 +38,7 @@ assert_cmd = "2.1.1"
 assert_fs = "1.1.3"
 base16ct = "1.0"
 blake3 = "1.8.2"
-brotli = "8.0.2"
+brotli = "9.0.0"
 # Load-bearing for BDF byte-parity: upstream `qbsdiff` depends on `bzip2` with
 # default features, which pulls in the pure-Rust `libbz2-rs-sys` backend. Feature
 # unification means this pin is the only thing keeping `bzip2` on the C backend

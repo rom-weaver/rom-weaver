@@ -215,9 +215,33 @@ jobs:
           name: ci-identify-release-data
           path: target
 
+      # The webapp build runs `ensure-identify-data.mjs`, which inside Docker
+      # rebuilt every pack from the source archives on both legs: ~360s of the
+      # app stage, reproducing the tree the Actions cache already holds.
+      # Restore it here (building and saving only on a miss, exactly as the
+      # Rust jobs do) and stage it where `.dockerignore` lets the context carry
+      # it; the Dockerfile copies it in with `IDENTIFY_DATA=prebuilt`. The
+      # packs are byte-identical on every architecture, so both legs use it.
+      - uses: actions/setup-node@v7
+        if: matrix.name == 'webapp'
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare webapp identify data
+        if: matrix.name == 'webapp'
+        uses: ./.github/actions/identify-data
+
+      - name: Stage webapp identify data
+        if: matrix.name == 'webapp'
+        run: |
+          set -euo pipefail
+          mkdir -p target/identify-data
+          cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1
+
       # The webapp image compiles the wasm module the `wasm` job has already
-      # built in this same run - ~390s of this job's ~570s, spent reproducing a
-      # module the cache can hand over. Restored here, the Dockerfile takes it
+      # built in this same run - ~390s spent reproducing a module the cache can
+      # hand over. Restored here, the Dockerfile takes it
       # from the context instead (`WASM=prebuilt`); on a miss it compiles as
       # before, so this only ever removes duplicated work.
       #
@@ -257,24 +281,29 @@ jobs:
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
           build-args: |
-            ${{ matrix.name == 'CLI' && 'IDENTIFY_DATA=prebuilt' || '' }}
+            IDENTIFY_DATA=prebuilt
             ${{ steps.wasm.outputs.cache-hit == 'true' && 'WASM=prebuilt' || '' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
           cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
-      # The prebuilt stage takes the binary out of `prebuilt/<arch>/`, so each
-      # leg smokes the directory its own architecture resolves.
+      # The prebuilt stages take the binary out of `prebuilt/<arch>/` and the
+      # man pages and completions out of `docs/`, so each leg smokes the
+      # directory its own architecture resolves. Stubs stand in for the real
+      # files: this proves the release fan-out's COPY sources reach the build
+      # context (`.dockerignore` decides that), not their contents.
       - name: Build CLI prebuilt path
         if: matrix.name == 'CLI'
         run: |
           set -euo pipefail
-          mkdir -p "prebuilt/${{ matrix.arch }}"
+          mkdir -p "prebuilt/${{ matrix.arch }}" docs/man docs/completions
           printf 'stub\n' > "prebuilt/${{ matrix.arch }}/rom-weaver"
+          printf 'stub\n' > docs/man/rom-weaver.1
+          printf 'stub\n' > docs/completions/rom-weaver.bash
           docker build \
             --file Dockerfile \
             --build-arg BINARY=prebuilt \
             --build-arg IDENTIFY_DATA=prebuilt \
-            --build-arg DOCS=none \
+            --build-arg DOCS=prebuilt \
             --tag prebuilt-smoke \
             .
 
@@ -693,18 +722,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Build the native targets the release publishes before a change reaches
-  # release day. The target list and the build itself are shared with the
-  # release fan-out (.github/cli-platforms.json,
-  # .github/actions/build-cli-platform) so CI cannot cover a different set of
-  # targets, or build them differently, than the one that ships.
-  #
-  # Pull requests build only the linux-x64-gnu entry marked `"pr": true` - all
-  # but the release pull request, which is the commit that ships.
-  # Pushes to main, manual dispatches, and the release fan-out build all nine,
-  # so repeated macOS, Windows, and cross-target release compiles stay off the
-  # review path without reducing what is proven before anything ships.
-  # scripts/ci/cli-platform-matrix.mjs owns the split.
+  # CI and release share the native target list and build action.
+  # Ordinary pull requests build entries marked `pr`; release pull requests, main, and dispatches build every target.
   cli-platforms:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
@@ -785,11 +804,7 @@ jobs:
           chmod +x cli/rom-weaver
           node scripts/verify-cli-platform.mjs cli/rom-weaver
 
-  # Every scanner whose input is the outside world rather than this repository.
-  # Deliberately not gating: an advisory is published against a transitive
-  # dependency without any commit of ours, and letting that turn each open pull
-  # request red blocks unrelated work until someone lands an upgrade. Findings
-  # surface as annotations and a job summary instead, so this job stays green.
+  # Advisory data can change without a repository commit, so this job reports warnings without gating CI.
   security:
     name: Security advisories
     runs-on: ubuntu-24.04
@@ -946,7 +961,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Same version as the .config/mise.toml pin; this leg cannot use mise.
-      - uses: taiki-e/install-action@v2.87.0
+      - uses: taiki-e/install-action@v2.87.7
         with:
           tool: cargo-nextest@0.9.140
 
@@ -1261,15 +1276,8 @@ jobs:
         if: needs.webapp-build.outputs.bundle != 'success'
         run: echo "Asset size gates skipped because webapp-build did not upload webapp-dist"
 
-  # The longest webapp suite, split across two runners. The runner script gives
-  # each test file its own Vitest process and caps in-process concurrency at
-  # `min(4, cores)`; a 4-core ubuntu runner is already saturated, so the only
-  # way left to shorten this leg is a second machine. `--shard=<i>/2` packs the
-  # files largest-first onto the lighter half, which matters because their sizes
-  # (and runtimes) are very uneven - a naive alphabetical split would leave one
-  # leg minutes behind and buy nothing. Two shards roughly halve this group's
-  # wall clock; the aggregate below sees a matrix dependency as one combined
-  # result, so a single failing shard still fails `Webapp`.
+  # Split the longest webapp suite across two runners because in-process concurrency is already capped.
+  # The aggregate treats the matrix as one dependency, so either failing shard fails Webapp.
   webapp-browser:
     name: Webapp (browser ${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
@@ -1366,6 +1374,8 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
+          identify-data-cache: "true"
+          emulatorjs-cache: "true"
 
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
@@ -1386,14 +1396,8 @@ jobs:
 
   webapp-webkit-e2e:
     name: Webapp (WebKit E2E)
-    # The full WASM path requires WebKit OPFS. Playwright's Linux WebKit exposes
-    # the API surface but hangs when the first real OPFS-backed operation starts;
-    # macOS WebKit exercises the supported Safari-family implementation.
-    # macos-15, not -14: Playwright freezes WebKit at rev 2251 on mac14 (and
-    # mac14-arm64) via `revisionOverrides`, so that build stops gaining protocol
-    # settings the client keeps adding - 1.62.0 began sending
-    # `Page.overrideSetting PushAPIEnabled` and every launch died on
-    # "Unknown setting". mac15 has no override and tracks the current revision.
+    # Test the WebKit OPFS path on macOS because Linux WebKit hangs on real OPFS operations.
+    # macos-15 tracks the current Playwright WebKit revision; macos-14 pins an obsolete override.
     runs-on: macos-15
     timeout-minutes: 60
     needs: [changes, wasm]
@@ -1407,6 +1411,8 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
+          identify-data-cache: "true"
+          emulatorjs-cache: "true"
           playwright: "true"
           playwright-browsers: webkit
 
@@ -1455,18 +1461,9 @@ jobs:
           '${{ needs.changes.outputs.wasm_runtime }}'
           'webapp-wasm-browser=${{ needs.webapp-wasm-browser.result }}'
 
-  # Decide which channels this ref publishes to. Channels are ordered
-  # prod -> beta -> nightly, and a deploy refreshes its own channel plus every
-  # less-stable one below it, so beta and nightly can never sit on code older
-  # than production:
-  #
-  #   vX.Y.Z tag          -> prod, beta, nightly
-  #   vX.Y.Z-alpha.N tag  -> beta, nightly
-  #   push to main        -> nightly
-  #   pull request        -> preview
-  #
-  # Split out of `deploy` because the channel list drives that job's matrix, and
-  # a matrix can only be fed by an upstream job's output.
+  # Plan prod, beta, nightly, or preview deployment channels from the ref.
+  # A stable tag updates prod, beta, and nightly; a prerelease updates beta and nightly; main updates nightly; pull requests use preview.
+  # This separate job supplies the deployment matrix.
   deploy-plan:
     name: Webapp deploy (plan)
     runs-on: ubuntu-24.04
