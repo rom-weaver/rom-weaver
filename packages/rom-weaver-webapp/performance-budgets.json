@@ -17,7 +17,7 @@
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 2125000,
         "maxRawBytes": 2190000,
-        "expectedBrotliBytes": 556000,
+        "expectedBrotliBytes": 561000,
         "maxBrotliBytes": 570000
       },
       {

@@ -7,7 +7,17 @@ import {
   getByteUnitSystem,
   normalizeByteUnitSystem,
 } from "../formatting/index.ts";
-import { DEFAULT_LOCALE, LOCALE_OPTIONS, type LocaleCode, MESSAGE_CATALOGS, type MessageId } from "./catalog.ts";
+import {
+  DEFAULT_LOCALE,
+  getCatalogVersion,
+  isShippedLocale,
+  loadCatalog,
+  LOCALE_OPTIONS,
+  type LocaleCode,
+  MESSAGE_CATALOGS,
+  type MessageId,
+  subscribeCatalogs,
+} from "./catalog.ts";
 import type { ByteUnitSystem } from "../../types/settings.ts";
 
 type Localizer = {
@@ -36,19 +46,17 @@ const normalizeLocale = (locale?: string): LocaleCode => {
 
 const baseLocale = (locale: LocaleCode): string => locale.split("-")[0] || "";
 
-const hasCatalog = (locale: string): boolean => Object.hasOwn(MESSAGE_CATALOGS, locale);
-
 const resolveCatalogLocale = (locale: LocaleCode): LocaleCode => {
-  if (hasCatalog(locale)) return locale;
+  if (isShippedLocale(locale)) return locale;
   const base = baseLocale(locale);
-  if (hasCatalog(base)) return base;
+  if (isShippedLocale(base)) return base;
   return DEFAULT_LOCALE;
 };
 
 const negotiateLocale = (locales: readonly string[] = []): LocaleCode => {
   for (const locale of locales) {
     const normalizedLocale = normalizeLocale(locale);
-    if (hasCatalog(normalizedLocale) || hasCatalog(baseLocale(normalizedLocale))) {
+    if (isShippedLocale(normalizedLocale) || isShippedLocale(baseLocale(normalizedLocale))) {
       return normalizedLocale;
     }
   }
@@ -63,26 +71,49 @@ const getBrowserLocaleCandidates = (): string[] => {
 };
 
 /*
- * Per-locale Lingui instances, cached. Each loads its own compiled catalog plus
- * the English source as a fallback so any gap (which `lingui compile --strict`
- * forbids at build time) degrades to English rather than showing a raw id. The
- * UI consumes the `Localizer` facade below - not Lingui's `<Trans>`/`useLingui`
- * - so no `<I18nProvider>` is needed; `useUiLocalizer`'s memo on the language
- * setting already re-renders consumers on a locale switch.
+ * Per-locale Lingui instances, cached. Each locale's table starts as a copy of
+ * the English source, and its own catalog is merged over it: Lingui 6 resolves
+ * ids only in the active locale's table, so this copy is what makes any gap
+ * (which `lingui compile --strict` forbids at build time) degrade to English
+ * rather than a raw id. A locale whose catalog is not in memory yet serves that
+ * English copy while its chunk loads, then `load` merges the translations into
+ * the same instance, so every `Localizer` built on it reads them from then on.
+ * The UI consumes the `Localizer` facade below - not Lingui's
+ * `<Trans>`/`useLingui` - so no `<I18nProvider>` is needed; `useUiLocalizer`
+ * subscribes to catalog arrivals and re-renders.
  */
 const i18nCache = new Map<LocaleCode, I18n>();
 
 const getI18n = (catalogLocale: LocaleCode): I18n => {
   const cached = i18nCache.get(catalogLocale);
   if (cached) return cached;
-  const localeMessages = MESSAGE_CATALOGS[catalogLocale] ?? FALLBACK_MESSAGES;
+  const localeMessages = MESSAGE_CATALOGS[catalogLocale];
   const i18n = setupI18n({
     locale: catalogLocale,
-    messages: { [DEFAULT_LOCALE]: FALLBACK_MESSAGES, [catalogLocale]: localeMessages },
-    ...(catalogLocale === DEFAULT_LOCALE ? {} : { fallbackLocales: { [catalogLocale]: DEFAULT_LOCALE } }),
+    messages: { [catalogLocale]: { ...FALLBACK_MESSAGES, ...localeMessages } },
   });
   i18nCache.set(catalogLocale, i18n);
+  if (!localeMessages) {
+    loadCatalog(catalogLocale).then(
+      (messages) => i18n.load(catalogLocale, messages),
+      () => undefined,
+    );
+  }
   return i18n;
+};
+
+/**
+ * Fetches the catalog a locale resolves to, so a render after it settles is
+ * translated on its first frame instead of flashing English. An empty locale
+ * reads the browser's languages, as `createBrowserLocalizer` does. Resolves
+ * even when the fetch fails: the localizer falls back to English on its own.
+ */
+const preloadCatalog = async (locale?: string): Promise<void> => {
+  const catalogLocale = resolveCatalogLocale(negotiateLocale(locale ? [locale] : getBrowserLocaleCandidates()));
+  await loadCatalog(catalogLocale).then(
+    () => undefined,
+    () => undefined,
+  );
 };
 
 const createLocalizer = (locale?: string, byteUnitSystem?: ByteUnitSystem): Localizer => {
@@ -104,4 +135,13 @@ const createBrowserLocalizer = (locale?: string, byteUnitSystem?: ByteUnitSystem
   createLocalizer(locale || negotiateLocale(getBrowserLocaleCandidates()), byteUnitSystem);
 
 export type { Localizer };
-export { createBrowserLocalizer, createLocalizer, getBrowserLocaleCandidates, LOCALE_OPTIONS, negotiateLocale };
+export {
+  createBrowserLocalizer,
+  createLocalizer,
+  getBrowserLocaleCandidates,
+  getCatalogVersion,
+  LOCALE_OPTIONS,
+  negotiateLocale,
+  preloadCatalog,
+  subscribeCatalogs,
+};
