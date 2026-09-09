@@ -1,6 +1,5 @@
-//! Shared label and report assembly helpers used by the patch format handlers. These keep the
-//! human-readable report labels (and the byuu parse `details` JSON) byte-identical across the
-//! formats that previously duplicated the same string assembly inline.
+//! Shared label and report assembly helpers for patch format handlers. They
+//! keep common report labels and Byuu parse details consistent.
 
 use crate::shared::endpoints::{PatchEndpointSide, PatchEndpointVariant, attach_patch_endpoints};
 use rom_weaver_core::{FormatDescriptor, OperationReport, ThreadExecution};

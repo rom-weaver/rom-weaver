@@ -33,14 +33,8 @@ const MAX_COMPARED_RECORDS: usize = 4096;
 /// anything. Below this a single coincidence would decide the basis.
 const MIN_RECORDS_FOR_EDGE_RULE: usize = 8;
 
-/// Untrimmed-edge records the losing basis needs before that rule decides.
-/// One coincidental match is ordinary; several is a pattern.
-///
-/// A wrong basis produces a coincidental edge match on roughly 1 record in 128,
-/// so this rule stays silent below a few hundred records and only speaks up on
-/// the large patches typical of a translation or overhaul hack. That is the
-/// intended reach: it is the weakest of the rules and the safe outcome of
-/// silence is [`BasisDecision::Inconclusive`].
+/// Untrimmed-edge margin the losing basis needs before this rule decides.
+/// Smaller margins leave the decision inconclusive.
 const MIN_UNTRIMMED_MARGIN: usize = 2;
 
 /// Which bytes of the input a patch is applied to.

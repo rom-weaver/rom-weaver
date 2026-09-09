@@ -1,8 +1,7 @@
 use super::*;
 
-/// Generate `rom_filter()` / `patch_filter()` accessors over a `filter:
-/// Vec<FilterKind>` field so handler call sites stay a mechanical rename from
-/// the old boolean flags. Shared by every command that takes `--filter`.
+/// Generate `rom_filter()` and `patch_filter()` accessors for commands that
+/// hold `filter: Vec<FilterKind>`.
 macro_rules! filter_accessors {
     ($command:ty) => {
         impl $command {

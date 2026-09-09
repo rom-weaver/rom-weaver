@@ -140,8 +140,8 @@ pub trait SelectionPrompter: Send + Sync {
     fn confirm(&self, heading: &str, details: &[String]) -> bool;
 }
 
-/// Prompter for headless callers (wasm, `--json`, non-tty). Reproduces the historical
-/// `interactive_selection_enabled == false` behavior: never block, always decline.
+/// Prompter for headless callers (wasm, `--json`, non-tty). It never blocks and
+/// always declines.
 #[derive(Debug, Default)]
 pub struct NoninteractivePrompter;
 

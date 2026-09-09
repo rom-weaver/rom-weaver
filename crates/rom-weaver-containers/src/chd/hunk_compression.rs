@@ -471,9 +471,8 @@ impl ChdContainerHandler {
         compression_level: i32,
         label: &str,
     ) -> Result<Vec<u8>> {
-        // Bulk compression sizes zstd's workspace to the hunk. A streaming level-22 encoder keeps
-        // a ~128 MiB workspace per worker and can exhaust wasm memory. Reuse one compressor per
-        // worker to avoid reallocating that workspace for every hunk.
+        // Bulk compression sizes the workspace to the hunk to limit WASM memory use.
+        // Reuse one compressor per worker to avoid allocating a workspace for every hunk.
         let compressed = CD_ZSTD_COMPRESSOR.with(|cell| {
             let mut slot = cell.borrow_mut();
             if slot.is_none() {
