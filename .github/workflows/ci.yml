@@ -215,9 +215,33 @@ jobs:
           name: ci-identify-release-data
           path: target
 
+      # The webapp build runs `ensure-identify-data.mjs`, which inside Docker
+      # rebuilt every pack from the source archives on both legs: ~360s of the
+      # app stage, reproducing the tree the Actions cache already holds.
+      # Restore it here (building and saving only on a miss, exactly as the
+      # Rust jobs do) and stage it where `.dockerignore` lets the context carry
+      # it; the Dockerfile copies it in with `IDENTIFY_DATA=prebuilt`. The
+      # packs are byte-identical on every architecture, so both legs use it.
+      - uses: actions/setup-node@v7
+        if: matrix.name == 'webapp'
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare webapp identify data
+        if: matrix.name == 'webapp'
+        uses: ./.github/actions/identify-data
+
+      - name: Stage webapp identify data
+        if: matrix.name == 'webapp'
+        run: |
+          set -euo pipefail
+          mkdir -p target/identify-data
+          cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1
+
       # The webapp image compiles the wasm module the `wasm` job has already
-      # built in this same run - ~390s of this job's ~570s, spent reproducing a
-      # module the cache can hand over. Restored here, the Dockerfile takes it
+      # built in this same run - ~390s spent reproducing a module the cache can
+      # hand over. Restored here, the Dockerfile takes it
       # from the context instead (`WASM=prebuilt`); on a miss it compiles as
       # before, so this only ever removes duplicated work.
       #
@@ -257,7 +281,7 @@ jobs:
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
           build-args: |
-            ${{ matrix.name == 'CLI' && 'IDENTIFY_DATA=prebuilt' || '' }}
+            IDENTIFY_DATA=prebuilt
             ${{ steps.wasm.outputs.cache-hit == 'true' && 'WASM=prebuilt' || '' }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.name == 'CLI' }}
           cache-to: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

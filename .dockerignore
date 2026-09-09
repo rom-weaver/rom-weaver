@@ -4,6 +4,8 @@
 target/*
 !target/identify-release
 !target/identify-release/**
+!target/identify-data
+!target/identify-data/**
 **/node_modules
 **/dist
 **/.vitest-attachments
