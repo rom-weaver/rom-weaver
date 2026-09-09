@@ -6,6 +6,7 @@ import {
   getNamedSourceFileName,
   getNamedSourceSize,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import { getBinarySourceTraceKind } from "../../storage/shared/binary/source-shared.ts";
 import type { LogRecord } from "../../types/logging.ts";
 import type { WorkerStorageBucket } from "../shared/worker-storage/storage-layout.ts";
 import { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
@@ -72,22 +73,7 @@ const TRAILING_SLASHES_REGEX = /\/+$/;
 // Visible names currently handed out to live (not-yet-cleaned-up) staged sources. A name is added on
 // allocate and removed in the source ref's `cleanup`, so membership means "still in use right now".
 const allocatedVirtualInputPaths = new Set<string>();
-const getBrowserSourceTraceKind = (source: unknown) => {
-  if (typeof File !== "undefined" && source instanceof File) return "file";
-  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
-  if (source instanceof Uint8Array) return "uint8array";
-  if (source instanceof ArrayBuffer) return "arraybuffer";
-  if (
-    source &&
-    typeof source === "object" &&
-    "getFile" in source &&
-    typeof (source as { getFile?: unknown }).getFile === "function"
-  )
-    return "file-handle";
-  if (typeof source === "string") return "path-string";
-  if (source && typeof source === "object") return "object";
-  return typeof source;
-};
+const getBrowserSourceTraceKind = (source: unknown) => getBinarySourceTraceKind(source, "path-string");
 
 const emitBrowserSourceRefTrace = (
   trace: BrowserOpfsSourceTraceContext | undefined,

@@ -281,6 +281,17 @@ const toPatchStageInfo = (
   };
 };
 
+const createPatchStageInfoMapper = (inputs: readonly { id?: string; fileName?: string }[]) => {
+  const inputLabelById = new Map(inputs.map((entry) => [entry.id || "", entry.fileName || "Input"]));
+  return (patch: ApplyWorkflowPatchState | undefined, order: number, originalName: string) => {
+    const targetName =
+      patch?.targetInputFileName ||
+      (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
+      "None selected";
+    return toPatchStageInfo(patch, originalName, order, `Target: ${targetName}`);
+  };
+};
+
 type PatchStageInfo = ReturnType<typeof toPatchStageInfo>;
 
 const getPatchTargetSelectionError = (input: ApplyWorkflowInputState | null, patches: ApplyWorkflowPatchState[]) => {
@@ -529,6 +540,7 @@ export {
   type ApplyWorkflowSessionInput,
   type ApplyWorkflowSyncState,
   createBaseApplyWorkflowSettings,
+  createPatchStageInfoMapper,
   createWorkflowOutputOverridesKey,
   createWorkflowPreparationSettingsKey,
   createWorkflowSettingsKey,
