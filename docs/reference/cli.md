@@ -122,7 +122,7 @@ rom-weaver only asks interactive questions when stdin and stderr are both termin
 
 ## Binary pipelines
 
-Native `extract` and `compress` accept `-` as an input path or as `--output`. `./-` names a literal file called `-`. These conventions do not change the JSON/WASM command schema or the stream behavior of other commands.
+Native `extract` and `compress` accept `-` as an input path or as `--output`. Native `patch create`, `patch apply` (including both `weave` spellings), `trim`, `save set`, and `tools ppf-undo` also accept `--output -`. `./-` names a literal file called `-`. These conventions do not change the JSON/WASM command schema. Other commands keep their existing output behavior.
 
 | Option or condition | Behavior |
 | --- | --- |
@@ -130,6 +130,11 @@ Native `extract` and `compress` accept `-` as an input path or as `--output`. `.
 | `--stdin-name NAME` | Names the temporary input and its archive entry. The default is `stdin.bin`. Only valid with input `-`; directory components, `/`, `\`, `:`, `.` and `..` are rejected. The extension can affect format and ROM detection. |
 | `compress --output -` | Requires an explicit `--format`. Writes the completed compressed file to stdout. Existing format and codec restrictions apply. |
 | `extract --output -` | Writes exactly one final regular file. Nested extraction retains its normal behavior. Zero or multiple final files are an error; `--select` can narrow the selection. CUE/GDI sheets require companion files and cannot be streamed. |
+| `patch create --output -` | Requires `--format`. Conflicts with `--plan` and `--checksum-name`. Writes the completed patch. |
+| `patch apply --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Conflicts with `--tui` and `--emit-bundle`. Requires one final regular file; disc sheets with companion files cannot be streamed. |
+| `trim --output -` | Requires exactly one trim-eligible source. Conflicts with `--in-place` and `--extension`. Writes the trimmed or restored file. |
+| `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
+| `tools ppf-undo --output -` | Writes the restored ROM. |
 | Binary stdout | Refuses terminal output and conflicts with `--json` and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
 | Stdin with `--dry-run` | Fails before reading stdin. Dry runs require an input file. |
 

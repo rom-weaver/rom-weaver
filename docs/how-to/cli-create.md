@@ -6,6 +6,7 @@ Build a patch from an original ROM and a modified one, and test the result befor
 ## Table of contents
 
 - [Create a patch](#create-a-patch)
+- [Pipe the patch to another program](#pipe-the-patch-to-another-program)
 - [Test what you built](#test-what-you-built)
 - [Where next](#where-next)
 
@@ -38,6 +39,19 @@ rom-weaver patch create \
 ```
 
 To create a patch from cheat codes instead of a changed ROM, see [Share a cheat as a patch](bake-cheat-codes.md#share-a-cheat-as-a-patch).
+
+## Pipe the patch to another program
+
+Set the patch format explicitly and use `--output -`:
+
+```bash
+rom-weaver patch create \
+  --original original.gba \
+  --modified modified.gba \
+  --format bps --output - | gzip > release.bps.gz
+```
+
+The [binary pipeline reference](../reference/cli.md#binary-pipelines) lists storage requirements and incompatible options.
 
 ## Test what you built
 
