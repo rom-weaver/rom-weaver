@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   filterCheats,
+  isCheatDatabaseSystem,
+  isCheatManualSystem,
   matchCheatGame,
   reconcileSelectedCheatIds,
   resolveCheatDatabaseEntry,
+  resolveManualOnlyCheatSystem,
   selectManualGame,
   type CheatDatabaseEntry,
   type CheatDatabaseIndex,
@@ -141,6 +144,23 @@ describe("cheat database catalog", () => {
       kind: "unsupported-system",
       platform: "Nintendo - Nintendo 64",
     });
+  });
+
+  it("separates database-backed systems from decoder-only ones", () => {
+    expect(isCheatDatabaseSystem("snes")).toBe(true);
+    expect(isCheatDatabaseSystem("playstation")).toBe(false);
+    expect(isCheatManualSystem("snes")).toBe(true);
+    expect(isCheatManualSystem("playstation")).toBe(true);
+    expect(isCheatManualSystem("n64")).toBe(false);
+    expect(isCheatManualSystem(undefined)).toBe(false);
+  });
+
+  it("resolves a decoder-only platform the index does not cover", () => {
+    expect(resolveManualOnlyCheatSystem(catalog, { platform: "Sony - PlayStation" })).toBe("playstation");
+    expect(resolveManualOnlyCheatSystem(undefined, { platform: "psx" })).toBe("playstation");
+    expect(resolveManualOnlyCheatSystem(undefined, { platform: "Sony - PlayStation 2" })).toBeUndefined();
+    expect(resolveManualOnlyCheatSystem(catalog, { platform: "snes" })).toBeUndefined();
+    expect(resolveManualOnlyCheatSystem(catalog, null)).toBeUndefined();
   });
 
   it("resolves a platform tag through the identify catalog aliases", () => {
