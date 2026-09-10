@@ -193,8 +193,9 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
   mountWebappRoot();
-  // The rail holds the three workflows; Docs is reference and files under More
-  // with the beta tools, which stay hidden while the setting is off.
+  // The rail holds the three workflows; Docs is reference and sits in the
+  // top-right link group, and the beta tools file under More, hidden while the
+  // setting is off.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
@@ -205,7 +206,8 @@ test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+  expect(document.querySelector(".masthead-links .masthead-docs")?.getAttribute("href")).toBe("docs");
 });
 
 const dropOnPage = async (fileName) => {
@@ -264,8 +266,10 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
     if (width >= 1000) {
-      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
-      expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
+      // Settings sits in the top-right link group: label beside the glyph, no tooltip.
+      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).not.toBe("none");
+      expect(document.querySelector(".masthead-settings .tip")).toBeNull();
+      expect(getComputedStyle(document.querySelector(".masthead-links")).display).not.toBe("none");
       // More sits in the nav now, so it is named like the tabs beside it rather
       // than tooltipped like the actions cluster it left. The label is a flex
       // item inside `.mode-more`, so its computed display blockifies - that it
@@ -274,10 +278,14 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
       expect(getComputedStyle(moreLabel).display).not.toBe("none");
       expect(moreLabel.textContent).toBe("More");
       expect(document.querySelector(".desktop-more .mode-more .tip")).toBeNull();
-      await page.getByRole("button", { name: "Settings" }).first().hover();
-      await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
+      // Docs, GitHub, Support and Settings are top-right links here, not More entries.
+      await expect.element(page.getByRole("menuitem", { name: "Docs" })).not.toBeInTheDocument();
+      await expect.element(page.getByRole("menuitem", { name: "Settings" })).not.toBeInTheDocument();
+    } else {
+      expect(getComputedStyle(document.querySelector(".masthead-links")).display).toBe("none");
+      await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
+      await expect.element(page.getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
     }
-    await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
   }
   await page.viewport(1280, 900);

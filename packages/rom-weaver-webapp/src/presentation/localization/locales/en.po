@@ -1335,6 +1335,11 @@ msgstr "Get started"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.githubShort"
+msgstr "GitHub"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.kindGuide"
 msgstr "Guide"
 

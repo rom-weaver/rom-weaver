@@ -1218,7 +1218,16 @@ const Masthead = ({
   const moreTabs = tabs.filter(isMoreMenuTab);
   // What's new has no WorkflowTab entry; it lives in More's Project group.
   const currentInMore = currentTab === "whats-new" || moreTabs.some((tab) => tab.id === currentTab);
+  // Docs, GitHub, Support and Settings sit in the top-right link group on the
+  // rail layout, so the desktop More menu does not list them a second time.
+  // The phone More menu keeps all four: the link group hides below the dock
+  // threshold.
+  const docsTab = moreTabs.find((tab) => tab.id === "docs");
+  const desktopMoreTabs = moreTabs.filter((tab) => tab !== docsTab);
+  const desktopCurrentInMore = currentTab === "whats-new" || desktopMoreTabs.some((tab) => tab.id === currentTab);
   const settingsLabel = localizer.message("ui.settings.title");
+  const githubLabel = localizer.message("ui.tools.github");
+  const supportLabel = localizer.message("ui.footer.donate");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
@@ -1367,20 +1376,17 @@ const Masthead = ({
               <MoreMenu
                 autoFocusFirst={utilityViaKeyboard}
                 buttonClassName="mode-more"
-                current={currentInMore}
+                current={desktopCurrentInMore}
                 className="desktop-more"
                 confirmExternalNavigation={confirmExternalNavigation}
-                donateHref={donateHref}
-                githubHref={githubHref}
                 localizer={localizer}
                 menuId="more-menu"
                 moreLabel={moreLabel}
                 onClose={closeUtility}
                 onOpenLog={onOpenLog}
-                onOpenSettings={onOpenSettings}
                 onOpenStatus={onOpenStatus}
                 onOpenStorage={onOpenStorage ?? onOpenLog}
-                moreTabs={moreTabs}
+                moreTabs={desktopMoreTabs}
                 onOpenWorkflowTab={onSelectTab}
                 onPreloadLog={onPreloadLog}
                 onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
@@ -1403,6 +1409,64 @@ const Masthead = ({
           triggerRef={activeFindRef}
         />
         <div className="masthead-tools" ref={toolsRef}>
+          {/* The link group: every destination reads as icon plus label, at
+              every width the group is shown. Below the dock threshold it is
+              hidden and the phone More menu carries the same four entries. */}
+          <span className="masthead-links">
+            {docsTab ? (
+              <a
+                aria-current={currentTab === docsTab.id ? "page" : undefined}
+                className="tool tool-link masthead-docs"
+                href={docsTab.href}
+                onClick={(event) => activateTabOnClick(event, docsTab.id, onSelectTab)}
+              >
+                {docsTab.icon}
+                <span className="tool-text">{docsTab.label}</span>
+              </a>
+            ) : null}
+            {githubHref ? (
+              <a
+                aria-label={githubLabel}
+                className="tool tool-link"
+                href={githubHref}
+                onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
+                rel="noreferrer"
+                target="_blank"
+                title={githubLabel}
+              >
+                <Github aria-hidden="true" />
+                <span aria-hidden="true" className="tool-text">
+                  {localizer.message("ui.tools.githubShort")}
+                </span>
+              </a>
+            ) : null}
+            {donateHref ? (
+              <a
+                className="tool tool-link masthead-support"
+                href={donateHref}
+                onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Heart aria-hidden="true" />
+                <span className="tool-text">{supportLabel}</span>
+              </a>
+            ) : null}
+            <button
+              aria-expanded={settingsOpen}
+              aria-haspopup="dialog"
+              className="tool tool-link masthead-settings"
+              onClick={onOpenSettings}
+              onFocus={onPreloadSettings}
+              onPointerDown={onPreloadSettings}
+              onPointerEnter={onPreloadSettings}
+              type="button"
+            >
+              <Settings aria-hidden="true" />
+              <span className="tool-text">{settingsLabel}</span>
+            </button>
+            <span aria-hidden="true" className="masthead-links-sep" />
+          </span>
           <button
             aria-haspopup="dialog"
             aria-label={runtimeTitle}
@@ -1429,25 +1493,6 @@ const Masthead = ({
             onToggle={() => setAccentOpen((open) => !open)}
             open={accentOpen}
           />
-          <button
-            aria-expanded={settingsOpen}
-            aria-haspopup="dialog"
-            aria-label={settingsLabel}
-            className="tool masthead-settings"
-            onClick={onOpenSettings}
-            onFocus={onPreloadSettings}
-            onPointerDown={onPreloadSettings}
-            onPointerEnter={onPreloadSettings}
-            type="button"
-          >
-            <Settings aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {settingsLabel}
-            </span>
-            <span aria-hidden="true" className="tip">
-              {settingsLabel}
-            </span>
-          </button>
           {utilityOpen && utilityPlacement === "mobile" ? (
             <UtilityMenu
               autoFocusFirst={utilityViaKeyboard}

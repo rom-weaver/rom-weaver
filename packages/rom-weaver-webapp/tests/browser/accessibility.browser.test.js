@@ -1167,7 +1167,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the masthead is one row at every width it keeps the rail", async () => {
+  test("the rail takes its own row under the brand and the link group at every width it exists", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {
       await setViewport({ height: 900, width });
       for (const tabs of [PAGE_TABS, ALL_TABS]) {
@@ -1177,46 +1177,37 @@ describe("webapp responsive navigation", () => {
         const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
         const modes = host.querySelector(".modes").getBoundingClientRect();
 
-        // brand | rail | actions, all sharing one row and never overlapping
-        expect(modes.left).toBeGreaterThanOrEqual(brand.right - 1);
-        expect(modes.right).toBeLessThanOrEqual(tools.left + 1);
-        expect(modes.top).toBeGreaterThanOrEqual(brand.top - 1);
-        expect(modes.bottom).toBeLessThanOrEqual(Math.max(brand.bottom, tools.bottom) + 1);
+        // brand | link group on the first row, never overlapping
+        expect(brand.right).toBeLessThanOrEqual(tools.left + 1);
+        expect(Math.abs(brand.top - tools.top)).toBeLessThanOrEqual(tools.height);
+        // the rail sits below both, on a row of its own
+        expect(modes.top).toBeGreaterThanOrEqual(Math.max(brand.bottom, tools.bottom) - 1);
         // the dock never shares the screen with the rail
         expect(getComputedStyle(host.querySelector(".dock-nav")).display).toBe("none");
       }
     }
   });
 
-  test("the rail tightens, then keeps only the selected label, in the snug band", async () => {
-    await setViewport({ height: 900, width: 1100 });
-    await renderMastheadOnly(ALL_TABS);
-    const snugPadding = Number.parseFloat(getComputedStyle(host.querySelector(".mode")).paddingInlineStart);
-    const selectedLabel = host.querySelector('.mode[aria-selected="true"] .mode-label');
-    const otherLabel = host.querySelector('.mode[aria-selected="false"] .mode-label');
-    // the selected tab reads in full; the others keep their label in the
-    // accessible name but paint only their glyph - never an ellipsis
-    expect(selectedLabel.getBoundingClientRect().width).toBeGreaterThan(20);
-    expect(otherLabel.getBoundingClientRect().width).toBeLessThanOrEqual(1);
-    expect(getComputedStyle(otherLabel).display).not.toBe("none");
-    expect(otherLabel.textContent.length).toBeGreaterThan(0);
-
-    await setViewport({ height: 900, width: 1200 });
-    await renderMastheadOnly(ALL_TABS);
-    for (const label of host.querySelectorAll(".mode .mode-label")) {
-      expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
-      expect(getComputedStyle(label).textOverflow).not.toBe("ellipsis");
+  test("every tab keeps its full label at every rail width", async () => {
+    for (const width of [1000, 1100, 1200, 1280, 1600]) {
+      await setViewport({ height: 900, width });
+      await renderMastheadOnly(ALL_TABS);
+      for (const label of host.querySelectorAll(".mode .mode-label")) {
+        // painted in full: never clipped to a glyph, never ellipsized
+        expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
+        expect(label.scrollWidth).toBeLessThanOrEqual(label.getBoundingClientRect().width + 1);
+        expect(getComputedStyle(label).textOverflow).not.toBe("ellipsis");
+        expect(getComputedStyle(label).maxWidth).toBe("none");
+      }
+      // the link group keeps its labels too
+      for (const label of host.querySelectorAll(".masthead-links .tool-text")) {
+        expect(getComputedStyle(label).display).not.toBe("none");
+        expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
+      }
     }
-    expect(Number.parseFloat(getComputedStyle(host.querySelector(".mode")).paddingInlineStart)).toBe(snugPadding);
-
-    await setViewport({ height: 900, width: 1280 });
-    await renderMastheadOnly(ALL_TABS);
-    const roomyPadding = Number.parseFloat(getComputedStyle(host.querySelector(".mode")).paddingInlineStart);
-    expect(roomyPadding).toBeGreaterThan(snugPadding);
-    expect(getComputedStyle(host.querySelector(".mode .mode-label")).maxWidth).toBe("none");
   });
 
-  test("the desktop rail centers on the masthead across top-row widths", async () => {
+  test("the desktop rail centers on the masthead across rail widths", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {
       await setViewport({ height: 900, width });
       await renderMastheadOnly(PAGE_TABS);
@@ -1257,10 +1248,12 @@ describe("webapp responsive navigation", () => {
         (tab) => getComputedStyle(tab).display !== "none",
       );
       expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
-      // the masthead keeps its single row: brand and actions only
+      // the masthead keeps its single row: brand and actions only, the link
+      // group folded into More
       const brand = host.querySelector(".brand").getBoundingClientRect();
       const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
       expect(brand.right).toBeLessThanOrEqual(tools.left + 1);
+      expect(getComputedStyle(host.querySelector(".masthead-links")).display).toBe("none");
       expect(host.querySelector(".masthead").getBoundingClientRect().height).toBeLessThanOrEqual(
         Math.max(brand.height, tools.height) + 24,
       );

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
@@ -48,6 +48,7 @@ const TABS = [
 const mastheadProps = {
   currentTab: "patcher",
   homeHref: "/apply",
+  donateHref: "https://example.com/donate",
   githubHref: "https://example.com/repo",
   onOpenWhatsNew: () => undefined,
   onOpenLog: () => undefined,
@@ -96,9 +97,20 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // status, theme, accent, settings - external actions live in the shared
-    // footer, Reset lives in the workflow panel head, and More is nav level
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
+    // the link group (docs, github, support, settings) plus status, theme and
+    // accent - Reset lives in the workflow panel head, and More is nav level
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
+    const links = container.querySelector(".masthead-links") as HTMLElement;
+    expect(
+      Array.from(links.querySelectorAll<HTMLElement>(".tool-link")).map((link) => link.textContent?.trim()),
+    ).toEqual(["Docs", "GitHub", "Support", "Settings"]);
+    // Every link keeps its label beside the glyph; none wears a tooltip.
+    expect(links.querySelector(".tip")).toBeNull();
+    expect(within(links).getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
+    expect(within(links).getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe(
+      "https://example.com/repo",
+    );
+    expect(within(links).getByRole("button", { name: "Settings" }).classList.contains("masthead-settings")).toBe(true);
     expect(container.querySelector(".actions-sep")).toBeNull();
     expect(container.querySelector(".tool-support")).toBeNull();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
@@ -130,7 +142,7 @@ describe("Masthead", () => {
 
   it("keeps utility destinations behind More on both layouts", () => {
     const onOpenStorage = vi.fn();
-    const { container, getByRole } = render(
+    const { container, getByRole, queryByRole } = render(
       withSettings(
         <Masthead
           {...mastheadProps}
@@ -152,26 +164,37 @@ describe("Masthead", () => {
     expect(menuStatus.classList.contains("more-status")).toBe(true);
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
-    // Docs and the beta tools file under their own headed groups.
-    // Real links: a middle-click or "open in new tab" still reaches the route.
-    expect(getByRole("menuitem", { name: "Docs" }).getAttribute("href")).toBe("docs");
+    // Docs, GitHub, Support and Settings live in the top-right link group on
+    // this layout, so the desktop menu does not list them again.
+    expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
+    expect(queryByRole("menuitem", { name: "View source on GitHub" })).toBeNull();
+    expect(queryByRole("menuitem", { name: "Support" })).toBeNull();
+    expect(queryByRole("menuitem", { name: "Settings" })).toBeNull();
+    expect(queryByRole("group", { name: "Docs" })).toBeNull();
     // With the selected workflow in the rail, More is not "you are here".
     expect(more.classList.contains("is-current")).toBe(false);
     expect(getByRole("menuitem", { name: "Trim Beta" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "PPF undo Beta" })).toBeTruthy();
     expect(getByRole("group", { name: "Tools" })).toBeTruthy();
-    expect(getByRole("group", { name: "Docs" })).toBeTruthy();
     expect(getByRole("group", { name: "Project" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "What\u2019s new" })).toBeTruthy();
     // The head row keeps the app's own surfaces one tap away on desktop too.
-    expect(getByRole("menuitem", { name: "Settings" }).classList.contains("more-head-item")).toBe(true);
+    expect(getByRole("menuitem", { name: "Status" }).classList.contains("more-head-item")).toBe(true);
     fireEvent.click(getByRole("menuitem", { name: "Storage" }));
     expect(onOpenStorage).toHaveBeenCalledTimes(1);
     expect(more.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("marks More current when the selected workflow lives inside it", () => {
+  it("marks the Docs link current on desktop and More current on the phone", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
+    expect(container.querySelector(".masthead-docs")?.getAttribute("aria-current")).toBe("page");
+    expect(container.querySelector(".desktop-more .mode-more.is-current")).toBeNull();
+    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
+  });
+
+  it("marks More current when a tool inside it is selected", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="trim" />));
+    expect(container.querySelector(".masthead-docs")?.getAttribute("aria-current")).toBeNull();
     expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
     expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
   });
@@ -314,7 +337,7 @@ describe("Masthead", () => {
   });
 
   it("renders GitHub and Support in the shared footer", () => {
-    const { container, getByRole } = render(
+    const { container } = render(
       withSettings(
         <>
           <Masthead {...mastheadProps} />
@@ -322,15 +345,15 @@ describe("Masthead", () => {
         </>,
       ),
     );
-    const footer = container.querySelector(".site-footer");
+    const footer = container.querySelector(".site-footer") as HTMLElement;
     expect(footer).toBeTruthy();
-    expect(getByRole("link", { name: "View source on GitHub" }).closest(".site-footer")).toBe(footer);
-    expect(getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe("https://example.com/repo");
-    expect(getByRole("link", { name: "Support" }).closest(".site-footer")).toBe(footer);
-    expect(getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
-    // The one crawlable path to the guides now that the rail has no Docs tab.
-    expect(getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
-    expect(container.querySelector(".masthead-tools a")).toBeNull();
+    const inFooter = within(footer);
+    expect(inFooter.getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe(
+      "https://example.com/repo",
+    );
+    expect(inFooter.getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
+    // A crawlable path to the guides on every layout, including the phone's.
+    expect(inFooter.getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
   });
 
   it("commits an accent straight from the masthead tray", () => {

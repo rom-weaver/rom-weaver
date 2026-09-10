@@ -1,10 +1,10 @@
 /* ═══ masthead ═══
-   One fixed-breakpoint grid: brand | centered rail | actions. Roomy desktop
-   mirrors the side tracks so the rail centers on the masthead; the snug band
-   protects the rail's remaining space. There is exactly one layout decision
-   ("does the rail fit?") and it lives in the media queries marked ▼ below - no
-   ResizeObserver, no data-masthead-layout, no measuring. Below the dock threshold
-   the primary nav moves to a fixed bottom dock, so the masthead never wraps. */
+   One fixed-breakpoint grid: brand | link group on the first row, the rail
+   centered on a row of its own beneath them. There is exactly one layout
+   decision ("does the rail fit?") and it lives in the media queries marked ▼
+   below - no ResizeObserver, no data-masthead-layout, no measuring. A tab label
+   is never clipped or hidden at any width. Below the dock threshold the primary
+   nav moves to a fixed bottom dock, and the masthead is one row again. */
 .rw-app .skip-link {
   position: fixed;
   inset-block-start: var(--sp-s);
@@ -23,8 +23,8 @@
   transform: none;
 }
 
-/* brand and actions always keep their intrinsic width; the rail gets the
-   leftover, centers itself, and scrolls when squeezed - collision-free at every
+/* brand and actions always keep their intrinsic width; the rail gets a full
+   row, centers itself, and scrolls when squeezed - collision-free at every
    width and locale. The brand's min-content floor is what keeps the wordmark
    whole. */
 .rw-app .masthead {
@@ -698,7 +698,8 @@ html.vt-theme .mode-rail .mode {
 }
 .rw-app .more-head {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: var(--sp-xs);
   padding-block-end: var(--sp-xs);
   margin-block-end: var(--sp-xs);
@@ -847,16 +848,73 @@ html.vt-theme .mode-rail .mode {
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-/* Desktop keeps the important destinations compact; the tooltip and aria-label
-   carry their names without turning the actions cluster into another nav. */
+/* The stateful controls (runtime status, theme, accent) stay glyph-only; the
+   tooltip and aria-label carry their names. */
 .rw-app .tool-text {
   display: none;
 }
 /* `.mode-more` is nav level, so it is named like the tabs beside it rather than
    tooltipped like the actions cluster it left. */
 .rw-app .dock-action .tool-text,
-.rw-app .mode-more .tool-text {
+.rw-app .mode-more .tool-text,
+.rw-app .tool-link .tool-text {
   display: inline;
+}
+
+/* ── the link group ──
+   Docs, GitHub, Support and Settings, as one set of ghost buttons that share
+   the `.tool` chrome but keep their label beside the glyph. The label is the
+   accessible name, so none of them wears a tooltip. */
+.rw-app .masthead-links {
+  display: inline-flex;
+  gap: var(--sp-2xs);
+  align-items: center;
+}
+.rw-app .tool-link {
+  display: inline-flex;
+  gap: var(--sp-xs);
+  align-items: center;
+  width: auto;
+  padding-inline: var(--sp-m);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.rw-app .tool-link svg {
+  flex: none;
+}
+.rw-app .tool-link[aria-current="page"] {
+  color: var(--thread-text);
+}
+/* Support wears the footer donate color; the icon fills on press (see footer.css). */
+.rw-app .masthead-support,
+.rw-app .masthead-support svg {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .masthead-support:hover,
+  .rw-app .masthead-support:hover svg {
+    color: var(--thread-text);
+  }
+  .rw-app .masthead-support:hover svg {
+    fill: currentcolor;
+  }
+}
+.rw-app .masthead-support:active,
+.rw-app .masthead-support:active svg {
+  color: var(--thread-text);
+}
+.rw-app .masthead-support:active svg {
+  fill: currentcolor;
+}
+/* A hairline between the destinations and the stateful controls. */
+.rw-app .masthead-links-sep {
+  width: 1px;
+  height: 20px;
+  margin-inline: var(--sp-xs);
+  background: var(--seam);
 }
 
 /* real tooltips - localizable text, not title="" */
@@ -970,51 +1028,30 @@ html.vt-theme .mode-rail .mode {
   transform: rotate(-90deg) scale(0.5);
 }
 
-/* ── the responsive ladder: three ranges, one threshold each ──
-   The nav is top row or dock, never a second row. The tabs keep their icon +
-   label pairing at every rail width, tightening (not shedding) in the snug band
-   above the dock handoff. */
+/* ── the responsive ladder: two ranges, one threshold ──
+   Every tab keeps its icon + label pairing at every width: a label is never
+   clipped, ellipsized or hidden. Above the dock threshold the rail takes a row
+   of its own under the brand and the link group; below it, it is the bottom
+   dock. One row for all three would need ~1870px: the mirrored side tracks
+   that center the rail each grow to the link group's width. */
 @media (min-width: 1000px) {
-  /* Equal side tracks center the top rail against the app column rather than
-     against the leftover space between the brand and action group. The tracks
-     MUST floor at their content: a `0` floor lets a wide rail starve them, and
-     the brand's sub-row cannot shrink, so it paints under the rail. With the
-     floor the rail is what gives way (it scrolls). The snug band keeps its
-     tighter tab padding below. */
+  /* Two rows: brand | link group, then the rail centered underneath. */
   .rw-app .masthead {
-    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+    grid-template-columns: minmax(max-content, 1fr) auto;
+    row-gap: var(--sp-s);
   }
   .rw-app .brand {
+    grid-row: 1;
     grid-column: 1;
     justify-self: start;
   }
-  .rw-app .modes {
+  .rw-app .masthead-tools {
+    grid-row: 1;
     grid-column: 2;
   }
-  .rw-app .masthead-tools {
-    grid-column: 3;
-  }
-}
-
-/* Snug band: the five full labels do not fit beside the brand and the action
-   group until ~1280px. The tabs first lose their outer padding, then, below
-   1180px, every tab but the selected one keeps only its glyph. The hidden labels
-   stay in the accessible name - they are clipped, not removed. Ellipsizing every
-   label was the previous answer and it cut every two-word label. */
-@media (min-width: 1000px) and (max-width: 1279px) {
-  .rw-app .mode {
-    gap: var(--sp-xs);
-    padding: var(--sp-s) var(--sp-m);
-  }
-}
-@media (min-width: 1000px) and (max-width: 1179px) {
-  .rw-app .mode:not([aria-selected="true"]) .mode-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    white-space: nowrap;
-    clip-path: inset(50%);
+  .rw-app .modes {
+    grid-row: 2;
+    grid-column: 1 / -1;
   }
 }
 /* ▼ dock threshold: the single number that replaced data-masthead-layout */
@@ -1038,7 +1075,8 @@ html.vt-theme .mode-rail .mode {
   .rw-app .mobile-more {
     display: inline-flex;
   }
-  .rw-app .masthead-settings {
+  /* The phone More menu carries these four instead. */
+  .rw-app .masthead-links {
     display: none;
   }
   .rw-app .dock .mobile-more {
