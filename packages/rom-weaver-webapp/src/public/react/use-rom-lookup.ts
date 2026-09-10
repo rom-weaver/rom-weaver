@@ -15,7 +15,6 @@ import { identifyHashAlgorithm } from "../../types/identify.ts";
 const MIN_QUERY_LENGTH = 2;
 
 /** Most titles a name search shows. */
-const RESULT_LIMIT = 50;
 
 /**
  * How many pack records a title's release lookup reads before the exact-title
@@ -195,7 +194,7 @@ const useRomLookup = (messages: RomLookupMessages) => {
       const { controller, run } = begin();
       try {
         const found = await searchExpectedRomTitles(query, {
-          limit: RESULT_LIMIT,
+          limit: Infinity,
           onProgress: onProgress(run),
           signal: controller.signal,
         });

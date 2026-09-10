@@ -376,7 +376,27 @@ const parseTitleIndex = (text) => {
 };
 
 /**
- * Titles whose normalized form contains every token of the query, best first.
+ * @param {string} left
+ * @param {string} right
+ */
+const withinOneEdit = (left, right) => {
+  if (Math.abs(left.length - right.length) > 1) return false;
+  let offset = 0;
+  while (offset < left.length && left[offset] === right[offset]) offset += 1;
+  if (offset === Math.min(left.length, right.length)) return true;
+  if (left.length < right.length) return left.slice(offset) === right.slice(offset + 1);
+  if (left.length > right.length) return left.slice(offset + 1) === right.slice(offset);
+  if (left.slice(offset + 1) === right.slice(offset + 1)) return true;
+  return (
+    left[offset] === right[offset + 1] &&
+    left[offset + 1] === right[offset] &&
+    left.slice(offset + 2) === right.slice(offset + 2)
+  );
+};
+
+/**
+ * Every query token MUST match; literal matches rank before spelling corrections.
+ * Short tokens and numbers stay literal to preserve sequel and platform queries.
  * An empty query matches nothing: a blank search box MUST NOT list 247k rows.
  * @param {TitleIndex} index
  * @param {string} query
@@ -394,16 +414,35 @@ const searchTitleIndex = (index, query, options = {}) => {
   const hits = [];
   for (const row of index.titles) {
     let matched = true;
+    let corrections = 0;
+    let position = row.normalized.indexOf(firstToken);
     for (const token of tokens) {
       const found = row.normalized.indexOf(token);
       if (found === -1) {
-        matched = false;
-        break;
+        if (token.length < 4 || /\p{N}/u.test(token)) {
+          matched = false;
+          break;
+        }
+        let correctedPosition = -1;
+        for (const word of row.normalized.matchAll(/\S+/gu)) {
+          if (withinOneEdit(token, word[0])) {
+            correctedPosition = word.index;
+            break;
+          }
+        }
+        if (correctedPosition < 0) {
+          matched = false;
+          break;
+        }
+        if (token === firstToken) position = correctedPosition;
+        corrections += 1;
       }
     }
     if (!matched) continue;
-    const position = row.normalized.indexOf(firstToken);
-    const rank = row.normalized === normalizedQuery ? 0 : row.normalized.startsWith(normalizedQuery) ? 1 : 2;
+    let rank = 2;
+    if (corrections) rank = 2 + corrections;
+    else if (row.normalized === normalizedQuery) rank = 0;
+    else if (row.normalized.startsWith(normalizedQuery)) rank = 1;
     hits.push({ position, rank, row });
   }
   hits.sort(

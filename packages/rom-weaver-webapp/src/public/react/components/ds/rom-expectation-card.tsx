@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
@@ -269,6 +269,8 @@ const RomSearch = ({
   localizer: ReturnType<typeof useUiLocalizer>;
   variant?: "compact" | "hero" | "section";
 }) => {
+  const [titlePage, setTitlePage] = useState({ titles: lookup.titles, count: 50 });
+  const visibleTitleCount = titlePage.titles === lookup.titles ? titlePage.count : 50;
   const inputId = `${idPrefix}-search`;
   const compact = variant === "compact";
   const submitLabel = lookup.busy
@@ -341,10 +343,19 @@ const RomSearch = ({
       ) : null}
       {!chosen && lookup.titles.length ? (
         <ul aria-label={localizer.message("ui.identify.titleResults")} className="identify-search-results">
-          {lookup.titles.map((title) => (
+          {lookup.titles.slice(0, visibleTitleCount).map((title) => (
             <RomTitleRow key={`${title.slug}/${title.name}`} onChoose={() => lookup.chooseTitle(title)} title={title} />
           ))}
         </ul>
+      ) : null}
+      {!chosen && lookup.titles.length > visibleTitleCount ? (
+        <button
+          className="btn"
+          onClick={() => setTitlePage({ titles: lookup.titles, count: visibleTitleCount + 50 })}
+          type="button"
+        >
+          {localizer.message("ui.tools.more")} ({visibleTitleCount} / {lookup.titles.length})
+        </button>
       ) : null}
     </form>
   );
