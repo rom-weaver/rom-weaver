@@ -52,19 +52,23 @@ Native `checksum --digest --algo ALGO` prints one lowercase primary digest and a
 
 ## Remaining usability choices
 
-A complete stream contract remains open. Stdin is available for three query commands, but file-producing workflows use paths. Binary stdout needs rules for multi-file outputs, seek-dependent formats, and separation from JSON events. A stdout value of `-` must not be advertised without those rules.
+Native extraction and compression now support stdin and binary stdout through private disk staging. Extraction requires one final file; compression to stdout requires an explicit format. JSON, dry runs, terminal stdout, and multi-file extraction have explicit restrictions in the [binary pipeline reference](reference/cli.md#binary-pipelines).
+
+Incremental streaming and pipe support for patching and trimming remain open. The initial pipe support removes the need to manage intermediate paths, but it does not remove temporary disk use or provide a stream format for multiple output files.
 
 The digest mode is not a replacement for `sha1sum`: checksum-file verification and filename records remain outside its scope. These changes preserve the current ROM-processing defaults.
 
 ## Verification scope
 
-Validation passed: 3,495 Rust workspace tests and doctests, with two repository-configured ignores; all-target, all-feature Clippy with warnings denied; documentation lint; the threaded WASM application compile check; and the native CLI smoke harness. The patch round trip produced the expected CRC32 `221d2d6c`.
+Validation passed: 3,509 Rust workspace tests and doctests, with two repository-configured ignores; all-target, all-feature Clippy with warnings denied; documentation lint; the threaded WASM application compile check; and the native CLI smoke harness. The patch round trip produced the expected CRC32 `221d2d6c`.
 
 The audit inspected argument parsing, native output, stdin, overwrite checks, bundle creation, and the existing smoke coverage. Regression tests cover preservation of user files, failed stdin cleanup, closed stdout, ordinary stdout failures, bundle destination validation, and JSON man installation.
 
 The independent review found an output-alias case involving nonexistent paths with `..`; that case was included in the bundle fix. A second candidate about probe names without process IDs referred to an intermediate diff; the final names include the process ID.
 
 The follow-up adds 14 integration tests for positional inputs and digest output. These cover mixed input order, stdin, leading-dash filenames, extraction, dry runs, existing identify query forms, output conflicts, archive hashing, byte ranges, quiet mode, and color. Its independent review found no remaining defects.
+
+The stacked pipeline change adds 14 integration tests for stdin names, ZIP/7z round trips, gzip extraction, nested leaves, ambiguous output, early validation, cleanup after input and stdout errors, and closed pipes. A three-command compress/extract/checksum pipeline preserved the known SHA-256 digest. A terminal check refused binary output, and the independent review found no remaining defects.
 
 No unresolved confirmed finding remains. This audit does not establish interactive terminal behavior on every shell, native Windows runtime behavior, or performance parity with other tools.
 
