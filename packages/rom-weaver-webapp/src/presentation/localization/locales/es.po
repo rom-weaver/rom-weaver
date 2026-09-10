@@ -310,6 +310,11 @@ msgstr "Se comprueba al aplicar — {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.cheats"
+msgstr "Trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.CHECKSUM_MISMATCH"
 msgstr "La validación de la suma de comprobación falló."
 

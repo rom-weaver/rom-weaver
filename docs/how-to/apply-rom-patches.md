@@ -45,7 +45,7 @@ Keep one clean original somewhere safe. rom-weaver writes a separate result, but
 
 You can add [supported archives](../reference/formats.md#container-and-compression-formats), including ZIP, 7z, RAR, and tar, without extracting them first. rom-weaver looks inside, including inside nested archives. Disc containers such as CHD and RVZ are unpacked to the form the patch expects.
 
-The page changes after the files are understood. **0x02 ROM** holds the game, **0x03 Patches** holds the patch stack, and **0x04 Apply** controls the new file.
+The page changes after the files are understood. **0x02 ROM** holds the game, **0x03 Patches** holds the patch stack, **0x04 Cheats** holds optional cheats, and **0x05 Apply** controls the new file.
 
 ## Read the ROM and patch cards
 
@@ -87,7 +87,7 @@ After changing an input, the order, or a switch, read each patch's **Checks** su
 
 If **APPLY & DOWNLOAD** is disabled, wait for reading and checksumming to finish. Read the nearby notice and resolve any failed checks.
 
-In **0x04 Apply**:
+In **0x05 Apply**:
 
 1. Enter an output filename without an extension.
 2. Pick a plain file or a compressed output format. The format selector adds the extension.
