@@ -768,7 +768,10 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     return;
   }
 
-  const fallbackPath = path.join(distDir, "index.html");
+  // Cloudflare Pages answers a missed navigation with 404.html at the URL that
+  // missed, so the preview does the same: that is the only way to exercise the
+  // page at a nested path, where its <base> tag decides every link.
+  const fallbackPath = path.join(distDir, "404.html");
   const acceptHeader = req.headers.accept || "";
   const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
   // Pages matches `_headers` against the requested path, not the file the SPA fallback
@@ -789,12 +792,12 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
       for (const header of Object.keys(CROSS_ORIGIN_ISOLATION_HEADERS)) delete pagesHeaders[header];
     }
     sendEarlyHints(res, pagesHeaders, path.extname(asset.resolvedPath) === ".html");
+    const isDocument = path.extname(asset.resolvedPath) === ".html";
     send(
       res,
-      200,
+      asset.resolvedPath === fallbackPath ? 404 : 200,
       {
-        "Cache-Control":
-          path.basename(asset.resolvedPath) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
+        "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
         "Content-Type": getContentType(asset.resolvedPath),
         ...(asset.brotli ? { Vary: "Accept-Encoding" } : {}),
         ...(encoded ? { "Content-Encoding": "br" } : {}),

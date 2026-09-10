@@ -502,6 +502,34 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
     await page.close();
 
+    // The host serves 404.html at whatever path missed, so the page's links
+    // must resolve against its <base> tag rather than the missed directory.
+    page = await context.newPage();
+    watchPageErrors();
+    const missedUrl = new URL("assets/missing/", baseUrl).href;
+    const missedResponse = await page.goto(missedUrl, { waitUntil: "domcontentloaded" });
+    if (missedResponse?.status() !== 404) {
+      throw new Error(`missed nested path returned ${missedResponse?.status()}, expected 404`);
+    }
+    await page.locator(".not-found-page").waitFor({ state: "visible" });
+    await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
+    const notFoundLinks = await page.evaluate(() => ({
+      brand: document.querySelector(".brand-mark-link")?.href,
+      home: document.querySelector(".not-found-home")?.href,
+      word: document.querySelector(".brand-word-link")?.href,
+    }));
+    for (const [name, href, expected] of [
+      ["brand mark", notFoundLinks.brand, baseUrl],
+      ["brand word", notFoundLinks.word, baseUrl],
+      ["home action", notFoundLinks.home, new URL("apply-patch", baseUrl).href],
+    ]) {
+      if (href !== expected) throw new Error(`404 page ${name} link at ${missedUrl} is ${href}, expected ${expected}`);
+    }
+    await page.locator(".brand-mark-link").click();
+    await page.locator(".home-page").waitFor({ state: "visible" });
+    if (page.url() !== baseUrl) throw new Error(`404 page brand link landed on ${page.url()}, expected ${baseUrl}`);
+    await page.close();
+
     page = await context.newPage();
     watchPageErrors();
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
