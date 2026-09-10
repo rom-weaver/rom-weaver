@@ -75,20 +75,32 @@ fn positional_file_accepts_a_leading_dash_after_separator() {
 
 #[test]
 fn identify_non_file_queries_stay_valid() {
+    // A fixture pack keeps the name search independent of the packs installed
+    // on the machine that runs the test.
+    let temp = setup_temp_dir();
+    let pack = temp.child("test.pack");
+    fs::write(
+        pack.path(),
+        super::identify::identify_pack_with_crc([0, 0, 0, 1], "Mario (USA)"),
+    )
+    .unwrap();
+    let pack = pack.path().to_str().unwrap();
     command_stdout(&["identify", "--hash", "00000000", "--json"], 0);
     command_stdout(
-        &["identify", "--name", "Mario", "--system", "nes", "--json"],
+        &["identify", "--name", "Mario", "--database", pack, "--json"],
         0,
     );
     command_stdout(&["identify", "database", "--help"], 0);
-    let temp = setup_temp_dir();
     let input = temp.child("sample.bin");
     fs::write(input.path(), b"sample").unwrap();
     let path = input.path().to_str().unwrap();
     let result = run_single_json_event(&["identify", path, "--json"], 0);
     assert_eq!(result["details"]["identify"]["input"], path);
     command_stdout(&["identify", path, "--hash", "00000000"], 1);
-    command_stdout(&["identify", path, "--name", "Mario", "--system", "nes"], 1);
+    command_stdout(
+        &["identify", path, "--name", "Mario", "--database", pack],
+        1,
+    );
 }
 
 #[test]
