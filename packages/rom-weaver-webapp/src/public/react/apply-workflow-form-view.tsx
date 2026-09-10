@@ -14,6 +14,7 @@ import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
 import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
+import { getCheatHeaderStripConflict } from "../../lib/cheats/header-guard.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -1433,6 +1434,7 @@ const ApplyOutputAction = ({
   applyTotalTime,
   bundleTools,
   bundleVerificationError,
+  cheatHeaderStripConflict,
   controllers,
   disabledPatchCount,
   enabledPatchCount,
@@ -1452,6 +1454,8 @@ const ApplyOutputAction = ({
   applyTotalTime: PatcherOutputState["totalTiming"];
   bundleTools?: BundleToolsState;
   bundleVerificationError: string | null;
+  /** Cheats are On while a header strip is pinned - Apply stays blocked. */
+  cheatHeaderStripConflict: string;
   controllers: { output: PatcherOutputController };
   disabledPatchCount: number;
   enabledPatchCount: number;
@@ -1486,7 +1490,9 @@ const ApplyOutputAction = ({
       </div>
       <PatcherPrimaryAction
         controller={controllers.output}
-        disableRun={(patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError}
+        disableRun={
+          (patches.length > 0 && enabledPatchCount === 0) || !!bundleVerificationError || !!cheatHeaderStripConflict
+        }
         showCompletedDownload={postApplyDownloadOption.visible || showDownloadFallback}
         totalTime={applyTotalTime || undefined}
       />
@@ -1800,6 +1806,7 @@ const buildRomRowDeps = (input: {
 
 function ApplyWorkflowFormView({
   cheats,
+  cheatsOn,
   controllers,
   emulatorOutput,
   bundleExpectedRomChecks,
@@ -1817,8 +1824,13 @@ function ApplyWorkflowFormView({
   pendingDrops = [],
   startup = { message: "", status: "ready" },
 }: {
-  /** The 0x04 cheats step; receives the same finished-stage accent as the ROM and patch steps. */
-  cheats?: (state: { woven: boolean }) => ReactNode;
+  /**
+   * The 0x04 cheats step; receives the same finished-stage accent as the ROM and
+   * patch steps, plus the header-strip guard the header controls derive.
+   */
+  cheats?: (state: { headerStripConflict: string; woven: boolean }) => ReactNode;
+  /** At least one cheat card's switch is On. */
+  cheatsOn?: boolean;
   controllers: {
     output: PatcherOutputController;
     patchStack: PatcherStackController;
@@ -1885,6 +1897,17 @@ function ApplyWorkflowFormView({
     return bundleMetaById && id !== undefined ? bundleMetaById.get(id) : undefined;
   });
   const bundleVerificationError = getBundleVerificationError(bundleMeta, patches);
+  // The per-patch header state in 0x03 decides the cheat guard; neither the
+  // Cheats step nor the header select keeps a copy of it. The output header in
+  // 0x05 is applied after the cheats bake, so it never moves a write.
+  // The request sends a decided auto resolution as an explicit mode, so the
+  // guard reads the same value the controller will send.
+  const cheatHeaderStripConflict = getCheatHeaderStripConflict({
+    cheatsOn: !!cheatsOn,
+    patchHeaderModes: patches.map(
+      (item) => item.headerChoice ?? (item.headerAutoDecided ? item.headerAutoMode : undefined),
+    ),
+  });
   const disabledPatchCount = disabledPatchFlags.filter(Boolean).length;
   const enabledPatchCount = patches.length - disabledPatchCount;
   const localizer = useUiLocalizer();
@@ -2085,6 +2108,7 @@ function ApplyWorkflowFormView({
       applyTotalTime={applyTotalTime}
       bundleTools={bundleTools}
       bundleVerificationError={bundleVerificationError}
+      cheatHeaderStripConflict={cheatHeaderStripConflict}
       controllers={{ output: controllers.output }}
       disabledPatchCount={disabledPatchCount}
       enabledPatchCount={enabledPatchCount}
@@ -2277,6 +2301,7 @@ function ApplyWorkflowFormView({
             patches={patches}
             patchStack={controllers.patchStack}
             romActualsById={romActualsById}
+            stripDisabled={!!cheatsOn}
             notice={
               <SectionNotice
                 id="rom-weaver-patch-notice-message"
@@ -2287,7 +2312,7 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          {cheats?.({ woven: wovenSteps })}
+          {cheats?.({ headerStripConflict: cheatHeaderStripConflict, woven: wovenSteps })}
 
           <WorkflowOutputStep
             action={renderOutputAction}

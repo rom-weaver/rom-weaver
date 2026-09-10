@@ -9,10 +9,12 @@ import {
   matchCheatGame,
   parseCheatDatabaseIndex,
   resolveCheatDatabaseEntry,
+  resolveManualOnlyCheatSystem,
   selectManualGame,
   type CheatDatabaseClient,
   type CheatDatabaseIndex,
-  type CheatDatabaseSystem,
+  type CheatManualOnlySystem,
+  type CheatManualSystem,
   type CheatGameMatch,
   type CheatRomIdentity,
   type CheatSystemShard,
@@ -28,7 +30,20 @@ import { FileCard } from "./ds/file-card.tsx";
 import { StepSection } from "./ds/layout.tsx";
 import "./cheat-database-section.css";
 
-type SystemOption = { value: CheatDatabaseSystem; label: string };
+type SystemOption = { value: CheatManualSystem; label: string };
+
+/**
+ * Systems with no cheat database, where the step still offers manual entry.
+ * Each states what its own code scheme delivers.
+ */
+const MANUAL_ONLY_SYSTEMS: Record<CheatManualOnlySystem, { label: string; copy: string }> = {
+  playstation: {
+    copy:
+      "No cheat database for PlayStation. You can still add Xploder codes by hand; " +
+      "their ROM writes bake into the PS-X EXE.",
+    label: "PlayStation",
+  },
+};
 
 /** `owner/repo` for the notice line; the index stores the repository URL. */
 const sourceName = (sourceUrl: string): string => {
@@ -172,7 +187,7 @@ const CheatCard = ({ record, position, selected, onToggle, onRemove }: CheatCard
 };
 
 type ManualCodeFormProps = {
-  defaultSystem: CheatDatabaseSystem;
+  defaultSystem: CheatManualSystem;
   systems: SystemOption[];
   classifier: ManualCheatClassifier;
   onAdd: (result: ManualCheatResult) => void;
@@ -182,7 +197,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("Manual cheat");
-  const [system, setSystem] = useState<CheatDatabaseSystem>(defaultSystem);
+  const [system, setSystem] = useState<CheatManualSystem>(defaultSystem);
   const [kind, setKind] = useState<ManualCheatKindOverride>("auto");
   const [result, setResult] = useState<ManualCheatResult>();
   const [error, setError] = useState("");
@@ -263,7 +278,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
               <span>System</span>
               <select
                 onChange={(event) => {
-                  setSystem(event.target.value as CheatDatabaseSystem);
+                  setSystem(event.target.value as CheatManualSystem);
                   clearClassification();
                 }}
                 value={system}
@@ -356,6 +371,10 @@ const AddCheatsDialog = ({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      // Each open starts on the full list: a search left over from the last
+      // visit would hide rows the user never filtered out this time.
+      setQuery("");
+      setPage(0);
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
     } else if (!open && dialog.open) {
@@ -532,6 +551,11 @@ export const CheatDatabaseSection = ({
     [activeCatalog, activeIndex, rom],
   );
   const system = entry?.cheatSystem;
+  // The decoder covers systems no shard does (PlayStation). Those keep manual
+  // entry, without a game list to browse.
+  const manualOnlySystem = system ? undefined : resolveManualOnlyCheatSystem(activeCatalog, rom ?? null);
+  const manualSystem: CheatManualSystem | undefined = system ?? manualOnlySystem;
+  const manualOnlyCopy = manualOnlySystem ? MANUAL_ONLY_SYSTEMS[manualOnlySystem].copy : "";
   const identityKey = rom?.key;
   useEffect(() => {
     if (identityKey === "") return;
@@ -691,10 +715,16 @@ export const CheatDatabaseSection = ({
         : classifying
           ? { text: "Checking cheat delivery types in ROMWeaver…" }
           : undefined;
-  const systems: SystemOption[] = (activeIndex?.entries ?? []).map((candidate) => ({
-    label: candidate.platform,
-    value: candidate.cheatSystem,
-  }));
+  const systems: SystemOption[] = [
+    ...(activeIndex?.entries ?? []).map((candidate) => ({
+      label: candidate.platform,
+      value: candidate.cheatSystem as CheatManualSystem,
+    })),
+    ...Object.entries(MANUAL_ONLY_SYSTEMS).map(([value, { label }]) => ({
+      label,
+      value: value as CheatManualSystem,
+    })),
+  ];
 
   const gamePicker =
     rom && entry && shard && match.kind !== "exact" ? (
@@ -740,9 +770,11 @@ export const CheatDatabaseSection = ({
       ) : null}
 
       <button className="needs-input cheat-add" onClick={() => setDialogOpen(true)} type="button">
-        <Search aria-hidden="true" />
+        {manualOnlyCopy ? <Plus aria-hidden="true" /> : <Search aria-hidden="true" />}
         <span>
-          {gameTitle ? (
+          {manualOnlyCopy ? (
+            "Add cheat codes"
+          ) : gameTitle ? (
             <>
               Search the cheat database for <b className="hexref mono">{gameTitle}</b>
             </>
@@ -752,9 +784,15 @@ export const CheatDatabaseSection = ({
         </span>
       </button>
       <p className="cheat-add-note">
-        {copy.heading}
-        {game ? ` · ${countLabel(game.cheats.length, "database cheat")}` : ""}
-        {databaseCredit}
+        {manualOnlyCopy ? (
+          manualOnlyCopy
+        ) : (
+          <>
+            {copy.heading}
+            {game ? ` · ${countLabel(game.cheats.length, "database cheat")}` : ""}
+            {databaseCredit}
+          </>
+        )}
       </p>
 
       {loading ? <p aria-live="polite">Loading this system's cheat database…</p> : null}
@@ -778,10 +816,10 @@ export const CheatDatabaseSection = ({
       <AddCheatsDialog
         addedIds={addedIds}
         extras={
-          system ? (
+          manualSystem ? (
             <ManualCodeForm
               classifier={classifyManualCode}
-              defaultSystem={system}
+              defaultSystem={manualSystem}
               onAdd={addManualRecord}
               systems={systems}
             />
@@ -790,7 +828,7 @@ export const CheatDatabaseSection = ({
         gamePicker={gamePicker}
         notices={
           <aside className="cheat-notices">
-            <p>{copy.detail}</p>
+            <p>{manualOnlyCopy || copy.detail}</p>
             <p>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</p>
             <p>ROMWeaver does not upload ROM data or checksums.</p>
             {activeIndex ? (
@@ -808,7 +846,7 @@ export const CheatDatabaseSection = ({
         records={records}
         stackCount={cards.length}
         status={pickerStatus}
-        title={gameTitle ? `Add cheats · ${gameTitle}` : "Add cheats"}
+        title={gameTitle && !manualOnlyCopy ? `Add cheats · ${gameTitle}` : "Add cheats"}
       />
     </StepSection>
   );

@@ -379,6 +379,22 @@ describe("CheatDatabaseSection platform resolution", () => {
     expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
   });
 
+  it("keeps manual entry for a system the decoder covers without a database", async () => {
+    const view = render(
+      <CheatDatabaseSection {...props} rom={{ key: "psx", platform: "Sony - PlayStation", title: "Game" }} />,
+    );
+    await waitFor(() =>
+      expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain(
+        "No cheat database for PlayStation",
+      ),
+    );
+    expect(view.container.querySelector(".cheat-add-note")?.textContent).not.toContain("Unsupported system");
+
+    fireEvent.click(view.getByRole("button", { name: /Add cheat codes/u }));
+    fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
+    expect((view.getByLabelText("System") as HTMLSelectElement).value).toBe("playstation");
+  });
+
   it("resolves the loosely formatted tag ingest reports to the index platform", async () => {
     const view = render(
       <CheatDatabaseSection
