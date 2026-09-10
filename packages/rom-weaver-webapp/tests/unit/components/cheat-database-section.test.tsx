@@ -125,8 +125,9 @@ describe("CheatDatabaseSection", () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await waitFor(() => expect(view.container.querySelector(".step-num")?.textContent).toBe("0x04"));
     expect(view.container.querySelector(".step-title")?.textContent).toBe("Cheats");
-    expect(view.getByText("0 cheats")).toBeTruthy();
-    expect(view.getByText("optional")).toBeTruthy();
+    // Like the ROM and patch steps, the header carries no count chips while the stack is empty.
+    expect(view.container.querySelector(".step-meta")).toBeNull();
+    expect(view.getByRole("button", { name: "Cheats" })).toBeTruthy();
     expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("Exact checksum match");
     expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("2 database cheats");
     expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain(
@@ -149,8 +150,81 @@ describe("CheatDatabaseSection", () => {
         validationMessage="Cheat conflict at ROM offset 0x2871."
       />,
     );
-    await waitFor(() => expect(view.getByRole("alert").textContent).toContain("Cheat conflict at ROM offset 0x2871"));
+    await waitFor(() => expect(view.getByText(/Cheat conflict at ROM offset 0x2871/u).closest(".notice")).toBeTruthy());
     expect(view.getByText(/Contains patches and 1 baked ROM cheat/u)).toBeTruthy();
+  });
+
+  it("waits for a ROM before it offers anything", () => {
+    const view = render(<CheatDatabaseSection {...props} rom={null} />);
+    expect(view.queryByRole("button", { name: /Search the cheat database/u })).toBeNull();
+    expect(view.queryByRole("checkbox", { name: "Use cheats" })).toBeNull();
+    expect(view.queryByRole("button", { name: /Collapse cheats/u })).toBeNull();
+    expect(view.getByRole("button", { name: "Choose your original ROM" })).toBeTruthy();
+  });
+
+  it("collapses the body from the header chevron", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    expect(view.getByText("1 cheat")).toBeTruthy();
+
+    fireEvent.click(view.getByRole("button", { name: "Collapse cheats" }));
+    expect(view.container.querySelector(".step-body")).toBeNull();
+    expect(view.container.querySelector(".step.is-collapsed")).toBeTruthy();
+    expect(view.getByText("1 cheat")).toBeTruthy();
+
+    fireEvent.click(view.getByRole("button", { name: "Expand cheats" }));
+    expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
+  });
+
+  it("a new ROM starts the step On and open again", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    await openDialog(view);
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
+    fireEvent.click(view.getByRole("button", { name: "Collapse cheats" }));
+    expect(view.container.querySelector(".step.is-off.is-collapsed")).toBeTruthy();
+
+    view.rerender(<CheatDatabaseSection {...props} rom={null} />);
+    const needsRom = view.getByRole("button", { name: "Choose your original ROM" });
+    expect(needsRom.closest("[inert]")).toBeNull();
+    expect(view.container.querySelector(".step.is-off")).toBeNull();
+
+    view.rerender(<CheatDatabaseSection {...props} rom={{ ...props.rom, key: "rom-b" }} />);
+    expect(view.container.querySelector(".step.is-collapsed")).toBeNull();
+    expect((view.getByRole("checkbox", { name: "Use cheats" }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("switching the step off publishes an empty selection and keeps the cards", async () => {
+    const onSelectionChange = vi.fn();
+    const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
+      "cheat-1",
+    ]);
+
+    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
+    expect(onSelectionChange.mock.lastCall?.[0]).toEqual([]);
+    expect(view.container.querySelector(".step.is-off")).toBeTruthy();
+    expect(view.container.querySelector(".step-body")?.hasAttribute("inert")).toBe(true);
+    expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
+    expect(view.getByText("0 cheats")).toBeTruthy();
+    expect(view.getByText("1 off")).toBeTruthy();
+
+    // A card switch flipped while the step is Off must not publish anything.
+    onSelectionChange.mockClear();
+    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
+    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
+    expect(onSelectionChange).not.toHaveBeenCalled();
+
+    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
+    expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
+      "cheat-1",
+    ]);
+    expect(view.container.querySelector(".step.is-off")).toBeNull();
   });
 
   it("searches the picker by description and by raw code", async () => {
@@ -413,11 +487,15 @@ describe("CheatDatabaseSection save as patch", () => {
     const onSaveAsPatch = vi.fn(async () => "smw - Infinite lives.ips");
     const view = render(<CheatDatabaseSection {...props} onSaveAsPatch={onSaveAsPatch} />);
     const save = () => view.getByRole("button", { name: /Save as patch/u }) as HTMLButtonElement;
-    await waitFor(() => expect(save().disabled).toBe(true));
-
+    // The action only appears once there is a card; an Off card still leaves it disabled.
     await openDialog(view);
+    expect(view.queryByRole("button", { name: /Save as patch/u })).toBeNull();
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
+    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
+    await waitFor(() => expect(save().disabled).toBe(true));
+
+    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
     await waitFor(() => expect(save().disabled).toBe(false));
   });
 

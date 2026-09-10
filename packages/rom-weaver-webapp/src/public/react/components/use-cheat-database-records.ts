@@ -96,8 +96,10 @@ const useCheatDatabaseRecords = ({
   const manualOnlySystem = system ? undefined : resolveManualOnlyCheatSystem(activeCatalog, rom);
   const manualSystem: CheatManualSystem | undefined = system ?? manualOnlySystem;
 
+  // Nothing loads until a ROM is staged: the step is idle without one.
+  const hasRom = !!rom;
   useEffect(() => {
-    if (index) return;
+    if (index || !hasRom) return;
     let active = true;
     setLoadError("");
     void loadCheatDatabase()
@@ -112,7 +114,7 @@ const useCheatDatabaseRecords = ({
     return () => {
       active = false;
     };
-  }, [index]);
+  }, [hasRom, index]);
 
   useEffect(() => {
     if (suppliedShard || !entry) {

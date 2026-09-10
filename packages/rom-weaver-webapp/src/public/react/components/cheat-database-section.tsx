@@ -21,8 +21,10 @@ import {
 import { getCheatPatchStatus, getRomCheats } from "../cheat-patch-export-model.ts";
 import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer, DrawerReadout } from "./ds/drawer.tsx";
+import { Notice } from "./ds/feedback.tsx";
 import { FileCard } from "./ds/file-card.tsx";
-import { StepSection } from "./ds/layout.tsx";
+import { InfoPopover, NeedsInput, StepSection } from "./ds/layout.tsx";
+import { useUiLocalizer } from "../settings-context.tsx";
 import "./cheat-database-section.css";
 
 type SystemOption = { value: CheatManualSystem; label: string };
@@ -493,6 +495,8 @@ export type CheatDatabaseSectionProps = {
    * the ROM to, so the caller does not resolve it a second time.
    */
   onSaveAsPatch?: (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => Promise<string>;
+  /** Opens the 0x01 picker from the empty state; the step does nothing until a ROM is staged. */
+  onNeedsRom?: () => void;
   outputSummary?: { rom: number };
   validationMessage?: string;
   /** Localized step heading. */
@@ -513,13 +517,19 @@ export const CheatDatabaseSection = ({
   classifyDatabaseCheats,
   onSelectionChange,
   onSaveAsPatch,
+  onNeedsRom,
   outputSummary,
   validationMessage,
   title,
   num = "0x04",
   woven,
 }: CheatDatabaseSectionProps) => {
+  const localizer = useUiLocalizer();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  // The header switch. Off keeps the cards but publishes an empty selection,
+  // so the run bakes nothing and the header-strip guard lets go.
+  const [enabled, setEnabled] = useState(true);
   const [savingPatch, setSavingPatch] = useState(false);
   const [patchStatus, setPatchStatus] = useState("");
   const [patchError, setPatchError] = useState("");
@@ -563,6 +573,11 @@ export const CheatDatabaseSection = ({
     setAddedIds(new Set());
     setManualRecords([]);
     setManualGameId("");
+    // A new ROM starts the step On and open: Off and collapsed belong to the
+    // stack the user built for the previous ROM, and the switch is gone
+    // while no ROM is staged.
+    setEnabled(true);
+    setCollapsed(false);
     selectionCallback.current?.([]);
   }, [identityKey, setManualGameId]);
 
@@ -596,7 +611,13 @@ export const CheatDatabaseSection = ({
 
   const publish = (nextSelected: Set<string>, source = records) => {
     setSelectedIds(nextSelected);
-    selectionCallback.current?.(source.filter(({ record }) => nextSelected.has(record.id)));
+    if (enabled) selectionCallback.current?.(source.filter(({ record }) => nextSelected.has(record.id)));
+  };
+
+  const toggleEnabled = () => {
+    const nextEnabled = !enabled;
+    setEnabled(nextEnabled);
+    selectionCallback.current?.(nextEnabled ? selectedRecords : []);
   };
 
   const addRecord = (record: ClassifiedCheatRecord) => {
@@ -672,20 +693,69 @@ export const CheatDatabaseSection = ({
       </label>
     ) : null;
 
+  // The chips report what the run will bake, so Off counts every card as off.
+  const publishedCount = enabled ? selectedRecords.length : 0;
+  const offCount = cards.length - publishedCount;
+  const status = loading
+    ? "Loading this system's cheat database…"
+    : classifying
+      ? "Checking cheat delivery types in ROMWeaver…"
+      : "";
+  const loadErrorMessage = loadError
+    ? `The cheat database is unavailable. Offline access starts after this system loads once. ${loadError}`
+    : "";
+
   return (
     <StepSection
+      className={enabled ? undefined : "is-off"}
+      collapse={
+        rom
+          ? {
+              collapsed,
+              label: collapsed ? "Expand cheats" : "Collapse cheats",
+              onToggle: () => setCollapsed(!collapsed),
+            }
+          : undefined
+      }
+      headerExtra={
+        rom ? (
+          <label className="patch-enable">
+            <input aria-label="Use cheats" checked={enabled} onChange={toggleEnabled} type="checkbox" />
+            <span aria-hidden="true" className="switch-state">
+              <b className="on">On</b>
+              <b className="off">Off</b>
+            </span>
+          </label>
+        ) : undefined
+      }
       id="rom-weaver-row-cheat-stack"
+      inert={!enabled}
+      info={
+        <InfoPopover title="Cheats">
+          <strong>Cheats</strong>
+          <ul className="info-list">
+            <li>Optional. Cheats that are On are baked into the output ROM after the patches apply.</li>
+            <li>Only ROM cheats can be baked; codes that target runtime memory stay unsupported.</li>
+            <li>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</li>
+            <li>ROMWeaver does not upload ROM data or checksums. Each system works offline after it loads once.</li>
+          </ul>
+        </InfoPopover>
+      }
       meta={
-        <>
-          <span className="rb mono">{countLabel(cards.length, "cheat")}</span>
-          <span className="rb mono muted">optional</span>
-        </>
+        cards.length ? (
+          <>
+            <span className="rb mono">{countLabel(publishedCount, "cheat")}</span>
+            {offCount ? <span className="rb mono muted">{`${offCount} off`}</span> : null}
+          </>
+        ) : undefined
       }
       num={num}
       title={title}
       woven={woven}
     >
-      {cards.length ? (
+      {rom ? null : <NeedsInput onClick={onNeedsRom}>{localizer.message("ui.apply.needsRom")}</NeedsInput>}
+
+      {rom && cards.length ? (
         <div className="cards patch-cards workflow-file-list" id="rom-weaver-list-cheat-stack">
           {cards.map((entry, index) => (
             <CheatCard
@@ -700,7 +770,7 @@ export const CheatDatabaseSection = ({
         </div>
       ) : null}
 
-      {onSaveAsPatch ? (
+      {rom && cards.length && onSaveAsPatch ? (
         <div className="cheat-actions">
           <button
             className="btn cheat-save-patch"
@@ -723,51 +793,68 @@ export const CheatDatabaseSection = ({
             {savingPatch ? "Creating patch…" : "Save as patch"}
           </button>
           {patchStatus ? <p role="status">{patchStatus}</p> : null}
-          {patchError ? <p role="alert">{patchError}</p> : null}
         </div>
       ) : null}
 
-      <button className="needs-input cheat-add" onClick={() => setDialogOpen(true)} type="button">
-        {manualOnlyCopy ? <Plus aria-hidden="true" /> : <Search aria-hidden="true" />}
-        <span>
-          {manualOnlyCopy ? (
-            "Add cheat codes"
-          ) : gameTitle ? (
-            <>
-              Search the cheat database for <b className="hexref mono">{gameTitle}</b>
-            </>
-          ) : (
-            "Search the cheat database"
-          )}
-        </span>
-      </button>
-      <p className="cheat-add-note">
-        {manualOnlyCopy ? (
-          manualOnlyCopy
-        ) : (
-          <>
-            {copy.heading}
-            {game ? ` · ${countLabel(game.cheats.length, "database cheat")}` : ""}
-            {databaseCredit}
-          </>
-        )}
-      </p>
-
-      {loading ? <p aria-live="polite">Loading this system's cheat database…</p> : null}
-      {classifying ? <p aria-live="polite">Checking cheat delivery types in ROMWeaver…</p> : null}
-      {classificationError ? <p role="alert">{classificationError}</p> : null}
-      {validationMessage ? <p role="alert">{validationMessage}</p> : null}
-      {loadError ? (
-        <p role="alert">
-          The cheat database is unavailable. Offline access starts after this system loads once. {loadError}
-        </p>
+      {rom ? (
+        <>
+          <button className="needs-input cheat-add" onClick={() => setDialogOpen(true)} type="button">
+            {manualOnlyCopy ? <Plus aria-hidden="true" /> : <Search aria-hidden="true" />}
+            <span>
+              {manualOnlyCopy ? (
+                "Add cheat codes"
+              ) : gameTitle ? (
+                <>
+                  Search the cheat database for <b className="hexref mono">{gameTitle}</b>
+                </>
+              ) : (
+                "Search the cheat database"
+              )}
+            </span>
+          </button>
+          <p className="cheat-add-note">
+            {manualOnlyCopy ? (
+              manualOnlyCopy
+            ) : (
+              <>
+                {copy.heading}
+                {game ? ` · ${countLabel(game.cheats.length, "database cheat")}` : ""}
+                {databaseCredit}
+              </>
+            )}
+          </p>
+        </>
       ) : null}
 
-      {outputSummary ? (
+      {status ? (
+        <p aria-live="polite" className="cheat-status">
+          {status}
+        </p>
+      ) : null}
+      {patchError ? (
+        <Notice id="rom-weaver-cheat-patch-error" level="error" onDismiss={() => setPatchError("")}>
+          {patchError}
+        </Notice>
+      ) : null}
+      {classificationError ? (
+        <Notice id="rom-weaver-cheat-classify-error" level="error">
+          {classificationError}
+        </Notice>
+      ) : null}
+      {validationMessage ? (
+        <Notice id="rom-weaver-cheat-notice-message" level="warn">
+          {validationMessage}
+        </Notice>
+      ) : null}
+      {loadErrorMessage ? (
+        <Notice id="rom-weaver-cheat-load-error" level="error">
+          {loadErrorMessage}
+        </Notice>
+      ) : null}
+
+      {outputSummary?.rom ? (
         <div className="cheat-output-summary" role="status">
-          {outputSummary.rom ? (
-            <p>ROM output: Contains patches and {countLabel(outputSummary.rom, "baked ROM cheat")}.</p>
-          ) : null}
+          <p>ROM output: Contains patches and {countLabel(outputSummary.rom, "baked ROM cheat")}.</p>
         </div>
       ) : null}
 
