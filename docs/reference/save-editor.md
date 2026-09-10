@@ -10,6 +10,8 @@ The Save Editor changes persistent game data. It does not change emulator save s
 - [Read-only fields](#read-only-fields)
 - [Recognition](#recognition)
 - [Integrity rules](#integrity-rules)
+- [Save containers](#save-containers)
+- [Physical save formats](#physical-save-formats)
 - [Unsupported data](#unsupported-data)
 
 <!-- END doctoc -->
@@ -69,8 +71,43 @@ HeartGold and SoulSilver use the stored game version after both save-block check
 
 Every write starts from a copy. The handler reparses the result before it returns the edited bytes.
 
+## Save containers
+
+The editor removes these wrappers before recognition and puts them back on output. The wrapper bytes survive unchanged; only the raw save inside changes.
+
+| Container | Extensions | Layout | Checksum |
+| --- | --- | --- | --- |
+| GameShark SP save (SharkPortSave) | `.sps`, `.xps` | Length-prefixed strings, a 28-byte game block, the raw save | Recomputed on output |
+| GameShark SP snapshot | `.gsv` | 1072-byte header, 128 KiB raw flash | None |
+| DeSmuME save | `.dsv` | Raw save, then a 122-byte footer | None |
+| DexDrive memory card | `.gme` | 3904-byte header, 128 KiB raw card | None |
+| Virtual Game Station memory card | `.mem`, `.vgs` | 64-byte header, 128 KiB raw card | None |
+
+A GameShark SP checksum that does not match produces a warning, not a rejection. A DeSmuME footer whose padded size disagrees with the file produces a warning.
+
+`save identify` reports the container under `container`, the raw save size under `save_size`, and the file size under `file_size`.
+
+## Physical save formats
+
+An unsupported save still gets a physical format guess from its raw size. The report lists every format below that matches, under `potential_formats`. A size match alone does not prove the platform. A format with a signature check sorts first and sets `signature_checked`.
+
+| Platform | Formats | Signature |
+| --- | --- | --- |
+| Game Boy and Game Boy Color | Battery SRAM 512 B (MBC2), 2 KiB, 8 KiB, 32 KiB, 128 KiB | None |
+| Game Boy Advance | EEPROM 512 B, EEPROM 8 KiB, SRAM 32 KiB, Flash 64 KiB, Flash 128 KiB | None |
+| Nintendo Entertainment System | Battery WRAM 8 KiB | None |
+| Super Nintendo | Battery SRAM 2 KiB, 8 KiB, 32 KiB, 64 KiB, 128 KiB | None |
+| Nintendo 64 | EEPROM 512 B, EEPROM 2 KiB, SRAM 32 KiB, FlashRAM 128 KiB, Controller Pak 32 KiB, Mupen64Plus combined save 290 KiB | None |
+| Nintendo DS | 512 B, 8 KiB, 64 KiB, 128 KiB, 256 KiB, 512 KiB, 1 MiB, 8 MiB, 32 MiB | None |
+| Sega Genesis and Mega Drive | Cartridge SRAM 8 KiB, 32 KiB, 64 KiB | None |
+| Sega Master System and Game Gear | Cartridge SRAM 8 KiB, 32 KiB | None |
+| Sony PlayStation | Memory card 128 KiB | `MC` at offset 0 |
+| Sega Saturn | Internal backup RAM 32 KiB, 64 KiB (16-bit dump) | `BackUpRam Format` header, contiguous or on odd bytes |
+
+The Mupen64Plus combined save is the libretro core's `.srm`: EEPROM, four Controller Paks, SRAM, then FlashRAM, 296,960 bytes in total. PSP saves are per-game directories and have no entry.
+
 ## Unsupported data
 
 Diamond, Pearl, Platinum, other Pokémon generations, and other Zelda games remain unsupported. The editor does not change party Pokémon or boxes.
 
-The editor rejects container headers and emulator-specific trailers. Export a raw game save before inspection.
+A physical format match or a removed container does not make a save editable. Only the games in [Supported games](#supported-games) have an editor. Emulator save states are rejected.

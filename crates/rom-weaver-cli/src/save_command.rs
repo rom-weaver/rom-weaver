@@ -2,8 +2,9 @@ use std::{collections::HashSet, fs::OpenOptions};
 
 use super::*;
 use rom_weaver_core::{
-    SaveDetectionInput, SaveDocument, SaveEdit, SaveField, SaveGameIdentity, SaveRecognition,
-    SaveRecognitionOutcome, SaveValue, apply_save_edits, detect_save, parse_save,
+    SaveDetectionInput, SaveDocument, SaveEdit, SaveField, SaveFormatCandidate, SaveGameIdentity,
+    SaveRecognition, SaveRecognitionOutcome, SaveValue, apply_save_edits, candidate_save_formats,
+    detect_save, parse_save,
 };
 
 const SAVE_DETAILS_KEY: &str = "save_editor";
@@ -29,14 +30,36 @@ impl CliApp {
         let recognition = detect_save(&input);
         let document = recognized_identity(&recognition)
             .and_then(|identity| parse_save(&input, identity).ok());
-        // Report the raw save size, not the outer file size, when the save is
-        // inside a wrapper such as a GameShark SP export.
-        let save_size = rom_weaver_core::unwrap_save_container(&input.bytes)
-            .map_or(input.bytes.len(), |(_, inner)| inner.len());
+        // Report the raw save, not the outer file, when the save is inside a
+        // wrapper such as a GameShark SP export or a DeSmuME .dsv.
+        let container = rom_weaver_core::unwrap_save_container(&input.bytes);
+        let raw_bytes = container
+            .as_ref()
+            .map_or(input.bytes.as_slice(), |(_, inner)| inner.as_slice());
+        let save_size = raw_bytes.len();
+        // A recognized game names its own format; every same-size candidate
+        // only matters when no handler claimed the save.
+        let mut potential_formats = candidate_save_formats(raw_bytes);
+        if let Some(document) = &document {
+            potential_formats.retain(|candidate| candidate.id == document.save_format);
+        }
+        let potential_format = (!potential_formats.is_empty()).then(|| {
+            potential_formats
+                .iter()
+                .map(SaveFormatCandidate::label)
+                .collect::<Vec<_>>()
+                .join("; ")
+        });
         let details = json!({
             SAVE_DETAILS_KEY: {
+                "file_size": input.bytes.len(),
                 "save_size": save_size,
-                "potential_format": potential_save_format(save_size),
+                "container": container.as_ref().map(|(container, _)| json!({
+                    "kind": container.kind().id(),
+                    "name": container.kind().display_name(),
+                })),
+                "potential_format": potential_format,
+                "potential_formats": potential_formats,
                 "recognition": recognition,
                 "document": document,
             }
@@ -53,10 +76,18 @@ impl CliApp {
                     candidates.len()
                 ),
             ),
-            SaveRecognitionOutcome::Unsupported { .. } => (
-                OperationStatus::Unsupported,
-                format!("Recognition: Unsupported\nSave size: {save_size} bytes"),
-            ),
+            SaveRecognitionOutcome::Unsupported { .. } => {
+                // Non-success reports print only the label, so the wrapper and
+                // the size-matched formats MUST travel in it.
+                let mut label = format!("Recognition: Unsupported\nSave size: {save_size} bytes");
+                if let Some((container, _)) = &container {
+                    label.push_str(&format!("\nContainer: {}", container.kind().display_name()));
+                }
+                if let Some(formats) = &potential_format {
+                    label.push_str(&format!("\nPotential format: {formats}"));
+                }
+                (OperationStatus::Unsupported, label)
+            }
         };
         self.finish(
             command,
@@ -575,17 +606,6 @@ fn save_value_text(value: &SaveValue) -> String {
         SaveValue::List(value) => serde_json::to_string(value).unwrap_or_else(|_| "[]".into()),
         SaveValue::Table(value) => serde_json::to_string(value).unwrap_or_else(|_| "[]".into()),
         SaveValue::Object(value) => serde_json::to_string(value).unwrap_or_else(|_| "{}".into()),
-    }
-}
-
-fn potential_save_format(size: usize) -> Option<&'static str> {
-    match size {
-        131_072 => Some("Flash 128 KiB"),
-        524_288 => Some("Nintendo DS save 512 KiB"),
-        65_536 => Some("64 KiB persistent save"),
-        32_768 => Some("32 KiB persistent save"),
-        8_192 => Some("8 KiB persistent save"),
-        _ => None,
     }
 }
 

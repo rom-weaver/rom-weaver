@@ -390,8 +390,11 @@ fn unsupported_save_stays_untouched() {
     assert_eq!(json["status"], "unsupported");
     assert_eq!(
         json["details"]["save_editor"]["potential_format"],
-        "64 KiB persistent save"
+        "Flash 64 KiB (Game Boy Advance); Battery SRAM 64 KiB (Super Nintendo); \
+         Nintendo DS save 64 KiB (Nintendo DS); \
+         Cartridge SRAM 64 KiB (Sega Genesis and Mega Drive)"
     );
+    assert!(json["details"]["save_editor"]["container"].is_null());
     assert_eq!(fs::read(save.path()).unwrap(), vec![0xA5; 65_536]);
 
     let ds_save = temp.child("unknown-ds.sav");
@@ -408,9 +411,75 @@ fn unsupported_save_stays_untouched() {
     assert_eq!(json["status"], "unsupported");
     assert_eq!(
         json["details"]["save_editor"]["potential_format"],
-        "Nintendo DS save 512 KiB"
+        "Nintendo DS save 512 KiB (Nintendo DS)"
     );
     assert_eq!(fs::read(ds_save.path()).unwrap(), vec![0xA5; 524_288]);
+}
+
+fn desmume_wrap(save: &[u8]) -> Vec<u8> {
+    let mut bytes = save.to_vec();
+    bytes.extend_from_slice(
+        b"|<--Snip above here to create a raw sav by excluding this DeSmuME savedata footer:",
+    );
+    for value in [save.len() as u32, save.len() as u32, 3, 2, 18, 0] {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    bytes.extend_from_slice(b"|-DESMUME SAVE-|");
+    bytes
+}
+
+#[test]
+fn save_identify_names_the_container_and_signature_formats() {
+    let temp = setup_temp_dir();
+    let dsv = temp.child("unknown.dsv");
+    fs::write(dsv.path(), desmume_wrap(&vec![0xA5; 65_536])).unwrap();
+    let json = run_single_json_event(
+        &["save", "identify", dsv.path().to_str().unwrap(), "--json"],
+        2,
+    );
+    let details = &json["details"]["save_editor"];
+    assert_eq!(json["status"], "unsupported");
+    assert_eq!(details["container"]["kind"], "desmume_dsv");
+    assert_eq!(details["container"]["name"], "DeSmuME save (.dsv)");
+    assert_eq!(details["save_size"], 65_536);
+    assert_eq!(details["file_size"], 65_536 + 122);
+    // An unsupported report prints its label on stderr.
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["save", "identify", dsv.path().to_str().unwrap()])
+        .assert()
+        .code(2)
+        .get_output()
+        .clone();
+    let human = String::from_utf8(output.stderr).unwrap();
+    assert!(human.contains("Container: DeSmuME save (.dsv)"), "{human}");
+    assert!(human.contains("Potential format: Flash 64 KiB"), "{human}");
+
+    let gme = temp.child("card.gme");
+    let mut wrapped = vec![0u8; 0xF40];
+    wrapped[..11].copy_from_slice(b"123-456-STD");
+    let mut card = vec![0u8; 131_072];
+    card[..2].copy_from_slice(b"MC");
+    wrapped.extend_from_slice(&card);
+    fs::write(gme.path(), &wrapped).unwrap();
+    let json = run_single_json_event(
+        &["save", "identify", gme.path().to_str().unwrap(), "--json"],
+        2,
+    );
+    let details = &json["details"]["save_editor"];
+    assert_eq!(details["container"]["kind"], "dexdrive_gme");
+    assert_eq!(
+        details["potential_formats"][0]["id"],
+        "psx_memory_card_128k"
+    );
+    assert_eq!(details["potential_formats"][0]["signature_checked"], true);
+    assert!(
+        details["potential_format"]
+            .as_str()
+            .unwrap()
+            .starts_with("Memory card 128 KiB (Sony PlayStation); ")
+    );
+    assert_eq!(fs::read(gme.path()).unwrap(), wrapped);
 }
 
 fn shark_port_wrap(save: &[u8]) -> Vec<u8> {
@@ -452,7 +521,13 @@ fn save_set_round_trips_a_shark_port_wrapper() {
         run_single_json_event(&["save", "identify", path.to_str().unwrap(), "--json"], 0);
     let details = &identify["details"]["save_editor"];
     assert_eq!(details["save_size"], 131_072);
-    assert_eq!(details["potential_format"], "Flash 128 KiB");
+    assert_eq!(details["file_size"], wrapped.len());
+    assert_eq!(details["container"]["kind"], "shark_port_save");
+    assert_eq!(
+        details["potential_format"],
+        "Flash 128 KiB (Game Boy Advance)"
+    );
+    assert_eq!(details["potential_formats"][0]["id"], "gba_flash_128k");
     assert_eq!(details["document"]["identity"]["id"], "pokemon-emerald");
     assert!(
         details["document"]["warnings"]

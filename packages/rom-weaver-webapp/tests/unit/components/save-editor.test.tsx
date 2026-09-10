@@ -216,11 +216,18 @@ describe("SaveEditor", () => {
     fireEvent.change(input, { target: { files: [new File(["save"], "ambiguous.sav")] } });
     await waitFor(() => expect(screen.getByText("Choose the game format")).toBeTruthy());
 
-    identifySave.mockResolvedValueOnce({ recognition: { candidates: [], outcome: { unsupported: {} } } });
+    identifySave.mockResolvedValueOnce({
+      containerName: "DeSmuME save (.dsv)",
+      potentialFormat: "Flash 64 KiB (Game Boy Advance)",
+      recognition: { candidates: [], outcome: { unsupported: {} } },
+      saveSize: 65_536,
+    });
     fireEvent.change(document.querySelector("input[type=file]"), {
-      target: { files: [new File(["save"], "bad.sav")] },
+      target: { files: [new File(["save"], "bad.dsv")] },
     });
     await waitFor(() => expect(screen.getByText(/does not have an editor/)).toBeTruthy());
+    expect(screen.getByText(/Container: DeSmuME save \(\.dsv\)/)).toBeTruthy();
+    expect(screen.getByText(/Potential format: Flash 64 KiB/)).toBeTruthy();
   });
 
   it("does not label emulator save states as SRAM", async () => {
