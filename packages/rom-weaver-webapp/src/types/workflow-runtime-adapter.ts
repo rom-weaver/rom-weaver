@@ -322,8 +322,12 @@ type RuntimePatchCreateWorkerInput = {
   format: NonNullable<PatchCreateCommand["format"]>;
   logLevel?: LogLevel;
   metadata: Record<string, JsonValue>;
-  modifiedFileName: string;
-  modifiedFilePath: NonNullable<PatchCreateCommand["modified"]>;
+  /** Omitted when `codes` synthesizes the modified ROM instead of a staged file. */
+  modifiedFileName?: string;
+  modifiedFilePath?: PatchCreateCommand["modified"];
+  codes?: PatchCreateCommand["codes"];
+  codeSystem?: PatchCreateCommand["code_system"];
+  codeKind?: PatchCreateCommand["code_kind"];
   originalFileName: string;
   originalFilePath: PatchCreateCommand["original"];
   outputName: NonNullable<PatchCreateCommand["output"]>;
@@ -415,7 +419,10 @@ type WorkflowRuntimePatch = {
   }) => Promise<PatchValidateResult>;
   createPatch?: (input: {
     original: SourceRef;
-    modified: SourceRef;
+    modified?: SourceRef;
+    codes?: PatchCreateCommand["codes"];
+    codeSystem?: PatchCreateCommand["code_system"];
+    codeKind?: PatchCreateCommand["code_kind"];
     format: NonNullable<PatchCreateCommand["format"]>;
     metadata: JsonObject;
     outputName: NonNullable<PatchCreateCommand["output"]>;

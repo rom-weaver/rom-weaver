@@ -293,3 +293,20 @@
     }
   }
 }
+
+@layer controls {
+  /* "Save as patch": a side export of the ROM cheats that are On, so it sits
+     below the cards rather than competing with the run action. */
+  .rw-app .cheat-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-s);
+    align-items: center;
+    margin-block: var(--sp-s);
+  }
+
+  .rw-app .cheat-actions p {
+    margin: 0;
+    color: var(--ink-2);
+  }
+}

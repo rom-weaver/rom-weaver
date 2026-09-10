@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import {
   cheatDelivery,
+  manualCheatId,
   type CheatManualSystem,
   type ClassifiedCheatRecord,
   type DatabaseCheatClassifier,
@@ -25,6 +26,7 @@ import type {
 import type { PatchValidationPlan } from "../../wasm/index.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
+import { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat } from "./cheat-patch-export-model.ts";
 import { CheatDatabaseSection } from "./components/cheat-database-section.tsx";
 import {
   type ApplyWorkflowPrepareHandlers,
@@ -128,15 +130,6 @@ const getApplyOutputVerification = ({
     return { level: "warn", message: localizer.message("ui.output.bundleDiverged") };
   }
   return null;
-};
-
-const manualCheatId = (system: CheatManualSystem, code: string, kind: string): string => {
-  let hash = 2_166_136_261;
-  for (const character of `${system}\0${kind}\0${code}`) {
-    hash ^= character.codePointAt(0) || 0;
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return `manual-${system}-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 };
 
 const getSinglePatchReplaceIndex = ({
@@ -1539,6 +1532,33 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [getCheatSource],
   );
+  const saveCheatsAsPatch = useCallback(
+    async (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => {
+      const codes = getCheatPatchCodes(records);
+      if (!codes.length) throw new Error("Turn on at least one ROM cheat to bake it into a patch");
+      const format = getCheatPatchFormat(cheatRomRow?.size);
+      const fileName = getCheatPatchFileName(cheatFileName, records, format);
+      const { CreateWorkflow } = await loadBrowserApi();
+      // The patch is a side product of this apply run, so it gets its own
+      // short-lived workflow: the apply workflow owns the run's own output.
+      const workflow = new CreateWorkflow({
+        ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+        settings: { format, output: { compression: "none", outputName: fileName } },
+      });
+      try {
+        await workflow.setOriginal(getCheatSource() as never);
+        await workflow.setCheatCodes(codes, system);
+        await workflow.setPatchType(format);
+        await workflow.setOutputName(fileName);
+        const result = await workflow.run();
+        await result.output.saveAs({ interactive: true });
+        return result.output.fileName;
+      } finally {
+        await workflow.dispose().catch(() => undefined);
+      }
+    },
+    [cheatFileName, cheatRomRow?.size, getCheatSource, resolvedAssetBaseUrl],
+  );
   const preflightSequence = useRef(0);
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[]) => {
@@ -1679,6 +1699,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
+            onSaveAsPatch={saveCheatsAsPatch}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
             rom={cheatRom}

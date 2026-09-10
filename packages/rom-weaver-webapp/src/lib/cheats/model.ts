@@ -41,7 +41,11 @@ export type CheatRecord = {
   sourceRevision: string;
 };
 
-type CheatWrite = { offset: number; value: number; width: number };
+/**
+ * Mirrors the Rust `CheatWrite`: `compare` is present only when the code
+ * carried a compare byte the resolver matched against this offset.
+ */
+type CheatWrite = { offset: number; value: number; width: number; compare?: number | null };
 
 type CheatResolution = { type: "romBakeable"; writes: CheatWrite[] } | { type: "unsupported"; reason: string };
 

@@ -439,11 +439,13 @@ mod tests {
                 offset: 0x10,
                 value: 0xAB,
                 width: 1,
+                compare: None,
             },
             CheatWrite {
                 offset: 0x20,
                 value: 0x1234,
                 width: 2,
+                compare: None,
             },
         ];
         let ips = serialize_cheat_ips(&writes, &[0u8; 0x40], CheatSystem::Genesis).unwrap();
@@ -466,6 +468,7 @@ mod tests {
             offset: 0x45_4F46,
             value: 0x42,
             width: 1,
+            compare: None,
         }];
         let ips = serialize_cheat_ips(&writes, &rom, CheatSystem::Genesis).unwrap();
         // Record: offset 0x454F45, len 2, data [0x99 (unchanged), 0x42].
@@ -482,6 +485,7 @@ mod tests {
             offset: 0x100_0000,
             value: 0x01,
             width: 1,
+            compare: None,
         }];
         let err = serialize_cheat_ips(&writes, &[], CheatSystem::Genesis).unwrap_err();
         assert!(
@@ -497,6 +501,7 @@ mod tests {
             offset: 0x10,
             value: 0xABCD,
             width: 2,
+            compare: None,
         }];
         let ips = serialize_cheat_ips(&writes, &[0u8; 0x20], CheatSystem::GameBoyAdvance).unwrap();
         assert_eq!(&ips[10..12], &[0xCD, 0xAB]);
@@ -508,6 +513,7 @@ mod tests {
             offset: 0x100_0000,
             value: 0xABCD,
             width: 2,
+            compare: None,
         }];
         let ips = serialize_cheat_patch(&writes, &[], CheatSystem::GameBoyAdvance).unwrap();
         assert_eq!(&ips[..5], b"IPS32");
