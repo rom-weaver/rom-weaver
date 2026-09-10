@@ -103,6 +103,17 @@ fn identify_non_file_queries_stay_valid() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn identify_preserves_backslashes_in_file_names() {
+    let temp = setup_temp_dir();
+    let input = temp.child("sample\\name.bin");
+    fs::write(input.path(), b"sample").expect("fixture");
+    let path = input.path().to_str().expect("path");
+    let result = run_single_json_event(&["identify", path, "--json"], 0);
+    assert_eq!(result["details"]["identify"]["input"], path);
+}
+
 #[test]
 fn compress_and_trim_accept_and_order_mixed_file_inputs() {
     let temp = setup_temp_dir();
