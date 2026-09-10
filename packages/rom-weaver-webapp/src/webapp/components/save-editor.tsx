@@ -548,10 +548,12 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
           ) : null}
         </div>
         {readOnly ? (
-          <output className="save-editor-readonly mono" id={controlId}>
-            {saveValueToText(field.value)}
+          <span className="save-editor-readonly">
+            <output className="mono" id={controlId}>
+              {saveValueToText(field.value)}
+            </output>
             <span className="save-editor-tag">read-only</span>
-          </output>
+          </span>
         ) : (
           <SaveFieldControl
             disabled={busy}
