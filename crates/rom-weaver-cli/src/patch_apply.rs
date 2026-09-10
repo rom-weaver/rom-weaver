@@ -151,6 +151,8 @@ struct EmitBundleInputs {
     bases: Vec<PatchBasisMode>,
     output: Option<PathBuf>,
     threads: ThreadBudget,
+    /// The cheat selection this run applied, filled in after the apply.
+    cheats: Vec<BundleCheatEntry>,
 }
 
 struct PatchApplyPrepareChainInputs<'a> {
@@ -253,7 +255,14 @@ impl CliApp {
             {
                 return outcome;
             }
-            return self.run_patch_apply_resolved(args, None, original_input, None, &mut None);
+            return self.run_patch_apply_resolved(
+                args,
+                None,
+                original_input,
+                None,
+                &mut None,
+                &mut Vec::new(),
+            );
         }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -327,8 +336,10 @@ impl CliApp {
             bases: args.patch_basis.clone(),
             output: args.output.clone(),
             threads: args.threads,
+            cheats: Vec::new(),
         });
         let mut final_output = None;
+        let mut applied_cheats = Vec::new();
         let outcome = if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
             let expected_rom_name = bundle_resolution
                 .as_ref()
@@ -341,6 +352,7 @@ impl CliApp {
                 original_input,
                 local_bundle,
                 &mut final_output,
+                &mut applied_cheats,
             )
         };
         // --emit-bundle failures don't undo the already-written apply; warn
@@ -349,6 +361,7 @@ impl CliApp {
             && outcome.status == OperationStatus::Succeeded
         {
             inputs.output = final_output.or(inputs.output);
+            inputs.cheats = applied_cheats;
             if let Err(error) = self.emit_apply_bundle(&emit_path, inputs) {
                 tracing::warn!(
                     %error,
@@ -364,9 +377,9 @@ impl CliApp {
     /// `bundle_create_inner`, so the emitted bundle is byte-for-byte what
     /// `bundle create` would write for the same inputs.
     fn emit_apply_bundle(&self, emit_path: &Path, inputs: EmitBundleInputs) -> Result<()> {
-        if inputs.patches.is_empty() {
+        if inputs.patches.is_empty() && inputs.cheats.is_empty() {
             return Err(RomWeaverError::Validation(
-                "--emit-bundle needs at least one applied --patch".to_string(),
+                "--emit-bundle needs at least one applied --patch or --cheat".to_string(),
             ));
         }
         let context = self.context(inputs.threads);
@@ -403,6 +416,7 @@ impl CliApp {
             output_check,
             threads: inputs.threads,
             patch_specs,
+            cheats: inputs.cheats,
             ..BundleCreateCommand::default()
         };
         self.bundle_create_inner(&create, &context)?;
@@ -448,6 +462,7 @@ impl CliApp {
         original_input: PathBuf,
         local_bundle: Option<PathBuf>,
         final_output: &mut Option<PathBuf>,
+        _applied_cheats: &mut Vec<BundleCheatEntry>,
     ) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -464,6 +479,7 @@ impl CliApp {
             bundle: _,
             with_patches: _,
             without_patches: _,
+            without_cheats: _,
             no_compress,
             compress_format,
             compress_codec,
@@ -491,13 +507,22 @@ impl CliApp {
         let has_manual_cheats = !codes.is_empty();
         // `--cheat` resolves to records only once the input ROM is resolved, so
         // the flag - not the (still empty) record list - decides whether this
-        // run has database cheats.
+        // run has database cheats. A bundle's recorded cheats count the same.
         let native_cheat_selection = !cheat_selection.cheats.is_empty();
+        // Native-only: resolving a bundle cheat reads the local cheat database.
+        #[cfg(not(target_arch = "wasm32"))]
+        let bundle_cheats = bundle_resolution
+            .as_ref()
+            .map(|resolution| resolution.cheats.clone())
+            .unwrap_or_default();
+        #[cfg(target_arch = "wasm32")]
+        let bundle_cheats: Vec<BundleCheatEntry> = Vec::new();
         #[cfg(not(target_arch = "wasm32"))]
         let mut cheat_records = cheat_records;
         #[cfg(target_arch = "wasm32")]
         let cheat_records = cheat_records;
-        let has_database_cheats = !cheat_records.is_empty() || native_cheat_selection;
+        let has_database_cheats =
+            !cheat_records.is_empty() || native_cheat_selection || !bundle_cheats.is_empty();
         let has_cheats = has_manual_cheats || has_database_cheats;
         let discover_implicit_patches = patches.is_empty() && !has_cheats && !no_extract;
         let input_kind_filter =
@@ -788,34 +813,30 @@ impl CliApp {
             }
         };
 
-        // Resolve `--cheat` against the resolved input ROM. The bakeable entries
-        // join `cheat_records` and are applied after the patch chain, like the
-        // webapp's.
+        // Resolve the bundle's recorded cheats and `--cheat` against the
+        // resolved input ROM. Both bake after the patch chain, like the
+        // webapp's. Native-only: the cheat database lives on disk.
         #[cfg(not(target_arch = "wasm32"))]
-        if native_cheat_selection {
-            match self.resolve_cheat_selection(&resolved_input, &cheat_selection, &context) {
-                Ok(resolved) => {
-                    if let Some(entry) = resolved.selected_unusable().first() {
-                        Self::cleanup_temp_paths(&temp_paths);
-                        return self.finish(
-                            "patch-apply",
-                            fail(
-                                "prepare",
-                                format!(
-                                    "cheat `{}` cannot be baked into the ROM",
-                                    entry.record.description
-                                ),
-                            ),
-                        );
-                    }
-                    cheat_records.extend(resolved.selected_rom_records());
-                }
-                Err(error) => {
-                    Self::cleanup_temp_paths(&temp_paths);
-                    return self.finish("patch-apply", fail("prepare", error.to_string()));
-                }
+        let skipped_bundle_cheats = match self.resolve_patch_apply_cheats(
+            &resolved_input,
+            &bundle_cheats,
+            &cheat_selection,
+            native_cheat_selection,
+            &context,
+        ) {
+            Ok(cheats) => {
+                cheat_records.extend(cheats.rom_records);
+                _applied_cheats.extend(cheats.applied);
+                cheats.skipped
             }
-        }
+            Err(error) => {
+                Self::cleanup_temp_paths(&temp_paths);
+                return self.finish("patch-apply", fail("prepare", error.to_string()));
+            }
+        };
+        // Now that the selection is resolved, the record list - not the flags -
+        // says whether this run bakes anything.
+        let has_database_cheats = !cheat_records.is_empty();
 
         // Bake cheat codes into a synthetic IPS patch applied after the explicit
         // patches, so a cheat wins over a patch that touches the same byte and a
@@ -845,7 +866,35 @@ impl CliApp {
         }
 
         let mut terminal_output_for_apply = None;
-        let report = if resolved_patches.is_empty() && !has_database_cheats {
+        #[cfg(not(target_arch = "wasm32"))]
+        let every_bundle_cheat_skipped = resolved_patches.is_empty()
+            && !has_database_cheats
+            && !skipped_bundle_cheats.is_empty();
+        #[cfg(target_arch = "wasm32")]
+        let every_bundle_cheat_skipped = false;
+        let report = if every_bundle_cheat_skipped {
+            // Every recorded cheat was optional and unresolvable, so the run
+            // has no patch and no cheat left: say which ones went missing
+            // rather than report a bare "not executed".
+            #[cfg(not(target_arch = "wasm32"))]
+            let detail = skipped_bundle_cheats
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            #[cfg(target_arch = "wasm32")]
+            let detail = String::new();
+            OperationReport::failed(
+                OperationFamily::Patch,
+                Some("cheat".to_string()),
+                "validate",
+                format!(
+                    "every cheat this bundle records was skipped, so there is nothing to apply: \
+                     {detail}"
+                ),
+                probe_threads.clone(),
+            )
+        } else if resolved_patches.is_empty() && !has_database_cheats {
             OperationReport::failed(
                 OperationFamily::Patch,
                 None,
@@ -1281,6 +1330,19 @@ impl CliApp {
             && let Some(summary) = cheat_summary
         {
             report.label = format!("{}; {}", report.label, summary.label());
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if report.status == OperationStatus::Succeeded && !skipped_bundle_cheats.is_empty() {
+            report.label = format!(
+                "{}; skipped {} optional bundle cheat(s): {}",
+                report.label,
+                skipped_bundle_cheats.len(),
+                skipped_bundle_cheats
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
 
         *final_output = terminal_output_for_apply;

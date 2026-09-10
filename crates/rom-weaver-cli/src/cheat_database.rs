@@ -50,6 +50,14 @@ pub(crate) fn attribution(directory: Option<&Path>) -> String {
     format!("Cheat data from {source}{revision}{url}, licensed {license}.")
 }
 
+/// The database the shards were imported from, as its manifest names it.
+/// Recorded in a bundle's cheat entries so a reader knows which IDs they are.
+pub(crate) fn source_name(directory: &Path) -> String {
+    load_manifest(directory)
+        .and_then(|manifest| manifest.source)
+        .unwrap_or_else(|| "libretro-database".to_string())
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CheatGameChecksums {

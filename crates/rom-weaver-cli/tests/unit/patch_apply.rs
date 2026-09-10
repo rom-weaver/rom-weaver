@@ -66,6 +66,7 @@ fn apply_command(input: &Path, patches: Vec<PathBuf>) -> PatchApplyCommand {
         bundle: None,
         with_patches: Vec::new(),
         without_patches: Vec::new(),
+        without_cheats: false,
         no_compress: true,
         compress_format: None,
         compress_codec: Vec::new(),
@@ -1560,6 +1561,7 @@ fn bundle_resolution(
     output_checks: Option<(String, FilenameRequirements)>,
 ) -> BundleApplyResolution {
     BundleApplyResolution {
+        cheats: Vec::new(),
         checks,
         expected_rom_name: None,
         output_checks,
