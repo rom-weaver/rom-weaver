@@ -5,7 +5,7 @@
 #
 # Usage (from repo root):
 #   cargo build -p rom-weaver-cli --release      # if target/release/rom-weaver is missing
-#   .claude/skills/run-rom-weaver/cli-smoke.sh
+#   .agents/skills/run-rom-weaver/cli-smoke.sh
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

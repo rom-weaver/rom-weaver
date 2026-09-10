@@ -4,11 +4,7 @@
     "budgets": [
       {
         "name": "HTML shell",
-        "path": "index.html",
-        "expectedRawBytes": 33700,
-        "maxRawBytes": 35400,
-        "expectedBrotliBytes": 7950,
-        "maxBrotliBytes": 8350
+        "path": "index.html"
       },
       {
         "name": "JavaScript",
@@ -18,55 +14,41 @@
           "assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$",
           "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
         ],
-        "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2125000,
-        "maxRawBytes": 2190000,
-        "expectedBrotliBytes": 561000,
-        "maxBrotliBytes": 570000
+        "requireBrotliMinBytes": 1024
       },
       {
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
-        "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 252000,
-        "maxRawBytes": 265000,
-        "expectedBrotliBytes": 69000,
-        "maxBrotliBytes": 73000
+        "requireBrotliMinBytes": 1024
       },
       {
         "name": "Save Editor JavaScript",
         "directory": "assets",
         "extension": ".js",
         "includePatterns": ["assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"],
-        "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 35000,
-        "maxRawBytes": 42000,
-        "expectedBrotliBytes": 9500,
-        "maxBrotliBytes": 11500
+        "requireBrotliMinBytes": 1024
       },
       {
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
-        "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 221000,
-        "maxRawBytes": 226000,
-        "expectedBrotliBytes": 35100,
-        "maxBrotliBytes": 35500
+        "requireBrotliMinBytes": 1024
       },
       {
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
-        "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 7285000,
-        "maxRawBytes": 7502000,
-        "expectedBrotliBytes": 1912000,
-        "maxBrotliBytes": 1989000
+        "requireBrotliMinBytes": 1024
       }
-    ]
+    ],
+    "drift": {
+      "warnPercent": 1,
+      "maxPercent": 3,
+      "floorBytes": 1024,
+      "noiseBytes": 512
+    }
   },
   "cssCoverage": {
     "maxUnusedBytes": 52000

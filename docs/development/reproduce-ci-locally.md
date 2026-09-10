@@ -44,7 +44,7 @@ The performance gates need the production WASM artifact and the webapp build fir
 
 ## Reproduce the Docker jobs
 
-`docker` is conditional on image-plumbing changes and is most directly reproduced with the source-build commands in the [self-hosting guide](../hosting/self-hosting.md). The `docker` job passes `IDENTIFY_DATA=prebuilt` to every leg it builds. For the CLI image it stages `target/identify-release/share`; run `mise run identify-data` and `node scripts/build-identify-release-data.mjs` before that variant. For the webapp image it stages the built packs under `target/identify-data/v1`; run `mise run identify-data` and `cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1` before that variant.
+`docker` is conditional on image-plumbing changes and is most directly reproduced with the source-build commands in the [self-hosting guide](../hosting/self-hosting.md). The `docker` job passes `IDENTIFY_DATA=prebuilt` to every leg it builds. For the CLI image it stages `target/identify-release/share`; run `mise run identify-data` and `node scripts/build-identify-release-data.mjs --tree-only` before that variant. For the webapp image it stages the built packs under `target/identify-data/v1`; run `mise run identify-data` and `cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1` before that variant.
 
 `docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle staged under `prebuilt/`. The CLI job uses `BINARY=prebuilt` when its packaging inputs change.
 

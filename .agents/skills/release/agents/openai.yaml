@@ -1,0 +1,4 @@
+# Codex counterpart of the `disable-model-invocation` frontmatter in SKILL.md:
+# starting a release is the user's call, so only an explicit `$release` runs it.
+policy:
+  allow_implicit_invocation: false
