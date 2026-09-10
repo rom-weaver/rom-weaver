@@ -1047,36 +1047,13 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-      # The gate compares this build against the last one on the default branch, so it needs no
-      # hand-maintained numbers - see the Performance budgets section of docs/development/ci.md. Only main writes the
-      # baseline, which is why the restore below carries no exact-key hit and never fails closed:
-      # a pull request with no cached baseline reports its sizes and passes.
-      - name: Restore size baseline
-        if: github.ref != 'refs/heads/main'
-        uses: actions/cache/restore@v6
-        with:
-          path: dist/size-baseline.json
-          key: webapp-size-baseline-${{ github.sha }}
-          restore-keys: webapp-size-baseline-
-
+      # The budgets the gate reads are the numbers in performance-budgets.json - see the
+      # Performance budgets section of docs/development/ci.md. A pull request that grows an asset
+      # on purpose raises its own budget in the same change.
       - name: Asset size gates
         id: size
         continue-on-error: true
-        run: >-
-          npm --prefix packages/rom-weaver-webapp run check:size --
-          ${{ github.ref == 'refs/heads/main'
-          && format('--write-baseline {0}/dist/size-baseline.json', github.workspace)
-          || format('--baseline {0}/dist/size-baseline.json', github.workspace) }}
-
-      # Saved only from main, so every pull request measures against the same published sizes
-      # rather than against whatever branch last ran. cache-cleanup.yml keeps the newest
-      # generation of this key family and deletes the rest.
-      - name: Save size baseline
-        if: github.ref == 'refs/heads/main' && steps.size.outcome == 'success'
-        uses: actions/cache/save@v6
-        with:
-          path: dist/size-baseline.json
-          key: webapp-size-baseline-${{ github.sha }}
+        run: npm --prefix packages/rom-weaver-webapp run check:size
 
   # Consume the prebuilt WASM module for the build-script contract and the exact
   # bundle uploaded by webapp-build for Lighthouse. The node-only script, lint,
