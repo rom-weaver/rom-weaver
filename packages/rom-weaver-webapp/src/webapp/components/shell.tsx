@@ -1259,8 +1259,11 @@ const Masthead = ({
       const tools = toolsRef.current;
       const target = event.target;
       const moreAnchors = [desktopMoreRef.current?.parentElement, mobileMoreRef.current?.parentElement];
-      if (target instanceof Node && (tools?.contains(target) || moreAnchors.some((anchor) => anchor?.contains(target))))
-        return;
+      if (!(target instanceof Node)) return;
+      // The link group shares the action box but navigates away, so a press on
+      // it closes an open menu the way a press on a rail tab does.
+      const insideTools = tools?.contains(target) && !(target instanceof Element && target.closest(".masthead-links"));
+      if (insideTools || moreAnchors.some((anchor) => anchor?.contains(target))) return;
       setAccentOpen(false);
       setUtilityOpen(false);
     };
@@ -1351,63 +1354,6 @@ const Masthead = ({
             </span>
           </span>
         </span>
-        <ModeRail
-          controlsPanels={tabsControlPanels}
-          current={currentTab}
-          navLabel={navLabel}
-          onSelect={onSelectTab}
-          tabs={tabs}
-          trailing={
-            <>
-              <span className="desktop-find">
-                <button
-                  aria-controls="find-palette"
-                  aria-expanded={findOpen && findPlacement === "desktop"}
-                  aria-haspopup="dialog"
-                  className="mode-more mode-find"
-                  onClick={() => toggleFind("desktop")}
-                  ref={desktopFindRef}
-                  type="button"
-                >
-                  <Search aria-hidden="true" />
-                  <span className="tool-text">{findLabel}</span>
-                </button>
-              </span>
-              <MoreMenu
-                autoFocusFirst={utilityViaKeyboard}
-                buttonClassName="mode-more"
-                current={desktopCurrentInMore}
-                className="desktop-more"
-                confirmExternalNavigation={confirmExternalNavigation}
-                localizer={localizer}
-                menuId="more-menu"
-                moreLabel={moreLabel}
-                onClose={closeUtility}
-                onOpenLog={onOpenLog}
-                onOpenStatus={onOpenStatus}
-                onOpenStorage={onOpenStorage ?? onOpenLog}
-                moreTabs={desktopMoreTabs}
-                onOpenWorkflowTab={onSelectTab}
-                onPreloadLog={onPreloadLog}
-                onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
-                open={utilityOpen && utilityPlacement === "desktop"}
-                renderMenu={utilityOpen && utilityPlacement === "desktop"}
-                runtimeState={runtimeState}
-                runtimePercent={runtimePercent}
-                toolsEnabled={betaToolsEnabled}
-                triggerRef={desktopMoreRef}
-              />
-            </>
-          }
-        />
-        <FindPalette
-          localizer={localizer}
-          onAction={onFindAction}
-          onClose={closeFind}
-          open={findOpen}
-          sources={findSources}
-          triggerRef={activeFindRef}
-        />
         <div className="masthead-tools" ref={toolsRef}>
           {/* The link group: every destination reads as icon plus label, at
               every width the group is shown. Below the dock threshold it is
@@ -1432,7 +1378,6 @@ const Masthead = ({
                 onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
                 rel="noreferrer"
                 target="_blank"
-                title={githubLabel}
               >
                 <Github aria-hidden="true" />
                 <span aria-hidden="true" className="tool-text">
@@ -1519,6 +1464,63 @@ const Masthead = ({
             />
           ) : null}
         </div>
+        <ModeRail
+          controlsPanels={tabsControlPanels}
+          current={currentTab}
+          navLabel={navLabel}
+          onSelect={onSelectTab}
+          tabs={tabs}
+          trailing={
+            <>
+              <span className="desktop-find">
+                <button
+                  aria-controls="find-palette"
+                  aria-expanded={findOpen && findPlacement === "desktop"}
+                  aria-haspopup="dialog"
+                  className="mode-more mode-find"
+                  onClick={() => toggleFind("desktop")}
+                  ref={desktopFindRef}
+                  type="button"
+                >
+                  <Search aria-hidden="true" />
+                  <span className="tool-text">{findLabel}</span>
+                </button>
+              </span>
+              <MoreMenu
+                autoFocusFirst={utilityViaKeyboard}
+                buttonClassName="mode-more"
+                current={desktopCurrentInMore}
+                className="desktop-more"
+                confirmExternalNavigation={confirmExternalNavigation}
+                localizer={localizer}
+                menuId="more-menu"
+                moreLabel={moreLabel}
+                onClose={closeUtility}
+                onOpenLog={onOpenLog}
+                onOpenStatus={onOpenStatus}
+                onOpenStorage={onOpenStorage ?? onOpenLog}
+                moreTabs={desktopMoreTabs}
+                onOpenWorkflowTab={onSelectTab}
+                onPreloadLog={onPreloadLog}
+                onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
+                open={utilityOpen && utilityPlacement === "desktop"}
+                renderMenu={utilityOpen && utilityPlacement === "desktop"}
+                runtimeState={runtimeState}
+                runtimePercent={runtimePercent}
+                toolsEnabled={betaToolsEnabled}
+                triggerRef={desktopMoreRef}
+              />
+            </>
+          }
+        />
+        <FindPalette
+          localizer={localizer}
+          onAction={onFindAction}
+          onClose={closeFind}
+          open={findOpen}
+          sources={findSources}
+          triggerRef={activeFindRef}
+        />
         {/* The parser-time resolver in index.html rewrites the thread count and
             runtime status before the shell paints, and removes itself. Keep its
             marker after the action group so both slots exist when it runs. */}

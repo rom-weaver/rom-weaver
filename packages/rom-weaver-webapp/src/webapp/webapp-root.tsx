@@ -86,7 +86,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   { href: "apply-patch", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply Patch" },
   { href: "create-patch", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create Patch" },
   { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM" },
-  // Reference rather than a workflow: filed under Docs in More on both layouts.
+  // Reference rather than a workflow: a top-right link on the rail layout, a More entry on the phone.
   { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
   {
     group: "tools",

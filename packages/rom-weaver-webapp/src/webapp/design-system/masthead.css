@@ -885,8 +885,18 @@ html.vt-theme .mode-rail .mode {
 .rw-app .tool-link svg {
   flex: none;
 }
+/* "you are here" for Docs: a boxed state, not a color alone, since Support beside
+   it wears the same accent color at rest. */
 .rw-app .tool-link[aria-current="page"] {
   color: var(--thread-text);
+  background: var(--well);
+  border-color: var(--seam);
+}
+@media (forced-colors: active) {
+  .rw-app .tool-link[aria-current="page"] {
+    color: SelectedItemText;
+    background: SelectedItem;
+  }
 }
 /* Support wears the footer donate color; the icon fills on press (see footer.css). */
 .rw-app .masthead-support,
@@ -911,10 +921,10 @@ html.vt-theme .mode-rail .mode {
 }
 /* A hairline between the destinations and the stateful controls. */
 .rw-app .masthead-links-sep {
-  width: 1px;
+  width: 0;
   height: 20px;
   margin-inline: var(--sp-xs);
-  background: var(--seam);
+  border-inline-start: 1px solid var(--seam);
 }
 
 /* real tooltips - localizable text, not title="" */

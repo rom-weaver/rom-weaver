@@ -1188,6 +1188,23 @@ describe("webapp responsive navigation", () => {
     }
   });
 
+  test("tab order follows the two masthead rows top to bottom", async () => {
+    await setViewport({ height: 900, width: 1280 });
+    await renderMastheadOnly(ALL_TABS);
+    const focusables = [...host.querySelectorAll("a[href], button")].filter(
+      (node) => node.tabIndex >= 0 && node.offsetParent !== null,
+    );
+    const rail = host.querySelector(".modes");
+    const inRail = focusables.map((node) => rail.contains(node));
+    // every first-row control (brand, link group, tools) precedes the rail in
+    // the sequence, and the rail really is the lower row
+    expect(inRail.indexOf(true)).toBeGreaterThan(inRail.lastIndexOf(false));
+    const top = (node) => node.getBoundingClientRect().top;
+    const firstRowBottom = Math.max(...focusables.filter((node) => !rail.contains(node)).map(top));
+    const railTop = Math.min(...focusables.filter((node) => rail.contains(node)).map(top));
+    expect(railTop).toBeGreaterThan(firstRowBottom);
+  });
+
   test("every tab keeps its full label at every rail width", async () => {
     for (const width of [1000, 1100, 1200, 1280, 1600]) {
       await setViewport({ height: 900, width });

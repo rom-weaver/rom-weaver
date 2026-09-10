@@ -185,6 +185,25 @@ describe("Masthead", () => {
     expect(more.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("closes an open More menu when a link-group entry is pressed", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
+    fireEvent.click(more);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    // The link group shares the action box with the menu trigger, but it
+    // navigates away, so a press on it dismisses the menu like a rail tab does.
+    fireEvent.pointerDown(container.querySelector(".masthead-docs") as HTMLAnchorElement);
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("keeps the DOM in visual order: brand, link group, then the rail", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const order = Array.from(container.querySelectorAll(".brand, .masthead-tools, .modes")).map(
+      (node) => node.className.split(" ")[0],
+    );
+    expect(order).toEqual(["brand", "masthead-tools", "modes"]);
+  });
+
   it("marks the Docs link current on desktop and More current on the phone", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
     expect(container.querySelector(".masthead-docs")?.getAttribute("aria-current")).toBe("page");
