@@ -278,7 +278,15 @@ Pass --json for the machine-readable form."
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cli_command() -> clap::Command {
-    Cli::command()
+    crate::cli_inputs::decorate(Cli::command().mut_subcommand("checksum", |command| {
+        command.arg(
+            clap::Arg::new("digest")
+                .long("digest")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["json", "dry_run"])
+                .help("Print only the digest; requires one --algo (no labels or elapsed time)"),
+        )
+    }))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -351,6 +359,33 @@ fn run_cli() -> ExitCode {
         Ok(cli) => cli,
         Err(error) => error.exit(),
     };
+    if let CliCommand::App(command) = &mut cli.command
+        && let Err(error) = crate::cli_inputs::resolve(command, &matches)
+    {
+        error.format(&mut cli_command()).exit();
+    }
+    let digest = matches
+        .subcommand_matches("checksum")
+        .is_some_and(|matches| matches.get_flag("digest"));
+    if digest && (cli.json || cli.dry_run) {
+        cli_command()
+            .error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--digest cannot be used with --json or --dry-run",
+            )
+            .exit();
+    }
+    if digest
+        && let CliCommand::App(Commands::Checksum(command)) = &cli.command
+        && command.algo.len() != 1
+    {
+        cli_command()
+            .error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--digest requires exactly one algorithm; use --algo ALGO",
+            )
+            .exit();
+    }
     // `completions` is a native-only concern: emit the script and exit before
     // any command runs. `cli_command()` rebuilds the same clap tree the parse
     // used, so the generated script covers every real subcommand.
@@ -465,6 +500,11 @@ fn run_cli() -> ExitCode {
         return finish_run(run_apply_tui(command, options, reporter, prompter));
     }
     install_cancel_handler();
+    if digest && let Commands::Checksum(command) = command {
+        return finish_run(crate::checksum_output::run(
+            command, options, reporter, prompter,
+        ));
+    }
     finish_run(run_command(command, options, reporter, prompter))
 }
 

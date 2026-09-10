@@ -11,7 +11,11 @@ use std::{
 
 extern crate self as rom_weaver_app;
 
+#[cfg(not(target_arch = "wasm32"))]
+mod checksum_output;
 mod cli;
+#[cfg(not(target_arch = "wasm32"))]
+mod cli_inputs;
 #[cfg(not(target_arch = "wasm32"))]
 mod formats_command;
 #[cfg(not(target_arch = "wasm32"))]
