@@ -1,4 +1,4 @@
-type WorkflowView = "patcher" | "creator" | "identify" | "trim" | "ppf-undo" | "test";
+type WorkflowView = "patcher" | "creator" | "identify" | "trim" | "ppf-undo" | "save-editor" | "test";
 /** "home" is the apex landing route: a WebappView the shell renders, but not a workflow. */
 type WebappView = WorkflowView | "docs" | "home" | "whats-new";
 
@@ -37,6 +37,10 @@ type PpfUndoSessionState = {
   active: boolean;
 };
 
+type SaveEditorSessionState = {
+  active: boolean;
+};
+
 const createEmptyValidationState = (): ValidationState => ({
   invalidFields: [],
   messages: [],
@@ -65,11 +69,14 @@ const createEmptyTrimSessionState = (): TrimSessionState => ({
 
 const createEmptyPpfUndoSessionState = (): PpfUndoSessionState => ({ active: false });
 
+const createEmptySaveEditorSessionState = (): SaveEditorSessionState => ({ active: false });
+
 export type {
   CreatorSessionState,
   PatcherSessionState,
   StartupState,
   PpfUndoSessionState,
+  SaveEditorSessionState,
   TrimSessionState,
   ValidationState,
   WebappView,
@@ -79,6 +86,7 @@ export {
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
   createEmptyPpfUndoSessionState,
+  createEmptySaveEditorSessionState,
   createEmptyTrimSessionState,
   createEmptyValidationState,
 };

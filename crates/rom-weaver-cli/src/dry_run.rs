@@ -10,7 +10,11 @@ impl CliApp {
     /// existing detailed planners.
     pub(super) fn plan_dry_run(&self, command: &Commands) -> Option<AppRunOutcome> {
         match command {
-            Commands::Compress(_) | Commands::Trim(_) => None,
+            // `save set` renders its own preview (the field-level diff and the
+            // integrity summary), so the shared planner MUST NOT intercept it.
+            Commands::Compress(_) | Commands::Trim(_) | Commands::Save(SaveCommands::Set(_)) => {
+                None
+            }
             Commands::Patch(PatchCommands::Apply(args)) if Self::plain_patch_plan(args) => None,
             Commands::Patch(PatchCommands::Apply(args)) => {
                 Some(self.plan_patch_apply_dry_run(args))

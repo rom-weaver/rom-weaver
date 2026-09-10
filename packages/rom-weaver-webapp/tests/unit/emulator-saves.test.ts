@@ -8,6 +8,7 @@ import {
   ensureEmulatorSaveBridge,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
+  replaceEmulatorSaveSram,
   serializeEmulatorSave,
   writeEmulatorSave,
   type EmulatorSaveRecord,
@@ -35,6 +36,8 @@ type FakeCursorRequest = {
 };
 
 type FakeTransaction = {
+  abort: () => void;
+  aborted: boolean;
   error: Error | null;
   onabort: (() => void) | null;
   oncomplete: (() => void) | null;
@@ -107,7 +110,7 @@ class FakeObjectStore {
     queueMicrotask(() => {
       request.result = result();
       request.onsuccess?.();
-      this.transaction.oncomplete?.();
+      if (!this.transaction.aborted) this.transaction.oncomplete?.();
     });
     return request;
   }
@@ -136,6 +139,11 @@ class FakeDatabase {
   private createTransaction(_mode: IDBTransactionMode): FakeTransaction {
     const transaction = {} as FakeTransaction;
     transaction.error = null;
+    transaction.aborted = false;
+    transaction.abort = () => {
+      transaction.aborted = true;
+      queueMicrotask(() => transaction.onabort?.());
+    };
     transaction.onabort = null;
     transaction.onerror = null;
     transaction.oncomplete = null;
@@ -212,6 +220,23 @@ describe("emulator saves", () => {
     const [stored] = await listEmulatorSaves();
     expect(Object.keys(stored || {}).sort()).toEqual(["gameId", "gameName", "label", "sram", "state", "updatedAt"]);
     expect(JSON.parse(serializeEmulatorSave(record))).toHaveProperty("label", record.label);
+  });
+
+  it("replaces only SRAM and preserves the selected record metadata and state", async () => {
+    await writeEmulatorSave(record);
+    const replaced = await replaceEmulatorSaveSram(record.gameId, new Uint8Array([8, 9]), record.sram);
+    expect(replaced).toMatchObject({ gameId: record.gameId, gameName: record.gameName, label: record.label });
+    expect(replaced.sram).toEqual(new Uint8Array([8, 9]));
+    expect(replaced.state).toEqual(record.state);
+  });
+
+  it("rejects a stale SRAM replacement", async () => {
+    await writeEmulatorSave(record);
+    await replaceEmulatorSaveSram(record.gameId, new Uint8Array([8, 9]), record.sram);
+    await expect(replaceEmulatorSaveSram(record.gameId, new Uint8Array([7]), record.sram)).rejects.toThrow(
+      "stored SRAM changed",
+    );
+    expect((await listEmulatorSaves())[0]?.sram).toEqual(new Uint8Array([8, 9]));
   });
 
   it("keeps the ROM name a version 1 record carries", async () => {

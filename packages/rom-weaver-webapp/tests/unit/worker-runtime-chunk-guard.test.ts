@@ -2,7 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkWorkerRuntimeChunk } from "../../scripts/check-size-budget.mjs";
+import {
+  checkAssetBudgetCoverage,
+  checkWorkerRuntimeChunk,
+  measureSizeBudget,
+} from "../../scripts/check-size-budget.mjs";
 
 // These fixtures stand in for a production build. The guard they exercise is what stops a silent
 // Vite/rolldown regression from re-duplicating the worker runtime or putting it on the first-paint
@@ -80,5 +84,67 @@ describe("checkWorkerRuntimeChunk", () => {
       `const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./${RUNTIME}"])))=>i.map(i=>d[i]);` +
       `import{a}from"./${SHARED}";const load=()=>import("./${RUNTIME}");`;
     expect(checkWorkerRuntimeChunk(writeDist(chunks, [INDEX, SHARED])).failures).toBe(0);
+  });
+});
+
+describe("measureSizeBudget", () => {
+  it("separates named lazy chunks from the core JavaScript budget", () => {
+    const distDir = writeDist(
+      {
+        "index-core.js": "core",
+        "save-editor-lazy.js": "editor",
+      },
+      ["index-core.js"],
+    );
+    const core = measureSizeBudget(
+      distDir,
+      { directory: "assets", excludePatterns: ["assets/save-editor-[^/]+\\.js$"], extension: ".js" },
+      6,
+    );
+    const editor = measureSizeBudget(
+      distDir,
+      { directory: "assets", extension: ".js", includePatterns: ["assets/save-editor-[^/]+\\.js$"] },
+      6,
+    );
+    expect(core.rawBytes).toBe(4);
+    expect(editor.rawBytes).toBe(6);
+  });
+
+  it("fails when an included lazy chunk pattern matches no file", () => {
+    const distDir = writeDist({ "index-core.js": "core" }, ["index-core.js"]);
+    expect(() =>
+      measureSizeBudget(
+        distDir,
+        { directory: "assets", extension: ".js", includePatterns: ["assets/save-editor-[^/]+\\.js$"] },
+        6,
+      ),
+    ).toThrow("matched no built files");
+  });
+
+  it("makes each split JavaScript file belong to exactly one budget", () => {
+    const distDir = writeDist({ "index-core.js": "core", "save-editor-lazy.js": "editor" }, ["index-core.js"]);
+    const config = {
+      assetSizes: {
+        budgets: [
+          {
+            directory: "assets",
+            excludePatterns: ["assets/save-editor-[^/]+\\.js$"],
+            extension: ".js",
+            name: "Core",
+          },
+          {
+            directory: "assets",
+            extension: ".js",
+            includePatterns: ["assets/save-editor-[^/]+\\.js$"],
+            name: "Editor",
+          },
+        ],
+      },
+    };
+    expect(checkAssetBudgetCoverage(config, distDir)).toEqual({ failures: 0, problems: [] });
+    config.assetSizes.budgets.pop();
+    expect(checkAssetBudgetCoverage(config, distDir).problems).toContain(
+      "assets/save-editor-lazy.js belongs to 0 .js budgets",
+    );
   });
 });

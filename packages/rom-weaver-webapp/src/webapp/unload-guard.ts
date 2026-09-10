@@ -39,6 +39,7 @@ type PendingChangeInputState = {
   creatorState?: CreatorState;
   trimState?: TrimState;
   ppfUndoActive?: RuntimeValue;
+  saveEditorActive?: RuntimeValue;
   patchStackState?: PendingPatchStackState;
   outputState?: PendingOutputState;
   romFilePresent?: RuntimeValue;
@@ -100,6 +101,7 @@ const getPendingChangeState = ({
   creatorState,
   trimState,
   ppfUndoActive,
+  saveEditorActive,
   patcherFormEdited,
   patchStackState,
   outputState,
@@ -116,6 +118,7 @@ const getPendingChangeState = ({
   settings: settingsDraftHasChanges(webappState),
   test: false,
   "ppf-undo": !!ppfUndoActive,
+  "save-editor": !!saveEditorActive,
   trim: trimHasPendingChanges(trimState),
 });
 
@@ -126,6 +129,7 @@ const shouldWarnBeforeUnload = (state: PendingChangeInputState): boolean => {
     pendingChangeState.creator ||
     pendingChangeState.trim ||
     pendingChangeState["ppf-undo"] ||
+    pendingChangeState["save-editor"] ||
     pendingChangeState.settings
   );
 };
@@ -141,6 +145,7 @@ const getUnloadConfirmationMessage = (state: PendingChangeInputState): string =>
   if (pendingChangeState.creator) return "You have unsaved patch creator inputs. Reload and lose those changes?";
   if (pendingChangeState.trim) return "You have an in-progress trim session. Reload and lose those changes?";
   if (pendingChangeState["ppf-undo"]) return "You have an in-progress PPF undo session. Reload and lose those changes?";
+  if (pendingChangeState["save-editor"]) return "You have unsaved save edits. Reload and lose those changes?";
   if (pendingChangeState.patcher) return "You have an in-progress patching session. Reload and lose those changes?";
   return "";
 };

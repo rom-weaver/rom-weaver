@@ -38,6 +38,7 @@ type WebappRootProps = {
     currentView: WebappView;
     patcherSession: PatcherSessionState;
     ppfUndoSession: { active: boolean };
+    saveEditorSession: { active: boolean };
     trimSession: TrimSessionState;
     settingsDialogOpen: boolean;
     settings: {
@@ -89,6 +90,7 @@ type WebappRootProps = {
     onTrimOutputFormatChange: (format: string) => void;
     onTrimSettingsChange: (settings: unknown) => void;
     onPpfUndoSessionChange: (active: boolean) => void;
+    onSaveEditorSessionChange: (active: boolean) => void;
   };
 };
 
