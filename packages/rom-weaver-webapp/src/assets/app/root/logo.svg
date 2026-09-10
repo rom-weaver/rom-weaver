@@ -4,14 +4,32 @@
     <clipPath id="cartridge">
       <path id="shell" d="M6 1h4q1 0 1 1t1 1h8q1 0 1-1t1-1h4a5 5 0 0 1 5 5v20a5 5 0 0 1-5 5H6a5 5 0 0 1-5-5V6a5 5 0 0 1 5-5Z"/>
     </clipPath>
+    <clipPath id="right-half">
+      <path d="M16 14h18v18H16z"/>
+    </clipPath>
+    <path id="thread-back" d="M-1 26.4C10 26.4 12 21.2 16 21.2s6 5.2 17 5.2"/>
+    <path id="thread-front" d="M-1 20.2C10 20.2 12 26.4 16 26.4s6-6.2 17-6.2"/>
   </defs>
+  <!--
+    The two threads interlace: the cream one passes over the accent one at the
+    left crossing, the accent one over the cream at the right. Painter order
+    alone cannot do that, so the accent thread is drawn twice - once under the
+    cream thread, then again clipped to the right half. Each thread carries a
+    charcoal casing stroke that opens the gap at the crossing it passes under.
+  -->
   <g clip-path="url(#cartridge)">
     <path fill="#20282d" d="M0 0h32v32H0z"/>
+    <use href="#thread-back" fill="none" stroke="#20282d" stroke-width="5.4"/>
+    <use href="#thread-back" fill="none" stroke="#d9690f" stroke-width="3.8"/>
+    <use href="#thread-front" fill="none" stroke="#20282d" stroke-width="5.4"/>
+    <use href="#thread-front" fill="none" stroke="#f6ecda" stroke-width="3.8"/>
+    <g clip-path="url(#right-half)">
+      <use href="#thread-back" fill="none" stroke="#20282d" stroke-width="5.4"/>
+      <use href="#thread-back" fill="none" stroke="#d9690f" stroke-width="3.8"/>
+    </g>
     <circle cx="16" cy="12" r="7.5" fill="#f6ecda"/>
-    <circle cx="16" cy="12" r="2.75" fill="#20282d"/>
-    <path d="M0 29c14 0 17-9 32-9" fill="none" stroke="#f6ecda" stroke-width="5"/>
-    <path d="M0 20c14 0 17 9 32 9" fill="none" stroke="#20282d" stroke-width="7"/>
-    <path d="M0 20c14 0 17 9 32 9" fill="none" stroke="#d9690f" stroke-width="5"/>
+    <circle cx="16" cy="12" r="2.75" fill="none" stroke="#20282d" stroke-width="0.6"/>
+    <circle cx="16" cy="12" r="1.6" fill="#20282d"/>
   </g>
   <use href="#shell" fill="none" stroke="#20282d" stroke-width="2"/>
   <use href="#shell" fill="none" stroke="#f6ecda" stroke-width="0.75"/>
