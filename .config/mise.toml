@@ -237,10 +237,12 @@ run = "cargo run -p rom-weaver-cli --example generate_manpages -- --write"
 
 [tasks.licenses]
 description = "Generate a build-time third-party attribution bundle"
+depends = ["identify-data"]
 run = "node {{ config_root }}/scripts/build-license-bundle.mjs"
 
 [tasks.licenses-check]
 description = "Verify the build-time third-party attribution bundle"
+depends = ["identify-data"]
 run = "node {{ config_root }}/scripts/check-license-bundle.mjs"
 
 [tasks.deny]

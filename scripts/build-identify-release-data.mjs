@@ -24,8 +24,8 @@ const defaultOut = join(repoRoot, "target", "identify-release");
 const defaultArchive = join(repoRoot, "target", "rom-weaver-identify-data.tar.br");
 const dataRelativeDir = join("share", "rom-weaver", "identify", "v1");
 
-const parseArgs = (argv) => {
-  const options = { archive: defaultArchive, input: defaultInput, out: defaultOut };
+export const parseArgs = (argv) => {
+  const options = { archive: defaultArchive, input: defaultInput, out: defaultOut, tree: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => {
@@ -35,6 +35,7 @@ const parseArgs = (argv) => {
       return resolve(next);
     };
     if (arg === "--archive") options.archive = value();
+    else if (arg === "--tree-only") options.tree = true;
     else if (arg === "--input") options.input = value();
     else if (arg === "--out") options.out = value();
     else throw new Error(`unknown argument: ${arg}`);
@@ -53,9 +54,13 @@ const run = (command, args, options = {}) => {
 
 const sha256File = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
+// `tree: true` writes only the `share` trees and skips the `.tar.br` archives.
+// The archive step shells out to GNU tar (`--sort`, `--mtime`), so it runs
+// only on Linux; the trees are pure node and build on every runner.
 export const buildIdentifyReleaseData = (options) => {
   const input = resolve(options.input);
   const out = resolve(options.out);
+  const treeOnly = options.tree === true;
   const archive = resolve(options.archive);
   const archiveDir = dirname(archive);
   const indexPath = join(input, "index.json");
@@ -151,10 +156,12 @@ export const buildIdentifyReleaseData = (options) => {
       ];
 
   rmSync(out, { force: true, recursive: true });
-  mkdirSync(archiveDir, { recursive: true });
-  for (const name of readdirSync(archiveDir)) {
-    if (/^rom-weaver-identify-data-.+\.tar\.br$/u.test(name)) {
-      rmSync(join(archiveDir, name), { force: true });
+  if (!treeOnly) {
+    mkdirSync(archiveDir, { recursive: true });
+    for (const name of readdirSync(archiveDir)) {
+      if (/^rom-weaver-identify-data-.+\.tar\.br$/u.test(name)) {
+        rmSync(join(archiveDir, name), { force: true });
+      }
     }
   }
   const buildArchive = (group, archivePath, treeRoot) => {
@@ -201,6 +208,9 @@ export const buildIdentifyReleaseData = (options) => {
       : catalog;
     writeFileSync(join(dataDir, "catalog.json"), `${JSON.stringify(groupCatalog, null, 2)}\n`);
     writeFileSync(join(dataDir, "index.json"), `${JSON.stringify(groupIndex, null, 2)}\n`);
+    if (treeOnly) {
+      return { archive: null, dataDir, group: group.id, sha256: null, systems: systems.length };
+    }
     mkdirSync(dirname(archivePath), { recursive: true });
     const temporaryTar = `${archivePath}.tar`;
     run("tar", [

@@ -104,7 +104,7 @@ xxhash-rust = { version = "0.8", features = ["xxh64"] }
 zerocopy = { version = "0.8", features = ["alloc", "derive"] }
 zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }
-zstd = "0.13.3"
+zstd = "0.14.0"
 
 [profile.release]
 lto = "fat"

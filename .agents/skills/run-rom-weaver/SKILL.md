@@ -5,14 +5,11 @@ description: Build and exercise the rom-weaver native CLI or browser webapp with
 
 # Run rom-weaver
 
-Use the committed harnesses to test the real CLI and webapp. Run all commands
-from the repository root unless a section says otherwise.
+Use the committed harnesses to test the real CLI and webapp. Run all commands from the repository root unless a section says otherwise.
 
 ## Set up a clean checkout
 
-The pinned versions are Node.js 24.18 and Rust 1.95. Install the system tools,
-including WASI SDK, from the [development guide](../../../docs/development/development.md#prerequisites).
-Then install dependencies and build the browser WASM artifact:
+The pinned versions are Node.js 24.18 and Rust 1.95. Install the system tools, including WASI SDK, from the [development guide](../../../docs/development/development.md#prerequisites). Then install dependencies and build the browser WASM artifact:
 
 ```bash
 mise trust
@@ -29,13 +26,10 @@ Build the CLI, then run its smoke test:
 
 ```bash
 cargo build -p rom-weaver-cli --release
-.claude/skills/run-rom-weaver/cli-smoke.sh
+.agents/skills/run-rom-weaver/cli-smoke.sh
 ```
 
-The script uses `target/release/rom-weaver`, falls back to the debug binary,
-and accepts `RW_BIN=/path/to/rom-weaver` as an override. It checks extraction,
-checksums, compression, and an xdelta patch round trip against committed test
-fixtures.
+The script uses `target/release/rom-weaver`, falls back to the debug binary, and accepts `RW_BIN=/path/to/rom-weaver` as an override. It checks extraction, checksums, compression, and an xdelta patch round trip against committed test fixtures.
 
 For one-off commands, use each subcommand's named arguments:
 
@@ -64,13 +58,11 @@ node scripts/dev-server.mjs preview --port 5191
 In another shell, from the same package directory, run:
 
 ```bash
-node ../../.claude/skills/run-rom-weaver/webapp-driver.mjs load
-node ../../.claude/skills/run-rom-weaver/webapp-driver.mjs apply
+node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs load
+node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs apply
 ```
 
-`load` checks that the app starts and saves a screenshot. `apply` uploads the
-committed source and xdelta fixtures, runs **Apply & download**, and checks that
-a file was downloaded. Output goes to `/tmp/rw-driver/` by default.
+`load` checks that the app starts and saves a screenshot. `apply` uploads the committed source and xdelta fixtures, runs **Apply & download**, and checks that a file was downloaded. Output goes to `/tmp/rw-driver/` by default.
 
 Environment overrides:
 
@@ -82,11 +74,8 @@ Environment overrides:
 
 - Missing Playwright package: run `npm ci --prefix packages/rom-weaver-webapp`.
 - Missing WASM file: run `mise run build-wasm`.
-- Browser startup timeout: confirm the server URL returns HTTP 200 with
-  `curl -sk https://localhost:5191/ -o /dev/null -w '%{http_code}'`.
-- CLI output-extension error: add `--no-compress` for a raw file, or use a
-  supported compressed extension.
+- Browser startup timeout: confirm the server URL returns HTTP 200 with `curl -sk https://localhost:5191/ -o /dev/null -w '%{http_code}'`.
+- CLI output-extension error: add `--no-compress` for a raw file, or use a supported compressed extension.
 - Missing CLI binary: run `cargo build -p rom-weaver-cli --release`.
 
-The bundled server supplies the COOP/COEP headers needed by
-`SharedArrayBuffer`. A plain static server does not reproduce the real runtime.
+The bundled server supplies the COOP/COEP headers needed by `SharedArrayBuffer`. A plain static server does not reproduce the real runtime.
