@@ -116,6 +116,13 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 
 COPY . .
 
+# The identify packs are context-ignored (`.dockerignore`), and the webapp
+# attribution reads the Libretro revision and license out of their index.
+# Both the source wasm build and the `app` stage below generate that
+# attribution before `npm run build` gets its own chance to fetch the data, so
+# it is built once here, where every later stage inherits it.
+RUN node scripts/ensure-identify-data.mjs
+
 # Cache mounts keep the cargo registry and the cmake-built C deps (libarchive)
 # across local rebuilds. On ephemeral CI runners they are a no-op: BuildKit
 # exports no cache mount to a registry or gha cache, so CI still pays a cold

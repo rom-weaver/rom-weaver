@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserWasiThreadWorkerPool } from "../../src/wasm/browser-wasi-thread-pool.ts";
 import { createRomWeaverBrowserOpfs } from "../../src/wasm/rom-weaver-browser-opfs-api.ts";
+import { createRomWeaverCommand } from "../../src/wasm/rom-weaver-command.ts";
 import {
   BrowserRomWeaverWorkerClient,
   createBrowserWorkerClient,
@@ -311,6 +312,34 @@ describe("rom-weaver-wasm browser runner parity", () => {
       expect(terminal.status).toBe("succeeded");
       expect(terminal.command).toBe("checksum");
       expect(terminal.elapsed_ms).toEqual(expect.any(Number));
+    });
+  });
+
+  it("classifies a RAM cheat as unsupported through the browser worker", async () => {
+    await withTempFixture(async ({ sourcePath, worker }) => {
+      const record = {
+        codeKind: "pro-action-replay",
+        description: "Infinite test value",
+        gameId: "public-domain-fixture",
+        id: "ram-test",
+        rawCode: "0010AB",
+        rawFields: { code: "0010AB", desc: "Infinite test value", enable: "false" },
+        sourceFile: "fixture.cht",
+        sourceIndex: 0,
+        sourceRevision: "test",
+        system: "nes",
+      };
+      const result = await runJsonFromWorker(worker)(
+        createRomWeaverCommand("cheat", {
+          input: sourcePath,
+          records: [record],
+        }),
+      );
+
+      assertRunJsonSucceeded(result, { command: "cheat" });
+      const classified = result.events.at(-1)?.details?.cheats?.records?.[0];
+      expect(classified?.resolution?.type).toBe("unsupported");
+      expect(classified?.resolution?.reason).toBe("the code targets runtime memory");
     });
   });
 

@@ -289,6 +289,77 @@ fn playstation_xploder_write_bakes_into_psx_exe() {
     assert_eq!(patched[0x800], 0xFF);
 }
 
+/// A 32 KiB Master System image whose `TMR SEGA` header lets the CLI detect the
+/// system without `--code-system`.
+fn master_system_rom() -> Vec<u8> {
+    let mut rom = vec![0u8; 0x8000];
+    rom[0x7FF0..0x7FF8].copy_from_slice(b"TMR SEGA");
+    rom
+}
+
+#[test]
+fn master_system_game_genie_apply_bakes_byte() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.sms");
+    let output = temp.child("patched.sms");
+    fs::write(input.path(), master_system_rom()).expect("fixture");
+
+    // 11A-C3B decodes to value 0x11 at address $4AC3, which is a headerless
+    // file offset.
+    let apply = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--code",
+            "11A-C3B",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        0,
+    ));
+    assert_eq!(apply["status"], "succeeded");
+    let patched = fs::read(output.path()).expect("output");
+    assert_eq!(patched[0x4AC3], 0x11);
+}
+
+#[test]
+fn master_system_action_replay_ram_code_is_rejected() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.sms");
+    let output = temp.child("patched.sms");
+    fs::write(input.path(), master_system_rom()).expect("fixture");
+
+    // $C012 is work RAM, not addressable in the ROM file.
+    let apply = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--code",
+            "00C0-12AB",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ],
+        1,
+    ));
+    assert_eq!(apply["status"], "failed");
+    assert!(
+        apply["label"]
+            .as_str()
+            .unwrap()
+            .contains("cheat_ram_address"),
+        "label should report the RAM-address code: {}",
+        apply["label"]
+    );
+}
+
 /// A cheat lands after the explicit patch chain: the patch's own source
 /// checksum still matches, and the cheat wins over a patch that changes the
 /// same byte.

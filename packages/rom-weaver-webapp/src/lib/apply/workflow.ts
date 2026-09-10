@@ -470,6 +470,7 @@ const applyPatchesToAsset = async ({
   applyPatchInRuntime,
   asset,
   assetPatches,
+  cheatRecords,
   options,
   patchOptions,
   patchFiles,
@@ -479,6 +480,7 @@ const applyPatchesToAsset = async ({
   applyPatchInRuntime: ApplyPatchWorker;
   asset: InputAsset;
   assetPatches: ParsedPatchLike[];
+  cheatRecords: PatchInput["cheatRecords"];
   options: ApplyPatchOptions;
   patchOptions: PatchInput["patchOptions"];
   patchFiles: PatchFileInstance[];
@@ -488,8 +490,11 @@ const applyPatchesToAsset = async ({
   const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
-  const patchLabel =
-    patchNames.length === 1 ? patchNames[0] || "patch" : `${patchNames.length || assetPatches.length} patches`;
+  const patchLabel = patchNames.length
+    ? patchNames.length === 1
+      ? patchNames[0] || "patch"
+      : `${patchNames.length} patches`
+    : `${cheatRecords?.length || 0} ROM cheats`;
   const applyLabel = `Applying ${patchLabel} to ${asset.fileName || "ROM"}`;
   const workerOutput = (await applyPatchInRuntime({
     input: toWorkerSourceRef(asset.file, asset.fileName || "input.bin"),
@@ -503,6 +508,7 @@ const applyPatchesToAsset = async ({
       }),
     options: {
       ...createWorkerApplyOptions(options, workerOutputName),
+      ...(cheatRecords?.length ? { cheatRecords } : {}),
       headerModes: getPatchHeaderModes(patchIndices, patchOptions),
       n64ByteOrders: getPatchN64ByteOrders(patchIndices, patchOptions),
       outputHeader: options.output?.header || ("auto" as const),
@@ -523,6 +529,7 @@ const applyPatchesToAsset = async ({
 const applyPreparedPatches = async ({
   assetCount,
   assets,
+  cheatRecords,
   inputAssets,
   options,
   patchOptions,
@@ -533,6 +540,7 @@ const applyPreparedPatches = async ({
 }: {
   assetCount: number;
   assets: InputAsset[];
+  cheatRecords: PatchInput["cheatRecords"];
   inputAssets: InputAsset[];
   options: ApplyPatchOptions;
   patchOptions: PatchInput["patchOptions"];
@@ -546,37 +554,41 @@ const applyPreparedPatches = async ({
   const workerOutputsById = new Map<string, AppliedWorkerOutput>();
   let applyTimeMs = 0;
   let hasApplyTimeMs = false;
-  if (!patches.length) {
+  if (!(patches.length || cheatRecords?.length)) {
     traceWorkflowStage(options, "stage.skip", "patch.target.resolve", "patch", {
       inputCount: inputAssets.length,
-      reason: "no patches provided",
+      reason: "no patches or ROM cheats provided",
     });
     traceWorkflowStage(options, "stage.skip", "apply", "output", {
       inputCount: inputAssets.length,
-      reason: "no patches provided",
+      reason: "no patches or ROM cheats provided",
     });
     return { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById };
   }
   reportProgress(options, { label: "Applying patch...", percent: null, stage: "apply" });
-  targets.push(
-    ...(await traceWorkflowStageBlock(
-      options,
-      "patch.target.resolve",
-      "patch",
-      () => resolvePatchTargets(inputAssets, patches, patchTargets),
-      () => ({
-        inputCount: inputAssets.length,
-        patchCount: patches.length,
-        strategy: patchTargets?.length ? "explicit" : "auto",
-      }),
-    )),
-  );
+  if (patches.length) {
+    targets.push(
+      ...(await traceWorkflowStageBlock(
+        options,
+        "patch.target.resolve",
+        "patch",
+        () => resolvePatchTargets(inputAssets, patches, patchTargets),
+        () => ({
+          inputCount: inputAssets.length,
+          patchCount: patches.length,
+          strategy: patchTargets?.length ? "explicit" : "auto",
+        }),
+      )),
+    );
+  }
   const patchesByTarget = groupPatchesByTarget(targets, patches);
+  const cheatTarget = cheatRecords?.length ? getPrimaryInputAsset(inputAssets) : undefined;
   const applyPatchInRuntime = runtime.patch?.applyPatch;
   if (!applyPatchInRuntime) throw new Error("Patch worker support is required for apply workflows");
   for (const asset of assets) {
-    const assetPatches = patchesByTarget.get(asset.id);
-    if (!assetPatches?.length) continue;
+    const assetPatches = patchesByTarget.get(asset.id) ?? [];
+    const assetCheatRecords = asset.id === cheatTarget?.id ? cheatRecords : undefined;
+    if (!(assetPatches.length || assetCheatRecords?.length)) continue;
     const workerOutputName = resolveWorkerApplyOutputName(options, asset);
     const patched = await traceWorkflowStageBlock(
       options,
@@ -587,6 +599,7 @@ const applyPreparedPatches = async ({
           applyPatchInRuntime,
           asset,
           assetPatches,
+          cheatRecords: assetCheatRecords,
           options,
           patchOptions,
           patchFiles,
@@ -594,6 +607,7 @@ const applyPreparedPatches = async ({
           workerOutputName,
         }),
       () => ({
+        cheatCount: assetCheatRecords?.length || 0,
         patchCount: assetPatches.length,
         patchFormats: assetPatches.map((patch) => patch.constructor?.name || "patch"),
         requestedOutputName: options.output?.outputName,
@@ -694,6 +708,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   const { applyTimeMs, hasApplyTimeMs, patchedById, targets, workerOutputsById } = await applyPreparedPatches({
     assetCount: inputAssets.length,
     assets: inputAssets,
+    cheatRecords: input.cheatRecords,
     inputAssets,
     options,
     patchOptions: input.patchOptions,
@@ -704,11 +719,8 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
   });
   await retainUncompressedWorkerOutputs({ inputAssets, options, workerOutputsById });
 
-  const {
-    compressionTimeMs,
-    files: outputFiles,
-    rawOutputSize,
-  } = await traceWorkflowStageBlock(
+  const romCheatCount = input.cheatRecords?.length || 0;
+  const materialized = await traceWorkflowStageBlock(
     options,
     "output.materialization",
     "output",
@@ -718,18 +730,22 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
       patchedCount: patchedById.size,
     }),
   );
+  const { compressionTimeMs, files: outputFiles, rawOutputSize } = materialized;
   const outputs = await Promise.all(outputFiles.map((file) => toPublicOutput(file, runtime)));
+  const primaryInput = targets[0] || getPrimaryInputAsset(inputAssets);
+  if (!primaryInput) throw new Error("No input file provided");
+
   traceWorkflowStage(options, "stage.finish", "result", "output", {
     inputCount: inputAssets.length,
     outputCount: outputs.length,
     patchCount: patches.length,
     patchedCount: patchedById.size,
     rawOutputSize,
+    romCheatCount,
   });
-  const primaryInput = targets[0] || getPrimaryInputAsset(inputAssets);
-  if (!primaryInput) throw new Error("No input file provided");
 
   return {
+    ...(romCheatCount ? { cheats: { rom: romCheatCount } } : {}),
     inputs: inputAssets.map((asset) => ({
       fileName: asset.fileName,
       id: asset.id,
@@ -755,10 +771,10 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
           inputSize: preparedInputSize,
           ...(hasApplyTimeMs ? { applyTimeMs } : {}),
           ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
-          outputSize: outputs[0].size || 0,
+          outputSize: outputs[0]?.size || 0,
           patchCompressedSize: patchCompressedSize || patchSize,
           patchSize,
-          rawSize: rawOutputSize,
+          rawSize: rawOutputSize || outputs[0]?.size || 0,
         }
       : undefined,
   };

@@ -198,6 +198,11 @@ unpacking, use `probe`."
     Ingest(IngestCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        command(hide = true, about = "Classify database cheats against a ROM")
+    )]
+    Cheat(CheatCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         command(
             about = "Pack files into an archive, disc image, or ROM-specific compressed format",
             long_about = "\
@@ -1472,8 +1477,15 @@ mod extract_batch_plan;
 #[path = "extract_batch.rs"]
 mod extract_batch;
 
+#[path = "cheat_command.rs"]
+mod cheat_command;
 mod cheats;
 mod cheats_apply;
+pub use cheat_command::CheatCommandResult;
+pub use cheats::{
+    CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatTarget, CheatWrite,
+    CheatWriteConflict, ClassifiedCheatRecord,
+};
 pub mod dcp;
 pub mod gdrom;
 mod patch_apply;
@@ -1521,7 +1533,7 @@ pub use bundle_create::BundleCreateResult;
 
 mod command_args;
 pub use command_args::{
-    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, ChecksumCommand,
+    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatCommand, ChecksumCommand,
     CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
     IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
     IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
