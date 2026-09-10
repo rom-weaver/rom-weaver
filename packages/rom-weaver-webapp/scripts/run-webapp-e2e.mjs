@@ -915,6 +915,15 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // Every page above banked its own coverage as it finished; nothing is still
     // recording here.
     if (browserName === "chromium") checkCssCoverage(cssCoverageEntries);
+  } catch (error) {
+    const dialog = await page
+      .locator(".sample-tutorial-dialog")
+      .textContent({ timeout: 1000 })
+      .catch(() => "No tutorial dialog");
+    process.stderr.write(
+      `Accessibility audit failed; tutorial dialog: ${dialog}\nPage errors: ${failures.join("\n")}\n`,
+    );
+    throw error;
   } finally {
     await context.close();
   }
