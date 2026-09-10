@@ -8,8 +8,8 @@
 // from there). The dev server uses a self-signed cert → ignoreHTTPSErrors.
 //
 // Usage (from packages/rom-weaver-webapp):
-//   node ../../.claude/skills/run-rom-weaver/webapp-driver.mjs load        # just boot + screenshot
-//   node ../../.claude/skills/run-rom-weaver/webapp-driver.mjs apply       # full apply flow + screenshot
+//   node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs load        # just boot + screenshot
+//   node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs apply       # full apply flow + screenshot
 //
 // Env:
 //   RW_URL   server URL (default https://localhost:5191/)
