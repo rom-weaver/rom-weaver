@@ -31,6 +31,8 @@
 
 export const CHEAT_SHARD_SCHEMA_VERSION = 1;
 
+const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
+
 /**
  * @typedef {Record<string, string>} RawFields
  * @typedef {{
@@ -104,6 +106,75 @@ export const cheatIdSource = (system, gameId, codeKind, rawFields) => {
 
 /** @param {string} hex */
 export const cheatIdFromHex = (hex) => `cheat_${hex.slice(0, 24)}`;
+
+/** @param {unknown} value */
+const isIndex = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+/** @param {unknown} value @returns {value is string[]} */
+const isStringArray = (value) => Array.isArray(value) && value.every((item) => typeof item === "string");
+
+/**
+ * @param {unknown} value
+ * @param {string} where
+ * @returns {StoredCheat}
+ */
+const validateStoredCheat = (value, where) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${where} is not an object.`);
+  const cheat = /** @type {Record<string, unknown>} */ (value);
+  if (cheat.description !== undefined && typeof cheat.description !== "string") {
+    throw new Error(`${where} has a non-string description.`);
+  }
+  if (cheat.rawCode !== null && typeof cheat.rawCode !== "string") throw new Error(`${where} has an invalid rawCode.`);
+  if (cheat.codeKind !== undefined && !CODE_KINDS.has(/** @type {string} */ (cheat.codeKind))) {
+    throw new Error(`${where} has an unknown codeKind.`);
+  }
+  if (cheat.importWarnings !== undefined && !isStringArray(cheat.importWarnings)) {
+    throw new Error(`${where} has invalid importWarnings.`);
+  }
+  if (cheat.rawFields !== undefined) {
+    const fields = cheat.rawFields;
+    if (!fields || typeof fields !== "object" || Array.isArray(fields))
+      throw new Error(`${where} has invalid rawFields.`);
+    for (const [key, field] of Object.entries(fields)) {
+      if (typeof field !== "string") throw new Error(`${where} raw field ${key} is not a string.`);
+    }
+  }
+  if (!(isIndex(cheat.sourceFile) && isIndex(cheat.sourceIndex))) throw new Error(`${where} has an invalid index.`);
+  return /** @type {StoredCheat} */ (cheat);
+};
+
+/**
+ * Check that parsed JSON has the stored shape, so both readers hash the same
+ * fields: a value the Rust loader would reject or coerce (a null description,
+ * an unknown code kind, a non-string raw field) MUST NOT produce an ID here.
+ * The caller checks the header (`schemaVersion`, `system`) and size bounds.
+ * @param {unknown} value
+ * @returns {StoredShard}
+ */
+export const validateStoredShard = (value) => {
+  if (!value || typeof value !== "object") throw new Error("The cheat database shard is not an object.");
+  const shard = /** @type {Record<string, unknown>} */ (value);
+  if (
+    shard.schemaVersion !== CHEAT_SHARD_SCHEMA_VERSION ||
+    typeof shard.system !== "string" ||
+    typeof shard.sourceRevision !== "string" ||
+    !Array.isArray(shard.games)
+  ) {
+    throw new Error("The cheat database shard has an invalid schema.");
+  }
+  shard.games.forEach((game, gameIndex) => {
+    const where = `Game ${gameIndex}`;
+    if (!game || typeof game !== "object" || Array.isArray(game)) throw new Error(`${where} is not an object.`);
+    const record = /** @type {Record<string, unknown>} */ (game);
+    if (typeof record.id !== "string" || typeof record.title !== "string") {
+      throw new Error(`${where} has no id or title.`);
+    }
+    if (!isStringArray(record.sourceFiles)) throw new Error(`${where} has invalid sourceFiles.`);
+    if (!Array.isArray(record.cheats)) throw new Error(`${where} has no cheats array.`);
+    for (const [position, cheat] of record.cheats.entries()) validateStoredCheat(cheat, `${where} cheat ${position}`);
+  });
+  return /** @type {StoredShard} */ (shard);
+};
 
 /**
  * The description a record without a `desc` field carries.
@@ -182,6 +253,15 @@ export const expandCheatShard = async (shard, sha256Hex) => {
 export const storeCheat = (record, sourceFiles) => {
   const sourceFile = sourceFiles.indexOf(record.sourceFile);
   if (sourceFile < 0) throw new Error(`${record.sourceFile} is not one of the game's source files.`);
+  // The reader rebuilds desc and code from description and rawCode, so a record
+  // where they differ would come back changed.
+  const hasDesc = Object.hasOwn(record.rawFields, "desc");
+  if (hasDesc && record.rawFields.desc !== record.description) {
+    throw new Error(`${record.sourceFile} cheat ${record.sourceIndex}: description differs from its desc field.`);
+  }
+  if ((record.rawFields.code ?? null) !== record.rawCode) {
+    throw new Error(`${record.sourceFile} cheat ${record.sourceIndex}: rawCode differs from its code field.`);
+  }
   /** @type {RawFields} */
   const rawFields = {};
   for (const [key, value] of Object.entries(record.rawFields)) {
@@ -189,7 +269,6 @@ export const storeCheat = (record, sourceFiles) => {
     if (key === "enable" && value === "false") continue;
     rawFields[key] = value;
   }
-  const hasDesc = Object.hasOwn(record.rawFields, "desc");
   return {
     ...(hasDesc ? { description: record.description } : {}),
     rawCode: record.rawCode,

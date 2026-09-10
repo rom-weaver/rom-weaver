@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { expandCheatShard } from "../packages/rom-weaver-webapp/src/lib/cheats/shard-format.mjs";
+import {
+  expandCheatShard,
+  storeCheat,
+  validateStoredShard,
+} from "../packages/rom-weaver-webapp/src/lib/cheats/shard-format.mjs";
 
 import { LIBRETRO_PLATFORM_PATHS, packGroupFor } from "./build-identify-index.mjs";
 import {
@@ -312,6 +316,42 @@ test("expandCheatShard defaults a record without desc and rejects a bad source f
   assert.equal(cheat.id, "cheat_83275ab42d2759effefab00f");
   stored.games[0].cheats[0].sourceFile = 1;
   await assert.rejects(() => expandCheatShard(stored, nodeSha256Hex), /source file/u);
+});
+
+test("validateStoredShard rejects records the Rust loader would read differently", () => {
+  const game = (cheat) => ({
+    schemaVersion: 1,
+    system: "nes",
+    sourceRevision: "rev",
+    games: [{ id: "game_x", title: "X", sourceFiles: ["cht/x.cht"], cheats: [cheat] }],
+  });
+  const good = { rawCode: "AKE-LVS", sourceFile: 0, sourceIndex: 0 };
+  assert.equal(validateStoredShard(game(good)).games[0].cheats[0].rawCode, "AKE-LVS");
+  assert.throws(() => validateStoredShard(game({ ...good, description: null })), /description/u);
+  assert.throws(() => validateStoredShard(game({ ...good, codeKind: "gameshark" })), /codeKind/u);
+  assert.throws(() => validateStoredShard(game({ ...good, rawFields: { enable: true } })), /enable/u);
+  assert.throws(() => validateStoredShard(game({ ...good, sourceFile: -1 })), /index/u);
+  assert.throws(() => validateStoredShard(game({ ...good, sourceIndex: 1.5 })), /index/u);
+  assert.throws(() => validateStoredShard({ ...game(good), schemaVersion: 2 }), /schema/u);
+  assert.throws(() => validateStoredShard({ ...game(good), games: [{ id: "g" }] }), /title/u);
+});
+
+test("storeCheat refuses a record whose description or rawCode drifted from its raw fields", () => {
+  const record = {
+    description: "Lives",
+    rawCode: "AAAA",
+    rawFields: { desc: "Lives", code: "AAAA", enable: "false" },
+    sourceFile: "cht/x.cht",
+    sourceIndex: 0,
+  };
+  assert.deepEqual(storeCheat(record, ["cht/x.cht"]), {
+    description: "Lives",
+    rawCode: "AAAA",
+    sourceFile: 0,
+    sourceIndex: 0,
+  });
+  assert.throws(() => storeCheat({ ...record, description: "Other" }, ["cht/x.cht"]), /description/u);
+  assert.throws(() => storeCheat({ ...record, rawCode: "BBBB" }, ["cht/x.cht"]), /rawCode/u);
 });
 
 test("stable cheat IDs ignore enable state but retain distinct record semantics", () => {

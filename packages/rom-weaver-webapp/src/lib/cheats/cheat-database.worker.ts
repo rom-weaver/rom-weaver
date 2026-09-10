@@ -2,7 +2,7 @@
 
 import { sha256Hex } from "../identify/sha256-hex.ts";
 import type { CheatDatabaseEntry, CheatSystemShard } from "./model.ts";
-import { expandCheatShard, type StoredShard } from "./shard-format.mjs";
+import { expandCheatShard, type StoredShard, validateStoredShard } from "./shard-format.mjs";
 
 const MAX_SHARD_BYTES = 128 * 1024 * 1024;
 const MAX_GAMES = 100_000;
@@ -34,7 +34,7 @@ const parseShard = async (text: string, entry: CheatDatabaseEntry): Promise<Chea
     0,
   );
   if (cheatCount > MAX_CHEATS) throw new Error("The cheat database shard has too many cheats.");
-  const expanded = await expandCheatShard(value as StoredShard, sha256Hex);
+  const expanded = await expandCheatShard(validateStoredShard(value), sha256Hex);
   return expanded as CheatSystemShard;
 };
 

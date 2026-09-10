@@ -21,6 +21,9 @@ use tracing::{debug, trace};
 
 use crate::cheats::{CheatKind, CheatRecord, CheatResolution, CheatSystem, ClassifiedCheatRecord};
 
+/// The only `schemaVersion` this loader reads; `shard-format.mjs` writes it.
+const CHEAT_SHARD_SCHEMA_VERSION: u32 = 1;
+
 /// Overrides the cheat-database directory. `--cheat-database` wins over it.
 pub(crate) const CHEAT_DATABASE_ENV: &str = "ROM_WEAVER_CHEAT_DATABASE";
 
@@ -91,6 +94,7 @@ pub(crate) struct CheatShard {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredShard {
+    schema_version: u32,
     system: CheatSystem,
     source_revision: String,
     games: Vec<StoredGame>,
@@ -189,6 +193,14 @@ fn cheat_id_source(
 /// Restore the full records from the stored form. `path` names the shard in
 /// errors only.
 fn expand_shard(stored: StoredShard, path: &Path) -> Result<CheatShard> {
+    if stored.schema_version != CHEAT_SHARD_SCHEMA_VERSION {
+        return Err(RomWeaverError::Validation(format!(
+            "the cheat database shard `{}` has schema version {}; this build reads version {}",
+            path.display(),
+            stored.schema_version,
+            CHEAT_SHARD_SCHEMA_VERSION
+        )));
+    }
     let system_name = serde_name(&stored.system);
     let mut games = Vec::with_capacity(stored.games.len());
     for game in stored.games {
@@ -799,6 +811,7 @@ mod tests {
         assert_eq!(second.code_kind, Some(CheatKind::GameGenie));
 
         let bad: StoredShard = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
             "system": "nes",
             "sourceRevision": "rev",
             "games": [{ "id": "g", "title": "G", "sourceFiles": [],
@@ -807,6 +820,13 @@ mod tests {
         .expect("stored shard");
         let error = expand_shard(bad, Path::new("shard.json")).expect_err("bad index");
         assert!(error.to_string().contains("source file 0"), "{error}");
+
+        let future: StoredShard = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 2, "system": "nes", "sourceRevision": "rev", "games": []
+        }))
+        .expect("stored shard");
+        let error = expand_shard(future, Path::new("shard.json")).expect_err("wrong version");
+        assert!(error.to_string().contains("schema version 2"), "{error}");
     }
 
     #[test]
