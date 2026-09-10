@@ -15,10 +15,11 @@ use std::{
 };
 
 use rom_weaver_core::{Result, RomWeaverError, ValidationCodeError};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tracing::{debug, trace};
 
-use crate::cheats::{CheatRecord, CheatResolution, CheatSystem, ClassifiedCheatRecord};
+use crate::cheats::{CheatKind, CheatRecord, CheatResolution, CheatSystem, ClassifiedCheatRecord};
 
 /// Overrides the cheat-database directory. `--cheat-database` wins over it.
 pub(crate) const CHEAT_DATABASE_ENV: &str = "ROM_WEAVER_CHEAT_DATABASE";
@@ -69,24 +70,180 @@ pub(crate) struct CheatGameChecksums {
     pub sha1: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub(crate) struct CheatGame {
     pub id: String,
     pub title: String,
-    #[serde(default)]
     pub normalized_title: String,
-    #[serde(default)]
     pub checksums: Vec<CheatGameChecksums>,
-    #[serde(default)]
     pub cheats: Vec<CheatRecord>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub(crate) struct CheatShard {
     pub system: CheatSystem,
     pub games: Vec<CheatGame>,
+}
+
+/// A shard as the file stores it: the form `shard-format.mjs` in the webapp
+/// documents. Each record omits what a reader derives, and
+/// [`expand_shard`] restores it exactly as the browser worker does.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredShard {
+    system: CheatSystem,
+    source_revision: String,
+    games: Vec<StoredGame>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredGame {
+    id: String,
+    title: String,
+    #[serde(default)]
+    normalized_title: String,
+    #[serde(default)]
+    checksums: Vec<CheatGameChecksums>,
+    #[serde(default)]
+    source_files: Vec<String>,
+    #[serde(default)]
+    cheats: Vec<StoredCheat>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredCheat {
+    /// Absent when the source record has no `desc` field.
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    raw_code: Option<String>,
+    #[serde(default)]
+    code_kind: Option<CheatKind>,
+    /// Source fields other than `desc` and `code`; `enable` only when it is
+    /// not `"false"`.
+    #[serde(default)]
+    raw_fields: BTreeMap<String, String>,
+    /// Index into the game's `sourceFiles`.
+    source_file: usize,
+    source_index: usize,
+}
+
+/// The name serde writes for a system or code kind: the spelling the shard
+/// file and the record IDs use, which differs from [`CheatSystem::id`].
+fn serde_name<T: Serialize>(value: &T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// The record ID the data build assigns: `cheat_` plus the first 24 hex
+/// digits of SHA-256 over `system NUL gameId NUL codeKind NUL fields`, where
+/// `fields` is the raw field map without `enable`, as JSON with keys sorted by
+/// UTF-16 code unit. Mirrors `cheatIdSource` in `shard-format.mjs`; bundles
+/// store these IDs, so the two MUST agree byte for byte.
+pub(crate) fn stable_cheat_id(
+    system: &str,
+    game_id: &str,
+    code_kind: Option<CheatKind>,
+    raw_fields: &BTreeMap<String, String>,
+) -> String {
+    let digest = Sha256::digest(cheat_id_source(system, game_id, code_kind, raw_fields));
+    let hex = digest
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("cheat_{hex}")
+}
+
+/// The text [`stable_cheat_id`] hashes.
+fn cheat_id_source(
+    system: &str,
+    game_id: &str,
+    code_kind: Option<CheatKind>,
+    raw_fields: &BTreeMap<String, String>,
+) -> String {
+    let mut keys = raw_fields
+        .keys()
+        .filter(|key| key.as_str() != "enable")
+        .collect::<Vec<_>>();
+    keys.sort_by(|left, right| left.encode_utf16().cmp(right.encode_utf16()));
+    let fields = keys
+        .iter()
+        .map(|key| {
+            format!(
+                "{}:{}",
+                serde_json::to_string(key).unwrap_or_default(),
+                serde_json::to_string(&raw_fields[*key]).unwrap_or_default()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let kind = code_kind.map(|kind| serde_name(&kind)).unwrap_or_default();
+    format!("{system}\0{game_id}\0{kind}\0{{{fields}}}")
+}
+
+/// Restore the full records from the stored form. `path` names the shard in
+/// errors only.
+fn expand_shard(stored: StoredShard, path: &Path) -> Result<CheatShard> {
+    let system_name = serde_name(&stored.system);
+    let mut games = Vec::with_capacity(stored.games.len());
+    for game in stored.games {
+        let mut cheats = Vec::with_capacity(game.cheats.len());
+        for (position, cheat) in game.cheats.into_iter().enumerate() {
+            let Some(source_file) = game.source_files.get(cheat.source_file).cloned() else {
+                return Err(RomWeaverError::Validation(format!(
+                    "the cheat database shard `{}` is not valid: cheat {position} of game `{}` \
+                     names source file {} but the game lists {} file(s)",
+                    path.display(),
+                    game.id,
+                    cheat.source_file,
+                    game.source_files.len()
+                )));
+            };
+            let mut raw_fields = BTreeMap::new();
+            if let Some(description) = &cheat.description {
+                raw_fields.insert("desc".to_owned(), description.clone());
+            }
+            if let Some(code) = &cheat.raw_code {
+                raw_fields.insert("code".to_owned(), code.clone());
+            }
+            raw_fields.extend(cheat.raw_fields);
+            raw_fields
+                .entry("enable".to_owned())
+                .or_insert_with(|| "false".to_owned());
+            let description = cheat
+                .description
+                .unwrap_or_else(|| format!("Cheat {}", cheat.source_index + 1));
+            let id = stable_cheat_id(&system_name, &game.id, cheat.code_kind, &raw_fields);
+            cheats.push(CheatRecord {
+                id,
+                system: stored.system,
+                game_id: game.id.clone(),
+                description,
+                raw_code: cheat.raw_code,
+                code_kind: cheat.code_kind,
+                raw_fields,
+                source_file,
+                source_index: cheat.source_index,
+                source_revision: stored.source_revision.clone(),
+            });
+        }
+        games.push(CheatGame {
+            id: game.id,
+            title: game.title,
+            normalized_title: game.normalized_title,
+            checksums: game.checksums,
+            cheats,
+        });
+    }
+    Ok(CheatShard {
+        system: stored.system,
+        games,
+    })
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -233,12 +390,13 @@ pub(crate) fn load_shard(directory: &Path, system: CheatSystem) -> Result<CheatS
     } else {
         raw
     };
-    let shard: CheatShard = serde_json::from_slice(&bytes).map_err(|error| {
+    let stored: StoredShard = serde_json::from_slice(&bytes).map_err(|error| {
         RomWeaverError::Validation(format!(
             "the cheat database shard `{}` is not valid: {error}",
             path.display()
         ))
     })?;
+    let shard = expand_shard(stored, &path)?;
     debug!(
         path = %path.display(),
         system = shard.system.id(),
@@ -535,6 +693,120 @@ mod tests {
             panic!("expected a coded validation error");
         };
         assert_eq!(coded.code(), "cheat_selector_unknown");
+    }
+
+    /// Expected IDs come from the reference implementation: `cheatIdSource`
+    /// in `shard-format.mjs` hashed with node's `crypto.createHash("sha256")`.
+    #[test]
+    fn stable_cheat_id_matches_the_data_build() {
+        let fields = |pairs: &[(&str, &str)]| {
+            pairs
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect::<BTreeMap<_, _>>()
+        };
+        assert_eq!(
+            stable_cheat_id(
+                "nes",
+                "game_test",
+                None,
+                &fields(&[
+                    ("desc", "Team runs faster"),
+                    ("code", "AKE-LVS"),
+                    ("enable", "false")
+                ])
+            ),
+            "cheat_5dab2c1d036a60f251b61b60"
+        );
+        // Escapes, non-ASCII text, an enabled record, and keys whose UTF-16
+        // order ("Z" < "a" < "aaa" < "code") differs from the map's insertion.
+        let tricky = fields(&[
+            ("desc", "Ünïcode \"quoted\" \\ back\nslash\ttabctl €"),
+            ("code", "0FA-99B"),
+            ("zzz", "1"),
+            ("aaa", "2"),
+            ("Z", "3"),
+            ("a", "4"),
+            ("enable", "true"),
+        ]);
+        assert_eq!(
+            cheat_id_source(
+                "gameboy-color",
+                "game_x",
+                Some(CheatKind::GameGenie),
+                &tricky
+            ),
+            "gameboy-color\0game_x\0game-genie\0{\"Z\":\"3\",\"a\":\"4\",\"aaa\":\"2\",\
+             \"code\":\"0FA-99B\",\"desc\":\"Ünïcode \\\"quoted\\\" \\\\ back\\nslash\\ttabctl €\",\
+             \"zzz\":\"1\"}"
+        );
+        assert_eq!(
+            stable_cheat_id(
+                "gameboy-color",
+                "game_x",
+                Some(CheatKind::GameGenie),
+                &tricky
+            ),
+            "cheat_6e16b20266d1728135d83b79"
+        );
+    }
+
+    #[test]
+    fn expand_shard_restores_the_derived_fields() {
+        let stored: StoredShard = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "system": "nes",
+            "sourceRevision": "rev",
+            "games": [{
+                "id": "game_x",
+                "title": "X",
+                "normalizedTitle": "x",
+                "sourceFiles": ["cht/x.cht", "cht/y.cht"],
+                "checksums": [],
+                "cheats": [
+                    { "rawCode": "AKE-LVS", "sourceFile": 1, "sourceIndex": 4 },
+                    {
+                        "description": "Lives",
+                        "rawCode": "AAAA",
+                        "codeKind": "game-genie",
+                        "rawFields": { "enable": "true", "extra": "1" },
+                        "sourceFile": 0,
+                        "sourceIndex": 0
+                    }
+                ]
+            }]
+        }))
+        .expect("stored shard");
+        let shard = expand_shard(stored, Path::new("shard.json")).expect("expands");
+        let game = &shard.games[0];
+        let first = &game.cheats[0];
+        assert_eq!(first.id, "cheat_83275ab42d2759effefab00f");
+        assert_eq!(first.description, "Cheat 5");
+        assert_eq!(first.source_file, "cht/y.cht");
+        assert_eq!(first.source_revision, "rev");
+        assert_eq!(first.game_id, "game_x");
+        assert_eq!(
+            first.raw_fields,
+            BTreeMap::from([
+                ("code".to_owned(), "AKE-LVS".to_owned()),
+                ("enable".to_owned(), "false".to_owned()),
+            ])
+        );
+        let second = &game.cheats[1];
+        assert_eq!(second.raw_fields["desc"], "Lives");
+        assert_eq!(second.raw_fields["enable"], "true");
+        assert_eq!(second.raw_fields["extra"], "1");
+        assert_eq!(second.code_kind, Some(CheatKind::GameGenie));
+
+        let bad: StoredShard = serde_json::from_value(serde_json::json!({
+            "system": "nes",
+            "sourceRevision": "rev",
+            "games": [{ "id": "g", "title": "G", "sourceFiles": [],
+                "cheats": [{ "rawCode": "AKE-LVS", "sourceFile": 0, "sourceIndex": 0 }] }]
+        }))
+        .expect("stored shard");
+        let error = expand_shard(bad, Path::new("shard.json")).expect_err("bad index");
+        assert!(error.to_string().contains("source file 0"), "{error}");
     }
 
     #[test]
