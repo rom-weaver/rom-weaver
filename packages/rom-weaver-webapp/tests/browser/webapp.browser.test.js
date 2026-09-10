@@ -165,7 +165,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByRole("tab", { name: "Apply Patch" })).toBeInTheDocument();
   await expect.element(page.getByRole("tab", { name: "Create Patch" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "PPF undo" })).toBeInTheDocument();
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
@@ -228,7 +228,7 @@ test("only one Identify workflow ever consumes a page drop", async () => {
   await expect.poll(() => document.querySelector("#identify-container")?.textContent).toContain("first.gba");
 
   await page.getByRole("button", { name: "More" }).click();
-  await page.getByRole("menuitem", { name: "PPF undo" }).click();
+  await page.getByRole("menuitem", { name: "PPF undo Beta" }).click();
   await expect.poll(() => document.querySelector("#panel-ppf-undo")?.hidden).toBe(false);
   // The Identify panel stays mounted behind PPF undo, so the count also proves the
   // hidden instance is the SAME one, not a second form.
