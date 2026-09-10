@@ -347,6 +347,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> Result<BundleCreateResult> {
         let specs = bundle_create_patch_specs(args)?;
+        self.preflight_bundle_create_outputs(args)?;
         let patch_basis = args.default_patch_basis.unwrap_or(PatchBasisMode::Auto);
         let cheats = self.bundle_create_cheat_entries(args, context)?;
         if specs.is_empty() && cheats.is_empty() {
@@ -517,8 +518,6 @@ impl CliApp {
             }),
         };
 
-        ensure_output_available(&args.output, args.force)?;
-
         let output_checks = bundle_entry_checks(&args.output_check, "--expect-out")?;
 
         let mut patches = Vec::with_capacity(specs.len());
@@ -649,6 +648,48 @@ impl CliApp {
             bundle,
             warnings,
         })
+    }
+
+    /// The definition and archive MUST name different files. Both destinations
+    /// need validation before source hashing or either output is written.
+    fn preflight_bundle_create_outputs(&self, args: &BundleCreateCommand) -> Result<()> {
+        if let Some(bundle) = args.bundle.as_deref() {
+            if bundle_create_outputs_alias(&args.output, bundle) {
+                return Err(RomWeaverError::Validation(
+                    "--output and --bundle must name different files".to_string(),
+                ));
+            }
+            ensure_output_available(bundle, args.force)?;
+            let format = bundle
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "--bundle path needs a creatable archive extension (for example .zip)"
+                            .to_string(),
+                    )
+                })?;
+            self.containers.find_creatable_by_name(format)?;
+        }
+        ensure_output_available(&args.output, args.force)?;
+        for output in
+            std::iter::once(args.output.as_path()).chain(args.bundle.iter().map(PathBuf::as_path))
+        {
+            if let Some(parent) = output
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+            {
+                super::path_access::check_writable_dir(parent)?;
+            }
+        }
+        if let Some(bundle) = args.bundle.as_deref()
+            && bundle_create_outputs_alias_after_parent_checks(&args.output, bundle)
+        {
+            return Err(RomWeaverError::Validation(
+                "--output and --bundle must name different files".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     /// Checksum one create source, emitting overall hash progress across the
@@ -1172,6 +1213,39 @@ fn required_base_name(path: &Path, what: &str) -> Result<String> {
                 path.display()
             ))
         })
+}
+
+fn bundle_create_outputs_alias(left: &Path, right: &Path) -> bool {
+    left == right || native_file_identity_matches(left, right)
+}
+
+fn bundle_create_outputs_alias_after_parent_checks(left: &Path, right: &Path) -> bool {
+    bundle_create_outputs_alias(left, right)
+        || matches!(
+            (output_path_identity(left), output_path_identity(right)),
+            (Some(left), Some(right)) if left == right
+        )
+}
+
+fn output_path_identity(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?;
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::canonicalize(parent)
+        .ok()
+        .map(|parent| parent.join(name))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn native_file_identity_matches(left: &Path, right: &Path) -> bool {
+    same_file::is_same_file(left, right).unwrap_or(false)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn native_file_identity_matches(_left: &Path, _right: &Path) -> bool {
+    false
 }
 
 /// Write bundle bytes honoring the output name's codec extension: plain

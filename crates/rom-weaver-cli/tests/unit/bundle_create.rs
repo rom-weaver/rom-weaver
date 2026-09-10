@@ -875,6 +875,188 @@ fn bundle_create_refuses_to_overwrite_an_existing_output() {
 }
 
 #[test]
+fn bundle_create_refuses_an_existing_archive_before_writing_the_definition() {
+    let dir = scratch_dir("archive-overwrite");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let archive = dir.join("release.zip");
+    let existing = b"existing archive";
+    fs::write(&archive, existing).expect("pre-existing archive");
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        bundle: Some(archive.clone()),
+        ..base_args(&dir)
+    };
+    let context = app.context(args.threads);
+
+    let error = app
+        .bundle_create_inner(&args, &context)
+        .expect_err("existing archive");
+
+    assert!(
+        error.to_string().contains("refusing to overwrite"),
+        "{error}"
+    );
+    assert_eq!(fs::read(&archive).expect("archive remains"), existing);
+    assert!(!args.output.exists(), "definition was not written");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn bundle_create_validates_the_archive_format_before_writing_the_definition() {
+    let dir = scratch_dir("invalid-archive-format");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        bundle: Some(dir.join("release.unknown")),
+        ..base_args(&dir)
+    };
+    let context = app.context(args.threads);
+
+    app.bundle_create_inner(&args, &context)
+        .expect_err("invalid archive format");
+
+    assert!(!args.output.exists(), "definition was not written");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn bundle_create_force_allows_replacing_both_outputs() {
+    let dir = scratch_dir("force-archive-overwrite");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let archive = dir.join("release.zip");
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        bundle: Some(archive.clone()),
+        force: true,
+        ..base_args(&dir)
+    };
+    fs::write(&args.output, b"existing definition").expect("pre-existing definition");
+    fs::write(&archive, b"existing archive").expect("pre-existing archive");
+    let context = app.context(args.threads);
+
+    app.bundle_create_inner(&args, &context)
+        .expect("--force replaces both outputs");
+
+    assert_ne!(
+        fs::read(&args.output).expect("definition"),
+        b"existing definition"
+    );
+    assert!(fs::read(&archive).expect("archive").starts_with(b"PK"));
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn bundle_create_rejects_aliasing_definition_and_archive_outputs() {
+    let dir = scratch_dir("aliasing-outputs");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        bundle: Some(dir.join("rom-weaver-bundle.json")),
+        ..base_args(&dir)
+    };
+    let context = app.context(args.threads);
+
+    let error = app
+        .bundle_create_inner(&args, &context)
+        .expect_err("aliasing outputs");
+
+    assert!(
+        error
+            .to_string()
+            .contains("--output and --bundle must name different files"),
+        "{error}"
+    );
+    assert!(!args.output.exists(), "definition was not written");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn bundle_create_rejects_nonexistent_outputs_with_equivalent_paths() {
+    let dir = scratch_dir("equivalent-output-paths");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    fs::create_dir_all(dir.join("sub")).expect("subdirectory");
+    let output = dir.join("release.zip");
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        output: output.clone(),
+        bundle: Some(dir.join("sub").join("..").join("release.zip")),
+        ..Default::default()
+    };
+    let context = app.context(args.threads);
+
+    let error = app
+        .bundle_create_inner(&args, &context)
+        .expect_err("equivalent output paths");
+
+    assert!(
+        error
+            .to_string()
+            .contains("--output and --bundle must name different files"),
+        "{error}"
+    );
+    assert!(!output.exists(), "definition was not written");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn bundle_create_resolves_symlink_parent_before_comparing_outputs() {
+    let dir = scratch_dir("symlink-output-paths");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let real = dir.join("real");
+    fs::create_dir_all(real.join("sub")).expect("real subdirectory");
+    let link = dir.join("link");
+    std::os::unix::fs::symlink(real.join("sub"), &link).expect("symlink");
+    let output = real.join("release.zip");
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        output: output.clone(),
+        bundle: Some(link.join("..").join("release.zip")),
+        ..Default::default()
+    };
+    let context = app.context(args.threads);
+
+    let error = app
+        .bundle_create_inner(&args, &context)
+        .expect_err("symlink-equivalent output paths");
+
+    assert!(
+        error
+            .to_string()
+            .contains("--output and --bundle must name different files"),
+        "{error}"
+    );
+    assert!(!output.exists(), "definition was not written");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn bundle_create_checks_the_archive_parent_before_writing_the_definition() {
+    let dir = scratch_dir("archive-parent");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let blocked_parent = write_fixture(&dir, "not-a-directory", b"file");
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        bundle: Some(blocked_parent.join("release.zip")),
+        ..base_args(&dir)
+    };
+    let context = app.context(args.threads);
+
+    app.bundle_create_inner(&args, &context)
+        .expect_err("archive parent is not writable");
+
+    assert!(!args.output.exists(), "definition was not written");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn a_schema_ref_is_stamped_at_the_top_of_the_written_bundle() {
     let dir = scratch_dir("schema-ref");
     let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
