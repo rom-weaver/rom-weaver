@@ -21,16 +21,24 @@
       "$ref": "#/$defs/rom"
     },
     "patches": {
-      "description": "Ordered patch chain: array order is the apply order. At least one entry.",
+      "description": "Ordered patch chain: array order is the apply order. May be empty only when `cheats` is not.",
       "type": "array",
-      "minItems": 1,
       "items": { "$ref": "#/$defs/patch" }
+    },
+    "cheats": {
+      "description": "Cheat selections this bundle reproduces, in selection order. They are baked into the ROM after the patch chain. Optional: a bundle without it is a plain patch recipe.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/cheat" }
     },
     "output": {
       "description": "Defaults for the final patched output. Overridable by explicit CLI flags / webapp edits.",
       "$ref": "#/$defs/output"
     }
   },
+  "anyOf": [
+    { "properties": { "patches": { "minItems": 1 } } },
+    { "required": ["cheats"], "properties": { "cheats": { "minItems": 1 } } }
+  ],
   "$defs": {
     "checks": {
       "description": "Expected checksums (algorithm -> lowercase hex) and/or exact byte size.",
@@ -141,6 +149,41 @@
           "description": "What this patch's input checks were authored against: `base` (the bundle's rom - verified once up front; the patch's embedded checks are skipped when it runs mid-chain) or `previous` (the previous selected patch's output, the default). Omitted means previous/inferred. `basis: \"base\"` with omitted `inputChecks` relies on `rom.checks`; declaring it WITH `inputChecks` pins a specific variant. The escape hatch for checksumless formats (IPS) whose basis cannot be inferred.",
           "type": "string",
           "enum": ["base", "previous"]
+        }
+      }
+    },
+    "cheat": {
+      "description": "One cheat selection. `id` names the record in the cheat database; `code` is a raw-code snapshot so the entry still applies when the database is absent.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "description": "Cheat database record ID. An exact description is also accepted, so a hand-authored bundle can name a cheat the way `cheat list` prints it. Must not be blank.",
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "source": {
+          "description": "Which database the ID belongs to, for example `libretro-database`.",
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "description": "The database revision the selection was made against.",
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "description": "The cheat's description, as the database records it.",
+          "type": "string"
+        },
+        "code": {
+          "description": "Raw code snapshot, so the entry still applies when the local cheat database is absent.",
+          "type": "string"
+        },
+        "optional": {
+          "description": "When true an unresolvable cheat is skipped and named in the report; omitted/false makes it fail the apply.",
+          "type": "boolean"
         }
       }
     },

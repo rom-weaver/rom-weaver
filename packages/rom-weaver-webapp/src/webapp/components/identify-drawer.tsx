@@ -1,10 +1,8 @@
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { ScanSearch } from "lucide-react";
 import { identifyGoodToolsRevisionLabels, uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import {
-  IDENTIFY_CONDITION_LABEL,
-  IDENTIFY_QUALITY_LABEL,
-  IDENTIFY_STATUS_MARK,
   identifyComponentEvidenceLabel,
   identifyDumpTagLabel,
   identifyMatchCountLabel,
@@ -44,11 +42,12 @@ const IdentifyDrawer = ({
   /** Detected system tag (e.g. "PSX · CD") shown on the drawer whether or not a title matched. */
   platformTag?: string;
 }) => {
+  const localizer = useUiLocalizer();
   const matches = identification?.matches ?? [];
   const { condition, database, evidence, hint, platformCandidates, quality, status } = identification ?? {};
   // The system tag alone is worth a drawer, as is a structured condition
   // (database required / unsupported media profile) or a match. A database that
-  // answered and held no record still renders, as "Unidentified": the staging
+  // answered and held no record still renders, as localizer.message("ui.identifyDrawer.unidentified"): the staging
   // card holds this slot with a placeholder, so a drawer that vanished on
   // arrival would shift the card exactly as a late one does. `unavailable` is
   // the exception - the packs never loaded, so there is no lookup to report and
@@ -81,12 +80,15 @@ const IdentifyDrawer = ({
     ...identifyGoodToolsRevisionLabels(sourceNames),
   ]);
   const discs = unique(
-    matches.map((match) => (typeof match.discNumber === "number" ? `Disc ${match.discNumber}` : "")),
+    matches.map((match) =>
+      typeof match.discNumber === "number"
+        ? localizer.message("ui.identifyDrawer.discNumber", { n: match.discNumber })
+        : "",
+    ),
   );
   const legacyVariant = matches.some((match) => match.legacyVariant);
-  const mark = status ? IDENTIFY_STATUS_MARK[status] : undefined;
   // A finished lookup that matched nothing still opens the drawer, on the
-  // "Unidentified" readout alone - no "Evidence" head over no rows.
+  // localizer.message("ui.identifyDrawer.unidentified") readout alone - no localizer.message("ui.identifyDrawer.evidence") head over no rows.
   const hasEvidence = !!(
     matches.length ||
     quality ||
@@ -105,19 +107,19 @@ const IdentifyDrawer = ({
     <Drawer
       className="identify-drawer"
       defaultOpen={defaultOpen}
-      label="Identify"
+      label={localizer.message("ui.identifyDrawer.identify")}
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={
         <>
           {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
           {condition ? (
-            <DrawerReadout muted>{IDENTIFY_CONDITION_LABEL[condition]}</DrawerReadout>
-          ) : status === "matched" && mark ? (
-            <DrawerReadout>{mark.label}</DrawerReadout>
+            <DrawerReadout muted>{localizer.message(`ui.identifyDrawer.condition.${condition}`)}</DrawerReadout>
+          ) : status === "matched" ? (
+            <DrawerReadout>{localizer.message("ui.file.identified")}</DrawerReadout>
           ) : status === "ambiguous" ? (
             <DrawerReadout muted>{identifyMatchCountLabel(matches.length)}</DrawerReadout>
           ) : status ? (
-            <DrawerReadout muted>Unidentified</DrawerReadout>
+            <DrawerReadout muted>{localizer.message("ui.identifyDrawer.unidentified")}</DrawerReadout>
           ) : null}
         </>
       }
@@ -125,17 +127,17 @@ const IdentifyDrawer = ({
       <div className="identify-drawer-body">
         {condition ? (
           <p className="pdesc identify-drawer-condition">
-            <b>{IDENTIFY_CONDITION_LABEL[condition]}.</b>{" "}
-            {hint || "The identification data does not support this input."}
+            <b>{localizer.message(`ui.identifyDrawer.condition.${condition}`)}.</b>{" "}
+            {hint || localizer.message("ui.identifyDrawer.unsupported")}
           </p>
         ) : null}
         {names.length ? (
           <div className="ck-group identify-drawer-group">
-            <div className="ck-group-head">Names</div>
+            <div className="ck-group-head">{localizer.message("ui.identifyDrawer.names")}</div>
             <div className="ckrows identify-drawer-names">
               {names.map((name) => (
                 <ChecksumRow
-                  ariaLabel={`Copy name ${name}`}
+                  ariaLabel={localizer.message("ui.identifyDrawer.copyName", { name })}
                   className={["identify-name-row", halfRowClass(name)].filter(Boolean).join(" ")}
                   copyValue={name}
                   key={name}
@@ -147,18 +149,28 @@ const IdentifyDrawer = ({
         ) : null}
         {!identification && systemTag ? (
           <div className="ckrows">
-            <EvidenceRow label="System" values={[systemTag]} />
+            <EvidenceRow label={localizer.message("ui.identifyDrawer.system")} values={[systemTag]} />
           </div>
         ) : null}
         {identification && hasEvidence ? (
           <div className="ck-group identify-drawer-group">
-            <div className="ck-group-head">Evidence</div>
+            <div className="ck-group-head">{localizer.message("ui.identifyDrawer.evidence")}</div>
             <div className="ckrows identify-drawer-evidence">
-              {quality ? <EvidenceRow label="Quality" values={[IDENTIFY_QUALITY_LABEL[quality]]} /> : null}
-              {sourceParts.length ? <EvidenceRow label="Database" values={[sourceParts.join(" · ")]} /> : null}
+              {quality ? (
+                <EvidenceRow
+                  label={localizer.message("ui.identifyDrawer.quality")}
+                  values={[localizer.message(`ui.identifyDrawer.quality.${quality}`)]}
+                />
+              ) : null}
+              {sourceParts.length ? (
+                <EvidenceRow
+                  label={localizer.message("ui.identifyDrawer.database")}
+                  values={[sourceParts.join(" · ")]}
+                />
+              ) : null}
               {platformCandidates?.length ? (
                 <EvidenceRow
-                  label="Platform candidates"
+                  label={localizer.message("ui.identifyDrawer.platformCandidates")}
                   values={platformCandidates.map((candidate) =>
                     [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" — "),
                   )}
@@ -166,25 +178,57 @@ const IdentifyDrawer = ({
               ) : null}
               {componentEvidence ? (
                 <EvidenceRow
-                  label="Components"
-                  values={[componentEvidence, ...(evidence?.layoutMatched === false ? ["layout differs"] : [])]}
+                  label={localizer.message("ui.identifyDrawer.components")}
+                  values={[
+                    componentEvidence,
+                    ...(evidence?.layoutMatched === false
+                      ? [localizer.message("ui.identifyDrawer.layoutDiffers")]
+                      : []),
+                  ]}
                 />
               ) : null}
-              {evidence?.missing?.length ? <EvidenceRow label="Missing" values={evidence.missing} /> : null}
-              {evidence?.unexpected?.length ? <EvidenceRow label="Unexpected" values={evidence.unexpected} /> : null}
-              <EvidenceRow label="Matched by" values={algorithms} />
-              <EvidenceRow label="Variant" values={variants} />
-              <EvidenceRow label="Platform" values={platforms.map(abbreviatePlatform)} />
-              {regions.length ? <EvidenceRow label="Region" values={regions} /> : null}
-              {languages.length ? <EvidenceRow label="Language" values={languages} /> : null}
-              {revisions.length ? <EvidenceRow label="Revision" values={revisions} /> : null}
-              {discs.length ? <EvidenceRow label="Disc" values={discs} /> : null}
-              {sources.length ? <EvidenceRow label="Source" values={sources} /> : null}
-              {legacyVariant ? <EvidenceRow label="Variant class" values={["Legacy variant"]} /> : null}
-              {dumpTags.length ? <EvidenceRow label="Dump status" values={dumpTags} /> : null}
-              {memberPath ? <EvidenceRow label="Archive member" values={[memberPath]} /> : null}
+              {evidence?.missing?.length ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.missing")} values={evidence.missing} />
+              ) : null}
+              {evidence?.unexpected?.length ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.unexpected")} values={evidence.unexpected} />
+              ) : null}
+              <EvidenceRow label={localizer.message("ui.identifyDrawer.matchedBy")} values={algorithms} />
+              <EvidenceRow label={localizer.message("ui.identifyDrawer.variant")} values={variants} />
+              <EvidenceRow
+                label={localizer.message("ui.identifyDrawer.platform")}
+                values={platforms.map(abbreviatePlatform)}
+              />
+              {regions.length ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.region")} values={regions} />
+              ) : null}
+              {languages.length ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.language")} values={languages} />
+              ) : null}
+              {revisions.length ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.revision")} values={revisions} />
+              ) : null}
+              {discs.length ? <EvidenceRow label={localizer.message("ui.identifyDrawer.disc")} values={discs} /> : null}
+              {sources.length ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.source")} values={sources} />
+              ) : null}
+              {legacyVariant ? (
+                <EvidenceRow
+                  label={localizer.message("ui.identifyDrawer.variantClass")}
+                  values={[localizer.message("ui.identifyDrawer.legacyVariant")]}
+                />
+              ) : null}
+              {dumpTags.length ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.dumpStatus")} values={dumpTags} />
+              ) : null}
+              {memberPath ? (
+                <EvidenceRow label={localizer.message("ui.identifyDrawer.archiveMember")} values={[memberPath]} />
+              ) : null}
               {status === "ambiguous" ? (
-                <EvidenceRow label="Candidates" values={[identifyMatchCountLabel(matches.length)]} />
+                <EvidenceRow
+                  label={localizer.message("ui.identifyDrawer.candidates")}
+                  values={[identifyMatchCountLabel(matches.length)]}
+                />
               ) : null}
             </div>
           </div>
@@ -199,29 +243,30 @@ const IdentifyDrawer = ({
    card stages and then pushes the Checks drawer down when it arrives. The
    placeholder holds that slot, in the same position and with the same head
    height as the resolved drawer. */
-const PendingIdentifyDrawer = ({ platformTag }: { platformTag?: string }) => (
-  <Drawer
-    className="identify-drawer"
-    label="Identify"
-    labelIcon={<ScanSearch aria-hidden="true" />}
-    readouts={
-      <>
-        {platformTag ? <DrawerReadout>{platformTag}</DrawerReadout> : null}
-        <DrawerReadout muted>Identifying…</DrawerReadout>
-      </>
-    }
-  >
-    <div className="identify-drawer-body">
-      <p className="pdesc">
-        Looking this ROM up in the title database. The rows below fill in once its checksums land.
-      </p>
-      <div className="ckrows identify-drawer-evidence">
-        <PendingChecksumRow label="Standard" length={24} />
-        <PendingChecksumRow label="Matched by" length={5} />
-        <PendingChecksumRow label="Platform" length={5} />
+const PendingIdentifyDrawer = ({ platformTag }: { platformTag?: string }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <Drawer
+      className="identify-drawer"
+      label={localizer.message("ui.identifyDrawer.identify")}
+      labelIcon={<ScanSearch aria-hidden="true" />}
+      readouts={
+        <>
+          {platformTag ? <DrawerReadout>{platformTag}</DrawerReadout> : null}
+          <DrawerReadout muted>{localizer.message("ui.identifyDrawer.identifying")}</DrawerReadout>
+        </>
+      }
+    >
+      <div className="identify-drawer-body">
+        <p className="pdesc">{localizer.message("ui.identifyDrawer.pending")}</p>
+        <div className="ckrows identify-drawer-evidence">
+          <PendingChecksumRow label={localizer.message("ui.identifyDrawer.standard")} length={24} />
+          <PendingChecksumRow label={localizer.message("ui.identifyDrawer.matchedBy")} length={5} />
+          <PendingChecksumRow label={localizer.message("ui.identifyDrawer.platform")} length={5} />
+        </div>
       </div>
-    </div>
-  </Drawer>
-);
+    </Drawer>
+  );
+};
 
 export { IdentifyDrawer, PendingIdentifyDrawer };

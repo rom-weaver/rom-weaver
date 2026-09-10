@@ -193,6 +193,18 @@ const toWarnings = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((warning) => String(warning || "")).filter((warning) => !!warning) : [];
 
 /**
+ * A bundle may record cheat selections. `ParsedBundle` does not carry them yet, so parsing drops
+ * them; say so rather than reduce the bundle silently. The CLI reproduces such a bundle in full.
+ */
+const cheatWarnings = (bundleRecord: unknown): string[] => {
+  const cheats = asRecord(bundleRecord)?.cheats;
+  if (!Array.isArray(cheats) || cheats.length === 0) return [];
+  return [
+    `this bundle records ${cheats.length} cheat selection${cheats.length === 1 ? "" : "s"}, which this app does not apply yet; apply it with the rom-weaver CLI to include them`,
+  ];
+};
+
+/**
  * Parse the `bundle` object from a terminal event's `details`. Returns `undefined` when the
  * payload is missing or malformed (so callers can fail loudly rather than route on a half-formed
  * result).
@@ -214,7 +226,7 @@ const parseBundleParseResult = (details: unknown): ParsedBundleParseResult | und
     bundle,
     patchSources,
     sourceKind,
-    warnings: toWarnings(record.warnings),
+    warnings: [...toWarnings(record.warnings), ...cheatWarnings(record.bundle)],
   };
   const archiveMember = toStringValue(record.archive_member);
   if (archiveMember !== undefined) result.archiveMember = archiveMember;
@@ -233,7 +245,7 @@ const parseBundleCreateResult = (details: unknown): ParsedBundleCreateResult | u
   const result: ParsedBundleCreateResult = {
     bundle,
     bundlePath,
-    warnings: toWarnings(record.warnings),
+    warnings: [...toWarnings(record.warnings), ...cheatWarnings(record.bundle)],
   };
   const archivePath = toStringValue(record.archive_path);
   if (archivePath !== undefined) result.archivePath = archivePath;

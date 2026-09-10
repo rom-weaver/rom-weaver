@@ -191,8 +191,6 @@ export {
   isIdentifyQuality,
 };
 export type {
-  IdentifyCondition,
-  IdentifyQuality,
   IdentifyStatus,
   ParsedIdentifyCandidate,
   ParsedIdentifyEvidence,

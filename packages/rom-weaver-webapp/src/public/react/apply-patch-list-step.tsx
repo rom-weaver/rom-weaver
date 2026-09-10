@@ -1,12 +1,13 @@
 import {
+  ArrowDown,
   ArrowLeftRight,
+  ArrowUp,
   Check,
   Crosshair,
   EllipsisVertical,
   GitBranch,
   Pencil,
   Plus,
-  RefreshCw,
   Scissors,
   Tag,
   Trash2,
@@ -120,43 +121,49 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
 
 /* The dry-run's "validation failed: " lead-in duplicates the well's title -
    strip it and re-capitalize what remains so the detail reads as a sentence. */
-const toFaultDetail = (message: string): string => {
+const toFaultDetail = (message: string, localizer: Localizer): string => {
   const detail = message.replace(/^\s*validation failed:?\s*/i, "").trim();
-  if (!detail) return "The patch's checks did not match this ROM.";
+  if (!detail) return localizer.message("ui.patch.validationMismatch");
   return detail.charAt(0).toUpperCase() + detail.slice(1);
 };
 
 /** Failed dry-run verdict: an inset fault well with the verdict, the detail,
  * and what to do next (naming the 0x05 override toggle when it is offered). */
-const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => (
-  <div className="pverdict pfault">
-    <div className="pfault-title">
-      <X aria-hidden="true" />
-      <span>Validation failed</span>
+const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <div className="pverdict pfault">
+      <div className="pfault-title">
+        <X aria-hidden="true" />
+        <span>{localizer.message("ui.patch.validationFailed")}</span>
+      </div>
+      <p className="pfault-detail">{toFaultDetail(message, localizer)}</p>
+      <p className="pfault-hint">
+        {overrideAvailable
+          ? localizer.message("ui.patch.validationMismatchOverride")
+          : localizer.message("ui.patch.validationMismatchHint")}
+      </p>
     </div>
-    <p className="pfault-detail">{toFaultDetail(message)}</p>
-    <p className="pfault-hint">
-      {overrideAvailable
-        ? "Pick the ROM this patch was made for, or use “Apply anyway despite patch & ROM check mismatch” in 0x05."
-        : "Pick the ROM this patch was made for."}
-    </p>
-  </div>
-);
+  );
+};
 
-const PreflightSuccess = () => (
-  <InfoToggle
-    ariaLabel="Preflight passed"
-    className="dry-apply-info"
-    icon={<Check aria-hidden="true" />}
-    panelClassName="dry-apply-pop"
-    portalPanel
-    title="Preflight passed"
-  >
-    <strong>Preflight passed</strong>
-    <p>rom-weaver verified this patch against the current input.</p>
-    <p>The real output has not been created yet.</p>
-  </InfoToggle>
-);
+const PreflightSuccess = () => {
+  const localizer = useUiLocalizer();
+  return (
+    <InfoToggle
+      ariaLabel={localizer.message("ui.patch.preflightPassed")}
+      className="dry-apply-info"
+      icon={<Check aria-hidden="true" />}
+      panelClassName="dry-apply-pop"
+      portalPanel
+      title={localizer.message("ui.patch.preflightPassed")}
+    >
+      <strong>{localizer.message("ui.patch.preflightPassed")}</strong>
+      <p>{localizer.message("ui.patch.preflightVerified")}</p>
+      <p>{localizer.message("ui.patch.preflightOutputPending")}</p>
+    </InfoToggle>
+  );
+};
 
 /** Grow a textarea to its content (`field-sizing: content` isn't in every
  * target browser yet); runs on mount and on every input. */
@@ -256,64 +263,79 @@ const PatchMetaFields = ({
   onMetaChange,
   onSubmit,
 }: PatchMetaFieldProps & { onSubmit: () => void }) => (
-  <div className="patch-meta-inline">
-    <PatchMetaTextField
-      field="name"
-      index={index}
-      item={item}
-      label="Name"
-      meta={meta}
-      onMetaChange={onMetaChange}
-      onSubmit={onSubmit}
-      placeholder={item.fileName.replace(/\.[^.]+$/, "")}
-    />
-    <div className="ofld patch-description-field">
-      <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
-        Description
-      </label>
-      <textarea
-        className="input popt-input"
-        defaultValue={meta?.description || ""}
-        id={`rom-weaver-patch-description-${index}`}
-        key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
-        onBlur={(event) => onMetaChange({ description: event.currentTarget.value.trim() || undefined })}
-        onInput={(event) => autosizeTextarea(event.currentTarget)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            event.currentTarget.blur();
-            onSubmit();
-          }
-        }}
-        placeholder="What this patch changes"
-        ref={autosizeTextarea}
-        rows={1}
-      />
-    </div>
-    <div className="patch-meta-cols">
-      <PatchMetaTextField
-        field="version"
-        index={index}
-        item={item}
-        label="Version"
-        meta={meta}
-        onMetaChange={onMetaChange}
-        onSubmit={onSubmit}
-        placeholder="1.0"
-      />
-      <PatchMetaTextField
-        field="author"
-        index={index}
-        item={item}
-        label="Author"
-        meta={meta}
-        onMetaChange={onMetaChange}
-        onSubmit={onSubmit}
-        placeholder="Who made it"
-      />
-    </div>
-  </div>
+  <PatchMetaFieldsContent index={index} item={item} meta={meta} onMetaChange={onMetaChange} onSubmit={onSubmit} />
 );
+
+const PatchMetaFieldsContent = ({
+  index,
+  item,
+  meta,
+  onMetaChange,
+  onSubmit,
+}: PatchMetaFieldProps & {
+  onSubmit: () => void;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <div className="patch-meta-inline">
+      <PatchMetaTextField
+        field="name"
+        index={index}
+        item={item}
+        label={localizer.message("ui.patch.name")}
+        meta={meta}
+        onMetaChange={onMetaChange}
+        onSubmit={onSubmit}
+        placeholder={item.fileName.replace(/\.[^.]+$/, "")}
+      />
+      <div className="ofld patch-description-field">
+        <label className="ofld-l" htmlFor={`rom-weaver-patch-description-${index}`}>
+          {localizer.message("ui.patch.description")}
+        </label>
+        <textarea
+          className="input popt-input"
+          defaultValue={meta?.description || ""}
+          id={`rom-weaver-patch-description-${index}`}
+          key={`patch-description:${item.key ?? index}:${meta?.description || ""}`}
+          onBlur={(event) => onMetaChange({ description: event.currentTarget.value.trim() || undefined })}
+          onInput={(event) => autosizeTextarea(event.currentTarget)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.blur();
+              onSubmit();
+            }
+          }}
+          placeholder={localizer.message("ui.patch.descriptionPlaceholder")}
+          ref={autosizeTextarea}
+          rows={1}
+        />
+      </div>
+      <div className="patch-meta-cols">
+        <PatchMetaTextField
+          field="version"
+          index={index}
+          item={item}
+          label={localizer.message("ui.patch.version")}
+          meta={meta}
+          onMetaChange={onMetaChange}
+          onSubmit={onSubmit}
+          placeholder="1.0"
+        />
+        <PatchMetaTextField
+          field="author"
+          index={index}
+          item={item}
+          label={localizer.message("ui.patch.author")}
+          meta={meta}
+          onMetaChange={onMetaChange}
+          onSubmit={onSubmit}
+          placeholder={localizer.message("ui.patch.authorPlaceholder")}
+        />
+      </div>
+    </div>
+  );
+};
 
 /** The ROM-header handling select on the patch card's meta line (beside the
  * On/Off switch): Auto (the engine's checksum-driven decision,
@@ -331,14 +353,17 @@ const PatchHeaderModeSelect = ({
   /** The cheat stack has a card switched On, so stripping is not on offer. */
   stripDisabled?: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   if (!item.showHeaderOption) return null;
-  const headerNoun = item.headerStrippedBytes ? `${item.headerStrippedBytes} B header` : "header";
-  const autoLabel = formatHeaderAutoLabel(item.headerAutoDecided, item.headerAutoMode);
+  const headerNoun = item.headerStrippedBytes
+    ? localizer.message("ui.patch.headerWithSize", { bytes: item.headerStrippedBytes })
+    : localizer.message("ui.patch.header");
+  const autoLabel = formatHeaderAutoLabel(item.headerAutoDecided, item.headerAutoMode, localizer);
   return (
     <span className="target-grp header-grp">
       <Scissors aria-hidden="true" />
       <label className="sr-only" htmlFor={`rom-weaver-patch-header-mode-${index}`}>
-        ROM header handling before patching
+        {localizer.message("ui.patch.headerHandling")}
       </label>
       <DropdownSelect
         className="meta-target-select mono ptgt-sel"
@@ -352,13 +377,13 @@ const PatchHeaderModeSelect = ({
             revalidate: true,
           });
         }}
-        title="Strip patches the headerless bytes when the patch was authored against a ROM without its copier header. Whether the header appears on the final output is the output card's separate ROM header setting."
+        title={localizer.message("ui.patch.headerHandlingHelp")}
         value={item.headerChoice ?? "auto"}
       >
         <option value="auto">{autoLabel}</option>
-        <option value="keep">keep {headerNoun}</option>
+        <option value="keep">{localizer.message("ui.patch.keepHeader", { header: headerNoun })}</option>
         <option disabled={stripDisabled} title={stripDisabled ? CHEAT_HEADER_STRIP_HINT : undefined} value="strip">
-          strip {headerNoun}
+          {localizer.message("ui.patch.stripHeader", { header: headerNoun })}
         </option>
       </DropdownSelect>
     </span>
@@ -538,12 +563,8 @@ const PatchExecutionInputSelect = ({
   );
 };
 
-const N64_ORDER_LABELS = {
-  "big-endian": "big endian (.z64)",
-  "byte-swapped": "byte-swapped (.v64)",
-  "little-endian": "little endian (.n64)",
-  keep: "keep current",
-} as const;
+const n64OrderLabel = (order: "big-endian" | "byte-swapped" | "little-endian" | "keep", localizer: Localizer) =>
+  localizer.message(`ui.patch.n64Order.${order}`);
 
 const PatchN64ByteOrderSelect = ({
   index,
@@ -554,15 +575,18 @@ const PatchN64ByteOrderSelect = ({
   item: PatchStackItemState;
   patchStack: PatcherStackController;
 }) => {
+  const localizer = useUiLocalizer();
   if (!item.showN64ByteOrderOption) return null;
   const autoMode = item.n64AutoMode || "keep";
-  const autoLabel = `byte order auto (${N64_ORDER_LABELS[autoMode]})`;
-  const sourceLabel = item.n64SourceOrder ? N64_ORDER_LABELS[item.n64SourceOrder] : "current order";
+  const autoLabel = localizer.message("ui.patch.n64Auto", { order: n64OrderLabel(autoMode, localizer) });
+  const sourceLabel = item.n64SourceOrder
+    ? n64OrderLabel(item.n64SourceOrder, localizer)
+    : localizer.message("ui.patch.n64CurrentOrder");
   return (
     <span className="target-grp header-grp">
       <ArrowLeftRight aria-hidden="true" />
       <label className="sr-only" htmlFor={`rom-weaver-patch-n64-byte-order-${index}`}>
-        N64 byte order before patching
+        {localizer.message("ui.patch.n64ByteOrder")}
       </label>
       <DropdownSelect
         className="meta-target-select mono ptgt-sel"
@@ -578,14 +602,14 @@ const PatchN64ByteOrderSelect = ({
             revalidate: true,
           });
         }}
-        title="Auto matches the patch's required source checksum against all three N64 byte orders. The original ROM order is restored on output."
+        title={localizer.message("ui.patch.n64ByteOrderHelp")}
         value={item.n64ByteOrderChoice ?? "auto"}
       >
         <option value="auto">{autoLabel}</option>
-        <option value="keep">keep current ({sourceLabel})</option>
-        <option value="big-endian">{N64_ORDER_LABELS["big-endian"]}</option>
-        <option value="byte-swapped">{N64_ORDER_LABELS["byte-swapped"]}</option>
-        <option value="little-endian">{N64_ORDER_LABELS["little-endian"]}</option>
+        <option value="keep">{localizer.message("ui.patch.n64KeepCurrent", { order: sourceLabel })}</option>
+        <option value="big-endian">{n64OrderLabel("big-endian", localizer)}</option>
+        <option value="byte-swapped">{n64OrderLabel("byte-swapped", localizer)}</option>
+        <option value="little-endian">{n64OrderLabel("little-endian", localizer)}</option>
       </DropdownSelect>
     </span>
   );
@@ -610,10 +634,10 @@ const matchInputCheck = (field: CheckField, value: string, actuals?: RomCheckAct
 
 /** Why a committed check value failed validation - shown inline under the field
  * and as its title. */
-const checkErrorMessage = (field: CheckField): string =>
+const checkErrorMessage = (field: CheckField, localizer: Localizer): string =>
   field === "bytes"
-    ? "Expected a whole number of bytes"
-    : `Expected ${CHECK_HEX_LENGTHS[field as CheckAlgorithm]} hex characters`;
+    ? localizer.message("ui.patch.expectedWholeBytes")
+    : localizer.message("ui.patch.expectedHexCharacters", { count: CHECK_HEX_LENGTHS[field as CheckAlgorithm] });
 
 /** An editable expected-check field (user-specified, not built into the patch):
  * commits on blur, removable via the trailing X. A malformed value shows an
@@ -652,6 +676,7 @@ const EditableCheckRow = ({
   onRemove: () => void;
   value: string;
 }) => {
+  const localizer = useUiLocalizer();
   const errorId = `${id}-err`;
   /* The ref callback is a fresh identity every render, so React detaches and
      reattaches it each time. Without this latch the handoff would re-focus on
@@ -718,13 +743,13 @@ const EditableCheckRow = ({
             element.focus();
           }}
           spellCheck={false}
-          title={invalid ? checkErrorMessage(field) : value || undefined}
+          title={invalid ? checkErrorMessage(field, localizer) : value || undefined}
           type="text"
         />
       ) : (
         <button
           aria-describedby={invalid ? errorId : undefined}
-          aria-label={`Edit ${label} check`}
+          aria-label={localizer.message("ui.patch.editCheck", { check: label })}
           className="ck-open mono"
           /* Derived from the field's own id so either state of the row is addressable. */
           id={`${id}-open`}
@@ -732,7 +757,7 @@ const EditableCheckRow = ({
             openedByUser.current = true;
             setEditing(true);
           }}
-          title={invalid ? checkErrorMessage(field) : value}
+          title={invalid ? checkErrorMessage(field, localizer) : value}
           type="button"
         >
           <span className={join("ck-v", value.length >= FIT_VALUE_MIN_CHARS && "ck-fit")}>{value}</span>
@@ -740,13 +765,18 @@ const EditableCheckRow = ({
       )}
       <span className="vrow-tail">
         {mark && !invalid ? (
-          <span className={`ck-mark ${mark}`} title={mark === "ok" ? "Matches the ROM" : "Does not match the ROM"}>
+          <span
+            className={`ck-mark ${mark}`}
+            title={localizer.message(mark === "ok" ? "ui.patch.matchesRom" : "ui.patch.doesNotMatchRom")}
+          >
             {mark === "ok" ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-            <span className="sr-only">{mark === "ok" ? "matches the ROM" : "does not match the ROM"}</span>
+            <span className="sr-only">
+              {localizer.message(mark === "ok" ? "ui.patch.matchesRom" : "ui.patch.doesNotMatchRom")}
+            </span>
           </span>
         ) : null}
         <button
-          aria-label={`Remove ${CHECK_LABELS[field]} check`}
+          aria-label={localizer.message("ui.patch.removeCheck", { check: CHECK_LABELS[field] })}
           className="ck-remove"
           onClick={onRemove}
           type="button"
@@ -756,7 +786,7 @@ const EditableCheckRow = ({
       </span>
       {invalid ? (
         <p className="ck-err" id={errorId}>
-          {checkErrorMessage(field)}
+          {checkErrorMessage(field, localizer)}
         </p>
       ) : null}
     </div>
@@ -1004,7 +1034,7 @@ const PatchChecksDrawer = ({
       className="patch-checks"
       bodyClassName={compact ? "ckrows patch-check-columns" : "ckrows patch-checks-body"}
       defaultOpen={hasBuiltIn || hasUserChecks}
-      label="Checks"
+      label={localizer.message("ui.patch.checks")}
       match={ok ? undefined : match}
       sublabel={
         !(disabled || verifying) && chainChip ? (
@@ -1014,7 +1044,7 @@ const PatchChecksDrawer = ({
           </span>
         ) : undefined
       }
-      timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
+      timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, localizer.message("ui.patch.checks"))}
       verifying={verifying}
     >
       <p className="patch-checks-explanation" id={`rom-weaver-patch-checks-help-${index}`}>
@@ -1046,7 +1076,11 @@ const PatchChecksDrawer = ({
           onMetaChange && addableFields.length ? (
             <label className="ck-add" htmlFor={`rom-weaver-patch-${side}-add-check-${index}`}>
               <Plus aria-hidden="true" />
-              <span className="sr-only">Add {side} check</span>
+              <span className="sr-only">
+                {localizer.message("ui.patch.addCheck", {
+                  side: localizer.message(side === "input" ? "ui.patch.input" : "ui.patch.output").toLowerCase(),
+                })}
+              </span>
               <DropdownSelect
                 className="ck-add-select"
                 id={`rom-weaver-patch-${side}-add-check-${index}`}
@@ -1058,7 +1092,7 @@ const PatchChecksDrawer = ({
                 value=""
               >
                 <option disabled value="">
-                  Add check
+                  {localizer.message("ui.patch.addCheckLabel")}
                 </option>
                 {addableFields.map((field) => (
                   <option key={field} value={field}>
@@ -1124,7 +1158,7 @@ const PatchChecksDrawer = ({
       {outputCheckHint ? (
         <p className="patch-off-note" id={`rom-weaver-patch-output-check-hint-${index}`}>
           <TriangleAlert aria-hidden="true" />
-          <span>The expected output is verified only when every patch in the bundle is applied.</span>
+          <span>{localizer.message("ui.patch.outputCheckHint")}</span>
         </p>
       ) : null}
     </ChecksumList>
@@ -1175,6 +1209,7 @@ const PatchDragHandle = ({
   position: number;
   total: number;
 }) => {
+  const localizer = useUiLocalizer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(position));
   const cancelEditRef = useRef(false);
@@ -1222,7 +1257,7 @@ const PatchDragHandle = ({
   if (editing) {
     return (
       <input
-        aria-label={`Edit patch position, currently ${position} of ${total}`}
+        aria-label={localizer.message("ui.patch.editPosition", { position, total })}
         className="handle phandle phandle-input mono"
         max={total}
         min={1}
@@ -1249,8 +1284,8 @@ const PatchDragHandle = ({
     <button
       aria-label={
         disabled
-          ? `Patch ${position} of ${total}. Reordering unavailable.`
-          : `Patch ${position} of ${total}. Drag to reorder, click to edit its position, or press the up and down arrow keys.`
+          ? localizer.message("ui.patch.reorderUnavailable", { position, total })
+          : localizer.message("ui.patch.reorderHelp", { position, total })
       }
       className="handle phandle"
       {...handleProps}
@@ -1261,7 +1296,7 @@ const PatchDragHandle = ({
         setDraft(String(position));
         setEditing(true);
       }}
-      title={disabled ? "Patch position" : "Drag to reorder · click to edit position · ↑ / ↓ keys"}
+      title={localizer.message(disabled ? "ui.patch.position" : "ui.patch.reorderTitle")}
       type="button"
     >
       <span aria-hidden="true" className="phandle-number mono">
@@ -1281,12 +1316,13 @@ const PatchTarget = ({
   item: PatchStackItemState;
   patchStack: PatcherStackController;
 }) => {
+  const localizer = useUiLocalizer();
   if (!item.targetOptions || item.targetOptions.length <= 1) return null;
   return (
     <span className="target-grp">
       <Crosshair aria-hidden="true" />
       <label className="sr-only" htmlFor={`rom-weaver-select-patch-target-${index}`}>
-        Apply patch into
+        {localizer.message("ui.patch.target")}
       </label>
       <DropdownSelect
         className="meta-target-select mono ptgt-sel"
@@ -1296,7 +1332,7 @@ const PatchTarget = ({
         value={item.targetValue || ""}
       >
         <option disabled value="">
-          Select target
+          {localizer.message("ui.patch.selectTarget")}
         </option>
         {item.targetOptions.map((option) => (
           <option key={option.value} value={option.value}>
@@ -1317,49 +1353,51 @@ const PatchEnableToggle = ({
   disabled: boolean;
   fileName: string;
   onToggle: () => void;
-}) => (
-  <label className="patch-enable">
-    <input
-      aria-label={`Include ${fileName.replace(/\.[^.]+$/, "")}`}
-      checked={!disabled}
-      onChange={onToggle}
-      type="checkbox"
-    />
-    <span aria-hidden="true" className="switch-state">
-      <b className="on">On</b>
-      <b className="off">Off</b>
-    </span>
-  </label>
-);
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <label className="patch-enable">
+      <input
+        aria-label={localizer.message("ui.patch.include", { name: fileName.replace(/\.[^.]+$/, "") })}
+        checked={!disabled}
+        onChange={onToggle}
+        type="checkbox"
+      />
+      <span aria-hidden="true" className="switch-state">
+        <b className="on">{localizer.message("ui.patch.on")}</b>
+        <b className="off">{localizer.message("ui.patch.off")}</b>
+      </span>
+    </label>
+  );
+};
 
 /** The check that closes the patch-details form; it takes the menu's slot in
  * the action column while editing (commit happens on each field's blur; the
  * check just closes the form). Carries the same id as the menu's Edit item so
  * open/close drive one control identity. */
-const PatchMetaDoneButton = ({ index, onToggle }: { index: number; onToggle: () => void }) => (
-  <button
-    aria-expanded
-    aria-label="Done editing patch details"
-    className="rm patch-menu-btn is-editing"
-    id={`rom-weaver-patch-meta-edit-${index}`}
-    onClick={onToggle}
-    title="Done"
-    type="button"
-  >
-    <Check aria-hidden="true" />
-  </button>
-);
+const PatchMetaDoneButton = ({ index, onToggle }: { index: number; onToggle: () => void }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <button
+      aria-expanded
+      aria-label={localizer.message("ui.patch.doneEditing")}
+      className="rm patch-menu-btn is-editing"
+      id={`rom-weaver-patch-meta-edit-${index}`}
+      onClick={onToggle}
+      title={localizer.message("ui.patch.done")}
+      type="button"
+    >
+      <Check aria-hidden="true" />
+    </button>
+  );
+};
 
-/** Three-dot menu in the card's top-right action column: Edit (opens the
- * patch-details form), Replace (swap the file in place), Remove. Present
- * through staging too. The item list stays mounted (visibility via [hidden])
- * so its actions keep stable, always-queryable ids. */
+/** Three-dot menu for infrequent metadata and removal actions. */
 const PatchActionsMenu = ({
   index,
   onOpenChange,
   onEdit,
   onRemove,
-  onReplace,
   open,
 }: {
   index: number;
@@ -1367,11 +1405,10 @@ const PatchActionsMenu = ({
   /** Absent while the details form cannot be edited (no bundle meta channel). */
   onEdit?: () => void;
   onRemove: () => void;
-  onReplace?: (file: File) => void;
   open: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event: PointerEvent) => {
@@ -1385,20 +1422,20 @@ const PatchActionsMenu = ({
       <button
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Patch actions"
+        aria-label={localizer.message("ui.patch.actions")}
         className={open ? "rm patch-menu-btn is-open" : "rm patch-menu-btn"}
         id={`rom-weaver-patch-menu-${index}`}
         onClick={() => onOpenChange(!open)}
         onKeyDown={(event) => {
           if (event.key === "Escape") onOpenChange(false);
         }}
-        title="Patch actions"
+        title={localizer.message("ui.patch.actions")}
         type="button"
       >
         <EllipsisVertical aria-hidden="true" />
       </button>
       <div
-        aria-label="Patch actions"
+        aria-label={localizer.message("ui.patch.actions")}
         className="patch-menu-list"
         hidden={!open}
         onKeyDown={(event) => {
@@ -1418,24 +1455,11 @@ const PatchActionsMenu = ({
             type="button"
           >
             <Pencil aria-hidden="true" />
-            Edit details
-          </button>
-        ) : null}
-        {onReplace ? (
-          <button
-            className="patch-menu-item"
-            id={`rom-weaver-patch-replace-${index}`}
-            onClick={() => fileRef.current?.click()}
-            role="menuitem"
-            title="Swap in a patch file, or an archive to pull the same-named patch from"
-            type="button"
-          >
-            <RefreshCw aria-hidden="true" />
-            Replace file…
+            {localizer.message("ui.patch.editDetails")}
           </button>
         ) : null}
         <button
-          aria-label="Remove patch"
+          aria-label={localizer.message("ui.patch.remove")}
           className="patch-menu-item is-danger"
           id={`rom-weaver-patch-menu-remove-${index}`}
           onClick={() => {
@@ -1446,33 +1470,80 @@ const PatchActionsMenu = ({
           type="button"
         >
           <Trash2 aria-hidden="true" />
-          Remove
+          {localizer.message("ui.patch.remove")}
         </button>
       </div>
-      {onReplace ? (
-        <input
-          accept={getFileInputAcceptAttributes().patchReplace}
-          aria-label="Replacement patch file or archive"
-          className="sr-only"
-          id={`rom-weaver-patch-replace-input-${index}`}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = "";
-            onOpenChange(false);
-            if (file) onReplace(file);
-          }}
-          ref={fileRef}
-          tabIndex={-1}
-          type="file"
-        />
-      ) : null}
     </div>
   );
 };
 
-/** One patch card: staging presentation, a three-dot actions menu (edit
- * details / replace file / remove) at the head of the name line, the Extract
- * drawer, and the unified Checks drawer (which owns the dry-run verdict). */
+/** The replacement input MUST keep its stable id for browser automation. */
+const PatchCardActions = ({
+  canMoveDown,
+  canMoveUp,
+  index,
+  onMoveDown,
+  onMoveUp,
+  onReplace,
+}: {
+  canMoveDown: boolean;
+  canMoveUp: boolean;
+  index: number;
+  onMoveDown: () => void;
+  onMoveUp: () => void;
+  onReplace: (file: File) => void;
+}) => {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const localizer = useUiLocalizer();
+  return (
+    <div className="patch-card-actions">
+      <button
+        className="btn ghost slim"
+        disabled={!canMoveUp}
+        id={`rom-weaver-patch-move-up-${index}`}
+        onClick={onMoveUp}
+        type="button"
+      >
+        <ArrowUp aria-hidden="true" />
+        {localizer.message("ui.patch.moveUp")}
+      </button>
+      <button
+        className="btn ghost slim"
+        disabled={!canMoveDown}
+        id={`rom-weaver-patch-move-down-${index}`}
+        onClick={onMoveDown}
+        type="button"
+      >
+        <ArrowDown aria-hidden="true" />
+        {localizer.message("ui.patch.moveDown")}
+      </button>
+      <button
+        className="btn ghost slim"
+        id={`rom-weaver-patch-replace-${index}`}
+        onClick={() => fileRef.current?.click()}
+        title={localizer.message("ui.patch.replaceHelp")}
+        type="button"
+      >
+        {localizer.message("ui.patch.replace")}
+      </button>
+      <input
+        accept={getFileInputAcceptAttributes().patchReplace}
+        aria-label={localizer.message("ui.patch.replacementInput")}
+        className="sr-only"
+        id={`rom-weaver-patch-replace-input-${index}`}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = "";
+          if (file) onReplace(file);
+        }}
+        ref={fileRef}
+        tabIndex={-1}
+        type="file"
+      />
+    </div>
+  );
+};
+
 const getPatchCardVerdict = (validationState: string | undefined, isDisabled: boolean): "bad" | "ok" | undefined => {
   if (isDisabled) return undefined;
   if (validationState === "invalid") return "bad";
@@ -1627,14 +1698,14 @@ const PatchCard = ({
           {meta?.version ? (
             <span className="meta-fmt mono meta-ic" id={`rom-weaver-patch-card-version-${index}`}>
               <Tag aria-hidden="true" />
-              <span className="sr-only">Version </span>
+              <span className="sr-only">{localizer.message("ui.patch.version")} </span>
               {meta.version}
             </span>
           ) : null}
           {meta?.author ? (
             <span className="meta-fmt meta-ic meta-author" id={`rom-weaver-patch-card-author-${index}`}>
               <UserRound aria-hidden="true" />
-              <span className="sr-only">Author </span>
+              <span className="sr-only">{localizer.message("ui.patch.author")} </span>
               {meta.author}
             </span>
           ) : null}
@@ -1657,7 +1728,7 @@ const PatchCard = ({
           {staging ? (
             <StageStatus
               id={`rom-weaver-progress-patch-${index}`}
-              label={stageStatusLabel("Reading", patchExtracting)}
+              label={stageStatusLabel(localizer.message("ui.patch.reading"), patchExtracting, localizer)}
               percent={percent}
             />
           ) : null}
@@ -1686,14 +1757,23 @@ const PatchCard = ({
         editing ? (
           <PatchMetaDoneButton index={index} onToggle={() => setMetaEditing(false)} />
         ) : (
-          <PatchActionsMenu
-            index={index}
-            onEdit={onMetaChange ? () => setMetaEditing(true) : undefined}
-            onOpenChange={setMenuOpen}
-            onRemove={() => patchStack.removeItem(index)}
-            onReplace={(file) => patchStack.replaceItem(index, file)}
-            open={menuOpen}
-          />
+          <>
+            <PatchCardActions
+              canMoveDown={canReorder && index < total - 1 && !!item.canMoveDown}
+              canMoveUp={canReorder && index > 0 && !!item.canMoveUp}
+              index={index}
+              onMoveDown={() => onReorder(index, index + 1)}
+              onMoveUp={() => onReorder(index, index - 1)}
+              onReplace={(file) => patchStack.replaceItem(index, file)}
+            />
+            <PatchActionsMenu
+              index={index}
+              onEdit={onMetaChange ? () => setMetaEditing(true) : undefined}
+              onOpenChange={setMenuOpen}
+              onRemove={() => patchStack.removeItem(index)}
+              open={menuOpen}
+            />
+          </>
         )
       }
       patch
@@ -1797,11 +1877,11 @@ const SharedPatchMetaEditor = ({
       }}
     >
       <div className="patch-shared-meta-heading" id="rom-weaver-bulk-patch-meta-title">
-        <strong>Bulk Edit</strong>
-        <span>Set metadata values for every patch.</span>
+        <strong>{localizer.message("ui.patch.bulkEdit")}</strong>
+        <span>{localizer.message("ui.patch.bulkEditHelp")}</span>
       </div>
       <div className="patch-shared-meta-field">
-        <label htmlFor="rom-weaver-shared-patch-version">Version</label>
+        <label htmlFor="rom-weaver-shared-patch-version">{localizer.message("ui.patch.version")}</label>
         <input
           className="input popt-input"
           id="rom-weaver-shared-patch-version"
@@ -1809,14 +1889,16 @@ const SharedPatchMetaEditor = ({
             setVersion(event.currentTarget.value);
             setVersionChanged(true);
           }}
-          placeholder={commonPatchMetaValue(bundleMeta, "version") === undefined ? "Multiple values" : "Version"}
+          placeholder={localizer.message(
+            commonPatchMetaValue(bundleMeta, "version") === undefined ? "ui.patch.multipleValues" : "ui.patch.version",
+          )}
           ref={versionInputRef}
           type="text"
           value={version}
         />
       </div>
       <div className="patch-shared-meta-field">
-        <label htmlFor="rom-weaver-shared-patch-author">Author</label>
+        <label htmlFor="rom-weaver-shared-patch-author">{localizer.message("ui.patch.author")}</label>
         <input
           className="input popt-input"
           id="rom-weaver-shared-patch-author"
@@ -1824,7 +1906,9 @@ const SharedPatchMetaEditor = ({
             setAuthor(event.currentTarget.value);
             setAuthorChanged(true);
           }}
-          placeholder={commonPatchMetaValue(bundleMeta, "author") === undefined ? "Multiple values" : "Author"}
+          placeholder={localizer.message(
+            commonPatchMetaValue(bundleMeta, "author") === undefined ? "ui.patch.multipleValues" : "ui.patch.author",
+          )}
           type="text"
           value={author}
         />
@@ -1844,10 +1928,10 @@ const SharedPatchMetaEditor = ({
       </div>
       <div className="patch-shared-meta-actions">
         <button className="btn ghost" onClick={onCancel} type="button">
-          Cancel
+          {localizer.message("ui.common.cancel")}
         </button>
         <button className="btn primary" type="submit">
-          Apply to all
+          {localizer.message("ui.patch.applyToAll")}
         </button>
       </div>
     </form>
@@ -1939,16 +2023,13 @@ const ApplyPatchListStep = ({
       fault={fault}
       id="rom-weaver-row-patch-stack"
       info={
-        <InfoPopover title="Supported patch types">
-          <strong>Supported patch types</strong>
+        <InfoPopover title={localizer.message("ui.patch.supportedTypes")}>
+          <strong>{localizer.message("ui.patch.supportedTypes")}</strong>
           <ul className="info-list">
-            <li>
-              IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSGBA, RUP, PPF, EBP, BSDIFF, and
-              more.
-            </li>
-            <li>NINJA1 headers are recognized, but applying NINJA1 patches is not supported.</li>
-            <li>PDS patches are unsupported; HDIFF19 directory patches are unsupported.</li>
-            <li>Patches can be chosen from supported (and nested) archives.</li>
+            <li>{localizer.message("ui.patch.supportedTypesList")}</li>
+            <li>{localizer.message("ui.patch.ninjaUnsupported")}</li>
+            <li>{localizer.message("ui.patch.pdsUnsupported")}</li>
+            <li>{localizer.message("ui.patch.archiveSupport")}</li>
           </ul>
         </InfoPopover>
       }
@@ -1963,23 +2044,23 @@ const ApplyPatchListStep = ({
             type="button"
           >
             <Pencil aria-hidden="true" />
-            Bulk edit
+            {localizer.message("ui.patch.bulkEdit")}
           </button>
         ) : undefined
       }
       meta={
         total > 0 ? (
           <>
-            <span className="rb mono">
-              {enabledCount} {enabledCount === 1 ? "file" : "files"}
-            </span>
-            {disabledCount ? <span className="rb mono muted">{disabledCount} disabled</span> : null}
+            <span className="rb mono">{localizer.messageCount("ui.patch.fileCount", enabledCount)}</span>
+            {disabledCount ? (
+              <span className="rb mono muted">{localizer.messageCount("ui.patch.disabledCount", disabledCount)}</span>
+            ) : null}
             {enabledBytes ? <span className="rb mono">{formatByteSize(enabledBytes)}</span> : null}
           </>
         ) : undefined
       }
       num="0x03"
-      title="Patches"
+      title={localizer.message("ui.step.patches")}
       woven={woven}
     >
       {bulkEditing && onBundleMetaBulkChange ? (

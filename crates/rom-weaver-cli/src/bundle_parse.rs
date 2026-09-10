@@ -64,6 +64,7 @@ pub(crate) fn parse_bundle_bytes(bytes: &[u8]) -> Result<RomWeaverBundle> {
     trace!(
         version = bundle.version,
         patches = bundle.patches.len(),
+        cheats = bundle.cheats.len(),
         has_rom = bundle.rom.is_some(),
         has_output = bundle.output.is_some(),
         "parsed bundle"
@@ -95,10 +96,10 @@ fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
         }
         _ => {}
     }
-    if bundle.patches.is_empty() {
+    if bundle.patches.is_empty() && bundle.cheats.is_empty() {
         return Err(bundle_validation(
             "bundle.patches.empty",
-            "bundle defines no patches",
+            "bundle defines no patches and no cheats",
         ));
     }
     let mut check_states = BTreeSet::new();
@@ -236,6 +237,15 @@ fn validate_bundle(bundle: &mut RomWeaverBundle) -> Result<()> {
             .filter(|id| !id.is_empty())
         {
             prior_patch_ids.insert(id.to_owned());
+        }
+    }
+    for (index, cheat) in bundle.cheats.iter().enumerate() {
+        if cheat.id.trim().is_empty() {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("bundle.cheat.id.missing")
+                    .with_message("bundle cheat entry has an empty id")
+                    .with_field("entry", format!("cheats[{index}]")),
+            ));
         }
     }
     if let Some(output) = &mut bundle.output {
@@ -400,6 +410,7 @@ fn normalize_checksum_map(checksums: &mut BTreeMap<String, String>, entry: &str)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bundle_schema::BundleCheatEntry;
 
     fn validation_code(error: RomWeaverError) -> &'static str {
         match error {
@@ -556,6 +567,69 @@ mod tests {
         assert!(!bundle.patches[0].optional);
         assert_eq!(bundle.patches[0].label.as_deref(), Some("stable"));
         assert!(bundle.patches[1].optional);
+    }
+
+    #[test]
+    fn parses_cheats_with_defaults() {
+        let bundle = parse_bundle_bytes(
+            br#"{ "version": 1, "patches": [ { "path": "a.ips" } ], "cheats": [
+                { "id": "cheat_rom" },
+                { "id": "cheat_two", "optional": true,
+                  "source": "libretro-database", "revision": "abc123",
+                  "description": "High score", "code": "0025:63" }
+            ] }"#,
+        )
+        .expect("a bundle carrying cheats parses");
+        assert_eq!(bundle.cheats.len(), 2);
+        assert!(!bundle.cheats[0].optional);
+        assert!(bundle.cheats[0].code.is_none());
+        assert!(bundle.cheats[1].optional);
+        assert_eq!(
+            bundle.cheats[1].source.as_deref(),
+            Some("libretro-database")
+        );
+        assert_eq!(bundle.cheats[1].revision.as_deref(), Some("abc123"));
+        assert_eq!(bundle.cheats[1].code.as_deref(), Some("0025:63"));
+    }
+
+    // A bundle without `cheats` keeps the empty default, and re-serializing it
+    // must not introduce the key: older readers reject unknown fields.
+    #[test]
+    fn omits_empty_cheats_on_serialization() {
+        let bundle = parse_bundle_bytes(br#"{ "version": 1, "patches": [ { "path": "a.ips" } ] }"#)
+            .expect("bundle parses");
+        assert!(bundle.cheats.is_empty());
+        let rendered = serde_json::to_string(&bundle).expect("serializes");
+        assert!(!rendered.contains("cheats"), "{rendered}");
+    }
+
+    #[test]
+    fn accepts_a_cheats_only_bundle_but_not_an_empty_one() {
+        let bundle =
+            parse_bundle_bytes(br#"{ "version": 1, "patches": [], "cheats": [ { "id": "c" } ] }"#)
+                .expect("a cheats-only bundle parses");
+        assert!(bundle.patches.is_empty());
+        assert_eq!(bundle.cheats.len(), 1);
+        assert_eq!(
+            parse_err(r#"{ "version": 1, "patches": [], "cheats": [] }"#),
+            "bundle.patches.empty"
+        );
+    }
+
+    #[test]
+    fn rejects_cheat_entries_that_name_nothing() {
+        assert_eq!(
+            parse_err(r#"{ "version": 1, "patches": [], "cheats": [ { "id": " " } ] }"#),
+            "bundle.cheat.id.missing"
+        );
+        assert_eq!(
+            parse_err(r#"{ "version": 1, "patches": [], "cheats": [ {} ] }"#),
+            "bundle.parse"
+        );
+        assert_eq!(
+            parse_err(r#"{ "version": 1, "patches": [], "cheats": [ { "id": "c", "who": 1 } ] }"#),
+            "bundle.parse"
+        );
     }
 
     #[test]
@@ -732,6 +806,14 @@ mod tests {
                 output_checks_ref: None,
                 header: Some(PatchApplyHeaderMode::Strip),
                 basis: Some(PatchInputBasis::Base),
+            }],
+            cheats: vec![BundleCheatEntry {
+                id: "cheat_rom".to_owned(),
+                source: Some("libretro-database".to_owned()),
+                revision: Some("abc123".to_owned()),
+                description: Some("Infinite lives".to_owned()),
+                code: Some("AKE-LVS".to_owned()),
+                optional: true,
             }],
             output: Some(BundleOutput {
                 name: Some("out.sfc".to_owned()),

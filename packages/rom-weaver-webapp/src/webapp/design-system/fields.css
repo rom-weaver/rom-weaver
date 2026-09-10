@@ -524,6 +524,20 @@
   position: relative;
   display: inline-block;
 }
+.rw-app .patch-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs);
+  justify-content: flex-end;
+  margin-block-end: var(--sp-xs);
+}
+.rw-app .patch-card-actions .btn {
+  min-height: var(--ctrl-h);
+}
+.rw-app .patch-card-actions .btn svg {
+  width: 14px;
+  height: 14px;
+}
 .rw-app .patch-menu-btn:active {
   color: var(--thread-text);
   background: color-mix(in oklab, var(--thread) 8%, transparent);

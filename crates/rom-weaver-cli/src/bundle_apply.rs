@@ -42,6 +42,9 @@ pub(super) struct BundleApplyResolution {
     /// Bundle-authored ROM member selector. It applies only while resolving
     /// the ROM source; patch archives keep the caller's selections.
     pub rom_member: Option<String>,
+    /// The bundle's cheat entries, resolved once the input ROM is known.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub cheats: Vec<BundleCheatEntry>,
 }
 
 enum BundleApplySource {
@@ -116,6 +119,7 @@ impl CliApp {
             bundle = %source.archive_source.display(),
             kind = ?source.loaded.kind,
             patches = bundle.patches.len(),
+            cheats = bundle.cheats.len(),
             has_rom = bundle.rom.is_some(),
             explicit_patches = args.patches.len(),
             "resolving bundle-driven patch apply"
@@ -146,7 +150,9 @@ impl CliApp {
             let selected =
                 self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
             let selected_set: BTreeSet<usize> = selected.iter().copied().collect();
-            if selected.is_empty() {
+            // A cheats-only bundle legitimately selects no patch - unless the
+            // caller dropped the cheats too, leaving nothing to run.
+            if selected.is_empty() && (bundle.cheats.is_empty() || args.without_cheats) {
                 return Err(RomWeaverError::Validation(
                     "no bundle patches selected (all are optional or disabled); pass --with <glob> to include some"
                         .to_string(),
@@ -366,6 +372,13 @@ impl CliApp {
             step_targets,
             step_ids,
             rom_member,
+            // `--without-cheats` runs the patch chain alone.
+            #[cfg(not(target_arch = "wasm32"))]
+            cheats: if args.without_cheats {
+                Vec::new()
+            } else {
+                bundle.cheats.clone()
+            },
         }))
     }
 

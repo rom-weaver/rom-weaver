@@ -266,6 +266,8 @@ struct EmitBundleInputs {
     default_basis: PatchBasisMode,
     output: Option<PathBuf>,
     threads: ThreadBudget,
+    /// The cheat selection this run applied, filled in after the apply.
+    cheats: Vec<BundleCheatEntry>,
 }
 
 struct PatchApplyPrepareChainInputs<'a> {
@@ -368,14 +370,15 @@ impl CliApp {
             {
                 return outcome;
             }
-            return self.run_patch_apply_resolved(
+            return self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
                 args,
-                None,
+                bundle_resolution: None,
                 original_input,
-                None,
-                &mut None,
-                None,
-            );
+                local_bundle: None,
+                final_output: &mut None,
+                emit_bases: None,
+                applied_cheats: &mut Vec::new(),
+            });
         }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -465,22 +468,25 @@ impl CliApp {
                 .unwrap_or(args.default_patch_basis.unwrap_or(PatchBasisMode::Auto)),
             output: args.output.clone(),
             threads: args.threads,
+            cheats: Vec::new(),
         });
         let mut final_output = None;
+        let mut applied_cheats = Vec::new();
         let outcome = if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
             let expected_rom_name = bundle_resolution
                 .as_ref()
                 .and_then(|resolution| resolution.expected_rom_name.as_deref());
             self.run_dcp_apply(args, expected_rom_name)
         } else {
-            self.run_patch_apply_resolved(
+            self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
                 args,
                 bundle_resolution,
                 original_input,
                 local_bundle,
-                &mut final_output,
-                emit_inputs.as_mut().map(|inputs| &mut inputs.bases),
-            )
+                final_output: &mut final_output,
+                emit_bases: emit_inputs.as_mut().map(|inputs| &mut inputs.bases),
+                applied_cheats: &mut applied_cheats,
+            })
         };
         // --emit-bundle failures don't undo the already-written apply; warn
         // rather than fail.
@@ -488,6 +494,7 @@ impl CliApp {
             && outcome.status == OperationStatus::Succeeded
         {
             inputs.output = final_output.or(inputs.output);
+            inputs.cheats = applied_cheats;
             if let Err(error) = self.emit_apply_bundle(&emit_path, inputs) {
                 tracing::warn!(
                     %error,
@@ -503,9 +510,9 @@ impl CliApp {
     /// `bundle_create_inner`, so the emitted bundle is byte-for-byte what
     /// `bundle create` would write for the same inputs.
     fn emit_apply_bundle(&self, emit_path: &Path, inputs: EmitBundleInputs) -> Result<()> {
-        if inputs.patches.is_empty() {
+        if inputs.patches.is_empty() && inputs.cheats.is_empty() {
             return Err(RomWeaverError::Validation(
-                "--emit-bundle needs at least one applied --patch".to_string(),
+                "--emit-bundle needs at least one applied --patch or --cheat".to_string(),
             ));
         }
         let context = self.context(inputs.threads);
@@ -546,6 +553,7 @@ impl CliApp {
             output_check,
             threads: inputs.threads,
             patch_specs,
+            cheats: inputs.cheats,
             ..BundleCreateCommand::default()
         };
         self.bundle_create_inner(&create, &context)?;
@@ -610,15 +618,16 @@ impl CliApp {
 
     /// The body of `patch apply` after bundle resolution: `args` is a plain,
     /// fully-merged command.
-    fn run_patch_apply_resolved(
-        &self,
-        args: PatchApplyCommand,
-        bundle_resolution: Option<BundleApplyResolution>,
-        original_input: PathBuf,
-        local_bundle: Option<PathBuf>,
-        final_output: &mut Option<PathBuf>,
-        emit_bases: Option<&mut Vec<PatchBasisMode>>,
-    ) -> AppRunOutcome {
+    fn run_patch_apply_resolved(&self, inputs: RunPatchApplyResolvedInputs<'_>) -> AppRunOutcome {
+        let RunPatchApplyResolvedInputs {
+            args,
+            bundle_resolution,
+            original_input,
+            local_bundle,
+            final_output,
+            emit_bases,
+            applied_cheats: _applied_cheats,
+        } = inputs;
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
         let PatchApplyCommand {
@@ -634,6 +643,7 @@ impl CliApp {
             bundle: _,
             with_patches: _,
             without_patches: _,
+            without_cheats: _,
             no_compress,
             compress_format,
             compress_codec,
@@ -657,6 +667,7 @@ impl CliApp {
             code_system,
             code_kind,
             cheat_records,
+            cheat_selection,
             emit_bundle: _,
             tui: _,
             force,
@@ -689,7 +700,24 @@ impl CliApp {
                 direct_step_ids.as_slice(),
             ));
         let has_manual_cheats = !codes.is_empty();
-        let has_database_cheats = !cheat_records.is_empty();
+        // `--cheat` resolves to records only once the input ROM is resolved, so
+        // the flag - not the (still empty) record list - decides whether this
+        // run has database cheats. A bundle's recorded cheats count the same.
+        let native_cheat_selection = !cheat_selection.cheats.is_empty();
+        // Native-only: resolving a bundle cheat reads the local cheat database.
+        #[cfg(not(target_arch = "wasm32"))]
+        let bundle_cheats = bundle_resolution
+            .as_ref()
+            .map(|resolution| resolution.cheats.clone())
+            .unwrap_or_default();
+        #[cfg(target_arch = "wasm32")]
+        let bundle_cheats: Vec<BundleCheatEntry> = Vec::new();
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut cheat_records = cheat_records;
+        #[cfg(target_arch = "wasm32")]
+        let cheat_records = cheat_records;
+        let has_database_cheats =
+            !cheat_records.is_empty() || native_cheat_selection || !bundle_cheats.is_empty();
         let has_cheats = has_manual_cheats || has_database_cheats;
         let discover_implicit_patches = patches.is_empty() && !has_cheats && !no_extract;
         let input_kind_filter =
@@ -758,30 +786,10 @@ impl CliApp {
             return self.finish("patch-apply", report);
         }
         if dry_run {
-            let Some(output) = output.as_deref() else {
-                return self.finish(
-                    "patch-apply",
-                    fail(
-                        "validate",
-                        "--dry-run requires --output when the output path cannot be inferred before selecting an archive member".to_string(),
-                    ),
-                );
-            };
-            for patch in &patches {
-                if let Some(report) = self.require_readable_path(
-                    "patch-apply",
-                    OperationFamily::Patch,
-                    None,
-                    patch,
-                    probe_threads.clone(),
-                ) {
-                    return self.finish("patch-apply", report);
-                }
-            }
-            let report = self.patch_apply_dry_run(
+            let report = self.run_patch_apply_dry_run(
                 &input,
                 &patches,
-                output,
+                output.as_deref(),
                 &compression_options,
                 probe_threads.clone(),
             );
@@ -809,15 +817,15 @@ impl CliApp {
             no_compress,
             "patch apply route resolved"
         );
-        let discovered_sidecars = if discover_implicit_patches && !is_disc {
-            match self.discover_patch_apply_sidecars(&input, &select, no_ignore, &context) {
-                Ok(discovered) => discovered,
-                Err(error) => {
-                    return self.finish("patch-apply", fail("prepare", error.to_string()));
-                }
-            }
-        } else {
-            DiscoveredPatchApplySidecars::default()
+        let discovered_sidecars = match self.discover_patch_apply_sidecars_for_run(
+            discover_implicit_patches && !is_disc,
+            &input,
+            &select,
+            no_ignore,
+            &context,
+        ) {
+            Ok(discovered) => discovered,
+            Err(error) => return self.finish("patch-apply", fail("prepare", error.to_string())),
         };
         if patches.is_empty() {
             patches = discovered_sidecars.patches.clone();
@@ -834,30 +842,17 @@ impl CliApp {
         let mut expected_input_size: Option<u64> = None;
         // Input-check precedence is CLI > bundle > file name; any conflict
         // names the bundle source that introduced it.
-        if !ignore_checksum_validation
-            && let Some(resolution) = &bundle_resolution
-            && let Some(report) = self.merge_patch_apply_bundle_requirements(
-                resolution,
-                disc_context.is_some(),
-                &mut expected_input_checksums,
-                &mut expected_input_size,
-                &mut expected_output_checksums,
-                probe_threads.clone(),
-            )
-        {
-            return self.finish("patch-apply", report);
-        }
-        if !ignore_checksum_validation
-            && let Some(first_patch) = patches.first()
-            && let Some(patch_name) = first_patch.file_name().and_then(|name| name.to_str())
-            && let Some(report) = self.merge_filename_requirements(
-                "patch-apply",
-                first_patch,
-                patch_name,
-                &mut expected_input_checksums,
-                &mut expected_input_size,
-                probe_threads.clone(),
-            )
+        if let Some(report) =
+            self.merge_patch_apply_requirements(MergePatchApplyRequirementsInputs {
+                ignore_checksum_validation,
+                bundle_resolution: bundle_resolution.as_ref(),
+                is_disc: disc_context.is_some(),
+                patches: &patches,
+                expected_input_checksums: &mut expected_input_checksums,
+                expected_input_size: &mut expected_input_size,
+                expected_output_checksums: &mut expected_output_checksums,
+                probe_threads: probe_threads.clone(),
+            })
         {
             return self.finish("patch-apply", report);
         }
@@ -1067,6 +1062,31 @@ impl CliApp {
             return self.finish("patch-apply", fail("validate", error.to_string()));
         }
 
+        // Resolve the bundle's recorded cheats and `--cheat` against the
+        // resolved input ROM. Both bake after the patch chain, like the
+        // webapp's. Native-only: the cheat database lives on disk.
+        #[cfg(not(target_arch = "wasm32"))]
+        let skipped_bundle_cheats = match self.resolve_patch_apply_cheats(
+            &resolved_input,
+            &bundle_cheats,
+            &cheat_selection,
+            native_cheat_selection,
+            &context,
+        ) {
+            Ok(cheats) => {
+                cheat_records.extend(cheats.rom_records);
+                _applied_cheats.extend(cheats.applied);
+                cheats.skipped
+            }
+            Err(error) => {
+                Self::cleanup_temp_paths(&temp_paths);
+                return self.finish("patch-apply", fail("prepare", error.to_string()));
+            }
+        };
+        // Now that the selection is resolved, the record list - not the flags -
+        // says whether this run bakes anything.
+        let has_database_cheats = !cheat_records.is_empty();
+
         // Bake cheat codes into a synthetic IPS patch applied after the explicit
         // patches, so a cheat wins over a patch that touches the same byte and a
         // checksum-carrying patch still sees the ROM it was built for. Offsets
@@ -1095,7 +1115,35 @@ impl CliApp {
         }
 
         let mut terminal_output_for_apply = None;
-        let report = if resolved_patches.is_empty() && !has_database_cheats {
+        #[cfg(not(target_arch = "wasm32"))]
+        let every_bundle_cheat_skipped = resolved_patches.is_empty()
+            && !has_database_cheats
+            && !skipped_bundle_cheats.is_empty();
+        #[cfg(target_arch = "wasm32")]
+        let every_bundle_cheat_skipped = false;
+        let report = if every_bundle_cheat_skipped {
+            // Every recorded cheat was optional and unresolvable, so the run
+            // has no patch and no cheat left: say which ones went missing
+            // rather than report a bare "not executed".
+            #[cfg(not(target_arch = "wasm32"))]
+            let detail = skipped_bundle_cheats
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            #[cfg(target_arch = "wasm32")]
+            let detail = String::new();
+            OperationReport::failed(
+                OperationFamily::Patch,
+                Some("cheat".to_string()),
+                "validate",
+                format!(
+                    "every cheat this bundle records was skipped, so there is nothing to apply: \
+                     {detail}"
+                ),
+                probe_threads.clone(),
+            )
+        } else if resolved_patches.is_empty() && !has_database_cheats {
             OperationReport::failed(
                 OperationFamily::Patch,
                 None,
@@ -1304,6 +1352,7 @@ impl CliApp {
                     context: &context,
                     temp_paths: &mut temp_paths,
                     cheat_records: &cheat_records,
+                    allow_cheat_conflicts: cheat_selection.allow_cheat_conflicts,
                 }) {
                     Ok(outcome) => outcome,
                     Err(report) => return *report,
@@ -1574,10 +1623,72 @@ impl CliApp {
         {
             report.label = format!("{}; {}", report.label, summary.label());
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        if report.status == OperationStatus::Succeeded && !skipped_bundle_cheats.is_empty() {
+            report.label = format!(
+                "{}; skipped {} optional bundle cheat(s): {}",
+                report.label,
+                skipped_bundle_cheats.len(),
+                skipped_bundle_cheats
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
 
         *final_output = terminal_output_for_apply;
         Self::cleanup_temp_paths(&temp_paths);
         self.finish("patch-apply", report)
+    }
+
+    /// Fold the bundle's declared checks and then the first patch's file name
+    /// into the expected input/output requirements. Precedence runs CLI, then
+    /// bundle, then file name, so the bundle merges first and the file name
+    /// only fills what is still unset. Returns the first conflicting report.
+    fn merge_patch_apply_requirements(
+        &self,
+        inputs: MergePatchApplyRequirementsInputs<'_>,
+    ) -> Option<OperationReport> {
+        let MergePatchApplyRequirementsInputs {
+            ignore_checksum_validation,
+            bundle_resolution,
+            is_disc,
+            patches,
+            expected_input_checksums,
+            expected_input_size,
+            expected_output_checksums,
+            probe_threads,
+        } = inputs;
+        if ignore_checksum_validation {
+            return None;
+        }
+        if let Some(resolution) = bundle_resolution
+            && let Some(report) = self.merge_patch_apply_bundle_requirements(
+                resolution,
+                is_disc,
+                expected_input_checksums,
+                expected_input_size,
+                expected_output_checksums,
+                probe_threads.clone(),
+            )
+        {
+            return Some(report);
+        }
+        if let Some(first_patch) = patches.first()
+            && let Some(patch_name) = first_patch.file_name().and_then(|name| name.to_str())
+            && let Some(report) = self.merge_filename_requirements(
+                "patch-apply",
+                first_patch,
+                patch_name,
+                expected_input_checksums,
+                expected_input_size,
+                probe_threads,
+            )
+        {
+            return Some(report);
+        }
+        None
     }
 
     fn merge_patch_apply_bundle_requirements(
@@ -3394,6 +3505,7 @@ struct RunPatchApplyLoopInputs<'a> {
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
     cheat_records: &'a [CheatRecord],
+    allow_cheat_conflicts: bool,
 }
 
 /// Which end of a bundle chain step a `BundlePatchInput` reference names. The
@@ -3443,6 +3555,27 @@ struct ChainSourceInputs<'a> {
     generated_member_flags: AutoExtractResolutionFlags,
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
+}
+
+struct RunPatchApplyResolvedInputs<'a> {
+    args: PatchApplyCommand,
+    bundle_resolution: Option<BundleApplyResolution>,
+    original_input: PathBuf,
+    local_bundle: Option<PathBuf>,
+    final_output: &'a mut Option<PathBuf>,
+    emit_bases: Option<&'a mut Vec<PatchBasisMode>>,
+    applied_cheats: &'a mut Vec<BundleCheatEntry>,
+}
+
+struct MergePatchApplyRequirementsInputs<'a> {
+    ignore_checksum_validation: bool,
+    bundle_resolution: Option<&'a BundleApplyResolution>,
+    is_disc: bool,
+    patches: &'a [PathBuf],
+    expected_input_checksums: &'a mut BTreeMap<String, String>,
+    expected_input_size: &'a mut Option<u64>,
+    expected_output_checksums: &'a mut BTreeMap<String, String>,
+    probe_threads: Option<ThreadExecution>,
 }
 
 struct LaneVerificationInputs<'a> {
@@ -3560,6 +3693,7 @@ impl CliApp {
             context,
             temp_paths,
             cheat_records,
+            allow_cheat_conflicts,
         } = inputs;
         let patch_count = resolved_patches.len() + usize::from(!cheat_records.is_empty());
         let mut current_input = apply_input;
@@ -4046,6 +4180,17 @@ impl CliApp {
         }
 
         if !cheat_records.is_empty() {
+            self.emit_running(
+                OperationLabel {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: Some("cheat"),
+                },
+                "apply",
+                format!("baking {} database cheat(s)", cheat_records.len()),
+                Some(0.0),
+                None,
+            );
             let mut rom = fs::read(&current_input).map_err(|error| {
                 Box::new(OperationReport::failed(
                     OperationFamily::Patch,
@@ -4055,16 +4200,17 @@ impl CliApp {
                     context.single_thread_execution(),
                 ))
             })?;
-            let (writes, summary) = Self::resolve_database_cheat_writes(&rom, cheat_records)
-                .map_err(|error| {
-                    Box::new(OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some("cheat".to_string()),
-                        "validate",
-                        error.to_string(),
-                        context.single_thread_execution(),
-                    ))
-                })?;
+            let (writes, summary) =
+                Self::resolve_database_cheat_writes(&rom, cheat_records, allow_cheat_conflicts)
+                    .map_err(|error| {
+                        Box::new(OperationReport::failed(
+                            OperationFamily::Patch,
+                            Some("cheat".to_string()),
+                            "validate",
+                            error.to_string(),
+                            context.single_thread_execution(),
+                        ))
+                    })?;
             cheats::apply_writes(&mut rom, summary.system, &writes).map_err(|error| {
                 Box::new(OperationReport::failed(
                     OperationFamily::Patch,
@@ -4633,6 +4779,57 @@ impl CliApp {
             ensure_output_available(&plan.output_path, force).map_err(&fail)?;
         }
         Ok(plan)
+    }
+
+    /// Discover RetroArch-style sidecar patches beside the input, or yield an
+    /// empty set when this run does not look for them (explicit patches were
+    /// given, cheats supply the work, or the input is a disc).
+    fn discover_patch_apply_sidecars_for_run(
+        &self,
+        discover: bool,
+        input: &Path,
+        select: &[String],
+        no_ignore: bool,
+        context: &OperationContext,
+    ) -> Result<DiscoveredPatchApplySidecars> {
+        if !discover {
+            return Ok(DiscoveredPatchApplySidecars::default());
+        }
+        self.discover_patch_apply_sidecars(input, select, no_ignore, context)
+    }
+
+    /// Validate the `--dry-run` preconditions, then plan the apply without
+    /// writing bytes. The output path MUST be given: with no bytes written
+    /// there is no archive member to infer it from.
+    fn run_patch_apply_dry_run(
+        &self,
+        input: &Path,
+        patches: &[PathBuf],
+        output: Option<&Path>,
+        compression_options: &PatchApplyCompressionOptions,
+        probe_threads: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let Some(output) = output else {
+            return OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                "--dry-run requires --output when the output path cannot be inferred before selecting an archive member".to_string(),
+                probe_threads,
+            );
+        };
+        for patch in patches {
+            if let Some(report) = self.require_readable_path(
+                "patch-apply",
+                OperationFamily::Patch,
+                None,
+                patch,
+                probe_threads.clone(),
+            ) {
+                return report;
+            }
+        }
+        self.patch_apply_dry_run(input, patches, output, compression_options, probe_threads)
     }
 
     fn patch_apply_dry_run(

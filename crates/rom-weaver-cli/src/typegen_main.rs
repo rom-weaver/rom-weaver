@@ -1,11 +1,11 @@
 use std::{env, fs, path::Path};
 
 use rom_weaver_app::{
-    BundleCheckState, BundleChecks, BundleCommands, BundleCreateCommand, BundleCreateResult,
-    BundleOutput, BundleParseCommand, BundleParseResult, BundlePatchEntry, BundlePatchInput,
-    BundlePatchSource, BundleRom, BundleSourceKind, BundleSourceRef, CheatCommand,
-    CheatCommandResult, CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatTarget,
-    CheatWrite, CheatWriteConflict, ChecksumCommand, ClassifiedCheatRecord, Commands,
+    BundleCheatEntry, BundleCheckState, BundleChecks, BundleCommands, BundleCreateCommand,
+    BundleCreateResult, BundleOutput, BundleParseCommand, BundleParseResult, BundlePatchEntry,
+    BundlePatchInput, BundlePatchSource, BundleRom, BundleSourceKind, BundleSourceRef,
+    CheatCommand, CheatCommandResult, CheatKind, CheatRecord, CheatResolution, CheatSystem,
+    CheatTarget, CheatWrite, CheatWriteConflict, ChecksumCommand, ClassifiedCheatRecord, Commands,
     CompressCommand, CompressionLevelProfile, ExtractCommand, ExtractStepDetails,
     ExtractedFileEntry, FilterKind, IdentifyCommand, IdentifyComponent, IdentifyDatabaseCommands,
     IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
@@ -249,6 +249,7 @@ fn render_types() -> String {
         export_decl::<BundleRom>(&config),
         export_decl::<BundlePatchInput>(&config),
         export_decl::<BundlePatchEntry>(&config),
+        export_decl::<BundleCheatEntry>(&config),
         export_decl::<BundleOutput>(&config),
         export_decl::<RomWeaverBundle>(&config),
         export_decl::<BundleSourceKind>(&config),

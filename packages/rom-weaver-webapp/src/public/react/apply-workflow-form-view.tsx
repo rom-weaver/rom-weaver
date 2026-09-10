@@ -112,13 +112,14 @@ const EmulatorJsAction = ({
   platform?: string;
   shown: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   if (!(output && shown)) return null;
   if (!core) {
     const unavailableLabel = platform?.trim()
-      ? `Cannot test ${platform.trim()} with EmulatorJS`
-      : "Cannot test this ROM with EmulatorJS";
+      ? localizer.message("ui.apply.emulator.unavailablePlatform", { platform: platform.trim() })
+      : localizer.message("ui.apply.emulator.unavailable");
     return (
       <div className="emulatorjs-test">
         <button className="btn play" disabled id="rom-weaver-button-test-emulator" type="button">
@@ -138,7 +139,7 @@ const EmulatorJsAction = ({
           await prepareEntry(retained.id);
           retained = getApplyEntry(fileName) || getApplyEntry();
         }
-        if (!retained?.checksum) throw new Error("The retained ROM has no SHA-1 checksum.");
+        if (!retained?.checksum) throw new Error(localizer.message("ui.apply.emulator.missingChecksum"));
         const { gameName } = createEmulatorGameIdentity({ checksum: retained.checksum, fileName: retained.fileName });
         prepareEmulatorAudioContext(gameName);
         setCurrentGame(retained.id);
@@ -148,7 +149,7 @@ const EmulatorJsAction = ({
       }
       prepareEmulatorAudioContext();
       const blob = await output.getBlob?.();
-      if (!blob) throw new Error("The finished output cannot be opened in EmulatorJS.");
+      if (!blob) throw new Error(localizer.message("ui.apply.emulator.unavailableOutput"));
       const loaded = await loadEmulatorRom(blob, output.fileName);
       const entry = {
         blob: loaded.blob,
@@ -167,7 +168,7 @@ const EmulatorJsAction = ({
       requestEmulatorStartFromUserAction(gameName);
       onSelectView?.("test");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not prepare the output for EmulatorJS.");
+      setError(reason instanceof Error ? reason.message : localizer.message("ui.apply.emulator.prepareFailed"));
     } finally {
       setLoading(false);
     }
@@ -183,7 +184,9 @@ const EmulatorJsAction = ({
         type="button"
       >
         <Gamepad2 aria-hidden="true" />
-        <span className="play-label">{loading ? "Preparing emulator…" : "Open in the Test tab"}</span>
+        <span className="play-label">
+          {loading ? localizer.message("ui.apply.emulator.preparing") : localizer.message("ui.apply.emulator.openTest")}
+        </span>
         <span className="play-core mono">{core}</span>
       </button>
       {error ? (
@@ -243,50 +246,61 @@ const usePendingCardMorph = (pendingCount: number, _resolvedCount: number) => {
   }, [pendingCount]);
 };
 
-const PendingDropCard = ({ drop }: { drop: PendingDrop }) => (
-  <FileCard
-    className="pending-card"
-    meta={
-      <StageStatus
-        id={`rom-weaver-progress-identify-${drop.id}`}
-        label={drop.bundle ? "Reading bundle" : drop.entryCount === undefined ? "Identifying" : "Identified"}
-        percent={null}
-      />
-    }
-    name={<ExtractName fileName={drop.name} />}
-    stageBar="indeterminate"
-  >
-    {drop.extracting ? (
-      <Drawer
-        bodyClassName="taskbody"
-        className="extract-d"
-        label="Files"
-        labelIcon={<Archive aria-hidden="true" />}
-        readouts={
-          drop.entryCount === undefined ? undefined : (
-            <DrawerReadout>
-              {drop.entryCount} {drop.entryCount === 1 ? "item" : "items"}
-            </DrawerReadout>
-          )
-        }
-      >
-        <span />
-      </Drawer>
-    ) : null}
-    {drop.kind === "rom" && drop.sheet ? (
-      <Drawer className="cue rw-cue-section" label={drop.sheet} labelIcon={<Disc3 aria-hidden="true" />}>
-        <span />
-      </Drawer>
-    ) : null}
-    {/* Same drawer order the resolved ROM card uses: sheets, Identify, Checks. */}
-    {drop.kind === "rom" ? <PendingIdentifyDrawer /> : null}
-    {drop.kind === "rom" ? (
-      <Drawer bodyClassName="ckrows" label="Checks" labelIcon={<ListChecks aria-hidden="true" />}>
-        <span />
-      </Drawer>
-    ) : null}
-  </FileCard>
-);
+const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <FileCard
+      className="pending-card"
+      meta={
+        <StageStatus
+          id={`rom-weaver-progress-identify-${drop.id}`}
+          label={
+            drop.bundle
+              ? localizer.message("ui.apply.drop.readingBundle")
+              : drop.entryCount === undefined
+                ? localizer.message("ui.apply.drop.identifying")
+                : localizer.message("ui.apply.drop.identified")
+          }
+          percent={null}
+        />
+      }
+      name={<ExtractName fileName={drop.name} />}
+      stageBar="indeterminate"
+    >
+      {drop.extracting ? (
+        <Drawer
+          bodyClassName="taskbody"
+          className="extract-d"
+          label={localizer.message("ui.apply.files")}
+          labelIcon={<Archive aria-hidden="true" />}
+          readouts={
+            drop.entryCount === undefined ? undefined : (
+              <DrawerReadout>{localizer.message("ui.apply.itemCount", { count: drop.entryCount })}</DrawerReadout>
+            )
+          }
+        >
+          <span />
+        </Drawer>
+      ) : null}
+      {drop.kind === "rom" && drop.sheet ? (
+        <Drawer className="cue rw-cue-section" label={drop.sheet} labelIcon={<Disc3 aria-hidden="true" />}>
+          <span />
+        </Drawer>
+      ) : null}
+      {/* Same drawer order the resolved ROM card uses: sheets, Identify, Checks. */}
+      {drop.kind === "rom" ? <PendingIdentifyDrawer /> : null}
+      {drop.kind === "rom" ? (
+        <Drawer
+          bodyClassName="ckrows"
+          label={localizer.message("ui.apply.tutorial.checks")}
+          labelIcon={<ListChecks aria-hidden="true" />}
+        >
+          <span />
+        </Drawer>
+      ) : null}
+    </FileCard>
+  );
+};
 
 const ApplyDropAfter = ({
   downloadHref,
@@ -305,6 +319,7 @@ const ApplyDropAfter = ({
   sampleLoading: boolean;
   workflowEmpty: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   if (pendingDrops.length) {
     return (
@@ -321,106 +336,109 @@ const ApplyDropAfter = ({
   return (
     <SampleTutorialStart
       downloadHref={downloadHref}
-      downloadLabel="Download a test bundle"
+      downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}
       downloadName={FIRST_WEAVE_ASSET}
       error={sampleError}
       guideHref={resolveGuidedSampleHref(assetBaseUrl, "apply")}
-      label="Start guided Apply"
+      label={localizer.message("ui.apply.tutorial.startApply")}
       loading={sampleLoading}
       onStart={onLoadApplySample}
       onSecondaryStart={onLoadBundleSample}
-      secondaryLabel="Create a sharable bundle"
+      secondaryLabel={localizer.message("ui.apply.tutorial.createBundle")}
       secondaryHref={resolveGuidedSampleHref(assetBaseUrl, "bundle")}
     />
   );
 };
 
-const APPLY_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
   {
     actions: [
-      ["checks", "Checks"],
-      ["remove", "Remove"],
+      ["checks", localizer.message("ui.apply.tutorial.checks")],
+      ["remove", localizer.message("ui.apply.tutorial.remove")],
     ],
-    body: "The ROM card keeps its name, source files, checksums, and file controls together.",
+    body: localizer.message("ui.apply.tutorial.rom.body"),
     openDrawers: true,
     target: "#rom-weaver-row-file-rom",
-    title: "Start with the ROM",
+    title: localizer.message("ui.apply.tutorial.rom.title"),
   },
   {
     actions: [
-      ["reorder", "Change patch order"],
-      ["toggle", "Toggle On / Off"],
-      ["header", "Header options"],
-      ["checks", "Checks"],
-      ["menu", "Menu: edit metadata · replace · remove"],
+      ["reorder", localizer.message("ui.apply.tutorial.moveUp")],
+      ["reorder", localizer.message("ui.apply.tutorial.moveDown")],
+      ["toggle", localizer.message("ui.apply.tutorial.toggle")],
+      ["header", localizer.message("ui.apply.tutorial.header")],
+      ["checks", localizer.message("ui.apply.tutorial.checks")],
+      ["replace", localizer.message("ui.apply.tutorial.replacePatch")],
+      ["menu", localizer.message("ui.apply.tutorial.patchDetails")],
     ],
-    body: "Both IPS patches target the original ROM, so either order works. Turn either patch off to apply only one change. Use the numbered handles to change the order, scissors for header handling, Checks for checksums, and the 3-dot menu to edit patch metadata, replace a file, or remove it.",
+    body: localizer.message("ui.apply.tutorial.patches.body"),
     openDrawers: true,
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
-    title: "Build the patch stack",
+    title: localizer.message("ui.apply.tutorial.patches.title"),
   },
   {
     actions: [
-      ["drop", "Drop files"],
-      ["drop", "Browse"],
+      ["drop", localizer.message("ui.apply.tutorial.dropFiles")],
+      ["drop", localizer.message("ui.apply.tutorial.browse")],
     ],
-    body: "The compact 0x01 row stays available after setup for more ROMs, patches, bundles, or archives.",
+    body: localizer.message("ui.apply.tutorial.addFiles.body"),
     target: "#rom-weaver-row-unified-drop",
-    title: "Add files at any time",
+    title: localizer.message("ui.apply.tutorial.addFiles.title"),
   },
   {
     actions: [
-      ["options", "Options"],
-      ["apply", "Apply & download"],
+      ["options", localizer.message("ui.apply.tutorial.options")],
+      ["apply", localizer.message("ui.apply.tutorial.applyDownload")],
     ],
-    body: "Choose the output name, format, compression, and header. Then press APPLY & DOWNLOAD to apply both patches.",
+    body: localizer.message("ui.apply.tutorial.output.body"),
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
     target: "#rom-weaver-row-output-file-name",
-    title: "Apply both patches",
+    title: localizer.message("ui.apply.tutorial.output.title"),
   },
 ];
 
-const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+const getBundleSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
   {
     actions: [
-      ["checks", "Checks"],
-      ["remove", "Remove"],
+      ["checks", localizer.message("ui.apply.tutorial.checks")],
+      ["remove", localizer.message("ui.apply.tutorial.remove")],
     ],
-    body: "A bundle is a recipe, so it starts with the ROM the patches expect. The sample uses a tiny legal practice ROM.",
+    body: localizer.message("ui.apply.bundleTutorial.rom.body"),
     openDrawers: true,
     target: "#rom-weaver-row-file-rom",
-    title: "Check the starting ROM",
+    title: localizer.message("ui.apply.bundleTutorial.rom.title"),
   },
   {
     actions: [
-      ["reorder", "Change patch order"],
-      ["toggle", "Required or optional"],
-      ["menu", "Patch details"],
+      ["reorder", localizer.message("ui.apply.tutorial.moveUp")],
+      ["reorder", localizer.message("ui.apply.tutorial.moveDown")],
+      ["toggle", localizer.message("ui.apply.bundleTutorial.optional")],
+      ["menu", localizer.message("ui.apply.tutorial.patchDetails")],
     ],
-    body: "These patches target the original ROM, so players can change their order or skip either one. Use Patch details to edit each patch's label, version, author, and description.",
+    body: localizer.message("ui.apply.bundleTutorial.patches.body"),
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
-    title: "Describe the patch recipe",
+    title: localizer.message("ui.apply.bundleTutorial.patches.title"),
   },
   {
-    actions: [["package", "Bundle + patches (.zip)"]],
-    body: "The bundle download is separate from Apply. Bundle + patches (.zip) shares the recipe and patch files without putting a copyrighted ROM in the download.",
+    actions: [["package", localizer.message("ui.apply.bundleTutorial.bundlePatches")]],
+    body: localizer.message("ui.apply.bundleTutorial.safeBundle.body"),
     openDrawers: true,
     placement: "top",
     target: "#rom-weaver-bundle-job",
-    title: "Choose a safe bundle",
+    title: localizer.message("ui.apply.bundleTutorial.safeBundle.title"),
   },
   {
-    actions: [["package", "Share bundle"]],
-    body: "Exporting a recipe does not apply patches. Press Share bundle to check and download the setup; the same control then becomes Download ZIP Bundle.",
+    actions: [["package", localizer.message("ui.bundleExport.share")]],
+    body: localizer.message("ui.apply.bundleTutorial.download.body"),
     cta: "#rom-weaver-button-export-bundle",
     openDrawers: true,
     placement: "top",
     target: "#rom-weaver-bundle-job",
-    title: "Build and download",
+    title: localizer.message("ui.apply.bundleTutorial.download.title"),
   },
 ];
 
@@ -430,15 +448,17 @@ const BUNDLE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
  */
 
 /** Full registry support, listed in the 0x01 info popover. */
-const APPLY_SUPPORTED_FILES = [
-  { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
-  { extensions: PATCH_FILE_EXTENSIONS, label: "Patches" },
-  { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
-] as const;
+const getApplySupportedFiles = (localizer: ReturnType<typeof useUiLocalizer>) =>
+  [
+    { extensions: ROM_FILE_EXTENSIONS, label: localizer.message("ui.apply.fileTypes.roms") },
+    { extensions: PATCH_FILE_EXTENSIONS, label: localizer.message("ui.apply.fileTypes.patches") },
+    { extensions: ARCHIVE_FILE_EXTENSIONS, label: localizer.message("ui.apply.fileTypes.archives") },
+  ] as const;
 
 const TIMING_LABEL = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
-const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing ? `${prefix} ${timing}` : undefined);
+const checksumTimingLabel = (timing: string | undefined, localizer: ReturnType<typeof useUiLocalizer>) =>
+  timing ? localizer.message("ui.apply.checksumTiming", { timing }) : undefined;
 
 /** Render a backend ROM type tag as "PLATFORM · DISC" (e.g. "PSX · CD"); empty when unknown. */
 const formatRomTypeTag = (romType: { platform?: string; discFormat?: string } | undefined): string => {
@@ -737,6 +757,7 @@ const buildPatchIdentificationLookup = (identification: RomIdentificationState |
 /** Dependencies threaded into the ROM-row renderers. */
 type RomRowDeps = {
   identificationStates: ReadonlyMap<string, RomIdentificationState>;
+  localizer: ReturnType<typeof useUiLocalizer>;
   romInputs: RomInputRowState[];
   verificationStates: Map<string, "bad" | "ok">;
   ui: PatcherUiController;
@@ -839,11 +860,18 @@ const buildDiscFileEntries = (romInput: RomInputRowState, romBytes: number | und
  * header cannot change the digit count, since ROM sizes are powers of two and none
  * sit within a header's length below a power of ten.
  */
-const buildPendingChecksumGroups = (romInput: RomInputRowState, romBytes: number | undefined) => {
+const buildPendingChecksumGroups = (
+  romInput: RomInputRowState,
+  romBytes: number | undefined,
+  localizer: ReturnType<typeof useUiLocalizer>,
+) => {
   const romByteCount = typeof romBytes === "number" && Number.isFinite(romBytes) ? Math.floor(romBytes) : undefined;
   const rows = [
     { label: "CRC32", length: 8 },
-    { label: "BYTES", length: romByteCount === undefined ? 8 : String(romByteCount).length },
+    {
+      label: localizer.message("ui.apply.bytes"),
+      length: romByteCount === undefined ? 8 : String(romByteCount).length,
+    },
     { label: "MD5", length: 32 },
     { label: "SHA-1", length: 40 },
   ];
@@ -867,6 +895,7 @@ const buildExpectedChecks = (deps: RomRowDeps) => {
 
 const renderRomCardMeta = (input: {
   identificationStatus: RomInputRowState["info"]["identificationStatus"];
+  localizer: ReturnType<typeof useUiLocalizer>;
   percent: number | null;
   stageLabel: string;
   staging: boolean;
@@ -877,7 +906,7 @@ const renderRomCardMeta = (input: {
      database that never loaded is not a ROM verdict at all - it reads as a quiet
      note beside the file, never as a checksum or patching failure. */
   if (input.identificationStatus === "unavailable") {
-    return <span className="rb mono muted">Title lookup unavailable</span>;
+    return <span className="rb mono muted">{input.localizer.message("ui.apply.titleLookupUnavailable")}</span>;
   }
   if (input.identificationStatus === "ambiguous") {
     return <span className="rb mono muted">{IDENTIFY_STATUS_LABEL.ambiguous}</span>;
@@ -896,7 +925,7 @@ const resolveRomCardState = (
 };
 
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
-  const { romInputs, verificationStates, ui } = deps;
+  const { localizer, romInputs, verificationStates, ui } = deps;
   const identification = resolveRomIdentification(romInput, deps.identificationStates.get(romInput.id));
   const identificationLookup = romInput.info.identification || buildPatchIdentificationLookup(identification);
   const state = resolveRomCardState(verificationStates.get(romInput.id), identification?.status);
@@ -904,12 +933,16 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   // A container ROM extracts and checksums in one pass (Rust hashes inline), so it
   // sits in the "extract" phase throughout - show both verbs. Phase comes from the
   // runtime stage, not the label text, so the verb survives stageless ticks.
-  const stageLabel = stageStatusLabel("Checksumming", romInput.info.validationPhase === "extract");
+  const stageLabel = stageStatusLabel(
+    localizer.message("ui.apply.checksumming"),
+    romInput.info.validationPhase === "extract",
+    localizer,
+  );
   const romBytes = romInput.size ?? romInput.sourceSize;
   const romTypeTag = formatRomTypeTag(romInput.info.romType);
   const hasDiscSheet = romInput.kind === "track";
   const fileEntries = buildDiscFileEntries(romInput, romBytes, hasDiscSheet);
-  const pendingGroups = buildPendingChecksumGroups(romInput, romBytes);
+  const pendingGroups = buildPendingChecksumGroups(romInput, romBytes, localizer);
   // Reserve one skeleton group per planned variant, from Rust's early `probe-variant-plan` event
   // (settled once the header is scanned, before the checksums finish), so the Checks panel starts at
   // its resolved height instead of growing group-by-group as values stream in. Without a plan yet,
@@ -935,6 +968,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
       identified: !staging && identification?.status === "matched",
       meta: renderRomCardMeta({
         identificationStatus: romInput.info.identificationStatus,
+        localizer,
         percent,
         stageLabel,
         staging,
@@ -960,12 +994,12 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
           onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
           open: staging ? true : romInput.info.checksumsExpanded,
           pending: staging ? pendingGroups : undefined,
-          timing: staging ? undefined : CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
+          timing: staging ? undefined : checksumTimingLabel(romInput.info.checksumTiming, localizer),
           trim: staging ? undefined : romInput.info.romProbe?.trim,
         },
         ...(hasDiscSheet && romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
       },
-      removeLabel: romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input",
+      removeLabel: localizer.message(romInputs.length > 1 ? "ui.apply.removeRom" : "ui.apply.clearRom"),
       stageBar: stageBarValue(staging, percent),
       state,
     },
@@ -989,12 +1023,13 @@ const discGroupDisplayName = (
   groupRows: RomInputRowState[],
   cueRow: RomInputRowState | undefined,
   firstTrackName: string | undefined,
+  localizer: ReturnType<typeof useUiLocalizer>,
 ): string => {
   const archiveFileName = groupRows.find((row) => row.archivePathEntries?.length)?.archivePathEntries?.[0]?.fileName;
   return (
     (archiveFileName && discDisplayName(archiveFileName)) ||
     (cueRow?.info.fileName && discDisplayName(cueRow.info.fileName)) ||
-    (firstTrackName ? discDisplayName(firstTrackName) : "Disc")
+    (firstTrackName ? discDisplayName(firstTrackName) : localizer.message("ui.apply.disc"))
   );
 };
 
@@ -1078,7 +1113,7 @@ const renderDiscGroup = (
   rows: Array<{ row: RomInputRowState; index: number }>,
   deps: RomRowDeps,
 ): WorkflowRomInputStepItem => {
-  const { romInputs, verificationStates, ui } = deps;
+  const { localizer, romInputs, verificationStates, ui } = deps;
   const groupRows = rows.map((entry) => entry.row);
   const cueRow = groupRows.find((row) => row.kind === "cue");
   const gdiRow = groupRows.find((row) => row.kind === "gdi");
@@ -1090,7 +1125,7 @@ const renderDiscGroup = (
   const discRomType = groupRows.find((row) => row.info.romType?.platform || row.info.romType?.discFormat)?.info.romType;
   const discRomTypeTag = formatRomTypeTag(discRomType);
   const firstTrackName = trackRows[0]?.info.fileName;
-  const discName = discGroupDisplayName(groupRows, cueRow, firstTrackName);
+  const discName = discGroupDisplayName(groupRows, cueRow, firstTrackName, localizer);
   const sheetEntries = buildDiscSheetEntries({
     cueRow,
     cueText,
@@ -1139,8 +1174,9 @@ const renderDiscGroup = (
       },
       meta: renderRomCardMeta({
         identificationStatus: undefined,
+        localizer,
         percent: overallPercent,
-        stageLabel: "Checksumming…",
+        stageLabel: localizer.message("ui.apply.checksummingProgress"),
         staging,
         statusId: `rom-weaver-progress-disc-${groupId}`,
       }),
@@ -1149,12 +1185,12 @@ const renderDiscGroup = (
         ...(discIdentification ? { identification: discIdentification } : {}),
         identifyPending: staging,
         ...(discRomTypeTag ? { platformTag: discRomTypeTag } : {}),
-        info: { timing: CHECKSUM_TIMING_LABEL(trackRows[0]?.info.checksumTiming) },
+        info: { timing: checksumTimingLabel(trackRows[0]?.info.checksumTiming, localizer) },
         tracks,
         ...(cueText ? { cue: { cueText } } : {}),
         ...(gdiText ? { gdi: { gdiText } } : {}),
       },
-      removeLabel: "Remove disc",
+      removeLabel: localizer.message("ui.apply.removeDisc"),
       stageBar: stageBarValue(staging, overallPercent),
       state,
     },
@@ -1199,33 +1235,46 @@ const readEmbeddedCheck = (
 const checkDeclaredChecksum = (input: {
   algorithm: string;
   index: number;
+  localizer: ReturnType<typeof useUiLocalizer>;
   patch: PatchStackItemState | undefined;
   rawValue: string;
   side: "input" | "output";
 }): string => {
-  const { algorithm, index, side } = input;
+  const { algorithm, index, localizer, side } = input;
   const normalizedAlgorithm = algorithm.toLowerCase().replace("sha-1", "sha1");
   const value = input.rawValue.trim().toLowerCase();
   if (!value) return "";
   const length = CHECKSUM_HEX_LENGTHS[normalizedAlgorithm];
   if (!(length && new RegExp(`^[0-9a-f]{${length}}$`).test(value))) {
-    return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} is malformed`;
+    return localizer.message("ui.apply.validation.malformedChecksum", {
+      algorithm: algorithm.toUpperCase(),
+      index: index + 1,
+      side,
+    });
   }
   const embedded = readEmbeddedCheck(input.patch, side, normalizedAlgorithm);
   if (embedded && embedded !== value) {
-    return `Patch ${index + 1} ${side} ${algorithm.toUpperCase()} conflicts with the checksum built into the patch`;
+    return localizer.message("ui.apply.validation.conflictingChecksum", {
+      algorithm: algorithm.toUpperCase(),
+      index: index + 1,
+      side,
+    });
   }
   return "";
 };
 
-const getBundleVerificationError = (bundleMeta: Array<BundlePatchMeta | undefined>, patches: PatchStackItemState[]) => {
+const getBundleVerificationError = (
+  bundleMeta: Array<BundlePatchMeta | undefined>,
+  patches: PatchStackItemState[],
+  localizer: ReturnType<typeof useUiLocalizer>,
+) => {
   for (const [index, meta] of bundleMeta.entries()) {
     for (const [side, checks] of [
       ["input", meta?.inputChecks?.checksums],
       ["output", meta?.outputChecks?.checksums],
     ] as const) {
       for (const [algorithm, rawValue] of Object.entries(checks || {})) {
-        const error = checkDeclaredChecksum({ algorithm, index, patch: patches[index], rawValue, side });
+        const error = checkDeclaredChecksum({ algorithm, index, localizer, patch: patches[index], rawValue, side });
         if (error) return error;
       }
     }
@@ -1250,36 +1299,39 @@ const OutputHeaderField = ({
   value?: "auto" | "keep" | "strip";
   visible: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   if (!visible) return null;
   const extensionsDiffer = !!headeredExtension && !!headerlessExtension && headeredExtension !== headerlessExtension;
   const info = {
     items: [
-      `Auto keeps headers emulators require (iNES/FDS/LNX/A78) and drops junk copier headers (SNES/PCE/Game Doctor)${retained ? "" : " - this ROM's header is copier junk, so auto drops it"}.`,
-      "Keep header: the patched output carries the ROM header (re-added if it was stripped for patching).",
-      "Headerless: the patched output has no ROM header (stripped from the output if the patch ran on the headered bytes).",
+      localizer.message(retained ? "ui.apply.header.autoRetain" : "ui.apply.header.autoStrip"),
+      localizer.message("ui.apply.header.keepInfo"),
+      localizer.message("ui.apply.header.stripInfo"),
       ...(extensionsDiffer
-        ? [
-            `The output extension follows the choice: ${headeredExtension} with the header, ${headerlessExtension} without.`,
-          ]
+        ? [localizer.message("ui.apply.header.extensionInfo", { headeredExtension, headerlessExtension })]
         : []),
     ],
-    summary:
-      "Whether the patched output carries the ROM's copier header. Separate from the per-patch strip choice, which only controls what bytes the patch applies against.",
-    title: "Output Header",
+    summary: localizer.message("ui.apply.header.summary"),
+    title: localizer.message("ui.apply.header.title"),
   };
   return (
-    <OutputField label="Output Header" labelInfo={<FieldInfoToggle info={info} label="Output Header" />}>
+    <OutputField
+      label={localizer.message("ui.apply.header.title")}
+      labelInfo={<FieldInfoToggle info={info} label={localizer.message("ui.apply.header.title")} />}
+    >
       <DropdownSelect
-        aria-label="Output Header"
+        aria-label={localizer.message("ui.apply.header.title")}
         className="select"
         disabled={disabled}
         id="rom-weaver-select-output-header"
         onChange={(event) => onChange(event.currentTarget.value as "auto" | "keep" | "strip")}
         value={value || "auto"}
       >
-        <option value="auto">auto ({retained ? "keep" : "strip"})</option>
-        <option value="keep">keep</option>
-        <option value="strip">strip</option>
+        <option value="auto">
+          {localizer.message(retained ? "ui.apply.header.autoKeep" : "ui.apply.header.autoStripOption")}
+        </option>
+        <option value="keep">{localizer.message("ui.apply.header.keep")}</option>
+        <option value="strip">{localizer.message("ui.apply.header.strip")}</option>
       </DropdownSelect>
     </OutputField>
   );
@@ -1330,6 +1382,7 @@ const PostApplyBehaviorFields = ({
   downloadSetting: unknown;
   testSetting: unknown;
 }) => {
+  const localizer = useUiLocalizer();
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
   const testValue = usePostApplyTestBehaviorValue(testSetting);
   return (
@@ -1337,7 +1390,7 @@ const PostApplyBehaviorFields = ({
       <PostApplyActionField
         disabled={disabled}
         id="rom-weaver-select-post-apply-download"
-        label="Post Apply Download"
+        label={localizer.message("ui.apply.postDownload")}
         onChange={setPostApplyDownloadBehaviorOverride}
         options={POST_APPLY_DOWNLOAD_BEHAVIOR_OPTIONS}
         value={downloadValue}
@@ -1345,7 +1398,7 @@ const PostApplyBehaviorFields = ({
       <PostApplyActionField
         disabled={disabled}
         id="rom-weaver-select-post-apply-test"
-        label="Post Apply Test"
+        label={localizer.message("ui.apply.postTest")}
         onChange={setPostApplyTestBehaviorOverride}
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
@@ -1364,10 +1417,11 @@ const BundleExportAction = ({
   bundleExport: BundleExportState;
   disabled: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   if (bundleExport.busy) {
     return (
       <ProgressActionButton
-        cancelLabel="Cancel bundle export"
+        cancelLabel={localizer.message("ui.apply.cancelBundleExport")}
         disabled
         label={bundleActionLabel}
         onCancel={bundleExport.cancelExport}
@@ -1417,6 +1471,7 @@ const ChecksumOverrideRow = ({
   state: ReturnType<PatcherUiController["getState"]>["checksumOverride"];
   uiController: PatcherUiController;
 }) => {
+  const localizer = useUiLocalizer();
   if (!state.visible) return null;
   return (
     <label className="checkrow warn">
@@ -1427,7 +1482,7 @@ const ChecksumOverrideRow = ({
         onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
         type="checkbox"
       />
-      <span>{state.label}</span>
+      <span>{localizer.message("ui.apply.validation.overrideChecksum")}</span>
     </label>
   );
 };
@@ -1557,13 +1612,13 @@ const BundleOutputFields = ({
   const localizer = useUiLocalizer();
   const exportTypeInfo = {
     items: [
-      "A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM; it is not a pre-patched ROM.",
-      "The required rom-weaver-bundle.json index contains the schema version, optional ROM description/checks, ordered patch entries, and optional output defaults/checks. Patch entries carry their sources, selections, header rules, and expected ROM-state checks.",
-      "The archive holds that index plus the patch files. Including the original ROM is optional, while a patch-only bundle carries its ROM checks and asks the player to provide the matching file.",
-      "The bundle supplies instructions and verification data; rom-weaver still performs the patching when the player applies it.",
+      localizer.message("ui.apply.archive.info.recipe"),
+      localizer.message("ui.apply.archive.info.index"),
+      localizer.message("ui.apply.archive.info.contents"),
+      localizer.message("ui.apply.archive.info.apply"),
     ],
-    summary: "Exports this session as a portable rom-weaver bundle defined by rom-weaver-bundle.json.",
-    title: "Archive",
+    summary: localizer.message("ui.apply.archive.summary"),
+    title: localizer.message("ui.apply.archive.title"),
   };
   if (!bundleExport) return null;
   const archiveType = bundleExport.format === "7z" ? "7z" : "zip";
@@ -1574,11 +1629,11 @@ const BundleOutputFields = ({
     <div className="bundle-job-fields">
       <OutputField
         className="export-type-field"
-        label="Archive type"
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label="Archive type" />}
+        label={localizer.message("ui.apply.archive.type")}
+        labelInfo={<FieldInfoToggle info={exportTypeInfo} label={localizer.message("ui.apply.archive.type")} />}
       >
         <DropdownSelect
-          aria-label="Archive type"
+          aria-label={localizer.message("ui.apply.archive.type")}
           className="select"
           disabled={bundleExport.busy}
           id="rom-weaver-bundle-export-format"
@@ -1667,19 +1722,24 @@ const BundleSecondaryJob = ({
   );
 };
 
-const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compressTiming?: string): ReactNode => {
+const renderApplyTimingMeta = (
+  applyDone: boolean,
+  localizer: ReturnType<typeof useUiLocalizer>,
+  applyTiming?: string,
+  compressTiming?: string,
+): ReactNode => {
   if (applyDone) {
     return (
       <>
         {applyTiming ? (
           <span className="rb mono done-chip">
-            <span className="k">Apply</span>
+            <span className="k">{localizer.message("ui.step.apply")}</span>
             <span className="t">{applyTiming}</span>
           </span>
         ) : null}
         {compressTiming ? (
           <span className="rb mono done-chip" style={{ animationDelay: "0.19s" }}>
-            <span className="k">Compress</span>
+            <span className="k">{localizer.message("ui.apply.compress")}</span>
             <span className="t">{compressTiming}</span>
           </span>
         ) : null}
@@ -1689,7 +1749,7 @@ const renderApplyTimingMeta = (applyDone: boolean, applyTiming?: string, compres
   if (!applyTiming) return undefined;
   return (
     <span className="rb mono">
-      <span className="k">Apply</span>
+      <span className="k">{localizer.message("ui.step.apply")}</span>
       <span className="t">{applyTiming}</span>
     </span>
   );
@@ -1724,6 +1784,7 @@ const useGuidedSampleLoader = (input: {
   onDrop: (files: File[]) => void;
   onStartBundle: () => void;
 }) => {
+  const localizer = useUiLocalizer();
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
   const [sampleTutorial, setSampleTutorial] = useState<"apply" | "bundle" | null>(null);
@@ -1741,7 +1802,7 @@ const useGuidedSampleLoader = (input: {
       input.onDrop([sample]);
     } catch {
       setSampleTutorial(null);
-      setSampleError("Could not load the sample. Try again.");
+      setSampleError(localizer.message("ui.apply.tutorial.sampleLoadFailed"));
     } finally {
       setSampleLoading(false);
     }
@@ -1787,6 +1848,7 @@ const buildRomRowDeps = (input: {
   expectedRomChecks: ParsedBundleChecks | undefined;
   expectedDatabaseChecksums: Record<string, string> | undefined;
   identificationStates: ReadonlyMap<string, RomIdentificationState>;
+  localizer: ReturnType<typeof useUiLocalizer>;
   romInputs: RomInputRowState[];
   romVerificationStates: RomRowDeps["verificationStates"];
   singleRom: boolean;
@@ -1795,6 +1857,7 @@ const buildRomRowDeps = (input: {
   const { expectedRomChecks, singleRom } = input;
   return {
     identificationStates: input.identificationStates,
+    localizer: input.localizer,
     romInputs: input.romInputs,
     ui: input.uiController,
     verificationStates: input.romVerificationStates,
@@ -1888,6 +1951,7 @@ function ApplyWorkflowFormView({
 
   const fileInputAccept = getFileInputAcceptAttributes();
   const dismissSectionNotice = (key: PatcherSectionNoticeKey) => () => uiController.dismissNotice?.(key);
+  const localizer = useUiLocalizer();
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
@@ -1904,7 +1968,7 @@ function ApplyWorkflowFormView({
     return id ? { id, ...metadata } : metadata;
   });
   const bundleVerificationError =
-    getBundleVerificationError(bundleMeta, patches) ||
+    getBundleVerificationError(bundleMeta, patches, localizer) ||
     validatePatchDependencies(
       bundleMeta.map((meta, index) => ({
         enabled: !disabledPatchFlags[index],
@@ -1927,7 +1991,6 @@ function ApplyWorkflowFormView({
   });
   const disabledPatchCount = disabledPatchFlags.filter(Boolean).length;
   const enabledPatchCount = patches.length - disabledPatchCount;
-  const localizer = useUiLocalizer();
   const settings = useRomWeaverSettings();
   // Inputs/patches still resolving - surfaced only on the selvage status strip.
   const inputsStaging =
@@ -2022,6 +2085,7 @@ function ApplyWorkflowFormView({
     expectedDatabaseChecksums: databaseOnlyChecks(expectedRomChecks, expectedRomIdentification)?.checksums,
     expectedRomChecks,
     identificationStates: romIdentificationStates,
+    localizer,
     romInputs,
     romVerificationStates,
     singleRom,
@@ -2096,29 +2160,25 @@ function ApplyWorkflowFormView({
   const workflowActuallyEmpty = !(workflowHasContent || dropStarted || manualRomLookup);
   const workflowEmpty = useFlatTransitionFlag(workflowActuallyEmpty);
   usePendingCardMorph(pendingDrops.length, romInputs.length + patches.length);
-  // "Needs input" directives forward to the 0x01 unified picker.
+  // "Needs input" directives forward to the unified picker.
   const openUnifiedPicker = () => document.getElementById("rom-weaver-input-file-unified")?.click();
   // Each section keeps its empty fixture whenever its own list is empty - not
   // just when the whole workflow is - so loading only a ROM (or only patches)
-  // still shows the other section's "add it in 0x01" prompt instead of a bare
+  // still shows the other section's prompt instead of a bare
   // header.
   /* Patches without a ROM leave 0x02 empty and the hero gone, so the checksum
      search the hero carried follows the gap here: the ROM can still be named
      before it exists. It leaves once a match or a derived check answers. */
   const romNeedsInput = (
     <>
-      <NeedsInput onClick={openUnifiedPicker}>
-        Add ROM in <b className="hexref mono">0x01</b> or click for any input
-      </NeedsInput>
+      <NeedsInput onClick={openUnifiedPicker}>{localizer.message("ui.apply.needsRom")}</NeedsInput>
       {canSearchRomHash && !manualRomLookup ? (
         <RomHashSearch localizer={localizer} lookup={romHashLookup} variant="section" />
       ) : null}
     </>
   );
   const patchesNeedsInput = (
-    <NeedsInput onClick={openUnifiedPicker}>
-      Add patches in <b className="hexref mono">0x01</b> or click for any input
-    </NeedsInput>
+    <NeedsInput onClick={openUnifiedPicker}>{localizer.message("ui.apply.needsPatches")}</NeedsInput>
   );
   const renderOutputAction = (
     <ApplyOutputAction
@@ -2159,7 +2219,7 @@ function ApplyWorkflowFormView({
     return (
       <section className="panel" id="rom-weaver-container">
         <div className="step-body">
-          <Notice level="error">{startup.message || "rom-weaver failed to load."}</Notice>
+          <Notice level="error">{startup.message || localizer.message("ui.apply.loadFailed")}</Notice>
         </div>
       </section>
     );
@@ -2169,7 +2229,7 @@ function ApplyWorkflowFormView({
     <section className={formReady ? "panel form-ready" : "panel"} id="rom-weaver-container">
       <UnifiedDropZone
         accept={fileInputAccept.unifiedApply}
-        addLabel={romInputs.length ? "Replace the ROM or add patches" : "Add the ROM or patches"}
+        addLabel={localizer.message(romInputs.length ? "ui.apply.add.replaceOrPatches" : "ui.apply.add.romOrPatches")}
         afterDropZone={
           <>
             <ApplyDropAfter
@@ -2192,24 +2252,21 @@ function ApplyWorkflowFormView({
           </>
         }
         big={workflowEmpty}
-        heroLabel="Drop or click to add ROMs, patches, bundles, or archives"
-        heroLabelCoarse="Tap to add ROMs, patches, bundles, or archives"
+        heroLabel={localizer.message("ui.apply.drop.hero")}
+        heroLabelCoarse={localizer.message("ui.apply.drop.heroCoarse")}
         id="rom-weaver-row-unified-drop"
         info={
           <ul className="info-list">
-            <li>Nested archives are decompressed; ROMs and patches are located automatically.</li>
-            <li>chd, rvz, and z3ds will be decompressed to raw formats before patching.</li>
-            <li>
-              A rom-weaver bundle is a portable patch recipe: a rom-weaver-bundle.json index, archived with its patches
-              and optionally a ROM.
-            </li>
-            <li>RetroArch softpatch naming is supported.</li>
+            <li>{localizer.message("ui.apply.drop.info.nested")}</li>
+            <li>{localizer.message("ui.apply.drop.info.compressed")}</li>
+            <li>{localizer.message("ui.apply.drop.info.bundle")}</li>
+            <li>{localizer.message("ui.apply.drop.info.retroArch")}</li>
           </ul>
         }
         inputId="rom-weaver-input-file-unified"
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDrop}
-        supported={APPLY_SUPPORTED_FILES}
+        supported={getApplySupportedFiles(localizer)}
       />
       {workflowEmpty ? (
         <GhostSteps
@@ -2230,7 +2287,7 @@ function ApplyWorkflowFormView({
                     expectation={romExpectation}
                     identification={manualRomLookup?.identification ?? expectedRomIdentification}
                     {...(manualRomLookup
-                      ? { onRemove: clearManualRomLookup, removeLabel: "Clear the expected ROM" }
+                      ? { onRemove: clearManualRomLookup, removeLabel: localizer.message("ui.apply.clearExpectedRom") }
                       : {})}
                   />
                   {/* A pasted checksum is the user's guess, so the search stays
@@ -2247,26 +2304,15 @@ function ApplyWorkflowFormView({
             fault={applyFailed}
             id="rom-weaver-row-file-rom"
             info={
-              <InfoPopover title="Input handling">
-                <strong>Input handling</strong>
+              <InfoPopover title={localizer.message("ui.apply.inputHandling.title")}>
+                <strong>{localizer.message("ui.apply.inputHandling.title")}</strong>
                 <ul>
-                  <li>Archives are decompressed; we find the ROM or let you choose.</li>
-                  <li>chd, rvz/wia/gcz, and z3ds files are decompressed before patching.</li>
-                  <li>Nested archives (7z in rar, chd in 7z, …) are handled recursively.</li>
-                  <li>
-                    A rom-weaver bundle is a portable recipe for applying a specific patch chain to a ROM. Its{" "}
-                    <code>rom-weaver-bundle.json</code> file is the required index. The JSON contains the schema
-                    version, optional ROM description/checks, ordered patch entries, and optional output
-                    defaults/checks.
-                  </li>
-                  <li>
-                    Patch entries can be required or optional, carry names/descriptions and default selections, point to
-                    URLs or bundle-relative files, and record header rules and expected ROM-state checks.
-                  </li>
-                  <li>
-                    A bundle can be a standalone JSON file or an archive containing that file and its patch files. It
-                    may include the ROM too; otherwise, provide the matching ROM separately.
-                  </li>
+                  <li>{localizer.message("ui.apply.inputHandling.archives")}</li>
+                  <li>{localizer.message("ui.apply.inputHandling.compressed")}</li>
+                  <li>{localizer.message("ui.apply.inputHandling.nested")}</li>
+                  <li>{localizer.message("ui.apply.inputHandling.bundleIndex")}</li>
+                  <li>{localizer.message("ui.apply.inputHandling.patchEntries")}</li>
+                  <li>{localizer.message("ui.apply.inputHandling.bundleContents")}</li>
                   <li>
                     <a href="https://docs.libretro.com/guides/softpatching/" rel="noreferrer" target="_blank">
                       RetroArch softpatch format
@@ -2297,7 +2343,7 @@ function ApplyWorkflowFormView({
               </>
             }
             num="0x02"
-            title="ROM"
+            title={localizer.message("ui.step.rom")}
             woven={wovenSteps}
           />
 
@@ -2345,7 +2391,7 @@ function ApplyWorkflowFormView({
               fields: outputState.compress?.fields,
               format: compressHeaderFormat,
               formatId: "rom-weaver-select-output-format-compress",
-              formatLabel: "Compression type",
+              formatLabel: localizer.message("ui.apply.compressionType"),
               formatOptions: compressionTypeOptions,
               formatValue: outputState.compressionFormat,
               note: outputState.compress?.note,
@@ -2358,22 +2404,22 @@ function ApplyWorkflowFormView({
             fault={applyFailed}
             fileName={outputState.displayFileName}
             fileNameId="rom-weaver-input-output-file-name"
-            fileNamePlaceholder="Output filename (no extension)"
+            fileNamePlaceholder={localizer.message("ui.apply.outputFilename")}
             format={outputState.compressionFormat}
             formatId="rom-weaver-select-output-format"
             formatOptions={outputState.options}
             id="rom-weaver-row-output-file-name"
             info={
-              <InfoPopover title="Output options">
-                <strong>Output</strong>
+              <InfoPopover title={localizer.message("ui.apply.outputOptions.title")}>
+                <strong>{localizer.message("ui.apply.outputOptions.output")}</strong>
                 <ul>
-                  <li>Set the filename without an extension - the format selector controls it.</li>
-                  <li>Container formats (zip, 7z, chd, rvz) are produced directly.</li>
-                  <li>Compression defaults come from Settings › Compression and apply to compressed output.</li>
+                  <li>{localizer.message("ui.apply.outputOptions.filename")}</li>
+                  <li>{localizer.message("ui.apply.outputOptions.containers")}</li>
+                  <li>{localizer.message("ui.apply.outputOptions.compression")}</li>
                 </ul>
               </InfoPopover>
             }
-            meta={renderApplyTimingMeta(applyDone, outputState.applyTiming, outputState.compressTiming)}
+            meta={renderApplyTimingMeta(applyDone, localizer, outputState.applyTiming, outputState.compressTiming)}
             nameSource={
               outputState.identifiedName
                 ? {
@@ -2394,7 +2440,7 @@ function ApplyWorkflowFormView({
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
             secondary={bundleSecondaryJob}
-            title="Apply"
+            title={localizer.message("ui.step.apply")}
             woven={applyDone || running}
           />
           {applyDone && onSelectTab ? <RelatedStrip entryKey="patcher" onSelectTab={onSelectTab} /> : null}
@@ -2403,10 +2449,14 @@ function ApplyWorkflowFormView({
 
       {sampleTutorial ? (
         <SampleTutorial
-          loadingBody="RomWeaver is unpacking one tiny ROM and two patches, then checking what each file is."
+          loadingBody={localizer.message("ui.apply.tutorial.loading")}
           onClose={closeSampleTutorial}
           ready={sampleTutorialReady}
-          steps={sampleTutorial === "bundle" ? BUNDLE_SAMPLE_TUTORIAL_STEPS : APPLY_SAMPLE_TUTORIAL_STEPS}
+          steps={
+            sampleTutorial === "bundle"
+              ? getBundleSampleTutorialSteps(localizer)
+              : getApplySampleTutorialSteps(localizer)
+          }
         />
       ) : null}
     </section>

@@ -456,7 +456,7 @@ export type TrimCommand = { input: Array<string>, output?: string, extension?: s
  */
 rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, force?: boolean, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, patch_select?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>,
+export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, patch_select?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, without_cheats?: boolean, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>,
 /**
  * Stable patch output IDs for direct JSON/WASM apply runs.
  */
@@ -612,6 +612,31 @@ header?: PatchApplyHeaderMode,
  */
 basis?: PatchInputBasis, };
 
+export type BundleCheatEntry = {
+/**
+ * Cheat database record ID. An exact description is also accepted, so a
+ * hand-authored bundle can name a cheat the way `cheat list` prints it.
+ */
+id: string,
+/**
+ * Which database the ID belongs to, for example `libretro-database`.
+ */
+source?: string,
+/**
+ * The database revision the selection was made against.
+ */
+revision?: string, description?: string,
+/**
+ * Raw code snapshot, so the entry still applies when the local cheat
+ * database is absent.
+ */
+code?: string,
+/**
+ * An optional cheat is skipped (and named in the report) when it cannot
+ * be resolved; omitted/false makes an unresolvable entry fail the apply.
+ */
+optional?: boolean, };
+
 export type BundleOutput = {
 /**
  * Default output file name.
@@ -652,7 +677,12 @@ checkStates?: Array<BundleCheckState>, rom?: BundleRom,
 /**
  * Ordered: array order is the apply order.
  */
-patches: Array<BundlePatchEntry>, output?: BundleOutput, };
+patches: Array<BundlePatchEntry>,
+/**
+ * Cheat selections baked into the ROM after the patch chain, in selection
+ * order. Optional: a bundle without it is a plain patch recipe.
+ */
+cheats?: Array<BundleCheatEntry>, output?: BundleOutput, };
 
 export type BundleSourceKind = "json" | "compressed-json" | "archive";
 
@@ -710,7 +740,12 @@ patch_input?: Array<BundlePatchInput | null>,
 /**
  * Index-aligned cumulative execution targets from the JSON/WASM surface.
  */
-patch_target?: Array<BundlePatchInput | null>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode, output: string, bundle?: string,
+patch_target?: Array<BundlePatchInput | null>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode,
+/**
+ * Cheat selections to record in the bundle. The wasm/JSON boundary sets
+ * this directly; the native CLI fills it from `--cheat`/`--cht`.
+ */
+cheats?: Array<BundleCheatEntry>, output: string, bundle?: string,
 /**
  * Optional packaged ROM payload. Checks are still calculated from `rom`.
  */

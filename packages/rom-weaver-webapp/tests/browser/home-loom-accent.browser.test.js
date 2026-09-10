@@ -48,7 +48,7 @@ test("the hero loom redyes its bands when the accent changes", async () => {
   host.style.width = "560px";
   document.body.append(host);
   root = createRoot(host);
-  root.render(createElement(HomeLoom));
+  root.render(createElement(HomeLoom, { ariaLabel: "The original ROM has three patches." }));
   await new Promise((resolve) => setTimeout(resolve, INTRO_MS));
 
   const canvas = host.querySelector("canvas");

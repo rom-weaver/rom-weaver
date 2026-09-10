@@ -1,5 +1,7 @@
 import { HomeLoom } from "./home-loom.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 
 /**
  * The apex route. Every other route is a workflow the visitor has already
@@ -60,39 +62,41 @@ const CHECKSUMS = ["CRC32", "MD5", "SHA-1", "SHA-256", "BLAKE3"];
  * read from storage here renders a different tree on the client and fails
  * hydration. Identify, Trim and Undo PPF are beta and reached from More.
  */
-const buildFlows = (route: (slug: string) => string): Flow[] => [
+const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow[] => [
   {
-    bring: "A ROM and one or more patches, in any order you choose.",
-    get: "The patched ROM with checksums checked. Save the chain as a bundle to replay or share it.",
+    bring: localizer.message("ui.home.flowApplyBring"),
+    get: localizer.message("ui.home.flowApplyGet"),
     href: route("apply-patch"),
     primary: true,
-    title: "Apply Patch",
+    title: localizer.message("ui.home.flowApply"),
   },
   {
     bring: (
       <>
-        A patch chain you have set up in Apply, or a <code>rom-weaver-bundle.json</code> someone sent you.
+        {localizer.message("ui.home.flowBundleBringBefore")} <code>rom-weaver-bundle.json</code>{" "}
+        {localizer.message("ui.home.flowBundleBringAfter")}
       </>
     ),
-    get: "One file that pins patch order, expected checksums, and output names. Open it and the workflow is ready to run.",
+    get: localizer.message("ui.home.flowBundleGet"),
     href: `${route("apply-patch")}?guide=bundle`,
-    title: "Bundle",
+    title: localizer.message("ui.home.flowBundle"),
   },
   {
-    bring: "An original file and your modified copy.",
-    get: "A patch in the format you choose, small enough to share.",
+    bring: localizer.message("ui.home.flowCreateBring"),
+    get: localizer.message("ui.home.flowCreateGet"),
     href: route("create-patch"),
-    title: "Create Patch",
+    title: localizer.message("ui.home.flowCreate"),
   },
   {
-    bring: "A ROM you just patched, or one from disk.",
-    get: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
+    bring: localizer.message("ui.home.flowTestBring"),
+    get: localizer.message("ui.home.flowTestGet"),
     href: route("test-rom"),
-    title: "Test ROM",
+    title: localizer.message("ui.home.flowTest"),
   },
 ];
 
 const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
+  const localizer = useUiLocalizer();
   const route = (slug: string) => {
     try {
       return new URL(slug, baseUrl).pathname;
@@ -100,46 +104,44 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
       return `/${slug}`;
     }
   };
-  const flows = buildFlows(route);
+  const flows = buildFlows(route, localizer);
 
   return (
     <section aria-labelledby="home-title" className="home-page" id="panel-home">
       <div className="home-wrap home-hero">
         <div className="home-hero-head">
-          <p className="home-eyebrow">Your ROM and disc image toolkit</p>
+          <p className="home-eyebrow">{localizer.message("ui.home.eyebrow")}</p>
           <h1 id="home-title">
-            Your ROMs. Your changes. <em>All on your device.</em>
+            {localizer.message("ui.home.title")} <em>{localizer.message("ui.home.titleEmphasis")}</em>
           </h1>
         </div>
         <div className="home-hero-body">
-          <p className="home-lede">
-            Apply translations, combine patches, and create patches of your own. Work with ROMs and disc images,
-            compressed or raw, in your browser or terminal. Save your patch order and checksums in a reusable bundle so
-            others can apply the same changes.
-          </p>
+          <p className="home-lede">{localizer.message("ui.home.lede")}</p>
           <div className="home-cta">
             <a className="btn primary lg" href={route("apply-patch")}>
-              Apply a patch
+              {localizer.message("ui.home.applyPatchCta")}
               <ArrowIcon />
             </a>
             <a className="btn ghost lg" href="#home-cli">
-              Install the CLI
+              {localizer.message("ui.home.installCli")}
             </a>
           </div>
           <p className="home-try">
-            New here? <a href={resolveGuidedSampleHref(baseUrl, "apply")}>Walk through the sample</a>: a tiny homebrew
-            NES ROM and two patches, already in order.
+            {localizer.message("ui.home.tryBefore")}{" "}
+            <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
+            {localizer.message("ui.home.tryAfter")}
           </p>
         </div>
         <div className="home-loom">
           <div className="home-loom-frame">
-            <span className="home-loom-tag">apply · 3 patches · in order</span>
-            <HomeLoom />
+            <span className="home-loom-tag">{localizer.message("ui.home.loomTag")}</span>
+            <HomeLoom ariaLabel={localizer.message("ui.home.loomAriaLabel")} />
             <div className="home-loom-legend">
               <span className="row">
                 <i style={{ background: "var(--warp-b)" }} />
                 <span>
-                  <span className="k">source </span>Original ROM
+                  <span className="k">{localizer.message("ui.home.loomSource")} </span>
+                  {localizer.message("ui.home.loomOriginalRom")}
                   <span className="sum">
                     {" · "}
                     <code>sha1 ✓</code>
@@ -149,54 +151,48 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="row">
                 <i style={{ background: "var(--loom-weft-1)" }} />
                 <span>
-                  <span className="k">patch 1 </span>translation.bps
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })} </span>translation.bps
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-2)" }} />
                 <span>
-                  <span className="k">patch 2 </span>bugfix.ips
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })} </span>bugfix.ips
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-3)" }} />
                 <span>
-                  <span className="k">patch 3 </span>undub.xdelta
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })} </span>undub.xdelta
                 </span>
               </span>
             </div>
           </div>
-          <p className="home-loom-caption">
-            One pass, no unpacking by hand, no intermediate files. Save it as a bundle and the order is kept for the
-            next person.
-          </p>
+          <p className="home-loom-caption">{localizer.message("ui.home.loomCaption")}</p>
         </div>
       </div>
 
       <div className="home-wrap home-section">
         <div className="home-section-head">
-          <p className="home-eyebrow">Pick a workflow</p>
-          <h2>Start from the files on your disk.</h2>
-          <p>
-            Every workflow takes files you already have and gives back one file you can keep, share, or play. A bundle
-            is how a workflow itself gets shared.
-          </p>
+          <p className="home-eyebrow">{localizer.message("ui.home.workflowsEyebrow")}</p>
+          <h2>{localizer.message("ui.home.workflowsTitle")}</h2>
+          <p>{localizer.message("ui.home.workflowsDescription")}</p>
         </div>
         <div className="home-flows">
           {flows.map((flow) => (
             <a className={flow.primary ? "home-flow is-primary" : "home-flow"} href={flow.href} key={flow.title}>
               <h3>
                 {flow.title}
-                {flow.primary ? <span className="badge">most used</span> : null}
+                {flow.primary ? <span className="badge">{localizer.message("ui.home.mostUsed")}</span> : null}
               </h3>
               <dl>
-                <dt>Bring</dt>
+                <dt>{localizer.message("ui.home.bring")}</dt>
                 <dd>{flow.bring}</dd>
-                <dt>Get</dt>
+                <dt>{localizer.message("ui.home.get")}</dt>
                 <dd>{flow.get}</dd>
               </dl>
               <span className="go">
-                Open {flow.title}
+                {localizer.message("ui.home.openFlow", { flow: flow.title })}
                 <ArrowIcon />
               </span>
             </a>
@@ -206,55 +202,55 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
 
       <div className="home-wrap home-section" id="home-cli">
         <div className="home-section-head">
-          <p className="home-eyebrow">One engine, two frontends</p>
-          <h2>The same Rust core, in a tab or in a shell.</h2>
-          <p>Pick the one that fits the job. Output bytes are identical either way.</p>
+          <p className="home-eyebrow">{localizer.message("ui.home.frontendsEyebrow")}</p>
+          <h2>{localizer.message("ui.home.frontendsTitle")}</h2>
+          <p>{localizer.message("ui.home.frontendsDescription")}</p>
         </div>
         <div className="home-fronts">
           <div className="home-front">
-            <h3>Webapp</h3>
+            <h3>{localizer.message("ui.home.webapp")}</h3>
             <ul>
-              <li>No install, no account. Open a page and drop files in.</li>
-              <li>Install it from the browser menu and it keeps working offline.</li>
-              <li>Files are read and written on your device. No upload ever happens.</li>
-              <li>Open a bundle link and the patch chain is staged for you.</li>
+              <li>{localizer.message("ui.home.webappItem1")}</li>
+              <li>{localizer.message("ui.home.webappItem2")}</li>
+              <li>{localizer.message("ui.home.webappItem3")}</li>
+              <li>{localizer.message("ui.home.webappItem4")}</li>
             </ul>
             <div className="home-install">
-              <span className="k">Open</span>
+              <span className="k">{localizer.message("ui.home.open")}</span>
               <pre>
                 <b>https://</b>rom-weaver.com/apply
               </pre>
             </div>
-            <p className="foot">Want your own copy? Host it yourself from static files or a Docker image.</p>
+            <p className="foot">{localizer.message("ui.home.webappFoot")}</p>
             <div className="home-actions">
               <a className="btn ghost" href={`${route("docs")}/self-hosting`}>
-                Self-hosting guide
+                {localizer.message("ui.home.selfHostingGuide")}
                 <ArrowIcon />
               </a>
             </div>
           </div>
           <div className="home-front">
-            <h3>Command line</h3>
+            <h3>{localizer.message("ui.home.commandLine")}</h3>
             <ul>
-              <li>Native builds for Linux, macOS, and Windows.</li>
-              <li>Every command can print line-delimited JSON for scripts.</li>
-              <li>Batch a whole folder: convert, verify, and patch in one run.</li>
+              <li>{localizer.message("ui.home.cliItem1")}</li>
+              <li>{localizer.message("ui.home.cliItem2")}</li>
+              <li>{localizer.message("ui.home.cliItem3")}</li>
             </ul>
             <div className="home-install">
-              <span className="k">Install with one of</span>
+              <span className="k">{localizer.message("ui.home.installWith")}</span>
               <pre>{`brew install rom-weaver/tap/rom-weaver
 npm install --global rom-weaver
 cargo install rom-weaver-cli
 docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
             </div>
-            <p className="foot">Every install method, with checksums and shell completions, is in the install guide.</p>
+            <p className="foot">{localizer.message("ui.home.cliFoot")}</p>
             <div className="home-actions">
               <a className="btn ghost" href={`${route("docs")}/install`}>
-                Full install guide
+                {localizer.message("ui.home.fullInstallGuide")}
                 <ArrowIcon />
               </a>
               <a className="btn ghost" href={`${route("docs")}/cli-get-started`}>
-                CLI walkthrough
+                {localizer.message("ui.home.cliWalkthrough")}
               </a>
             </div>
           </div>
@@ -263,13 +259,13 @@ docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
 
       <div className="home-wrap home-section">
         <div className="home-section-head">
-          <p className="home-eyebrow">What it reads and writes</p>
-          <h2>Every console generation brought its own format. Bring all of them.</h2>
+          <p className="home-eyebrow">{localizer.message("ui.home.formatsEyebrow")}</p>
+          <h2>{localizer.message("ui.home.formatsTitle")}</h2>
         </div>
         <div className="home-formats">
           <div className="home-fmt-row">
             <div className="k">
-              Containers <small>reads</small>
+              {localizer.message("ui.home.containers")} <small>{localizer.message("ui.home.reads")}</small>
             </div>
             <div className="home-chips">
               {CONTAINERS_READ.map((name) => (
@@ -277,12 +273,12 @@ docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
                   {name}
                 </span>
               ))}
-              <span className="more">and nested archives</span>
+              <span className="more">{localizer.message("ui.home.nestedArchives")}</span>
             </div>
           </div>
           <div className="home-fmt-row">
             <div className="k">
-              Containers <small>writes</small>
+              {localizer.message("ui.home.containers")} <small>{localizer.message("ui.home.writes")}</small>
             </div>
             <div className="home-chips">
               {CONTAINERS_WRITE.map((name) => (
@@ -290,12 +286,12 @@ docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
                   {name}
                 </span>
               ))}
-              <span className="more">with codec-aware compression settings</span>
+              <span className="more">{localizer.message("ui.home.codecCompressionSettings")}</span>
             </div>
           </div>
           <div className="home-fmt-row">
             <div className="k">
-              Patches <small>reads and writes</small>
+              {localizer.message("ui.home.patches")} <small>{localizer.message("ui.home.readsAndWrites")}</small>
             </div>
             <div className="home-chips">
               {PATCH_FORMATS.map((name) => (
@@ -304,19 +300,19 @@ docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
                 </span>
               ))}
               <span className="more">
-                <a href={`${route("docs")}/supported-formats`}>full table</a>
+                <a href={`${route("docs")}/supported-formats`}>{localizer.message("ui.home.fullTable")}</a>
               </span>
             </div>
           </div>
           <div className="home-fmt-row">
-            <div className="k">Checksums</div>
+            <div className="k">{localizer.message("ui.home.checksums")}</div>
             <div className="home-chips">
               {CHECKSUMS.map((name) => (
                 <span className="home-chip" key={name}>
                   {name}
                 </span>
               ))}
-              <span className="more">with copier-header detection and repair</span>
+              <span className="more">{localizer.message("ui.home.copierHeader")}</span>
             </div>
           </div>
         </div>
@@ -324,36 +320,30 @@ docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
 
       <div className="home-wrap home-section">
         <div className="home-section-head">
-          <p className="home-eyebrow">Why local-first</p>
-          <h2>Your collection is yours. The tool should act like it.</h2>
+          <p className="home-eyebrow">{localizer.message("ui.home.localFirstEyebrow")}</p>
+          <h2>{localizer.message("ui.home.localFirstTitle")}</h2>
         </div>
         <div className="home-promises">
           <div className="home-promise">
             <h3>
               <CheckIcon />
-              Files stay on the device
+              {localizer.message("ui.home.filesStay")}
             </h3>
-            <p>
-              The webapp runs the same engine as the CLI, compiled to WebAssembly and running in worker threads. There
-              is no server to send anything to.
-            </p>
+            <p>{localizer.message("ui.home.filesStayDescription")}</p>
           </div>
           <div className="home-promise">
             <h3>
               <CheckIcon />
-              The bundle is the proof
+              {localizer.message("ui.home.bundleProof")}
             </h3>
-            <p>
-              A bundle records the input checksum, every patch in order, and the expected output. Months later you can
-              show where a file came from, or hand the bundle to someone and they get the same bytes.
-            </p>
+            <p>{localizer.message("ui.home.bundleProofDescription")}</p>
           </div>
           <div className="home-promise">
             <h3>
               <CheckIcon />
-              Open source, forever
+              {localizer.message("ui.home.openSource")}
             </h3>
-            <p>AGPL-3.0 licensed. Read the code, build it yourself, or host the webapp on your own domain.</p>
+            <p>{localizer.message("ui.home.openSourceDescription")}</p>
           </div>
         </div>
       </div>
