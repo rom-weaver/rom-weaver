@@ -114,6 +114,7 @@ rom-weaver patch create \
   --solid-extended \
   --output infinite-lives.solid
 ```
+
 ## Use the cheat database instead of typing codes
 
 Install the shards once:
