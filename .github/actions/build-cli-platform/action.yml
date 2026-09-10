@@ -37,6 +37,13 @@ inputs:
       Save the cargo cache after a miss. CI saves only on main; the release
       fan-out is restore-only unless its caller says otherwise.
     default: "false"
+  identify-release-tree:
+    description: >-
+      "build" writes the identify release tree from the restored packs before
+      the package is staged; "prebuilt" expects the caller to have placed it at
+      target/identify-release (the release fan-out downloads it as an artifact).
+    required: false
+    default: prebuilt
   registry-url:
     description: >-
       npm registry to configure Node against. The release fan-out needs it for
@@ -125,6 +132,13 @@ runs:
 
     - name: Prepare ROM identify data
       uses: ./.github/actions/identify-data
+
+    # Tree only: the .tar.br archives need GNU tar, which macOS and Windows
+    # runners lack, and nothing here consumes them.
+    - name: Build identify release tree
+      if: inputs.identify-release-tree == 'build'
+      shell: bash
+      run: node scripts/build-identify-release-data.mjs --tree-only
 
     - name: Build release CLI
       if: runner.os != 'Windows' && inputs.build != 'cross'
