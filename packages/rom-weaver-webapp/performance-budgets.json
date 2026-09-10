@@ -4,33 +4,43 @@
     "budgets": [
       {
         "name": "HTML shell",
-        "path": "index.html"
+        "path": "index.html",
+        "expectedRawBytes": 33700,
+        "maxRawBytes": 35400,
+        "expectedBrotliBytes": 7950,
+        "maxBrotliBytes": 8350
       },
       {
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
-        "requireBrotliMinBytes": 1024
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 2225000,
+        "maxRawBytes": 2260000,
+        "expectedBrotliBytes": 584000,
+        "maxBrotliBytes": 592000
       },
       {
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
-        "requireBrotliMinBytes": 1024
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 226500,
+        "maxRawBytes": 231000,
+        "expectedBrotliBytes": 36400,
+        "maxBrotliBytes": 37000
       },
       {
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
-        "requireBrotliMinBytes": 1024
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 7140000,
+        "maxRawBytes": 7350000,
+        "expectedBrotliBytes": 1885000,
+        "maxBrotliBytes": 1960000
       }
-    ],
-    "drift": {
-      "warnPercent": 1,
-      "maxPercent": 6,
-      "floorBytes": 1024,
-      "noiseBytes": 512
-    }
+    ]
   },
   "cssCoverage": {
     "maxUnusedBytes": 52000
