@@ -10,6 +10,31 @@ import { isReleasePullRequest } from "./release-pr.mjs";
 // The route table distinguishes published pages from unpublished maintainer notes in the same folder.
 const PUBLISHED_DOCS = new Set(DOC_SOURCES.map((source) => `docs/${source.file}`));
 
+// These files decide which parts of CI run or set up its shared toolchains. A
+// missed dependency here can skip or break any consumer, so their changes MUST
+// keep the full matrix.
+const FULL_CI_PLUMBING = new Set([
+  "scripts/ci/classify-changes.mjs",
+  "scripts/ci/classify-workflow.mjs",
+  "scripts/ci/install-system-dependencies.mjs",
+  "scripts/ci/mise-disable-tools.mjs",
+  "scripts/ci/release-pr.mjs",
+  "scripts/ci/select-mise-tools.mjs",
+]);
+
+// These deployment and cleanup helpers have repo-lint coverage and do not
+// affect an application build. New CI helpers stay fail-open below until their
+// consumers have the same proof.
+const REPO_LINT_CI_HELPERS = new Set([
+  "scripts/ci/cache-cleanup.mjs",
+  "scripts/ci/cleanup-preview-deployments.sh",
+  "scripts/ci/deploy-pages.mjs",
+  "scripts/ci/deployment-status.mjs",
+  "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
+  "scripts/ci/ensure-cloudflare-pages-project.mjs",
+  "scripts/ci/github-api.mjs",
+]);
+
 const EMPTY = {
   rust: false,
   webapp: false,
@@ -56,7 +81,12 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       path.startsWith(".cargo/") ||
       path === ".config/lefthook.yml" ||
       path === ".config/mise.toml" ||
-      path.startsWith("scripts/ci/")
+      FULL_CI_PLUMBING.has(path) ||
+      (path.startsWith("scripts/ci/") &&
+        !path.endsWith(".test.mjs") &&
+        !REPO_LINT_CI_HELPERS.has(path) &&
+        path !== "scripts/ci/cli-platform-matrix.mjs" &&
+        path !== "scripts/ci/docker-matrix.mjs")
     )
       result.full = true;
 
@@ -89,12 +119,24 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       result.webapp = true;
     }
 
+    if (path === "scripts/ci/cli-platform-matrix.mjs") result.rust = true;
+    if (path === "scripts/ci/docker-matrix.mjs") {
+      result.webapp = true;
+      result.docker_cli = true;
+      result.docker_webapp = true;
+      result.docker_cli_arm64 = true;
+      result.docker_webapp_arm64 = true;
+    }
+
     if (
       path.startsWith("packages/rom-weaver-webapp/") ||
       PUBLISHED_DOCS.has(path) ||
       path === "package.json" ||
       path === "package-lock.json" ||
-      /^scripts\/.*\.mjs$/.test(path) ||
+      // CI helper tests run in repo-lint. Their implementation does not enter
+      // the webapp bundle, and the classifier keeps selection plumbing above
+      // fail-open.
+      /^scripts\/(?!ci\/).*\.mjs$/.test(path) ||
       path.startsWith("scripts/wasm/") ||
       path === ".dockerignore" ||
       path === "docker-compose.yml" ||

@@ -14,6 +14,19 @@ const classifyFor = (eventName, ...paths) =>
     ]),
   );
 const classify = (...paths) => classifyFor(undefined, ...paths);
+const REPO_LINT_ONLY = {
+  rust: "false",
+  webapp: "false",
+  wasm_runtime: "false",
+  security: "false",
+  docker_cli: "false",
+  docker_webapp: "false",
+  docker_cli_arm64: "false",
+  docker_webapp_arm64: "false",
+  docker_prebuilt: "false",
+  repo_lint: "true",
+  full: "false",
+};
 
 test("documentation changes skip compiled stacks", () =>
   assert.deepEqual(classify("README.md", "docs/development/ci.md"), {
@@ -47,6 +60,8 @@ test("webapp changes reuse wasm and skip Rust", () => {
   assert.equal(result.webapp, "true");
   assert.equal(result.wasm_runtime, "false");
 });
+test("root Node scripts keep webapp coverage", () =>
+  assert.equal(classify("scripts/warn-only.mjs").webapp, "true"));
 test("browser runtime changes select the direct WASM browser suite", () => {
   for (const path of [
     "packages/rom-weaver-webapp/src/wasm/browser-opfs-runner.ts",
@@ -321,9 +336,7 @@ test("dependency and CI changes select their broader checks", () => {
   });
   for (const path of [
     ".github/workflows/ci.yml",
-    "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
     "scripts/ci/mise-disable-tools.mjs",
-    "scripts/ci/resolve-wasm-run.mjs",
   ]) {
     assert.deepEqual(
       classify(path),
@@ -342,6 +355,78 @@ test("dependency and CI changes select their broader checks", () => {
       },
       path,
     );
+  }
+});
+
+test("CI helper tests select repo lint without compiled stacks", () => {
+  for (const path of [
+    "scripts/ci/deploy-pages.test.mjs",
+    "scripts/ci/deployment-status.test.mjs",
+    "scripts/ci/docker-matrix.test.mjs",
+  ]) {
+    assert.deepEqual(classify(path), REPO_LINT_ONLY, path);
+  }
+});
+
+test("deployment and cleanup helpers select repo lint without compiled stacks", () => {
+  for (const path of [
+    "scripts/ci/cache-cleanup.mjs",
+    "scripts/ci/cleanup-preview-deployments.sh",
+    "scripts/ci/deploy-pages.mjs",
+    "scripts/ci/deployment-status.mjs",
+    "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
+    "scripts/ci/ensure-cloudflare-pages-project.mjs",
+    "scripts/ci/github-api.mjs",
+  ]) {
+    assert.deepEqual(classifyFor("pull_request", path), REPO_LINT_ONLY, path);
+  }
+});
+
+test("CI matrix helpers select their consumers", () => {
+  assert.deepEqual(classifyFor("pull_request", "scripts/ci/cli-platform-matrix.mjs"), {
+    rust: "true",
+    webapp: "false",
+    wasm_runtime: "false",
+    security: "false",
+    docker_cli: "false",
+    docker_webapp: "false",
+    docker_cli_arm64: "false",
+    docker_webapp_arm64: "false",
+    docker_prebuilt: "false",
+    repo_lint: "true",
+    full: "false",
+  });
+  assert.deepEqual(classifyFor("pull_request", "scripts/ci/docker-matrix.mjs"), {
+    rust: "false",
+    webapp: "true",
+    wasm_runtime: "false",
+    security: "false",
+    docker_cli: "true",
+    docker_webapp: "true",
+    docker_cli_arm64: "true",
+    docker_webapp_arm64: "true",
+    docker_prebuilt: "true",
+    repo_lint: "true",
+    full: "false",
+  });
+});
+
+test("unknown CI helpers stay fail-open", () => {
+  const result = classifyFor("pull_request", "scripts/ci/new-helper.mjs");
+  for (const [key, value] of Object.entries(result)) assert.equal(value, "true", key);
+});
+
+test("selection plumbing stays fail-open", () => {
+  for (const path of [
+    "scripts/ci/classify-changes.mjs",
+    "scripts/ci/classify-workflow.mjs",
+    "scripts/ci/install-system-dependencies.mjs",
+    "scripts/ci/release-pr.mjs",
+    "scripts/ci/select-mise-tools.mjs",
+  ]) {
+    for (const [key, value] of Object.entries(classify(path))) {
+      assert.equal(value, "true", `${path}: ${key}`);
+    }
   }
 });
 
