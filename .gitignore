@@ -23,6 +23,8 @@
 /crates/rom-weaver-cli/data/identify/v1/index.json
 /crates/rom-weaver-cli/data/identify/v1/checksum-routes.bin
 /crates/rom-weaver-cli/data/identify/v1/checksum-routes.bin.br
+/crates/rom-weaver-cli/data/identify/v1/title-index.json
+/crates/rom-weaver-cli/data/identify/v1/title-index.json.br
 /crates/rom-weaver-cli/data/identify/v1/cheats-*.json
 /crates/rom-weaver-cli/data/identify/v1/cheats-*.json.br
 /crates/rom-weaver-cli/data/identify/v1/libretro-database-LICENSE

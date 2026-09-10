@@ -59,6 +59,9 @@ const identifyCheatEntriesForSlugs = (slugs) =>
 const identifyChecksumRouterEntries = identifyDataIndex.checksumRoutes
   ? [identifyPackEntry(identifyDataIndex.checksumRoutes)]
   : [];
+// The title index rides with the default packs for the same reason as the
+// router: the cross-platform name search needs it before any pack is loaded.
+const identifyTitleIndexEntries = identifyDataIndex.titleIndex ? [identifyPackEntry(identifyDataIndex.titleIndex)] : [];
 const identifyDefaultPackGroup = {
   id: "default",
   label: "Built-in systems",
@@ -66,6 +69,7 @@ const identifyDefaultPackGroup = {
     ...identifyPackGroups.defaultSystems.map(identifyPackEntry),
     ...identifyCheatEntriesForSlugs(identifyPackGroups.defaultSystems.map((system) => system.slug)),
     ...identifyChecksumRouterEntries,
+    ...identifyTitleIndexEntries,
   ],
   required: true,
 };

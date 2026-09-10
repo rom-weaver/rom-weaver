@@ -1,12 +1,6 @@
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 
-/** One choosable platform: the pack slug the search loads, and its display name. */
-type ExpectedRomPlatform = {
-  platform: string;
-  slug: string;
-};
-
 type ExpectedRomLookupOptions = {
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void;
   signal?: AbortSignal;
@@ -47,15 +41,6 @@ const lookupExpectedRom = async (
 };
 
 /**
- * The platforms a name search can be scoped to. Same seam as
- * {@link lookupExpectedRom}, so a test replaces one module for both.
- */
-const listExpectedRomPlatforms = async (): Promise<ExpectedRomPlatform[]> => {
-  const { listIdentifyPlatforms } = await import("../../platform/browser/identify-packs.ts");
-  return listIdentifyPlatforms();
-};
-
-/**
  * Search one platform's identify pack by game name. Resolves to `undefined`
  * when the search found nothing, and to an `unavailable` resolution when the
  * database itself could not be read - the two are different answers and the
@@ -81,5 +66,46 @@ const searchExpectedRomByName = async (
   return { matches: candidate.matches, status: candidate.status };
 };
 
-export { listExpectedRomPlatforms, lookupExpectedRom, searchExpectedRomByName };
-export type { ExpectedRomPlatform };
+/** One cross-platform title hit: the base title and the pack that holds it. */
+type ExpectedRomTitle = {
+  name: string;
+  platform: string;
+  slug: string;
+};
+
+/**
+ * A title search answer. `unavailable` means the database could not be read;
+ * the caller MUST NOT report it as "no match".
+ */
+type ExpectedRomTitleSearch =
+  | { status: "ok"; titles: ExpectedRomTitle[] }
+  | { status: "unavailable"; unavailableReason?: string };
+
+/**
+ * Search game names across every platform through the browser-only title
+ * index, so the user does not have to pick a platform first. The hits carry
+ * base titles; {@link searchExpectedRomByName} lists one title's regional
+ * variants from the chosen platform's pack.
+ */
+const searchExpectedRomTitles = async (
+  query: string,
+  options: ExpectedRomLookupOptions & { limit?: number } = {},
+): Promise<ExpectedRomTitleSearch> => {
+  const { IdentifyDataUnavailableError, searchIdentifyTitles } =
+    await import("../../platform/browser/identify-packs.ts");
+  try {
+    const titles = await searchIdentifyTitles(query, {
+      ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    return { status: "ok", titles };
+  } catch (error) {
+    if (error instanceof IdentifyDataUnavailableError) {
+      return { status: "unavailable", ...(error.message ? { unavailableReason: error.message } : {}) };
+    }
+    throw error;
+  }
+};
+
+export { lookupExpectedRom, searchExpectedRomByName, searchExpectedRomTitles };
+export type { ExpectedRomTitle };

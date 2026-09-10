@@ -58,10 +58,12 @@ const fixture = ({ grouped = false } = {}) => {
   const sources = { libretro: { licenseFile: "libretro-database-LICENSE", revision: "fixture" } };
   writeFileSync(
     join(input, "index.json"),
-    `${JSON.stringify({ cheats, checksumRoutes: { file: "checksum-routes.bin" }, format: "fixture", groups, sources, systems })}\n`,
+    `${JSON.stringify({ cheats, checksumRoutes: { file: "checksum-routes.bin" }, titleIndex: { file: "title-index.json" }, format: "fixture", groups, sources, systems })}\n`,
   );
   writeFileSync(join(input, "checksum-routes.bin"), Buffer.from("RWCR1 fixture router"));
   writeFileSync(join(input, "checksum-routes.bin.br"), Buffer.from("RWCR1 fixture router br"));
+  writeFileSync(join(input, "title-index.json"), Buffer.from("{} fixture title index"));
+  writeFileSync(join(input, "title-index.json.br"), Buffer.from("{} fixture title index br"));
   writeFileSync(
     join(input, "catalog.json"),
     `${JSON.stringify({ format: "fixture-catalog", platforms: systems.map((entry) => ({ packSlug: entry.slug })) })}\n`,
@@ -187,7 +189,7 @@ test("rejects a Brotli sidecar that does not match its raw pack", () => {
   );
 });
 
-test("release indexes drop the browser-only checksum router", () => {
+test("release indexes drop the browser-only checksum router and title index", () => {
   const { input, root } = fixture({ grouped: true });
   const built = buildIdentifyReleaseData({
     archive: join(root, "default.tar.br"),
@@ -196,13 +198,17 @@ test("release indexes drop the browser-only checksum router", () => {
   });
   const index = JSON.parse(readFileSync(join(built.dataDir, "index.json"), "utf8"));
   assert.ok(!("checksumRoutes" in index));
+  assert.ok(!("titleIndex" in index));
   assert.ok(built.optional.length > 0);
   for (const optional of built.optional) {
     const optionalIndex = JSON.parse(readFileSync(join(optional.dataDir, "index.json"), "utf8"));
     assert.ok(!("checksumRoutes" in optionalIndex), optional.group);
+    assert.ok(!("titleIndex" in optionalIndex), optional.group);
     assert.ok(!existsSync(join(optional.dataDir, "checksum-routes.bin")), optional.group);
+    assert.ok(!existsSync(join(optional.dataDir, "title-index.json")), optional.group);
   }
   assert.ok(!existsSync(join(built.dataDir, "checksum-routes.bin")));
+  assert.ok(!existsSync(join(built.dataDir, "title-index.json")));
 });
 
 test("cheat shards ride in the group that owns their platform pack", () => {
