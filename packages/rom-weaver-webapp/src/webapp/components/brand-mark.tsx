@@ -34,17 +34,16 @@ const BrandMark = (props: SVGProps<SVGSVGElement>) => (
     </defs>
     <g clipPath="url(#rom-weaver-mark-cartridge)">
       <path d="M0 0h32v32H0z" fill="#20282d" />
-      <use fill="none" href="#rom-weaver-mark-thread-back" stroke="#20282d" strokeWidth="5.4" />
-      <use className="brand-mark-band" fill="none" href="#rom-weaver-mark-thread-back" strokeWidth="3.8" />
-      <use fill="none" href="#rom-weaver-mark-thread-front" stroke="#20282d" strokeWidth="5.4" />
-      <use fill="none" href="#rom-weaver-mark-thread-front" stroke="#f6ecda" strokeWidth="3.8" />
+      <use fill="none" href="#rom-weaver-mark-thread-back" stroke="#20282d" strokeWidth="6.6" />
+      <use className="brand-mark-band" fill="none" href="#rom-weaver-mark-thread-back" strokeWidth="4.4" />
+      <use fill="none" href="#rom-weaver-mark-thread-front" stroke="#20282d" strokeWidth="6.6" />
+      <use fill="none" href="#rom-weaver-mark-thread-front" stroke="#f6ecda" strokeWidth="4.4" />
       <g clipPath="url(#rom-weaver-mark-right-half)">
-        <use fill="none" href="#rom-weaver-mark-thread-back" stroke="#20282d" strokeWidth="5.4" />
-        <use className="brand-mark-band" fill="none" href="#rom-weaver-mark-thread-back" strokeWidth="3.8" />
+        <use fill="none" href="#rom-weaver-mark-thread-back" stroke="#20282d" strokeWidth="6.6" />
+        <use className="brand-mark-band" fill="none" href="#rom-weaver-mark-thread-back" strokeWidth="4.4" />
       </g>
       <circle cx="16" cy="12" fill="#f6ecda" r="7.5" />
-      <circle cx="16" cy="12" fill="none" r="2.75" stroke="#20282d" strokeWidth="0.6" />
-      <circle cx="16" cy="12" fill="#20282d" r="1.6" />
+      <circle cx="16" cy="12" fill="#20282d" r="2.75" />
     </g>
     <use fill="none" href="#rom-weaver-mark-shell" stroke="#20282d" strokeWidth="2" />
     <use fill="none" href="#rom-weaver-mark-shell" stroke="#f6ecda" strokeWidth="0.75" />

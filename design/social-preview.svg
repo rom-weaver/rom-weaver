@@ -47,17 +47,16 @@
   -->
   <g clip-path="url(#cartridge)">
     <path fill="#20282d" d="M0 0h32v32H0z"/>
-    <use href="#thread-back" fill="none" stroke="#20282d" stroke-width="5.4"/>
-    <use href="#thread-back" fill="none" stroke="#d9690f" stroke-width="3.8"/>
-    <use href="#thread-front" fill="none" stroke="#20282d" stroke-width="5.4"/>
-    <use href="#thread-front" fill="none" stroke="#f6ecda" stroke-width="3.8"/>
+    <use href="#thread-back" fill="none" stroke="#20282d" stroke-width="6.6"/>
+    <use href="#thread-back" fill="none" stroke="#d9690f" stroke-width="4.4"/>
+    <use href="#thread-front" fill="none" stroke="#20282d" stroke-width="6.6"/>
+    <use href="#thread-front" fill="none" stroke="#f6ecda" stroke-width="4.4"/>
     <g clip-path="url(#right-half)">
-      <use href="#thread-back" fill="none" stroke="#20282d" stroke-width="5.4"/>
-      <use href="#thread-back" fill="none" stroke="#d9690f" stroke-width="3.8"/>
+      <use href="#thread-back" fill="none" stroke="#20282d" stroke-width="6.6"/>
+      <use href="#thread-back" fill="none" stroke="#d9690f" stroke-width="4.4"/>
     </g>
     <circle cx="16" cy="12" r="7.5" fill="#f6ecda"/>
-    <circle cx="16" cy="12" r="2.75" fill="none" stroke="#20282d" stroke-width="0.6"/>
-    <circle cx="16" cy="12" r="1.6" fill="#20282d"/>
+    <circle cx="16" cy="12" r="2.75" fill="#20282d"/>
   </g>
   <use href="#shell" fill="none" stroke="#20282d" stroke-width="2"/>
   <use href="#shell" fill="none" stroke="#f6ecda" stroke-width="0.75"/>
