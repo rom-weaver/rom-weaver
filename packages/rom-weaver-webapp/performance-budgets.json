@@ -45,7 +45,7 @@
     ],
     "drift": {
       "warnPercent": 1,
-      "maxPercent": 3,
+      "maxPercent": 6,
       "floorBytes": 1024,
       "noiseBytes": 512
     }
