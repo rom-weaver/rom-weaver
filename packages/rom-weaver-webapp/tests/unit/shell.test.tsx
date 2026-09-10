@@ -156,8 +156,8 @@ describe("More menu destinations", () => {
     fireEvent.click(getByRole("menuitem", { name: "Trim Beta" }));
     expect(onSelectTab).toHaveBeenCalledWith("trim");
 
-    // Docs is a top-right link on desktop, not a More entry.
-    fireEvent.click(container.querySelector(".masthead-docs") as HTMLAnchorElement);
+    openDesktopMore(container);
+    fireEvent.click(getByRole("menuitem", { name: "Docs" }));
     expect(onSelectTab).toHaveBeenCalledWith("docs");
 
     openDesktopMore(container);
@@ -366,7 +366,7 @@ describe("external links", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  it("confirms before leaving from the link group and from inside the phone More menu", async () => {
+  it("confirms before leaving from the More menu on every layout", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
     const confirmExternalNavigation = vi.fn(async () => true);
@@ -380,13 +380,15 @@ describe("external links", () => {
       ),
     );
 
-    // Desktop: the top-right link group.
-    fireEvent.click(getByRole("link", { name: "View source on GitHub" }));
+    // Desktop More.
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(getByRole("menuitem", { name: "View source on GitHub" }));
     await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/repo"));
-    fireEvent.click(getByRole("link", { name: "Support" }));
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(getByRole("menuitem", { name: "Support" }));
     await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/donate"));
 
-    // Phone: the same two entries inside More.
+    // Phone More.
     confirmExternalNavigation.mockClear();
     fireEvent.click(container.querySelector(".dock .mobile-more button") as HTMLButtonElement);
     fireEvent.click(getByRole("menuitem", { name: "View source on GitHub" }));

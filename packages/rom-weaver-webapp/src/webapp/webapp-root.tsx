@@ -86,14 +86,14 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   { href: "apply-patch", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply Patch" },
   { href: "create-patch", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create Patch" },
   { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM" },
-  // Reference rather than a workflow: a top-right link on the rail layout, a More entry on the phone.
+  // Reference rather than a workflow: a More entry under Project.
   { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
   {
     group: "tools",
     href: "apply-patch#bundle",
     icon: <Package aria-hidden="true" />,
     id: "bundle",
-    label: "Bundles",
+    label: "Bundle Patches",
     placement: "more",
   },
   // Beta utility routes. They stay behind the beta-tools setting and show up
@@ -757,7 +757,6 @@ function WebappRoot({
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
             onSelectTab={handleSelectTab}
-            settingsOpen={logOpen && logTab === "settings"}
             tabs={mastheadTabs}
             tabsControlPanels={!notFound}
           />

@@ -1094,10 +1094,9 @@ describe("accent dye-lot accessibility", () => {
 });
 
 describe("webapp responsive navigation", () => {
-  // The ladder is fixed breakpoints and nothing else: single row >= 1000px
-  // (compact tab padding below 1280px, and below 1180px only the selected tab
-  // keeps its label), bottom dock below 1000px. No measurement, no
-  // data-masthead-layout, and never a second masthead row.
+  // The ladder is fixed breakpoints and nothing else: two rows >= 1000px (the
+  // rail on its own row under the brand and link group, centered between them),
+  // bottom dock below 1000px. No measurement, no data-masthead-layout.
   const ALL_TABS = [
     ...PAGE_TABS,
     {
@@ -1132,6 +1131,8 @@ describe("webapp responsive navigation", () => {
             { className: "app" },
             createElement(Masthead, {
               currentTab: "patcher",
+              donateHref: "https://example.com/donate",
+              githubHref: "https://example.com/repo",
               homeHref: "/apply-patch",
               onOpenWhatsNew: noop,
               onOpenLog: noop,
@@ -1167,7 +1168,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the rail takes its own row under the brand and the link group at every width it exists", async () => {
+  test("the rail shares the top row with the brand and the link group", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {
       await setViewport({ height: 900, width });
       for (const tabs of [PAGE_TABS, ALL_TABS]) {
@@ -1177,32 +1178,27 @@ describe("webapp responsive navigation", () => {
         const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
         const modes = host.querySelector(".modes").getBoundingClientRect();
 
-        // brand | link group on the first row, never overlapping
-        expect(brand.right).toBeLessThanOrEqual(tools.left + 1);
-        expect(Math.abs(brand.top - tools.top)).toBeLessThanOrEqual(tools.height);
-        // the rail sits below both, on a row of its own
-        expect(modes.top).toBeGreaterThanOrEqual(Math.max(brand.bottom, tools.bottom) - 1);
+        // one row: all three share the top edge
+        expect(Math.abs(modes.top - brand.top)).toBeLessThanOrEqual(Math.max(modes.height, brand.height));
+        // brand left of the rail, rail left of the link group
+        expect(brand.right).toBeLessThanOrEqual(modes.left + 1);
+        expect(modes.right).toBeLessThanOrEqual(tools.left + 1);
         // the dock never shares the screen with the rail
         expect(getComputedStyle(host.querySelector(".dock-nav")).display).toBe("none");
       }
     }
   });
 
-  test("tab order follows the two masthead rows top to bottom", async () => {
+  test("tab order follows the masthead left to right", async () => {
     await setViewport({ height: 900, width: 1280 });
     await renderMastheadOnly(ALL_TABS);
     const focusables = [...host.querySelectorAll("a[href], button")].filter(
       (node) => node.tabIndex >= 0 && node.offsetParent !== null,
     );
-    const rail = host.querySelector(".modes");
-    const inRail = focusables.map((node) => rail.contains(node));
-    // every first-row control (brand, link group, tools) precedes the rail in
-    // the sequence, and the rail really is the lower row
-    expect(inRail.indexOf(true)).toBeGreaterThan(inRail.lastIndexOf(false));
-    const top = (node) => node.getBoundingClientRect().top;
-    const firstRowBottom = Math.max(...focusables.filter((node) => !rail.contains(node)).map(top));
-    const railTop = Math.min(...focusables.filter((node) => rail.contains(node)).map(top));
-    expect(railTop).toBeGreaterThan(firstRowBottom);
+    const lefts = focusables.map((node) => node.getBoundingClientRect().left);
+    for (let i = 1; i < lefts.length; i += 1) {
+      expect(lefts[i]).toBeGreaterThanOrEqual(lefts[i - 1] - 1);
+    }
   });
 
   test("every tab keeps its full label at every rail width", async () => {
@@ -1216,25 +1212,21 @@ describe("webapp responsive navigation", () => {
         expect(getComputedStyle(label).textOverflow).not.toBe("ellipsis");
         expect(getComputedStyle(label).maxWidth).toBe("none");
       }
-      // the link group stays glyph-only; each name rides its tooltip
-      for (const link of host.querySelectorAll(".masthead-links .tool-link")) {
-        expect(link.querySelector(".tool-text")).toBeNull();
-        expect(link.querySelector(".tip")?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
-      }
     }
   });
 
-  test("the desktop rail centers on the masthead across rail widths", async () => {
+  test("the desktop rail centers between the brand and the action group", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {
       await setViewport({ height: 900, width });
       await renderMastheadOnly(PAGE_TABS);
 
-      const masthead = host.querySelector(".masthead").getBoundingClientRect();
+      const brand = host.querySelector(".brand").getBoundingClientRect();
+      const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
       const modes = host.querySelector(".modes").getBoundingClientRect();
-      const mastheadCenter = masthead.left + masthead.width / 2;
+      const gapCenter = (brand.right + tools.left) / 2;
       const modesCenter = modes.left + modes.width / 2;
 
-      expect(Math.abs(modesCenter - mastheadCenter)).toBeLessThanOrEqual(1);
+      expect(Math.abs(modesCenter - gapCenter)).toBeLessThanOrEqual(1);
     }
   });
 
@@ -1265,12 +1257,10 @@ describe("webapp responsive navigation", () => {
         (tab) => getComputedStyle(tab).display !== "none",
       );
       expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
-      // the masthead keeps its single row: brand and actions only, the link
-      // group folded into More
+      // the masthead keeps its single row: brand and the stateful controls
       const brand = host.querySelector(".brand").getBoundingClientRect();
       const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
       expect(brand.right).toBeLessThanOrEqual(tools.left + 1);
-      expect(getComputedStyle(host.querySelector(".masthead-links")).display).toBe("none");
       expect(host.querySelector(".masthead").getBoundingClientRect().height).toBeLessThanOrEqual(
         Math.max(brand.height, tools.height) + 24,
       );

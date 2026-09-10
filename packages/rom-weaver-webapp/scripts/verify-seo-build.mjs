@@ -274,11 +274,7 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(
-    docsHtml,
-    'aria-current="page" class="tool tool-link masthead-docs"',
-    `${route.slug} Docs link marked current`,
-  );
+  assertIncludes(docsHtml, 'class="mode-more is-current"', `${route.slug} More marked current for the guides`);
   assertIncludes(
     docsHtml,
     '<button aria-label="Switch to light theme" class="tool"',

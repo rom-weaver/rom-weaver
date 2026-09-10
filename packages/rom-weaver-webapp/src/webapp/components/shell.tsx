@@ -652,14 +652,9 @@ const UtilityMenu = ({
           {toolTabs.map((tab) => workflowItem(tab))}
         </fieldset>
       ) : null}
-      {docsTabs.length > 0 ? (
-        <fieldset className="more-group">
-          <legend className="more-group-label">{localizer.message("ui.nav.docs")}</legend>
-          {docsTabs.map((tab) => workflowItem(tab))}
-        </fieldset>
-      ) : null}
       <fieldset className="more-group">
         <legend className="more-group-label">{localizer.message("ui.tools.project")}</legend>
+        {docsTabs.map((tab) => workflowItem(tab))}
         <a
           data-more-workflow="whats-new"
           href="whats-new"
@@ -1116,7 +1111,6 @@ const Masthead = ({
   confirmExternalNavigation,
   donateHref,
   githubHref,
-  settingsOpen,
   threads,
   updateReady = false,
   version,
@@ -1149,7 +1143,6 @@ const Masthead = ({
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
-  settingsOpen?: boolean;
   threads?: number;
   updateReady?: boolean;
   version?: string;
@@ -1218,13 +1211,6 @@ const Masthead = ({
   const moreTabs = tabs.filter(isMoreMenuTab);
   // What's new has no WorkflowTab entry; it lives in More's Project group.
   const currentInMore = currentTab === "whats-new" || moreTabs.some((tab) => tab.id === currentTab);
-  // Docs, GitHub, Support and Settings also sit in the top-right link group on
-  // the rail layout. Below the dock threshold the group hides and the phone
-  // More menu is the only way to reach them.
-  const docsTab = moreTabs.find((tab) => tab.id === "docs");
-  const settingsLabel = localizer.message("ui.settings.title");
-  const githubLabel = localizer.message("ui.tools.github");
-  const supportLabel = localizer.message("ui.footer.donate");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
@@ -1257,10 +1243,7 @@ const Masthead = ({
       const target = event.target;
       const moreAnchors = [desktopMoreRef.current?.parentElement, mobileMoreRef.current?.parentElement];
       if (!(target instanceof Node)) return;
-      // The link group shares the action box but navigates away, so a press on
-      // it closes an open menu the way a press on a rail tab does.
-      const insideTools = tools?.contains(target) && !(target instanceof Element && target.closest(".masthead-links"));
-      if (insideTools || moreAnchors.some((anchor) => anchor?.contains(target))) return;
+      if (tools?.contains(target) || moreAnchors.some((anchor) => anchor?.contains(target))) return;
       setAccentOpen(false);
       setUtilityOpen(false);
     };
@@ -1351,74 +1334,59 @@ const Masthead = ({
             </span>
           </span>
         </span>
-        <div className="masthead-tools" ref={toolsRef}>
-          {/* The link group: Docs, GitHub, Support and Settings stay glyph-only,
-              with the tooltip and aria-label carrying each name. Docs also
-              stays in the More menu; below the dock threshold the group hides
-              and the phone More menu carries all four. */}
-          <span className="masthead-links">
-            {docsTab ? (
-              <a
-                aria-current={currentTab === docsTab.id ? "page" : undefined}
-                className="tool tool-link masthead-docs"
-                aria-label={docsTab.label}
-                href={docsTab.href}
-                onClick={(event) => activateTabOnClick(event, docsTab.id, onSelectTab)}
-              >
-                {docsTab.icon}
-                <span aria-hidden="true" className="tip">
-                  {docsTab.label}
-                </span>
-              </a>
-            ) : null}
-            {githubHref ? (
-              <a
-                aria-label={githubLabel}
-                className="tool tool-link"
-                href={githubHref}
-                onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <Github aria-hidden="true" />
-                <span aria-hidden="true" className="tip">
-                  {localizer.message("ui.tools.githubShort")}
-                </span>
-              </a>
-            ) : null}
-            {donateHref ? (
-              <a
-                aria-label={supportLabel}
-                className="tool tool-link masthead-support"
-                href={donateHref}
-                onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <Heart aria-hidden="true" />
-                <span aria-hidden="true" className="tip">
-                  {supportLabel}
-                </span>
-              </a>
-            ) : null}
-            <button
-              aria-expanded={settingsOpen}
-              aria-haspopup="dialog"
-              aria-label={settingsLabel}
-              className="tool tool-link masthead-settings"
-              onClick={onOpenSettings}
-              onFocus={onPreloadSettings}
-              onPointerDown={onPreloadSettings}
-              onPointerEnter={onPreloadSettings}
-              type="button"
-            >
-              <Settings aria-hidden="true" />
-              <span aria-hidden="true" className="tip">
-                {settingsLabel}
+        <ModeRail
+          controlsPanels={tabsControlPanels}
+          current={currentTab}
+          navLabel={navLabel}
+          onSelect={onSelectTab}
+          tabs={tabs}
+          trailing={
+            <>
+              <span className="desktop-find">
+                <button
+                  aria-controls="find-palette"
+                  aria-expanded={findOpen && findPlacement === "desktop"}
+                  aria-haspopup="dialog"
+                  className="mode-more mode-find"
+                  onClick={() => toggleFind("desktop")}
+                  ref={desktopFindRef}
+                  type="button"
+                >
+                  <Search aria-hidden="true" />
+                  <span className="tool-text">{findLabel}</span>
+                </button>
               </span>
-            </button>
-            <span aria-hidden="true" className="masthead-links-sep" />
-          </span>
+              <MoreMenu
+                autoFocusFirst={utilityViaKeyboard}
+                buttonClassName="mode-more"
+                current={currentInMore}
+                className="desktop-more"
+                confirmExternalNavigation={confirmExternalNavigation}
+                donateHref={donateHref}
+                githubHref={githubHref}
+                localizer={localizer}
+                menuId="more-menu"
+                moreLabel={moreLabel}
+                onClose={closeUtility}
+                onOpenLog={onOpenLog}
+                onOpenStatus={onOpenStatus}
+                onOpenStorage={onOpenStorage ?? onOpenLog}
+                moreTabs={moreTabs}
+                onOpenWorkflowTab={onSelectTab}
+                onOpenSettings={onOpenSettings}
+                onPreloadLog={onPreloadLog}
+                onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
+                open={utilityOpen && utilityPlacement === "desktop"}
+                renderMenu={utilityOpen && utilityPlacement === "desktop"}
+                runtimeState={runtimeState}
+                runtimePercent={runtimePercent}
+                toolsEnabled={betaToolsEnabled}
+                triggerRef={desktopMoreRef}
+              />
+            </>
+          }
+        />
+        <div className="masthead-tools" ref={toolsRef}>
           <button
             aria-haspopup="dialog"
             aria-label={runtimeTitle}
@@ -1471,55 +1439,6 @@ const Masthead = ({
             />
           ) : null}
         </div>
-        <ModeRail
-          controlsPanels={tabsControlPanels}
-          current={currentTab}
-          navLabel={navLabel}
-          onSelect={onSelectTab}
-          tabs={tabs}
-          trailing={
-            <>
-              <span className="desktop-find">
-                <button
-                  aria-controls="find-palette"
-                  aria-expanded={findOpen && findPlacement === "desktop"}
-                  aria-haspopup="dialog"
-                  className="mode-more mode-find"
-                  onClick={() => toggleFind("desktop")}
-                  ref={desktopFindRef}
-                  type="button"
-                >
-                  <Search aria-hidden="true" />
-                  <span className="tool-text">{findLabel}</span>
-                </button>
-              </span>
-              <MoreMenu
-                autoFocusFirst={utilityViaKeyboard}
-                buttonClassName="mode-more"
-                current={currentInMore}
-                className="desktop-more"
-                confirmExternalNavigation={confirmExternalNavigation}
-                localizer={localizer}
-                menuId="more-menu"
-                moreLabel={moreLabel}
-                onClose={closeUtility}
-                onOpenLog={onOpenLog}
-                onOpenStatus={onOpenStatus}
-                onOpenStorage={onOpenStorage ?? onOpenLog}
-                moreTabs={moreTabs}
-                onOpenWorkflowTab={onSelectTab}
-                onPreloadLog={onPreloadLog}
-                onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
-                open={utilityOpen && utilityPlacement === "desktop"}
-                renderMenu={utilityOpen && utilityPlacement === "desktop"}
-                runtimeState={runtimeState}
-                runtimePercent={runtimePercent}
-                toolsEnabled={betaToolsEnabled}
-                triggerRef={desktopMoreRef}
-              />
-            </>
-          }
-        />
         <FindPalette
           localizer={localizer}
           onAction={onFindAction}

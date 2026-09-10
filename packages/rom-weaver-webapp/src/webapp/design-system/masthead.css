@@ -487,9 +487,9 @@ html.vt-theme .mode-rail .mode {
   position: relative;
   z-index: 1;
   display: inline-flex;
-  gap: var(--sp-s);
+  gap: var(--sp-xs);
   align-items: center;
-  padding: var(--sp-s) var(--sp-l);
+  padding: var(--sp-s);
   font-size: 0.8rem;
   font-weight: 650;
   color: var(--ink-2);
@@ -550,7 +550,7 @@ html.vt-theme .mode-rail .mode {
   display: inline-flex;
   gap: var(--sp-xs);
   align-items: center;
-  padding: var(--sp-s) var(--sp-l);
+  padding: var(--sp-s);
   font-size: 0.8rem;
   font-weight: 650;
   color: var(--ink-3);
@@ -860,60 +860,6 @@ html.vt-theme .mode-rail .mode {
   display: inline;
 }
 
-/* ── the link group ──
-   Docs, GitHub, Support and Settings, as one set of ghost icons that share the
-   `.tool` chrome but stay glyph-only; the tooltip and aria-label carry each
-   name. */
-.rw-app .masthead-links {
-  display: inline-flex;
-  gap: var(--sp-2xs);
-  align-items: center;
-}
-.rw-app .tool-link {
-  text-decoration: none;
-}
-/* "you are here" for Docs: a boxed state, not a color alone, since Support beside
-   it wears the same accent color at rest. */
-.rw-app .tool-link[aria-current="page"] {
-  color: var(--thread-text);
-  background: var(--well);
-  border-color: var(--seam);
-}
-@media (forced-colors: active) {
-  .rw-app .tool-link[aria-current="page"] {
-    color: SelectedItemText;
-    background: SelectedItem;
-  }
-}
-/* Support wears the footer donate color; the icon fills on press (see footer.css). */
-.rw-app .masthead-support,
-.rw-app .masthead-support svg {
-  color: var(--thread-text);
-}
-@media (hover: hover) {
-  .rw-app .masthead-support:hover,
-  .rw-app .masthead-support:hover svg {
-    color: var(--thread-text);
-  }
-  .rw-app .masthead-support:hover svg {
-    fill: currentcolor;
-  }
-}
-.rw-app .masthead-support:active,
-.rw-app .masthead-support:active svg {
-  color: var(--thread-text);
-}
-.rw-app .masthead-support:active svg {
-  fill: currentcolor;
-}
-/* A hairline between the destinations and the stateful controls. */
-.rw-app .masthead-links-sep {
-  width: 0;
-  height: 20px;
-  margin-inline: var(--sp-xs);
-  border-inline-start: 1px solid var(--seam);
-}
-
 /* real tooltips - localizable text, not title="" */
 .rw-app .tip {
   position: absolute;
@@ -1027,28 +973,28 @@ html.vt-theme .mode-rail .mode {
 
 /* ── the responsive ladder: two ranges, one threshold ──
    Every tab keeps its icon + label pairing at every width: a label is never
-   clipped, ellipsized or hidden. Above the dock threshold the rail takes a row
-   of its own under the brand and the link group; below it, it is the bottom
-   dock. One row for all three would need ~1870px: the mirrored side tracks
-   that center the rail each grow to the link group's width. */
+   clipped, ellipsized or hidden. Below the dock threshold the rail is the
+   bottom dock. Above it, brand | rail | link group share the top row: the rail
+   centers in the middle track, i.e. between the brand and the link group, and
+   its tabs scroll if a narrow column cannot hold them all rather than pushing
+   the rail to a second row. */
 @media (min-width: 1000px) {
-  /* Two rows: brand | link group, then the rail centered underneath. */
   .rw-app .masthead {
-    grid-template-columns: minmax(max-content, 1fr) auto;
-    row-gap: var(--sp-s);
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    column-gap: var(--sp-s);
   }
   .rw-app .brand {
     grid-row: 1;
     grid-column: 1;
     justify-self: start;
   }
-  .rw-app .masthead-tools {
+  .rw-app .modes {
     grid-row: 1;
     grid-column: 2;
   }
-  .rw-app .modes {
-    grid-row: 2;
-    grid-column: 1 / -1;
+  .rw-app .masthead-tools {
+    grid-row: 1;
+    grid-column: 3;
   }
 }
 /* ▼ dock threshold: the single number that replaced data-masthead-layout */
@@ -1071,10 +1017,6 @@ html.vt-theme .mode-rail .mode {
   }
   .rw-app .mobile-more {
     display: inline-flex;
-  }
-  /* The phone More menu carries these four instead. */
-  .rw-app .masthead-links {
-    display: none;
   }
   .rw-app .dock .mobile-more {
     position: relative;

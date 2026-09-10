@@ -97,26 +97,10 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // the link group (docs, github, support, settings) plus status, theme and
-    // accent - Reset lives in the workflow panel head, and More is nav level
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
-    const links = container.querySelector(".masthead-links") as HTMLElement;
-    // Glyph only: every name rides the tooltip and the aria-label.
-    expect(links.querySelector(".tool-text")).toBeNull();
-    expect(Array.from(links.querySelectorAll<HTMLElement>(".tip")).map((tip) => tip.textContent?.trim())).toEqual([
-      "Docs",
-      "GitHub",
-      "Support",
-      "Settings",
-    ]);
-    expect(within(links).getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
-    expect(within(links).getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe(
-      "https://example.com/repo",
-    );
-    expect(within(links).getByRole("link", { name: "Support" }).getAttribute("href")).toBe(
-      "https://example.com/donate",
-    );
-    expect(within(links).getByRole("button", { name: "Settings" }).classList.contains("masthead-settings")).toBe(true);
+    // the stateful controls (status, theme, accent) - Reset lives in the
+    // workflow panel head, More is nav level, and every destination is in More
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(3);
+    expect(container.querySelector(".masthead-links")).toBeNull();
     expect(container.querySelector(".actions-sep")).toBeNull();
     expect(container.querySelector(".tool-support")).toBeNull();
     expect(container.querySelector(".accent-tool")).toBeTruthy();
@@ -170,19 +154,18 @@ describe("Masthead", () => {
     expect(menuStatus.classList.contains("more-status")).toBe(true);
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
-    // Docs stays in the More menu beside the glyph-only link group; GitHub,
-    // Support and Settings live only in the top-right group on this layout.
-    // Real links: a middle-click or "open in new tab" still reaches the route.
+    // Every destination lives in More: Docs, GitHub and Support under Project,
+    // Settings in the head row.
     expect(getByRole("menuitem", { name: "Docs" }).getAttribute("href")).toBe("docs");
-    expect(queryByRole("menuitem", { name: "View source on GitHub" })).toBeNull();
-    expect(queryByRole("menuitem", { name: "Support" })).toBeNull();
-    expect(queryByRole("menuitem", { name: "Settings" })).toBeNull();
+    expect(getByRole("menuitem", { name: "View source on GitHub" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "Support" })).toBeTruthy();
+    expect(getByRole("menuitem", { name: "Settings" }).classList.contains("more-head-item")).toBe(true);
     // With the selected workflow in the rail, More is not "you are here".
     expect(more.classList.contains("is-current")).toBe(false);
     expect(getByRole("menuitem", { name: "Trim Beta" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "PPF undo Beta" })).toBeTruthy();
     expect(getByRole("group", { name: "Tools" })).toBeTruthy();
-    expect(getByRole("group", { name: "Docs" })).toBeTruthy();
+    expect(queryByRole("group", { name: "Docs" })).toBeNull();
     expect(getByRole("group", { name: "Project" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "What\u2019s new" })).toBeTruthy();
     // The head row keeps the app's own surfaces one tap away on desktop too.
@@ -192,35 +175,22 @@ describe("Masthead", () => {
     expect(more.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("closes an open More menu when a link-group entry is pressed", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
-    fireEvent.click(more);
-    expect(more.getAttribute("aria-expanded")).toBe("true");
-    // The link group shares the action box with the menu trigger, but it
-    // navigates away, so a press on it dismisses the menu like a rail tab does.
-    fireEvent.pointerDown(container.querySelector(".masthead-docs") as HTMLAnchorElement);
-    expect(more.getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("keeps the DOM in visual order: brand, link group, then the rail", () => {
+  it("keeps the DOM in visual order: brand, rail, then the action group", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const order = Array.from(container.querySelectorAll(".brand, .masthead-tools, .modes")).map(
       (node) => node.className.split(" ")[0],
     );
-    expect(order).toEqual(["brand", "masthead-tools", "modes"]);
+    expect(order).toEqual(["brand", "modes", "masthead-tools"]);
   });
 
-  it("marks both the Docs link and More current when Docs is selected", () => {
+  it("marks More current when Docs is selected", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
-    expect(container.querySelector(".masthead-docs")?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
     expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
   });
 
   it("marks More current when a tool inside it is selected", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="trim" />));
-    expect(container.querySelector(".masthead-docs")?.getAttribute("aria-current")).toBeNull();
     expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
     expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
   });
@@ -407,13 +377,13 @@ describe("Masthead", () => {
     expect(container.querySelector(".accent-tray")).toBeNull();
   });
 
-  it("preloads Settings before interaction completes", () => {
+  it("preloads the settings dialog from the thread chip", () => {
     const onPreloadSettings = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
-    const settings = container.querySelector(".masthead-settings") as HTMLButtonElement;
-    fireEvent.pointerEnter(settings);
-    fireEvent.focus(settings);
-    fireEvent.pointerDown(settings);
+    const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
+    fireEvent.pointerEnter(threads);
+    fireEvent.focus(threads);
+    fireEvent.pointerDown(threads);
     expect(onPreloadSettings).toHaveBeenCalledTimes(3);
   });
 });
