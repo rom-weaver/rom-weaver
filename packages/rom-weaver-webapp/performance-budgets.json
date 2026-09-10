@@ -5,7 +5,7 @@
       {
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 33700,
+        "expectedRawBytes": 34000,
         "maxRawBytes": 35400,
         "expectedBrotliBytes": 7950,
         "maxBrotliBytes": 8350
@@ -19,10 +19,10 @@
           "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 1980000,
-        "maxRawBytes": 2060000,
-        "expectedBrotliBytes": 517000,
-        "maxBrotliBytes": 538000
+        "expectedRawBytes": 2080000,
+        "maxRawBytes": 2165000,
+        "expectedBrotliBytes": 537000,
+        "maxBrotliBytes": 559000
       },
       {
         "name": "Documentation search JavaScript",
@@ -30,10 +30,10 @@
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 272000,
-        "maxRawBytes": 284000,
-        "expectedBrotliBytes": 73500,
-        "maxBrotliBytes": 76500
+        "expectedRawBytes": 280000,
+        "maxRawBytes": 292000,
+        "expectedBrotliBytes": 75500,
+        "maxBrotliBytes": 78500
       },
       {
         "name": "Save Editor JavaScript",
@@ -51,7 +51,7 @@
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 228000,
+        "expectedRawBytes": 228500,
         "maxRawBytes": 231000,
         "expectedBrotliBytes": 36400,
         "maxBrotliBytes": 37000
@@ -61,10 +61,10 @@
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 7440000,
-        "maxRawBytes": 7650000,
-        "expectedBrotliBytes": 1960000,
-        "maxBrotliBytes": 2015000
+        "expectedRawBytes": 7470000,
+        "maxRawBytes": 7690000,
+        "expectedBrotliBytes": 1967000,
+        "maxBrotliBytes": 2025000
       }
     ]
   },

@@ -304,7 +304,7 @@ describe("apply workflow view - empty bench", () => {
     // Patches alone retire the hero, so the search lives in the empty ROM step.
     expect(container.querySelector(".drop.hero")).toBeNull();
     const romStep = container.querySelector("#rom-weaver-row-file-rom") as HTMLElement;
-    expect(romStep.textContent).toContain("Add ROM in");
+    expect(romStep.textContent).toContain("Choose your original ROM");
     const search = romStep.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
     expect(search).toBeTruthy();
     // The search stands open, as in the hero: no drawer to click first.

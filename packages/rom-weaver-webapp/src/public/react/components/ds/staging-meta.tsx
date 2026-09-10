@@ -1,3 +1,4 @@
+import { createLocalizer, type Localizer } from "../../../../presentation/localization/index.ts";
 import type { ReactNode } from "react";
 
 /**
@@ -13,8 +14,8 @@ type StageProgress = { label?: ReactNode; percent?: number | null } | null | und
  * "<verb>…" from "Extracting & <verb>…". Labels vary across startup/finalize and
  * formats, so text sniffing hid combined phases.
  */
-const stageStatusLabel = (verb: string, extracting: boolean): string =>
-  extracting ? `Extracting & ${verb}…` : `${verb}…`;
+const stageStatusLabel = (verb: string, extracting: boolean, localizer: Localizer = createLocalizer("en")): string =>
+  extracting ? localizer.message("ui.stage.extractingWith", { verb }) : `${verb}…`;
 
 /** Numeric percent from converted progress props, or null when indeterminate. */
 const stagePercent = (progress: StageProgress): number | null =>

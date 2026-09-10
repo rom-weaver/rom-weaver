@@ -71,7 +71,9 @@ test("deleting a selected patch archive requires selection again when re-added",
 
   await expect.poll(() => getPatchStackFileNames(), { timeout: 30000 }).toContain("change.ips");
 
-  const removeButton = document.querySelector("#rom-weaver-list-patch-stack button[aria-label='Remove patch']");
+  const removeButton = document.querySelector(
+    "#rom-weaver-list-patch-stack button[id^='rom-weaver-patch-menu-remove-']",
+  );
   if (!(removeButton instanceof HTMLButtonElement)) throw new Error("Missing remove patch button");
   removeButton.click();
 

@@ -198,29 +198,32 @@ const formatRatio = (first: ExtractionLevel, last: ExtractionLevel) => {
 };
 
 /** The card name line. */
-const ExtractName = ({ displayName, fileName, folderPath, identified }: ExtractNameProps) => (
-  <div className="nmline" data-file-name={fileName}>
-    {/* Assistive technology gets the identified title and full filename; the visible face
+const ExtractName = ({ displayName, fileName, folderPath, identified }: ExtractNameProps) => {
+  const localizer = useUiLocalizer();
+  return (
+    <div className="nmline" data-file-name={fileName}>
+      {/* Assistive technology gets the identified title and full filename; the visible face
         drops the extension because the format badge carries it. */}
-    <span className="sr-only">
-      {displayName?.trim() ? `${displayName.trim()} — ${fileName}` : fileName}
-      {identified ? " — Identified" : ""}
-    </span>
-    <span
-      aria-hidden="true"
-      className="nm"
-      title={[displayName?.trim(), folderPath ? `${folderPath} › ${fileName}` : fileName].filter(Boolean).join(" — ")}
-    >
-      {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
-      {displayName?.trim() || getDisplayName(fileName)}
-    </span>
-    {identified ? (
-      <span aria-hidden="true" className="nm-identified" title="Identified">
-        <ScanSearch />
+      <span className="sr-only">
+        {displayName?.trim() ? `${displayName.trim()} — ${fileName}` : fileName}
+        {identified ? ` — ${localizer.message("ui.file.identified")}` : ""}
       </span>
-    ) : null}
-  </div>
-);
+      <span
+        aria-hidden="true"
+        className="nm"
+        title={[displayName?.trim(), folderPath ? `${folderPath} › ${fileName}` : fileName].filter(Boolean).join(" — ")}
+      >
+        {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
+        {displayName?.trim() || getDisplayName(fileName)}
+      </span>
+      {identified ? (
+        <span aria-hidden="true" className="nm-identified" title={localizer.message("ui.file.identified")}>
+          <ScanSearch />
+        </span>
+      ) : null}
+    </div>
+  );
+};
 
 /** Just the Files drawer (no name line) - for cards that render the name separately. */
 const ExtractDrawer = ({
@@ -282,7 +285,7 @@ const ExtractDrawer = ({
     <Drawer
       bodyClassName="taskbody"
       className="extract-d"
-      label="Files"
+      label={localizer.message("ui.file.files")}
       labelIcon={<Archive aria-hidden="true" />}
       readouts={
         <>
