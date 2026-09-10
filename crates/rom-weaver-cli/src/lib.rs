@@ -27,6 +27,8 @@ mod render;
 mod save_command;
 #[cfg(not(target_arch = "wasm32"))]
 mod stdout_output;
+#[cfg(not(target_arch = "wasm32"))]
+mod streams;
 
 pub use cli::*;
 #[cfg(not(target_arch = "wasm32"))]

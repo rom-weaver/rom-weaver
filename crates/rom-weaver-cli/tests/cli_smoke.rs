@@ -16,6 +16,9 @@ mod checksum_output;
 #[path = "cli_smoke/cli_inputs.rs"]
 mod cli_inputs;
 
+#[path = "cli_smoke/streams.rs"]
+mod streams;
+
 #[path = "cli_smoke/identify.rs"]
 mod identify;
 
