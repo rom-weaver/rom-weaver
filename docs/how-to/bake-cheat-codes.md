@@ -10,6 +10,8 @@ Write Game Genie, GameShark/Pro Action Replay, or raw Xploder codes permanently 
 - [Say which console or scheme a code is for](#say-which-console-or-scheme-a-code-is-for)
 - [Combine codes with a patch](#combine-codes-with-a-patch)
 - [Share a cheat as a patch](#share-a-cheat-as-a-patch)
+- [Use the cheat database instead of typing codes](#use-the-cheat-database-instead-of-typing-codes)
+- [Build a patch from database cheats](#build-a-patch-from-database-cheats)
 - [Prove what you produced](#prove-what-you-produced)
 - [Related](#related)
 
@@ -113,6 +115,46 @@ rom-weaver patch create \
   --output infinite-lives.solid
 ```
 
+## Use the cheat database instead of typing codes
+
+Install the shards once:
+
+```bash
+rom-weaver setup
+```
+
+That puts them in `cheats` beside the identify packs, which is where every cheat flag looks by default. `--cheat-database DIR` and `$ROM_WEAVER_CHEAT_DATABASE` point somewhere else.
+
+See what the database has for a ROM:
+
+```bash
+rom-weaver cheat list --input game.nes
+```
+
+Each row is an ID, a delivery, the raw code, and a description. A `rom` entry can be baked into the ROM; an `unsupported` entry cannot, and the row says why.
+
+Bake the entries you want:
+
+```bash
+rom-weaver patch apply \
+  --input game.nes \
+  --cheat "Infinite lives" \
+  --cheat cheat_5a8473f0d9d3ed2c6f75737d \
+  --output game-coded.nes
+```
+
+Select by ID when a description names more than one entry; the run fails rather than guessing. Selecting an `unsupported` entry fails and names it.
+
+Two `rom` cheats that write different values to the same byte fail with `cheat_write_conflict`. Add `--allow-cheat-conflicts` to let the last one win.
+
+## Build a patch from database cheats
+
+```bash
+rom-weaver patch create --original game.nes --cheat "Infinite lives" --output cheats.ips
+```
+
+Only `rom` entries can go in a patch. Without `--cheat` every cheat the matched game holds is used. The report names the entries it skipped in `details.skipped_cheats`.
+
 ## Prove what you produced
 
 Hash the result so you can tell the baked ROM apart from the clean one later:
@@ -125,7 +167,9 @@ Keep the clean ROM. A patch author's checksum refers to the unbaked file, so a l
 
 ## Related
 
+- [CLI reference](../reference/cli.md#cheats): the `cheat` command and the shared cheat flags.
 - [CLI reference](../reference/cli.md#extras): `--code` beside the other patching extras.
 - [Create patches from the CLI](cli-create.md): the rest of the create workflow.
+- [Cheat database reference](../reference/cheat-database.md): the directory layout, delivery classes, and match classes.
 - [Apply patches from the CLI](cli-apply.md): the rest of the apply workflow.
 - [How patching works](../explanation/how-patching-works.md): why the exact starting bytes matter.

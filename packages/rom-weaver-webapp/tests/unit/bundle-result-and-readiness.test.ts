@@ -157,6 +157,39 @@ describe("bundle result parsing", () => {
     expect(parseBundleCreateResult({ bundle_create: { bundle_path: "", bundle: { version: 1 } } })).toBeUndefined();
     expect(parseBundleCreateResult({})).toBeUndefined();
   });
+
+  it("warns that it drops the cheat selections a bundle records", () => {
+    const cheats = [{ id: "cheat_one" }, { id: "cheat_two" }];
+    const parsed = parseBundleParseResult({
+      bundle: {
+        bundle: { patches: [], version: 1, cheats },
+        patch_sources: [],
+        source_kind: "json",
+        warnings: ["existing"],
+      },
+    });
+    expect(parsed?.warnings).toEqual(["existing", expect.stringContaining("2 cheat selections")]);
+
+    const created = parseBundleCreateResult({
+      bundle_create: {
+        bundle_path: "rom-weaver-bundle.json",
+        bundle: { patches: [], version: 1, cheats: [cheats[0]] },
+        warnings: [],
+      },
+    });
+    expect(created?.warnings).toEqual([expect.stringContaining("1 cheat selection,")]);
+
+    // A bundle without cheats gains no warning.
+    const plain = parseBundleParseResult({
+      bundle: {
+        bundle: { patches: [], version: 1 },
+        patch_sources: [],
+        source_kind: "json",
+        warnings: [],
+      },
+    });
+    expect(plain?.warnings).toEqual([]);
+  });
 });
 
 type Stage = {

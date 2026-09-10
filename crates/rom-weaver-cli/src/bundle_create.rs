@@ -31,6 +31,16 @@ pub struct BundleCreateResult {
     pub warnings: Vec<String>,
 }
 
+/// The `; N cheat entr(y|ies)` clause of the create label; empty when the
+/// bundle records none.
+fn cheat_entry_summary(count: usize) -> String {
+    match count {
+        0 => String::new(),
+        1 => "; 1 cheat entry".to_string(),
+        many => format!("; {many} cheat entries"),
+    }
+}
+
 impl CliApp {
     pub(super) fn run_bundle_create(&self, mut args: BundleCreateCommand) -> AppRunOutcome {
         let context = self.context(args.threads);
@@ -65,7 +75,7 @@ impl CliApp {
         let report = match self.bundle_create_inner(&args, &context) {
             Ok(result) => {
                 let label = format!(
-                    "wrote bundle `{}` ({} patch entr{}{})",
+                    "wrote bundle `{}` ({} patch entr{}{}{})",
                     result.bundle_path,
                     result.bundle.patches.len(),
                     if result.bundle.patches.len() == 1 {
@@ -73,6 +83,7 @@ impl CliApp {
                     } else {
                         "ies"
                     },
+                    cheat_entry_summary(result.bundle.cheats.len()),
                     result
                         .archive_path
                         .as_deref()
@@ -199,6 +210,13 @@ impl CliApp {
             }
         }
 
+        // An explicit --cheat selection replaces the spec's cheats wholesale,
+        // the way explicit --patch flags replace its patch chain; otherwise the
+        // spec's own entries carry through.
+        if args.cheats.is_empty() && args.cheat_selection.cheats.is_empty() {
+            args.cheats = spec.cheats.clone();
+        }
+
         // Explicit --patch flags win wholesale over the spec's patch chain.
         if args.patch_specs.is_empty() && args.patch.is_empty() {
             let mut specs = Vec::with_capacity(spec.patches.len());
@@ -250,15 +268,61 @@ impl CliApp {
         Ok(())
     }
 
+    /// The bundle's cheat entries: whatever the caller supplied, plus the
+    /// `--cheat` selection resolved against the ROM. Native-only
+    /// (reads the local cheat database); on wasm the webapp supplies entries
+    /// directly.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn bundle_create_cheat_entries(
+        &self,
+        args: &BundleCreateCommand,
+        context: &OperationContext,
+    ) -> Result<Vec<BundleCheatEntry>> {
+        let mut cheats = args.cheats.clone();
+        let selection = &args.cheat_selection;
+        if selection.cheats.is_empty() {
+            return Ok(cheats);
+        }
+        let Some(rom) = args.rom.as_deref() else {
+            return Err(RomWeaverError::Validation(
+                "--cheat needs --input so the selection can be classified against the ROM"
+                    .to_string(),
+            ));
+        };
+        let resolved = self.resolve_cheat_selection(rom, selection, context)?;
+        if let Some(entry) = resolved.selected_unusable().first() {
+            return Err(RomWeaverError::Validation(format!(
+                "cheat `{}` cannot be recorded: it cannot be baked into the ROM",
+                entry.record.description
+            )));
+        }
+        cheats.extend(resolved.bundle_cheat_entries(&selection.cheats));
+        trace!(
+            cheats = cheats.len(),
+            "recorded cheat selections in a bundle"
+        );
+        Ok(cheats)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn bundle_create_cheat_entries(
+        &self,
+        args: &BundleCreateCommand,
+        _context: &OperationContext,
+    ) -> Result<Vec<BundleCheatEntry>> {
+        Ok(args.cheats.clone())
+    }
+
     pub(super) fn bundle_create_inner(
         &self,
         args: &BundleCreateCommand,
         context: &OperationContext,
     ) -> Result<BundleCreateResult> {
         let specs = bundle_create_patch_specs(args)?;
-        if specs.is_empty() {
+        let cheats = self.bundle_create_cheat_entries(args, context)?;
+        if specs.is_empty() && cheats.is_empty() {
             return Err(RomWeaverError::Validation(
-                "bundle create requires at least one --patch".to_string(),
+                "bundle create requires at least one --patch or --cheat".to_string(),
             ));
         }
         let algorithms: Vec<String> = if args.checksum.is_empty() {
@@ -455,6 +519,7 @@ impl CliApp {
             version: BUNDLE_VERSION,
             rom,
             patches,
+            cheats,
             output,
         };
         let mut bytes = serde_json::to_vec_pretty(&bundle).map_err(|error| {

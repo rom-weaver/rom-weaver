@@ -51,6 +51,7 @@ pub fn render_success(surface: &Surface, event: &ProgressEvent) {
             }
             "checksum" => render_checksum(surface, event),
             "identify" => render_identify(surface, event),
+            "cheat" => render_cheat_list(surface, event),
             _ => render_details_or_label(surface, event),
         }
     }
@@ -247,6 +248,52 @@ fn render_candidates(surface: &Surface, event: &ProgressEvent) {
     } else {
         label_line(surface, event);
     }
+}
+
+/// `cheat list`: the match class, the attribution line, then one row per cheat.
+fn render_cheat_list(surface: &Surface, event: &ProgressEvent) {
+    let Some(list) = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("cheat_list"))
+    else {
+        return render_details_or_label(surface, event);
+    };
+    label_line(surface, event);
+    let text = |key: &str| list.get(key).and_then(Value::as_str).unwrap_or("");
+    surface.line(&format!(
+        "system {}, matched by {}{}",
+        text("system"),
+        text("match_kind"),
+        match text("game_id") {
+            "" => String::new(),
+            id => format!(" (game {id})"),
+        }
+    ));
+    let entries = list.get("entries").and_then(Value::as_array);
+    let Some(entries) = entries else {
+        return surface.line(text("attribution"));
+    };
+    let width = |key: &str| {
+        entries
+            .iter()
+            .filter_map(|entry| entry.get(key).and_then(Value::as_str))
+            .map(str::len)
+            .max()
+            .unwrap_or(0)
+    };
+    let (id_width, delivery_width, code_width) = (width("id"), width("delivery"), width("code"));
+    for entry in entries {
+        let field = |key: &str| entry.get(key).and_then(Value::as_str).unwrap_or("");
+        surface.line(&format!(
+            "{:id_width$}  {:delivery_width$}  {:code_width$}  {}",
+            field("id"),
+            field("delivery"),
+            field("code"),
+            field("description")
+        ));
+    }
+    surface.line(text("attribution"));
 }
 
 /// Fallback: render a recognized `details` object as flattened key/values, else the plain label.
