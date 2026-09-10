@@ -1,0 +1,19 @@
+# The count is wrong on purpose.
+cheats = 1
+
+cheat0_desc = "Infinite \"Things\""
+cheat0_code = "AAAA-BBBB+CCCC-DDDD"
+cheat0_enable = false
+cheat0_unknown_field = "keep\\this"
+
+cheat2_desc = Duplicate description
+cheat2_code = "7E1234??"
+cheat2_enable = false
+
+cheat7_desc = Duplicate description
+cheat7_code = "01050EC6;013F0DC6"
+cheat7_enable = false
+cheat7_address = "4660"
+cheat7_value = "63"
+cheat7_handler = "1"
+cheat7_big_endian = "false"

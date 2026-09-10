@@ -40,6 +40,7 @@ Procedures for specific tasks.
 ### In the browser
 
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
+- [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)
@@ -69,6 +70,7 @@ Procedures for specific tasks.
 Facts to look up. No advice, no steps.
 
 - [Supported formats](reference/formats.md): the full patch, container, codec, checksum, trim, and header support tables.
+- [Cheat database](reference/cheat-database.md): supported systems, delivery classes, matching, storage, and licensing.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v1.schema.json): the machine-readable bundle format.
@@ -80,8 +82,9 @@ Facts to look up. No advice, no steps.
 Background on the engine, formats, and design decisions.
 
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
+- [ROM cheats](explanation/rom-cheats.md): why ROMWeaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
-- [Choosing a patch format](explanation/patch-formats.md): differences between BPS, IPS, xdelta, PPF, and other patch formats.
+- [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.

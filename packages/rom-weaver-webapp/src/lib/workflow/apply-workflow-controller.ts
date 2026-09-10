@@ -16,6 +16,7 @@ import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/
 import { getPatchProbeRequirements, parsePatchForApply } from "../apply/patch-apply-service.ts";
 import { runApplyWorkflow } from "../apply/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
+import type { CheatRecord } from "../cheats/model.ts";
 import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
 import { getPatchFileBlob, getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
 import {
@@ -119,6 +120,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
   private inputs: TSource[] = [];
+  private cheatRecords: CheatRecord[] = [];
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
    * finished hashing), keyed by input stage id; `discoverImplicitPatches` applies them instead of
    * re-opening the dialog. Values are chosen file names in apply order; empty = user picked nothing. */
@@ -165,6 +167,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   getPatchSources(): TSource[] {
     return this.patches.map((patch) => patch.source);
+  }
+
+  /** Set the ROM cheat records that the next run bakes into the output. */
+  setCheats(records: CheatRecord[]): void {
+    this.cheatRecords = records.map((record) => cloneValue(record));
   }
 
   /** Export the exact leaves staging prepared, so a bundle export right after apply needs no
@@ -787,6 +794,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         wrapPublicOutput<TDestination>(output, this.runtime, index),
       );
       const publicResult: ApplyResult<TDestination> = {
+        ...(result.cheats ? { cheats: result.cheats } : {}),
         inputs: result.inputs,
         output: outputs[0] as ApplyResult<TDestination>["output"],
         outputs,
@@ -1477,6 +1485,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   private createPatchInput(onProgress?: ApplyWorkflowOptions["onProgress"]): PatchInput {
     return {
+      cheatRecords: this.cheatRecords.map((record) => cloneValue(record)),
       inputs: this.getEffectiveInputSources() as never,
       options: this.createExecutionOptions(onProgress),
       parsedPatches: this.patches.map((patch) => patch.parsedPatch).filter(Boolean) as ParsedPatchLike[],

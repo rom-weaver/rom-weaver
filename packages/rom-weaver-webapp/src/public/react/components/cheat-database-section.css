@@ -1,0 +1,295 @@
+@layer style, foundation, drawers, controls, readouts, docs, overrides;
+
+@layer controls {
+  /* Float the cheat card actions so long descriptions wrap beneath them - the
+     same treatment the patch stack gets, restated because those rules are
+     scoped to #rom-weaver-list-patch-stack. */
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-top {
+    display: flow-root;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-actions {
+    float: right;
+    display: flex;
+    margin: 0 0 var(--sp-xs) var(--sp-m);
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-btns {
+    display: flex;
+    gap: var(--sp-s);
+    align-items: center;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-name {
+    display: block;
+    min-width: 0;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-name > .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    margin-block-start: var(--sp-xs);
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch .phandle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--ctrl-h);
+    height: var(--ctrl-h);
+    min-height: 0;
+    padding: 2px;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack .nm {
+    font-weight: 700;
+  }
+
+  /* The .rb chip chrome is scoped to step headers and drawer readouts; the
+     cheat card's meta line needs the same badge. */
+  .rw-app #rom-weaver-list-cheat-stack .card-meta .rb,
+  .rw-app .cheat-pick-badges .rb {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    font-size: var(--badge-fs);
+    font-stretch: 86%;
+    color: var(--weft);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    background: var(--well);
+    border: 1px solid var(--seam-soft);
+    border-radius: 6px;
+  }
+
+  .rw-app .cheat-add {
+    width: 100%;
+  }
+
+  .rw-app .cheat-add svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .rw-app .cheat-add-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: var(--sp-s) 0 0;
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+
+  .rw-app .cheat-output-summary p {
+    margin: 0;
+  }
+
+  /* Add-cheats dialog. Its width lives in design-system/dialogs.css with the
+     other dialog sizes, in the same layer as the .dlg rules it overrides. */
+  .rw-app .cheat-dlg .dlg-body {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .rw-app .cheat-search {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .rw-app .cheat-search svg,
+  .rw-app .manual-cheat-toggle svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .rw-app .cheat-search svg {
+    z-index: 1;
+    margin-inline: 0.75rem -2rem;
+    pointer-events: none;
+  }
+
+  .rw-app .cheat-search input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.75rem;
+    padding-inline-start: 2.5rem;
+  }
+
+  .rw-app .cheat-pick-list {
+    display: grid;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    border: 1px solid var(--seam, currentColor);
+    border-radius: var(--r-m, 6px);
+  }
+
+  .rw-app .cheat-pick {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    min-width: 0;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .rw-app .cheat-pick + .cheat-pick {
+    border-block-start: 1px solid var(--seam-soft, currentColor);
+  }
+
+  .rw-app .cheat-pick-text {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .rw-app .cheat-pick-name {
+    font-weight: 650;
+    overflow-wrap: anywhere;
+  }
+
+  .rw-app .cheat-pick-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+  }
+
+  .rw-app .cheat-pick-btn {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    justify-content: center;
+    min-width: 5.5rem;
+    min-height: 2.5rem;
+    padding-inline: 0.7rem;
+    border: 1px solid var(--seam-strong, currentColor);
+    border-radius: 6px;
+  }
+
+  .rw-app .cheat-pick-btn svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .rw-app .cheat-pick-btn.is-added {
+    color: var(--verified, currentColor);
+    border-color: color-mix(in oklab, var(--verified, currentColor) 55%, var(--seam-strong, currentColor));
+  }
+
+  .rw-app .cheat-pick-empty {
+    margin: 0;
+    color: var(--ink-3);
+  }
+
+  .rw-app .cheat-pick-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+
+  .rw-app .cheat-pager {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .rw-app .cheat-pager button {
+    min-height: 2.4rem;
+    padding-inline: 0.7rem;
+    border: 1px solid var(--seam-strong, currentColor);
+    border-radius: 6px;
+  }
+
+  .rw-app .cheat-pager button:disabled {
+    opacity: 0.5;
+  }
+
+  .rw-app .cheat-notices,
+  .rw-app .manual-cheat-result {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+    padding: 0.8rem;
+    border: 1px solid var(--seam, currentColor);
+  }
+
+  .rw-app .cheat-notices {
+    font-size: 0.88rem;
+  }
+
+  .rw-app .cheat-notices p,
+  .rw-app .manual-cheat-result p {
+    margin: 0;
+  }
+
+  .rw-app .cheat-game-picker,
+  .rw-app .manual-cheat form,
+  .rw-app .manual-cheat form > label,
+  .rw-app .manual-cheat-options > label {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .rw-app .cheat-game-picker select,
+  .rw-app .manual-cheat input,
+  .rw-app .manual-cheat textarea,
+  .rw-app .manual-cheat select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .rw-app .manual-cheat-toggle {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+  }
+
+  .rw-app .manual-cheat form {
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--seam, currentColor);
+  }
+
+  .rw-app .manual-cheat-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .rw-app .cheat-pick-btn:active,
+  .rw-app .cheat-pager button:not(:disabled):active,
+  .rw-app .manual-cheat-toggle:active {
+    filter: brightness(0.9);
+  }
+
+  @media (hover: hover) {
+    .rw-app .cheat-pick-btn:hover,
+    .rw-app .cheat-pager button:not(:disabled):hover,
+    .rw-app .manual-cheat-toggle:hover {
+      filter: brightness(1.08);
+    }
+  }
+
+  @media (max-width: 40rem) {
+    .rw-app .cheat-pick {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rw-app .manual-cheat-options {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

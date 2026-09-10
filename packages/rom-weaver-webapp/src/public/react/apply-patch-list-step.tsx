@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { CHEAT_HEADER_STRIP_HINT } from "../../lib/cheats/header-guard.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
@@ -116,7 +117,7 @@ const toFaultDetail = (message: string): string => {
 };
 
 /** Failed dry-run verdict: an inset fault well with the verdict, the detail,
- * and what to do next (naming the 0x04 override toggle when it is offered). */
+ * and what to do next (naming the 0x05 override toggle when it is offered). */
 const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => (
   <div className="pverdict pfault">
     <div className="pfault-title">
@@ -126,7 +127,7 @@ const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overr
     <p className="pfault-detail">{toFaultDetail(message)}</p>
     <p className="pfault-hint">
       {overrideAvailable
-        ? "Pick the ROM this patch was made for, or use “Apply anyway despite patch & ROM check mismatch” in 0x04."
+        ? "Pick the ROM this patch was made for, or use “Apply anyway despite patch & ROM check mismatch” in 0x05."
         : "Pick the ROM this patch was made for."}
     </p>
   </div>
@@ -301,10 +302,13 @@ const PatchHeaderModeSelect = ({
   index,
   item,
   patchStack,
+  stripDisabled,
 }: {
   index: number;
   item: PatchStackItemState;
   patchStack: PatcherStackController;
+  /** The cheat stack has a card switched On, so stripping is not on offer. */
+  stripDisabled?: boolean;
 }) => {
   if (!item.showHeaderOption) return null;
   const headerNoun = item.headerStrippedBytes ? `${item.headerStrippedBytes} B header` : "header";
@@ -332,7 +336,9 @@ const PatchHeaderModeSelect = ({
       >
         <option value="auto">{autoLabel}</option>
         <option value="keep">keep {headerNoun}</option>
-        <option value="strip">strip {headerNoun}</option>
+        <option disabled={stripDisabled} title={stripDisabled ? CHEAT_HEADER_STRIP_HINT : undefined} value="strip">
+          strip {headerNoun}
+        </option>
       </DropdownSelect>
     </span>
   );
@@ -1186,6 +1192,7 @@ const PatchCard = ({
   position,
   romActuals,
   rowProps,
+  stripDisabled,
   total,
 }: {
   /** Show the input-basis select in the card's Checks drawer. */
@@ -1212,6 +1219,8 @@ const PatchCard = ({
   /** This patch's target ROM computed checks, for verifying input checks. */
   romActuals?: RomCheckActuals;
   rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
+  /** The cheat stack has a card switched On, so stripping is not on offer. */
+  stripDisabled?: boolean;
   total: number;
 }) => {
   // Pencil edit state: the name and description editors open/close together.
@@ -1295,7 +1304,9 @@ const PatchCard = ({
           {/* The patch's single contextual control (target OR header OR byte
               order - never more than one applies) closes the metadata line. */}
           {staging ? null : <PatchTarget index={index} item={item} patchStack={patchStack} />}
-          {staging || isDisabled ? null : <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} />}
+          {staging || isDisabled ? null : (
+            <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} stripDisabled={stripDisabled} />
+          )}
           {staging || isDisabled ? null : <PatchN64ByteOrderSelect index={index} item={item} patchStack={patchStack} />}
           {staging ? (
             <StageStatus
@@ -1504,6 +1515,7 @@ const ApplyPatchListStep = ({
   patches,
   patchStack,
   romActualsById,
+  stripDisabled,
   woven,
 }: {
   /** The run has optional/skipped patches: hint on the chain-output card that its
@@ -1521,13 +1533,15 @@ const ApplyPatchListStep = ({
   onBundleMetaBulkChange?: (updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   notice?: ReactNode;
-  /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
+  /** The 0x05 "Apply anyway…" override toggle is on offer - fault hints name it. */
   overrideAvailable?: boolean;
   /** ROM id → its computed checks, for verifying user-entered input checks against
    * the real ROM (the chain-input patch's target). */
   romActualsById?: ReadonlyMap<string, RomCheckActuals>;
   patches: PatchStackItemState[];
   patchStack: PatcherStackController;
+  /** The cheat stack has a card switched On, so stripping is not on offer. */
+  stripDisabled?: boolean;
   woven?: boolean;
 }) => {
   const [bulkEditing, setBulkEditing] = useState(false);
@@ -1649,6 +1663,7 @@ const ApplyPatchListStep = ({
             position={reorderList.displayIndex(index) + 1}
             romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
             rowProps={reorderList.rowProps(index)}
+            stripDisabled={stripDisabled}
             total={total}
           />
         ))}

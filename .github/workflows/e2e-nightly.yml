@@ -37,6 +37,7 @@ jobs:
           wasi-sdk: "true"
           webapp-deps: "true"
           playwright: "true"
+          identify-data-cache: "true"
 
       - name: Generate webapp attribution
         run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
