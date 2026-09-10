@@ -122,7 +122,9 @@ rom-weaver patch validate \
   --patch fixes.ups
 ```
 
-Patches are checked as a chain by default. Pass `--independent` to check each one against the original ROM and get a verdict per patch, and `--expect-in ALGO=HEX` to check the ROM itself at the same time.
+Patches default to automatic checksum inference. Pass `--default-patch-basis base` for patches made from the original ROM, or `previous` for a dependent chain.
+
+Pass `--independent` to check each patch separately and report every verdict. Use `--expect-in ALGO=HEX` to check the ROM itself.
 
 ## Where next
 

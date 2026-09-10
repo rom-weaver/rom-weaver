@@ -504,7 +504,16 @@ const resolveArchiveInputAssetsByDescent = async (
       file.fileName = fileName;
       // The CHD recompress path keys off the disc format; ingest reports each leaf's optical medium.
       const discFormat = ingestResult.assets[index]?.discFormat;
-      if (discFormat) file.metadata = { ...file.metadata, format: discFormat };
+      const ingestAsset = ingestResult.assets[index];
+      const member = output.fileName?.trim();
+      if (member || discFormat || ingestAsset?.discGroupId || ingestAsset?.trackNumber !== undefined)
+        file.metadata = {
+          ...file.metadata,
+          ...(member ? { member } : {}),
+          ...(discFormat ? { format: discFormat } : {}),
+          ...(ingestAsset?.discGroupId ? { discGroupId: ingestAsset.discGroupId } : {}),
+          ...(ingestAsset?.trackNumber === undefined ? {} : { trackNumber: ingestAsset.trackNumber }),
+        };
       const identification = ingestResult.assets[index]?.identification;
       if (identification)
         (file as typeof file & { identification?: typeof identification }).identification = identification;
@@ -540,7 +549,17 @@ const resolveArchiveInputAssetsByDescent = async (
         trackFile.fileName,
         trackFile,
         groupId,
-        { patchable: true },
+        {
+          member:
+            typeof (trackFile.metadata as { member?: unknown } | undefined)?.member === "string"
+              ? (trackFile.metadata as { member: string }).member
+              : trackFile.fileName,
+          patchable: true,
+          trackNumber:
+            typeof (trackFile.metadata as { trackNumber?: unknown } | undefined)?.trackNumber === "number"
+              ? (trackFile.metadata as { trackNumber: number }).trackNumber
+              : undefined,
+        },
         { cueText, gdiText, splitBinAvailable },
       ),
     );

@@ -148,6 +148,10 @@ pub struct IdentifyComponent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub sha256: Option<String>,
+    /// One-based disc track number on a per-track database record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub track: Option<u32>,
 }
 
 /// Which database produced the match.
@@ -288,6 +292,36 @@ impl IdentifyDatabaseSet {
         Ok(Some(Self { packs }))
     }
 
+    /// The installed packs whose catalog profile stores per-track disc hashes.
+    /// Only they can hold a multi-track record, so a caller after one skips
+    /// the cartridge packs, which are most of the database.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn load_track_packs() -> Result<Option<Self>> {
+        let provider = IdentifyPackProvider::new(None)?;
+        let mut packs = Vec::new();
+        for entry in provider.catalog_entries() {
+            if !entry
+                .media_profiles
+                .iter()
+                .any(|profile| profile_needs_tracks(profile))
+            {
+                continue;
+            }
+            let Some(pack) = provider.take_pack_for_slug(&entry.pack_slug)? else {
+                trace!(slug = %entry.pack_slug, "per-track identify pack is not installed");
+                continue;
+            };
+            trace!(slug = %entry.pack_slug, "loaded per-track identify pack");
+            packs.push((pack.name, pack.file));
+        }
+        Ok((!packs.is_empty()).then_some(Self { packs }))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(super) fn load_track_packs() -> Result<Option<Self>> {
+        Ok(None)
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn from_builtin_packs() -> Result<Self> {
         let database_dir = super::identify_database::default_database_dir()?;
@@ -355,9 +389,17 @@ impl IdentifyDatabaseSet {
                     routed_checksums
                         .entry("crc32".to_string())
                         .or_insert(route_crc32);
-                    let outcome =
+                    // A pack may route a hash whose record has no size; that
+                    // route cannot form a fingerprint and is not a match.
+                    let Some(outcome) =
                         match_single_blob(database_name, pack, Some(size), &routed_checksums)?
-                            .expect("a positive RWFP1 hash size produces a fingerprint");
+                    else {
+                        trace!(
+                            database = database_name,
+                            size, "skipping a routed hash with no size"
+                        );
+                        continue;
+                    };
                     push_artifact_matches(database_name, variant, outcome, seen, output);
                 }
                 continue;
@@ -693,6 +735,7 @@ fn identify_title_match(
                 md5: component.md5,
                 sha1: component.sha1,
                 sha256: component.sha256,
+                track: component.track,
             })
             .collect(),
         game_id: game_match.game_id,
@@ -770,6 +813,7 @@ fn name_search_title_match(
                 md5: component.md5.clone(),
                 sha1: component.sha1.clone(),
                 sha256: component.sha256.clone(),
+                track: component.track,
             })
             .collect(),
         game_id: game.game_id.clone(),
@@ -1143,6 +1187,7 @@ impl CliApp {
                 md5: checksums.get("md5").cloned(),
                 sha1: checksums.get("sha1").cloned(),
                 sha256: checksums.get("sha256").cloned(),
+                track: None,
             }],
             None => Vec::new(),
         };

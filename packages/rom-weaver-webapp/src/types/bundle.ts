@@ -3,6 +3,7 @@
 // these camelCase, `number`-based types are what the webapp consumes. Kept in `types/` (not `lib/`)
 // so the runtime adapter type can reference them without an import cycle (mirrors `types/ingest.ts`).
 import type { ParsedPatchDescriptor } from "./ingest.ts";
+import type { PatchInputRef } from "./workflow-runtime-types.ts";
 
 type BundleHeaderMode = "keep" | "strip" | "auto";
 type BundleSourceKind = "json" | "compressed-json" | "archive";
@@ -20,7 +21,13 @@ type ParsedBundleChecks = {
   size?: number;
 };
 
+type ParsedBundlePatchInput = PatchInputRef;
+
+type ParsedBundleCheckState = { id: string; checks: ParsedBundleChecks };
+
 type ParsedBundleRom = {
+  member?: string;
+  checksRef?: string;
   name?: string;
   url?: string;
   path?: string;
@@ -28,6 +35,11 @@ type ParsedBundleRom = {
 };
 
 type ParsedBundlePatchEntry = {
+  input?: ParsedBundlePatchInput;
+  /** Cumulative output lane. It does not replace the entry's fixed input. */
+  target?: ParsedBundlePatchInput;
+  inputChecksRef?: string;
+  outputChecksRef?: string;
   /** Stable patch-slot identity retained across source replacements. */
   id?: string;
   /** Author-controlled release version; distinct from the bundle schema version. */
@@ -46,13 +58,12 @@ type ParsedBundlePatchEntry = {
   /** Expected post-apply state, only when it differs from the final `output.checks`. */
   outputChecks?: ParsedBundleChecks;
   header?: BundleHeaderMode;
-  /** What this patch's input checks were authored against: the bundle's rom (`base`, verified
-   * once up front) or the previous selected patch's output (`previous`, the default). Absent
-   * means previous/inferred. */
+  /** Per-entry override of the bundle's shared patch input rule. */
   basis?: "base" | "previous";
 };
 
 type ParsedBundleOutput = {
+  checksRef?: string;
   name?: string;
   header?: BundleHeaderMode;
   /** Expected checksums/size of the final output once the full patch chain is applied. */
@@ -60,7 +71,10 @@ type ParsedBundleOutput = {
 };
 
 type ParsedBundle = {
+  checkStates?: ParsedBundleCheckState[];
   version: number;
+  /** v2 shared patch input rule. v1 bundles omit this and preserve automatic inference. */
+  patchBasis?: "auto" | "base" | "previous";
   rom?: ParsedBundleRom;
   /** Ordered: array order is the apply order. */
   patches: ParsedBundlePatchEntry[];
@@ -91,6 +105,7 @@ type ParsedBundleCreateResult = {
 };
 
 export type {
+  ParsedBundlePatchInput,
   BundleHeaderMode,
   BundleSourceKind,
   ParsedBundle,

@@ -71,6 +71,7 @@ fn validate_command(input: &Path, patches: Vec<PathBuf>) -> PatchValidateCommand
         independent: false,
         plan: false,
         patch_basis: Vec::new(),
+        default_patch_basis: None,
         patch_input_check: Vec::new(),
         patch_output_check: Vec::new(),
         threads: ThreadBudget::Fixed(1),
@@ -699,6 +700,7 @@ fn plan_metadata_aligns_one_value_per_patch_or_none_at_all() {
     let none = CliApp::align_plan_metadata(
         &PlanFlagInputs {
             basis: Vec::new(),
+            default_basis: PatchBasisMode::Auto,
             input_checks: Vec::new(),
             output_checks: Vec::new(),
         },
@@ -711,6 +713,7 @@ fn plan_metadata_aligns_one_value_per_patch_or_none_at_all() {
     let aligned = CliApp::align_plan_metadata(
         &PlanFlagInputs {
             basis: vec![PatchBasisMode::Base, PatchBasisMode::Previous],
+            default_basis: PatchBasisMode::Auto,
             input_checks: Vec::new(),
             output_checks: vec!["crc32=deadbeef".to_string(), "crc32=a684c7c6".to_string()],
         },
@@ -729,6 +732,7 @@ fn plan_metadata_aligns_one_value_per_patch_or_none_at_all() {
     let short = CliApp::align_plan_metadata(
         &PlanFlagInputs {
             basis: vec![PatchBasisMode::Base],
+            default_basis: PatchBasisMode::Auto,
             input_checks: Vec::new(),
             output_checks: Vec::new(),
         },

@@ -1,3 +1,6 @@
+use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular_archive_format};
+
+use super::bundle_load::is_stream_codec_format_name;
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::*;
 
@@ -56,6 +59,161 @@ enum AutoExtractMode {
 }
 
 impl CliApp {
+    pub(super) fn resolve_exact_member_source(
+        &self,
+        source: &Path,
+        member: &str,
+        context: &OperationContext,
+        labels: AutoExtractResolutionLabels<'_>,
+        flags: AutoExtractResolutionFlags,
+    ) -> Result<ResolvedChecksumSource> {
+        let member = super::bundle_parse::normalized_member_path(member, labels.source_label)?;
+        if flags.no_extract {
+            return Err(RomWeaverError::Validation(format!(
+                "{} `{member}` requires extraction; remove --no-extract",
+                labels.source_label
+            )));
+        }
+        let mut current = source.to_path_buf();
+        let mut cleanup_paths = Vec::new();
+        let result = (|| -> Result<ResolvedChecksumSource> {
+            for depth in 0..MAX_NESTED_EXTRACT_DEPTH {
+                if let Some(disc) =
+                    self.build_disc_context(&current, Some(&member), None, context)?
+                {
+                    return Ok(ResolvedChecksumSource {
+                        source: self.disc_member_path(&disc, &member)?,
+                        extracted_archives: depth,
+                        cleanup_paths: Vec::new(),
+                    });
+                }
+                // Generated intermediates have no format extension. Exact
+                // member lookup MAY recognize tar by its parsed archive format.
+                let handler = self
+                    .containers
+                    .probe(&current)
+                    .or_else(|| {
+                        if probe_regular_archive_format(
+                            &current,
+                            "tar",
+                            RegularArchiveProbeFormat::Tar,
+                        )
+                        .unwrap_or(false)
+                        {
+                            self.containers.find_by_name("tar")
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or_else(|| {
+                        RomWeaverError::Validation(format!(
+                            "{} `{member}` was not found in `{}`",
+                            labels.source_label,
+                            source.display()
+                        ))
+                    })?;
+                if is_stream_codec_format_name(handler.descriptor().name) {
+                    let resolved = self.resolve_source_with_auto_extract_with_mode(
+                        &current,
+                        &[],
+                        context,
+                        labels,
+                        AutoExtractResolutionOptions {
+                            no_extract: false,
+                            no_ignore: true,
+                            kind_filter: ArchiveEntryKindFilter::default(),
+                            mode: AutoExtractMode::SingleStep,
+                            stop_on_single_payload_codec: false,
+                        },
+                    )?;
+                    cleanup_paths.extend(resolved.cleanup_paths);
+                    if resolved.extracted_archives == 0 {
+                        return Err(RomWeaverError::Validation(format!(
+                            "{} `{member}` could not be extracted from `{}`",
+                            labels.source_label,
+                            current.display()
+                        )));
+                    }
+                    current = resolved.source;
+                    continue;
+                }
+                let entries = handler.list_entries(
+                    &ContainerProbeRequest {
+                        source: current.clone(),
+                        split_bin: true,
+                    },
+                    context,
+                )?;
+                let matches = entries
+                    .iter()
+                    .filter(|entry| normalize_archive_name(entry) == member)
+                    .count();
+                if matches != 1 {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{} `{member}` matches {matches} entries in `{}`; expected one exact member",
+                        labels.source_label,
+                        current.display()
+                    )));
+                }
+                let selection = member
+                    .chars()
+                    .fold(String::new(), |mut selection, character| {
+                        match character {
+                            '*' => selection.push_str("[*]"),
+                            '?' => selection.push_str("[?]"),
+                            '[' => selection.push_str("[[]"),
+                            _ => selection.push(character),
+                        }
+                        selection
+                    });
+                let out_dir = context.temp_paths().next_path(labels.temp_prefix, None);
+                fs::create_dir_all(&out_dir)?;
+                cleanup_paths.push(out_dir.clone());
+                trace!(source = %current.display(), member, format = handler.descriptor().name, "extracting exact target member");
+                handler.extract(
+                    &ContainerExtractRequest {
+                        source: current.clone(),
+                        selections: vec![selection],
+                        kind_filter: ArchiveEntryKindFilter::default(),
+                        out_dir: out_dir.clone(),
+                        split_bin: true,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                        containing_archive: (current != source).then(|| source.to_path_buf()),
+                    },
+                    context,
+                )?;
+                let selected = out_dir.join(&member);
+                if !selected.is_file() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{} `{member}` did not extract to a file",
+                        labels.source_label
+                    )));
+                }
+                return Ok(ResolvedChecksumSource {
+                    source: selected,
+                    extracted_archives: depth + 1,
+                    cleanup_paths: Vec::new(),
+                });
+            }
+            Err(RomWeaverError::Validation(format!(
+                "{} `{member}` exceeded the extract depth limit",
+                labels.source_label
+            )))
+        })();
+        match result {
+            Ok(mut resolved) => {
+                resolved.cleanup_paths = cleanup_paths;
+                Ok(resolved)
+            }
+            Err(error) => {
+                Self::cleanup_temp_paths(&cleanup_paths);
+                Err(error)
+            }
+        }
+    }
+
     pub(super) fn resolve_source_with_auto_extract(
         &self,
         source: &Path,

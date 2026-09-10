@@ -323,16 +323,26 @@ describe("setPatchTarget", () => {
 
   it("assigns a target found by id or by file name", async () => {
     const controller = createController();
-    const stage = patchStage() as StageProbe & { state: { targetInputFileName?: string; targetInputId?: string } };
+    const stage = patchStage() as StageProbe & {
+      state: { patchTarget?: { member?: string; rom: true }; targetInputFileName?: string; targetInputId?: string };
+    };
     controller.patches = [stage];
-    controller.getPatchableInputAssets = vi.fn(() => [{ fileName: "rom.sfc", id: "input-1" }]);
+    controller.getPatchableInputAssets = vi.fn(() => [
+      { fileName: "rom.sfc", id: "input-1", member: "disc/track01.bin" },
+      { fileName: "track02.bin", id: "input-2", member: "disc/track02.bin" },
+    ]);
 
     await controller.setPatchTarget(0, "input-1");
     expect(stage.state.targetInputId).toBe("input-1");
+    expect(stage.state.patchTarget).toEqual({ member: "disc/track01.bin", rom: true });
 
     stage.state.targetInputId = undefined;
     await controller.setPatchTarget(0, "rom.sfc");
     expect(stage.state.targetInputId).toBe("input-1");
+
+    stage.state.patchTarget = { member: "disc/track01.bin", rom: true };
+    await controller.setPatchTarget(0, "input-2");
+    expect(stage.state.patchTarget).toEqual({ member: "disc/track02.bin", rom: true });
   });
 
   it("rejects a target that no staged input matches", async () => {

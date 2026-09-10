@@ -1,3 +1,4 @@
+import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
 import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { ParsedIdentifyResolution, IdentifyStatus } from "../../types/identify.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
@@ -86,6 +87,7 @@ type StagedInputInfo = {
 };
 
 type ApplyWorkflowStageSnapshot = {
+  defaultPatchBasis?: "auto" | "base" | "previous";
   inputs: BinarySource[];
   patches: BinarySource[];
   options: ApplyPatchFormSettings & {
@@ -145,11 +147,16 @@ type LocalApplyPatchFormSessionOptions = Pick<
   | "onApplyComplete"
   | "onError"
 > & {
+  defaultPatchBasis?: "auto" | "base" | "previous";
   applyPatches: (input: {
     inputs: BinarySource[];
     patches: BinarySource[];
     /** Index-aligned per-patch run options (header/PPF-undo/checks) replayed onto re-staged runs. */
     patchOptions?: Array<{
+      id?: string;
+      input?: ParsedBundlePatchInput;
+      inputChecks?: string;
+      outputChecks?: string;
       basis?: "base" | "previous";
       header?: "keep" | "strip";
       n64ByteOrder?: "keep" | "big-endian" | "little-endian" | "byte-swapped";
@@ -157,6 +164,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
     }>;
+    defaultPatchBasis?: "auto" | "base" | "previous";
     options: ApplyPatchFormSettings & {
       output: NonNullable<ApplyPatchFormSettings["output"]> & {
         compression: "auto" | CompressionFormat;
@@ -213,6 +221,10 @@ type LocalApplyPatchFormSessionOptions = Pick<
     input: ApplyWorkflowStageSnapshot,
     patchIndex: number,
     option: {
+      id?: string;
+      input?: ParsedBundlePatchInput;
+      inputChecks?: string;
+      outputChecks?: string;
       basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;

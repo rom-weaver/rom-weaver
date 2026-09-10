@@ -39,6 +39,33 @@ fn parses_checksum_run_request_without_algorithms() {
 }
 
 #[test]
+fn parses_patch_apply_execution_target_fields() {
+    let request = parse_wasm_run_request(
+        r#"{"command":{"type":"patch","args":{"type":"apply","args":{"input":"game.bin","patches":["a.ips","b.ips"],"patch_id":["a","b"],"patch_target":[{"rom":true,"member":"track.bin"},{"patch":"a","member":"game.bin"}],"patch_input":[{"rom":true},{"patch":"a"}],"patch_input_check":["size=16","crc32=12345678"],"patch_output_check":["size=16","crc32=87654321"]}}}}"#,
+    )
+    .expect("patch apply execution target request should parse");
+    let rom_weaver_app::Commands::Patch(rom_weaver_app::PatchCommands::Apply(args)) =
+        request.command
+    else {
+        panic!("expected patch apply command");
+    };
+    assert_eq!(args.patch_id, ["a", "b"]);
+    assert!(matches!(
+        args.patch_input.as_slice(),
+        [Some(rom_weaver_app::BundlePatchInput::Rom { rom: true, member: None }),
+         Some(rom_weaver_app::BundlePatchInput::Patch { patch, member: None })] if patch == "a"
+    ));
+    assert!(matches!(
+        args.patch_target.as_slice(),
+        [Some(rom_weaver_app::BundlePatchInput::Rom { rom: true, member: Some(rom_member) }),
+         Some(rom_weaver_app::BundlePatchInput::Patch { patch, member: Some(patch_member) })]
+            if rom_member == "track.bin" && patch == "a" && patch_member == "game.bin"
+    ));
+    assert_eq!(args.patch_input_check, ["size=16", "crc32=12345678"]);
+    assert_eq!(args.patch_output_check, ["size=16", "crc32=87654321"]);
+}
+
+#[test]
 fn empty_stdin_reports_a_missing_request_error() {
     let error = parse_wasm_run_request("").expect_err("empty input should fail to parse");
     assert_eq!(error, "missing typed run request on stdin");

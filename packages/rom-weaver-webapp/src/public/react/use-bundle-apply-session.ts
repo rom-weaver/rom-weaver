@@ -1,8 +1,11 @@
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import { lookupExpectedRom } from "../../lib/apply/expected-rom-lookup.ts";
+import { fillMemberLaneChecks } from "../../lib/bundle/bundle-member-checks.ts";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import { bundleCheckTokens } from "../../lib/bundle/bundle-targets.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedBundleChecks, ParsedBundlePatchInput } from "../../types/bundle.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
@@ -10,6 +13,8 @@ const logger = createLogger("bundle-apply-session");
 
 /** Per-patch bundle metadata kept for the cards (label/description) and export round-trips. */
 type BundlePatchMeta = {
+  input?: ParsedBundlePatchInput;
+  target?: ParsedBundlePatchInput;
   /** Stable author-facing identity carried through bundle exports. */
   id?: string;
   /** Author-controlled patch release version; distinct from the schema version. */
@@ -71,6 +76,8 @@ const createBundlePatchMetadata = (
         basis: entry.basis,
         description: entry.description,
         id: entry.id,
+        input: entry.input,
+        target: entry.target,
         inputChecks: entry.inputChecks,
         label: entry.label,
         name: entry.name,
@@ -103,6 +110,33 @@ const stripOutputNameExtension = (name: string): string => {
   return stripped || name.trim();
 };
 
+/**
+ * Per-track input checks for the bundle's ROM-member lanes, taken from the
+ * identify record its `rom` checks name. Apply-time only: the values are handed
+ * to the patch options, never merged into the exported bundle metadata.
+ */
+const resolveMemberLaneChecks = async (
+  session: BundleApplySession,
+): Promise<ReadonlyMap<number, ParsedBundleChecks>> => {
+  const empty = new Map<number, ParsedBundleChecks>();
+  const needsFill = session.entries.some(
+    (entry) => !!(entry.target && "rom" in entry.target && entry.target.member) && !(entry.input || entry.inputChecks),
+  );
+  if (!needsFill) return empty;
+  const romChecks = session.romExpectation?.checks || session.chainEndpointChecks.input;
+  if (!romChecks) return empty;
+  try {
+    const identification = await lookupExpectedRom(romChecks);
+    const fills = fillMemberLaneChecks(session.entries, identification);
+    if (fills.size) logger.debug("bundle session filled member lane checks", { entries: [...fills.keys()] });
+    return fills;
+  } catch {
+    // A ROM the identify database cannot name is not an apply error; the lanes
+    // simply keep the checks the bundle itself declared.
+    return empty;
+  }
+};
+
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /**
@@ -133,6 +167,10 @@ const useBundleApplySession = ({
   const [bundleMetaById, setBundleMetaById] = useState<ReadonlyMap<string, BundlePatchMeta>>(new Map());
   const [bundleDefaultsPending, setBundleDefaultsPending] = useState(false);
   const seedGenerationRef = useRef(0);
+  // Apply-time input checks per patch id, filled from the identify record the
+  // bundle's rom checks name. Kept out of `bundleMetaById` on purpose: the form
+  // rebuilds run options from that metadata, and an export must not carry these.
+  const memberLaneChecksRef = useRef<ReadonlyMap<string, string>>(new Map());
   const activeSeedPatchNamesRef = useRef<readonly string[] | null>(null);
 
   useEffect(
@@ -201,6 +239,7 @@ const useBundleApplySession = ({
       );
       const meta = createBundlePatchMetadata(patches, session.entries, ids);
       setBundleMetaById(meta);
+      memberLaneChecksRef.current = new Map();
       // The controller work runs task-chained straight from the match, so everything lands while the
       // patches are still staging - well before the apply button arms. Deferring longer would race a
       // fast apply click: any settings commit cancels a queued apply (by design for real user edits).
@@ -221,6 +260,15 @@ const useBundleApplySession = ({
             }
             await new Promise<void>((resolve) => setTimeout(resolve, 20));
           }
+          const memberLaneChecks = await resolveMemberLaneChecks(session);
+          if (!isCurrent()) return;
+          memberLaneChecksRef.current = new Map(
+            [...memberLaneChecks].flatMap(([index, checks]) => {
+              const id = ids[index];
+              const tokens = bundleCheckTokens(checks);
+              return id && tokens ? [[id, tokens] as const] : [];
+            }),
+          );
           // Seed header modes through normal options. The bundle's ROM checksum
           // belongs only to the chain input; reactive sync owns the chain output
           // because it applies only while the full bundle chain remains intact.
@@ -230,9 +278,15 @@ const useBundleApplySession = ({
             const validateInputChecksum = inputChecks?.sha1 || inputChecks?.md5 || inputChecks?.crc32;
             await Promise.resolve(
               controllersRef.current.patchStack?.setPatchOption?.(index, {
+                ...(entry.id ? { id: entry.id } : {}),
+                ...(entry.input ? { input: entry.input } : {}),
+                ...(entry.target ? { target: entry.target } : {}),
                 ...(entry.basis ? { basis: entry.basis } : {}),
                 ...(entry.header === "keep" || entry.header === "strip" ? { header: entry.header } : {}),
                 ...(validateInputChecksum ? { validateInputChecksum } : {}),
+                ...(memberLaneChecks.has(index)
+                  ? { inputChecks: bundleCheckTokens(memberLaneChecks.get(index)) || "" }
+                  : {}),
                 // A local bundle can finish staging before its session metadata lands. Its option update
                 // clears the earlier verdict, so revalidate once after the final seeded entry.
                 revalidate: index === session.entries.length - 1,
@@ -298,6 +352,7 @@ const useBundleApplySession = ({
     bundleDefaultsPending,
     bundleMetaById,
     handleBundlePatchesChange,
+    memberLaneChecksRef,
     updateBundleMeta,
     updateBundleMetaForIds,
   };

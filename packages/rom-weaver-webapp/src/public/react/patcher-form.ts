@@ -1,5 +1,5 @@
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
-import type { ParsedBundleCreateResult } from "../../types/bundle.ts";
+import type { ParsedBundleCreateResult, ParsedBundlePatchInput } from "../../types/bundle.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { PatcherOutputState, PatchStackItemState, PatchStackState } from "./patcher-presentation.ts";
@@ -40,6 +40,11 @@ type PatcherStackController = StoreController<PatchStackState> & {
   setPatchOption?: (
     index: number,
     option: {
+      id?: string;
+      input?: ParsedBundlePatchInput;
+      target?: ParsedBundlePatchInput;
+      inputChecks?: string;
+      outputChecks?: string;
       basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
@@ -48,7 +53,7 @@ type PatcherStackController = StoreController<PatchStackState> & {
       /** A user edit: rerun the deep validation so the card verdict reflects the change. */
       revalidate?: boolean;
     },
-  ) => void;
+  ) => void | Promise<void>;
 };
 
 type PatcherOutputController = StoreController<PatcherOutputState> & {

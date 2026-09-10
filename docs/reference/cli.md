@@ -21,6 +21,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Inputs](#inputs)
   - [Output and compression](#output-and-compression)
   - [Bundle detection](#bundle-detection)
+  - [Bundle execution targets](#bundle-execution-targets)
   - [Checksum flags](#checksum-flags)
   - [Header and byte-order flags](#header-and-byte-order-flags)
   - [Extras](#extras)
@@ -201,7 +202,7 @@ The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON re
 - `matches[].provenance`: every source that contributed the matched hash record.
 - `matches[].legacy_variant`: true for an OpenGood-only record.
 - `matches[].dump_tags`: preserved GoodTools status tags for a legacy variant.
-- `matches[].expected_components`: the matched record's own components - `size` and every checksum the database holds, plus `filename` and `hash_scope`. A partial check reads the checksums it does not itself carry from here.
+- `matches[].expected_components`: the matched record's own components - `size` and every checksum the database holds, plus `filename`, `hash_scope`, and the one-based `track` on a per-track disc record. A partial check reads the checksums it does not itself carry from here.
 - `matches[].game_id`, `matches[].region`, `matches[].language`, `matches[].disc_number`, `matches[].revision`, `matches[].parent`: record metadata, each present when the pack holds it.
 - `evidence`: `required_components_matched`, `required_components_total`, and `layout_matched`.
 
@@ -259,7 +260,9 @@ Under `Basic`, `patch apply --help` puts the common `--input`, `--patch`, and `-
 
 ### Inputs
 
-Repeat `--patch` to run several patches in order, each on the result of the last. Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-bundle.json` can supply the ROM, the patch order, the checks, and the output name instead.
+Repeat `--patch` to run several patches in order on one accumulated result. The shared input basis defaults to `auto`, which infers the authored input from checksums. `--default-patch-basis base` declares original-ROM patches. `previous` declares a dependent chain. Repeat `--patch-basis` for mixed per-patch overrides.
+
+Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-bundle.json` can supply the ROM, patch order, input rule, checks, and output name.
 
 ### Output and compression
 
@@ -274,6 +277,23 @@ DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM dat
 ### Bundle detection
 
 When `patch apply` detects a bundle from its positional input, the canonical `rom-weaver-bundle.json` name is the fast path. It also content-probes valid plain `.json` files and root-level `.json` members inside archives. A stream-compressed positional bundle needs a canonical name such as `rom-weaver-bundle.json.gz`; pass a differently named one explicitly with `--bundle`.
+
+Bundle version 2 requires `patchBasis`. Bundle version 1 remains readable and uses automatic inference. Per-entry `basis` values override the shared bundle rule.
+
+### Bundle execution targets
+
+A version 2 patch entry accepts `target` and `input`. Both use either a ROM reference (`rom: true`) or a generated-output reference (`patch: "producer-id"`), with an optional exact `member` selector.
+
+| Field | Execution behavior |
+| --- | --- |
+| `target` | Continues the selected patch chain for the referenced target. The first selected step starts from that target's source bytes. |
+| `input` | Reads the exact referenced bytes, including a named producer's output. It does not follow optional changes to an accumulated chain. |
+| Both | Reads `input` and records the result in the chain identified by `target`. |
+| Neither | Retains the ordinary accumulated execution order. |
+
+When the identify database is installed, `rom.checks` that match a per-track disc record (only the packs whose catalog profile is per-track are read) supply the first selected step of every ROM-member lane that declares no `input` and no `inputChecks` with that member's checks from the record: `crc32`, `md5`, `sha1`, and `size`. The member matches a record component by file name, then by track number. The first selected step of a ROM-member lane verifies its input checks against the member bytes before it runs, whether the checks were authored or filled; an authored check is skipped when an earlier optional entry of that lane is deselected. A chain check failure (`patch.chain.input_mismatch`, `patch.chain.output_mismatch`, `patch.base.input_mismatch`) also carries the database's `expected_title`, `expected_platform`, `expected_region`, and `expected_revision` for the declared state when the database knows it. Both are best effort: a missing database changes nothing.
+
+A named producer must be selected and precede its consumer. Member selection applies to both ROM sources and generated outputs. A producer reference identifies the intermediate bytes after that patch, before final output compression or disc reassembly. `basis` and `patchBasis` describe authored verification requirements; they do not choose execution bytes. `checkStates` and the check-reference fields share authored state values across entries. Output compression remains an apply-time option.
 
 ### Checksum flags
 
@@ -301,7 +321,9 @@ When `patch apply` detects a bundle from its positional input, the canonical `ro
 
 - `--expect-in` adds a check on the ROM itself, and accepts a checksum (`ALGO=HEX`), an exact size (`size=N`), or a minimum size (`min-size=N`).
 - `--strip-header` and `--n64-byte-order` put the ROM in the form the patches expect before checking; N64 byte order defaults to matching the patch's source CRC32.
-- Patches are checked as a chain by default, each against the output of the one before it. `--independent` checks each one against the original ROM instead and reports a verdict per patch, rather than stopping at the first failure.
+- `--default-patch-basis base|previous|auto` sets the shared input relationship. The default is `auto`.
+- `--patch-basis base|previous|auto` overrides one patch. It binds to the preceding `--patch`.
+- `--independent` checks each patch separately against the original ROM. It reports every verdict instead of stopping at the first failure.
 
 ## Patch creation metadata
 
@@ -311,11 +333,13 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 
 ## Bundles
 
-`bundle schema` prints the JSON Schema. The committed schema is [rom-weaver-bundle-v1.schema.json](../rom-weaver-bundle-v1.schema.json).
+`bundle schema` prints the JSON Schema. The current schema is [rom-weaver-bundle-v2.schema.json](../rom-weaver-bundle-v2.schema.json). Version 1 bundles remain readable.
 
 | Option | Meaning |
 | --- | --- |
 | `--rom-name`, `--rom-url` | Expected logical ROM name and remote source. A filename mismatch warns; checksum and size mismatches remain strict. |
+| `--rom-member PATH` | Exact archive member or disc track recorded as the bundle's ROM target. Its checksums describe that member. |
+| `--default-patch-basis base\|previous\|auto` | Shared input basis recorded as `patchBasis`. The default is `auto`. |
 | `--patch-id`, `--patch-version` | Stable patch identity and author-controlled version. |
 | `--patch-author`, `--patch-name`, `--patch-description`, `--patch-label` | Patch metadata. |
 | `--patch-optional` | Marks the preceding patch optional. |

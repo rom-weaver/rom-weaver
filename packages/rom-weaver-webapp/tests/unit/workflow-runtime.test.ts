@@ -315,8 +315,18 @@ describe("browser ingest and bundle runtime", () => {
       bundleRom: { fileName: "bundle.rom", source: "bundle" },
       noBundleRom: true,
       outputName: "named",
-      patches: [{ author: "A", fileName: "fix.ips", source: "patch", optional: true }],
+      patches: [
+        {
+          author: "A",
+          fileName: "fix.ips",
+          input: { member: "disc/track01.bin", rom: true },
+          optional: true,
+          source: "patch",
+          target: { member: "generated/track01.bin", patch: "first" },
+        },
+      ],
       rom: { fileName: "game.rom", source: "rom" },
+      romMember: "disc/track01.bin",
     } as never);
     expect(created).toMatchObject({
       bundleOutput: { path: "/work/result.json" },
@@ -326,7 +336,10 @@ describe("browser ingest and bundle runtime", () => {
       expect.objectContaining({
         bundlePath: "/work/output-scope/bundle.zip",
         noBundleRom: true,
+        patchInputs: [{ member: "disc/track01.bin", rom: true }],
         patchPaths: expect.any(Array),
+        patchTargets: [{ member: "generated/track01.bin", patch: "first" }],
+        romMember: "disc/track01.bin",
       }),
       undefined,
       undefined,

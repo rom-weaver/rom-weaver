@@ -3,6 +3,7 @@ import type { ParsedIdentifyResolution } from "./identify.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { SourceRef } from "./source.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
+import type { PatchInputRef } from "./workflow-runtime-types.ts";
 
 type ApplyWorkflowSourceStatus = "empty" | "failed" | "loading" | "needsSelection" | "ready";
 
@@ -25,6 +26,10 @@ type ApplyWorkflowBundleSource = {
   originalSource: SourceRef;
   fileName: string;
   size?: number;
+  /** Exact logical ROM member/track locator when this source is a disc/archive leaf. */
+  member?: string;
+  /** Concrete execution target used by bundle export. */
+  target?: PatchInputRef;
 };
 
 type ApplyWorkflowBundleRomSource = ApplyWorkflowBundleSource & {
@@ -33,6 +38,7 @@ type ApplyWorkflowBundleRomSource = ApplyWorkflowBundleSource & {
 };
 
 type ApplyWorkflowBundleSources = {
+  error?: string;
   rom: ApplyWorkflowBundleRomSource | null;
   patches: ApplyWorkflowBundleSource[];
 };
@@ -53,6 +59,9 @@ type ApplyWorkflowResolvedInput = {
   selectedCandidateId?: string;
   order?: number;
   groupId?: string;
+  member?: string;
+  trackNumber?: number;
+  discGroupId?: string;
   size?: number;
   sourceSize?: number;
   chdMode?: string;
@@ -87,6 +96,14 @@ type ApplyWorkflowInputState = {
 
 type ApplyWorkflowPatchState = {
   id: string;
+  /** Stable bundle/session identity; distinct from the transient source id. */
+  patchId?: string;
+  /** Concrete execution input recorded by a bundle or session. */
+  patchInput?: PatchInputRef;
+  /** Cumulative output lane recorded by a bundle or session. */
+  patchTarget?: PatchInputRef;
+  inputChecks?: string;
+  outputChecks?: string;
   fileName?: string;
   status: ApplyWorkflowSourceStatus;
   candidates: SelectionCandidate[];

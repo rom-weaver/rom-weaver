@@ -1,18 +1,22 @@
 use super::*;
 
 /// Version of the public `rom-weaver-bundle.json` bundle schema this build
-/// writes and reads.
-pub const BUNDLE_VERSION: u32 = 1;
+/// writes.
+pub const BUNDLE_VERSION: u32 = 2;
 
 /// The JSON Schema for `rom-weaver-bundle.json`, embedded from the copy shipped
 /// with this crate. A workspace test below keeps it byte-for-byte aligned with
 /// the canonical docs copy.
 /// Editors can bind it via a `$schema` key (accepted on read) or the published
 /// URL in its `$id`.
-pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../rom-weaver-bundle-v1.schema.json");
+pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../rom-weaver-bundle-v2.schema.json");
+#[cfg(test)]
+pub const BUNDLE_JSON_SCHEMA_V1: &str = include_str!("../rom-weaver-bundle-v1.schema.json");
 
 /// Published, resolvable location of [`BUNDLE_JSON_SCHEMA`] (matches its `$id`).
-pub const BUNDLE_JSON_SCHEMA_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json";
+pub const BUNDLE_JSON_SCHEMA_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json";
+#[cfg(not(target_arch = "wasm32"))]
+pub const BUNDLE_JSON_SCHEMA_V1_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v1.schema.json";
 
 /// A distributable ordered patch workflow with optional ROM, selection seed,
 /// endpoint checks, sources, and output defaults. Sources are URLs or
@@ -31,6 +35,16 @@ pub struct RomWeaverBundle {
     #[cfg_attr(feature = "typescript-types", ts(optional, rename = "$schema"))]
     pub schema: Option<String>,
     pub version: u32,
+    /// Shared input-basis declaration for the chain. Version 2 requires this
+    /// value; version 1 omits it and retains automatic inference.
+    #[serde(rename = "patchBasis", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub patch_basis: Option<PatchBasisMode>,
+    /// Named checksum states. References preserve the authored relationship
+    /// between states even when two states currently have equal digests.
+    #[serde(default, rename = "checkStates", skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub check_states: Vec<BundleCheckState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom: Option<BundleRom>,
@@ -97,10 +111,50 @@ pub struct BundleRom {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub path: Option<String>,
+    /// Exact archive member or disc track to use after resolving this ROM
+    /// source. Omitted retains ordinary single-ROM auto-selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub member: Option<String>,
     /// Expected checksums/size of the ROM itself (also verifies downloads).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub checks: Option<BundleChecks>,
+    /// Named state carrying this ROM's expected checks. New writers use this
+    /// instead of repeating a `checks` object on every consumer.
+    #[serde(default, rename = "checksRef", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub checks_ref: Option<String>,
+}
+
+/// A named expected byte state shared by bundle entries. Equality of the
+/// contained checks does not merge states: only an explicit ID reference does.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(deny_unknown_fields)]
+pub struct BundleCheckState {
+    pub id: String,
+    pub checks: BundleChecks,
+}
+
+/// Which concrete bytes a patch executes against. This is distinct from
+/// `basis`, which records what the patch author used for verification.
+#[derive(Clone, Debug, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(untagged, deny_unknown_fields)]
+pub enum BundlePatchInput {
+    Rom {
+        rom: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "typescript-types", ts(optional))]
+        member: Option<String>,
+    },
+    Patch {
+        patch: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[cfg_attr(feature = "typescript-types", ts(optional))]
+        member: Option<String>,
+    },
 }
 
 /// One step of the bundle's ordered patch chain.
@@ -143,6 +197,17 @@ pub struct BundlePatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub path: Option<String>,
+    /// Fixed execution input for this patch. Omitted keeps the target lane's
+    /// cumulative output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub input: Option<BundlePatchInput>,
+    /// Cumulative execution lane for this patch. Omitted retains the legacy
+    /// single sequential lane. A patch target seeds its lane from the named
+    /// producer's output when the lane first runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub target: Option<BundlePatchInput>,
     /// Expected checksums/size of the ROM state this patch applies to, ONLY
     /// when it differs from `rom.checks` (a mid-chain step). Absent means the
     /// patch relies on the rom's own checks.
@@ -153,6 +218,15 @@ pub struct BundlePatchEntry {
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub input_checks: Option<BundleChecks>,
+    /// Named authored input state. Mutually exclusive with inline
+    /// `inputChecks`; it does not select execution bytes.
+    #[serde(
+        default,
+        rename = "inputChecksRef",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub input_checks_ref: Option<String>,
     /// Expected checksums/size immediately after this patch is applied, ONLY
     /// when it differs from the bundle's final `output.checks`.
     #[serde(
@@ -162,6 +236,15 @@ pub struct BundlePatchEntry {
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output_checks: Option<BundleChecks>,
+    /// Named authored output state. Mutually exclusive with inline
+    /// `outputChecks`.
+    #[serde(
+        default,
+        rename = "outputChecksRef",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub output_checks_ref: Option<String>,
     /// Per-patch header mode override (`auto` when omitted).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -213,6 +296,11 @@ pub struct BundleOutput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub checks: Option<BundleChecks>,
+    /// Named expected final-output state. Mutually exclusive with inline
+    /// `checks`.
+    #[serde(default, rename = "checksRef", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub checks_ref: Option<String>,
 }
 
 #[cfg(test)]
@@ -223,13 +311,19 @@ mod schema_tests {
     // The packaged crate cannot contain the repository's docs directory, so
     // compare against it only when running from the workspace checkout.
     #[test]
-    fn embedded_schema_matches_canonical_docs_copy() {
-        let docs_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../docs/rom-weaver-bundle-v1.schema.json");
-        if docs_path.exists() {
-            let canonical =
-                std::fs::read_to_string(docs_path).expect("read canonical docs bundle schema");
-            assert_eq!(canonical, BUNDLE_JSON_SCHEMA);
+    fn embedded_schemas_match_canonical_docs_copies() {
+        for (name, embedded) in [
+            ("rom-weaver-bundle-v1.schema.json", BUNDLE_JSON_SCHEMA_V1),
+            ("rom-weaver-bundle-v2.schema.json", BUNDLE_JSON_SCHEMA),
+        ] {
+            let docs_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../docs")
+                .join(name);
+            if docs_path.exists() {
+                let canonical =
+                    std::fs::read_to_string(docs_path).expect("read canonical docs bundle schema");
+                assert_eq!(canonical, embedded);
+            }
         }
     }
 
@@ -250,7 +344,16 @@ mod schema_tests {
             .get("properties")
             .and_then(serde_json::Value::as_object)
             .expect("schema declares top-level properties");
-        for key in ["$schema", "version", "rom", "patches", "cheats", "output"] {
+        for key in [
+            "$schema",
+            "version",
+            "patchBasis",
+            "checkStates",
+            "rom",
+            "patches",
+            "cheats",
+            "output",
+        ] {
             assert!(
                 properties.contains_key(key),
                 "schema is missing top-level property `{key}`"
@@ -271,7 +374,7 @@ mod schema_tests {
     #[test]
     fn parse_accepts_and_preserves_schema_key() {
         let json = format!(
-            r#"{{ "$schema": "{BUNDLE_JSON_SCHEMA_URL}", "version": {BUNDLE_VERSION}, "patches": [ {{ "path": "a.ips" }} ] }}"#
+            r#"{{ "$schema": "{BUNDLE_JSON_SCHEMA_URL}", "version": {BUNDLE_VERSION}, "patchBasis": "base", "patches": [ {{ "path": "a.ips" }} ] }}"#
         );
         let bundle = crate::bundle_parse::parse_bundle_bytes(json.as_bytes())
             .expect("a bundle carrying $schema parses");
