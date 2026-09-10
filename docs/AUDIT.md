@@ -9,6 +9,7 @@ The comparison uses the [GNU command-line interface standards][gnu-cli] and the 
 
 - [Existing strengths](#existing-strengths)
 - [Confirmed findings and fixes](#confirmed-findings-and-fixes)
+- [Additional usability improvements](#additional-usability-improvements)
 - [Remaining usability choices](#remaining-usability-choices)
 - [Verification scope](#verification-scope)
 
@@ -43,23 +44,27 @@ CLI-4 handles native stdout failures without unwinding file operations. A closed
 
 CLI-5 returns an installation event with the page count and directory. Printing a man page remains an asset-generation command, like completions or the bundle schema. That exception is now explicit in the CLI reference. Quiet-mode help also describes its existing summary suppression.
 
+## Additional usability improvements
+
+Six native commands now accept positional file operands while retaining `--input`: probe, checksum, identify, extract, compress, and trim. Scalar inputs reject mixed forms. Compression and trimming retain the order of mixed positional and named inputs. The shared JSON/WASM schema is unchanged.
+
+Native `checksum --digest --algo ALGO` prints one lowercase primary digest and a newline. It requires exactly one algorithm and rejects JSON and dry-run output. It retains archive extraction and byte-range semantics; `--no-extract` hashes archive bytes. No filename or variant records are included.
+
 ## Remaining usability choices
 
-These are interface choices, not unresolved defects from the confirmed set.
+A complete stream contract remains open. Stdin is available for three query commands, but file-producing workflows use paths. Binary stdout needs rules for multi-file outputs, seek-dependent formats, and separation from JSON events. A stdout value of `-` must not be advertised without those rules.
 
-1. **Consistent file operands.** Most commands require `--input`; save commands use positional files. Optional positional input aliases could reduce typing while preserving existing flags. The parser would need explicit rules for repeated inputs and mixed positional and named arguments.
-2. **Simple checksum output.** The current command opens archives by default and reports ROM variants. It is not a replacement for `sha1sum`. A dedicated output mode could print digest/file records, with explicit rules for raw bytes, multiple variants, and unusual filenames. JSON is the current stable scripting interface.
-3. **A complete stream contract.** Stdin is available for three query commands, but file-producing workflows use paths. Binary stdout would need rules for multi-file outputs, seek-dependent formats, and separation from JSON events. A stdout value of `-` must not be advertised without those rules.
-
-These choices involve public syntax or semantics. This branch preserves the current input and ROM-processing defaults.
+The digest mode is not a replacement for `sha1sum`: checksum-file verification and filename records remain outside its scope. These changes preserve the current ROM-processing defaults.
 
 ## Verification scope
 
-Validation passed: 3,481 Rust workspace tests and doctests, with two repository-configured ignores; all-target, all-feature Clippy with warnings denied; documentation lint; the threaded WASM application compile check; and the native CLI smoke harness. The patch round trip produced the expected CRC32 `221d2d6c`.
+Validation passed: 3,495 Rust workspace tests and doctests, with two repository-configured ignores; all-target, all-feature Clippy with warnings denied; documentation lint; the threaded WASM application compile check; and the native CLI smoke harness. The patch round trip produced the expected CRC32 `221d2d6c`.
 
 The audit inspected argument parsing, native output, stdin, overwrite checks, bundle creation, and the existing smoke coverage. Regression tests cover preservation of user files, failed stdin cleanup, closed stdout, ordinary stdout failures, bundle destination validation, and JSON man installation.
 
 The independent review found an output-alias case involving nonexistent paths with `..`; that case was included in the bundle fix. A second candidate about probe names without process IDs referred to an intermediate diff; the final names include the process ID.
+
+The follow-up adds 14 integration tests for positional inputs and digest output. These cover mixed input order, stdin, leading-dash filenames, extraction, dry runs, existing identify query forms, output conflicts, archive hashing, byte ranges, quiet mode, and color. Its independent review found no remaining defects.
 
 No unresolved confirmed finding remains. This audit does not establish interactive terminal behavior on every shell, native Windows runtime behavior, or performance parity with other tools.
 

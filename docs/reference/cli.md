@@ -68,9 +68,11 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 
 `-h` prints a one-line summary of each option; `--help` prints the full explanation, including the extra detail on flags like `--patch-header`.
 
-Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create` is the exception, taking `--original` and `--modified` instead. The other short flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e` extension, `-n` dry run, `-v` verbose, and `-q` quiet. Run `rom-weaver <command> --help` for the full list.
+`probe`, `checksum`, `identify`, and `extract` accept one positional `FILE` instead of `-i`/`--input`. Supplying both forms is an error. `compress` and `trim` accept multiple positional files and repeated `--input` values; mixed forms retain their command-line order. `--` ends option parsing for filenames that start with `-`. The native aliases do not change the JSON/WASM command schema.
 
-`identify`, `probe`, and `checksum` accept `-` as the `--input` value to read from stdin.
+Output flags remain `-o`/`--output` on commands that accept them. `patch create` takes `--original` and `--modified`. The other short flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e` extension, `-n` dry run, `-v` verbose, and `-q` quiet. `rom-weaver <command> --help` lists each command's flags.
+
+`identify`, `probe`, and `checksum` accept `-` as either the positional file or the `--input` value to read from stdin.
 
 See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
@@ -215,6 +217,10 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 ## Checksum
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
+
+Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json` and `--dry-run`.
+
+`--digest` retains the normal input semantics: archives open automatically, `--no-extract` hashes the archive bytes, and `--start`/`--length` select a byte range. It is not a checksum-file verification mode.
 
 ## Save Editor
 
