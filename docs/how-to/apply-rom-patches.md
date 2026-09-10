@@ -7,6 +7,7 @@ Use the Apply page to combine your clean ROM with one or more patches. The origi
 
 - [What do you need?](#what-do-you-need)
 - [Add the files](#add-the-files)
+- [Apply a BPS patch](#apply-a-bps-patch)
 - [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
 - [Put several patches in order](#put-several-patches-in-order)
 - [Choose the output and apply](#choose-the-output-and-apply)
@@ -46,6 +47,12 @@ Keep one clean original somewhere safe. rom-weaver writes a separate result, but
 You can add [supported archives](../reference/formats.md#container-and-compression-formats), including ZIP, 7z, RAR, and tar, without extracting them first. rom-weaver looks inside, including inside nested archives. Disc containers such as CHD and RVZ are unpacked to the form the patch expects.
 
 The page changes after the files are understood. **0x02 ROM** holds the game, **0x03 Patches** holds the patch stack, **0x04 Cheats** holds optional cheats, and **0x05 Apply** controls the new file.
+
+## Apply a BPS patch
+
+A BPS patch records the checksum of the ROM it was made for. Add the `.bps` file and your clean ROM together. rom-weaver reads the BPS check and stops if the ROM does not match.
+
+Read the patch author's required region and revision before you add the files. When the checks match, set the output name and choose **APPLY & DOWNLOAD**. For headers, patch order, or a failed check, use the relevant steps in this guide. The [CLI Apply guide](cli-apply.md) has the terminal command for the same BPS workflow.
 
 ## Read the ROM and patch cards
 
