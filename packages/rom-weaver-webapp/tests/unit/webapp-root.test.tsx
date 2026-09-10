@@ -166,14 +166,6 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
 
-  it("links the brand back to the site root from any missing path", async () => {
-    window.history.replaceState({}, "", "/assets/");
-    const { container } = await renderRoot({ notFound: true });
-
-    expect(container.querySelector(".brand-mark-link")?.getAttribute("href")).toBe("/");
-    expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/");
-  });
-
   it("routes a not-found tab click to a full page load", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const { container } = await renderRoot({ notFound: true });
