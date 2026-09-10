@@ -3396,6 +3396,55 @@ struct RunPatchApplyLoopInputs<'a> {
     cheat_records: &'a [CheatRecord],
 }
 
+/// Which end of a bundle chain step a `BundlePatchInput` reference names. The
+/// two roles resolve identically and differ only in the validation codes and
+/// messages reported when a reference cannot be resolved.
+#[derive(Clone, Copy)]
+enum ChainSourceRole {
+    Target,
+    Input,
+}
+
+impl ChainSourceRole {
+    fn rom_member_code(self) -> &'static str {
+        match self {
+            Self::Target => "bundle.patch.target.rom.member.unavailable",
+            Self::Input => "bundle.patch.input.rom.member.unavailable",
+        }
+    }
+
+    fn rom_member_message(self) -> &'static str {
+        match self {
+            Self::Target => "target ROM member was not resolved from the bundle input",
+            Self::Input => "input ROM member was not resolved from the bundle input",
+        }
+    }
+
+    fn patch_code(self) -> &'static str {
+        match self {
+            Self::Target => "bundle.patch.target.patch.unavailable",
+            Self::Input => "bundle.patch.input.patch.unavailable",
+        }
+    }
+
+    fn patch_message(self) -> &'static str {
+        match self {
+            Self::Target => "target patch producer has not produced bytes",
+            Self::Input => "patch input producer has not produced bytes",
+        }
+    }
+}
+
+struct ChainSourceInputs<'a> {
+    /// The unpatched apply input, used when a ROM reference names no member.
+    initial: &'a ProducedPatchOutput,
+    rom_member_inputs: &'a BTreeMap<String, PathBuf>,
+    producer_outputs: &'a BTreeMap<String, ProducedPatchOutput>,
+    generated_member_flags: AutoExtractResolutionFlags,
+    context: &'a OperationContext,
+    temp_paths: &'a mut Vec<PathBuf>,
+}
+
 struct LaneVerificationInputs<'a> {
     index: usize,
     patch_count: usize,
@@ -3517,6 +3566,11 @@ impl CliApp {
         let initial_input = current_input.clone();
         let initial_header_state = header_state.clone();
         let initial_n64_order = *n64_order;
+        let initial_output = ProducedPatchOutput {
+            path: initial_input.clone(),
+            header_state: initial_header_state.clone(),
+            n64_order: initial_n64_order,
+        };
         let mut producer_outputs: BTreeMap<String, ProducedPatchOutput> = BTreeMap::new();
         let mut target_outputs: BTreeMap<BundlePatchInput, ProducedPatchOutput> = BTreeMap::new();
         let mut lane_seeds: BTreeMap<Option<BundlePatchInput>, ProducedPatchOutput> =
@@ -3559,82 +3613,18 @@ impl CliApp {
                 let selected = if let Some(output) = target_outputs.get(target) {
                     output.clone()
                 } else {
-                    match target {
-                        BundlePatchInput::Rom { member, .. } => match member {
-                            Some(member) => {
-                                let path = rom_member_inputs.get(member).cloned().ok_or_else(|| {
-                                    RomWeaverError::ValidationCode(
-                                        ValidationCodeError::new("bundle.patch.target.rom.member.unavailable")
-                                            .with_message("target ROM member was not resolved from the bundle input")
-                                            .with_field("member", member.clone()),
-                                    )
-                                })
-                                .map_err(|error| Box::new(OperationReport::failed(
-                                    OperationFamily::Patch, None, "validate", error.to_string(),
-                                    context.single_thread_execution(),
-                                )))?;
-                                self.produced_patch_output_for_source(path)
-                                    .map_err(|error| {
-                                        Box::new(OperationReport::failed(
-                                            OperationFamily::Patch,
-                                            None,
-                                            "prepare",
-                                            error.to_string(),
-                                            context.single_thread_execution(),
-                                        ))
-                                    })?
-                            }
-                            None => ProducedPatchOutput {
-                                path: initial_input.clone(),
-                                header_state: initial_header_state.clone(),
-                                n64_order: initial_n64_order,
-                            },
+                    self.resolve_chain_source(
+                        target,
+                        ChainSourceRole::Target,
+                        ChainSourceInputs {
+                            initial: &initial_output,
+                            rom_member_inputs,
+                            producer_outputs: &producer_outputs,
+                            generated_member_flags,
+                            context,
+                            temp_paths,
                         },
-                        BundlePatchInput::Patch { patch, member } => {
-                            let producer = producer_outputs
-                                .get(patch)
-                                .ok_or_else(|| {
-                                    RomWeaverError::ValidationCode(
-                                        ValidationCodeError::new(
-                                            "bundle.patch.target.patch.unavailable",
-                                        )
-                                        .with_message(
-                                            "target patch producer has not produced bytes",
-                                        )
-                                        .with_field("patch", patch.clone()),
-                                    )
-                                })
-                                .map_err(|error| {
-                                    Box::new(OperationReport::failed(
-                                        OperationFamily::Patch,
-                                        None,
-                                        "validate",
-                                        error.to_string(),
-                                        context.single_thread_execution(),
-                                    ))
-                                })?;
-                            match member {
-                                Some(member) => self
-                                    .resolve_generated_patch_output_member(
-                                        producer,
-                                        member,
-                                        generated_member_flags,
-                                        context,
-                                        temp_paths,
-                                    )
-                                    .map_err(|error| {
-                                        Box::new(OperationReport::failed(
-                                            OperationFamily::Patch,
-                                            None,
-                                            "prepare",
-                                            error.to_string(),
-                                            context.single_thread_execution(),
-                                        ))
-                                    })?,
-                                None => producer.clone(),
-                            }
-                        }
-                    }
+                    )?
                 };
                 current_input = selected.path.clone();
                 *header_state = selected.header_state.clone();
@@ -3646,86 +3636,21 @@ impl CliApp {
                 *n64_order = legacy_output.n64_order;
             }
             if let Some(input) = explicit_input {
-                match input {
-                    BundlePatchInput::Rom { member, .. } => {
-                        let selected = match member {
-                            Some(member) => {
-                                let path = rom_member_inputs.get(member).cloned().ok_or_else(|| {
-                                    Box::new(OperationReport::failed(
-                                        OperationFamily::Patch,
-                                        None,
-                                        "validate",
-                                        RomWeaverError::ValidationCode(
-                                            ValidationCodeError::new("bundle.patch.input.rom.member.unavailable")
-                                                .with_message("input ROM member was not resolved from the bundle input")
-                                                .with_field("member", member.clone()),
-                                        ).to_string(),
-                                        context.single_thread_execution(),
-                                    ))
-                                })?;
-                                self.produced_patch_output_for_source(path)
-                                    .map_err(|error| {
-                                        Box::new(OperationReport::failed(
-                                            OperationFamily::Patch,
-                                            None,
-                                            "prepare",
-                                            error.to_string(),
-                                            context.single_thread_execution(),
-                                        ))
-                                    })?
-                            }
-                            None => ProducedPatchOutput {
-                                path: initial_input.clone(),
-                                header_state: initial_header_state.clone(),
-                                n64_order: initial_n64_order,
-                            },
-                        };
-                        current_input = selected.path;
-                        *header_state = selected.header_state;
-                        *n64_order = selected.n64_order;
-                    }
-                    BundlePatchInput::Patch { patch, member } => {
-                        let Some(produced) = producer_outputs.get(patch) else {
-                            return Err(Box::new(OperationReport::failed(
-                                OperationFamily::Patch,
-                                None,
-                                "validate",
-                                RomWeaverError::ValidationCode(
-                                    ValidationCodeError::new(
-                                        "bundle.patch.input.patch.unavailable",
-                                    )
-                                    .with_message("patch input producer has not produced bytes")
-                                    .with_field("patch", patch.clone()),
-                                )
-                                .to_string(),
-                                context.single_thread_execution(),
-                            )));
-                        };
-                        let selected = match member {
-                            Some(member) => self
-                                .resolve_generated_patch_output_member(
-                                    produced,
-                                    member,
-                                    generated_member_flags,
-                                    context,
-                                    temp_paths,
-                                )
-                                .map_err(|error| {
-                                    Box::new(OperationReport::failed(
-                                        OperationFamily::Patch,
-                                        None,
-                                        "prepare",
-                                        error.to_string(),
-                                        context.single_thread_execution(),
-                                    ))
-                                })?,
-                            None => produced.clone(),
-                        };
-                        current_input = selected.path;
-                        *header_state = selected.header_state;
-                        *n64_order = selected.n64_order;
-                    }
-                }
+                let selected = self.resolve_chain_source(
+                    input,
+                    ChainSourceRole::Input,
+                    ChainSourceInputs {
+                        initial: &initial_output,
+                        rom_member_inputs,
+                        producer_outputs: &producer_outputs,
+                        generated_member_flags,
+                        context,
+                        temp_paths,
+                    },
+                )?;
+                current_input = selected.path;
+                *header_state = selected.header_state;
+                *n64_order = selected.n64_order;
             }
             let lane_key = target.cloned();
             let lane_position = (0..=index)
@@ -4264,6 +4189,79 @@ impl CliApp {
             .get(lane_key)
             .and_then(|plan| plan.get(&index))
             .cloned())
+    }
+
+    /// Resolve the bytes a chain step reads from, for either the step's target
+    /// lane seed or its explicit input. Errors carry the failing operation
+    /// report so the caller can return it unchanged.
+    fn resolve_chain_source(
+        &self,
+        reference: &BundlePatchInput,
+        role: ChainSourceRole,
+        sources: ChainSourceInputs<'_>,
+    ) -> std::result::Result<ProducedPatchOutput, Box<OperationReport>> {
+        let ChainSourceInputs {
+            initial,
+            rom_member_inputs,
+            producer_outputs,
+            generated_member_flags,
+            context,
+            temp_paths,
+        } = sources;
+        let failed = |stage: &'static str, error: String| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                stage,
+                error,
+                context.single_thread_execution(),
+            ))
+        };
+        match reference {
+            BundlePatchInput::Rom { member, .. } => match member {
+                Some(member) => {
+                    let path = rom_member_inputs.get(member).cloned().ok_or_else(|| {
+                        failed(
+                            "validate",
+                            RomWeaverError::ValidationCode(
+                                ValidationCodeError::new(role.rom_member_code())
+                                    .with_message(role.rom_member_message())
+                                    .with_field("member", member.clone()),
+                            )
+                            .to_string(),
+                        )
+                    })?;
+                    self.produced_patch_output_for_source(path)
+                        .map_err(|error| failed("prepare", error.to_string()))
+                }
+                None => Ok(initial.clone()),
+            },
+            BundlePatchInput::Patch { patch, member } => {
+                let producer = producer_outputs.get(patch).ok_or_else(|| {
+                    failed(
+                        "validate",
+                        RomWeaverError::ValidationCode(
+                            ValidationCodeError::new(role.patch_code())
+                                .with_message(role.patch_message())
+                                .with_field("patch", patch.clone()),
+                        )
+                        .to_string(),
+                    )
+                })?;
+                match member {
+                    Some(member) => self
+                        .resolve_generated_patch_output_member(
+                            producer,
+                            member,
+                            generated_member_flags,
+                            context,
+                            temp_paths,
+                        )
+                        .map_err(|error| failed("prepare", error.to_string())),
+                    None => Ok(producer.clone()),
+                }
+            }
+        }
     }
 
     fn resolve_generated_patch_output_member(
