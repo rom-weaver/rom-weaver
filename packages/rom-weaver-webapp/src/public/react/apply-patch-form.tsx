@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import {
   cheatDelivery,
-  type CheatDatabaseSystem,
+  type CheatManualSystem,
   type ClassifiedCheatRecord,
   type DatabaseCheatClassifier,
   type ManualCheatClassifier,
@@ -130,7 +130,7 @@ const getApplyOutputVerification = ({
   return null;
 };
 
-const manualCheatId = (system: CheatDatabaseSystem, code: string, kind: string): string => {
+const manualCheatId = (system: CheatManualSystem, code: string, kind: string): string => {
   let hash = 2_166_136_261;
   for (const character of `${system}\0${kind}\0${code}`) {
     hash ^= character.codePointAt(0) || 0;
@@ -253,6 +253,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
+  // Mirrors the cheat step's On switches so the header controls in 0x03 and 0x05 can refuse a strip.
+  const [cheatsOn, setCheatsOn] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -1541,6 +1543,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const handleCheatSelection = useCallback(
     (records: ClassifiedCheatRecord[]) => {
       selectedCheatsRef.current = records;
+      // Only ROM-bakeable cheats depend on the header bytes; RAM cheats go to
+      // the cheat file and never see the ROM.
+      setCheatsOn(records.some((record) => cheatDelivery(record) === "rom"));
       setCompletedOutput(null);
       setCompletedCheats(undefined);
       const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
@@ -1670,16 +1675,19 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
-        cheats={
+        cheats={({ headerStripConflict, woven }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
             rom={cheatRom}
-            validationMessage={cheatConflictMessage}
+            title={localizer.message("ui.step.cheats")}
+            validationMessage={cheatConflictMessage || headerStripConflict}
+            woven={woven}
           />
-        }
+        )}
+        cheatsOn={cheatsOn}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}

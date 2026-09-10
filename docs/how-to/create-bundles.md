@@ -40,7 +40,7 @@ Order is part of the recipe. Move a card only when you know the patch was author
 
 ## Turn on bundle output and download it
 
-In **0x04 Apply**:
+In **0x05 Apply**:
 
 1. Set the output filename and format users should receive after patching.
 2. Open **Options**.
