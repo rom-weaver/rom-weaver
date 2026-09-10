@@ -279,6 +279,7 @@ fn resolve_nes(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Result<
                     offset,
                     value: decoded.value,
                     width: decoded.width,
+                    compare: decoded.compare,
                 });
             }
         }
@@ -299,6 +300,7 @@ fn resolve_nes(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Result<
         offset,
         value: decoded.value,
         width: decoded.width,
+        compare: decoded.compare,
     }])
 }
 
@@ -331,6 +333,7 @@ fn resolve_snes(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Result
         offset,
         value: decoded.value,
         width: decoded.width,
+        compare: decoded.compare,
     }])
 }
 
@@ -353,6 +356,7 @@ fn resolve_genesis(
         offset,
         value: decoded.value,
         width: decoded.width,
+        compare: decoded.compare,
     }])
 }
 
@@ -379,6 +383,7 @@ fn resolve_gameboy(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>>
             offset,
             value: decoded.value,
             width: decoded.width,
+            compare: decoded.compare,
         }]);
     }
 
@@ -397,6 +402,7 @@ fn resolve_gameboy(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>>
                     offset,
                     value: decoded.value,
                     width: decoded.width,
+                    compare: decoded.compare,
                 });
             }
         }
@@ -415,6 +421,7 @@ fn resolve_gameboy(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>>
         offset,
         value: decoded.value,
         width: decoded.width,
+        compare: decoded.compare,
     }])
 }
 
@@ -435,6 +442,7 @@ fn resolve_sega8(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Resul
                 offset: direct,
                 value: decoded.value,
                 width: decoded.width,
+                compare: decoded.compare,
             }]);
         }
         // The slot the address falls in can hold any bank, so every bank whose
@@ -449,6 +457,7 @@ fn resolve_sega8(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Resul
                     offset,
                     value: decoded.value,
                     width: decoded.width,
+                    compare: decoded.compare,
                 });
             }
         }
@@ -465,6 +474,7 @@ fn resolve_sega8(rom: &[u8], layout: &RomLayout, decoded: &DecodedCode) -> Resul
         offset: direct,
         value: decoded.value,
         width: decoded.width,
+        compare: decoded.compare,
     }])
 }
 
@@ -481,6 +491,7 @@ fn resolve_gba(rom: &[u8], decoded: &DecodedCode) -> Result<Vec<CheatWrite>> {
         offset,
         value: decoded.value,
         width: decoded.width,
+        compare: decoded.compare,
     }])
 }
 
@@ -514,5 +525,6 @@ fn resolve_playstation(
         offset,
         value: decoded.value,
         width: decoded.width,
+        compare: decoded.compare,
     }])
 }

@@ -1069,9 +1069,19 @@ const invokeRomWeaverCreatePatchWorker = async (
     [input.originalFilePath, input.modifiedFilePath],
     async (outputPath) => {
       const threadArg = toThreadBudget(input.threads);
+      // Rust `patch-create` takes either a modified ROM or cheat codes it bakes
+      // into the original; passing both is rejected, so the codes path omits
+      // `modified` entirely.
+      const codes = (input.codes || []).map((code) => String(code || "").trim()).filter((code) => !!code);
       const command = createRomWeaverCommand("patch-create", {
         format: input.format,
-        modified: input.modifiedFilePath,
+        ...(codes.length
+          ? {
+              codes,
+              ...(input.codeSystem ? { code_system: input.codeSystem } : {}),
+              ...(input.codeKind ? { code_kind: input.codeKind } : {}),
+            }
+          : { modified: input.modifiedFilePath }),
         original: input.originalFilePath,
         output: outputPath,
         ...(input.checksumName ? { checksum_name: true } : {}),
@@ -1079,6 +1089,7 @@ const invokeRomWeaverCreatePatchWorker = async (
         ...(threadArg ? { threads: threadArg } : {}),
       });
       emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-create dispatch", {
+        codeCount: codes.length,
         command,
         modifiedFilePath: input.modifiedFilePath,
         originalFilePath: input.originalFilePath,

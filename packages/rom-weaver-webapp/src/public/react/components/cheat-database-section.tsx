@@ -1,16 +1,10 @@
-import { Check, Plus, Search, WandSparkles, X } from "lucide-react";
+import { Check, Download, Plus, Search, WandSparkles, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { IdentifyCatalog } from "../../../lib/identify/identify-catalog.ts";
 import {
   cheatDelivery,
-  createCheatDatabaseClient,
   filterCheats,
   isSelectableCheat,
-  matchCheatGame,
-  parseCheatDatabaseIndex,
-  resolveCheatDatabaseEntry,
-  resolveManualOnlyCheatSystem,
-  selectManualGame,
   type CheatDatabaseClient,
   type CheatDatabaseIndex,
   type CheatManualOnlySystem,
@@ -24,7 +18,8 @@ import {
   type ManualCheatKindOverride,
   type ManualCheatResult,
 } from "../../../lib/cheats/index.ts";
-import { loadIdentifyIndexAndCatalog } from "../../../platform/browser/identify-packs.ts";
+import { getCheatPatchStatus, getRomCheats } from "../cheat-patch-export-model.ts";
+import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer, DrawerReadout } from "./ds/drawer.tsx";
 import { FileCard } from "./ds/file-card.tsx";
 import { StepSection } from "./ds/layout.tsx";
@@ -54,17 +49,8 @@ const sourceName = (sourceUrl: string): string => {
   }
 };
 
-const loadCheatDatabase = async (): Promise<{ index: CheatDatabaseIndex; catalog: IdentifyCatalog | undefined }> => {
-  const { index, catalog } = await loadIdentifyIndexAndCatalog();
-  const parsed = parseCheatDatabaseIndex(index);
-  if (!parsed) throw new Error("This deployment ships no cheat database.");
-  return { index: parsed, catalog };
-};
-
 /** Rows per page in the add-cheats dialog list. */
 const DIALOG_PAGE_SIZE = 8;
-
-const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : undefined);
 
 const matchCopy = (match: CheatGameMatch): { heading: string; detail: string } => {
   if (match.kind === "exact") {
@@ -96,7 +82,7 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
     ? { badge: "ROM cheat", short: "ROM", text: "Baked into output" }
     : { badge: "Unsupported", short: "N/A", text: "Cannot be baked into the ROM" };
 
-const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
+export const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
 
 const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -349,7 +335,7 @@ type AddCheatsDialogProps = {
  * by description or raw code, with the manual-code entry point below the list.
  * Rows added here become cards in the step.
  */
-const AddCheatsDialog = ({
+export const AddCheatsDialog = ({
   open,
   onClose,
   title,
@@ -500,6 +486,13 @@ export type CheatDatabaseSectionProps = {
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
   onSelectionChange?: (records: ClassifiedCheatRecord[]) => void;
+  /**
+   * Bake the ROM cheats that are On into a standalone patch and download it.
+   * Resolves with the created file name. Absent when the workflow cannot run
+   * one (no ROM staged yet). The system is the one the database lookup routed
+   * the ROM to, so the caller does not resolve it a second time.
+   */
+  onSaveAsPatch?: (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => Promise<string>;
   outputSummary?: { rom: number };
   validationMessage?: string;
   /** Localized step heading. */
@@ -519,42 +512,49 @@ export const CheatDatabaseSection = ({
   classifyManualCode,
   classifyDatabaseCheats,
   onSelectionChange,
+  onSaveAsPatch,
   outputSummary,
   validationMessage,
   title,
   num = "0x04",
   woven,
 }: CheatDatabaseSectionProps) => {
-  const [loadedShard, setLoadedShard] = useState<CheatSystemShard>();
-  const [loadedIndex, setLoadedIndex] = useState<CheatDatabaseIndex>();
-  const [loadedCatalog, setLoadedCatalog] = useState<IdentifyCatalog>();
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState("");
-  const [manualGameId, setManualGameId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [savingPatch, setSavingPatch] = useState(false);
+  const [patchStatus, setPatchStatus] = useState("");
+  const [patchError, setPatchError] = useState("");
   // Cards on show. Selection is the subset whose switch is On, so a card can
   // stay in the stack while excluded from the run.
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [classifiedRecords, setClassifiedRecords] = useState<ClassifiedCheatRecord[]>([]);
-  const [classificationError, setClassificationError] = useState("");
-  const [classifying, setClassifying] = useState(false);
   const [manualRecords, setManualRecords] = useState<ClassifiedCheatRecord[]>([]);
   const selectionCallback = useRef(onSelectionChange);
   const previousGameId = useRef<string | undefined>(undefined);
   selectionCallback.current = onSelectionChange;
 
-  const activeIndex = index ?? loadedIndex;
-  const activeCatalog = catalog ?? loadedCatalog;
-  const entry = useMemo(
-    () => resolveCheatDatabaseEntry(activeIndex, activeCatalog, rom),
-    [activeCatalog, activeIndex, rom],
-  );
-  const system = entry?.cheatSystem;
-  // The decoder covers systems no shard does (PlayStation). Those keep manual
-  // entry, without a game list to browse.
-  const manualOnlySystem = system ? undefined : resolveManualOnlyCheatSystem(activeCatalog, rom ?? null);
-  const manualSystem: CheatManualSystem | undefined = system ?? manualOnlySystem;
+  const {
+    activeIndex,
+    classificationError,
+    classifying,
+    entry,
+    game,
+    loadError,
+    loading,
+    manualGameId,
+    manualOnlySystem,
+    manualSystem,
+    match: databaseMatch,
+    records: classifiedRecords,
+    setManualGameId,
+    shard,
+  } = useCheatDatabaseRecords({
+    ...(catalog ? { catalog } : {}),
+    classifyDatabaseCheats,
+    ...(suppliedClient ? { client: suppliedClient } : {}),
+    ...(index ? { index } : {}),
+    rom,
+    ...(suppliedShard ? { shard: suppliedShard } : {}),
+  });
   const manualOnlyCopy = manualOnlySystem ? MANUAL_ONLY_SYSTEMS[manualOnlySystem].copy : "";
   const identityKey = rom?.key;
   useEffect(() => {
@@ -564,56 +564,9 @@ export const CheatDatabaseSection = ({
     setManualRecords([]);
     setManualGameId("");
     selectionCallback.current?.([]);
-  }, [identityKey]);
+  }, [identityKey, setManualGameId]);
 
-  useEffect(() => {
-    if (index) return;
-    let active = true;
-    setLoadError("");
-    void loadCheatDatabase()
-      .then((loaded) => {
-        if (!active) return;
-        setLoadedIndex(loaded.index);
-        setLoadedCatalog(loaded.catalog);
-      })
-      .catch((reason: unknown) => {
-        if (active) setLoadError(reason instanceof Error ? reason.message : "The cheat database is unavailable.");
-      });
-    return () => {
-      active = false;
-    };
-  }, [index]);
-
-  useEffect(() => {
-    if (suppliedShard || !entry) {
-      setLoadedShard(undefined);
-      return;
-    }
-    const client = suppliedClient ?? createCheatDatabaseClient();
-    let active = true;
-    setLoading(true);
-    setLoadError("");
-    void client
-      .loadShard(entry)
-      .then((nextShard) => {
-        if (active) setLoadedShard(nextShard);
-      })
-      .catch((reason: unknown) => {
-        if (active) setLoadError(reason instanceof Error ? reason.message : "The cheat database is unavailable.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-      if (!suppliedClient) client.close();
-    };
-  }, [entry, suppliedClient, suppliedShard]);
-
-  const shard = suppliedShard ?? loadedShard;
-  const automaticMatch = useMemo(() => matchCheatGame(rom, entry, shard), [entry, rom, shard]);
-  const match = manualGameId ? selectManualGame(shard, manualGameId) : automaticMatch;
-  const game = matchGame(match);
+  const match = databaseMatch;
   const gameId = game?.id;
   useEffect(() => {
     if (previousGameId.current && previousGameId.current !== gameId) {
@@ -624,33 +577,6 @@ export const CheatDatabaseSection = ({
     }
     previousGameId.current = gameId;
   }, [gameId]);
-  useEffect(() => {
-    if (!(game && system)) {
-      setClassifiedRecords([]);
-      return;
-    }
-    let active = true;
-    setClassifying(true);
-    setClassificationError("");
-    void classifyDatabaseCheats(game.cheats, system)
-      .then((nextRecords) => {
-        if (active) setClassifiedRecords(nextRecords);
-      })
-      .catch((reason: unknown) => {
-        if (active) {
-          setClassifiedRecords([]);
-          setClassificationError(
-            reason instanceof Error ? reason.message : "The cheat records could not be classified.",
-          );
-        }
-      })
-      .finally(() => {
-        if (active) setClassifying(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [classifyDatabaseCheats, game, system]);
   const records = useMemo(() => [...classifiedRecords, ...manualRecords], [classifiedRecords, manualRecords]);
   // Cards keep the order the user added them in, like the patch stack.
   const cards = useMemo(
@@ -662,6 +588,11 @@ export const CheatDatabaseSection = ({
     [addedIds, records],
   );
   const copy = matchCopy(match);
+  const selectedRecords = useMemo(
+    () => records.filter(({ record }) => selectedIds.has(record.id)),
+    [records, selectedIds],
+  );
+  const selectedRomCheats = useMemo(() => getRomCheats(selectedRecords), [selectedRecords]);
 
   const publish = (nextSelected: Set<string>, source = records) => {
     setSelectedIds(nextSelected);
@@ -766,6 +697,33 @@ export const CheatDatabaseSection = ({
               selected={selectedIds.has(entry.record.id)}
             />
           ))}
+        </div>
+      ) : null}
+
+      {onSaveAsPatch ? (
+        <div className="cheat-actions">
+          <button
+            className="btn cheat-save-patch"
+            disabled={savingPatch || !selectedRomCheats.length}
+            onClick={() => {
+              setPatchError("");
+              setPatchStatus("");
+              setSavingPatch(true);
+              void onSaveAsPatch(selectedRecords, manualSystem)
+                .then((fileName) => setPatchStatus(getCheatPatchStatus(fileName, selectedRomCheats.length)))
+                .catch((reason: unknown) =>
+                  setPatchError(reason instanceof Error ? reason.message : "The cheat patch could not be created."),
+                )
+                .finally(() => setSavingPatch(false));
+            }}
+            title={selectedRomCheats.length ? undefined : "Turn on at least one ROM cheat to bake it into a patch."}
+            type="button"
+          >
+            <Download aria-hidden="true" />
+            {savingPatch ? "Creating patch…" : "Save as patch"}
+          </button>
+          {patchStatus ? <p role="status">{patchStatus}</p> : null}
+          {patchError ? <p role="alert">{patchError}</p> : null}
         </div>
       ) : null}
 

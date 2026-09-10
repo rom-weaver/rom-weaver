@@ -2347,8 +2347,6 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          {cheats}
-
           <ApplyPatchListStep
             bundleMeta={bundleMeta}
             bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}

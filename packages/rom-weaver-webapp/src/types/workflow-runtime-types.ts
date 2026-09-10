@@ -147,7 +147,12 @@ type CreateWorkflowOptions = Omit<CreateSettings, "format" | "patch"> &
 
 type CreatePatchInput = {
   original: SourceRef;
-  modified: SourceRef;
+  /** Omitted when `codes` supplies the modification instead of a second ROM. */
+  modified?: SourceRef;
+  /** Cheat codes the engine bakes into the original to synthesize the modified ROM. */
+  codes?: string[];
+  codeSystem?: string;
+  codeKind?: string;
   selectedModifiedEntryName?: string;
   selectedOriginalEntryName?: string;
   /** crc32 of the resolved original source, embedded into the patch output name

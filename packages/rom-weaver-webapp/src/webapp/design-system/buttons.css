@@ -95,3 +95,68 @@
   letter-spacing: 0.04em;
   scroll-margin-block-end: calc(var(--dock-h, 0px) + var(--sp-l));
 }
+
+/* Segmented control: a fieldset of `aria-pressed` buttons (log dialog view
+   toggle, Create's modified-source switch). It lives here rather than beside
+   either caller because dialogs.css is deferred and the Create switch paints
+   with the form. */
+.rw-app .seg {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: var(--sp-2xs);
+  min-inline-size: 0;
+  padding: 3px;
+  margin: 0;
+  background: var(--well);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
+}
+.rw-app .seg .seg-btn {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 0;
+  height: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--r-s) - 3px);
+  transition:
+    background 0.18s,
+    color 0.18s;
+}
+@media (hover: hover) {
+  .rw-app .seg .seg-btn:not(:disabled):hover {
+    color: var(--ink);
+  }
+}
+/* Touch devices need active feedback because they lack hover. */
+.rw-app .seg .seg-btn:not(:disabled):active {
+  color: var(--ink);
+}
+.rw-app .seg .seg-btn[aria-pressed="true"] {
+  color: var(--thread-ink);
+  background: var(--thread);
+  box-shadow: 0 1px 3px -1px color-mix(in oklab, var(--thread) 55%, transparent);
+}
+@media (hover: hover) {
+  .rw-app .seg .seg-btn[aria-pressed="true"]:not(:disabled):hover {
+    color: var(--thread-ink);
+  }
+}
+.rw-app .seg .seg-btn[aria-pressed="true"]:not(:disabled):active {
+  color: var(--thread-ink);
+}
+.rw-app .seg .seg-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
