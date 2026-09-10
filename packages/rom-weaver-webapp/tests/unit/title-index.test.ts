@@ -5,7 +5,6 @@ import {
   encodeTitleIndex,
   normalizeTitle,
   parseTitleIndex,
-  searchTitleIndex,
   TITLE_INDEX_FORMAT,
 } from "../../src/lib/identify/title-index.mjs";
 
@@ -92,100 +91,5 @@ describe("parseTitleIndex", () => {
     ["[]", /not an object/u],
   ])("rejects %s", (text, message) => {
     expect(() => parseTitleIndex(text)).toThrow(message);
-  });
-});
-
-describe("searchTitleIndex", () => {
-  const index = parseTitleIndex(
-    encodeTitleIndex([
-      { name: "Sonic", slugs: ["gen"] },
-      { name: "Sonic the Hedgehog", slugs: ["gen"] },
-      { name: "Sonic the Hedgehog 2", slugs: ["gen", "gg"] },
-      { name: "Dr. Robotnik's Mean Bean Machine", slugs: ["gen"] },
-      { name: "Super Sonic Racer", slugs: ["snes"] },
-    ]),
-  );
-
-  it("ranks exact, then prefix, then earlier first-token position", () => {
-    expect(searchTitleIndex(index, "sonic").map(({ name }) => name)).toEqual([
-      "Sonic",
-      "Sonic the Hedgehog",
-      "Sonic the Hedgehog 2",
-      "Super Sonic Racer",
-    ]);
-    expect(searchTitleIndex(index, "sonic hedgehog").map(({ name }) => name)).toEqual([
-      "Sonic the Hedgehog",
-      "Sonic the Hedgehog 2",
-    ]);
-  });
-
-  it("requires every token to match and returns the pack slugs", () => {
-    expect(searchTitleIndex(index, "robotnik bean")).toEqual([
-      { name: "Dr. Robotnik's Mean Bean Machine", slugs: ["gen"] },
-    ]);
-    expect(searchTitleIndex(index, "sonic mario")).toEqual([]);
-    expect(searchTitleIndex(index, "hedgehog 2")[0]?.slugs).toEqual(["gen", "gg"]);
-  });
-
-  it("finds every Zelda title regardless of the word's position", () => {
-    const zelda = parseTitleIndex(
-      encodeTitleIndex([
-        { name: "The Legend of Zelda", slugs: ["nes"] },
-        { name: "Zelda II - The Adventure of Link", slugs: ["nes"] },
-        { name: "The Legend of Zelda - A Link to the Past", slugs: ["snes"] },
-        { name: "Super Mario Bros.", slugs: ["nes"] },
-      ]),
-    );
-    expect(searchTitleIndex(zelda, "zelda").map(({ name }) => name)).toEqual([
-      "Zelda II - The Adventure of Link",
-      "The Legend of Zelda",
-      "The Legend of Zelda - A Link to the Past",
-    ]);
-  });
-
-  it.each(["snic", "soonic", "sonik", "snoic"])("corrects the typo %s", (query) => {
-    expect(searchTitleIndex(index, query)[0]).toEqual({ name: "Sonic", slugs: ["gen"] });
-  });
-
-  it("matches reordered words with typos and preserves platform results", () => {
-    expect(searchTitleIndex(index, "hedghog snoic 2")).toEqual([
-      { name: "Sonic the Hedgehog 2", slugs: ["gen", "gg"] },
-    ]);
-    expect(searchTitleIndex(index, "snoic mario")).toEqual([]);
-  });
-
-  it("ranks literal matches ahead of corrections before applying the limit", () => {
-    const ranked = parseTitleIndex(
-      encodeTitleIndex([
-        { name: "Sonic", slugs: ["gen"] },
-        { name: "Sonic Adventure", slugs: ["dc"] },
-        { name: "Sonik", slugs: ["other"] },
-      ]),
-    );
-    expect(searchTitleIndex(ranked, "sonik").map(({ name }) => name)).toEqual(["Sonik", "Sonic", "Sonic Adventure"]);
-    expect(searchTitleIndex(ranked, "sonik", { limit: 1 })[0]?.name).toBe("Sonik");
-  });
-
-  it("keeps short tokens and numbers literal and rejects larger spelling errors", () => {
-    expect(searchTitleIndex(index, "snc")).toEqual([]);
-    expect(searchTitleIndex(index, "sonic 3")).toEqual([]);
-    expect(searchTitleIndex(index, "sxnyc")).toEqual([]);
-  });
-
-  it("ranks an earlier corrected word ahead of a shorter title", () => {
-    const ranked = parseTitleIndex(
-      encodeTitleIndex([
-        { name: "Zzzz Sonic", slugs: ["gen"] },
-        { name: "Sonic Universe", slugs: ["gen"] },
-      ]),
-    );
-    expect(searchTitleIndex(ranked, "snoic", { limit: 1 })[0]?.name).toBe("Sonic Universe");
-  });
-
-  it("returns nothing for an empty query and honours the limit", () => {
-    expect(searchTitleIndex(index, "")).toEqual([]);
-    expect(searchTitleIndex(index, "  -- ")).toEqual([]);
-    expect(searchTitleIndex(index, "sonic", { limit: 2 })).toHaveLength(2);
-    expect(searchTitleIndex(index, "sonic", { limit: 0 })).toEqual([]);
   });
 });

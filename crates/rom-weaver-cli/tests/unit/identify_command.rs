@@ -178,6 +178,7 @@ fn identify_args(input: Option<PathBuf>, database: Vec<PathBuf>) -> IdentifyComm
         database,
         system: None,
         name: None,
+        title_index: None,
         limit: None,
         offline: false,
         database_dir: None,

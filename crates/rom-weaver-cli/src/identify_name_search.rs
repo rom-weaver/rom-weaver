@@ -12,8 +12,17 @@ const NAME_WEIGHT: i64 = 300;
 const ALTERNATE_WEIGHT: i64 = 150;
 const TAG_WEIGHT: i64 = 50;
 const WORD_START_BONUS: i64 = 40;
+const EXACT_WORD_BONUS: i64 = 100;
+const WORD_PREFIX_BONUS: i64 = 70;
 const TOKEN_BASE: i64 = 10;
 const RUN_WEIGHT: i64 = 2;
+const RUN_LENGTH_CAP: usize = 32;
+const NAME_LENGTH_PENALTY_CAP: i64 = 255;
+const MAX_TOKEN_QUALITY: i64 = TOKEN_BASE
+    + RUN_WEIGHT * RUN_LENGTH_CAP as i64
+    + EXACT_WORD_BONUS
+    + WORD_START_BONUS
+    + NAME_WEIGHT;
 
 /// Human labels for the raw GoodTools dump codes a pack stores. A dump tag is
 /// one or two characters, so it MUST match on equality only, never fuzzily.
@@ -138,40 +147,205 @@ fn dump_tag_matches(token: &str, tag: &str) -> bool {
         .any(|(_, labels)| labels.contains(&token))
 }
 
-/// The score of one token against one normalized candidate text, or `None`
-/// when the token appears nowhere in it. A prefix of a word beats a match in
-/// the middle of one, and a longer token beats a shorter one.
-fn token_score(token: &str, candidate: &str) -> Option<i64> {
-    let position = candidate.find(token)?;
-    let at_word_start = position == 0 || candidate.as_bytes()[position - 1] == b' ';
-    let mut score = TOKEN_BASE + RUN_WEIGHT * token.chars().count() as i64;
-    if at_word_start {
-        score += WORD_START_BONUS;
+/// A normalized query token and its Unicode scalar values. Storing the
+/// scalars avoids repeatedly walking a token while comparing title words.
+#[derive(Debug)]
+struct QueryToken {
+    text: String,
+    characters: Vec<char>,
+    typo_limit: Option<usize>,
+}
+
+impl QueryToken {
+    fn new(text: String) -> Self {
+        let characters: Vec<char> = text.chars().collect();
+        let length = characters.len();
+        let typo_limit = if characters.iter().any(|character| character.is_numeric()) || length < 4
+        {
+            None
+        } else if length <= 6 {
+            Some(1)
+        } else {
+            Some(2)
+        };
+        Self {
+            text,
+            characters,
+            typo_limit,
+        }
     }
-    Some(score)
+}
+
+/// One matched query token. Ordering this type puts literal matches first,
+/// then lower edit distances, then field and position quality.
+#[derive(Clone, Copy, Debug)]
+struct TokenScore {
+    literal: bool,
+    distance: usize,
+    quality: i64,
+}
+
+impl TokenScore {
+    fn better_than(self, other: Self) -> bool {
+        (self.literal && !other.literal)
+            || (self.literal == other.literal
+                && (self.distance < other.distance
+                    || (self.distance == other.distance && self.quality > other.quality)))
+    }
+}
+
+/// Score a literal token occurrence. Full-word matches beat prefixes, which
+/// beat matches inside a word; earlier words break otherwise equal matches.
+fn literal_token_score(token: &QueryToken, candidate: &str) -> Option<TokenScore> {
+    let base = TOKEN_BASE + RUN_WEIGHT * token.characters.len().min(RUN_LENGTH_CAP) as i64;
+    let mut best = None;
+    for (word_index, word) in candidate.split(' ').enumerate() {
+        let mut search_from = 0;
+        while let Some(offset) = word[search_from..].find(&token.text) {
+            let offset = search_from + offset;
+            let mut quality = base - word_index.min(20) as i64;
+            if offset == 0 {
+                quality += WORD_START_BONUS;
+                if word == token.text {
+                    quality += EXACT_WORD_BONUS;
+                } else {
+                    quality += WORD_PREFIX_BONUS;
+                }
+            }
+            let score = TokenScore {
+                literal: true,
+                distance: 0,
+                quality,
+            };
+            best = Some(best.map_or(score, |current| {
+                if score.better_than(current) {
+                    score
+                } else {
+                    current
+                }
+            }));
+            search_from = offset + token.text.len();
+        }
+    }
+    best
+}
+
+/// The bounded optimal-string-alignment distance. OSA is the restricted
+/// Damerau-Levenshtein metric: it counts one adjacent transposition, while
+/// forbidding a character from taking part in more than one edit. The search
+/// only needs distances at or below `limit`, so it evaluates a narrow band.
+fn osa_distance_at_most(
+    token: &QueryToken,
+    word: &str,
+    limit: usize,
+    scratch: &mut SearchScratch,
+) -> Option<usize> {
+    scratch.characters.clear();
+    scratch.characters.extend(word.chars());
+    let width = scratch.characters.len();
+    let height = token.characters.len();
+    if height.abs_diff(width) > limit {
+        return None;
+    }
+
+    scratch.osa_before_previous.clear();
+    scratch.osa_before_previous.extend(0..=width);
+    scratch
+        .osa_previous
+        .clone_from(&scratch.osa_before_previous);
+    scratch.osa_current.resize(width + 1, limit + 1);
+    for row in 1..=height {
+        scratch.osa_current.fill(limit + 1);
+        scratch.osa_current[0] = row;
+        let start = row.saturating_sub(limit).max(1);
+        let end = (row + limit).min(width);
+        let mut row_best = limit + 1;
+        for column in start..=end {
+            let substitution = scratch.osa_previous[column - 1]
+                + usize::from(token.characters[row - 1] != scratch.characters[column - 1]);
+            let deletion = scratch.osa_previous[column] + 1;
+            let insertion = scratch.osa_current[column - 1] + 1;
+            let mut value = substitution.min(deletion).min(insertion);
+            if row > 1
+                && column > 1
+                && token.characters[row - 1] == scratch.characters[column - 2]
+                && token.characters[row - 2] == scratch.characters[column - 1]
+            {
+                value = value.min(scratch.osa_before_previous[column - 2] + 1);
+            }
+            scratch.osa_current[column] = value;
+            row_best = row_best.min(value);
+        }
+        if row_best > limit {
+            return None;
+        }
+        std::mem::swap(&mut scratch.osa_before_previous, &mut scratch.osa_previous);
+        std::mem::swap(&mut scratch.osa_previous, &mut scratch.osa_current);
+    }
+    (scratch.osa_previous[width] <= limit).then_some(scratch.osa_previous[width])
+}
+
+/// Score one token against normalized candidate text. A literal token always
+/// scores above a fuzzy token. Fuzzy work is bounded by the typo limit and is
+/// done only for title words whose lengths can possibly be within that limit.
+fn token_score(
+    token: &QueryToken,
+    candidate: &str,
+    scratch: &mut SearchScratch,
+) -> Option<TokenScore> {
+    if let Some(score) = literal_token_score(token, candidate) {
+        return Some(score);
+    }
+    let limit = token.typo_limit?;
+    let base = TOKEN_BASE + RUN_WEIGHT * token.characters.len().min(RUN_LENGTH_CAP) as i64;
+    let mut best = None;
+    for (word_index, word) in candidate.split(' ').enumerate() {
+        let Some(distance) = osa_distance_at_most(token, word, limit, scratch) else {
+            continue;
+        };
+        let score = TokenScore {
+            literal: false,
+            distance,
+            quality: base - word_index.min(20) as i64,
+        };
+        best = Some(best.map_or(score, |current| {
+            if score.better_than(current) {
+                score
+            } else {
+                current
+            }
+        }));
+    }
+    best
 }
 
 /// A parsed name query. Empty queries are rejected by `new`, so every search
 /// runs with at least one token.
 #[derive(Debug)]
 pub(super) struct NameQuery {
-    tokens: Vec<String>,
+    normalized: String,
+    tokens: Vec<QueryToken>,
 }
 
 /// Scratch buffers a search reuses for every candidate.
 #[derive(Default)]
 pub(super) struct SearchScratch {
     text: String,
-    best: Vec<Option<i64>>,
+    best: Vec<Option<TokenScore>>,
+    characters: Vec<char>,
+    osa_before_previous: Vec<usize>,
+    osa_previous: Vec<usize>,
+    osa_current: Vec<usize>,
 }
 
 impl NameQuery {
     pub(super) fn new(query: &str) -> Result<Self> {
         let normalized = normalize(query);
-        let tokens: Vec<String> = normalized
+        let tokens: Vec<QueryToken> = normalized
             .split(' ')
             .filter(|token| !token.is_empty())
             .map(str::to_string)
+            .map(QueryToken::new)
             .collect();
         if tokens.is_empty() {
             return Err(RomWeaverError::Validation(
@@ -179,12 +353,59 @@ impl NameQuery {
             ));
         }
         trace!(tokens = ?tokens, "parsed identify name query");
-        Ok(Self { tokens })
+        Ok(Self { normalized, tokens })
     }
 
-    /// Raise this token's best score when `candidate` beats what it has.
-    fn offer(best: &mut Option<i64>, score: i64) {
-        *best = Some(best.map_or(score, |current: i64| current.max(score)));
+    /// Raise this token's best score when `candidate` has a stronger match.
+    fn offer(best: &mut Option<TokenScore>, score: TokenScore) {
+        *best = Some(best.map_or(score, |current| {
+            if score.better_than(current) {
+                score
+            } else {
+                current
+            }
+        }));
+    }
+
+    fn offer_title_scores(&self, candidate: &str, weight: i64, scratch: &mut SearchScratch) {
+        for (index, token) in self.tokens.iter().enumerate() {
+            if let Some(score) = token_score(token, candidate, scratch) {
+                Self::offer(
+                    &mut scratch.best[index],
+                    TokenScore {
+                        quality: score.quality.saturating_add(weight),
+                        ..score
+                    },
+                );
+            }
+        }
+    }
+
+    /// Encode the lexicographic token ordering into a sortable score. The
+    /// dynamic distance weight exceeds every title-quality contribution, so
+    /// total edit distance always beats field, position, and title length.
+    fn finish_score(&self, name_length: i64, scratch: &SearchScratch) -> Option<i64> {
+        let mut total_distance = 0_i64;
+        let mut quality = -name_length.min(NAME_LENGTH_PENALTY_CAP);
+        let mut all_literal = true;
+        for score in &scratch.best {
+            let score = (*score)?;
+            total_distance = total_distance.saturating_add(score.distance as i64);
+            quality = quality.saturating_add(score.quality);
+            all_literal &= score.literal;
+        }
+        let token_count = i64::try_from(self.tokens.len()).unwrap_or(i64::MAX);
+        let secondary_range = (MAX_TOKEN_QUALITY + 2)
+            .saturating_mul(token_count)
+            .saturating_add(NAME_LENGTH_PENALTY_CAP);
+        let distance_weight = secondary_range.saturating_add(1);
+        let literal_bonus =
+            distance_weight.saturating_mul(token_count.saturating_mul(2).saturating_add(1));
+        Some(
+            quality
+                .saturating_sub(total_distance.saturating_mul(distance_weight))
+                .saturating_add(if all_literal { literal_bonus } else { 0 }),
+        )
     }
 
     /// The game's score, or `None` when any query token matches none of the
@@ -195,33 +416,49 @@ impl NameQuery {
         scratch.best.clear();
         scratch.best.resize(self.tokens.len(), None);
         normalize_into(&game.name, &mut scratch.text);
-        let name_length = scratch.text.chars().count() as i64;
-        for (index, token) in self.tokens.iter().enumerate() {
-            if let Some(score) = token_score(token, &scratch.text) {
-                Self::offer(&mut scratch.best[index], score + NAME_WEIGHT);
-            }
-        }
+        let name_length = i64::try_from(scratch.text.chars().count()).unwrap_or(i64::MAX);
+        let text = std::mem::take(&mut scratch.text);
+        self.offer_title_scores(&text, NAME_WEIGHT, scratch);
+        scratch.text = text;
         for alternate in &game.alternate_names {
             normalize_into(alternate, &mut scratch.text);
-            for (index, token) in self.tokens.iter().enumerate() {
-                if let Some(score) = token_score(token, &scratch.text) {
-                    Self::offer(&mut scratch.best[index], score + ALTERNATE_WEIGHT);
-                }
-            }
+            let text = std::mem::take(&mut scratch.text);
+            self.offer_title_scores(&text, ALTERNATE_WEIGHT, scratch);
+            scratch.text = text;
         }
         for tag in &game.dump_tags {
             for (index, token) in self.tokens.iter().enumerate() {
-                if dump_tag_matches(token, tag) {
-                    Self::offer(&mut scratch.best[index], TOKEN_BASE + TAG_WEIGHT);
+                if dump_tag_matches(&token.text, tag) {
+                    Self::offer(
+                        &mut scratch.best[index],
+                        TokenScore {
+                            literal: true,
+                            distance: 0,
+                            quality: TOKEN_BASE + TAG_WEIGHT,
+                        },
+                    );
                 }
             }
         }
-        let mut total = 0;
-        for best in &scratch.best {
-            total += (*best)?;
-        }
-        // A shorter name is the closer answer for the same tokens.
-        Some(total - name_length)
+        self.finish_score(name_length, scratch)
+    }
+
+    /// Score one title with the same normalization and token rules as pack
+    /// names. This supports title indexes without creating a synthetic pack.
+    pub(super) fn score_title(&self, name: &str, scratch: &mut SearchScratch) -> Option<i64> {
+        scratch.best.clear();
+        scratch.best.resize(self.tokens.len(), None);
+        normalize_into(name, &mut scratch.text);
+        let name_length = i64::try_from(scratch.text.chars().count()).unwrap_or(i64::MAX);
+        let text = std::mem::take(&mut scratch.text);
+        let prefix_weight = if text.starts_with(&self.normalized) {
+            NAME_WEIGHT
+        } else {
+            0
+        };
+        self.offer_title_scores(&text, prefix_weight, scratch);
+        scratch.text = text;
+        self.finish_score(name_length, scratch)
     }
 }
 

@@ -72,11 +72,15 @@ The file is JSON: a sorted array of pack slugs and an array of `[displayName, [p
 
 The index stores base titles only. One row per game record would be 5.4 MB Brotli against 1.6 MB for base titles; the regional variants of a chosen title come from that platform's pack.
 
-A search tokenizes the query and keeps titles whose normalized form contains every token. Results are ordered by exact normalized equality, then a normalized prefix match, then the position of the first token, then the shorter title, then the name.
+A search requires every query token to match. Literal matches anywhere in a title rank before spelling corrections. The shared Rust scorer in `crates/rom-weaver-cli/src/identify_name_search.rs` ranks corrections by edit distance and also serves searches over installed packs.
+
+The distance is optimal string alignment (restricted Damerau–Levenshtein). An insertion, deletion, substitution, or adjacent letter swap counts as one edit. Words of four to six characters allow one edit; longer words allow two. Shorter words and tokens containing numbers match literally. Total edit distance ranks before word position and title length.
 
 `index.json` records the file under `titleIndex` with its size, SHA-256, title count, and pack count. The ordering is fixed, so a rebuild over the same titles is byte-identical. The shared builder and reader live in `packages/rom-weaver-webapp/src/lib/identify/title-index.mjs`.
 
-The title index is browser data only. The native CLI searches an installed pack directly, and `scripts/build-identify-release-data.mjs` removes `titleIndex` from every release index.
+The browser verifies and stages the index for the WASM `identify --name --title-index` command. Rust validates its rows and returns scored base titles with pack slugs; the browser maps those slugs to platform labels. All matches remain available through the result list's More button. JavaScript does not score names.
+
+The native CLI can read an explicit title-index file through the same command. Packaged CLI data does not include that index: `scripts/build-identify-release-data.mjs` removes `titleIndex` from every release index.
 
 ## Browser installation
 

@@ -1,5 +1,5 @@
 /**
- * Browser-only title index: every pack's base game titles in one file, so a
+ * Cross-platform title index: every pack's base game titles in one file, so a
  * name query can name the platforms that hold a title without loading a pack
  * and without the user choosing a platform first.
  *
@@ -375,86 +375,4 @@ const parseTitleIndex = (text) => {
   return { packs, titles };
 };
 
-/**
- * @param {string} left
- * @param {string} right
- */
-const withinOneEdit = (left, right) => {
-  if (Math.abs(left.length - right.length) > 1) return false;
-  let offset = 0;
-  while (offset < left.length && left[offset] === right[offset]) offset += 1;
-  if (offset === Math.min(left.length, right.length)) return true;
-  if (left.length < right.length) return left.slice(offset) === right.slice(offset + 1);
-  if (left.length > right.length) return left.slice(offset + 1) === right.slice(offset);
-  if (left.slice(offset + 1) === right.slice(offset + 1)) return true;
-  return (
-    left[offset] === right[offset + 1] &&
-    left[offset + 1] === right[offset] &&
-    left.slice(offset + 2) === right.slice(offset + 2)
-  );
-};
-
-/**
- * Every query token MUST match; literal matches rank before spelling corrections.
- * Short tokens and numbers stay literal to preserve sequel and platform queries.
- * An empty query matches nothing: a blank search box MUST NOT list 247k rows.
- * @param {TitleIndex} index
- * @param {string} query
- * @param {{ limit?: number }} [options]
- * @returns {TitleEntry[]}
- */
-const searchTitleIndex = (index, query, options = {}) => {
-  const limit = options.limit ?? 50;
-  const normalizedQuery = normalizeTitle(query);
-  if (!normalizedQuery || limit <= 0) return [];
-  const tokens = normalizedQuery.split(" ").filter(Boolean);
-  if (!tokens.length) return [];
-  const firstToken = tokens[0] ?? "";
-  /** @type {{ row: TitleRow; rank: number; position: number }[]} */
-  const hits = [];
-  for (const row of index.titles) {
-    let matched = true;
-    let corrections = 0;
-    let position = row.normalized.indexOf(firstToken);
-    for (const token of tokens) {
-      const found = row.normalized.indexOf(token);
-      if (found === -1) {
-        if (token.length < 4 || /\p{N}/u.test(token)) {
-          matched = false;
-          break;
-        }
-        let correctedPosition = -1;
-        for (const word of row.normalized.matchAll(/\S+/gu)) {
-          if (withinOneEdit(token, word[0])) {
-            correctedPosition = word.index;
-            break;
-          }
-        }
-        if (correctedPosition < 0) {
-          matched = false;
-          break;
-        }
-        if (token === firstToken) position = correctedPosition;
-        corrections += 1;
-      }
-    }
-    if (!matched) continue;
-    let rank = 2;
-    if (corrections) rank = 2 + corrections;
-    else if (row.normalized === normalizedQuery) rank = 0;
-    else if (row.normalized.startsWith(normalizedQuery)) rank = 1;
-    hits.push({ position, rank, row });
-  }
-  hits.sort(
-    (left, right) =>
-      left.rank - right.rank ||
-      left.position - right.position ||
-      left.row.normalized.length - right.row.normalized.length ||
-      compareStrings(left.row.name, right.row.name),
-  );
-  return hits
-    .slice(0, limit)
-    .map(({ row }) => ({ name: row.name, slugs: row.packs.map((packIndex) => index.packs[packIndex] ?? "") }));
-};
-
-export { baseTitle, encodeTitleIndex, normalizeTitle, parseTitleIndex, searchTitleIndex, TITLE_INDEX_FORMAT };
+export { baseTitle, encodeTitleIndex, normalizeTitle, parseTitleIndex, TITLE_INDEX_FORMAT };

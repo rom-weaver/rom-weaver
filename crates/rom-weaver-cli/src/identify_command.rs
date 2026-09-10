@@ -845,6 +845,12 @@ impl CliApp {
                 identify_failed("--limit applies to --name only".to_string(), None),
             ));
         }
+        if args.title_index.is_some() {
+            return Some(self.finish(
+                "identify",
+                identify_failed("--title-index requires --name".to_string(), None),
+            ));
+        }
         None
     }
 
@@ -941,6 +947,7 @@ impl CliApp {
             hash: _,
             size: _,
             name: _,
+            title_index: _,
             limit: _,
             database,
             system,
@@ -1375,6 +1382,15 @@ impl CliApp {
                  --hash"
                     .to_string(),
             ));
+        }
+        if let Some(path) = &args.title_index {
+            if !args.database.is_empty() || args.system.is_some() || args.size.is_some() {
+                return Err(RomWeaverError::Validation(
+                    "--title-index cannot be combined with --database, --system, or --size"
+                        .to_string(),
+                ));
+            }
+            return super::identify_title_search::search_title_index(path, query, args.limit);
         }
         if args.database.is_empty() && args.system.is_none() {
             return Err(RomWeaverError::Validation(

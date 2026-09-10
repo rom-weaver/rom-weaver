@@ -674,3 +674,114 @@ fn identify_by_name_needs_a_pack_selection() {
         "expected both flags in the error, got: {text}"
     );
 }
+
+#[test]
+fn identify_searches_title_index_including_partial_names_and_typos() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["nes", "snes"],
+            "titles": [
+                ["The Legend of Zelda", [0]],
+                ["Zelda II - The Adventure of Link", [0]],
+                ["The Legend of Zelda - A Link to the Past", [1]],
+                ["Super Mario World", [1]]
+            ]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+    for query in ["zelda", "zelad"] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--title-index",
+                index.path().to_str().expect("index path"),
+                "--name",
+                query,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        let hits = json["details"]["identifyTitles"]["matches"]
+            .as_array()
+            .expect("title matches");
+        assert_eq!(hits.len(), 3, "query {query}");
+        assert!(hits.iter().any(|hit| hit["name"] == "The Legend of Zelda"));
+        assert!(
+            hits.iter()
+                .any(|hit| hit["name"] == "Zelda II - The Adventure of Link")
+        );
+        assert!(hits.iter().all(|hit| hit["score"].is_number()));
+    }
+}
+
+#[test]
+fn identify_title_index_rejects_invalid_rows_even_when_query_does_not_match() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(index.path(), r#"{"format":"rom-weaver-identify-title-index-v1","packs":["nes"],"titles":[["Zelda",[1]]]}"#).expect("write invalid index");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "identify",
+            "--title-index",
+            index.path().to_str().expect("index path"),
+            "--name",
+            "mario",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stderr
+        .clone();
+    assert!(
+        String::from_utf8(output)
+            .expect("stderr")
+            .contains("invalid pack indexes")
+    );
+}
+
+#[test]
+fn identify_title_index_can_return_matches_beyond_the_default_limit() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    let titles: Vec<_> = (0..60)
+        .map(|number| serde_json::json!([format!("Zelda {number}"), [0]]))
+        .collect();
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1", "packs": ["nes"], "titles": titles
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+    for (limit, expected) in [("50", 50), ("4294967295", 60)] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--title-index",
+                index.path().to_str().expect("index path"),
+                "--name",
+                "zelda",
+                "--limit",
+                limit,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        assert_eq!(
+            json["details"]["identifyTitles"]["matches"]
+                .as_array()
+                .expect("matches")
+                .len(),
+            expected
+        );
+    }
+}

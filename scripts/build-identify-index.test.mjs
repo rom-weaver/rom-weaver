@@ -40,7 +40,6 @@ import {
 } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
 import {
   parseTitleIndex,
-  searchTitleIndex,
   TITLE_INDEX_FORMAT,
 } from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
 
@@ -595,7 +594,14 @@ test("the builder emits a title index that finds every pack's base titles", asyn
     "OpenNES.Headered.dat",
     OPENGOOD_HEADERED_DAT,
   );
-  const args = ["--cache-dir", cacheDir, "--out", outDir, "--only", `${NES},Tandy - Color Computer`];
+  const args = [
+    "--cache-dir",
+    cacheDir,
+    "--out",
+    outDir,
+    "--only",
+    `${NES},Tandy - Color Computer`,
+  ];
   await main(args);
 
   const index = JSON.parse(readFileSync(join(outDir, "index.json"), "utf8"));
@@ -613,16 +619,26 @@ test("the builder emits a title index that finds every pack's base titles", asyn
   const titleIndex = parseTitleIndex(bytes.toString("utf8"));
   assert.deepEqual([...titleIndex.packs].sort(), index.systems.map(({ slug }) => slug).sort());
   // The dump tags are stripped, so both regional variants fold to one title.
-  const hits = searchTitleIndex(titleIndex, "Alpha Quest");
+  const hits = titleIndex.titles.filter(({ name }) => name === "Alpha Quest");
   assert.deepEqual(
     hits.map(({ name }) => name),
     ["Alpha Quest"],
   );
-  assert.ok(hits[0].slugs.includes("nintendo-nintendo-entertainment-system"));
-  assert.equal(searchTitleIndex(titleIndex, "no such game").length, 0);
+  assert.ok(
+    hits[0].packs.some(
+      (pack) => titleIndex.packs[pack] === "nintendo-nintendo-entertainment-system",
+    ),
+  );
 
   const outDir2 = join(work, "out2");
-  await main(["--cache-dir", cacheDir, "--out", outDir2, "--only", `${NES},Tandy - Color Computer`]);
+  await main([
+    "--cache-dir",
+    cacheDir,
+    "--out",
+    outDir2,
+    "--only",
+    `${NES},Tandy - Color Computer`,
+  ]);
   assert.deepEqual(readFileSync(join(outDir2, "title-index.json")), bytes);
 });
 
@@ -735,7 +751,8 @@ test("no npm package is imported at module scope", () => {
   const offenders = [];
   for (const match of source.matchAll(/^import\s[^;]*?from\s*["']([^"']+)["']/gmu)) {
     const specifier = match[1];
-    if (specifier.startsWith("node:") || specifier.startsWith(".") || specifier.startsWith("/")) continue;
+    if (specifier.startsWith("node:") || specifier.startsWith(".") || specifier.startsWith("/"))
+      continue;
     offenders.push(specifier);
   }
   assert.deepEqual(offenders, [], `import these lazily instead: ${offenders.join(", ")}`);

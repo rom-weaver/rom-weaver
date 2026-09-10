@@ -2,14 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ingest = vi.fn();
 const dispose = vi.fn();
+const stageSource = vi.fn();
 const stageSources = vi.fn();
 const loadIdentifyPacks = vi.fn();
+const loadIdentifyTitleIndex = vi.fn();
+const mapIdentifyTitleSearchMatches = vi.fn();
 const invokeRomWeaverIdentifyHashWorker = vi.fn();
+const invokeRomWeaverIdentifyTitlesWorker = vi.fn();
 
 vi.mock("../../src/platform/browser/workflow-runtime.ts", () => ({
   browserRuntime: {
     ingest: { run: ingest },
-    workerIo: { stageSources },
+    workerIo: { stageSource, stageSources },
   },
 }));
 
@@ -18,11 +22,16 @@ class IdentifyDataUnavailableError extends Error {}
 vi.mock("../../src/platform/browser/identify-packs.ts", () => ({
   IdentifyDataUnavailableError,
   loadIdentifyPacks,
+  loadIdentifyTitleIndex,
+  mapIdentifyTitleSearchMatches,
 }));
 
-vi.mock("../../src/lib/runtime/wasm-command-runtime.ts", () => ({ invokeRomWeaverIdentifyHashWorker }));
+vi.mock("../../src/lib/runtime/wasm-command-runtime.ts", () => ({
+  invokeRomWeaverIdentifyHashWorker,
+  invokeRomWeaverIdentifyTitlesWorker,
+}));
 
-const { identifyChecks, identifyRom } = await import("../../src/platform/browser/browser-api.ts");
+const { identifyChecks, identifyRom, identifyTitles } = await import("../../src/platform/browser/browser-api.ts");
 
 const match = (name: string) => ({
   algorithm: "crc32",
@@ -197,5 +206,58 @@ describe("identifyChecks", () => {
 
     expect(result.status).toBe("unavailable");
     expect(result.unavailableReason).toBe("ROM identify index request failed");
+  });
+});
+
+describe("identifyTitles", () => {
+  it("stages the validated raw index, dispatches the WASM search, and cleans it up", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    loadIdentifyTitleIndex.mockResolvedValue({ blob: new Blob(["index"]), fileName: "title-index.json" });
+    stageSource.mockResolvedValue({ cleanup, filePath: "/db/title-index.json" });
+    invokeRomWeaverIdentifyTitlesWorker.mockResolvedValue({
+      matches: [{ name: "Sonic the Hedgehog", score: 0, slugs: ["sega-mega-drive-genesis"] }],
+    });
+    mapIdentifyTitleSearchMatches.mockResolvedValue([
+      { name: "Sonic the Hedgehog", platform: "Sega Mega Drive", slug: "sega-mega-drive-genesis" },
+    ]);
+
+    await expect(identifyTitles(" sonic ", { limit: Infinity })).resolves.toEqual({
+      status: "ok",
+      titles: [{ name: "Sonic the Hedgehog", platform: "Sega Mega Drive", slug: "sega-mega-drive-genesis" }],
+    });
+    expect(stageSource).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackFileName: "title-index.json", scope: "checksum" }),
+    );
+    expect(invokeRomWeaverIdentifyTitlesWorker).toHaveBeenCalledWith(
+      expect.objectContaining({
+        knownInputPaths: ["/db/title-index.json"],
+        limit: Infinity,
+        name: "sonic",
+        titleIndexPath: "/db/title-index.json",
+      }),
+      undefined,
+    );
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("cleans up after a WASM failure", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    loadIdentifyTitleIndex.mockResolvedValue({ blob: new Blob(["index"]), fileName: "title-index.json" });
+    stageSource.mockResolvedValue({ cleanup, filePath: "/db/title-index.json" });
+    invokeRomWeaverIdentifyTitlesWorker.mockRejectedValue(new Error("bad index"));
+
+    await expect(identifyTitles("sonic")).rejects.toThrow("bad index");
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("reports a title-index load failure as unavailable", async () => {
+    loadIdentifyTitleIndex.mockRejectedValue(new IdentifyDataUnavailableError("title index checksum is invalid"));
+
+    await expect(identifyTitles("sonic")).resolves.toEqual({
+      status: "unavailable",
+      titles: [],
+      unavailableReason: "title index checksum is invalid",
+    });
+    expect(stageSource).not.toHaveBeenCalled();
   });
 });

@@ -422,6 +422,10 @@ quality?: string, platform_candidates?: Array<PlatformCandidate>, media?: Identi
  */
 condition?: string, hint?: string, };
 
+export type IdentifyTitleSearchMatch = { name: string, slugs: Array<string>, score: number, };
+
+export type IdentifyTitleSearchResult = { matches: Array<IdentifyTitleSearchMatch>, };
+
 export type IdentifyDatabaseDirCommand = { database_dir?: string, };
 
 export type IdentifyDatabaseSystemCommand = { system: string, database_dir?: string, };
@@ -438,7 +442,7 @@ export type IdentifyDatabaseCommands = { "type": "list", "args": IdentifyDatabas
 
 export type IdentifySubcommands = { "type": "database", "args": IdentifyDatabaseCommands };
 
-export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, name?: string, limit?: number, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
+export type IdentifyCommand = { input?: string, hash?: Array<string>, size?: bigint, database?: Array<string>, system?: string, name?: string, title_index?: string, limit?: number, offline?: boolean, database_dir?: string, exhaustive_database_search?: boolean, subcommand?: IdentifySubcommands, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, no_trim_fix?: boolean, threads?: ThreadBudget, };
 
 export type IngestCommand = { input: string, output: string, database?: Array<string>, select?: Array<string>,
 /**

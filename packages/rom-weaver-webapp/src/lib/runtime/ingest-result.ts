@@ -18,6 +18,7 @@ import type { ParsedIngestResult, ParsedIngestRomAsset, ParsedPatchDescriptor } 
 import type {
   IdentifyLookupResult,
   IdentifyResult,
+  IdentifyTitleSearchResult,
   IdentifyTitleMatch,
   IngestResult,
   IngestRomAsset,
@@ -330,6 +331,33 @@ export type ParsedIdentifyCommandResult = {
   input: string;
   matches: ParsedIdentifyTitleMatch[];
   status: "matched" | "ambiguous" | "unknown";
+};
+
+export type ParsedIdentifyTitleSearchResult = {
+  matches: Array<{ name: string; score: number; slugs: string[] }>;
+};
+
+export const parseIdentifyTitleSearchResult = (details: unknown): ParsedIdentifyTitleSearchResult | undefined => {
+  const search = asRecord(asRecord(details)?.identifyTitles) as WireRecord<IdentifyTitleSearchResult> | undefined;
+  if (!(search && Array.isArray(search.matches))) return undefined;
+  const matches: ParsedIdentifyTitleSearchResult["matches"] = [];
+  for (const entry of search.matches) {
+    const match = asRecord(entry);
+    if (
+      !match ||
+      typeof match.name !== "string" ||
+      !match.name ||
+      !Array.isArray(match.slugs) ||
+      !match.slugs.length ||
+      typeof match.score !== "number" ||
+      !Number.isFinite(match.score)
+    ) {
+      return undefined;
+    }
+    if (!match.slugs.every((slug) => typeof slug === "string" && slug)) return undefined;
+    matches.push({ name: match.name, score: match.score, slugs: match.slugs });
+  }
+  return { matches };
 };
 
 export const parseIdentifyCommandResult = (details: unknown): ParsedIdentifyCommandResult | undefined => {

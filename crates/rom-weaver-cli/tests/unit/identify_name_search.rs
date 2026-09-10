@@ -28,6 +28,11 @@ fn hit(query: &str, game: &PackGame) -> Option<i64> {
     query.score(game, &mut SearchScratch::default())
 }
 
+fn title_hit(query: &str, title: &str) -> Option<i64> {
+    let query = NameQuery::new(query).expect("a non-empty query");
+    query.score_title(title, &mut SearchScratch::default())
+}
+
 fn names(query: &str, games: &[PackGame]) -> Vec<String> {
     let parsed = NameQuery::new(query).expect("a non-empty query");
     search_packs(&parsed, &[games])
@@ -86,6 +91,72 @@ fn every_query_token_must_match() {
         hit("mario kart", &game("Super Mario World (USA)")).is_none(),
         "a token that matches nothing rejects the candidate"
     );
+}
+
+#[test]
+fn title_scores_require_every_query_token() {
+    assert!(title_hit("legend zelda", "The Legend of Zelda").is_some());
+    assert!(title_hit("legend zelda", "Zelda II").is_none());
+}
+
+#[test]
+fn title_scores_find_all_zelda_titles() {
+    for title in ["The Legend of Zelda", "Zelda II: The Adventure of Link"] {
+        assert!(title_hit("zelda", title).is_some(), "{title}");
+    }
+}
+
+#[test]
+fn title_scores_accept_bounded_typos_and_transpositions() {
+    assert!(title_hit("zelda", "Zelad II").is_some());
+    assert!(title_hit("adventure", "Adventxure").is_some());
+    assert!(title_hit("adventure", "Adventxxure").is_some());
+    assert!(title_hit("adventure", "Adventxxxure").is_none());
+}
+
+#[test]
+fn title_scores_fold_unicode_before_fuzzy_matching() {
+    assert!(title_hit("pokemno", "Pokémon Red").is_some());
+}
+
+#[test]
+fn short_and_numeric_tokens_stay_literal() {
+    assert!(title_hit("zel", "Zelda").is_some());
+    assert!(title_hit("zel", "zxl").is_none());
+    assert!(title_hit("64", "Nintendo 64").is_some());
+    assert!(title_hit("64", "Nintendo 65").is_none());
+}
+
+#[test]
+fn literal_title_match_outranks_a_fuzzy_match() {
+    let exact = title_hit("zelda", "Zelda II").expect("exact title hit");
+    let fuzzy = title_hit("zelda", "Zelad II").expect("fuzzy title hit");
+    assert!(exact > fuzzy);
+}
+
+#[test]
+fn fewer_edits_outrank_a_shorter_and_earlier_title() {
+    let one_edit =
+        title_hit("adventure", "An Adventxure With A Very Long Name").expect("one edit title hit");
+    let two_edits = title_hit("adventure", "Adventxxure").expect("two edit title hit");
+    assert!(one_edit > two_edits);
+}
+
+#[test]
+fn literal_substring_outranks_a_short_fuzzy_title() {
+    let literal = title_hit(
+        "zelda",
+        "A Very Long Title With Several Words Before XZelda Appears",
+    )
+    .expect("literal substring title hit");
+    let fuzzy = title_hit("zelda", "Zelad").expect("fuzzy title hit");
+    assert!(literal > fuzzy);
+}
+
+#[test]
+fn tokens_that_contain_numbers_stay_literal() {
+    assert!(title_hit("zelda2", "Zelda2").is_some());
+    assert!(title_hit("zelda2", "Zelda3").is_none());
 }
 
 #[test]

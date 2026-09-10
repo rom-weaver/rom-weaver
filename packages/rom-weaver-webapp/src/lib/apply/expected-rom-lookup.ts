@@ -82,30 +82,24 @@ type ExpectedRomTitleSearch =
   | { status: "unavailable"; unavailableReason?: string };
 
 /**
- * Search game names across every platform through the browser-only title
- * index, so the user does not have to pick a platform first. The hits carry
- * base titles; {@link searchExpectedRomByName} lists one title's regional
- * variants from the chosen platform's pack.
+ * Search game names across every platform through the browser API, so the
+ * user does not have to pick a platform first. The hits carry base titles;
+ * {@link searchExpectedRomByName} lists one title's regional variants from the
+ * chosen platform's pack.
  */
 const searchExpectedRomTitles = async (
   query: string,
   options: ExpectedRomLookupOptions & { limit?: number } = {},
 ): Promise<ExpectedRomTitleSearch> => {
-  const { IdentifyDataUnavailableError, searchIdentifyTitles } =
-    await import("../../platform/browser/identify-packs.ts");
-  try {
-    const titles = await searchIdentifyTitles(query, {
-      ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
-      ...(options.onProgress ? { onProgress: options.onProgress } : {}),
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
-    return { status: "ok", titles };
-  } catch (error) {
-    if (error instanceof IdentifyDataUnavailableError) {
-      return { status: "unavailable", ...(error.message ? { unavailableReason: error.message } : {}) };
-    }
-    throw error;
-  }
+  const { identifyTitles } = await import("../../platform/browser/browser-api.ts");
+  const result = await identifyTitles(query, {
+    ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
+    ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+  return result.status === "unavailable"
+    ? { status: "unavailable", unavailableReason: result.unavailableReason }
+    : { status: "ok", titles: result.titles };
 };
 
 export { lookupExpectedRom, searchExpectedRomByName, searchExpectedRomTitles };
