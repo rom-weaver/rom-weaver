@@ -99,28 +99,6 @@ runs:
         cache-on-failure: true
         save-if: ${{ inputs.cache-save == 'true' }}
 
-    # rust-cache drops workspace crates; sccache reuses their unchanged compilations.
-    # Native wrappers cannot run inside cross-rs containers.
-    - name: Set up Rust compiler cache
-      if: inputs.build != 'cross'
-      uses: mozilla-actions/sccache-action@v0.0.11
-      with:
-        version: v0.17.0
-
-    - name: Configure Rust compiler cache
-      if: inputs.build != 'cross'
-      shell: bash
-      env:
-        CACHE_NAMESPACE: rom-weaver-cli-native-v1-${{ inputs.package }}
-        CACHE_MODE: ${{ inputs.cache-save == 'true' && 'READ_WRITE' || 'READ_ONLY' }}
-      run: |
-        {
-          echo "RUSTC_WRAPPER=$SCCACHE_PATH"
-          echo "SCCACHE_GHA_ENABLED=true"
-          echo "SCCACHE_GHA_VERSION=$CACHE_NAMESPACE"
-          echo "SCCACHE_GHA_RW_MODE=$CACHE_MODE"
-        } >> "$GITHUB_ENV"
-
     - name: Install Linux build dependencies
       if: runner.os == 'Linux'
       shell: bash
