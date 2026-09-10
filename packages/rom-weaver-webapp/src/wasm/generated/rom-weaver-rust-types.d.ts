@@ -276,6 +276,24 @@ assets: Array<IngestRomAsset>,
  */
 patches: Array<PatchDescriptor>, };
 
+export type CheatSystem = "nes" | "snes" | "genesis" | "gameboy" | "gameboy-color" | "gameboyadvance" | "playstation" | "mastersystem" | "gamegear" | "sega32x" | "sg1000";
+
+export type CheatKind = "game-genie" | "pro-action-replay" | "xploder";
+
+export type CheatTarget = "cartridge-rom" | "runtime-memory" | "unknown";
+
+export type CheatWrite = { offset: number, value: number, width: number, };
+
+export type CheatRecord = { id: string, system: CheatSystem, gameId: string, description: string, rawCode: string | null, codeKind?: CheatKind, rawFields: { [key in string]: string }, sourceFile: string, sourceIndex: number, sourceRevision: string, };
+
+export type CheatResolution = { "type": "romBakeable", writes: Array<CheatWrite>, } | { "type": "unsupported", reason: string, };
+
+export type ClassifiedCheatRecord = { record: CheatRecord, resolution: CheatResolution, detectedKind: CheatKind | null, };
+
+export type CheatWriteConflict = { firstId: string, secondId: string, offset: number, firstValue: number, secondValue: number, };
+
+export type CheatCommandResult = { records: Array<ClassifiedCheatRecord>, conflicts: Array<CheatWriteConflict>, };
+
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 
 export type N64ByteOrder = "big-endian" | "little-endian" | "byte-swapped";
@@ -422,6 +440,13 @@ export type IngestCommand = { input: string, output: string, database?: Array<st
  */
 sidecar_names?: Array<string>, sidecar_only?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, split_bin?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
+export type CheatCommand = { input: string,
+/**
+ * Direct records for the JSON/WASM boundary. The native argv parser does
+ * not expose this internal command.
+ */
+records: Array<CheatRecord>, };
+
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 
 export type TrimCommand = { input: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, filter?: Array<FilterKind>,
@@ -452,7 +477,12 @@ patch_input_check?: Array<string>,
 /**
  * Index-aligned authored post-apply checks for the patch apply JSON wire.
  */
-patch_output_check?: Array<string>, default_patch_basis?: PatchBasisMode, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
+patch_output_check?: Array<string>, default_patch_basis?: PatchBasisMode, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string,
+/**
+ * Structured database records selected for ROM baking. This field exists
+ * on the JSON/WASM boundary; the public CLI keeps `--code` unchanged.
+ */
+cheat_records?: Array<CheatRecord>, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
 
 export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, patch_select?: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
@@ -696,7 +726,7 @@ export type BundleCommands = { "type": "create", "args": BundleCreateCommand } |
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,
 /**

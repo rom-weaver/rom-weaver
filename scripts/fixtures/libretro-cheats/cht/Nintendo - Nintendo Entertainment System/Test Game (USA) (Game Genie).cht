@@ -1,0 +1,13 @@
+cheats = 2
+cheat4_desc = "Infinite \"Things\""
+cheat4_code = "AAAA-BBBB+CCCC-DDDD"
+cheat4_enable = true
+cheat4_unknown_field = "keep\\this"
+
+cheat9_desc = "A distinct variant"
+cheat9_code = "AAAA-BBBC"
+cheat9_enable = false
+
+cheat11_desc = "A distinct variant"
+cheat11_code = "AAAA-BBBC"
+cheat11_enable = true

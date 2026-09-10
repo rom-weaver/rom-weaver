@@ -88,6 +88,7 @@ fn apply_command(input: &Path, patches: Vec<PathBuf>) -> PatchApplyCommand {
         codes: Vec::new(),
         code_system: None,
         code_kind: "auto".to_string(),
+        cheat_records: Vec::new(),
         emit_bundle: None,
         tui: false,
         threads: ThreadBudget::Fixed(1),

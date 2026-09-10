@@ -6,13 +6,24 @@
 
 use super::*;
 
-use crate::cheats::{self, CheatKind, CheatSystem, CheatWrite, RomLayout};
+use crate::cheats::{
+    self, CheatKind, CheatRecord, CheatResolution, CheatSystem, CheatWrite, RomLayout,
+};
 
 /// Summary of a cheat-code resolution, used to enrich operation labels.
 pub(super) struct CheatApplySummary {
     pub system: CheatSystem,
     pub code_count: usize,
     pub write_count: usize,
+}
+
+pub(super) struct CheatIpsRequest<'a> {
+    pub source: &'a Path,
+    pub codes: &'a [String],
+    pub system_override: Option<&'a str>,
+    pub kind_id: &'a str,
+    pub context: &'a OperationContext,
+    pub temp_paths: &'a mut Vec<PathBuf>,
 }
 
 impl CheatApplySummary {
@@ -31,10 +42,19 @@ impl CheatApplySummary {
     }
 }
 
-fn cheat_system_from_header(header: KnownRomHeader) -> Option<CheatSystem> {
-    match header {
+/// The Mega Drive header covers 32X carts too; the console name at 0x100 is
+/// what separates them.
+fn cheat_system_from_header(header: KnownRomHeader, source: &Path) -> Result<Option<CheatSystem>> {
+    Ok(match header {
         KnownRomHeader::Nes => Some(CheatSystem::Nes),
-        KnownRomHeader::MegaDrive => Some(CheatSystem::Genesis),
+        KnownRomHeader::MegaDrive => Some(
+            if read_console_name(source)?.windows(3).any(|w| w == b"32X") {
+                CheatSystem::Sega32x
+            } else {
+                CheatSystem::Genesis
+            },
+        ),
+        KnownRomHeader::SmsTmr => Some(CheatSystem::MasterSystem),
         KnownRomHeader::GameBoy => Some(CheatSystem::GameBoy),
         KnownRomHeader::Gba => Some(CheatSystem::GameBoyAdvance),
         KnownRomHeader::SnesCopier
@@ -42,7 +62,7 @@ fn cheat_system_from_header(header: KnownRomHeader) -> Option<CheatSystem> {
         | KnownRomHeader::SmcGameDoctor1
         | KnownRomHeader::SmcGameDoctor2 => Some(CheatSystem::Snes),
         _ => None,
-    }
+    })
 }
 
 /// Serialize resolved writes as an IPS patch over `rom`'s bytes. A record may
@@ -113,26 +133,9 @@ fn serialize_cheat_ips32(writes: &[CheatWrite], system: CheatSystem) -> Result<V
 }
 
 fn cheat_write_data(write: &CheatWrite, system: CheatSystem) -> Result<Vec<u8>> {
-    let bytes = if matches!(system, CheatSystem::Genesis) {
-        write.value.to_be_bytes()
-    } else {
-        write.value.to_le_bytes()
-    };
-    match write.width {
-        1 => Ok(vec![write.value as u8]),
-        2 => {
-            let start = if matches!(system, CheatSystem::Genesis) {
-                2
-            } else {
-                0
-            };
-            Ok(bytes[start..start + 2].to_vec())
-        }
-        4 => Ok(bytes.to_vec()),
-        other => Err(RomWeaverError::Validation(format!(
-            "unsupported cheat write width {other}"
-        ))),
-    }
+    cheats::write_bytes(write, system).map_err(|_| {
+        RomWeaverError::Validation(format!("unsupported cheat write width {}", write.width))
+    })
 }
 
 fn serialize_cheat_patch(
@@ -158,7 +161,7 @@ impl CliApp {
         if let Some(id) = override_id.map(str::trim).filter(|id| !id.is_empty()) {
             return CheatSystem::parse(id).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
-                    "unknown --code-system `{id}`; expected nes, snes, genesis, gameboy, gba, or psx"
+                    "unknown --code-system `{id}`; expected nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gba, or psx"
                 ))
             });
         }
@@ -166,15 +169,19 @@ impl CliApp {
             return Ok(CheatSystem::PlayStation);
         }
         match Self::detect_known_rom_header(source)? {
-            Some(matched) => cheat_system_from_header(matched.header).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "could not map detected ROM header ({}) for `{}` to a cheat system; pass --code-system",
-                    matched.profile_name(),
-                    source.display()
-                ))
-            }),
+            Some(matched) => {
+                cheat_system_from_header(matched.header, source)?.ok_or_else(
+                    || {
+                        RomWeaverError::Validation(format!(
+                            "could not map detected ROM header ({}) for `{}` to a cheat system; pass --code-system",
+                            matched.profile_name(),
+                            source.display()
+                        ))
+                    },
+                )
+            }
             None => Err(RomWeaverError::Validation(format!(
-                "could not detect the ROM system for `{}`; pass --code-system nes|snes|genesis|gameboy|gba|psx",
+                "could not detect the ROM system for `{}`; pass --code-system nes|snes|genesis|32x|sms|gamegear|sg1000|gameboy|gba|psx",
                 source.display()
             ))),
         }
@@ -211,13 +218,16 @@ impl CliApp {
     /// applies cleanly to `source`'s bytes via the normal IPS handler.
     pub(super) fn synthesize_cheat_ips(
         &self,
-        source: &Path,
-        codes: &[String],
-        system_override: Option<&str>,
-        kind_id: &str,
-        context: &OperationContext,
-        temp_paths: &mut Vec<PathBuf>,
+        request: CheatIpsRequest<'_>,
     ) -> Result<(PathBuf, CheatApplySummary)> {
+        let CheatIpsRequest {
+            source,
+            codes,
+            system_override,
+            kind_id,
+            context,
+            temp_paths,
+        } = request;
         let system = self.cheat_system_for(source, system_override)?;
         let rom = fs::read(source)?;
         trace!(
@@ -245,6 +255,61 @@ impl CliApp {
                 system,
                 code_count: count_codes(codes, system, kind_id),
                 write_count: writes.len(),
+            },
+        ))
+    }
+
+    pub(super) fn resolve_database_cheat_writes(
+        rom: &[u8],
+        records: &[CheatRecord],
+    ) -> Result<(Vec<CheatWrite>, CheatApplySummary)> {
+        let system = records.first().map(|record| record.system).ok_or_else(|| {
+            RomWeaverError::Validation("no cheat records were selected".to_string())
+        })?;
+        if records.iter().any(|record| record.system != system) {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("cheat_system_mismatch")
+                    .with_message("all selected cheat records must target the same system"),
+            ));
+        }
+        let mut writes = Vec::new();
+        let mut record_writes = Vec::new();
+        for record in records {
+            let classified = cheats::classify_record(rom, record);
+            match classified.resolution {
+                CheatResolution::RomBakeable { writes: resolved } => {
+                    record_writes.push((record.id.clone(), record.system, resolved.clone()));
+                    writes.extend(resolved);
+                }
+                CheatResolution::Unsupported { reason } => {
+                    return Err(RomWeaverError::ValidationCode(
+                        ValidationCodeError::new("cheat_unsupported")
+                            .with_message("the selected cheat cannot be baked into the ROM")
+                            .with_field("reason", reason)
+                            .with_field("cheat_id", record.id.clone()),
+                    ));
+                }
+            }
+        }
+        let conflicts = cheats::detect_write_conflicts(&record_writes);
+        if let Some(conflict) = conflicts.first() {
+            return Err(RomWeaverError::ValidationCode(
+                ValidationCodeError::new("cheat_write_conflict")
+                    .with_message("selected ROM cheats write different values at the same offset")
+                    .with_field("first_cheat_id", conflict.first_id.clone())
+                    .with_field("second_cheat_id", conflict.second_id.clone())
+                    .with_field("offset", format!("{:#X}", conflict.offset))
+                    .with_field("first_value", format!("{:02X}", conflict.first_value))
+                    .with_field("second_value", format!("{:02X}", conflict.second_value)),
+            ));
+        }
+        let write_count = writes.len();
+        Ok((
+            writes,
+            CheatApplySummary {
+                system,
+                code_count: records.len(),
+                write_count,
             },
         ))
     }
@@ -305,6 +370,17 @@ fn codes_for_kind(codes: &[String], system: CheatSystem, kind_id: &str) -> Vec<S
 
 fn count_codes(codes: &[String], system: CheatSystem, kind_id: &str) -> usize {
     codes_for_kind(codes, system, kind_id).len()
+}
+
+/// Mega Drive carts name the console at file offset 0x100..0x110.
+fn read_console_name(path: &Path) -> Result<[u8; 16]> {
+    let mut file = File::open(path)?;
+    let mut name = [0_u8; 16];
+    file.seek(SeekFrom::Start(0x100))?;
+    if file.read_exact(&mut name).is_err() {
+        return Ok([0_u8; 16]);
+    }
+    Ok(name)
 }
 
 fn is_playstation_executable(path: &Path) -> Result<bool> {

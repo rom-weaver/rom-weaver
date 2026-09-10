@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   INDEX_FORMAT,
+  LIBRETRO_LICENSE_FILE,
   GOODTOOLS_ARCHIVE,
   GOODTOOLS_ARCHIVE_SHA256,
   GOODTOOLS_DAT_PATH,
@@ -24,6 +25,11 @@ import {
   slugifyPlatform,
 } from "./build-identify-index.mjs";
 import { hasCurrentData } from "./ensure-identify-data.mjs";
+import {
+  CHEAT_PLATFORMS,
+  CHEAT_SHARD_FORMAT,
+  cheatShardFileName,
+} from "./import-libretro-cheats.mjs";
 import {
   buildPackFilter,
   CHECKSUM_ROUTER_FORMAT,
@@ -73,6 +79,30 @@ function buildCurrentDataDir() {
     })),
   };
   writeFileSync(join(dataDir, "catalog.json"), JSON.stringify(catalog));
+  writeFileSync(join(dataDir, LIBRETRO_LICENSE_FILE), "fixture license\n");
+  const cheats = Object.entries(CHEAT_PLATFORMS).map(([platform, spec]) => {
+    const slug = slugifyPlatform(platform);
+    const file = cheatShardFileName(slug);
+    const bytes = Buffer.from(
+      `${JSON.stringify({ schemaVersion: 1, system: spec.cheatSystem, games: [] })}\n`,
+    );
+    writeFileSync(join(dataDir, file), bytes);
+    writeFileSync(join(dataDir, `${file}.br`), bytes);
+    return {
+      platform,
+      slug,
+      cheatSystem: spec.cheatSystem,
+      format: CHEAT_SHARD_FORMAT,
+      file,
+      brotliFile: `${file}.br`,
+      brotliBytes: bytes.length,
+      rawBytes: bytes.length,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      games: 0,
+      cheats: 0,
+      group: packGroupFor(platform),
+    };
+  });
   const routerBytes = Buffer.from(
     encodeChecksumRouter(
       systems.map((system) => buildPackFilter(system.file.slice(0, -".pack".length), [])),
@@ -95,8 +125,13 @@ function buildCurrentDataDir() {
       catalog: "catalog.json",
       checksumRoutes,
       format: INDEX_FORMAT,
+      cheats,
       sources: {
-        libretro: { revision: LIBRETRO_REVISION, url: LIBRETRO_REPOSITORY },
+        libretro: {
+          licenseFile: LIBRETRO_LICENSE_FILE,
+          revision: LIBRETRO_REVISION,
+          url: LIBRETRO_REPOSITORY,
+        },
         opengood: { revision: OPENGOOD_REVISION, url: OPENGOOD_REPOSITORY },
         opengoodHeadered: {
           revision: OPENGOOD_HEADERED_REVISION,
@@ -255,6 +290,40 @@ test("hasCurrentData rejects an index that never recorded the checksum router", 
     const index = JSON.parse(readFileSync(indexPath, "utf8"));
     delete index.checksumRoutes;
     writeFileSync(indexPath, JSON.stringify(index, null, 2));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects an index without cheat shards", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const indexPath = join(dataDir, "index.json");
+    const index = JSON.parse(readFileSync(indexPath, "utf8"));
+    delete index.cheats;
+    writeFileSync(indexPath, JSON.stringify(index, null, 2));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects a cheat shard whose bytes drifted from the index", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const index = JSON.parse(readFileSync(join(dataDir, "index.json"), "utf8"));
+    writeFileSync(join(dataDir, index.cheats[0].file), "{}\n");
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects a data dir without the Libretro license text", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    rmSync(join(dataDir, LIBRETRO_LICENSE_FILE));
     assert.equal(hasCurrentData(dataDir), false);
   } finally {
     rmSync(work, { recursive: true, force: true });

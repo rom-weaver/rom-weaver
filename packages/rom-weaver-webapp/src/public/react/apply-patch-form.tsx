@@ -1,7 +1,14 @@
 import { bundleCheckTokens, selectBundleMembers, validatePatchDependencies } from "../../lib/bundle/bundle-targets.ts";
 import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
+import {
+  cheatDelivery,
+  type CheatDatabaseSystem,
+  type ClassifiedCheatRecord,
+  type DatabaseCheatClassifier,
+  type ManualCheatClassifier,
+} from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -20,6 +27,7 @@ import type {
 import type { PatchValidationPlan } from "../../wasm/index.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
+import { CheatDatabaseSection } from "./components/cheat-database-section.tsx";
 import {
   type ApplyWorkflowPrepareHandlers,
   type ApplyWorkflowSessionInput,
@@ -130,6 +138,15 @@ const getApplyOutputVerification = ({
   return null;
 };
 
+const manualCheatId = (system: CheatDatabaseSystem, code: string, kind: string): string => {
+  let hash = 2_166_136_261;
+  for (const character of `${system}\0${kind}\0${code}`) {
+    hash ^= character.codePointAt(0) || 0;
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `manual-${system}-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+};
+
 const getSinglePatchReplaceIndex = ({
   forcePatchWorkflowRefresh,
   inputsChanged,
@@ -222,12 +239,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const patchInputBasisRef = useRef<PatchInputBasis>(patchInputBasis);
   patchInputBasisRef.current = patchInputBasis;
   const [completedOutput, setCompletedOutput] = useState<BrowserApplyResult["output"] | null>(null);
+  const [completedCheats, setCompletedCheats] = useState<BrowserApplyResult["cheats"]>();
   const [resolvedOutputCompression, setResolvedOutputCompression] = useState<CompressionFormat | undefined>(undefined);
   const [resolvedOutputName, setResolvedOutputName] = useState("");
   const [resolvedOutputNameKey, setResolvedOutputNameKey] = useState("");
   const handleApplyComplete = useCallback(
     (result: BrowserApplyResult) => {
       setCompletedOutput(result.output);
+      setCompletedCheats(result.cheats);
       onApplyComplete?.(result);
     },
     [onApplyComplete],
@@ -243,6 +262,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const lastPatchOrderRef = useRef("");
   const forcePatchWorkflowRefreshRef = useRef(false);
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
+  const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
+  const [cheatConflictMessage, setCheatConflictMessage] = useState("");
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -318,6 +339,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const handleLocalInputsChange = useCallback(
     (nextInputs: BinarySource[]) => {
       setCompletedOutput(null);
+      setCompletedCheats(undefined);
       syncInputSelectionRefs(nextInputs);
       onInputsChange?.(nextInputs);
     },
@@ -489,6 +511,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
       setCompletedOutput(null);
+      setCompletedCheats(undefined);
       if (!nextPatches.length) {
         setLocalBundleSession(null);
         setBundleDismissed(true);
@@ -1191,6 +1214,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         else abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
         try {
           setCompletedOutput(null);
+          setCompletedCheats(undefined);
+          const selectedCheats = selectedCheatsRef.current;
+          workflow.setCheats?.(
+            selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
+          );
           const result = (await workflow.run()) as BrowserApplyResult;
           handleApplyComplete(result);
           return normalizeApplyResult(result);
@@ -1592,6 +1620,115 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const resolvedOutputController = localOutputController;
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
+  const cheatUiState = useSyncExternalStore(
+    resolvedUiController.subscribe,
+    resolvedUiController.getState,
+    resolvedUiController.getState,
+  );
+  const cheatRomRow = cheatUiState.romInputs.length === 1 ? cheatUiState.romInputs[0] : undefined;
+  const cheatFileName = cheatRomRow?.info.fileName || cheatRomRow?.info.archiveName || "";
+  const cheatPlatform = cheatRomRow?.info.romType?.platform;
+  const cheatChecksums = useMemo(() => {
+    if (!cheatRomRow) return undefined;
+    const values: Record<string, string[]> = {};
+    const add = (algorithm: string, value: string | undefined) => {
+      if (!value) return;
+      values[algorithm] ??= [];
+      const list = values[algorithm];
+      if (!list.includes(value)) list.push(value);
+    };
+    add("crc32", cheatRomRow.info.crc32);
+    add("md5", cheatRomRow.info.md5);
+    add("sha1", cheatRomRow.info.sha1);
+    for (const variant of cheatRomRow.info.checksumVariants || []) {
+      for (const [algorithm, value] of Object.entries(variant.checksums)) add(algorithm, value);
+    }
+    return values;
+  }, [cheatRomRow]);
+  const cheatRom = useMemo(
+    () =>
+      cheatRomRow
+        ? {
+            checksums: cheatChecksums,
+            fileName: cheatFileName,
+            key: `${cheatRomRow.id}:${cheatRomRow.info.sha1 || cheatRomRow.info.crc32 || cheatFileName}`,
+            platform: cheatPlatform,
+            title: cheatFileName,
+          }
+        : null,
+    [cheatChecksums, cheatFileName, cheatPlatform, cheatRomRow],
+  );
+  const getCheatSource = useCallback(() => {
+    const source = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources().rom?.source;
+    if (!source) throw new Error("Wait for ROM staging to finish before checking cheats");
+    return source;
+  }, [workflowHandle]);
+  const classifyDatabaseCheats = useCallback<DatabaseCheatClassifier>(
+    async (records) => {
+      const { runBrowserCheats } = await loadBrowserApi();
+      return (await runBrowserCheats({ records, rom: getCheatSource() })).records;
+    },
+    [getCheatSource],
+  );
+  const classifyManualCode = useCallback<ManualCheatClassifier>(
+    async ({ code, description, kind, system }) => {
+      const record = {
+        ...(kind === "auto" ? {} : { codeKind: kind }),
+        description,
+        gameId: "manual",
+        id: manualCheatId(system, code, kind),
+        rawCode: code,
+        rawFields: { code, desc: description, enable: "false" },
+        sourceFile: "manual",
+        sourceIndex: 0,
+        sourceRevision: "manual",
+        system,
+      };
+      const { runBrowserCheats } = await loadBrowserApi();
+      const classified = (await runBrowserCheats({ records: [record], rom: getCheatSource() })).records[0];
+      if (!classified) throw new Error("ROMWeaver did not return a cheat classification");
+      return {
+        detectedSystem: system,
+        detectedType: classified.detectedKind || classified.resolution.type,
+        record: classified,
+      };
+    },
+    [getCheatSource],
+  );
+  const preflightSequence = useRef(0);
+  const handleCheatSelection = useCallback(
+    (records: ClassifiedCheatRecord[]) => {
+      selectedCheatsRef.current = records;
+      setCompletedOutput(null);
+      setCompletedCheats(undefined);
+      const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
+      (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords);
+      const sequence = ++preflightSequence.current;
+      setCheatConflictMessage("");
+      if (romRecords.length < 2) return;
+      const descriptions = new Map(romRecords.map((record) => [record.id, record.description]));
+      void loadBrowserApi()
+        .then(({ runBrowserCheats }) => runBrowserCheats({ records: romRecords, rom: getCheatSource() }))
+        .then(({ conflicts }) => {
+          const [conflict] = conflicts;
+          if (sequence !== preflightSequence.current || !conflict) return;
+          const firstDescription = descriptions.get(conflict.firstId) || conflict.firstId;
+          const secondDescription = descriptions.get(conflict.secondId) || conflict.secondId;
+          setCheatConflictMessage(
+            `Cheat conflict at ROM offset 0x${conflict.offset.toString(16).toUpperCase()}: ` +
+              `${firstDescription} writes ${conflict.firstValue.toString(16).padStart(2, "0").toUpperCase()}, ` +
+              `${secondDescription} writes ${conflict.secondValue.toString(16).padStart(2, "0").toUpperCase()}.`,
+          );
+        })
+        .catch((error: unknown) => {
+          if (sequence === preflightSequence.current) {
+            setCheatConflictMessage(error instanceof Error ? error.message : "Cheat conflict validation failed");
+          }
+        });
+    },
+    [getCheatSource, workflowHandle],
+  );
+
   // "Share this setup" (secondary job after the output card): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
   const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
@@ -1692,6 +1829,16 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
+        cheats={
+          <CheatDatabaseSection
+            classifyDatabaseCheats={classifyDatabaseCheats}
+            classifyManualCode={classifyManualCode}
+            onSelectionChange={handleCheatSelection}
+            outputSummary={completedCheats}
+            rom={cheatRom}
+            validationMessage={cheatConflictMessage}
+          />
+        }
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}

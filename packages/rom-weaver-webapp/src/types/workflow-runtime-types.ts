@@ -3,6 +3,7 @@ import type {
   RomSpecificCompressionFormat,
 } from "../lib/compression/container-format-registry.ts";
 import type { InputAsset } from "../lib/input/input-assets.ts";
+import type { CheatRecord } from "../lib/cheats/model.ts";
 import type { RetainedRuntimeOutput, VfsOutputRef } from "../storage/vfs/types.ts";
 import type { ROM_WEAVER_COMPRESSION_METADATA } from "../wasm/generated/rom-weaver-format-metadata.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../workers/protocol/patch-engine.ts";
@@ -120,6 +121,8 @@ type PatchApplyUserOptions = {
 };
 
 type PatchInput = {
+  /** Selected records that Rust resolves as ordered ROM transformations. */
+  cheatRecords?: CheatRecord[];
   inputs: Array<SourceRef> | SourceRef;
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;
@@ -314,6 +317,9 @@ type CompressionCreateResult = {
 };
 
 type ApplyWorkflowResult = {
+  cheats?: {
+    rom: number;
+  };
   output: PublicOutput;
   outputs: PublicOutput[];
   sizeSummary?: {

@@ -5,26 +5,39 @@
 //! and RAM-only addresses. The pure module never touches the filesystem.
 
 use rom_weaver_core::{Result, RomWeaverError, ValidationCodeError};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+#[cfg(feature = "typescript-types")]
+use ts_rs::TS;
 
 mod action_replay;
 mod game_genie;
 mod layout;
 mod xploder;
 
-#[cfg(test)]
 use layout::Mapping;
 pub use layout::RomLayout;
 
 /// A console family whose cheat codes we can decode. The address layout and
 /// code scheme differ per system, so the caller must identify it up front.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "typescript-types", ts(rename_all = "lowercase"))]
 pub enum CheatSystem {
     Nes,
     Snes,
     Genesis,
     GameBoy,
+    #[serde(rename = "gameboy-color")]
+    #[cfg_attr(feature = "typescript-types", ts(rename = "gameboy-color"))]
+    GameBoyColor,
     GameBoyAdvance,
     PlayStation,
+    MasterSystem,
+    GameGear,
+    Sega32x,
+    Sg1000,
 }
 
 impl CheatSystem {
@@ -35,8 +48,13 @@ impl CheatSystem {
             Self::Snes => "snes",
             Self::Genesis => "genesis",
             Self::GameBoy => "gameboy",
+            Self::GameBoyColor => "gameboy-color",
             Self::GameBoyAdvance => "gba",
             Self::PlayStation => "psx",
+            Self::MasterSystem => "sms",
+            Self::GameGear => "gamegear",
+            Self::Sega32x => "32x",
+            Self::Sg1000 => "sg1000",
         }
     }
 
@@ -46,9 +64,14 @@ impl CheatSystem {
             "nes" | "famicom" | "fc" => Some(Self::Nes),
             "snes" | "sfc" | "superfamicom" => Some(Self::Snes),
             "genesis" | "megadrive" | "mega-drive" | "md" | "smd" => Some(Self::Genesis),
-            "gameboy" | "gb" | "gbc" => Some(Self::GameBoy),
+            "gameboy" | "gb" => Some(Self::GameBoy),
+            "gameboy-color" | "gameboycolor" | "gbc" => Some(Self::GameBoyColor),
             "gba" | "game-boy-advance" | "gameboy-advance" => Some(Self::GameBoyAdvance),
             "psx" | "ps1" | "playstation" | "playstation-1" => Some(Self::PlayStation),
+            "sms" | "mastersystem" | "master-system" => Some(Self::MasterSystem),
+            "gamegear" | "gg" | "game-gear" => Some(Self::GameGear),
+            "32x" | "sega32x" | "sega-32x" => Some(Self::Sega32x),
+            "sg1000" | "sg-1000" => Some(Self::Sg1000),
             _ => None,
         }
     }
@@ -56,7 +79,10 @@ impl CheatSystem {
 
 /// Which code scheme a textual code uses. GameShark codes share Pro Action
 /// Replay's raw address:value form, so they are decoded as the same kind.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "typescript-types", ts(rename_all = "kebab-case"))]
 pub enum CheatKind {
     GameGenie,
     ProActionReplay,
@@ -89,11 +115,93 @@ pub struct DecodedCode {
 
 /// A concrete byte write into the ROM file: overwrite `width` bytes at `offset`
 /// with `value`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "camelCase")]
 pub struct CheatWrite {
     pub offset: usize,
     pub value: u32,
     pub width: u8,
+}
+
+/// A decoded address class. This does not weaken [`resolve_writes`], which
+/// still rejects runtime addresses when a caller asks to bake them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "typescript-types", ts(rename_all = "kebab-case"))]
+pub enum CheatTarget {
+    CartridgeRom,
+    RuntimeMemory,
+    Unknown,
+}
+
+/// A normalized logical cheat. All subcodes and unknown source fields remain
+/// attached to this one record.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "camelCase")]
+pub struct CheatRecord {
+    pub id: String,
+    pub system: CheatSystem,
+    pub game_id: String,
+    pub description: String,
+    pub raw_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub code_kind: Option<CheatKind>,
+    pub raw_fields: BTreeMap<String, String>,
+    pub source_file: String,
+    pub source_index: usize,
+    pub source_revision: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "camelCase", tag = "type")]
+#[cfg_attr(
+    feature = "typescript-types",
+    ts(rename_all = "camelCase", tag = "type")
+)]
+pub enum CheatResolution {
+    RomBakeable { writes: Vec<CheatWrite> },
+    Unsupported { reason: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "camelCase")]
+pub struct ClassifiedCheatRecord {
+    pub record: CheatRecord,
+    pub resolution: CheatResolution,
+    pub detected_kind: Option<CheatKind>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "camelCase")]
+pub struct CheatWriteConflict {
+    pub first_id: String,
+    pub second_id: String,
+    pub offset: usize,
+    pub first_value: u8,
+    pub second_value: u8,
+}
+
+/// Every subcode decodes to an address that is not cartridge ROM.
+const REASON_RUNTIME: &str = "the code targets runtime memory";
+/// Some subcodes of one record are ROM and some are runtime memory; the record
+/// only works as a unit, so none of it is baked.
+const REASON_MIXED: &str = "linked subcodes target runtime memory";
+const REASON_PARAMETER: &str = "the entry needs a parameter value";
+const REASON_STRUCTURED: &str = "the entry is a structured runtime memory entry";
+
+/// The Z80 Sega systems map cartridge ROM below $C000; $C000 and up is work RAM.
+pub(crate) const SEGA8_RAM_START: u32 = 0xC000;
+
+/// The 68k systems store multi-byte values big-endian.
+pub(crate) const fn uses_big_endian_words(system: CheatSystem) -> bool {
+    matches!(system, CheatSystem::Genesis | CheatSystem::Sega32x)
 }
 
 /// Split a raw input into individual codes. Cheat lists are commonly joined
@@ -112,40 +220,41 @@ pub fn split_codes(input: &str) -> Vec<&str> {
 /// A four-word GBA ROM-patch code stays together as one item.
 pub fn split_xploder_codes(input: &str) -> Vec<String> {
     let mut codes = Vec::new();
-    for segment in input.split(['+', ',', ';']) {
-        let tokens: Vec<&str> = segment.split_whitespace().collect();
-        let mut index = 0;
-        while index < tokens.len() {
-            if index + 3 < tokens.len()
-                && tokens[index].len() == 8
-                && tokens[index + 1].len() == 8
-                && tokens[index + 2].len() == 8
-                && tokens[index + 3].len() == 8
-                && tokens[index].eq_ignore_ascii_case("00000000")
-                && is_gba_rom_patch_word(tokens[index + 1])
-                && tokens[index + 3].eq_ignore_ascii_case("00000000")
-            {
-                codes.push(format!(
-                    "{}{}{}{}",
-                    tokens[index],
-                    tokens[index + 1],
-                    tokens[index + 2],
-                    tokens[index + 3]
-                ));
-                index += 4;
-                continue;
-            }
-            if index + 1 < tokens.len()
-                && tokens[index].len() == 8
-                && (tokens[index + 1].len() == 4 || tokens[index + 1].len() == 8)
-            {
-                codes.push(format!("{}{}", tokens[index], tokens[index + 1]));
-                index += 2;
-                continue;
-            }
-            codes.push(tokens[index].to_owned());
-            index += 1;
+    let tokens = input
+        .split(|character: char| matches!(character, '+' | ',' | ';') || character.is_whitespace())
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    let mut index = 0;
+    while index < tokens.len() {
+        if index + 3 < tokens.len()
+            && tokens[index].len() == 8
+            && tokens[index + 1].len() == 8
+            && tokens[index + 2].len() == 8
+            && tokens[index + 3].len() == 8
+            && tokens[index].eq_ignore_ascii_case("00000000")
+            && is_gba_rom_patch_word(tokens[index + 1])
+            && tokens[index + 3].eq_ignore_ascii_case("00000000")
+        {
+            codes.push(format!(
+                "{}{}{}{}",
+                tokens[index],
+                tokens[index + 1],
+                tokens[index + 2],
+                tokens[index + 3]
+            ));
+            index += 4;
+            continue;
         }
+        if index + 1 < tokens.len()
+            && tokens[index].len() == 8
+            && (tokens[index + 1].len() == 4 || tokens[index + 1].len() == 8)
+        {
+            codes.push(format!("{}{}", tokens[index], tokens[index + 1]));
+            index += 2;
+            continue;
+        }
+        codes.push(tokens[index].to_owned());
+        index += 1;
     }
     codes
 }
@@ -185,11 +294,14 @@ fn coded(code: &'static str, message: &'static str, offending: &str) -> RomWeave
 pub fn decode(code: &str, system: CheatSystem, kind: CheatKind) -> Result<DecodedCode> {
     let normalized = normalize(code);
     tracing::trace!(target: "rom_weaver_cheats", raw = code, normalized = %normalized, ?system, ?kind, "decoding cheat code");
-    let decoded = match kind {
+    let mut decoded = match kind {
         CheatKind::GameGenie => game_genie::decode(&normalized, system, code)?,
         CheatKind::ProActionReplay => action_replay::decode(&normalized, system, code)?,
         CheatKind::Xploder => xploder::decode(&normalized, system, code)?,
     };
+    // Game Boy Color uses the compatible Game Boy decoder, which emits its
+    // base family. Retain the caller's selected database system in the result.
+    decoded.system = system;
     tracing::debug!(
         target: "rom_weaver_cheats",
         raw = code,
@@ -211,12 +323,16 @@ pub fn decode(code: &str, system: CheatSystem, kind: CheatKind) -> Result<Decode
 /// Replay are both 8 hex-ish chars and cannot be told apart reliably, so SNES
 /// defaults to Game Genie - pass an explicit kind for SNES Pro Action Replay.
 pub fn decode_auto(code: &str, system: CheatSystem) -> Result<DecodedCode> {
-    let kind = infer_kind(&normalize(code), system);
+    let kind = infer_kind(code, &normalize(code), system);
     decode(code, system, kind)
 }
 
-fn infer_kind(normalized: &str, system: CheatSystem) -> CheatKind {
+/// `raw` still carries the `address:value` colon that `normalize` strips; on
+/// the Sega systems that colon is the one signal that separates a raw memory
+/// write from a Game Genie code of the same length.
+fn infer_kind(raw: &str, normalized: &str, system: CheatSystem) -> CheatKind {
     let all_hex = !normalized.is_empty() && normalized.bytes().all(|b| b.is_ascii_hexdigit());
+    let colon = raw.contains(':');
     match system {
         // GG uses A P Z L G I T Y E O X U K S V N - no decimal digits.
         CheatSystem::Nes => {
@@ -227,7 +343,7 @@ fn infer_kind(normalized: &str, system: CheatSystem) -> CheatKind {
             }
         }
         // GB GG is 6 or 9 hex; GameShark is 8 hex.
-        CheatSystem::GameBoy => {
+        CheatSystem::GameBoy | CheatSystem::GameBoyColor => {
             if all_hex && normalized.len() == 8 {
                 CheatKind::ProActionReplay
             } else {
@@ -237,7 +353,24 @@ fn infer_kind(normalized: &str, system: CheatSystem) -> CheatKind {
         // Genesis GG is 8 chars from a no-digit-ambiguity alphabet incl.
         // 0-9; GameShark is 10 hex (6 addr + 4 value) or colon-separated.
         CheatSystem::Genesis => {
-            if all_hex && normalized.len() != 8 {
+            if colon || (all_hex && normalized.len() != 8) {
+                CheatKind::ProActionReplay
+            } else {
+                CheatKind::GameGenie
+            }
+        }
+        // 32X carts run the same Game Genie and GameShark devices as Genesis.
+        CheatSystem::Sega32x => {
+            if colon || (all_hex && normalized.len() != 8) {
+                CheatKind::ProActionReplay
+            } else {
+                CheatKind::GameGenie
+            }
+        }
+        // Sega 8-bit Pro Action Replay codes are 8 hex digits opening with
+        // `00`; Game Genie codes are 6 or 9 digits.
+        CheatSystem::MasterSystem | CheatSystem::GameGear | CheatSystem::Sg1000 => {
+            if colon || (all_hex && normalized.len() == 8 && normalized.starts_with("00")) {
                 CheatKind::ProActionReplay
             } else {
                 CheatKind::GameGenie
@@ -246,6 +379,373 @@ fn infer_kind(normalized: &str, system: CheatSystem) -> CheatKind {
         CheatSystem::Snes => CheatKind::GameGenie,
         CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => CheatKind::Xploder,
     }
+}
+
+/// Classify an understood decoded address without trying to map it to a file.
+pub fn classify_decoded_code(layout: &RomLayout, decoded: &DecodedCode) -> CheatTarget {
+    if layout.system != decoded.system {
+        return CheatTarget::Unknown;
+    }
+    let address = decoded.address;
+    match decoded.system {
+        CheatSystem::Nes => {
+            if address >= 0x8000 {
+                CheatTarget::CartridgeRom
+            } else {
+                CheatTarget::RuntimeMemory
+            }
+        }
+        CheatSystem::Snes => {
+            let bank = (address >> 16) & 0xff;
+            let low = address & 0xffff;
+            let system_bank = bank <= 0x3f || (0x80..=0xbf).contains(&bank);
+            if bank == 0x7e
+                || bank == 0x7f
+                || (system_bank && low < 0x2000)
+                || (matches!(layout.mapping, Mapping::SnesLoRom) && low < 0x8000)
+            {
+                CheatTarget::RuntimeMemory
+            } else {
+                CheatTarget::CartridgeRom
+            }
+        }
+        CheatSystem::Genesis | CheatSystem::Sega32x => {
+            if address >= 0xe0_0000 {
+                CheatTarget::RuntimeMemory
+            } else {
+                CheatTarget::CartridgeRom
+            }
+        }
+        CheatSystem::GameBoy | CheatSystem::GameBoyColor => {
+            if address < 0x8000 {
+                CheatTarget::CartridgeRom
+            } else {
+                CheatTarget::RuntimeMemory
+            }
+        }
+        CheatSystem::MasterSystem | CheatSystem::GameGear | CheatSystem::Sg1000 => {
+            if address < SEGA8_RAM_START {
+                CheatTarget::CartridgeRom
+            } else {
+                CheatTarget::RuntimeMemory
+            }
+        }
+        CheatSystem::GameBoyAdvance => {
+            if (0x0800_0000..0x0A00_0000).contains(&address) {
+                CheatTarget::CartridgeRom
+            } else {
+                CheatTarget::RuntimeMemory
+            }
+        }
+        CheatSystem::PlayStation => match layout.mapping {
+            Mapping::PlayStationExe {
+                load_address,
+                data_bytes,
+            } if address >= load_address
+                && ((address - load_address) as usize)
+                    .checked_add(decoded.width as usize)
+                    .is_some_and(|end| end <= data_bytes) =>
+            {
+                CheatTarget::CartridgeRom
+            }
+            _ => CheatTarget::RuntimeMemory,
+        },
+    }
+}
+
+/// Common database placeholders need a value before the code can be decoded.
+pub fn contains_parameter_placeholder(value: &str) -> bool {
+    value.contains('?') || value.to_ascii_uppercase().contains("XX")
+}
+
+fn record_kind_hint(record: &CheatRecord) -> Option<CheatKind> {
+    let field_hint = record
+        .raw_fields
+        .iter()
+        .find(|(name, _)| matches!(name.as_str(), "kind" | "type" | "device" | "code_type"))
+        .map(|(_, value)| value.as_str())
+        .unwrap_or_default();
+    let hint = format!("{field_hint} {}", record.source_file).to_ascii_lowercase();
+    if matches!(
+        record.system,
+        CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
+    ) && (hint.contains("action replay")
+        || hint.contains("action-replay")
+        || hint.contains("gameshark")
+        || hint.contains("game shark")
+        || hint.contains("xploder")
+        || hint.contains("xplorer")
+        || hint.contains("codebreaker")
+        || hint.contains("code breaker"))
+    {
+        Some(CheatKind::Xploder)
+    } else if hint.contains("game genie") || hint.contains("game-genie") {
+        Some(CheatKind::GameGenie)
+    } else if hint.contains("action replay")
+        || hint.contains("action-replay")
+        || hint.contains("gameshark")
+        || hint.contains("game shark")
+    {
+        Some(CheatKind::ProActionReplay)
+    } else if hint.contains("xploder")
+        || hint.contains("xplorer")
+        || hint.contains("codebreaker")
+        || hint.contains("code breaker")
+    {
+        Some(CheatKind::Xploder)
+    } else {
+        None
+    }
+}
+
+fn has_structured_runtime_semantics(record: &CheatRecord) -> bool {
+    record.raw_fields.keys().any(|name| {
+        matches!(
+            name.as_str(),
+            "address"
+                | "value"
+                | "handler"
+                | "memory_search_size"
+                | "address_bit_position"
+                | "big_endian"
+                | "repeat_count"
+                | "repeat_add_to_address"
+                | "repeat_add_to_value"
+                | "condition"
+                | "condition_type"
+                | "condition_address"
+                | "condition_value"
+                | "activation"
+        )
+    })
+}
+
+fn has_parameterized_executable_field(record: &CheatRecord) -> bool {
+    record.raw_fields.iter().any(|(name, value)| {
+        matches!(
+            name.as_str(),
+            "code"
+                | "address"
+                | "value"
+                | "handler"
+                | "memory_search_size"
+                | "address_bit_position"
+                | "big_endian"
+                | "repeat_count"
+                | "repeat_add_to_address"
+                | "repeat_add_to_value"
+                | "condition"
+                | "condition_type"
+                | "condition_address"
+                | "condition_value"
+                | "activation"
+        ) && contains_parameter_placeholder(value)
+    })
+}
+
+/// Classify one named cheat as one unit. A record whose subcodes are not all
+/// cartridge ROM writes is unsupported: the subcodes can depend on each other,
+/// so a partial bake would change the cheat's meaning.
+pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecord {
+    let unsupported = |reason: &str, detected_kind: Option<CheatKind>| ClassifiedCheatRecord {
+        record: record.clone(),
+        resolution: CheatResolution::Unsupported {
+            reason: reason.to_string(),
+        },
+        detected_kind,
+    };
+    if has_parameterized_executable_field(record)
+        || record
+            .raw_code
+            .as_deref()
+            .is_some_and(contains_parameter_placeholder)
+    {
+        return unsupported(REASON_PARAMETER, None);
+    }
+    if has_structured_runtime_semantics(record) {
+        return unsupported(
+            REASON_STRUCTURED,
+            record.code_kind.or_else(|| record_kind_hint(record)),
+        );
+    }
+
+    let Some(raw_code) = record.raw_code.as_deref() else {
+        return unsupported("the entry has no native code", None);
+    };
+
+    let record_kind = record.code_kind.or_else(|| record_kind_hint(record));
+    let codes = if record_kind == Some(CheatKind::Xploder)
+        || (record_kind.is_none()
+            && matches!(
+                record.system,
+                CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
+            )) {
+        split_xploder_codes(raw_code)
+    } else {
+        split_codes(raw_code)
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
+    };
+    if codes.is_empty() {
+        return unsupported("the entry has an empty native code", None);
+    }
+
+    let layout = RomLayout::detect(rom, record.system);
+    let mut writes = Vec::new();
+    let mut rom_count = 0usize;
+    let mut runtime_count = 0usize;
+    let mut detected_kind = None;
+    for code in &codes {
+        let mut hinted_kind = record_kind;
+        let normalized = normalize(code);
+        if hinted_kind.is_none()
+            && record.system == CheatSystem::Snes
+            && code.contains('-')
+            && normalized.len() == 8
+            && normalized.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            hinted_kind = Some(CheatKind::GameGenie);
+        }
+        if hinted_kind.is_none()
+            && record.system == CheatSystem::Snes
+            && normalized.len() == 8
+            && normalized.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            let game_genie = decode(code, record.system, CheatKind::GameGenie);
+            let action_replay = decode(code, record.system, CheatKind::ProActionReplay);
+            match (game_genie, action_replay) {
+                (Ok(game_genie), Ok(action_replay)) => {
+                    let game_genie_target = classify_decoded_code(&layout, &game_genie);
+                    let action_replay_target = classify_decoded_code(&layout, &action_replay);
+                    // Both readings land in RAM, so the ambiguity does not
+                    // matter: neither can be baked.
+                    if game_genie_target == CheatTarget::RuntimeMemory
+                        && action_replay_target == CheatTarget::RuntimeMemory
+                    {
+                        runtime_count += 1;
+                        continue;
+                    }
+                    return unsupported(
+                        "the SNES code is ambiguous between Game Genie and Action Replay",
+                        None,
+                    );
+                }
+                (Ok(decoded), Err(_)) | (Err(_), Ok(decoded)) => {
+                    detected_kind = Some(decoded.kind);
+                    match classify_decoded_code(&layout, &decoded) {
+                        CheatTarget::CartridgeRom => match resolve_writes(rom, &layout, &decoded) {
+                            Ok(resolved) => {
+                                rom_count += 1;
+                                writes.extend(resolved);
+                                continue;
+                            }
+                            Err(error) => {
+                                return unsupported(&error.to_string(), detected_kind);
+                            }
+                        },
+                        CheatTarget::RuntimeMemory => {
+                            runtime_count += 1;
+                            continue;
+                        }
+                        CheatTarget::Unknown => {}
+                    }
+                }
+                (Err(error), Err(_)) => {
+                    return unsupported(&error.to_string(), None);
+                }
+            }
+        }
+        let decode_result = match hinted_kind {
+            Some(kind) => decode(code, record.system, kind),
+            None => decode_auto(code, record.system),
+        };
+        let decoded = match decode_result {
+            Ok(decoded) => decoded,
+            Err(error) => return unsupported(&error.to_string(), detected_kind),
+        };
+        detected_kind = match detected_kind {
+            None => Some(decoded.kind),
+            Some(kind) if kind == decoded.kind => Some(kind),
+            Some(_) => None,
+        };
+        match classify_decoded_code(&layout, &decoded) {
+            CheatTarget::CartridgeRom => match resolve_writes(rom, &layout, &decoded) {
+                Ok(resolved) => {
+                    rom_count += 1;
+                    writes.extend(resolved);
+                }
+                Err(error) => return unsupported(&error.to_string(), detected_kind),
+            },
+            CheatTarget::RuntimeMemory => runtime_count += 1,
+            CheatTarget::Unknown => {
+                return unsupported(
+                    "the decoded code does not match the selected system",
+                    detected_kind,
+                );
+            }
+        }
+    }
+
+    let resolution = match (rom_count > 0, runtime_count > 0) {
+        (true, false) => CheatResolution::RomBakeable { writes },
+        (false, true) => CheatResolution::Unsupported {
+            reason: REASON_RUNTIME.to_string(),
+        },
+        (true, true) => CheatResolution::Unsupported {
+            reason: REASON_MIXED.to_string(),
+        },
+        (false, false) => CheatResolution::Unsupported {
+            reason: "the entry contains no codes".to_string(),
+        },
+    };
+    ClassifiedCheatRecord {
+        record: record.clone(),
+        resolution,
+        detected_kind,
+    }
+}
+
+/// Find differing byte writes. Equal overlaps are compatible and omitted.
+///
+/// Each entry carries its own [`CheatSystem`] because the byte order of a
+/// multi-byte write decides which byte lands on which offset; comparing the
+/// wrong bytes both misses real conflicts and misreports the values.
+pub fn detect_write_conflicts(
+    entries: &[(String, CheatSystem, Vec<CheatWrite>)],
+) -> Vec<CheatWriteConflict> {
+    use std::collections::BTreeMap;
+
+    let mut seen: BTreeMap<usize, (String, u8)> = BTreeMap::new();
+    let mut conflicts = Vec::new();
+    for (id, system, writes) in entries {
+        for write in writes {
+            // An unsupported width cannot be applied either, so skipping it here
+            // never hides a byte that reaches the ROM.
+            let Ok(bytes) = write_bytes(write, *system) else {
+                continue;
+            };
+            for (relative, value) in bytes.into_iter().enumerate() {
+                let offset = write.offset + relative;
+                match seen.get(&offset) {
+                    Some((first_id, first_value)) if *first_value != value => {
+                        conflicts.push(CheatWriteConflict {
+                            first_id: first_id.clone(),
+                            second_id: id.clone(),
+                            offset,
+                            first_value: *first_value,
+                            second_value: value,
+                        });
+                    }
+                    None => {
+                        seen.insert(offset, (id.clone(), value));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    conflicts
 }
 
 /// Map a decoded code onto concrete ROM file writes, given the ROM's layout.
@@ -258,10 +758,36 @@ pub fn resolve_writes(
     layout::resolve_writes(rom, layout, decoded)
 }
 
+/// The exact bytes a write puts in the ROM, in the target system's byte order.
+/// Callers MUST use this rather than re-deriving the byte order, so applying,
+/// serializing, and conflict detection can never disagree about a write.
+pub fn write_bytes(write: &CheatWrite, system: CheatSystem) -> Result<Vec<u8>> {
+    let big_endian = uses_big_endian_words(system);
+    let bytes = if big_endian {
+        write.value.to_be_bytes()
+    } else {
+        write.value.to_le_bytes()
+    };
+    match write.width {
+        1 => Ok(vec![write.value as u8]),
+        2 => {
+            let start = if big_endian { 2 } else { 0 };
+            Ok(bytes[start..start + 2].to_vec())
+        }
+        4 => Ok(bytes.to_vec()),
+        other => Err(coded(
+            "cheat_bad_code",
+            "unsupported cheat write width",
+            &other.to_string(),
+        )),
+    }
+}
+
 /// Apply resolved writes into a mutable ROM buffer in place.
 pub fn apply_writes(rom: &mut [u8], system: CheatSystem, writes: &[CheatWrite]) -> Result<()> {
     for write in writes {
-        let end = write.offset.saturating_add(write.width as usize);
+        let bytes = write_bytes(write, system)?;
+        let end = write.offset.saturating_add(bytes.len());
         if end > rom.len() {
             return Err(coded(
                 "cheat_offset_out_of_range",
@@ -269,29 +795,7 @@ pub fn apply_writes(rom: &mut [u8], system: CheatSystem, writes: &[CheatWrite]) 
                 &format!("offset={:#X} len={:#X}", write.offset, rom.len()),
             ));
         }
-        match write.width {
-            1 => rom[write.offset] = write.value as u8,
-            2 | 4 => {
-                let bytes = if matches!(system, CheatSystem::Genesis) {
-                    write.value.to_be_bytes()
-                } else {
-                    write.value.to_le_bytes()
-                };
-                let start = if write.width == 2 && matches!(system, CheatSystem::Genesis) {
-                    2
-                } else {
-                    0
-                };
-                rom[write.offset..end].copy_from_slice(&bytes[start..start + write.width as usize]);
-            }
-            other => {
-                return Err(coded(
-                    "cheat_bad_code",
-                    "unsupported cheat write width",
-                    &other.to_string(),
-                ));
-            }
-        }
+        rom[write.offset..end].copy_from_slice(&bytes);
         tracing::trace!(
             target: "rom_weaver_cheats",
             offset = format_args!("{:#X}", write.offset),
