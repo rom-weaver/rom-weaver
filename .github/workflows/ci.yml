@@ -1119,6 +1119,12 @@ jobs:
           name: webapp-dist
           path: packages/rom-weaver-webapp/dist
 
+      # The Lighthouse runner calls ensure-identify-data before it serves the
+      # bundle. Without the cached packs that script rebuilds every pack from
+      # the source archives, ~7 min of a job whose audits take 2.
+      - name: Prepare identify data
+        uses: ./.github/actions/identify-data
+
       # Audits the bundle built above, served by the repository's own preview
       # server (HTTP/2, brotli sidecars, production cache headers), never the
       # Cloudflare preview deployment. Gating a required check on a deploy would
