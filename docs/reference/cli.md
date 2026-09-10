@@ -91,11 +91,11 @@ Codecs are stricter. Each format accepts only the codec names in its own row of 
 
 Every command accepts these global flags, listed under `Global options` in its help:
 
-- `--json` prints operation reports as one JSON object per line instead of human-readable output. Asset generators such as `bundle schema` and `completions` keep their native schema or script output.
+- `--json` prints operation reports as one JSON object per line instead of human-readable output. Asset generators such as `bundle schema`, `completions`, and `man` without `--install` keep their native output. `man --install --json` reports the installed page count and output directory as a JSON event.
 - `--progress` and `--no-progress` override the automatic choice, which is to show progress on a terminal and hide it when output is piped.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. Logging is off unless you ask for it, and it is separate from the normal output.
 - `-v`, `-vv`, and `-vvv` are shorthand for info, debug, and trace.
-- `-q`/`--quiet` logs errors only.
+- `-q`/`--quiet` logs errors only and hides successful write summaries. Query results and dry-run plans remain visible. Progress is controlled separately by `--progress` and `--no-progress`.
 - `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
 - `--color` and `--no-color` override colored output. The flag wins over the `NO_COLOR` environment variable, which wins over the terminal-vs-piped default. `--color` keeps color even when piped, though the live progress bar stays terminal-only.
 
@@ -384,7 +384,9 @@ The full support matrix - every patch format, container and compressed ROM or di
 ## JSON output
 
 
-Pass `--json` to make operation commands emit one JSON object per line, including progress, status, warnings, selected inputs, and emitted-file metadata where relevant. JSON mode disables interactive selection, making it the stable interface for scripts. Commands that generate an asset, such as `bundle schema` and `completions`, still write that asset in its native format.
+Pass `--json` to make operation commands emit one JSON object per line, including progress, status, warnings, selected inputs, and emitted-file metadata where relevant. JSON mode disables interactive selection, making it the stable interface for scripts. Commands that generate an asset, such as `bundle schema`, `completions`, and `man` without `--install`, still write that asset in its native format.
+
+A closed stdout pipe does not cause a panic or interrupt file creation. The command finishes its work and retains its operation exit status. Other stdout write errors produce a diagnostic on stderr and a nonzero exit status.
 
 ```bash
 rom-weaver --json probe --input game.sfc | jq
