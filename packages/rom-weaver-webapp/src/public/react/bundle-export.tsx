@@ -141,6 +141,10 @@ const embeddedChecks = (item: PatchStackItemState | undefined, side: "in" | "out
 type UseBundleExportOptions = {
   /** Live session sources, read at export time. */
   getSessionSources: () => BundleExportSources;
+  /** Resolves once every queued staging mutation has settled. The session
+   * sources read below are a snapshot of the staged workflow, so exporting
+   * while a replace is still staging would bundle the superseded file. */
+  waitForPendingWork?: () => Promise<unknown>;
   /** Live per-patch stack items (index-aligned with patches) for leaf names + header round-trips. */
   getStackItems: () => PatchStackItemState[];
   /** Stable patch-slot ids; unlike source signatures these survive replacement. */
@@ -351,6 +355,7 @@ const preparePackagedRom = async ({
 
 const useBundleExport = ({
   getSessionSources,
+  waitForPendingWork,
   getPatchIds,
   getStackItems,
   getName,
@@ -412,6 +417,7 @@ const useBundleExport = ({
       return;
     }
     const exportName = getName?.().trim() || "";
+    await waitForPendingWork?.();
     const sources = getSessionSources();
     if (sources.error) {
       setError(sources.error);
@@ -539,6 +545,7 @@ const useBundleExport = ({
     onComplete,
     downloadExport,
     getPatchIds,
+    waitForPendingWork,
   ]);
 
   const cancelExport = useCallback(() => abortControllerRef.current?.abort(), []);

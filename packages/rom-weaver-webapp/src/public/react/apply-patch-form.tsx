@@ -1787,6 +1787,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       };
     },
     getStackItems: () => resolvedStackController.getState().items,
+    waitForPendingWork: () => mutationQueueRef.current,
     initialBundleRom: defaultBundleContents === "rom",
     initialFormat: defaultBundleFormat,
     ready: bundleExportReady,
