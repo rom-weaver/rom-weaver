@@ -652,14 +652,9 @@ const UtilityMenu = ({
           {toolTabs.map((tab) => workflowItem(tab))}
         </fieldset>
       ) : null}
-      {docsTabs.length > 0 ? (
-        <fieldset className="more-group">
-          <legend className="more-group-label">{localizer.message("ui.nav.docs")}</legend>
-          {docsTabs.map((tab) => workflowItem(tab))}
-        </fieldset>
-      ) : null}
       <fieldset className="more-group">
         <legend className="more-group-label">{localizer.message("ui.tools.project")}</legend>
+        {docsTabs.map((tab) => workflowItem(tab))}
         <a
           data-more-workflow="whats-new"
           href="whats-new"
@@ -1116,7 +1111,6 @@ const Masthead = ({
   confirmExternalNavigation,
   donateHref,
   githubHref,
-  settingsOpen,
   threads,
   updateReady = false,
   version,
@@ -1149,7 +1143,6 @@ const Masthead = ({
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
-  settingsOpen?: boolean;
   threads?: number;
   updateReady?: boolean;
   version?: string;
@@ -1218,7 +1211,6 @@ const Masthead = ({
   const moreTabs = tabs.filter(isMoreMenuTab);
   // What's new has no WorkflowTab entry; it lives in More's Project group.
   const currentInMore = currentTab === "whats-new" || moreTabs.some((tab) => tab.id === currentTab);
-  const settingsLabel = localizer.message("ui.settings.title");
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
@@ -1250,8 +1242,8 @@ const Masthead = ({
       const tools = toolsRef.current;
       const target = event.target;
       const moreAnchors = [desktopMoreRef.current?.parentElement, mobileMoreRef.current?.parentElement];
-      if (target instanceof Node && (tools?.contains(target) || moreAnchors.some((anchor) => anchor?.contains(target))))
-        return;
+      if (!(target instanceof Node)) return;
+      if (tools?.contains(target) || moreAnchors.some((anchor) => anchor?.contains(target))) return;
       setAccentOpen(false);
       setUtilityOpen(false);
     };
@@ -1377,11 +1369,11 @@ const Masthead = ({
                 moreLabel={moreLabel}
                 onClose={closeUtility}
                 onOpenLog={onOpenLog}
-                onOpenSettings={onOpenSettings}
                 onOpenStatus={onOpenStatus}
                 onOpenStorage={onOpenStorage ?? onOpenLog}
                 moreTabs={moreTabs}
                 onOpenWorkflowTab={onSelectTab}
+                onOpenSettings={onOpenSettings}
                 onPreloadLog={onPreloadLog}
                 onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
                 open={utilityOpen && utilityPlacement === "desktop"}
@@ -1393,14 +1385,6 @@ const Masthead = ({
               />
             </>
           }
-        />
-        <FindPalette
-          localizer={localizer}
-          onAction={onFindAction}
-          onClose={closeFind}
-          open={findOpen}
-          sources={findSources}
-          triggerRef={activeFindRef}
         />
         <div className="masthead-tools" ref={toolsRef}>
           <button
@@ -1429,25 +1413,6 @@ const Masthead = ({
             onToggle={() => setAccentOpen((open) => !open)}
             open={accentOpen}
           />
-          <button
-            aria-expanded={settingsOpen}
-            aria-haspopup="dialog"
-            aria-label={settingsLabel}
-            className="tool masthead-settings"
-            onClick={onOpenSettings}
-            onFocus={onPreloadSettings}
-            onPointerDown={onPreloadSettings}
-            onPointerEnter={onPreloadSettings}
-            type="button"
-          >
-            <Settings aria-hidden="true" />
-            <span aria-hidden="true" className="tool-text">
-              {settingsLabel}
-            </span>
-            <span aria-hidden="true" className="tip">
-              {settingsLabel}
-            </span>
-          </button>
           {utilityOpen && utilityPlacement === "mobile" ? (
             <UtilityMenu
               autoFocusFirst={utilityViaKeyboard}
@@ -1474,6 +1439,14 @@ const Masthead = ({
             />
           ) : null}
         </div>
+        <FindPalette
+          localizer={localizer}
+          onAction={onFindAction}
+          onClose={closeFind}
+          open={findOpen}
+          sources={findSources}
+          triggerRef={activeFindRef}
+        />
         {/* The parser-time resolver in index.html rewrites the thread count and
             runtime status before the shell paints, and removes itself. Keep its
             marker after the action group so both slots exist when it runs. */}

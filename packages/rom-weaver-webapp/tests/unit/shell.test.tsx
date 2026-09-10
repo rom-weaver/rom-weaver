@@ -366,7 +366,7 @@ describe("external links", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
-  it("confirms before leaving from inside the More menu", async () => {
+  it("confirms before leaving from the More menu on every layout", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
     const confirmExternalNavigation = vi.fn(async () => true);
@@ -380,11 +380,20 @@ describe("external links", () => {
       ),
     );
 
-    openDesktopMore(container);
+    // Desktop More.
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
     fireEvent.click(getByRole("menuitem", { name: "View source on GitHub" }));
     await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/repo"));
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
+    fireEvent.click(getByRole("menuitem", { name: "Support" }));
+    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/donate"));
 
-    openDesktopMore(container);
+    // Phone More.
+    confirmExternalNavigation.mockClear();
+    fireEvent.click(container.querySelector(".dock .mobile-more button") as HTMLButtonElement);
+    fireEvent.click(getByRole("menuitem", { name: "View source on GitHub" }));
+    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/repo"));
+    fireEvent.click(container.querySelector(".dock .mobile-more button") as HTMLButtonElement);
     fireEvent.click(getByRole("menuitem", { name: "Support" }));
     await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/donate"));
   });
