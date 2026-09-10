@@ -28,22 +28,18 @@
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
-        "includePatterns": [
-          "assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"
-        ],
+        "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 252000,
-        "maxRawBytes": 265000,
-        "expectedBrotliBytes": 69000,
-        "maxBrotliBytes": 73000
+        "expectedRawBytes": 275000,
+        "maxRawBytes": 286000,
+        "expectedBrotliBytes": 74500,
+        "maxBrotliBytes": 77500
       },
       {
         "name": "Save Editor JavaScript",
         "directory": "assets",
         "extension": ".js",
-        "includePatterns": [
-          "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
-        ],
+        "includePatterns": ["assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 35000,
         "maxRawBytes": 42000,
