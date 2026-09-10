@@ -30,7 +30,7 @@ You need the patch and your own copy of the exact game release it was made for. 
 
 Compare the checksum, not just the filename. [How patching works](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the difference.
 
-If you have a checksum but not the file, paste it into **Identify by checksum**. It sits under the drop zone on the empty page, and in **0x02 ROM** once a patch is loaded. rom-weaver looks the checksum up in its local identification data and shows the expected ROM: its title, its region and revision, and every checksum and the size the data holds. Nothing is uploaded.
+If you know the ROM but do not have the file, type its checksum or its game name into **Identify by checksum or game name**. It sits under the drop zone on the empty page, and in **0x02 ROM** once a patch is loaded. A checksum shows the expected ROM directly. A name lists the matching games on every system; choose one, then choose its region or revision. Either way the card shows the expected ROM: its title, its region and revision, and every checksum and the size the local identification data holds. Nothing is uploaded.
 
 The search appears only while nothing else names the ROM. A bundle entry, or a patch that records its own source, already answers the question.
 

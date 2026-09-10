@@ -9,6 +9,7 @@
 - [Data source](#data-source)
 - [CLI database directory](#cli-database-directory)
 - [Storage and network behavior](#storage-and-network-behavior)
+- [Shard file](#shard-file)
 - [Preserved source fields](#preserved-source-fields)
 - [Bundles](#bundles)
 
@@ -101,17 +102,36 @@ Each shard is one identify data asset (`assets/identify-cheats-<platform slug>.j
 
 A shard belongs to the same pack group as its platform's identify pack. The background warm-up downloads the default group, the Settings page installs optional groups, and the CLI `identify database install-group` installs the same shards natively. An uncached shard is fetched on demand when the Cheats section opens.
 
-All nine shards are in the default group. Together they add about 4.5 MB to the default group download and about 58 MB of decoded JSON to the browser's cache storage.
+All nine shards are in the default group. Together they add about 2 MB to the default group download and about 17 MB of decoded JSON to the browser's cache storage.
 
 The service worker verifies each shard's SHA-256 before it stores it, and the parsing worker verifies it again before use. A shard that fails either check reports the database as unavailable.
 
-A dedicated browser worker parses each shard. The initial JavaScript bundle does not contain the database.
+A dedicated browser worker parses each shard and restores the fields the file leaves out (see [Shard file](#shard-file)). The initial JavaScript bundle does not contain the database.
 
 The hosted app requests shards only from its own origin. It makes no runtime request to Libretro.
 
+## Shard file
+
+A shard is one JSON document: `schemaVersion`, `system`, `sourceRevision`, and `games`. Each game carries its `id`, `title`, `normalizedTitle`, `regions`, `revisions`, `sourceFiles`, `checksums`, and `cheats`.
+
+The file stores each cheat record without the values a reader derives. The CLI and the browser worker restore them the same way:
+
+| Record field | Source in the file |
+| --- | --- |
+| `system` | the shard's `system` |
+| `gameId` | the game's `id` |
+| `sourceRevision` | the shard's `sourceRevision` |
+| `sourceFile` | `sourceFiles[sourceFile]` of the game (the file stores an index) |
+| `description` | stored when the source record has a `desc` field, else `Cheat <sourceIndex + 1>` |
+| `rawFields.desc`, `rawFields.code` | `description` and `rawCode` |
+| `rawFields.enable` | stored only when it is not `false` |
+| `id` | `cheat_` plus the first 24 hex digits of SHA-256 over `system`, `gameId`, `codeKind`, and the raw fields without `enable`, as key-sorted JSON, joined by NUL bytes |
+
+Record IDs do not depend on the file layout, so a bundle written against an earlier layout still names the same records.
+
 ## Preserved source fields
 
-Each imported record keeps the original code, every `cheatN_*` value, unknown fields, source file, source index, and source revision.
+Each imported record keeps the original code, every `cheatN_*` value, unknown fields, source file, source index, and source revision. A source record without a `cheatN_enable` line reads as `enable = false`.
 
 ROMWeaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 

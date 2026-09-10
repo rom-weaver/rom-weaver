@@ -3,12 +3,12 @@ import { Fragment } from "react";
 import { identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
+import type { ExpectedRomTitle } from "../../../../lib/apply/expected-rom-lookup.ts";
 import { identifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../../../../types/identify.ts";
 import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import { useUiLocalizer } from "../../settings-context.tsx";
-import type { useRomHashLookup } from "../../use-rom-hash-lookup.ts";
-import type { useRomNameLookup } from "../../use-rom-name-lookup.ts";
+import type { RomLookupMessages, useRomLookup } from "../../use-rom-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
 import { ExtractName } from "./extraction-tree.tsx";
 import { FileCard } from "./file-card.tsx";
@@ -69,15 +69,22 @@ const databaseOnlyChecks = (
   return { checksums, ...(size === undefined ? {} : { size }) };
 };
 
-/** Where an expected-ROM check came from; it decides the card's meta line. */
-type RomExpectationSource = "bundle" | "manual" | "patch";
+/**
+ * Where an expected-ROM check came from; it decides the card's meta line.
+ * `manual` is a pasted checksum, `name` a title chosen from a name search.
+ */
+type RomExpectationSource = "bundle" | "manual" | "name" | "patch";
 
 const ROM_EXPECTATION_META: Record<
   RomExpectationSource,
-  "ui.sourceInfo.expectationMetaBundle" | "ui.sourceInfo.expectationMetaManual" | "ui.sourceInfo.expectationMetaPatch"
+  | "ui.sourceInfo.expectationMetaBundle"
+  | "ui.sourceInfo.expectationMetaManual"
+  | "ui.sourceInfo.expectationMetaName"
+  | "ui.sourceInfo.expectationMetaPatch"
 > = {
   bundle: "ui.sourceInfo.expectationMetaBundle",
   manual: "ui.sourceInfo.expectationMetaManual",
+  name: "ui.sourceInfo.expectationMetaName",
   patch: "ui.sourceInfo.expectationMetaPatch",
 };
 
@@ -87,12 +94,18 @@ const ROM_EXPECTATION_AUTHORITY: Record<
   RomExpectationSource,
   | "ui.sourceInfo.expectationAuthorityBundle"
   | "ui.sourceInfo.expectationAuthorityManual"
+  | "ui.sourceInfo.expectationAuthorityName"
   | "ui.sourceInfo.expectationAuthorityPatch"
 > = {
   bundle: "ui.sourceInfo.expectationAuthorityBundle",
   manual: "ui.sourceInfo.expectationAuthorityManual",
+  name: "ui.sourceInfo.expectationAuthorityName",
   patch: "ui.sourceInfo.expectationAuthorityPatch",
 };
+
+/** The expectation source a search result asserts, by the route that found it. */
+const romLookupSource = (foundBy: "checksum" | "name"): RomExpectationSource =>
+  foundBy === "name" ? "name" : "manual";
 
 /** What the workflow expects the ROM to be, and where that expectation came from. */
 type RomExpectation = {
@@ -207,14 +220,44 @@ const RomExpectationCard = ({
   );
 };
 
+/* One title from a name search, on one platform. The index holds base titles,
+   so the platform is what separates two rows with the same name. */
+const RomTitleRow = ({ onChoose, title }: { onChoose: () => void; title: ExpectedRomTitle }) => (
+  <li className="identify-search-result">
+    <button className="btn identify-search-result-btn" onClick={onChoose} type="button">
+      <span className="identify-search-result-name">{title.name}</span>
+      <span className="identify-search-result-meta">{title.platform}</span>
+    </button>
+  </li>
+);
+
+/* One release of a chosen title. The name leads; region, revision, and dump
+   tags follow, because those are what separate two releases of one game. */
+const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; onChoose: () => void }) => {
+  const details = [match.region, match.revision, ...(match.dumpTags || [])].filter(Boolean);
+  return (
+    <li className="identify-search-result">
+      <button className="btn identify-search-result-btn" onClick={onChoose} type="button">
+        <span className="identify-search-result-name">{match.name}</span>
+        {details.length ? <span className="identify-search-result-meta">{details.join(" · ")}</span> : null}
+      </button>
+    </li>
+  );
+};
+
+const versionKey = (match: ParsedIdentifyTitleMatch) =>
+  `${match.database}/${match.name}/${match.variant}/${match.region || ""}/${match.revision || ""}`;
+
 /**
- * Paste a checksum to find the ROM this run needs, without having the file.
- * Shared by the apply and identify pages - one lookup, one wording - so the
- * only difference is where its answer lands. The `hero` variant belongs to
- * empty input steps. The `section` variant stands beside the empty ROM
- * prompt. The `compact` variant refines an existing expectation.
+ * Find the ROM this run needs without having the file: paste a checksum or
+ * type a game name into the one box. Shared by the apply and identify pages -
+ * one lookup, one wording - so the only difference is where its answer lands.
+ * The `hero` variant belongs to empty input steps. The `section` variant is
+ * the island beside the empty ROM prompt. The `compact` variant refines an
+ * existing expectation. A name search lists titles, then the releases of the
+ * chosen title, under the row; a checksum answers directly.
  */
-const RomHashSearch = ({
+const RomSearch = ({
   idPrefix = "rom-weaver-rom",
   lookup,
   localizer,
@@ -222,36 +265,37 @@ const RomHashSearch = ({
 }: {
   /** Owner-scoped id prefix: the apply and identify panels stay mounted side by side. */
   idPrefix?: string;
-  lookup: ReturnType<typeof useRomHashLookup>;
+  lookup: ReturnType<typeof useRomLookup>;
   localizer: ReturnType<typeof useUiLocalizer>;
   variant?: "compact" | "hero" | "section";
 }) => {
-  const inputId = `${idPrefix}-hash`;
+  const inputId = `${idPrefix}-search`;
   const compact = variant === "compact";
   const submitLabel = lookup.busy
-    ? lookup.stage || localizer.message("ui.identify.hashSearching")
-    : localizer.message(compact ? "ui.identify.hashSearchAgain" : "ui.identify.hashSearch");
+    ? lookup.stage || localizer.message("ui.identify.searching")
+    : localizer.message(compact ? "ui.identify.searchAgain" : "ui.identify.search");
+  const chosen = lookup.title;
   return (
     <form
-      className={`identify-hash identify-hash--${variant}`}
-      id={`${inputId}-search`}
+      className={`identify-search identify-search--${variant}`}
+      id={`${inputId}-form`}
       onSubmit={(event) => {
         event.preventDefault();
         void lookup.search();
       }}
     >
-      <label className="identify-hash-label" htmlFor={inputId}>
-        {localizer.message(compact ? "ui.identify.hashRefine" : "ui.identify.hashDisclosure")}
+      <label className="identify-search-label" htmlFor={inputId}>
+        {localizer.message(compact ? "ui.identify.searchRefine" : "ui.identify.searchDisclosure")}
       </label>
-      <div className="identify-hash-row">
+      <div className="identify-search-row">
         <input
           aria-invalid={lookup.error ? "true" : undefined}
           autoComplete="off"
-          className="input mono identify-hash-input"
+          className="input identify-search-input"
           disabled={lookup.busy}
           id={inputId}
           onChange={(event) => lookup.setText(event.currentTarget.value)}
-          placeholder={localizer.message("ui.identify.hashPlaceholder")}
+          placeholder={localizer.message("ui.identify.searchPlaceholder")}
           spellCheck={false}
           type="text"
           value={lookup.text}
@@ -260,191 +304,71 @@ const RomHashSearch = ({
             a row, not the step's action, so it MUST NOT take the row's width. */}
         <button
           aria-label={submitLabel}
-          className={compact ? "btn identify-hash-submit" : "btn primary identify-hash-submit"}
+          className={compact ? "btn identify-search-submit" : "btn primary identify-search-submit"}
           disabled={lookup.busy || !lookup.text.trim()}
           type="submit"
         >
           <Search aria-hidden="true" />
           {/* A phone keeps only the glyph (phone-dock.css); the name stays on the button. */}
-          <span className="identify-hash-submit-text">{submitLabel}</span>
+          <span className="identify-search-submit-text">{submitLabel}</span>
         </button>
       </div>
       {lookup.error ? (
-        <p className="identify-hash-error" role="alert">
+        <p className="identify-search-error" role="alert">
           {lookup.error}
         </p>
       ) : null}
-    </form>
-  );
-};
-
-/* One title from a name search. The name leads; region, revision, and dump
-   tags follow, because those are what separate two rows with the same name. */
-const RomNameResultRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; onChoose: () => void }) => {
-  const details = [match.region, match.revision, ...(match.dumpTags || [])].filter(Boolean);
-  return (
-    <li className="identify-name-result">
-      <button className="btn identify-name-result-btn" onClick={onChoose} type="button">
-        <span className="identify-name-result-name">{match.name}</span>
-        {details.length ? <span className="identify-name-result-meta">{details.join(" · ")}</span> : null}
-      </button>
-    </li>
-  );
-};
-
-/**
- * Find the ROM this run needs by game name. A name cannot be routed to a pack
- * the way a checksum can, so the platform picker comes first and the query
- * input stays disabled until a platform is chosen; the search then reads that
- * one platform's data. The picker filters by typing because the catalog holds
- * more platforms than anyone scrolls through.
- */
-const RomNameSearch = ({
-  idPrefix = "rom-weaver-rom",
-  lookup,
-  localizer,
-}: {
-  /** Owner-scoped id prefix: the apply and identify panels stay mounted side by side. */
-  idPrefix?: string;
-  lookup: ReturnType<typeof useRomNameLookup>;
-  localizer: ReturnType<typeof useUiLocalizer>;
-}) => {
-  const platformInputId = `${idPrefix}-name-platform`;
-  const nameInputId = `${idPrefix}-name`;
-  const listId = `${platformInputId}-options`;
-  const chosen = lookup.platform;
-  const submitLabel = lookup.busy
-    ? lookup.stage || localizer.message("ui.identify.nameSearching")
-    : localizer.message("ui.identify.nameSearch");
-  return (
-    <form
-      className="identify-name"
-      id={`${nameInputId}-search`}
-      onSubmit={(event) => {
-        event.preventDefault();
-        void lookup.search();
-      }}
-    >
-      <p className="identify-name-heading">{localizer.message("ui.identify.nameDisclosure")}</p>
-      <label className="identify-hash-label" htmlFor={platformInputId}>
-        {localizer.message("ui.identify.namePlatformLabel")}
-      </label>
-      <div className="identify-name-platform">
-        <input
-          autoComplete="off"
-          className="input identify-name-platform-input"
-          id={platformInputId}
-          onChange={(event) => lookup.setFilter(event.currentTarget.value)}
-          onFocus={lookup.loadPlatforms}
-          placeholder={localizer.message("ui.identify.namePlatformPlaceholder")}
-          spellCheck={false}
-          type="text"
-          value={lookup.filter}
-        />
-        {chosen ? (
-          <button className="btn identify-name-platform-change" onClick={lookup.clearPlatform} type="button">
-            {localizer.message("ui.identify.namePlatformChange")}
+      {chosen ? (
+        <div className="identify-search-results-head">
+          <p className="identify-search-results-label">
+            {localizer.message("ui.identify.versionResults", { platform: chosen.platform, title: chosen.name })}
+          </p>
+          <button className="btn identify-search-back" onClick={lookup.leaveTitle} type="button">
+            {localizer.message("ui.identify.versionsBack")}
           </button>
-        ) : null}
-      </div>
-      {chosen ? null : (
-        <ul
-          aria-label={localizer.message("ui.identify.namePlatformLabel")}
-          className="identify-name-platform-list"
-          id={listId}
-        >
-          {lookup.filteredPlatforms.length
-            ? lookup.filteredPlatforms.map((platform) => (
-                <li className="identify-name-platform-option" key={platform.slug}>
-                  <button
-                    className="btn identify-name-platform-btn"
-                    onClick={() => lookup.choosePlatform(platform)}
-                    type="button"
-                  >
-                    {platform.platform}
-                  </button>
-                </li>
-              ))
-            : // Before the catalog request settles the list is empty because
-              // nothing arrived yet, so "no match" MUST wait for the answer.
-              lookup.platformsLoaded && (
-                <li className="identify-name-platform-empty">{localizer.message("ui.identify.namePlatformEmpty")}</li>
-              )}
-        </ul>
-      )}
-      <label className="identify-hash-label" htmlFor={nameInputId}>
-        {localizer.message("ui.identify.nameLabel")}
-      </label>
-      <div className="identify-hash-row">
-        <input
-          aria-invalid={lookup.error ? "true" : undefined}
-          autoComplete="off"
-          className="input identify-hash-input"
-          disabled={!chosen || lookup.busy}
-          id={nameInputId}
-          onChange={(event) => lookup.setText(event.currentTarget.value)}
-          placeholder={localizer.message(chosen ? "ui.identify.namePlaceholder" : "ui.identify.namePlatformFirst")}
-          spellCheck={false}
-          type="text"
-          value={lookup.text}
-        />
-        <button
-          aria-label={submitLabel}
-          className="btn primary identify-hash-submit"
-          disabled={!chosen || lookup.busy || !lookup.text.trim()}
-          type="submit"
-        >
-          <Search aria-hidden="true" />
-          <span className="identify-hash-submit-text">{submitLabel}</span>
-        </button>
-      </div>
-      {lookup.error ? (
-        <p className="identify-hash-error" role="alert">
-          {lookup.error}
-        </p>
+        </div>
+      ) : lookup.titles.length ? (
+        <div className="identify-search-results-head">
+          <p className="identify-search-results-label">{localizer.message("ui.identify.titleResults")}</p>
+        </div>
       ) : null}
-      {lookup.matches.length ? (
-        <>
-          <p className="identify-name-results-label">{localizer.message("ui.identify.nameResults")}</p>
-          <ul aria-label={localizer.message("ui.identify.nameResults")} className="identify-name-results">
-            {lookup.matches.map((match) => (
-              <RomNameResultRow
-                key={`${match.database}/${match.name}/${match.variant}/${match.region || ""}/${match.revision || ""}`}
-                match={match}
-                onChoose={() => lookup.choose(match)}
-              />
-            ))}
-          </ul>
-        </>
+      {chosen && lookup.versions.length ? (
+        <ul aria-label={localizer.message("ui.identify.versionResultsList")} className="identify-search-results">
+          {lookup.versions.map((match) => (
+            <RomVersionRow key={versionKey(match)} match={match} onChoose={() => lookup.choose(match)} />
+          ))}
+        </ul>
+      ) : null}
+      {!chosen && lookup.titles.length ? (
+        <ul aria-label={localizer.message("ui.identify.titleResults")} className="identify-search-results">
+          {lookup.titles.map((title) => (
+            <RomTitleRow key={`${title.slug}/${title.name}`} onChoose={() => lookup.chooseTitle(title)} title={title} />
+          ))}
+        </ul>
       ) : null}
     </form>
   );
 };
 
-/* The messages the name search needs before and after a lookup - one catalog
-   entry per wording, so the apply and identify pages cannot drift apart. */
-const ROM_NAME_LOOKUP_MESSAGES = (localizer: ReturnType<typeof useUiLocalizer>) => ({
-  failed: localizer.message("ui.identify.nameFailed"),
-  noMatch: localizer.message("ui.identify.nameNoMatch"),
-  platformsFailed: localizer.message("ui.identify.namePlatformsFailed"),
+/* Every message the lookup reports - one catalog entry per wording, so the
+   apply and identify pages cannot drift apart. */
+const ROM_LOOKUP_MESSAGES = (localizer: ReturnType<typeof useUiLocalizer>): RomLookupMessages => ({
+  failed: localizer.message("ui.identify.searchFailed"),
+  hashInvalid: localizer.message("ui.identify.hashInvalid"),
+  hashNoMatch: localizer.message("ui.identify.hashNoMatch"),
+  hashUnavailable: localizer.message("ui.identify.hashUnavailable"),
+  nameNoMatch: localizer.message("ui.identify.nameNoMatch"),
+  nameUnavailable: localizer.message("ui.identify.nameUnavailable"),
   tooShort: localizer.message("ui.identify.nameTooShort"),
-  unavailable: localizer.message("ui.identify.nameUnavailable"),
-});
-
-/* The two validation messages the search shares with the identify page - one
-   catalog entry, one wording, wherever a checksum is pasted. */
-const ROM_HASH_LOOKUP_MESSAGES = (localizer: ReturnType<typeof useUiLocalizer>) => ({
-  invalid: localizer.message("ui.identify.hashInvalid"),
-  invalidChars: localizer.message("ui.identify.hashInvalidChars"),
+  versionsNoMatch: localizer.message("ui.identify.versionsNoMatch"),
 });
 
 export {
   compareRomExpectation,
   databaseOnlyChecks,
-  ROM_HASH_LOOKUP_MESSAGES,
-  ROM_NAME_LOOKUP_MESSAGES,
+  ROM_LOOKUP_MESSAGES,
   RomExpectationCard,
-  RomHashSearch,
-  RomNameSearch,
+  romLookupSource,
+  RomSearch,
   type RomExpectation,
 };

@@ -11,7 +11,6 @@ import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { resolveIdentifyPackGroups } from "../../scripts/identify-pack-groups.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
-import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
@@ -60,6 +59,9 @@ const identifyCheatEntriesForSlugs = (slugs) =>
 const identifyChecksumRouterEntries = identifyDataIndex.checksumRoutes
   ? [identifyPackEntry(identifyDataIndex.checksumRoutes)]
   : [];
+// The title index rides with the default packs for the same reason as the
+// router: the cross-platform name search needs it before any pack is loaded.
+const identifyTitleIndexEntries = identifyDataIndex.titleIndex ? [identifyPackEntry(identifyDataIndex.titleIndex)] : [];
 const identifyDefaultPackGroup = {
   id: "default",
   label: "Built-in systems",
@@ -67,6 +69,7 @@ const identifyDefaultPackGroup = {
     ...identifyPackGroups.defaultSystems.map(identifyPackEntry),
     ...identifyCheatEntriesForSlugs(identifyPackGroups.defaultSystems.map((system) => system.slug)),
     ...identifyChecksumRouterEntries,
+    ...identifyTitleIndexEntries,
   ],
   required: true,
 };
@@ -1356,7 +1359,6 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       compileLinguiCatalogs(),
       docsVirtualModule(DOC_ROUTES),
-      brandMarkAssets(),
       shareWorkerRuntimeChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveEmulatorJsAssets(),
@@ -1382,14 +1384,17 @@ export default defineConfig(({ command, mode }) => {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.
           manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
-          // The checksum router is warm-up data like the packs, so neither
-          // the raw file nor its brotli sidecar joins the precache.
+          // The checksum router and the title index are warm-up data like the
+          // packs, so neither the raw files nor their brotli sidecars join the
+          // precache.
           globIgnores: [
             "**/*.map",
             "assets/identify-*.pack.br",
             "assets/identify-*.bin",
             "assets/identify-*.bin.br",
             "assets/identify-cheats-*.json.br",
+            "assets/identify-title-index.json",
+            "assets/identify-title-index.json.br",
           ],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:

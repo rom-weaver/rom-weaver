@@ -68,13 +68,16 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   document.body.append(host);
 
   // Exactly what the parser-time resolver in index.html writes before React
-  // loads: the count, its accessible name, and the runtime state + glyph.
+  // loads: the count, its accessible name, and the runtime state, title, glyph,
+  // and lucide class.
   const threads = host.querySelector(".masthead-threads");
   const runtime = host.querySelector(".sub-status");
   threads.querySelector(".masthead-threads-count").textContent = "8";
   threads.setAttribute("aria-label", "8 threads");
   runtime.dataset.sw = "disabled";
   runtime.setAttribute("aria-label", "Offline support off");
+  runtime.setAttribute("title", "Offline support off");
+  runtime.querySelector("svg").setAttribute("class", "lucide lucide-cloud-off");
   runtime.querySelector("svg").innerHTML =
     '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path>';
 

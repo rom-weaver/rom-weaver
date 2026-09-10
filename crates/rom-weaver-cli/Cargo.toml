@@ -42,6 +42,7 @@ rom-weaver-core = { path = "../rom-weaver-core", version = "0.15.1" }
 rom-weaver-patches = { path = "../rom-weaver-patches", version = "0.15.1" }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 zstd.workspace = true

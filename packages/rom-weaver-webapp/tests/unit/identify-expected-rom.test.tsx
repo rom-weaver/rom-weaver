@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 const searchChecksum = async (container: HTMLElement, hash: string) => {
-  const input = container.querySelector<HTMLInputElement>(".identify-hash-input");
+  const input = container.querySelector<HTMLInputElement>(".identify-search-input");
   if (!input) throw new Error("the checksum search input is missing");
   fireEvent.change(input, { target: { value: hash } });
   fireEvent.submit(input.closest("form") as HTMLFormElement);
@@ -53,8 +53,8 @@ const stageRom = async (container: HTMLElement) => {
 it("offers the optional ROM drop zone beside a checksum match", async () => {
   const { container } = render(<IdentifyForm />);
 
-  const hashSearch = container.querySelector(".identify-hash");
-  expect(hashSearch?.parentElement?.classList.contains("identify-hash-island")).toBe(true);
+  const hashSearch = container.querySelector(".identify-search");
+  expect(hashSearch?.parentElement?.classList.contains("identify-search-island")).toBe(true);
   expect(hashSearch?.closest(".unified-drop-step")).not.toBeNull();
   expect(hashSearch?.closest(".drop.hero")).toBeNull();
 
@@ -100,7 +100,7 @@ it("clearing the expectation clears the lookup", async () => {
   fireEvent.click(remove);
 
   await waitFor(() => expect(container.querySelector("#identify-container-expected-rom")).toBeNull());
-  expect(container.querySelector<HTMLInputElement>(".identify-hash-input")?.value).toBe("");
+  expect(container.querySelector<HTMLInputElement>(".identify-search-input")?.value).toBe("");
   expect(container.querySelector(".ghost-steps")).not.toBeNull();
 });
 
@@ -108,7 +108,7 @@ it("keeps the hero while a checksum is typed and moves the search into 0x02 on a
   const { container } = render(<IdentifyForm />);
   expect(container.querySelector(".unified-drop-step--hero")).not.toBeNull();
 
-  const input = container.querySelector<HTMLInputElement>(".identify-hash-input");
+  const input = container.querySelector<HTMLInputElement>(".identify-search-input");
   if (!input) throw new Error("the checksum search input is missing");
   fireEvent.change(input, { target: { value: "abcd" } });
 
@@ -118,8 +118,8 @@ it("keeps the hero while a checksum is typed and moves the search into 0x02 on a
 
   await searchChecksum(container, "abcd1234");
   expect(container.querySelector(".unified-drop-step--hero")).toBeNull();
-  const refine = container.querySelector(".identify-hash--compact");
+  const refine = container.querySelector(".identify-search--compact");
   expect(refine).not.toBeNull();
   expect(refine?.textContent).toContain("Not the ROM you meant?");
-  expect(container.querySelector<HTMLInputElement>(".identify-hash-input")?.value).toBe("abcd1234");
+  expect(container.querySelector<HTMLInputElement>(".identify-search-input")?.value).toBe("abcd1234");
 });

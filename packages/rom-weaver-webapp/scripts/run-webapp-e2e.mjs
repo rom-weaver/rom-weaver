@@ -36,12 +36,44 @@ const MANY_ENTRIES_COUNT = 2048;
 const MANY_ENTRY_SIZE = 4096;
 const E2E_ATTEMPTS = 2;
 const E2E_SHARD_FLAGS = ["--a11y", "--journeys", "--journeys-raw", "--journeys-archive"];
+const PREBUILT_WEBAPP_CHANNEL = "prod";
+const PREBUILT_WEBAPP_DIST_FILES = ["index.html", "manifest.json"];
 export const resolveE2EShard = (args) => {
   const requested = args.filter((arg) => E2E_SHARD_FLAGS.includes(arg));
   if (requested.length > 1) {
     throw new Error(`Use only one E2E shard: ${E2E_SHARD_FLAGS.slice(0, -1).join(", ")}, or ${E2E_SHARD_FLAGS.at(-1)}`);
   }
   return requested[0]?.slice(2) || "all";
+};
+export const resolveE2EBuild = (environment) => {
+  if (environment.ROM_WEAVER_E2E_USE_PREBUILT_DIST !== "1") {
+    return { channel: environment.ROM_WEAVER_CHANNEL || "dev", source: "build" };
+  }
+  if (environment.ROM_WEAVER_CHANNEL !== PREBUILT_WEBAPP_CHANNEL) {
+    throw new Error(
+      `ROM_WEAVER_E2E_USE_PREBUILT_DIST=1 requires ROM_WEAVER_CHANNEL=${PREBUILT_WEBAPP_CHANNEL}; webapp-dist is a production bundle`,
+    );
+  }
+  return { channel: PREBUILT_WEBAPP_CHANNEL, source: "prebuilt" };
+};
+export const assertPrebuiltWebappDist = (readFile) => {
+  const files = new Map();
+  for (const file of PREBUILT_WEBAPP_DIST_FILES) {
+    try {
+      files.set(file, readFile(file));
+    } catch (error) {
+      throw new Error(`webapp-dist is missing ${file}: ${error?.message || error}`);
+    }
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(files.get("manifest.json"));
+  } catch (error) {
+    throw new Error(`webapp-dist has an invalid manifest.json: ${error?.message || error}`);
+  }
+  if (manifest.name !== "rom-weaver" || manifest.short_name !== "rom-weaver") {
+    throw new Error("webapp-dist is not a production bundle: manifest.json has a channel-specific name");
+  }
 };
 const E2E_SHARD = resolveE2EShard(process.argv.slice(2));
 const RUN_AUDITS = E2E_SHARD === "all" || E2E_SHARD === "a11y";
@@ -502,6 +534,34 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
     await page.close();
 
+    // The host serves 404.html at whatever path missed, so the page's links
+    // must resolve against its <base> tag rather than the missed directory.
+    page = await context.newPage();
+    watchPageErrors();
+    const missedUrl = new URL("assets/missing/", baseUrl).href;
+    const missedResponse = await page.goto(missedUrl, { waitUntil: "domcontentloaded" });
+    if (missedResponse?.status() !== 404) {
+      throw new Error(`missed nested path returned ${missedResponse?.status()}, expected 404`);
+    }
+    await page.locator(".not-found-page").waitFor({ state: "visible" });
+    await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
+    const notFoundLinks = await page.evaluate(() => ({
+      brand: document.querySelector(".brand-mark-link")?.href,
+      home: document.querySelector(".not-found-home")?.href,
+      word: document.querySelector(".brand-word-link")?.href,
+    }));
+    for (const [name, href, expected] of [
+      ["brand mark", notFoundLinks.brand, baseUrl],
+      ["brand word", notFoundLinks.word, baseUrl],
+      ["home action", notFoundLinks.home, new URL("apply-patch", baseUrl).href],
+    ]) {
+      if (href !== expected) throw new Error(`404 page ${name} link at ${missedUrl} is ${href}, expected ${expected}`);
+    }
+    await page.locator(".brand-mark-link").click();
+    await page.locator(".home-page").waitFor({ state: "visible" });
+    if (page.url() !== baseUrl) throw new Error(`404 page brand link landed on ${page.url()}, expected ${baseUrl}`);
+    await page.close();
+
     page = await context.newPage();
     watchPageErrors();
     if (browserName === "chromium") await page.coverage.startCSSCoverage();
@@ -855,6 +915,15 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // Every page above banked its own coverage as it finished; nothing is still
     // recording here.
     if (browserName === "chromium") checkCssCoverage(cssCoverageEntries);
+  } catch (error) {
+    const dialog = await page
+      .locator(".sample-tutorial-dialog")
+      .textContent({ timeout: 1000 })
+      .catch(() => "No tutorial dialog");
+    process.stderr.write(
+      `Accessibility audit failed; tutorial dialog: ${dialog}\nPage errors: ${failures.join("\n")}\n`,
+    );
+    throw error;
   } finally {
     await context.close();
   }
@@ -1064,7 +1133,7 @@ const createBrowserContextFactory = async (browserType, browserName) => {
 const startServer = (mode, port, corpusDir) => {
   const server = childProcess.spawn(process.execPath, ["scripts/dev-server.mjs", mode, "--port", String(port)], {
     cwd: PACKAGE_DIR,
-    env: { ...process.env, ...(corpusDir ? { ROM_WEAVER_E2E_CORPUS_DIR: corpusDir } : {}) },
+    env: { ...process.env, PORT: String(port), ...(corpusDir ? { ROM_WEAVER_E2E_CORPUS_DIR: corpusDir } : {}) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
@@ -1113,16 +1182,17 @@ const main = async () => {
         );
       }
       if (RUN_RAW_JOURNEY) {
-        await runApplyJourney(createContext, devBaseUrl, "raw apply/download", [
+        await runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",
           "archive_sources/change.ips",
         ]);
       }
       if (RUN_ARCHIVE_JOURNEY) {
-        await runApplyJourney(createContext, devBaseUrl, "archive routing/apply/download", [
+        await runApplyJourney(createContext, previewBaseUrl, "archive routing/apply/download", [
           "archives/one-rom.zip",
           "archives/one-patch.7z",
         ]);
+        // The stress page MUST use the dev server because it is not a production entry point.
         if (browserName === "chromium" && corpusDir) await runArchiveStressSmoke(createContext, devBaseUrl);
       }
     } finally {
@@ -1141,11 +1211,16 @@ const main = async () => {
 };
 
 const runWithRetry = async () => {
-  childProcess.execFileSync("npm", ["run", "build"], {
-    cwd: PACKAGE_DIR,
-    env: { ...process.env, ROM_WEAVER_CHANNEL: process.env.ROM_WEAVER_CHANNEL || "dev" },
-    stdio: "inherit",
-  });
+  const build = resolveE2EBuild(process.env);
+  if (build.source === "prebuilt") {
+    assertPrebuiltWebappDist((file) => fs.readFileSync(path.join(PACKAGE_DIR, "dist", file), "utf8"));
+  } else {
+    childProcess.execFileSync("npm", ["run", "build"], {
+      cwd: PACKAGE_DIR,
+      env: { ...process.env, ROM_WEAVER_CHANNEL: build.channel },
+      stdio: "inherit",
+    });
+  }
   for (let attempt = 1; attempt <= E2E_ATTEMPTS; attempt += 1) {
     try {
       await main();

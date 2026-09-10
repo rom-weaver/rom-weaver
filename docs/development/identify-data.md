@@ -9,6 +9,7 @@ ROMWeaver builds deterministic RWFP1 packs from pinned Libretro and OpenGood dat
 - [Source policy](#source-policy)
 - [RWFP1 records](#rwfp1-records)
 - [Checksum router](#checksum-router)
+- [Title index](#title-index)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Cheat shards](#cheat-shards)
@@ -63,9 +64,23 @@ The browser uses the router when it identifies a bare checksum. Each pack filter
 
 The router is browser data only. The native CLI searches every installed pack for a bare checksum, and `scripts/build-identify-release-data.mjs` removes `checksumRoutes` from every release index.
 
+## Title index
+
+`title-index.json` holds every pack's base game titles in one file, so a name search covers all platforms without loading a pack and without the reader choosing a platform first. A base title is a game name with its first ` (` or ` [` tag group and everything after it removed, so the regional and dump-tag variants of one game collapse into a single row.
+
+The file is JSON: a sorted array of pack slugs and an array of `[displayName, [packIndex, ...]]` rows, ordered by the normalized title then the display name. Normalization lowercases, folds accented Latin letters to ASCII, and collapses every run of non-alphanumeric characters into one space - the same rules as the CLI name search in `crates/rom-weaver-cli/src/identify_name_search.rs`. A title that several packs hold carries one row naming every pack.
+
+The index stores base titles only. One row per game record would be 5.4 MB Brotli against 1.6 MB for base titles; the regional variants of a chosen title come from that platform's pack.
+
+A search tokenizes the query and keeps titles whose normalized form contains every token. Results are ordered by exact normalized equality, then a normalized prefix match, then the position of the first token, then the shorter title, then the name.
+
+`index.json` records the file under `titleIndex` with its size, SHA-256, title count, and pack count. The ordering is fixed, so a rebuild over the same titles is byte-identical. The shared builder and reader live in `packages/rom-weaver-webapp/src/lib/identify/title-index.mjs`.
+
+The title index is browser data only. The native CLI searches an installed pack directly, and `scripts/build-identify-release-data.mjs` removes `titleIndex` from every release index.
+
 ## Browser installation
 
-The web build emits each pack as a Brotli static asset. The service worker precaches `index.json` and `catalog.json` with the app under one service-worker revision. Packs and the checksum router are not precached: the background warm-up downloads the default group, which includes the router, and the optional groups the user has ticked in Settings.
+The web build emits each pack as a Brotli static asset. The service worker precaches `index.json` and `catalog.json` with the app under one service-worker revision. Packs, the checksum router, and the title index are not precached: the background warm-up downloads the default group, which includes the router and the title index, and the optional groups the user has ticked in Settings.
 
 The Settings page can install a complete optional group. The service worker checks every pack before it marks the group as installed.
 
@@ -88,6 +103,8 @@ The default `bundled-identify-data` feature enables the packaged default data. B
 The same build writes one cheat shard per platform in `CHEAT_PLATFORMS` (`scripts/import-libretro-cheats.mjs`). It extracts that platform's `cht/` directory from the pinned Libretro archive, matches each `.cht` file title against the platform's parsed release list, and writes `cheats-<slug>.json` plus a Brotli copy next to the packs.
 
 Before it writes a shard, the importer drops every record that can never bake: structured RetroArch entries, empty or placeholder codes, and codes whose literal address is provably runtime memory for that system. A record is dropped only when every one of its subcodes is provably unbakeable; Game Genie forms are kept, because only the Rust decoder can resolve their address against the ROM. A game with no remaining cheats is dropped. A platform whose filtered game list is empty fails the build; remove that platform from `CHEAT_PLATFORMS`.
+
+The file stores each record once, without the values a reader derives (`id`, `system`, `gameId`, `sourceRevision`, the repeated `desc`/`code`/`enable` raw fields, and the source file name). `packages/rom-weaver-webapp/src/lib/cheats/shard-format.mjs` owns that layout: the builder calls its `storeCheat`, the browser worker calls its `expandCheatShard`, and `crates/rom-weaver-cli/src/cheat_database.rs` ports the expansion for the CLI. The record ID is a SHA-256 over the restored fields, so all three MUST agree byte for byte; the Rust unit tests pin IDs the JavaScript reference produced. `ensure-identify-data.mjs` checks every shard's leading bytes against the current schema version and Libretro revision, so a data directory an older builder wrote is rebuilt even when the index still matches its files. The reference page documents the layout: [Shard file](../reference/cheat-database.md#shard-file).
 
 `index.json` lists each remaining shard under `cheats` with its platform, slug, Rust `cheatSystem` identifier, size, SHA-256, and pack group. `sources.libretro.licenseFile` names the copied license text.
 
