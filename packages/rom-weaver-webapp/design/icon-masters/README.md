@@ -12,7 +12,7 @@ Source SVGs for the pre-rendered PNGs in `../../src/assets/app/root/`. Each wrap
 
 ## Geometry
 
-The logo uses a 32 × 32 viewBox. The cartridge fills 30 × 30 units; the disc hole is 5.5 units wide, and both bands are 4.4 units wide. The bands interlace - cream over accent at the left crossing, accent over cream at the right - and a 6.6-unit charcoal casing stroke opens the gap at each crossing. Every detail MUST survive the 30 px masthead and the 16 px favicon, which is why the hub is a solid disc: a ring around it turns to grey mush below roughly 64 px. A 0.75-unit cream outline sits over a 2-unit charcoal outline, keeping the silhouette visible on both dark and light surfaces. The favicon uses this mark directly, without the launcher padding.
+The logo uses a 32 × 32 viewBox. The cartridge fills 30 × 30 units; the disc carries a 5.6-unit hub ring around a 3.1-unit centre, and both bands are 3.15 units wide. The bands interlace - cream over accent at the left crossing, accent over cream at the right - and a 4.4-unit charcoal casing stroke opens the gap at each crossing. Geometry is traced from the reference render in `design/logo-concepts/thread-weave.png` at the repository root; band centres match it to within 0.35 units. The hub ring only resolves above roughly 64 px, so it reads as a grey smudge in the 30 px masthead and the 16 px favicon.
 
 The launcher masters center the mark on an opaque charcoal background. The maskable master keeps the mark inside the central 80%-diameter safe circle.
 
