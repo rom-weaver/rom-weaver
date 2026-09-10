@@ -10,6 +10,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io,
     path::Path,
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use rom_weaver_core::{IoOp, OperationFamily, OperationReport, RomWeaverError, ThreadExecution};
@@ -69,25 +70,24 @@ pub(super) fn check_writable_dir(directory: &Path) -> Result<(), RomWeaverError>
     // A mode check would have to reimplement the kernel's ACL, supplementary
     // group, and read-only-mount rules. Creating and removing a file asks the
     // kernel the question directly.
-    let probe = directory.join(PROBE_FILE_NAME);
-    let created = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&probe)
-        .map(|_| ());
-    match created {
-        Ok(()) => {
-            let _ = fs::remove_file(&probe);
-            trace!(directory = %directory.display(), "output directory is writable");
-            Ok(())
+    loop {
+        let sequence = NEXT_PROBE_ID.fetch_add(1, Ordering::Relaxed);
+        let probe = directory.join(format!(
+            "{PROBE_FILE_PREFIX}-{}-{sequence}",
+            std::process::id()
+        ));
+        match OpenOptions::new().write(true).create_new(true).open(&probe) {
+            Ok(file) => {
+                drop(file);
+                fs::remove_file(&probe)
+                    .map_err(|error| denied_error(IoOp::Write, directory, error))?;
+                trace!(directory = %directory.display(), "output directory is writable");
+                return Ok(());
+            }
+            // A collision MUST leave the existing file untouched.
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(denied_error(IoOp::Write, directory, error)),
         }
-        // A probe left behind by a run that died mid-check. Removing it proves
-        // exactly what creating it would have - unlinking needs write on the
-        // directory - and clears the litter from the user's output.
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            fs::remove_file(&probe).map_err(|error| denied_error(IoOp::Write, directory, error))
-        }
-        Err(error) => Err(denied_error(IoOp::Write, directory, error)),
     }
 }
 
@@ -104,7 +104,8 @@ fn denied_error(op: IoOp, path: &Path, error: io::Error) -> RomWeaverError {
     RomWeaverError::io_path(op, path, error)
 }
 
-const PROBE_FILE_NAME: &str = ".rom-weaver-write-probe";
+const PROBE_FILE_PREFIX: &str = ".rom-weaver-write-probe";
+static NEXT_PROBE_ID: AtomicU64 = AtomicU64::new(0);
 
 // The browser build reaches the filesystem through the OPFS proxy, where a file
 // may hold only one handle at a time and permissions do not exist. Probing there
