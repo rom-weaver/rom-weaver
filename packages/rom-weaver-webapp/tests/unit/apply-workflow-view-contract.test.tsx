@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { StepSection } from "../../src/public/react/components/ds/layout.tsx";
 import { shouldIdentifySource } from "../../src/lib/input/input-identification-policy.ts";
+import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
 import type {
   PatcherOutputController,
@@ -462,6 +462,7 @@ describe("apply workflow view - empty bench", () => {
 });
 
 describe("apply workflow view - staged bench", () => {
+  afterEach(cleanup);
   it("edits shared patch details from the patches header", async () => {
     const onBundleMetaBulkChange = vi.fn();
     const onToggle = vi.fn();
@@ -511,6 +512,33 @@ describe("apply workflow view - staged bench", () => {
     fireEvent.keyDown(getByLabelText("Version"), { key: "Escape" });
     expect(container.querySelector("#rom-weaver-bulk-patch-meta")).toBeNull();
     await vi.waitFor(() => expect(document.activeElement).toBe(button));
+  });
+
+  it("keeps mixed patch versions when only the shared author changes", () => {
+    const onBundleMetaBulkChange = vi.fn();
+    const { getByLabelText, getByRole } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", { author: "First author", version: "1.0" }],
+        ["patch-b", { author: "Second author", version: "2.0" }],
+      ]),
+      onBundleMetaBulkChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [patchItem("first.ips"), patchItem("second.ips")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+
+    fireEvent.click(getByRole("button", { name: "Bulk edit" }));
+    expect((getByLabelText("Version") as HTMLInputElement).placeholder).toBe("Multiple values");
+    fireEvent.change(getByLabelText("Author"), { target: { value: "Shared author" } });
+    fireEvent.submit(getByLabelText("Author").closest("form") as HTMLFormElement);
+
+    expect(onBundleMetaBulkChange).toHaveBeenCalledWith(["patch-a", "patch-b"], {
+      author: "Shared author",
+    });
   });
 
   it("disables the emulator action when the input does not resolve to a supported core", () => {
@@ -604,6 +632,132 @@ describe("apply workflow view - staged bench", () => {
       (el) => el.textContent,
     );
     expect(patchLabels).toEqual(["Checks"]);
+  });
+
+  it("separates authored checks from stack input and repeats a named predecessor's output evidence", () => {
+    const base = patchItem("base.ips");
+    base.validationValues = ["out crc32=12345678"];
+    const addOn = patchItem("add-on.bps");
+    addOn.chainVerdict = {
+      basis: "previous",
+      basisSource: "declared",
+      matched: { index: 0, kind: "patch_output" },
+    };
+    addOn.targetOptions = [{ label: "game.sfc / program.rom", value: "rom-1" }];
+    addOn.targetValue = "rom-1";
+    addOn.validationState = "deferred";
+    addOn.validationValues = ["in crc32=12345678", "out crc32=87654321"];
+    const onBundleMetaChange = vi.fn();
+    const { container } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", { name: "Base patch", outputChecks: { checksums: { crc32: "12345678" } } }],
+        ["patch-b", { basis: "base", input: { patch: "patch-a" }, name: "Add-on" }],
+      ]),
+      onBundleMetaChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [base, addOn],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.sfc")] },
+    });
+
+    const addOnCard = container.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")[1];
+    expect(addOnCard?.textContent).toContain("Authored input checks — Original ROM");
+    expect(addOnCard?.textContent).toContain("Apply to — Output of Base patch");
+    expect(addOnCard?.textContent).toContain("Target ROM — game.sfc / program.rom");
+    expect(addOnCard?.textContent).toContain("Embedded output checks — Standalone patch result");
+    expect(addOnCard?.textContent).toContain("Stack output checks — Combined result");
+    expect(addOnCard?.textContent).toContain("Shared input checks — Output of Base patch");
+    expect(addOnCard?.textContent).toContain("Checks during apply — Base patch");
+    expect(addOnCard?.textContent).not.toContain("Verified — game.sfc / program.rom");
+
+    const executionInput = addOnCard?.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
+    fireEvent.change(executionInput, { target: { value: "rom" } });
+    expect(onBundleMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
+  });
+
+  it("keeps a selected producer member when the execution source changes", () => {
+    const onBundleMetaChange = vi.fn();
+    const first = patchItem("first.ips");
+    const second = patchItem("second.ips");
+    const { container } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", { name: "First" }],
+        ["patch-b", { input: { member: "generated/track03.bin", patch: "patch-a" }, name: "Second" }],
+      ]),
+      onBundleMetaChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [first, second],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.sfc")] },
+    });
+
+    const select = container.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
+    expect(select.options[2]?.textContent).toContain("First / generated/track03.bin");
+    const member = container.querySelector("#rom-weaver-patch-execution-member-1") as HTMLInputElement;
+    fireEvent.change(member, { target: { value: "generated/track04.bin" } });
+    fireEvent.blur(member);
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+      input: { member: "generated/track04.bin", patch: "patch-a" },
+    });
+    fireEvent.change(select, { target: { value: "rom" } });
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+      input: { member: "generated/track04.bin", rom: true },
+    });
+  });
+
+  it("shows an unavailable named stack input before Apply", () => {
+    const { container } = renderView({
+      bundleMetaById: new Map([["patch-a", { input: { patch: "missing-base" } }]]),
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a"],
+        onToggle: () => undefined,
+      },
+      patches: [patchItem("add-on.bps")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.sfc")] },
+    });
+
+    expect(container.textContent).toContain(
+      "Patch patch-a requires output from missing-base. Enable that patch and place it first.",
+    );
+  });
+
+  it("repeats root-ROM checks as evidence without marking an authored declaration verified", () => {
+    const patch = patchItem("add-on.bps");
+    patch.chainVerdict = { basis: "base", basisSource: "declared", matched: { kind: "base" } };
+    patch.targetOptions = [{ label: "game.sfc", value: "rom-1" }];
+    patch.targetValue = "rom-1";
+    patch.validationValues = ["in crc32=C6FB1252"];
+    const onBundleMetaChange = vi.fn();
+    const { container } = renderView({
+      bundleExpectedRomChecks: { checksums: { crc32: "C6FB1252" } },
+      bundleMetaById: new Map([["patch-a", { input: { member: "program.rom", rom: true } }]]),
+      onBundleMetaChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a"],
+        onToggle: () => undefined,
+      },
+      patches: [patch],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.sfc")] },
+    });
+
+    const sharedChecks = container.querySelector("#rom-weaver-patch-shared-input-checks-0");
+    expect(sharedChecks?.textContent).toContain("Shared input checks — Original ROM / program.rom");
+    expect(sharedChecks?.textContent).toContain("c6fb1252");
+    expect(sharedChecks?.querySelector(".ck-mark")).toBeNull();
+
+    const executionInput = container.querySelector("#rom-weaver-patch-execution-input-0") as HTMLSelectElement;
+    expect(executionInput.options[1]?.textContent).toBe("Original ROM / program.rom");
+    fireEvent.change(executionInput, { target: { value: "current" } });
+    fireEvent.change(executionInput, { target: { value: "rom" } });
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-a", { input: { member: "program.rom", rom: true } });
   });
 
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {
@@ -1188,6 +1342,34 @@ describe("apply workflow view - bundle controls", () => {
     expect(shareButton?.parentElement?.classList).toContain("bundle-job-content");
     expect(container.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(container.querySelector(".bundle-rom-warning .notice")?.textContent).toContain("right to distribute it");
+  });
+
+  it("defaults each patch input to automatic and locks it during bundle export", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const onPatchInputBasisChange = vi.fn();
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={{ ...bundleExport(), busy: true }}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({
+              items: [patchItem("first.ips"), patchItem("second.ips")],
+            }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+          onPatchInputBasisChange={onPatchInputBasisChange}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const selects = Array.from(container.querySelectorAll<HTMLSelectElement>('select[id^="rom-weaver-patch-basis-"]'));
+    expect(selects).toHaveLength(2);
+    expect(selects.every((select) => select.value === "auto")).toBe(true);
+    expect(selects.every((select) => select.disabled)).toBe(true);
+    fireEvent.change(selects[1] as HTMLSelectElement, { target: { value: "base" } });
+    expect(onPatchInputBasisChange).not.toHaveBeenCalled();
   });
 
   it("keeps the busy sharing action in the same full-row wrapper", () => {

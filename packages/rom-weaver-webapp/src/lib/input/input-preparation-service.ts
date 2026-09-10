@@ -385,7 +385,7 @@ const resolveCueInputAssets = async (
         trackFile.fileName,
         trackFile,
         groupId,
-        reference,
+        { ...reference, member: reference.fileName },
         { cueText },
       );
       assets.push(asset);
@@ -521,7 +521,7 @@ const prepareMultipleDirectInputAssets = async (
           trackFile.fileName,
           trackFile,
           groupId,
-          reference,
+          { ...reference, member: reference.fileName },
           { cueText, gdiText },
         ),
       );

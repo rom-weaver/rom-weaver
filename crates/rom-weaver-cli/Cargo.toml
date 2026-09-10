@@ -18,6 +18,7 @@ include = [
   "Cargo.toml",
   "README.md",
   "rom-weaver-bundle-v1.schema.json",
+  "rom-weaver-bundle-v2.schema.json",
 ]
 
 [lib]

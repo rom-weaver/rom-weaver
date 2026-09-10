@@ -452,8 +452,46 @@ const getPatchN64ByteOrders = (patchIndices: number[], patchOptions: PatchInput[
     return patchOption?.n64ByteOrder || patchOption?.resolvedN64ByteOrder || ("auto" as const);
   });
 
-const getPatchBases = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
-  patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.basis || ("auto" as const));
+const getPatchBases = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) => {
+  const bases = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.basis || ("auto" as const));
+  return bases.some((basis) => basis !== "auto") ? bases : undefined;
+};
+
+const getPatchIds = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) => {
+  const ids = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.id || "");
+  return ids.some(Boolean) ? ids : undefined;
+};
+
+const getPatchInputs = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
+  const inputs = patchIndices.map((patchIndex) => {
+    const input = patchOptions?.[patchIndex]?.input;
+    // Member selection already happened against prepared InputAssets. The Rust worker receives
+    // that leaf directly, so carrying the member selector into patch-apply would select it twice.
+    if (input && "rom" in input && input.member && asset.member === input.member) return { rom: true } as const;
+    return input || null;
+  });
+  return inputs.some(Boolean) ? inputs : undefined;
+};
+
+const getPatchTargets = (patchIndices: number[], patchOptions: PatchInput["patchOptions"], asset: InputAsset) => {
+  const targets = patchIndices.map((patchIndex) => {
+    const target = patchOptions?.[patchIndex]?.target;
+    // The worker receives the selected leaf, so the member is already resolved.
+    // Keep the ROM target slot to distinguish this explicit lane from an unscoped patch.
+    if (target && "rom" in target && target.member && asset.member === target.member) return { rom: true } as const;
+    return target || null;
+  });
+  return targets.some(Boolean) ? targets : undefined;
+};
+
+const getPatchChecks = (
+  patchIndices: number[],
+  patchOptions: PatchInput["patchOptions"],
+  field: "inputChecks" | "outputChecks",
+) => {
+  const checks = patchIndices.map((patchIndex) => patchOptions?.[patchIndex]?.[field] || "");
+  return checks.some(Boolean) ? checks : undefined;
+};
 
 const canReuseWorkerOutputPath = (output: PublicOutputWithApplySummary) =>
   !!(
@@ -472,6 +510,7 @@ const applyPatchesToAsset = async ({
   assetPatches,
   cheatRecords,
   options,
+  defaultPatchBasis,
   patchOptions,
   patchFiles,
   patches,
@@ -482,12 +521,19 @@ const applyPatchesToAsset = async ({
   assetPatches: ParsedPatchLike[];
   cheatRecords: PatchInput["cheatRecords"];
   options: ApplyPatchOptions;
+  defaultPatchBasis?: PatchInput["defaultPatchBasis"];
   patchOptions: PatchInput["patchOptions"];
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   workerOutputName?: string;
 }) => {
   const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
+  const patchBasis = getPatchBases(patchIndices, patchOptions);
+  const patchIds = getPatchIds(patchIndices, patchOptions);
+  const patchInputs = getPatchInputs(patchIndices, patchOptions, asset);
+  const patchTargets = getPatchTargets(patchIndices, patchOptions, asset);
+  const patchInputChecks = getPatchChecks(patchIndices, patchOptions, "inputChecks");
+  const patchOutputChecks = getPatchChecks(patchIndices, patchOptions, "outputChecks");
   const selectedPatches = getSelectedPatchInputs(assetPatches, patches, patchFiles);
   const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
   const patchLabel = patchNames.length
@@ -512,7 +558,13 @@ const applyPatchesToAsset = async ({
       headerModes: getPatchHeaderModes(patchIndices, patchOptions),
       n64ByteOrders: getPatchN64ByteOrders(patchIndices, patchOptions),
       outputHeader: options.output?.header || ("auto" as const),
-      patchBasis: getPatchBases(patchIndices, patchOptions),
+      ...(defaultPatchBasis ? { defaultPatchBasis } : {}),
+      ...(patchBasis ? { patchBasis } : {}),
+      ...(patchIds ? { patchIds } : {}),
+      ...(patchInputs ? { patchInputs } : {}),
+      ...(patchTargets ? { patchTargets } : {}),
+      ...(patchInputChecks ? { patchInputChecks } : {}),
+      ...(patchOutputChecks ? { patchOutputChecks } : {}),
     },
     patches: selectedPatches,
     signal: options.signal,
@@ -533,6 +585,7 @@ const applyPreparedPatches = async ({
   inputAssets,
   options,
   patchOptions,
+  defaultPatchBasis,
   patchFiles,
   patches,
   patchTargets,
@@ -544,6 +597,7 @@ const applyPreparedPatches = async ({
   inputAssets: InputAsset[];
   options: ApplyPatchOptions;
   patchOptions: PatchInput["patchOptions"];
+  defaultPatchBasis?: PatchInput["defaultPatchBasis"];
   patchFiles: PatchFileInstance[];
   patches: ParsedPatchLike[];
   patchTargets: Array<"auto" | string> | undefined;
@@ -572,7 +626,15 @@ const applyPreparedPatches = async ({
         options,
         "patch.target.resolve",
         "patch",
-        () => resolvePatchTargets(inputAssets, patches, patchTargets),
+        () =>
+          resolvePatchTargets(
+            inputAssets,
+            patches,
+            patchTargets,
+            patchOptions?.map((option) => option?.input),
+            patchOptions?.map((option) => option?.id),
+            patchOptions?.map((option) => option?.target),
+          ),
         () => ({
           inputCount: inputAssets.length,
           patchCount: patches.length,
@@ -602,6 +664,7 @@ const applyPreparedPatches = async ({
           cheatRecords: assetCheatRecords,
           options,
           patchOptions,
+          defaultPatchBasis,
           patchFiles,
           patches,
           workerOutputName,
@@ -712,6 +775,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     inputAssets,
     options,
     patchOptions: input.patchOptions,
+    defaultPatchBasis: input.defaultPatchBasis,
     patchFiles,
     patches,
     patchTargets,

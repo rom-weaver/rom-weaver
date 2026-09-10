@@ -598,3 +598,109 @@ fn cleanup_removes_directories_and_files_and_ignores_what_is_gone() {
     assert!(dir.exists(), "only the named paths are removed");
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn exact_member_keeps_literal_brackets_and_rejects_prefixes() {
+    let app = noninteractive_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let dir = scratch_dir("exact-member");
+    let literal = dir.join("game [!].bin");
+    let wildcard_match = dir.join("game !.bin");
+    fs::write(&literal, b"literal target").expect("literal member");
+    fs::write(&wildcard_match, b"different target").expect("wildcard member");
+    let archive = dir.join("roms.zip");
+    make_zip(&app, &archive, &[literal, wildcard_match], &context);
+    let flags = AutoExtractResolutionFlags {
+        no_extract: false,
+        no_ignore: true,
+        kind_filter: no_filter(),
+        stop_on_single_payload_codec: false,
+    };
+    let resolved = app
+        .resolve_exact_member_source(&archive, "game [!].bin", &context, labels(), flags)
+        .expect("exact member");
+    assert_eq!(
+        fs::read(&resolved.source).expect("member bytes"),
+        b"literal target"
+    );
+    CliApp::cleanup_temp_paths(&resolved.cleanup_paths);
+    let error = app
+        .resolve_exact_member_source(&archive, "game", &context, labels(), flags)
+        .expect_err("a prefix is not a member");
+    assert!(error.to_string().contains("expected one exact member"));
+    fs::remove_dir_all(dir).expect("cleanup");
+}
+
+#[test]
+fn exact_member_peels_stream_wrappers_but_requires_a_member() {
+    let app = noninteractive_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let dir = scratch_dir("exact-stream-member");
+    let source = dir.join("game.bin");
+    fs::write(&source, b"target bytes").expect("ROM");
+    let archive = dir.join("roms.zip");
+    make_zip(&app, &archive, std::slice::from_ref(&source), &context);
+    let flags = AutoExtractResolutionFlags {
+        no_extract: false,
+        no_ignore: true,
+        kind_filter: no_filter(),
+        stop_on_single_payload_codec: false,
+    };
+    for (input, name, should_resolve) in [
+        (&archive, "roms.zip.gz", true),
+        (&source, "game.bin.gz", false),
+    ] {
+        let compressed = dir.join(name);
+        let mut encoder = flate2::write::GzEncoder::new(
+            File::create(&compressed).expect("gzip file"),
+            flate2::Compression::default(),
+        );
+        encoder
+            .write_all(&fs::read(input).expect("gzip input"))
+            .expect("gzip encode");
+        encoder.finish().expect("gzip finish");
+        let result =
+            app.resolve_exact_member_source(&compressed, "game.bin", &context, labels(), flags);
+        if should_resolve {
+            let resolved = result.expect("wrapped archive member");
+            assert_eq!(
+                fs::read(&resolved.source).expect("member bytes"),
+                b"target bytes"
+            );
+            CliApp::cleanup_temp_paths(&resolved.cleanup_paths);
+        } else {
+            assert!(
+                result.is_err(),
+                "decompressing a raw file does not resolve a member"
+            );
+        }
+    }
+    fs::remove_dir_all(dir).expect("cleanup");
+}
+
+#[test]
+fn exact_member_rejects_raw_input_and_disabled_extraction() {
+    let app = noninteractive_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let dir = scratch_dir("exact-member-unavailable");
+    let source = dir.join("game.bin");
+    fs::write(&source, b"raw ROM bytes").expect("ROM");
+    for no_extract in [false, true] {
+        let error = app
+            .resolve_exact_member_source(
+                &source,
+                "game.bin",
+                &context,
+                labels(),
+                AutoExtractResolutionFlags {
+                    no_extract,
+                    no_ignore: true,
+                    kind_filter: no_filter(),
+                    stop_on_single_payload_codec: false,
+                },
+            )
+            .expect_err("explicit member must resolve");
+        assert!(error.to_string().contains("game.bin"));
+    }
+    fs::remove_dir_all(dir).expect("cleanup");
+}

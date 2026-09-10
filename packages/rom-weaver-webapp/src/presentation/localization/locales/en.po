@@ -120,6 +120,11 @@ msgstr "{count} warning(s)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.identified"
+msgstr "{title} — {platform}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.sevenZipCodec"
 msgstr "7z"
 
@@ -350,6 +355,11 @@ msgstr "Apply this patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.execution"
+msgstr "Apply to — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.applyToAll"
 msgstr "Apply to all"
 
@@ -400,6 +410,16 @@ msgstr "Author"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.input"
+msgstr "Authored input checks — {basis}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.explanation"
+msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.auto"
 msgstr "auto"
 
@@ -410,18 +430,18 @@ msgstr "Auto"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.basis.autoBase"
-msgstr "auto (base ROM)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.autoKeep"
 msgstr "auto (keep)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.basis.autoBase"
+msgstr "auto (Original ROM)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.autoPrevious"
-msgstr "auto (previous)"
+msgstr "auto (Previous patch output)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -442,6 +462,16 @@ msgstr "Auto keeps headers emulators require and drops junk copier headers."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64ByteOrderHelp"
 msgstr "Auto matches the patch source checksum against all three N64 byte orders. The original ROM order is restored on output."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.auto"
+msgstr "Automatic"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.automatic"
+msgstr "Automatic detection"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -667,6 +697,11 @@ msgstr "Checks"
 #: src/presentation/localization/messages.ts
 msgid "ui.checks.title"
 msgstr "Checks"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.deferred"
+msgstr "Checks during apply — {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -910,6 +945,11 @@ msgstr "current order"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.currentStackInput"
+msgstr "Current stack input"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.dark"
 msgstr "Dark"
 
@@ -1117,6 +1157,11 @@ msgstr "Edit patch position, currently {position} of {total}"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
 msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.embeddedOutput"
+msgstr "Embedded output checks — Standalone patch result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1740,6 +1785,11 @@ msgstr "Media profile not supported"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.executionMember"
+msgstr "Member path"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality.metadata_only"
 msgstr "Metadata only"
 
@@ -1910,6 +1960,11 @@ msgstr "No selectable file was found."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unknown"
+msgstr "Not checked yet — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectedMismatch"
 msgstr "Not the expected ROM"
 
@@ -2040,6 +2095,21 @@ msgstr "Original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.original"
+msgstr "Original ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoBase"
+msgstr "Original ROM (automatic)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.originalRom"
+msgstr "Original ROM{member}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.output"
 msgstr "Output"
 
@@ -2077,6 +2147,11 @@ msgstr "Output format"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Output Header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchOutput"
+msgstr "Output of {patch}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2132,6 +2207,11 @@ msgstr "Patch {index} {side} {algorithm} is malformed"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomPatch"
 msgstr "patch {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchNumber"
+msgstr "Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2272,6 +2352,16 @@ msgstr "Preview build"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "previous output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.previous"
+msgstr "Previous patch output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoPrevious"
+msgstr "Previous patch output (automatic)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2432,6 +2522,11 @@ msgstr "Required or optional"
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_UNAVAILABLE"
 msgstr "Required worker support is unavailable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.expects"
+msgstr "Requires {patch} first"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2630,6 +2725,11 @@ msgstr "Share your changes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.sharedInput"
+msgstr "Shared input checks — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.error"
 msgstr "Shared session download failed"
 
@@ -2672,6 +2772,11 @@ msgstr "source"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.source"
 msgstr "Source"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.stackOutput"
+msgstr "Stack output checks — Combined result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2782,6 +2887,11 @@ msgstr "Tap to add ROMs, patches, bundles, or archives"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tap to choose files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.targetRom"
+msgstr "Target ROM — {target}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3154,6 +3264,11 @@ msgstr "Unidentified"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unknownPatchOutput"
+msgstr "Unknown patch output ({patch})"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.unusedInputs"
 msgstr "Unused inputs: {names}{count, plural, =0 {} one {, and one more} other {, and # more}}."
 
@@ -3179,6 +3294,11 @@ msgstr "Use duplicate ROMs?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.executionMemberTitle"
+msgstr "Use the exact member path from the selected ROM or patch output."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationFailed"
 msgstr "Validation failed"
 
@@ -3196,6 +3316,11 @@ msgstr "Variant"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.variantClass"
 msgstr "Variant class"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.verified"
+msgstr "Verified — {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

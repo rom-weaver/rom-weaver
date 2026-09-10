@@ -8,6 +8,7 @@ import {
   POST_APPLY_TEST_BEHAVIOR_OPTIONS,
 } from "../../lib/apply/post-apply-behavior.ts";
 import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
+import { validatePatchDependencies } from "../../lib/bundle/bundle-targets.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
@@ -76,6 +77,7 @@ import { loadEmulatorRom, renameRomToOutput } from "./components/emulator-load-r
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { PatchInputBasis } from "./patch-input-basis.ts";
 import {
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
@@ -1884,6 +1886,8 @@ function ApplyWorkflowFormView({
   onSelectView,
   onUnifiedDrop,
   patchEnablement,
+  patchInputBasis,
+  onPatchInputBasisChange,
   pendingDrops = [],
   startup = { message: "", status: "ready" },
 }: {
@@ -1891,7 +1895,7 @@ function ApplyWorkflowFormView({
    * The 0x04 cheats step; receives the same finished-stage accent as the ROM and
    * patch steps, plus the header-strip guard the header controls derive.
    */
-  cheats?: (state: { headerStripConflict: string; woven: boolean }) => ReactNode;
+  cheats?: (state: { headerStripConflict: string; onNeedsRom: () => void; woven: boolean }) => ReactNode;
   /** At least one cheat card's switch is On. */
   cheatsOn?: boolean;
   controllers: {
@@ -1921,6 +1925,8 @@ function ApplyWorkflowFormView({
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
   patchEnablement?: PatchEnablement;
+  patchInputBasis?: PatchInputBasis;
+  onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
   pendingDrops?: PendingDrop[];
   startup?: StartupState;
 }) {
@@ -1958,9 +1964,20 @@ function ApplyWorkflowFormView({
   // Card metadata is resolved by stable id so reorders keep the right annotations.
   const bundleMeta = patches.map((_, index) => {
     const id = patchIds[index];
-    return bundleMetaById && id !== undefined ? bundleMetaById.get(id) : undefined;
+    const metadata = bundleMetaById && id !== undefined ? bundleMetaById.get(id) : undefined;
+    return id ? { id, ...metadata } : metadata;
   });
-  const bundleVerificationError = getBundleVerificationError(bundleMeta, patches, localizer);
+  const bundleVerificationError =
+    getBundleVerificationError(bundleMeta, patches, localizer) ||
+    validatePatchDependencies(
+      bundleMeta.map((meta, index) => ({
+        enabled: !disabledPatchFlags[index],
+        id: meta?.id || `patch-${index + 1}`,
+        input: meta?.input,
+        target: meta?.target,
+      })),
+    ) ||
+    null;
   // The per-patch header state in 0x03 decides the cheat guard; neither the
   // Cheats step nor the header select keeps a copy of it. The output header in
   // 0x05 is applied after the cheats bake, so it never moves a write.
@@ -2346,7 +2363,11 @@ function ApplyWorkflowFormView({
             overrideAvailable={uiState.checksumOverride.visible}
             patches={patches}
             patchStack={controllers.patchStack}
+            patchInputBasis={patchInputBasis}
+            patchInputBasisDisabled={bundleExport?.busy}
+            onPatchInputBasisChange={onPatchInputBasisChange}
             romActualsById={romActualsById}
+            sharedRomChecks={singleRom ? expectedRomChecks : undefined}
             stripDisabled={!!cheatsOn}
             notice={
               <SectionNotice
@@ -2358,7 +2379,11 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          {cheats?.({ headerStripConflict: cheatHeaderStripConflict, woven: wovenSteps })}
+          {cheats?.({
+            headerStripConflict: cheatHeaderStripConflict,
+            onNeedsRom: openUnifiedPicker,
+            woven: wovenSteps,
+          })}
 
           <WorkflowOutputStep
             action={renderOutputAction}

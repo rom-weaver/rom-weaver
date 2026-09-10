@@ -9,6 +9,8 @@ A rom-weaver bundle records a patch recipe so another user can repeat it.
 - [What it contains](#what-it-contains)
 - [What it is not](#what-it-is-not)
 - [Why the order lives in the file](#why-the-order-lives-in-the-file)
+  - [Authored checks and execution inputs](#authored-checks-and-execution-inputs)
+  - [Shared data and repeated evidence](#shared-data-and-repeated-evidence)
 - [When to make one](#when-to-make-one)
 - [Links can carry them](#links-can-carry-them)
 - [Related](#related)
@@ -34,7 +36,7 @@ The JSON recipe, conventionally named `rom-weaver-bundle.json`, can record:
 
 An archive can carry the recipe and its patch files together. A recipe can also reference local paths or download URLs.
 
-The machine-readable definition is [`rom-weaver-bundle-v1.schema.json`](../rom-weaver-bundle-v1.schema.json).
+The machine-readable definition is [`rom-weaver-bundle-v2.schema.json`](../rom-weaver-bundle-v2.schema.json).
 
 ## What it is not
 
@@ -46,9 +48,25 @@ A bundle can include ROM bytes, but packaging does not grant redistribution righ
 
 ## Why the order lives in the file
 
-Patch 2 reads patch 1's output, not the original ROM - see [How patching works](how-patching-works.md). The order is therefore part of the release, as load-bearing as the patch files themselves. Recording it in the bundle is what stops a user from reconstructing it by hand out of a numbered filename convention.
+By default, each patch reads the accumulated result of the selected patches before it. A target can restrict that chain to one ROM member or track. Patches on another track do not change its accumulated result. If an optional patch is disabled, later patches on its target continue from the preceding selected result.
 
-The same logic covers the optional patches: "which combinations are supported" is knowledge only the author has, and a bundle can carry it as switches rather than as a paragraph.
+A fixed input has a different contract. A patch that explicitly reads patch A's output keeps that dependency when unrelated patches move or optional choices change. Its producer must be enabled and must run first. Both ROM inputs and generated outputs can select an exact member. A member identifies bytes inside its source; a matching filename in another source is not interchangeable.
+
+For example, A, optional B, and C can form a chain on Track 1 while D modifies Track 2. With B enabled, C reads B's result. With B disabled, C reads A's result. A deliberate dependency on A always reads A, regardless of B's selection. The bundle preserves these relationships across saving and reopening.
+
+### Authored checks and execution inputs
+
+The authored basis describes the source against which a patch was made. Its execution input describes the bytes that the operation modifies. Several patches can have the same authored source while modifying an accumulated result. A standalone patch's embedded output checksum does not prove that combined result.
+
+Version 2 records a shared authored basis rule, with per-patch exceptions. Automatic inference uses available checks. Version 1 remains readable with its automatic behavior.
+
+The identify database can stand in for checks a recipe does not declare. When the expected ROM's checks name a multi-track disc record, each track chain that starts from the ROM without checks of its own inherits that track's checks from the record, and a failed check names the title the declared state belongs to. The recipe itself is not changed; the database only adds evidence at apply time. The exact rules are in the [CLI reference](../reference/cli.md#bundle-execution-targets).
+
+### Shared data and repeated evidence
+
+A check state can have several consumers. The recipe stores its values once and uses references from each consumer. The interface can show that same evidence on the ROM, each consuming patch, and a result without copying those values into the recipe. Equal digests alone do not make two separately authored states the same state.
+
+Packaged payloads are separate from check states. Several patch entries can reference one stored file when their payload bytes are equal. Selecting a track retains its parent source instead of adding a second copy of the ROM.
 
 ## When to make one
 

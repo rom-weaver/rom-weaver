@@ -83,7 +83,7 @@ import {
 import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
 import { projectSelectionCandidates } from "./selection-candidate-projection.ts";
 import type { StagedRomSourceController } from "./staged-rom-source.ts";
-import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
+import { cloneChecksumRomProbe, getInputAssetChecksums } from "./staged-source-checksums.ts";
 
 /** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
@@ -116,6 +116,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
   private nextPatchSequence = 0;
+  private defaultPatchBasis: "auto" | "base" | "previous" = "auto";
   private outputState: ApplyOutputState;
   private inputSession?: InputSession<TSource>;
   private patches: Array<StagedSource<TSource>> = [];
@@ -180,7 +181,8 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     const session = this.inputSession;
     const selectedOwner = this.getSelectedInputOwner();
     const inputStage = selectedOwner || session?.view;
-    const primaryAsset = getPrimaryInputAsset(inputStage?.preparedInputAssets || []);
+    const inputAssets = (inputStage?.preparedInputAssets || []).filter((asset) => asset.patchable);
+    const primaryAsset = getPrimaryInputAsset(inputAssets);
     const sourceForFile = (file: PatchFileInstance | undefined, fallback: TSource, fileName: string): SourceRef => {
       const external = file ? getPatchFileExternalSource(file, fileName) : undefined;
       if (!external) return fallback as unknown as SourceRef;
@@ -192,24 +194,49 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       }
       return { fileName, size: external.size, source: external.source };
     };
+    let exportError: string | undefined;
+    const patchTargets = this.patches.map((stage, index) => {
+      const targetId = stage.state.targetInputId;
+      if (!targetId) {
+        exportError = `Patch ${index + 1} has no resolved ROM target`;
+        return undefined;
+      }
+      const target = inputAssets.find((asset) => asset.id === targetId);
+      if (!target) {
+        exportError = `Patch ${index + 1} target belongs to a different ROM source`;
+        return undefined;
+      }
+      if (target.kind === "track" && !target.member)
+        exportError = `Patch ${index + 1} track has no stable member locator`;
+      if (target.member && inputAssets.filter((asset) => asset.member === target.member).length > 1)
+        exportError = `Patch ${index + 1} member locator is ambiguous: ${target.member}`;
+      return target;
+    });
+    const memberTarget = patchTargets.find((target) => target?.member);
+    const romChecksums = getInputAssetChecksums(memberTarget || primaryAsset);
     const rom =
       primaryAsset && inputStage
         ? {
-            fileName: primaryAsset.file.fileName || primaryAsset.fileName || inputStage.state.fileName || "rom.bin",
+            fileName: memberTarget?.member
+              ? inputStage.state.fileName || primaryAsset.fileName || "rom.bin"
+              : primaryAsset.file.fileName || primaryAsset.fileName || inputStage.state.fileName || "rom.bin",
             originalSource: inputStage.source as unknown as SourceRef,
-            size: primaryAsset.size,
-            source: sourceForFile(
-              primaryAsset.file,
-              inputStage.source,
-              primaryAsset.file.fileName || primaryAsset.fileName,
-            ),
-            ...(inputStage.state.checksums ? { checksums: { ...inputStage.state.checksums } } : {}),
+            size: memberTarget?.size ?? primaryAsset.size,
+            source: memberTarget?.member
+              ? (inputStage.source as unknown as SourceRef)
+              : sourceForFile(
+                  primaryAsset.file,
+                  inputStage.source,
+                  primaryAsset.file.fileName || primaryAsset.fileName,
+                ),
+            ...(memberTarget?.member ? { member: memberTarget.member } : {}),
+            ...(romChecksums ? { checksums: { ...romChecksums } } : {}),
             ...(inputStage.state.romType?.recommendedFormat
               ? { recommendedFormat: inputStage.state.romType.recommendedFormat }
               : {}),
           }
         : null;
-    const patches = this.patches.map((stage) => {
+    const patches = this.patches.map((stage, index) => {
       const selectedCandidate = stage.state.candidates.find(
         (candidate) => candidate.id === stage.state.selectedCandidateId,
       );
@@ -221,9 +248,14 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         originalSource: stage.source as unknown as SourceRef,
         size: stage.preparedPatchFile?.fileSize || stage.state.size,
         source: sourceForFile(stage.preparedPatchFile, stage.source, fileName),
+        target:
+          stage.state.patchTarget ??
+          (patchTargets[index]?.member
+            ? { rom: true as const, member: patchTargets[index].member }
+            : ({ rom: true } as const)),
       };
     });
-    return { patches, rom };
+    return { patches, rom, ...(exportError ? { error: exportError } : {}) };
   }
 
   async setInput(
@@ -694,11 +726,20 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     });
   }
 
+  async setDefaultPatchBasis(basis: "auto" | "base" | "previous"): Promise<void> {
+    return this.mutate("setDefaultPatchBasis", async () => {
+      if (this.defaultPatchBasis === basis) return;
+      this.defaultPatchBasis = basis;
+      this.trace("patch.basis.default", { basis });
+    });
+  }
+
   async setPatchTarget(index: number, targetInputId: string | "auto"): Promise<void> {
     return this.mutate("setPatchTarget", async () => {
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
       if (targetInputId === "auto") {
+        stage.state.patchTarget = undefined;
         clearApplyPatchTarget(stage);
         await this.evaluatePatchReadiness(stage);
         this.recomputeOutputState();
@@ -708,6 +749,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         (asset) => asset.id === targetInputId || asset.fileName === targetInputId,
       );
       if (!target) throw new RomWeaverError("SELECTION_NOT_FOUND", `Patch target was not found: ${targetInputId}`);
+      stage.state.patchTarget = target.member ? { member: target.member, rom: true } : { rom: true };
       assignApplyPatchTarget(stage, target);
       await this.evaluatePatchReadiness(stage);
       this.recomputeOutputState();
@@ -717,6 +759,11 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   async setPatchOption(
     index: number,
     option: {
+      id?: string;
+      input?: ApplyWorkflowPatchState["patchInput"];
+      target?: ApplyWorkflowPatchState["patchTarget"];
+      inputChecks?: string;
+      outputChecks?: string;
       basis?: "base" | "previous";
       validateInputChecksum?: string;
       validateOutputChecksum?: string;
@@ -728,6 +775,57 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const stage = this.patches[index];
       if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
       let verificationChanged = false;
+      if ("id" in option) {
+        verificationChanged ||= stage.state.patchId !== option.id?.trim();
+        stage.state.patchId = option.id?.trim() || undefined;
+      }
+      if ("input" in option) {
+        verificationChanged ||= JSON.stringify(stage.state.patchInput) !== JSON.stringify(option.input);
+        stage.state.patchInput = option.input;
+        if (option.input && "patch" in option.input) {
+          const producerId = option.input.patch;
+          const producerIndex = this.patches.findIndex((candidate) => candidate.state.patchId === producerId);
+          if (producerIndex < 0 || producerIndex >= index)
+            throw new RomWeaverError("INVALID_INPUT", `Patch input producer is unavailable: ${producerId}`);
+          const producerTargetId = this.patches[producerIndex]?.state.targetInputId;
+          const producerTarget = this.getPatchableInputAssets().find((asset) => asset.id === producerTargetId);
+          if (producerTarget) assignApplyPatchTarget(stage, producerTarget);
+          else clearApplyPatchTarget(stage);
+        } else if (option.input?.member) {
+          const member = option.input.member;
+          const matches = this.getPatchableInputAssets().filter((asset) => asset.member === member);
+          if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
+          else clearApplyPatchTarget(stage);
+        }
+      }
+      if ("target" in option) {
+        verificationChanged ||= JSON.stringify(stage.state.patchTarget) !== JSON.stringify(option.target);
+        stage.state.patchTarget = option.target;
+        const target = option.target;
+        if (target && "patch" in target) {
+          const producerIndex = this.patches.findIndex((candidate) => candidate.state.patchId === target.patch);
+          if (producerIndex < 0 || producerIndex >= index)
+            throw new RomWeaverError("INVALID_INPUT", `Patch target producer is unavailable: ${target.patch}`);
+          const producerTargetId = this.patches[producerIndex]?.state.targetInputId;
+          const producerTarget = this.getPatchableInputAssets().find((asset) => asset.id === producerTargetId);
+          if (producerTarget) assignApplyPatchTarget(stage, producerTarget);
+          else clearApplyPatchTarget(stage);
+        } else if (target?.member) {
+          const matches = this.getPatchableInputAssets().filter((asset) => asset.member === target.member);
+          if (matches.length === 1) assignApplyPatchTarget(stage, matches[0] as InputAsset);
+          else clearApplyPatchTarget(stage);
+        }
+      }
+      if ("inputChecks" in option) {
+        const value = option.inputChecks?.trim() || undefined;
+        verificationChanged ||= stage.state.inputChecks !== value;
+        stage.state.inputChecks = value;
+      }
+      if ("outputChecks" in option) {
+        const value = option.outputChecks?.trim() || undefined;
+        verificationChanged ||= stage.state.outputChecks !== value;
+        stage.state.outputChecks = value;
+      }
       if ("basis" in option) {
         verificationChanged ||= stage.state.basisChoice !== option.basis;
         stage.state.basisChoice = option.basis;
@@ -1321,7 +1419,24 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   private async refreshPatchReadiness() {
-    for (const patch of this.patches) await this.evaluatePatchReadiness(patch);
+    for (const [index, patch] of this.patches.entries()) {
+      const targetRef = patch.state.patchTarget || patch.state.patchInput;
+      if (targetRef && "patch" in targetRef) {
+        const producer = this.patches.find(
+          (candidate, producerIndex) => producerIndex < index && candidate.state.patchId === targetRef.patch,
+        );
+        const target = producer
+          ? this.getPatchableInputAssets().find((asset) => asset.id === producer.state.targetInputId)
+          : undefined;
+        if (target) assignApplyPatchTarget(patch, target);
+        else clearApplyPatchTarget(patch);
+      } else if (targetRef?.member) {
+        const matches = this.getPatchableInputAssets().filter((asset) => asset.member === targetRef.member);
+        if (matches.length === 1) assignApplyPatchTarget(patch, matches[0] as InputAsset);
+        else clearApplyPatchTarget(patch);
+      }
+      await this.evaluatePatchReadiness(patch);
+    }
   }
 
   /**
@@ -1334,6 +1449,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       number,
       { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
     >;
+    defaultPatchBasis?: "auto" | "base" | "previous";
     disabledIndexes?: ReadonlySet<number>;
   }): Promise<void> {
     return this.mutate("validatePatches", async () => {
@@ -1355,6 +1471,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         const preflight = stage.state.checksumPreflight;
         if (!(stage.state.status === "ready" && stage.state.targetInputId && preflight)) continue;
         if (!(stage.parsedPatch && stage.preparedPatchFile)) continue;
+        // The planner receives a linear patch list. An explicit named producer is resolved by
+        // apply-time execution, so planning it against the current visual order would report a
+        // false predecessor mismatch after a reorder or partial selection.
+        if (stage.state.patchInput && "patch" in stage.state.patchInput) continue;
         const target = assets.find(
           (asset) => asset.id === stage.state.targetInputId || asset.fileName === stage.state.targetInputId,
         );
@@ -1378,6 +1498,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
             entry.chain?.inputChecks ?? "",
             entry.chain?.outputChecks ?? "",
           ]),
+          defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
           targetId,
         });
         for (const entry of chain) entry.chainFingerprint = fingerprint;
@@ -1394,6 +1515,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         });
       }
       const adapters: PatchTargetValidationAdapters = {
+        defaultPatchBasis: options?.defaultPatchBasis ?? "auto",
         emitProgress: (event) => this.emitProgress(event),
         onChainPlan: (targetId, plan) => {
           this.latestChainPlans.set(targetId, plan);
@@ -1486,11 +1608,17 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private createPatchInput(onProgress?: ApplyWorkflowOptions["onProgress"]): PatchInput {
     return {
       cheatRecords: this.cheatRecords.map((record) => cloneValue(record)),
+      defaultPatchBasis: this.defaultPatchBasis,
       inputs: this.getEffectiveInputSources() as never,
       options: this.createExecutionOptions(onProgress),
       parsedPatches: this.patches.map((patch) => patch.parsedPatch).filter(Boolean) as ParsedPatchLike[],
       patches: this.patches.map((patch) => patch.source) as never,
       patchOptions: this.patches.map((patch) => ({
+        ...(patch.state.patchId ? { id: patch.state.patchId } : {}),
+        ...(patch.state.patchInput ? { input: patch.state.patchInput } : {}),
+        ...(patch.state.patchTarget ? { target: patch.state.patchTarget } : {}),
+        ...(patch.state.inputChecks ? { inputChecks: patch.state.inputChecks } : {}),
+        ...(patch.state.outputChecks ? { outputChecks: patch.state.outputChecks } : {}),
         basis: patch.state.basisChoice,
         // User drawer choice wins; otherwise only a checksum-proven decision acts.
         // An undecided one is left unset so the engine's own inference runs.

@@ -99,6 +99,11 @@ const clonePatchState = (
   state: InternalSourceState,
   parentCompressions: ApplyWorkflowParentCompression[],
 ): ApplyWorkflowPatchState => ({
+  patchId: state.patchId,
+  patchInput: state.patchInput ? { ...state.patchInput } : undefined,
+  patchTarget: state.patchTarget ? { ...state.patchTarget } : undefined,
+  inputChecks: state.inputChecks,
+  outputChecks: state.outputChecks,
   basisChoice: state.basisChoice,
   candidates: state.candidates.map(cloneCandidate),
   checksumPreflight: clonePatchChecksumPreflight(state.checksumPreflight),
@@ -150,6 +155,9 @@ const cloneResolvedInputState = (
       ? selectedCandidate.parentCandidateId || undefined
       : undefined;
   })(),
+  member: state.member,
+  trackNumber: state.trackNumber,
+  discGroupId: state.discGroupId,
   id: state.id,
   identification: cloneIdentification(state.identification),
   order: state.order,
@@ -184,6 +192,9 @@ const cloneResolvedInputAssetState = (
     id: asset.id,
     identification: cloneIdentification(asset.identification),
     kind: asset.kind,
+    member: asset.member,
+    trackNumber: asset.trackNumber,
+    discGroupId: asset.discGroupId,
     order,
     parentCompressions: getAssetParentCompressions(asset, parentCompressions),
     patchable: asset.patchable,

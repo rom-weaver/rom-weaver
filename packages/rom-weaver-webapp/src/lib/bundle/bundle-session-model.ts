@@ -6,13 +6,18 @@ import type {
   BundleHeaderMode,
   ParsedBundle,
   ParsedBundleChecks,
+  ParsedBundlePatchInput,
   ParsedBundleParseResult,
   ParsedBundleSourceRef,
 } from "../../types/bundle.ts";
 
+import { resolveBundleChecks } from "./bundle-targets.ts";
+
 type BundleAcquisition = { kind: "url"; url: string } | { kind: "extracted"; extractedPath: string };
 
 type BundlePlanEntry = {
+  input?: ParsedBundlePatchInput;
+  target?: ParsedBundlePatchInput;
   acquisition: BundleAcquisition;
   id?: string;
   version?: string;
@@ -44,9 +49,12 @@ type BundleRomExpectation = {
 type BundleApplySessionPlan = {
   /** Identity key for run-once guards (the bundle URL; the boot flow may suffix an attempt). */
   key: string;
+  /** v1 bundles use inference. v2 carries an explicit shared rule. */
+  patchBasis: "auto" | "base" | "previous";
   name?: string;
   warnings: string[];
   romAcquisition?: BundleAcquisition;
+  romMember?: string;
   /** Set when the bundle ships no ROM: the expected ROM the user must supply. */
   romExpectation?: BundleRomExpectation;
   /** Bundle order = apply order; index-aligned with the acquired patch files. */
@@ -78,10 +86,23 @@ type BundleChainEndpointChecks = {
  * `output.checks`). These verify the ROM and the run's output - they are NOT
  * attributed to individual patches: a patch's card only shows checks the
  * patch itself declared.
+ *
+ * A last patch that declares a `target` writes into one lane (a ROM member or
+ * track), so its `outputChecks` describe that lane's raw bytes and not the
+ * reassembled run output. The endpoint MUST then come from `output.checks`
+ * alone; the lane checks stay per-step verification. `bundle_apply.rs`
+ * (`resolve_selected_bundle_output_check`) makes the same distinction.
  */
 const bundleChainEndpointChecks = (bundle: ParsedBundle): BundleChainEndpointChecks => {
-  const input = bundle.patches[0]?.inputChecks || bundle.rom?.checks;
-  const output = bundle.patches.at(-1)?.outputChecks || bundle.output?.checks;
+  const first = bundle.patches[0];
+  const last = bundle.patches.at(-1);
+  const input =
+    resolveBundleChecks(bundle, first?.inputChecks, first?.inputChecksRef) ||
+    resolveBundleChecks(bundle, bundle.rom?.checks, bundle.rom?.checksRef);
+  const bundleOutput = resolveBundleChecks(bundle, bundle.output?.checks, bundle.output?.checksRef);
+  const output = last?.target
+    ? bundleOutput
+    : resolveBundleChecks(bundle, last?.outputChecks, last?.outputChecksRef) || bundleOutput;
   return { ...(input ? { input } : {}), ...(output ? { output } : {}) };
 };
 
@@ -92,9 +113,10 @@ const bundleSessionDisplayName = (bundle: ParsedBundle): string | undefined => b
 const bundleRomExpectation = (bundle: ParsedBundle): BundleRomExpectation | undefined => {
   const rom = bundle.rom;
   if (!rom || rom.url || rom.path) return undefined;
+  const checks = resolveBundleChecks(bundle, rom.checks, rom.checksRef);
   const expectation: BundleRomExpectation = {
     ...(rom.name ? { name: rom.name } : {}),
-    ...(rom.checks ? { checks: rom.checks } : {}),
+    ...(checks ? { checks } : {}),
   };
   return Object.keys(expectation).length ? expectation : undefined;
 };
@@ -132,6 +154,8 @@ const toBundlePlanEntry = (
 ): BundlePlanEntry => ({
   acquisition: toAcquisition(source, bundleUrl, `patch ${index + 1}`),
   ...(patch.id ? { id: patch.id } : {}),
+  ...(patch.input ? { input: patch.input } : {}),
+  ...(patch.target ? { target: patch.target } : {}),
   ...(patch.version ? { version: patch.version } : {}),
   ...(patch.author ? { author: patch.author } : {}),
   ...(patch.name ? { name: patch.name } : {}),
@@ -153,14 +177,27 @@ const buildBundleApplySessionPlan = (parsed: ParsedBundleParseResult, bundleUrl:
   parsed.bundle.patches.forEach((patch, index) => {
     const patchSource = parsed.patchSources[index];
     if (!patchSource) throw new Error(`Bundle patch ${index + 1} has no resolved source`);
-    entries.push(toBundlePlanEntry(patch, patchSource.source, bundleUrl, index));
+    entries.push(
+      toBundlePlanEntry(
+        {
+          ...patch,
+          inputChecks: resolveBundleChecks(parsed.bundle, patch.inputChecks, patch.inputChecksRef),
+          outputChecks: resolveBundleChecks(parsed.bundle, patch.outputChecks, patch.outputChecksRef),
+        },
+        patchSource.source,
+        bundleUrl,
+        index,
+      ),
+    );
   });
   const name = bundleSessionDisplayName(parsed.bundle);
   const romExpectation = parsed.romSource ? undefined : bundleRomExpectation(parsed.bundle);
   return {
     chainEndpointChecks: bundleChainEndpointChecks(parsed.bundle),
+    ...(parsed.bundle.rom?.member ? { romMember: parsed.bundle.rom.member } : {}),
     entries,
     key: bundleUrl,
+    patchBasis: parsed.bundle.version >= 2 ? parsed.bundle.patchBasis || "auto" : "auto",
     ...(name ? { name } : {}),
     outputDefaults: toOutputDefaults(parsed),
     ...(parsed.romSource ? { romAcquisition: toAcquisition(parsed.romSource, bundleUrl, "rom") } : {}),

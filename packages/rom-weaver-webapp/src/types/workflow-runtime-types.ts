@@ -89,8 +89,22 @@ type ApplyWorkflowOptions = ApplySettings &
     sidecarPatchOutputLabels?: Record<number, string>;
   };
 
+/** Concrete execution input for a patch. This stays separate from the authored
+ * checksum basis and from the transient InputAsset id. */
+type PatchInputRef = { rom: true; member?: string } | { patch: string; member?: string };
+
 /** Per-patch options the user can set in the patch "Options" panel, aligned by patch index. */
 type PatchApplyUserOptions = {
+  /** Stable bundle/session identity for this patch slot. */
+  id?: string;
+  /** Concrete execution input recorded by a bundle or session. */
+  input?: PatchInputRef;
+  /** Cumulative output lane recorded by a bundle or session. */
+  target?: PatchInputRef;
+  /** Expected checks for the concrete input state, forwarded to patch-apply. */
+  inputChecks?: string;
+  /** Expected checks for this patch's output, forwarded to patch-apply. */
+  outputChecks?: string;
   /** Which state this patch's embedded input checks describe. */
   basis?: "base" | "previous";
   /** Raw hex checksum to validate the target input before apply (algorithm auto-detected by length). */
@@ -113,6 +127,8 @@ type PatchInput = {
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;
   patchOptions?: PatchApplyUserOptions[];
+  /** Shared default sent once to the Rust patch planner. */
+  defaultPatchBasis?: "auto" | "base" | "previous";
   preparedInputAssets?: InputAsset[];
   preparedPatchFiles?: PatchFileInstance[];
   parsedPatches?: ParsedPatchLike[];
@@ -353,6 +369,7 @@ type CreatePatchResult = {
 
 export type {
   ApplyWorkflowOptions,
+  PatchInputRef,
   ApplyWorkflowResult,
   CompressionCreateInput,
   CompressionCreateResult,

@@ -1,9 +1,19 @@
 import { expect, test } from "vitest";
 import { createRomWeaverOutputScope, runWithRomWeaverOutputScope } from "../../src/lib/runtime/run-output-paths.ts";
-import { normalizeChdCodecArgs, resolvePatchApplyThreadArg } from "../../src/lib/runtime/wasm-command-runtime.ts";
+import {
+  normalizeChdCodecArgs,
+  normalizePatchApplyDefaultBasis,
+  resolvePatchApplyThreadArg,
+} from "../../src/lib/runtime/wasm-command-runtime.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { browserVfs } from "../../src/platform/browser/workflow-runtime-vfs-cleanup.ts";
 import { createPublicSourceValidator } from "../../src/platform/shared/public-source-validation.ts";
+import { resetRomWeaverRunner, warmupRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
+import { loadFixtureFile, RAW_ROM } from "./patcher-test-shared.js";
+
+const CHAIN_A = "tests/fixtures/browser-generated/chain-step-a.bps";
+const CHAIN_B = "tests/fixtures/browser-generated/chain-step-b.bps";
+const SAME_BASE_D = "tests/fixtures/browser-generated/chain-step-d.bps";
 
 test("normalizeChdCodecArgs strips conflicting per-codec levels", () => {
   const result = normalizeChdCodecArgs(["cdlz:9", "cdzl:9", "cdfl:8"]);
@@ -19,6 +29,11 @@ test("normalizeChdCodecArgs preserves matching codec levels", () => {
     codecs: ["cdlz:9", "cdzl:9"],
     stripped: false,
   });
+});
+
+test("patch apply accepts either generated or web shared-basis option names", () => {
+  expect(normalizePatchApplyDefaultBasis({ default_patch_basis: "previous" })).toBe("previous");
+  expect(normalizePatchApplyDefaultBasis({ defaultPatchBasis: "auto" })).toBe("auto");
 });
 
 test("resolvePatchApplyThreadArg forces single-thread for xdelta patches", () => {
@@ -157,3 +172,66 @@ test("browser public source validation rejects path sources", () => {
     }),
   ).not.toThrow();
 });
+
+test("browser patch apply follows a named earlier output across a sibling patch", async () => {
+  await resetRomWeaverRunner();
+  await warmupRomWeaverRunner();
+
+  const [rom, patchA, patchB, patchD] = await Promise.all([
+    loadFixtureFile(RAW_ROM),
+    loadFixtureFile(CHAIN_A),
+    loadFixtureFile(CHAIN_B),
+    loadFixtureFile(SAME_BASE_D),
+  ]);
+
+  const applyBytes = async (patches, options) => {
+    const output = await browserRuntime.patch.applyPatch({
+      input: rom,
+      options,
+      patches,
+    });
+    try {
+      const blob = await browserRuntime.publicOutput.getBlob(output);
+      return new Uint8Array(await blob.arrayBuffer());
+    } finally {
+      await output.dispose();
+    }
+  };
+
+  const expected = await applyBytes(
+    [
+      { patchFile: patchA, patchFileName: patchA.name },
+      { patchFile: patchB, patchFileName: patchB.name },
+    ],
+    {
+      patchIds: ["a", "b"],
+      patchInputs: [{ rom: true }, { patch: "a" }],
+    },
+  );
+  const namedBranch = await applyBytes(
+    [
+      { patchFile: patchA, patchFileName: patchA.name },
+      { patchFile: patchD, patchFileName: patchD.name },
+      { patchFile: patchB, patchFileName: patchB.name },
+    ],
+    {
+      patchIds: ["a", "d", "b"],
+      patchInputs: [{ rom: true }, { rom: true }, { patch: "a" }],
+    },
+  );
+
+  expect(namedBranch).toEqual(expected);
+  expect(namedBranch).toEqual(
+    await applyBytes(
+      [
+        { patchFile: patchA, patchFileName: patchA.name },
+        { patchFile: patchD, patchFileName: patchD.name },
+        { patchFile: patchB, patchFileName: patchB.name },
+      ],
+      {
+        patchIds: ["a", "d", "b"],
+        patchInputs: [{ rom: true }, { rom: true }, { patch: "a" }],
+      },
+    ),
+  );
+}, 180000);

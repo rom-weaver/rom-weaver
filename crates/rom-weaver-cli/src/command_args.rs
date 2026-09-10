@@ -1452,12 +1452,12 @@ copier size rules."
             value_enum,
             action = ArgAction::Append,
             help_heading = "Compatibility",
-            help = "Which ROM the preceding --patch was built against: auto, base, or previous [default: auto]",
+            help = "Override the preceding --patch input rule: auto, base, or previous",
             long_help = "\
 Which ROM the preceding --patch was built against, and so which one its
 checksums describe.
 
-  auto      Work it out from the checksums (the default).
+  auto      Clear the shared rule and work it out from the checksums.
   base      The original ROM. It is verified once up front, and the patch's own
             checks are skipped when it runs later in the chain.
   previous  The output of the patch before it.
@@ -1465,14 +1465,73 @@ checksums describe.
 Reach for this when several patches in a chain were each written against the
 unmodified ROM rather than against each other.
 
-This flag must follow the --patch it describes; it binds to the most recent
---patch and carries forward until the next occurrence. An occurrence before any
---patch applies to every patch."
+This flag must follow the --patch it describes and applies only to that patch.
+Use --default-patch-basis to set one rule for every patch."
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_basis: Vec<PatchBasisMode>,
+    /// Stable patch output IDs for direct JSON/WASM apply runs.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_id: Vec<String>,
+    /// Concrete execution inputs for direct JSON/WASM apply runs.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_input: Vec<Option<BundlePatchInput>>,
+    /// Cumulative execution targets for direct JSON/WASM apply runs.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_target: Vec<Option<BundlePatchInput>>,
+    /// Index-aligned authored pre-apply checks for the patch apply JSON wire.
+    /// They verify the selected execution input without changing it.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-input-check",
+            value_name = "ALGO=HEX",
+            help_heading = "Diagnostics/authoring",
+            help = "Expected input checks for the preceding patch (repeatable, comma-separable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_input_check: Vec<String>,
+    /// Index-aligned authored post-apply checks for the patch apply JSON wire.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-output-check",
+            value_name = "ALGO=HEX",
+            help_heading = "Diagnostics/authoring",
+            help = "Expected output checks for the preceding patch (repeatable, comma-separable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_output_check: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "default-patch-basis",
+            value_enum,
+            help_heading = "Compatibility",
+            help = "Shared input ROM rule for every patch: auto, base, or previous [default: auto]",
+            long_help = "\
+Set one input ROM rule for every patch. An individual --patch-basis can override it.
+
+  base      Every patch was made from the original ROM.
+  previous  Each later patch was made from the previous result.
+  auto      Infer the input ROM from checksums (the default)."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub default_patch_basis: Option<PatchBasisMode>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1928,12 +1987,29 @@ pub struct PatchValidateCommand {
         arg(
             long = "patch-basis",
             value_enum,
-            help = "Which ROM the preceding --patch was built against: auto, base, or previous [default: auto]"
+            help = "Override the preceding --patch input rule: auto, base, or previous"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_basis: Vec<PatchBasisMode>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "default-patch-basis",
+            value_enum,
+            help = "Shared input ROM rule for every patch: auto, base, or previous [default: auto]",
+            long_help = "\
+Set one input ROM rule for every patch. An individual --patch-basis can override it.
+
+  base      Every patch was made from the original ROM.
+  previous  Each later patch was made from the previous result.
+  auto      Infer the input ROM from checksums (the default)."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub default_patch_basis: Option<PatchBasisMode>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2485,13 +2561,19 @@ pub struct BundleCreatePatchSpec {
     pub header: Option<PatchApplyHeaderMode>,
     /// Emitted `basis` for the entry (`None` omits the field).
     pub basis: Option<PatchInputBasis>,
-    /// Expected pre-apply ROM checksums for this entry (`algo=hex` tokens),
-    /// emitted as the entry's `inputChecks` when they differ from the rom's.
+    /// Concrete execution target for this patch. This stays separate from the
+    /// authored `basis` declaration.
+    pub input: Option<BundlePatchInput>,
+    /// Cumulative execution lane for this patch.
+    pub target: Option<BundlePatchInput>,
+    /// Expected pre-apply ROM checksums for this entry (`algo=hex` tokens).
     pub input_checks: Vec<String>,
-    /// Expected post-apply ROM checksums for this entry, emitted as the
-    /// entry's `outputChecks` when they differ from the bundle's final
-    /// `output.checks`.
+    /// Original named state from `--from`; it proves intentional sharing.
+    pub input_checks_ref: Option<String>,
+    /// Expected post-apply ROM checksums for this entry.
     pub output_checks: Vec<String>,
+    /// Original named state from `--from`; it proves intentional sharing.
+    pub output_checks_ref: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -2542,12 +2624,24 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "rom-name",
-            help = "Expected ROM file name to show and use for output naming; a supplied ROM with a different name only warns"
+            help = "Expected source ROM file name to show and use for output naming; a mismatch is advisory"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom_name: Option<String>,
+    /// Exact member/track selected from the ROM source before patching. The
+    /// wasm JSON surface uses the same field.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "rom-member",
+            help = "Use this exact archive member or disc track as the bundle ROM target"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub rom_member: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2672,13 +2766,41 @@ patches reads left to right:
         arg(
             long = "patch-basis",
             value_enum,
-            help = "Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it",
-            long_help = patch_adjacency_long_help!("Which ROM the preceding --patch was built against: base (the bundle's ROM) or previous (the patch before it). Use auto to leave it out and let apply infer it")
+            help = "Override the preceding --patch input rule: base or previous. Use auto to inherit the bundle rule",
+            long_help = patch_adjacency_long_help!("Override the preceding --patch input rule: base (the bundle's ROM) or previous (the patch before it). Use auto to inherit the bundle rule")
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patch_basis: Vec<PatchBasisMode>,
+    /// Index-aligned concrete execution inputs from the JSON/WASM surface.
+    /// Native flags currently author the legacy ordered chain.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_input: Vec<Option<BundlePatchInput>>,
+    /// Index-aligned cumulative execution targets from the JSON/WASM surface.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_target: Vec<Option<BundlePatchInput>>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "default-patch-basis",
+            value_enum,
+            help = "Shared input ROM rule recorded in the v2 bundle: auto, base, or previous [default: auto]",
+            long_help = "\
+Record one input ROM rule for every patch. An individual --patch-basis overrides it.
+
+  base      Every patch was made from the original ROM.
+  previous  Each later patch was made from the previous result.
+  auto      Infer the input ROM from checksums (the default)."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub default_patch_basis: Option<PatchBasisMode>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

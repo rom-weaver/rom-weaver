@@ -65,6 +65,7 @@
       "enum": ["auto", "keep", "strip"]
     },
     "rom": {
+      "description": "The one ROM the chain starts from: where to get it and how to recognize it. Omit it for a patch-only bundle whose user supplies the ROM.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -88,6 +89,7 @@
       "not": { "required": ["url", "path"] }
     },
     "patch": {
+      "description": "One patch step: its source, display metadata, and declared checks. Exactly one of url or path.",
       "type": "object",
       "additionalProperties": false,
       "oneOf": [{ "required": ["url"] }, { "required": ["path"] }],
@@ -186,6 +188,7 @@
       }
     },
     "output": {
+      "description": "Defaults and expected result for the final patched output. Compression stays an apply-time choice.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

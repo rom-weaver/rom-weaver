@@ -110,7 +110,15 @@ describe("runApplyWorkflow validation and preparation", () => {
           workers: { threads: 3 },
         },
         parsedPatches: [parsed],
-        patchOptions: [{ basis: "base", header: "strip", n64ByteOrder: "big-endian" }],
+        patchOptions: [
+          {
+            basis: "base",
+            header: "strip",
+            id: "patch-a",
+            n64ByteOrder: "big-endian",
+            target: { member: "disc/track01.bin", rom: true },
+          },
+        ],
         patches: sourceRef("fix.ips", 4),
         preparedInputAssets: [inputAsset],
         preparedPatchFiles: [preparedPatch],
@@ -141,6 +149,14 @@ describe("runApplyWorkflow validation and preparation", () => {
         ],
       }),
     );
+    expect(mocks.resolvePatchTargets).toHaveBeenCalledWith(
+      [inputAsset],
+      [parsed],
+      undefined,
+      [undefined],
+      ["patch-a"],
+      [{ member: "disc/track01.bin", rom: true }],
+    );
     expect(mocks.buildSessionOutputFiles).toHaveBeenCalledWith(
       [inputAsset],
       expect.any(Map),
@@ -164,6 +180,69 @@ describe("runApplyWorkflow validation and preparation", () => {
         rawSize: 30,
       },
     });
+  });
+
+  it("does not dispatch a worker after cross-track reference validation fails", async () => {
+    const inputAsset = { ...asset(), kind: "track", member: "disc/track01.bin" };
+    const runtime = makeRuntime();
+    mocks.resolvePatchTargets.mockRejectedValue(
+      new Error(
+        "Patch 2 source track disc/track01.bin and target track disc/track02.bin are different; the browser cannot apply this reference",
+      ),
+    );
+
+    await expect(
+      runApplyWorkflow(
+        {
+          inputs: sourceRef("disc.cue", 20),
+          options: { output: { outputName: "result.bin" } },
+          parsedPatches: [parsedPatch("ips"), parsedPatch("ips")],
+          patchOptions: [
+            { id: "patch-a", target: { member: "disc/track01.bin", rom: true } },
+            {
+              id: "patch-b",
+              input: { patch: "patch-a" },
+              target: { member: "disc/track02.bin", rom: true },
+            },
+          ],
+          patches: [sourceRef("first.ips", 4), sourceRef("second.ips", 4)],
+          preparedInputAssets: [inputAsset],
+          preparedPatchFiles: [patchFile("first.ips"), patchFile("second.ips")],
+        } as never,
+        runtime as never,
+      ),
+    ).rejects.toThrow("source track disc/track01.bin and target track disc/track02.bin are different");
+
+    expect(runtime.patch.applyPatch).not.toHaveBeenCalled();
+  });
+
+  it("keeps an explicit selected-ROM target separate from an unscoped lane", async () => {
+    const inputAsset = { ...asset(), member: "disc/track01.bin" };
+    const firstPatch = patchFile("first.ips");
+    const secondPatch = patchFile("second.ips");
+    const firstParsed = parsedPatch("ips");
+    const secondParsed = parsedPatch("ips");
+    const runtime = makeRuntime();
+    mocks.resolvePatchTargets.mockResolvedValue([inputAsset, inputAsset]);
+    mocks.buildSessionOutputFiles.mockResolvedValue({ files: [], rawOutputSize: 30 });
+
+    await runApplyWorkflow(
+      {
+        inputs: sourceRef("disc.cue", 20),
+        options: { output: { outputName: "result.bin" } },
+        parsedPatches: [firstParsed, secondParsed],
+        patchOptions: [{ target: { member: "disc/track01.bin", rom: true } }, {}],
+        patches: [sourceRef("first.ips", 4), sourceRef("second.ips", 4)],
+        preparedInputAssets: [inputAsset],
+        preparedPatchFiles: [firstPatch, secondPatch],
+      } as never,
+      runtime as never,
+    );
+
+    expect(runtime.patch.applyPatch).toHaveBeenCalledOnce();
+    expect(runtime.patch.applyPatch).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ patchTargets: [{ rom: true }, null] }) }),
+    );
   });
 
   it("prepares multiple direct input assets and reports the no-patch path", async () => {

@@ -1,4 +1,4 @@
-import { Upload } from "lucide-react";
+import { ChevronDown, Upload } from "lucide-react";
 import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } from "react";
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
@@ -37,6 +37,8 @@ const StepSection = ({
   woven,
   fault,
   headerAction,
+  collapse,
+  inert,
 }: {
   num: string;
   title: ReactNode;
@@ -53,27 +55,60 @@ const StepSection = ({
   woven?: boolean;
   /** Mark the step as the failing stage. */
   fault?: boolean;
-}) => (
-  <section className={join("step", woven && "is-woven", fault && "is-fault", className)} id={id}>
-    <div className="step-head">
-      <span className="step-num mono">{num}</span>
-      <h2 className="step-title">{title}</h2>
-      {info}
-      {meta ? <span className="step-meta mono">{meta}</span> : null}
-      {headerExtra}
-      {headerAction ? (
-        <button
-          aria-label={headerAction.label}
-          className="step-head-action"
-          disabled={headerAction.disabled}
-          onClick={headerAction.onClick}
-          type="button"
-        />
-      ) : null}
-    </div>
-    <div className="step-body">{children}</div>
-  </section>
-);
+  /** Chevron at the end of the header that hides the body while collapsed. */
+  collapse?: { collapsed: boolean; label: string; onToggle: () => void };
+  /** Render the body but take it out of the tab order and block input (a step switched off). */
+  inert?: boolean;
+}) => {
+  const bodyId = id ? `${id}-body` : undefined;
+  return (
+    <section
+      className={join(
+        "step",
+        woven && "is-woven",
+        fault && "is-fault",
+        collapse?.collapsed && "is-collapsed",
+        className,
+      )}
+      id={id}
+    >
+      <div className="step-head">
+        <span className="step-num mono">{num}</span>
+        <h2 className="step-title">{title}</h2>
+        {info}
+        {meta ? <span className="step-meta mono">{meta}</span> : null}
+        {headerExtra}
+        {collapse ? (
+          <button
+            aria-controls={bodyId}
+            aria-expanded={!collapse.collapsed}
+            aria-label={collapse.label}
+            className="step-collapse"
+            onClick={collapse.onToggle}
+            title={collapse.label}
+            type="button"
+          >
+            <ChevronDown aria-hidden="true" />
+          </button>
+        ) : null}
+        {headerAction ? (
+          <button
+            aria-label={headerAction.label}
+            className="step-head-action"
+            disabled={headerAction.disabled}
+            onClick={headerAction.onClick}
+            type="button"
+          />
+        ) : null}
+      </div>
+      {collapse?.collapsed ? null : (
+        <div className="step-body" id={bodyId} inert={inert || undefined}>
+          {children}
+        </div>
+      )}
+    </section>
+  );
+};
 
 /**
  * Clickable "i" info mark with a viewport-aware popover. Content is the

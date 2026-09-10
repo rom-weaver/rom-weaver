@@ -129,6 +129,8 @@ const loadBundleUrlSession = async (
       chainEndpointChecks: plan.chainEndpointChecks,
       entries,
       key: plan.key,
+      patchBasis: plan.patchBasis,
+      ...(plan.romMember ? { romMember: plan.romMember } : {}),
       ...(plan.name ? { name: plan.name } : {}),
       outputDefaults: plan.outputDefaults,
       ...(acquiredRomFile ? { romFileName: acquiredRomFile.name } : {}),

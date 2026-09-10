@@ -26,6 +26,17 @@ type InternalSourceState = {
   /** True when the pending candidate selection allows picking several patches at once. */
   multiSelect?: boolean;
   selectedCandidateId?: string;
+  member?: string;
+  trackNumber?: number;
+  discGroupId?: string;
+  /** Stable bundle/session identity; distinct from the transient source id. */
+  patchId?: ApplyWorkflowPatchState["patchId"];
+  /** Concrete execution input recorded by a bundle or session. */
+  patchInput?: ApplyWorkflowPatchState["patchInput"];
+  /** Cumulative output lane recorded by a bundle or session. */
+  patchTarget?: ApplyWorkflowPatchState["patchTarget"];
+  inputChecks?: ApplyWorkflowPatchState["inputChecks"];
+  outputChecks?: ApplyWorkflowPatchState["outputChecks"];
   targetInputId?: string;
   targetInputFileName?: string;
   size?: number;

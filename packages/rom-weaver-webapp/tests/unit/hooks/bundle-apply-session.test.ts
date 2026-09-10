@@ -1,8 +1,11 @@
 // @vitest-environment happy-dom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { lookupExpectedRom } from "../../../src/lib/apply/expected-rom-lookup.ts";
 import type { BundleApplySession } from "../../../src/lib/bundle/bundle-session-model.ts";
 import { mergeBundleMetaForIds, useBundleApplySession } from "../../../src/public/react/use-bundle-apply-session.ts";
+
+vi.mock("../../../src/lib/apply/expected-rom-lookup.ts", () => ({ lookupExpectedRom: vi.fn() }));
 
 const patch = (fileName: string) => ({ fileName, name: fileName });
 
@@ -94,10 +97,11 @@ describe("useBundleApplySession", () => {
     expect(setPatchOption).toHaveBeenNthCalledWith(1, 0, {
       basis: "base",
       header: "strip",
+      id: "bundle-first",
       revalidate: false,
       validateInputChecksum: "1234abcd",
     });
-    expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, { revalidate: true });
+    expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, { id: "bundle-second", revalidate: true });
     expect(setDisplayFileName).toHaveBeenCalledWith("Bundle result");
     expect(setOutputHeader).toHaveBeenCalledWith("keep");
     expect((patches[0] as { _generatedPatchName?: string })._generatedPatchName).toBeTruthy();
@@ -111,6 +115,74 @@ describe("useBundleApplySession", () => {
     act(() => result.current.handleBundlePatchesChange([foreign]));
     expect((foreign as { _generatedPatchName?: string })._generatedPatchName).toBeUndefined();
     expect(result.current.bundleDefaultsPending).toBe(false);
+  });
+
+  it("seeds a rom-member lane with the track checks its identify record holds", async () => {
+    vi.mocked(lookupExpectedRom).mockResolvedValue({
+      matches: [
+        {
+          algorithm: "components",
+          database: "redump",
+          expectedComponents: [
+            { crc32: "aaaaaaaa", ordinal: 0, role: "data_track", size: 10, track: 1 },
+            { crc32: "bbbbbbbb", ordinal: 1, role: "audio_track", size: 20, track: 2 },
+          ],
+          name: "Two Track Quest (USA)",
+          platform: "Test Disc System",
+          variant: "raw",
+        },
+      ],
+      status: "matched",
+    });
+    const setPatchOption = vi.fn().mockResolvedValue(undefined);
+    const controllersRef = {
+      current: {
+        output: { setDisplayFileName: vi.fn(), setOutputHeader: vi.fn() },
+        patchStack: {
+          getState: () => ({ items: [{ progress: null }, { optionsDisabled: false }] }),
+          setPatchOption,
+        },
+      },
+    } as never;
+    const { result } = renderHook(() =>
+      useBundleApplySession({
+        bundleSession: session({
+          entries: [
+            { fileName: "first.ips", id: "first", optional: false, target: { member: "track01.bin", rom: true } },
+            { fileName: "second.ips", id: "second", optional: false, target: { member: "track02.bin", rom: true } },
+          ],
+        }),
+        controllersRef,
+        getPatchIds: () => ["slot-1", "slot-2"],
+        seedPatchEnablement: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.handleBundlePatchesChange([patch("first.ips"), patch("second.ips")]));
+    await waitFor(() => expect(result.current.bundleDefaultsPending).toBe(false));
+
+    expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "1234abcd" } });
+    expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, {
+      id: "second",
+      inputChecks: "crc32=bbbbbbbb,size=20",
+      revalidate: true,
+      target: { member: "track02.bin", rom: true },
+    });
+    // The bundle's own member lane is filled the same way; its component is
+    // the track rom.checks already describe, so the gate stays consistent.
+    expect(setPatchOption).toHaveBeenNthCalledWith(1, 0, {
+      id: "first",
+      inputChecks: "crc32=aaaaaaaa,size=10",
+      revalidate: false,
+      target: { member: "track01.bin", rom: true },
+      validateInputChecksum: "1234abcd",
+    });
+    expect([...result.current.memberLaneChecksRef.current]).toEqual([
+      ["slot-1", "crc32=aaaaaaaa,size=10"],
+      ["slot-2", "crc32=bbbbbbbb,size=20"],
+    ]);
+    // Only the bundle's own metadata reaches an export.
+    expect(result.current.bundleMetaById.get("slot-2")?.inputChecks).toBeUndefined();
   });
 
   it("replays when the session arrives after the patch list", async () => {

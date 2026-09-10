@@ -120,6 +120,11 @@ msgstr "{count} aviso(s)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.identified"
+msgstr "{title} — {platform}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.sevenZipCodec"
 msgstr "7z"
 
@@ -350,6 +355,11 @@ msgstr "Aplicar este parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.execution"
+msgstr "Aplicar a — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.applyToAll"
 msgstr "Aplicar a todos"
 
@@ -400,6 +410,16 @@ msgstr "Autor"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.input"
+msgstr "Comprobaciones de entrada creadas — {basis}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.explanation"
+msgstr "Las comprobaciones de entrada creadas describen una fuente del parche. Cada parche se ejecuta sobre la entrada actual de la pila."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.auto"
 msgstr "auto"
 
@@ -410,18 +430,18 @@ msgstr "Automático"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.basis.autoBase"
-msgstr "auto (ROM base)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.autoKeep"
 msgstr "automático (conservar)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.basis.autoBase"
+msgstr "auto (ROM original)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.autoPrevious"
-msgstr "auto (anterior)"
+msgstr "auto (Salida del parche anterior)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -442,6 +462,16 @@ msgstr "Automático conserva los encabezados que requieren los emuladores y elim
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64ByteOrderHelp"
 msgstr "Auto compara la suma de comprobación de origen del parche con los tres órdenes de bytes de N64. El orden original de la ROM se restaura en la salida."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.auto"
+msgstr "Automático"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.automatic"
+msgstr "Detección automática"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -667,6 +697,11 @@ msgstr "Comprobaciones"
 #: src/presentation/localization/messages.ts
 msgid "ui.checks.title"
 msgstr "Comprobaciones"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.deferred"
+msgstr "Se comprueba al aplicar — {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -910,6 +945,11 @@ msgstr "orden actual"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.currentStackInput"
+msgstr "Entrada actual de la pila"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.dark"
 msgstr "Oscuro"
 
@@ -1117,6 +1157,11 @@ msgstr "Editar posición del parche, actualmente {position} de {total}"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
 msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo de una partida guardada,"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.embeddedOutput"
+msgstr "Comprobaciones de salida integradas — Resultado del parche independiente"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1740,6 +1785,11 @@ msgstr "Perfil de medio no compatible"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.executionMember"
+msgstr "Ruta del archivo interno"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality.metadata_only"
 msgstr "Solo metadatos"
 
@@ -1910,6 +1960,11 @@ msgstr "No se encontró ningún archivo seleccionable."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unknown"
+msgstr "Aún no comprobado — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectedMismatch"
 msgstr "No es la ROM esperada"
 
@@ -2040,6 +2095,21 @@ msgstr "ROM original"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.original"
+msgstr "ROM original"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoBase"
+msgstr "ROM original (automático)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.originalRom"
+msgstr "ROM original{member}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.output"
 msgstr "Salida"
 
@@ -2077,6 +2147,11 @@ msgstr "Formato de salida"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Encabezado de salida"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchOutput"
+msgstr "Salida de {patch}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2132,6 +2207,11 @@ msgstr "El {algorithm} de {side} del parche {index} tiene un formato incorrecto"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomPatch"
 msgstr "parche {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchNumber"
+msgstr "Parche {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2272,6 +2352,16 @@ msgstr "Compilación de vista previa"
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.previous"
 msgstr "salida anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchInputs.previous"
+msgstr "Salida del parche anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.autoPrevious"
+msgstr "Salida del parche anterior (automático)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2432,6 +2522,11 @@ msgstr "Obligatorio u opcional"
 #: src/presentation/localization/messages.ts
 msgid "error.WORKER_UNAVAILABLE"
 msgstr "El soporte de workers requerido no está disponible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.expects"
+msgstr "Requiere primero {patch}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2630,6 +2725,11 @@ msgstr "en un parche comprimido y compartible que otros puedan aplicar —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.sharedInput"
+msgstr "Comprobaciones de entrada compartidas — {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.urlSession.error"
 msgstr "Falló la descarga de la sesión compartida"
 
@@ -2672,6 +2772,11 @@ msgstr "origen"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.source"
 msgstr "Fuente"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.stackOutput"
+msgstr "Comprobaciones de salida de la pila — Resultado combinado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2782,6 +2887,11 @@ msgstr "Toca para agregar ROM, parches, paquetes o archivos"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Toca para elegir archivos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.targetRom"
+msgstr "ROM objetivo — {target}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3154,6 +3264,11 @@ msgstr "Sin identificar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unknownPatchOutput"
+msgstr "Salida de parche desconocida ({patch})"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.unusedInputs"
 msgstr "Entradas sin usar: {names}{count, plural, =0 {} one { y una más} other { y # más}}."
 
@@ -3179,6 +3294,11 @@ msgstr "¿Usar ROM duplicadas?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.executionMemberTitle"
+msgstr "Usa la ruta exacta del archivo interno de la ROM o del resultado del parche seleccionado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationFailed"
 msgstr "La validación falló"
 
@@ -3196,6 +3316,11 @@ msgstr "Variante"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.variantClass"
 msgstr "Clase de variante"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.verified"
+msgstr "Comprobado — {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

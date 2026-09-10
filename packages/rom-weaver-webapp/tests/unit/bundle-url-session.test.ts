@@ -27,7 +27,7 @@ const parsedResult = (overrides: Record<string, unknown> = {}) => ({
       { author: "A", id: "p1", name: "Translation", optional: false },
       { id: "p2", label: "optional fix", name: "Fix", optional: true },
     ],
-    rom: { checks: { checksums: { crc32: "deadbeef" }, size: 4 }, name: "Example ROM" },
+    rom: { checks: { checksums: { crc32: "deadbeef" }, size: 4 }, member: "disc/track01.bin", name: "Example ROM" },
     version: 1,
   },
   patchSources: [
@@ -90,6 +90,7 @@ describe("loadBundleUrlSession", () => {
       name: "Example release",
       outputDefaults: { header: "strip", name: "Example release" },
       romFileName: "example.bin",
+      romMember: "disc/track01.bin",
       warnings: ["optional patch has no output check"],
     });
     expect(loaded.session.entries.map((entry) => entry.fileName)).toEqual(["translation.ips", "fix.ips"]);

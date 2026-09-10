@@ -393,7 +393,11 @@ export type IdentifyComponent = { role: ComponentRole, ordinal: number, size: bi
  * Only set on a database record's component; the input's own components
  * are always hashed whole.
  */
-hash_scope?: string, filename?: string, crc32?: string, md5?: string, sha1?: string, sha256?: string, };
+hash_scope?: string, filename?: string, crc32?: string, md5?: string, sha1?: string, sha256?: string,
+/**
+ * One-based disc track number on a per-track database record.
+ */
+track?: number, };
 
 export type IdentifyDatabaseInfo = { source?: string, upstream_sources?: Array<string>, revision?: string, pack_format: string, canonicalization_profile?: string, };
 
@@ -459,14 +463,35 @@ export type TrimCommand = { input: Array<string>, output?: string, extension?: s
  */
 rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, force?: boolean, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, patch_select?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, without_cheats?: boolean, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string,
+export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, patch_select?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, without_cheats?: boolean, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>,
+/**
+ * Stable patch output IDs for direct JSON/WASM apply runs.
+ */
+patch_id?: Array<string>,
+/**
+ * Concrete execution inputs for direct JSON/WASM apply runs.
+ */
+patch_input?: Array<BundlePatchInput | null>,
+/**
+ * Cumulative execution targets for direct JSON/WASM apply runs.
+ */
+patch_target?: Array<BundlePatchInput | null>,
+/**
+ * Index-aligned authored pre-apply checks for the patch apply JSON wire.
+ * They verify the selected execution input without changing it.
+ */
+patch_input_check?: Array<string>,
+/**
+ * Index-aligned authored post-apply checks for the patch apply JSON wire.
+ */
+patch_output_check?: Array<string>, default_patch_basis?: PatchBasisMode, output_header?: PatchApplyOutputHeaderMode, repair_checksum?: boolean, n64_byte_order?: Array<PatchN64ByteOrderMode>, ignore_checksum_validation?: boolean, expect_out?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string,
 /**
  * Structured database records selected for ROM baking. This field exists
  * on the JSON/WASM boundary; the public CLI keeps `--code` unchanged.
  */
 cheat_records?: Array<CheatRecord>, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
 
-export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, patch_select?: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
+export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, patch_select?: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
 export type PatchCreateCommand = { original: string, modified?: string, format?: string, output?: string, plan?: boolean, ignore_checksum_validation?: boolean, checksum_name?: boolean, assume_in?: Array<string>, codes?: Array<string>, code_system?: string, code_kind?: string, threads?: ThreadBudget, solid_system?: string, solid_game?: string, solid_hack?: string, solid_version?: string, solid_author?: string, solid_contact?: string, solid_comment?: string, solid_extended?: boolean, xdelta_secondary?: string, force?: boolean, };
 
@@ -535,6 +560,8 @@ export type BundleChecks = { checksums?: { [key in string]: string },
  */
 size?: number | null, };
 
+export type BundleCheckState = { id: string, checks: BundleChecks, };
+
 export type BundleRom = {
 /**
  * Display / output-naming file name. For a separately supplied ROM, this
@@ -550,9 +577,21 @@ url?: string,
  */
 path?: string,
 /**
+ * Exact archive member or disc track to use after resolving this ROM
+ * source. Omitted retains ordinary single-ROM auto-selection.
+ */
+member?: string,
+/**
  * Expected checksums/size of the ROM itself (also verifies downloads).
  */
-checks?: BundleChecks, };
+checks?: BundleChecks,
+/**
+ * Named state carrying this ROM's expected checks. New writers use this
+ * instead of repeating a `checks` object on every consumer.
+ */
+checksRef?: string, };
+
+export type BundlePatchInput = { rom: boolean, member?: string, } | { patch: string, member?: string, };
 
 export type BundlePatchEntry = {
 /**
@@ -585,16 +624,37 @@ url?: string,
  */
 path?: string,
 /**
+ * Fixed execution input for this patch. Omitted keeps the target lane's
+ * cumulative output.
+ */
+input?: BundlePatchInput,
+/**
+ * Cumulative execution lane for this patch. Omitted retains the legacy
+ * single sequential lane. A patch target seeds its lane from the named
+ * producer's output when the lane first runs.
+ */
+target?: BundlePatchInput,
+/**
  * Expected checksums/size of the ROM state this patch applies to, ONLY
  * when it differs from `rom.checks` (a mid-chain step). Absent means the
  * patch relies on the rom's own checks.
  */
 inputChecks?: BundleChecks,
 /**
+ * Named authored input state. Mutually exclusive with inline
+ * `inputChecks`; it does not select execution bytes.
+ */
+inputChecksRef?: string,
+/**
  * Expected checksums/size immediately after this patch is applied, ONLY
  * when it differs from the bundle's final `output.checks`.
  */
 outputChecks?: BundleChecks,
+/**
+ * Named authored output state. Mutually exclusive with inline
+ * `outputChecks`.
+ */
+outputChecksRef?: string,
 /**
  * Per-patch header mode override (`auto` when omitted).
  */
@@ -646,7 +706,12 @@ name?: string, header?: PatchApplyOutputHeaderMode,
  * (every patch, in bundle order) has been applied. A partial selection
  * validates against its last patch's `outputChecks` instead.
  */
-checks?: BundleChecks, };
+checks?: BundleChecks,
+/**
+ * Named expected final-output state. Mutually exclusive with inline
+ * `checks`.
+ */
+checksRef?: string, };
 
 export type RomWeaverBundle = {
 /**
@@ -657,7 +722,17 @@ export type RomWeaverBundle = {
  * but never auto-injected by create (keeps emitted bytes stable). First
  * field so it serializes at the top, the conventional position.
  */
-$schema?: string, version: number, rom?: BundleRom,
+$schema?: string, version: number,
+/**
+ * Shared input-basis declaration for the chain. Version 2 requires this
+ * value; version 1 omits it and retains automatic inference.
+ */
+patchBasis?: PatchBasisMode,
+/**
+ * Named checksum states. References preserve the authored relationship
+ * between states even when two states currently have equal digests.
+ */
+checkStates?: Array<BundleCheckState>, rom?: BundleRom,
 /**
  * Ordered: array order is the apply order.
  */
@@ -710,7 +785,21 @@ export type BundleCreateCommand = { rom?: string,
  * export skips re-hashing the same prepared leaf. `algo=hex` tokens supply
  * the emitted rom checks; a `size=N` token supplies the prepared size.
  */
-assume_in?: Array<string>, rom_url?: string, rom_name?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode,
+assume_in?: Array<string>, rom_url?: string, rom_name?: string,
+/**
+ * Exact member/track selected from the ROM source before patching. The
+ * wasm JSON surface uses the same field.
+ */
+rom_member?: string, patch?: Array<string>, patch_id?: Array<string>, patch_version?: Array<string>, patch_name?: Array<string>, patch_description?: Array<string>, patch_author?: Array<string>, patch_label?: Array<string>, patch_optional?: Array<boolean>, patch_source_url?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>,
+/**
+ * Index-aligned concrete execution inputs from the JSON/WASM surface.
+ * Native flags currently author the legacy ordered chain.
+ */
+patch_input?: Array<BundlePatchInput | null>,
+/**
+ * Index-aligned cumulative execution targets from the JSON/WASM surface.
+ */
+patch_target?: Array<BundlePatchInput | null>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode,
 /**
  * Cheat selections to record in the bundle. The wasm/JSON boundary sets
  * this directly; the native CLI fills it from `--cheat`/`--cht`.

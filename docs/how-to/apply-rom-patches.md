@@ -53,33 +53,35 @@ Start with the labels and warning colors, then open **Checks** if you need the n
 
 The ROM card shows the selected filename, size, detected system, and checksums. A message about the expected filename is advice. The name can differ while the bytes are still correct. A checksum or expected-size failure is strict and means the bytes do not match.
 
-Each patch card shows its format and position. Open **Checks** to see what that patch expects at this point in the chain. Open the three-dot **Patch actions** menu to edit details, replace the file, or remove it. Header controls appear only for formats and systems where they make sense.
+Each patch card shows its format and position. Open **Checks** to see the state that the patch's input checks describe and the result that its output checks describe. Open the three-dot **Patch actions** menu to edit details, replace the file, or remove it. Header controls appear only for formats and systems where they make sense.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-light.avif" width="1170" height="2348">
-    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-light.avif" width="2242" height="1045">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-light.webp" width="1170" height="2348">
-    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1045" alt="Cropped Apply patch stack with two ordered practice patches in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-light.avif" width="1170" height="2440">
+    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-light.avif" width="2242" height="1031">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-light.webp" width="1170" height="2440">
+    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1031" alt="Cropped Apply patch stack with two ordered practice patches in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-dark.avif" width="1170" height="2348">
-    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-dark.avif" width="2242" height="1045">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2348">
-    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1045" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-dark.avif" width="1170" height="2440">
+    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-dark.avif" width="2242" height="1031">
+    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2440">
+    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1031" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme">
   </picture>
   <figcaption>Patches run from top to bottom. Each card shows the checks for that step.</figcaption>
 </figure>
 
 ## Put several patches in order
 
-Patches run from top to bottom. Patch 2 receives the output of patch 1, not the clean ROM. Order is part of the release instructions.
+Patches run from top to bottom and modify one result. Each patch card has an input selector. This selector chooses the state that the patch's **Input** checks must match.
+
+Keep **Automatic** to let the checks select their input state. Choose **Original ROM** when the patch was made from the clean ROM. Choose **Previous patch output** when the patch depends on the result above it.
 
 Drag a numbered handle to move a patch. With a keyboard, focus the handle and use its announced controls. The number changes when the card moves.
 
 The On or Off switch temporarily skips a patch. This is useful for optional add-ons, but only use combinations the author says are compatible. Turning off a required base patch can make everything below it fail.
 
-After changing order or switches, read the checks again. A valid chain should show each patch matching the bytes produced by the step before it.
+After changing an input, the order, or a switch, read each patch's **Checks** summary again. **Input checks** describe what the patch reads. **Output checks** describe what that patch creates.
 
 ## Choose the output and apply
 

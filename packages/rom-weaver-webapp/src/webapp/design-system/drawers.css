@@ -303,6 +303,14 @@
 .rw-app .identify-drawer > .cks-head .readouts > .rb {
   flex: 0 1 auto;
 }
+/* A patch Checks header carries a long validation summary plus timing. Let the
+   summary shrink while the timing stays readable. */
+.rw-app .patch-checks > .cks-head .readouts > .rb.muted {
+  flex: 0 1 auto;
+}
+.rw-app .patch-checks > .cks-head .readouts > .rb.time {
+  flex: none;
+}
 .rw-app .identify-drawer-names .ck-v,
 .rw-app .identify-drawer-evidence .ck-v {
   text-transform: none;
@@ -455,6 +463,21 @@
   opacity: 0.2;
   mask-image: var(--weave-mask);
   mask-size: 7px 7px;
+}
+.rw-app .ck-group-title {
+  display: block;
+  padding-inline: 9px;
+  margin-block: -2px 6px;
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+.rw-app .patch-checks-explanation {
+  grid-column: 1 / -1;
+  padding-inline: 9px;
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink-3);
 }
 .rw-app .ck {
   /* The label track floor aligns independently gridded rows. */

@@ -121,51 +121,160 @@ fn required_base_name_reports_a_path_without_a_file_name() {
     );
 }
 
-#[test]
-fn checks_implied_by_needs_a_baseline() {
-    let entry = checks(&[("crc32", "deadbeef")], None);
-    assert!(!checks_implied_by(&entry, None));
+fn canonicalized_input(
+    entry: BundleChecks,
+    baseline: Option<BundleChecks>,
+) -> (BundlePatchEntry, Vec<BundleCheckState>) {
+    let mut rom =
+        baseline.map(|checks| serde_json::from_value(json!({ "checks": checks })).expect("ROM"));
+    let mut patches =
+        vec![serde_json::from_value(json!({ "id": "test", "inputChecks": entry })).expect("patch")];
+    let states = canonicalize_bundle_check_states(&mut rom, &mut patches, &mut None, None);
+    (patches.remove(0), states)
+}
+
+fn referenced_checks<'a>(bundle: &'a RomWeaverBundle, reference: Option<&str>) -> &'a BundleChecks {
+    let reference = reference.expect("check reference");
+    &bundle
+        .check_states
+        .iter()
+        .find(|state| state.id == reference)
+        .expect("referenced state")
+        .checks
 }
 
 #[test]
-fn empty_checks_are_implied_by_any_baseline() {
-    let baseline = checks(&[("crc32", "deadbeef")], Some(16));
-    assert!(checks_implied_by(&BundleChecks::default(), Some(&baseline)));
+fn authored_checks_without_a_baseline_keep_their_values() {
+    let expected = checks(&[("crc32", "deadbeef")], None);
+    let (entry, states) = canonicalized_input(expected.clone(), None);
+    assert!(entry.input_checks.is_none());
+    assert_eq!(states.len(), 1);
+    assert_eq!(
+        entry.input_checks_ref.as_deref(),
+        Some(states[0].id.as_str())
+    );
+    assert_eq!(states[0].checks, expected);
 }
 
 #[test]
-fn checks_are_implied_when_every_digest_matches_case_insensitively() {
-    let baseline = checks(&[("crc32", "deadbeef"), ("md5", "abcd")], Some(16));
-    let entry = checks(&[("crc32", "DEADBEEF")], Some(16));
-    assert!(checks_implied_by(&entry, Some(&baseline)));
+fn explicit_rom_dependency_can_share_its_authored_state() {
+    let expected = checks(&[("crc32", "deadbeef")], Some(16));
+    let mut rom = Some(serde_json::from_value(json!({ "checks": expected })).expect("ROM"));
+    let mut patches = vec![
+        serde_json::from_value(json!({
+            "id": "patch", "input": { "rom": true }, "basis": "base", "inputChecks": expected
+        }))
+        .expect("patch"),
+    ];
+    let states = canonicalize_bundle_check_states(&mut rom, &mut patches, &mut None, None);
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].checks, expected);
+    assert_eq!(patches[0].input_checks_ref, rom.expect("ROM").checks_ref);
 }
 
 #[test]
-fn checks_are_not_implied_when_a_digest_differs_or_is_absent() {
+fn equal_checks_without_a_shared_source_keep_distinct_states() {
+    let expected = checks(&[("crc32", "deadbeef")], Some(16));
+    let (entry, states) = canonicalized_input(expected.clone(), Some(expected.clone()));
+    assert_eq!(states.len(), 2);
+    assert_ne!(entry.input_checks_ref.as_deref(), Some("rom"));
+    assert!(states.iter().all(|state| state.checks == expected));
+}
+
+#[test]
+fn differing_and_additional_digests_keep_their_authored_values() {
     let baseline = checks(&[("crc32", "deadbeef")], None);
-    assert!(!checks_implied_by(
-        &checks(&[("crc32", "0badf00d")], None),
-        Some(&baseline)
-    ));
-    assert!(!checks_implied_by(
-        &checks(&[("sha1", "deadbeef")], None),
-        Some(&baseline)
-    ));
+    for expected in [
+        checks(&[("crc32", "0badf00d")], None),
+        checks(&[("sha1", "deadbeef")], None),
+    ] {
+        let (entry, states) = canonicalized_input(expected.clone(), Some(baseline.clone()));
+        assert_eq!(states.len(), 2);
+        assert_eq!(
+            states
+                .iter()
+                .find(|state| Some(&state.id) == entry.input_checks_ref.as_ref())
+                .expect("input state")
+                .checks,
+            expected
+        );
+    }
 }
 
 #[test]
-fn checks_are_not_implied_when_the_size_differs() {
+fn different_sizes_keep_distinct_authored_states() {
     let baseline = checks(&[("crc32", "deadbeef")], Some(16));
-    assert!(!checks_implied_by(
-        &checks(&[("crc32", "deadbeef")], Some(32)),
-        Some(&baseline)
-    ));
+    let expected = checks(&[("crc32", "deadbeef")], Some(32));
+    let (entry, states) = canonicalized_input(expected.clone(), Some(baseline));
+    assert_eq!(states.len(), 2);
+    assert_eq!(
+        states
+            .iter()
+            .find(|state| Some(&state.id) == entry.input_checks_ref.as_ref())
+            .expect("input state")
+            .checks,
+        expected
+    );
 }
 
 #[test]
-fn checks_tokens_render_algo_equals_hex_and_drop_the_size() {
+fn final_output_shares_the_last_patch_output_state_without_a_patch_id() {
+    let expected = checks(&[("crc32", "deadbeef")], Some(16));
+    let mut patches =
+        vec![serde_json::from_value(json!({ "outputChecks": expected })).expect("patch")];
+    let mut output: Option<BundleOutput> =
+        Some(serde_json::from_value(json!({ "checks": expected })).expect("output"));
+    let states = canonicalize_bundle_check_states(&mut None, &mut patches, &mut output, None);
+    assert_eq!(states.len(), 1);
+    assert_eq!(
+        output.expect("output").checks_ref,
+        patches[0].output_checks_ref
+    );
+}
+
+#[test]
+fn an_authored_output_state_named_output_is_not_duplicated() {
+    let expected = checks(&[("crc32", "deadbeef")], Some(16));
+    let mut patches = vec![
+        serde_json::from_value(json!({ "outputChecks": expected, "outputChecksRef": "output" }))
+            .expect("patch"),
+    ];
+    let mut output: Option<BundleOutput> =
+        Some(serde_json::from_value(json!({ "checks": expected })).expect("output"));
+    let states = canonicalize_bundle_check_states(&mut None, &mut patches, &mut output, None);
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].id, "output");
+    assert_eq!(
+        output.expect("output").checks_ref.as_deref(),
+        Some("output")
+    );
+}
+
+#[test]
+fn a_differing_output_state_named_output_gets_a_unique_id() {
+    let mut patches = vec![
+        serde_json::from_value(json!({
+            "outputChecks": checks(&[("crc32", "deadbeef")], None),
+            "outputChecksRef": "output"
+        }))
+        .expect("patch"),
+    ];
+    let mut output: Option<BundleOutput> = Some(
+        serde_json::from_value(json!({ "checks": checks(&[("crc32", "0badf00d")], None) }))
+            .expect("output"),
+    );
+    let states = canonicalize_bundle_check_states(&mut None, &mut patches, &mut output, None);
+    assert_eq!(states.len(), 2);
+    assert_eq!(
+        output.expect("output").checks_ref.as_deref(),
+        Some("output-2")
+    );
+}
+
+#[test]
+fn checks_tokens_preserve_digests_and_size() {
     let tokens = checks_tokens(&checks(&[("crc32", "deadbeef"), ("md5", "abcd")], Some(16)));
-    assert_eq!(tokens, vec!["crc32=deadbeef", "md5=abcd"]);
+    assert_eq!(tokens, vec!["crc32=deadbeef", "md5=abcd", "size=16"]);
 }
 
 #[test]
@@ -442,7 +551,7 @@ fn bundle_create_hashes_the_rom_and_records_a_path_entry() {
     let bundle_rom = result.bundle.rom.as_ref().expect("rom entry");
     assert_eq!(bundle_rom.path.as_deref(), Some("game.nes"));
     assert_eq!(bundle_rom.name, None, "a distributed rom needs no name");
-    let rom_checks = bundle_rom.checks.as_ref().expect("rom checks");
+    let rom_checks = referenced_checks(&result.bundle, bundle_rom.checks_ref.as_deref());
     assert_eq!(rom_checks.size, Some(32));
     let algorithms: Vec<&str> = rom_checks.checksums.keys().map(String::as_str).collect();
     assert_eq!(algorithms, vec!["crc32", "md5", "sha1"]);
@@ -475,7 +584,12 @@ fn no_bundle_rom_keeps_checks_and_names_the_rom_the_user_must_supply() {
     assert_eq!(bundle_rom.path, None);
     assert_eq!(bundle_rom.url, None);
     assert_eq!(bundle_rom.name.as_deref(), Some("game.nes"));
-    assert!(bundle_rom.checks.is_some());
+    assert!(bundle_rom.checks_ref.is_some());
+    assert!(
+        !referenced_checks(&result.bundle, bundle_rom.checks_ref.as_deref())
+            .checksums
+            .is_empty()
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -494,12 +608,14 @@ fn assume_in_tokens_replace_the_rom_hash_and_size() {
     let context = app.context(args.threads);
     let result = app.bundle_create_inner(&args, &context).expect("create");
 
-    let rom_checks = result
-        .bundle
-        .rom
-        .as_ref()
-        .and_then(|rom| rom.checks.as_ref())
-        .expect("rom checks");
+    let rom_checks = referenced_checks(
+        &result.bundle,
+        result
+            .bundle
+            .rom
+            .as_ref()
+            .and_then(|rom| rom.checks_ref.as_deref()),
+    );
     assert_eq!(
         rom_checks.checksums.get("crc32").map(String::as_str),
         Some("deadbeef"),
@@ -611,7 +727,7 @@ fn duplicate_source_base_names_are_rejected() {
 }
 
 #[test]
-fn entry_checks_equal_to_the_endpoints_are_left_out() {
+fn entry_checks_are_preserved_as_named_states() {
     let dir = scratch_dir("implied-checks");
     let rom = write_fixture(&dir, "game.nes", &[0x55; 4]);
     let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
@@ -636,19 +752,18 @@ fn entry_checks_equal_to_the_endpoints_are_left_out() {
     let entry = &result.bundle.patches[0];
     assert!(
         entry.input_checks.is_none(),
-        "input checks equal to rom.checks are implied"
+        "input values live in a named state"
     );
     assert!(
         entry.output_checks.is_none(),
-        "output checks equal to output.checks are implied"
+        "output values live in a named state"
     );
     let output = result.bundle.output.as_ref().expect("output block");
     assert_eq!(output.name.as_deref(), Some("patched.nes"));
     assert_eq!(
-        output
-            .checks
-            .as_ref()
-            .and_then(|checks| checks.checksums.get("crc32"))
+        referenced_checks(&result.bundle, output.checks_ref.as_deref())
+            .checksums
+            .get("crc32")
             .map(String::as_str),
         Some("0badf00d")
     );
@@ -656,7 +771,7 @@ fn entry_checks_equal_to_the_endpoints_are_left_out() {
 }
 
 #[test]
-fn distinct_entry_checks_are_kept_on_the_entry() {
+fn distinct_entry_checks_keep_distinct_named_states() {
     let dir = scratch_dir("kept-checks");
     let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
     let app = test_app();
@@ -672,18 +787,16 @@ fn distinct_entry_checks_are_kept_on_the_entry() {
 
     let entry = &result.bundle.patches[0];
     assert_eq!(
-        entry
-            .input_checks
-            .as_ref()
-            .and_then(|checks| checks.checksums.get("crc32"))
+        referenced_checks(&result.bundle, entry.input_checks_ref.as_deref())
+            .checksums
+            .get("crc32")
             .map(String::as_str),
         Some("11111111")
     );
     assert_eq!(
-        entry
-            .output_checks
-            .as_ref()
-            .and_then(|checks| checks.checksums.get("crc32"))
+        referenced_checks(&result.bundle, entry.output_checks_ref.as_deref())
+            .checksums
+            .get("crc32")
             .map(String::as_str),
         Some("22222222")
     );

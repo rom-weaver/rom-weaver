@@ -125,6 +125,19 @@ describe("ApplyPatchListStep", () => {
     expect(container.textContent).toContain("Patch source loaded");
   });
 
+  it("labels a successful preflight as verified when its chain verdict has no source match", () => {
+    const verifiedWithoutIdentity = item(0, {
+      chainVerdict: {
+        basis: "base",
+        basisSource: "default",
+        matched: { kind: "none" },
+      },
+    });
+    const { container } = renderList({ patches: [verifiedWithoutIdentity] });
+
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Verified — Game A");
+  });
+
   it("takes the strip header option away while cheats are on", () => {
     const offered = renderList().container.querySelector(
       "#rom-weaver-patch-header-mode-0 option[value='strip']",

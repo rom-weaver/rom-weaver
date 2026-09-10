@@ -125,6 +125,7 @@ const ChecksumList = ({
   onToggle,
   lead,
   bodyClassName,
+  className,
   children,
 }: {
   action?: ReactNode;
@@ -140,11 +141,13 @@ const ChecksumList = ({
   onToggle?: (open: boolean) => void;
   lead?: ReactNode;
   bodyClassName?: string;
+  className?: string;
   children: ReactNode;
 }) => (
   <Drawer
     action={action}
     bodyClassName={bodyClassName}
+    className={className}
     defaultOpen={defaultOpen}
     label={label}
     labelIcon={<ListChecks aria-hidden="true" />}

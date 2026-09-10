@@ -8,8 +8,7 @@
 use super::*;
 
 /// What a patch's input checks were authored against: the original ROM
-/// (`base` - verified once up front) or the previous enabled patch's output
-/// (`previous` - today's chain semantics, the default).
+/// (`base`) or the previous enabled patch's output (`previous`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(rename_all = "snake_case")]
@@ -18,8 +17,7 @@ pub enum PatchInputBasis {
     Previous,
 }
 
-/// Per-patch basis argument on the CLI/wasm surface: `auto` defers to
-/// checksum inference.
+/// Input rule on the CLI/wasm surface. `auto` defers to checksum inference.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -320,6 +318,10 @@ pub(crate) struct PatchStepVerification {
     /// Whether the selection up to and including this step is exactly the
     /// bundle's chain prefix ending here.
     pub is_chain_prefix: bool,
+    /// `declared_input` describes the lane's own source bytes (filled from the
+    /// identify database), so it verifies at the lane start even when earlier
+    /// optional entries of the lane are deselected.
+    pub lane_source_input: bool,
 }
 
 /// The planner's resolution before dry-run results are merged in.
