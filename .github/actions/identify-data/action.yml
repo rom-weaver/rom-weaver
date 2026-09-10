@@ -8,6 +8,13 @@ description: >-
   from the source archives and saves the new packs. Requires node on PATH
   (setup-node or mise).
 
+inputs:
+  cache-save:
+    description: >-
+      Save the packs to the Actions cache after a miss. Set to false for
+      workflow_run jobs, which are restore-only.
+    default: "true"
+
 runs:
   using: composite
   steps:
@@ -39,7 +46,7 @@ runs:
     # Pull requests can restore main's cache but cannot share caches with other
     # pull requests. Only main saves this large, byte-identical data set.
     - name: Save identify packs
-      if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      if: inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: crates/rom-weaver-cli/data/identify/v1
