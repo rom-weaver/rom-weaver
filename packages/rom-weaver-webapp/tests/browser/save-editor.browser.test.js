@@ -103,7 +103,9 @@ const mount = () => {
 };
 
 const uploadSave = async (name = "game.sav") => {
-  await page.getByLabelText("Save file").upload(new File(["save"], name, { type: "application/octet-stream" }));
+  await page
+    .getByLabelText("Drop a game save to edit it")
+    .upload(new File(["save"], name, { type: "application/octet-stream" }));
   await expect.element(page.getByLabelText("Name", { exact: true })).toHaveValue("ASH");
 };
 
@@ -180,7 +182,7 @@ test("shows unsupported and ambiguous recognition states", async () => {
   mocks.identifySave.mockResolvedValueOnce({
     recognition: { candidates: [], outcome: { unsupported: { reasons: [] } }, reasons: [] },
   });
-  await page.getByLabelText("Save file").upload(new File(["bad"], "bad.sav"));
+  await page.getByLabelText("Drop a game save to edit it").upload(new File(["bad"], "bad.sav"));
   await expect.element(page.getByText(/does not have an editor/)).toBeInTheDocument();
 
   mocks.identifySave.mockResolvedValueOnce({
@@ -193,7 +195,7 @@ test("shows unsupported and ambiguous recognition states", async () => {
       reasons: [],
     },
   });
-  await page.getByLabelText("Save file").upload(new File(["maybe"], "maybe.sav"));
+  await page.getByLabelText("Replace the save").upload(new File(["maybe"], "maybe.sav"));
   await expect.element(page.getByText("Choose the game format")).toBeInTheDocument();
   await page.getByRole("button", { name: /Ruby/ }).click();
   await expect.element(page.getByLabelText("Name", { exact: true })).toHaveValue("ASH");

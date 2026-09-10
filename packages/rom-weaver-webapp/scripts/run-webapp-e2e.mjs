@@ -628,11 +628,12 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
-      // Trim and PPF undo live in the More menu, not the mode rail; their Beta
-      // chip is part of the accessible name.
+      // Trim, PPF undo, and Save Editor live in the More menu, not the mode
+      // rail; their Beta chip is part of the accessible name.
       for (const [label, panelId] of [
         ["Trim ROM", "panel-trim"],
         ["PPF undo", "panel-ppf-undo"],
+        ["Save Editor", "panel-save-editor"],
       ]) {
         await page.getByRole("button", { name: "More", exact: true }).click();
         await page.getByRole("menuitem", { name: `${label} Beta`, exact: true }).click();

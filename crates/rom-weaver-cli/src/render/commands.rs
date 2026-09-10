@@ -94,6 +94,7 @@ fn render_save_identify(surface: &Surface, event: &ProgressEvent) {
             ),
             ("Parser".to_string(), string_field(document, "handler_id")),
             ("Save size".to_string(), size_field(save, "save_size")),
+            ("Container".to_string(), container_field(save)),
             ("Integrity".to_string(), string_field(integrity, "state")),
             ("Recognition".to_string(), confidence),
             (
@@ -113,11 +114,21 @@ fn render_save_identify(surface: &Surface, event: &ProgressEvent) {
     surface.key_values(&[
         ("Recognition".to_string(), recognition_label.to_string()),
         ("Save size".to_string(), size_field(save, "save_size")),
+        ("Container".to_string(), container_field(save)),
         (
             "Potential format".to_string(),
             string_field(save, "potential_format"),
         ),
     ]);
+}
+
+fn container_field(save: &Value) -> String {
+    save.get("container")
+        .filter(|container| container.is_object())
+        .map_or_else(
+            || "none".to_string(),
+            |container| string_field(container, "name"),
+        )
 }
 
 fn render_save_inspect(surface: &Surface, event: &ProgressEvent) {

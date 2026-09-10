@@ -191,6 +191,16 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().ppfUndoSession.active).toBe(true);
   });
 
+  it("routes and tracks the Save Editor workflow", () => {
+    const controller = createController();
+    controller.updateDraftSetting("betaToolsEnabled", true);
+    expect(controller.saveDraftSettings()).toBe(true);
+    expect(controller.selectView("save-editor")).toBe("save-editor");
+    expect(window.location.pathname).toBe("/save-editor");
+    controller.setSaveEditorSessionState(true);
+    expect(controller.getState().saveEditorSession.active).toBe(true);
+  });
+
   it("does not notify subscribers when the PPF undo session state is unchanged", () => {
     const controller = createController();
     const listener = vi.fn();
@@ -278,6 +288,7 @@ describe("createWebappRootController over the vanilla store", () => {
     controller.setPatcherInputState([{}]);
     controller.setPatcherPatchState([{}]);
     controller.setPpfUndoSessionState(true);
+    controller.setSaveEditorSessionState(true);
     controller.setTrimSourceState({});
     controller.setStartupState("error", "failed");
     controller.openSettings();
@@ -299,6 +310,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(state.draftSettings).toEqual(state.settings);
     expect(state.startup).toEqual({ message: "", status: "ready" });
     expect(state.ppfUndoSession.active).toBe(false);
+    expect(state.saveEditorSession.active).toBe(false);
     expect(state.trimSession.sourceFilePresent).toBe(false);
     expect(state.validation).toEqual({ invalidFields: [], messages: [] });
   });

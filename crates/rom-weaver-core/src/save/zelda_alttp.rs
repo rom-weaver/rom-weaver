@@ -229,8 +229,8 @@ fn definition() -> SaveGameDefinition {
             family: "zelda-alttp".into(),
         },
         platform: "snes".into(),
-        save_format: "snes_sram_8k".into(),
-        save_format_name: "Battery SRAM 8 KiB".into(),
+        save_format: SNES_SRAM_8K.id.into(),
+        save_format_name: SNES_SRAM_8K.display_name.into(),
         handler_id: "zelda-alttp".into(),
         supported_save_sizes: SNES_SRAM_8K
             .supported_sizes
@@ -434,8 +434,8 @@ fn build_document(
         sections,
         fields,
         platform: "snes".into(),
-        save_format: "snes_sram_8k".into(),
-        save_format_name: "Battery SRAM 8 KiB".into(),
+        save_format: SNES_SRAM_8K.id.into(),
+        save_format_name: SNES_SRAM_8K.display_name.into(),
         handler_id: "zelda-alttp".into(),
         save_size: ALTT_P_SRAM_SIZE as u32,
         warnings,

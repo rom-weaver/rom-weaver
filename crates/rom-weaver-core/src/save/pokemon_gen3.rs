@@ -633,7 +633,7 @@ fn build_document(
     for (index, (section, offset, bit)) in badges.into_iter().enumerate() {
         fields.push(SaveField {
             id: format!("progress.badge_{}", index + 1),
-            label: format!("Badge {}", index + 1),
+            label: badge_label(family, index),
             section_id: section,
             offset: offset as u16,
             kind: SaveFieldKind::BitfieldBoolean,
@@ -716,6 +716,24 @@ fn text_field(
         step: None,
         encoding: Some("pokemon_gen3_english".into()),
     }
+}
+
+/// Badge flag order follows FLAG_BADGE01_GET..FLAG_BADGE08_GET in each decompilation.
+/// https://github.com/pret/pokeemerald/blob/master/include/constants/flags.h
+/// https://github.com/pret/pokefirered/blob/master/include/constants/flags.h
+const HOENN_BADGE_NAMES: [&str; 8] = [
+    "Stone", "Knuckle", "Dynamo", "Heat", "Balance", "Feather", "Mind", "Rain",
+];
+const KANTO_BADGE_NAMES: [&str; 8] = [
+    "Boulder", "Cascade", "Thunder", "Rainbow", "Soul", "Marsh", "Volcano", "Earth",
+];
+
+fn badge_label(family: Family, index: usize) -> String {
+    let names = match family {
+        Family::Rs | Family::Emerald => HOENN_BADGE_NAMES,
+        Family::Frlg => KANTO_BADGE_NAMES,
+    };
+    format!("{} Badge", names[index])
 }
 
 fn badge_offsets(family: Family) -> [(u8, usize, u8); 8] {

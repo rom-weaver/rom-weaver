@@ -411,7 +411,7 @@ fn build_document(
         let value = read(bytes, layout.player_three, offset)[0] & (1 << (index % 8)) != 0;
         fields.push(SaveField {
             id: format!("progress.badge_{}", index + 1),
-            label: format!("Badge {}", index + 1),
+            label: badge_label(index),
             section_id: 0,
             offset: offset as u16,
             kind: SaveFieldKind::BitfieldBoolean,
@@ -526,6 +526,17 @@ fn money_offset(family: Family) -> usize {
         Family::GoldSilver => 2,
         Family::Crystal => 0x3D3,
     }
+}
+
+/// Badge flag order follows the wJohtoBadges and wKantoBadges bit constants.
+/// https://github.com/pret/pokecrystal/blob/master/constants/engine_flags.asm
+const BADGE_NAMES: [&str; 16] = [
+    "Zephyr", "Hive", "Plain", "Fog", "Storm", "Mineral", "Glacier", "Rising", "Boulder",
+    "Cascade", "Thunder", "Rainbow", "Soul", "Marsh", "Volcano", "Earth",
+];
+
+fn badge_label(index: usize) -> String {
+    format!("{} Badge", BADGE_NAMES[index])
 }
 
 fn badge_offset(family: Family) -> usize {

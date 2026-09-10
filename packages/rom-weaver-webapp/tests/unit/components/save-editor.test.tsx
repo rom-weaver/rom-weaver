@@ -146,8 +146,9 @@ describe("SaveEditor", () => {
     await chooseFile();
     expect(screen.getByRole("group", { name: "trainer" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "progress" })).toBeTruthy();
-    expect((screen.getByLabelText("Gender") as HTMLSelectElement).value).toBe("male");
-    expect(screen.getByText("1")).toBeTruthy();
+    const gender = screen.getByRole("radiogroup", { name: "Gender" });
+    expect((gender.querySelector("input:checked") as HTMLInputElement).value).toBe("male");
+    expect(screen.getByLabelText("Badge 1").textContent).toContain("1");
   });
 
   it("shows a field error and keeps the previous value for invalid integers", async () => {
@@ -215,11 +216,18 @@ describe("SaveEditor", () => {
     fireEvent.change(input, { target: { files: [new File(["save"], "ambiguous.sav")] } });
     await waitFor(() => expect(screen.getByText("Choose the game format")).toBeTruthy());
 
-    identifySave.mockResolvedValueOnce({ recognition: { candidates: [], outcome: { unsupported: {} } } });
+    identifySave.mockResolvedValueOnce({
+      containerName: "DeSmuME save (.dsv)",
+      potentialFormat: "Flash 64 KiB (Game Boy Advance)",
+      recognition: { candidates: [], outcome: { unsupported: {} } },
+      saveSize: 65_536,
+    });
     fireEvent.change(document.querySelector("input[type=file]"), {
-      target: { files: [new File(["save"], "bad.sav")] },
+      target: { files: [new File(["save"], "bad.dsv")] },
     });
     await waitFor(() => expect(screen.getByText(/does not have an editor/)).toBeTruthy());
+    expect(screen.getByText(/Container: DeSmuME save \(\.dsv\)/)).toBeTruthy();
+    expect(screen.getByText(/Potential format: Flash 64 KiB/)).toBeTruthy();
   });
 
   it("does not label emulator save states as SRAM", async () => {

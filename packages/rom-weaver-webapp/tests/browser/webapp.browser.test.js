@@ -91,6 +91,7 @@ const createNoopActions = () => ({
   onSaveClose: () => undefined,
   onSelectView: () => undefined,
   onPpfUndoSessionChange: () => undefined,
+  onSaveEditorSessionChange: () => undefined,
 });
 
 const createServiceWorkerCacheState = () => ({

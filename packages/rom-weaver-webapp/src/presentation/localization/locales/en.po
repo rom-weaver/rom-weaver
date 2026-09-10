@@ -1140,6 +1140,11 @@ msgstr "Edit {check} check"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.saveDescription"
+msgstr "Edit a game save in the browser and download it with every checksum recalculated."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.editDetails"
 msgstr "Edit details"
 
@@ -1147,6 +1152,11 @@ msgstr "Edit details"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.editPosition"
 msgstr "Edit patch position, currently {position} of {total}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.saveThesis"
+msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3396,6 +3406,11 @@ msgstr "with codec-aware compression settings"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.copierHeader"
 msgstr "with copier-header detection and repair"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.saveThesis2"
+msgstr "with every checksum recalculated before you download —"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

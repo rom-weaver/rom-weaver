@@ -16,4 +16,8 @@ describe("settingsDraftHasChanges (numeric-aware equality)", () => {
   it("flags an active PPF undo session", () => {
     expect(shouldWarnBeforeUnload({ ppfUndoActive: true })).toBe(true);
   });
+
+  it("flags an active Save Editor session", () => {
+    expect(shouldWarnBeforeUnload({ saveEditorActive: true })).toBe(true);
+  });
 });

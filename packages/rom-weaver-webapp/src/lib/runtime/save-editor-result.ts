@@ -20,6 +20,8 @@ type SaveEditorResult = {
   schema?: unknown;
   saveSize?: number;
   potentialFormat?: string;
+  /** The wrapper around the raw save (GameShark SP, DeSmuME, DexDrive, VGS), when one was found. */
+  containerName?: string;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -124,6 +126,9 @@ const parseSaveEditorResult = (details: unknown): SaveEditorResult => {
     ...(value.schema === undefined ? {} : { schema: value.schema }),
     ...(typeof value.save_size === "number" ? { saveSize: value.save_size } : {}),
     ...(typeof value.potential_format === "string" ? { potentialFormat: value.potential_format } : {}),
+    ...(isRecord(value.container) && typeof value.container.name === "string"
+      ? { containerName: value.container.name }
+      : {}),
   };
 };
 
