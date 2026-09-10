@@ -12,6 +12,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
 import {
+  CHEAT_PLATFORMS,
+  CHEAT_SHARD_FORMAT,
+  buildCheatShard,
+  cheatShardFileName,
+  encodeCheatShard,
+  releasesFromIdentifyGames,
+} from "./import-libretro-cheats.mjs";
+import {
   buildPackFilter,
   CHECKSUM_ROUTER_FORMAT,
   encodeChecksumRouter,
@@ -52,6 +60,9 @@ export const GOODTOOLS_LICENSE = "MIT";
 export const LIBRETRO_REPOSITORY = "https://github.com/libretro/libretro-database";
 export const LIBRETRO_REVISION = "69ea62a2823823820d4f121c2b53bf20fd088ab4";
 export const LIBRETRO_LICENSE = "CC-BY-SA-4.0";
+// The upstream license text ships in the data dir: CC-BY-SA requires the full
+// terms to travel with the adapted DAT and cheat data.
+export const LIBRETRO_LICENSE_FILE = "libretro-database-LICENSE";
 export const IDENTIFY_GENERATION_DATE = "2026-08-27";
 // This is the complete pinned source manifest: the 52 root DATs, 92 No-Intro
 // DATs, and 22 Redump DATs. Do not replace it with a live directory listing.
@@ -729,6 +740,70 @@ export function stripLeadingComponent(entryPath) {
   return rest.join("/");
 }
 
+// Every `.cht` file below one archive directory, extracted with the same
+// name-then-strip discipline as extractArchiveMembers. Returns the extracted
+// members as archive-relative paths (`cht/<platform>/<title>.cht`).
+export async function extractArchiveDirectory({ archive, directory, sourceRoot }) {
+  const { extract: tarExtract } = await import("tar");
+  const members = [];
+  await tarExtract({
+    cwd: sourceRoot,
+    file: archive,
+    filter: (entryPath, entry) => {
+      const normalized = normalizeArchivePath(entryPath);
+      const relative = stripLeadingComponent(normalized);
+      if (entry.type !== "File" || !relative.startsWith(`${directory}/`)) return false;
+      if (!relative.toLowerCase().endsWith(".cht")) return false;
+      members.push(relative);
+      return true;
+    },
+    strip: 1,
+  });
+  return members.sort();
+}
+
+async function ensureArchiveDownloaded({ archiveUrl, cacheDir, label, revision }) {
+  const archiveDir = path.join(cacheDir, label);
+  const archive = path.join(archiveDir, `${revision}.tar.gz`);
+  await mkdir(archiveDir, { recursive: true });
+  const archiveInfo = await fileStat(archive);
+  if (!archiveInfo?.isFile() || archiveInfo.size === 0) {
+    await runCurl(archiveUrl, `${archive}.part`, undefined);
+    await rename(`${archive}.part`, archive);
+  }
+  return archive;
+}
+
+// Extract one archive directory into the source cache once. The member list
+// is recorded next to the directory so a later build can trust the cache
+// without re-reading the archive; a missing member invalidates the record.
+async function ensureArchiveDirectory({ archiveUrl, cacheDir, directory, label, revision }) {
+  const sourceRoot = path.join(cacheDir, label, revision);
+  const recordPath = path.join(sourceRoot, `${directory}.members.json`);
+  let members;
+  try {
+    const recorded = JSON.parse(await readFile(recordPath, "utf8"));
+    if (Array.isArray(recorded) && recorded.every((member) => typeof member === "string")) {
+      const present = await Promise.all(
+        recorded.map(async (member) => (await fileStat(path.join(sourceRoot, member)))?.isFile()),
+      );
+      if (present.every(Boolean)) members = recorded;
+    }
+  } catch {
+    // No usable record: extract below.
+  }
+  if (!members) {
+    const archive = await ensureArchiveDownloaded({ archiveUrl, cacheDir, label, revision });
+    await mkdir(sourceRoot, { recursive: true });
+    members = await extractArchiveDirectory({ archive, directory, sourceRoot });
+    if (!members.length) {
+      throw new Error(`${label} archive has no .cht files under ${directory}`);
+    }
+    await writeFile(recordPath, `${JSON.stringify(members)}\n`);
+  }
+  return members.map((member) => ({ sourcePath: member, target: path.join(sourceRoot, member) }));
+}
+
 async function ensureArchiveFiles({
   archiveUrl,
   cacheDir,
@@ -748,14 +823,7 @@ async function ensureArchiveFiles({
     if (!info?.isFile() || info.size === 0) missing.push(entry);
   }
   if (missing.length) {
-    const archiveDir = path.join(cacheDir, label);
-    const archive = path.join(archiveDir, `${revision}.tar.gz`);
-    await mkdir(archiveDir, { recursive: true });
-    const archiveInfo = await fileStat(archive);
-    if (!archiveInfo?.isFile() || archiveInfo.size === 0) {
-      await runCurl(archiveUrl, `${archive}.part`, undefined);
-      await rename(`${archive}.part`, archive);
-    }
+    const archive = await ensureArchiveDownloaded({ archiveUrl, cacheDir, label, revision });
     await mkdir(sourceRoot, { recursive: true });
     await extractArchiveMembers({
       archive,
@@ -783,6 +851,73 @@ async function ensureLibretroDats(sourcePaths, cacheDir) {
     requestedPaths: sourcePaths,
     revision: LIBRETRO_REVISION,
   });
+}
+
+async function ensureLibretroCheatFiles(directory, cacheDir) {
+  return ensureArchiveDirectory({
+    archiveUrl: `${LIBRETRO_REPOSITORY}/archive/${LIBRETRO_REVISION}.tar.gz`,
+    cacheDir,
+    directory,
+    label: "libretro",
+    revision: LIBRETRO_REVISION,
+  });
+}
+
+// One cheat shard per platform in CHEAT_PLATFORMS, matched against the same
+// parsed release list the platform's pack was built from.
+async function writeCheatShard(platform, games, options) {
+  const spec = CHEAT_PLATFORMS[platform];
+  const slug = slugifyPlatform(platform);
+  console.error(`[identify] ${platform}: building cheat shard`);
+  const sources = await ensureLibretroCheatFiles(spec.directory, options.cacheDir);
+  const files = await Promise.all(
+    sources.map(async ({ sourcePath, target }) => ({
+      sourcePath,
+      text: await readFile(target, "utf8"),
+    })),
+  );
+  const shard = buildCheatShard({
+    cheatSystem: spec.cheatSystem,
+    files,
+    releases: releasesFromIdentifyGames(games),
+    sourceRevision: LIBRETRO_REVISION,
+  });
+  // The freshness check expects one shard per CHEAT_PLATFORMS entry, so an
+  // entry that filters down to nothing is a configuration error, not a skip.
+  if (shard.games.length === 0) {
+    throw new Error(`${platform} has no bakeable cheats; remove it from CHEAT_PLATFORMS`);
+  }
+  const fileName = cheatShardFileName(slug);
+  const bytes = encodeCheatShard(shard);
+  const outPath = path.join(options.outPath, fileName);
+  await writeFile(outPath, bytes);
+  const entry = {
+    platform,
+    slug,
+    cheatSystem: spec.cheatSystem,
+    format: CHEAT_SHARD_FORMAT,
+    file: fileName,
+    rawBytes: bytes.length,
+    sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+    games: shard.games.length,
+    cheats: shard.games.reduce((total, game) => total + game.cheats.length, 0),
+    group: packGroupFor(platform),
+  };
+  if (options.brotli) {
+    const compressed = brotliCompressBuffer(bytes, {
+      parameterProfile: "default",
+      quality: options.brotliQuality,
+    });
+    await writeFile(`${outPath}.br`, compressed);
+    entry.brotliFile = `${fileName}.br`;
+    entry.brotliBytes = compressed.length;
+  }
+  console.error(
+    `[identify] ${platform}: wrote ${fileName} (${formatBytes(bytes.length)}` +
+      `${entry.brotliBytes ? `, br ${formatBytes(entry.brotliBytes)}` : ""}` +
+      `, ${entry.games.toLocaleString("en-US")} game(s), ${entry.cheats.toLocaleString("en-US")} cheat(s))`,
+  );
+  return entry;
 }
 
 async function ensureOpenGoodDats(
@@ -2349,7 +2484,7 @@ export async function main(argv = process.argv.slice(2)) {
     throw new Error("No platforms selected to build");
   }
 
-  const neededLibretro = new Set();
+  const neededLibretro = new Set(["LICENSE"]);
   const neededOpenGood = new Set();
   const neededOpenGoodHeadered = new Set();
   const neededGoodToolsHeadered = new Set();
@@ -2396,13 +2531,19 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   await mkdir(options.outPath, { recursive: true });
+  await writeFile(
+    path.join(options.outPath, LIBRETRO_LICENSE_FILE),
+    await readFile(paths.libretro.get("LICENSE")),
+  );
   const systems = [];
+  const cheats = [];
   const routerFilters = [];
   const routerSamples = [];
   for (const platform of selected) {
     const games = await readPlatformGames(platform, options, paths);
     const system = await writeSystemPackV1(platform, games, options);
     systems.push(system);
+    if (CHEAT_PLATFORMS[platform]) cheats.push(await writeCheatShard(platform, games.games, options));
     const keys = collectRouterKeys(games.games);
     routerFilters.push(buildPackFilter(system.slug, keys));
     routerSamples.push({ slug: system.slug, keys: sampleRouterKeys(keys) });
@@ -2472,9 +2613,11 @@ export async function main(argv = process.argv.slice(2)) {
       libretro: {
         url: LIBRETRO_REPOSITORY,
         license: LIBRETRO_LICENSE,
+        licenseFile: LIBRETRO_LICENSE_FILE,
         revision: LIBRETRO_REVISION,
       },
     },
+    cheats,
     groups: [
       { id: "default", label: "Default", default: true },
       { id: "optional-arcade", label: "Arcade", default: false },

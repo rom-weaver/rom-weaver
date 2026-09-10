@@ -13,6 +13,7 @@ import {
   GOODTOOLS_RELEASE,
   GOODTOOLS_REPOSITORY,
   INDEX_FORMAT,
+  LIBRETRO_LICENSE_FILE,
   LIBRETRO_PLATFORM_PATHS,
   LIBRETRO_REPOSITORY,
   LIBRETRO_REVISION,
@@ -24,6 +25,11 @@ import {
   packGroupFor,
   slugifyPlatform,
 } from "./build-identify-index.mjs";
+import {
+  CHEAT_PLATFORMS,
+  CHEAT_SHARD_FORMAT,
+  cheatShardFileName,
+} from "./import-libretro-cheats.mjs";
 import { CHECKSUM_ROUTER_FORMAT } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
 
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
@@ -37,6 +43,10 @@ const expectedPackNames = [
   ),
 ];
 const sortedExpectedPackNames = [...expectedPackNames].sort();
+const expectedCheatSlugs = Object.keys(CHEAT_PLATFORMS)
+  .filter((platform) => LIBRETRO_PLATFORM_PATHS[platform])
+  .map(slugifyPlatform)
+  .sort();
 
 const log = (level, message) => console.log(`[ensure-identify-data] ${level}: ${message}`);
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -82,6 +92,29 @@ const hasCurrentChecksumRouter = (dataDir, entry) => {
   return existsSync(brotliPath) && readFileSync(brotliPath).length === entry.brotliBytes;
 };
 
+// Cheat shards are built from the same Libretro archive as the packs, so a data
+// dir that predates them, or whose shard set or bytes drifted, MUST be rebuilt.
+const hasCurrentCheats = (dataDir, entries) => {
+  if (!Array.isArray(entries)) return false;
+  const slugs = entries.map((entry) => entry.slug).sort();
+  if (slugs.length !== expectedCheatSlugs.length) return false;
+  if (slugs.some((slug, position) => slug !== expectedCheatSlugs[position])) return false;
+  return entries.every((entry) => {
+    const spec = CHEAT_PLATFORMS[entry.platform];
+    if (!spec || spec.cheatSystem !== entry.cheatSystem) return false;
+    if (entry.format !== CHEAT_SHARD_FORMAT || entry.file !== cheatShardFileName(entry.slug))
+      return false;
+    if (entry.group !== packGroupFor(entry.platform)) return false;
+    const shardPath = join(dataDir, entry.file);
+    if (!existsSync(shardPath)) return false;
+    const bytes = readFileSync(shardPath);
+    if (bytes.length !== entry.rawBytes || sha256(bytes) !== entry.sha256) return false;
+    if (!entry.brotliFile || !Number.isSafeInteger(entry.brotliBytes)) return false;
+    const brotliPath = join(dataDir, entry.brotliFile);
+    return existsSync(brotliPath) && readFileSync(brotliPath).length === entry.brotliBytes;
+  });
+};
+
 export const hasCurrentData = (dataDir = defaultDataDir) => {
   const indexPath = join(dataDir, "index.json");
   if (!existsSync(indexPath)) return false;
@@ -96,6 +129,7 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
     index.catalog !== "catalog.json" ||
     index.sources?.libretro?.url !== LIBRETRO_REPOSITORY ||
     index.sources?.libretro?.revision !== LIBRETRO_REVISION ||
+    index.sources?.libretro?.licenseFile !== LIBRETRO_LICENSE_FILE ||
     index.sources?.opengood?.url !== OPENGOOD_REPOSITORY ||
     index.sources?.opengood?.revision !== OPENGOOD_REVISION ||
     index.sources?.opengoodHeadered?.url !== OPENGOOD_REPOSITORY ||
@@ -109,8 +143,11 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
   ) {
     return false;
   }
+  const licensePath = join(dataDir, LIBRETRO_LICENSE_FILE);
+  if (!existsSync(licensePath) || readFileSync(licensePath).length === 0) return false;
   if (!hasCurrentCatalog(dataDir)) return false;
   if (!hasCurrentChecksumRouter(dataDir, index.checksumRoutes)) return false;
+  if (!hasCurrentCheats(dataDir, index.cheats)) return false;
   if (!Array.isArray(index.systems)) return false;
   if (
     index.systems.some((system) => {
