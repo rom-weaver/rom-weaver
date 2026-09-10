@@ -69,7 +69,7 @@ const createDocsRouteHtml = (html, route, channel, channelLabel) => {
   }
   return routeHtml.replace(
     "</head>",
-    `  <script type="application/ld+json">${serializeInlineJson(structuredData)}</script>\n  </head>`,
+    `  <link rel="alternate" type="text/markdown" href="/${escapeHtml(route.slug)}.md" />\n  <script type="application/ld+json">${serializeInlineJson(structuredData)}</script>\n  </head>`,
   );
 };
 

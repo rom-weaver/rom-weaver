@@ -2236,6 +2236,12 @@ function ApplyWorkflowFormView({
         heroLabel={localizer.message("ui.apply.drop.hero")}
         heroLabelCoarse={localizer.message("ui.apply.drop.heroCoarse")}
         id="rom-weaver-row-unified-drop"
+        lead={{
+          line1: "ui.hero.thesis",
+          line2: "ui.hero.thesis2",
+          description: "ui.hero.applyDescription",
+          guide: { href: "/docs/apply-rom-patches", label: "ui.hero.applyGuide" },
+        }}
         info={
           <ul className="info-list">
             <li>{localizer.message("ui.apply.drop.info.nested")}</li>

@@ -56,6 +56,7 @@ const CreatePatchFormView = ({
           line1: "ui.hero.createThesis",
           line2: "ui.hero.createThesis2",
           description: "ui.hero.createDescription",
+          guide: { href: "/docs/create-rom-patches", label: "ui.hero.createGuide" },
         }}
       />
       {sourcesEmpty ? (

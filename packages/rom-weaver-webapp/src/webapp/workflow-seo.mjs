@@ -4,7 +4,7 @@ const SITE_ALTERNATE_NAMES = Object.freeze(["RomWeaver", "Rom Weaver", "rom weav
 const WORKFLOW_SEO_ROUTES = Object.freeze({
   creator: Object.freeze({
     description:
-      "Create ROM patches locally in your browser with format-aware settings, checksums, and distributable patch bundles. No uploads or account required.",
+      "Create BPS, IPS, UPS, xdelta, and other ROM patches locally in your browser with checksums and distributable bundles. No uploads or account required.",
     slug: "create-patch",
     title: `${SITE_NAME} — Create ROM patches online`,
   }),
@@ -23,7 +23,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   patcher: Object.freeze({
     description:
-      "Apply ROM patches privately in your browser with automatic format detection, checksum validation, and ordered patch chains. No uploads or account required.",
+      "Apply BPS, IPS, UPS, xdelta, and other ROM patches privately in your browser with checksum validation and ordered patch chains. No uploads or account required.",
     slug: "apply-patch",
     title: `${SITE_NAME} — Apply ROM patches online`,
   }),

@@ -321,7 +321,7 @@ msgstr "Add a ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
-msgstr "Add a ROM and its patches, then download the patched ROM or a reusable bundle."
+msgstr "Add a ROM with BPS, IPS, UPS, xdelta, or other patches. Download the patched ROM or a reusable bundle."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -916,7 +916,7 @@ msgstr "Commit"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createDescription"
-msgstr "Compare original and modified ROMs, raw or in archives, to create a patch others can apply."
+msgstr "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2477,6 +2477,16 @@ msgstr "Pull request preview"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality"
 msgstr "Quality"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyGuide"
+msgstr "Read the Apply guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.createGuide"
+msgstr "Read the Create guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

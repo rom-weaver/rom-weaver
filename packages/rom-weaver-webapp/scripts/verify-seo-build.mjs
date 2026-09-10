@@ -62,6 +62,13 @@ const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
 
+for (const route of DOC_ROUTES) {
+  assertIncludes(read(`${route.slug}.md`), `Canonical: https://rom-weaver.com/${route.slug}`, "Markdown canonical");
+  assertIncludes(read(`${route.slug}.html`), `type="text/markdown" href="/${route.slug}.md"`, "Markdown discovery");
+  assertIncludes(headers, `/${route.slug}.md\n  Content-Type: text/markdown; charset=utf-8`, "Markdown content type");
+  assertIncludes(headers, `Link: <https://rom-weaver.com/${route.slug}>; rel="canonical"`, "Markdown canonical header");
+}
+
 for (const route of [
   "apply-patch",
   "create-patch",
@@ -101,7 +108,8 @@ assertIncludes(
 // dead assets. The HTML already carries the exact module, stylesheet, and font URLs; keep
 // deploy-sensitive Link headers disabled.
 assertIncludes(headers, "  ! Link", "disabled deploy-sensitive Link hints");
-if (/^\s+Link:/m.test(headers)) throw new Error("_headers must not emit deploy-sensitive Link preload hints");
+if (/^\s+Link:.*\brel\s*=\s*"?(?:preload|modulepreload)\b/im.test(headers))
+  throw new Error("_headers must not emit deploy-sensitive Link preload hints");
 // The 404 body is served at whatever URL missed, so its relative asset URLs
 // need an absolute base to resolve at nested paths.
 assertIncludes(notFoundHtml, '<base href="/" />', "404 asset base");
@@ -309,7 +317,7 @@ for (const route of DOC_ROUTES) {
   }
   // Documentation links are authored repository-relative; every one of them must have
   // been rewritten to a route or an absolute repository URL.
-  const unrewritten = docsHtml.match(/href="(?!https?:)[^"]*\.md(?:#[^"]*)?"/g);
+  const unrewritten = route.html.match(/href="(?!https?:)[^"]*\.md(?:#[^"]*)?"/g);
   if (unrewritten) throw new Error(`${route.slug} has unrewritten Markdown links: ${unrewritten.join(", ")}`);
   // Documentation links to the app must be root-relative, so beta, nightly, and PR
   // previews keep the reader on the deployment they are already reading. Only

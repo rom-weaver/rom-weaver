@@ -1,6 +1,6 @@
 # rom-weaver
 
-> A local-first browser tool for applying and creating ROM patches. Files are processed on-device without uploads or accounts.
+> A local-first ROM toolkit. Apply and create BPS, IPS, UPS, xdelta, and other patches in the browser; identify ROMs; and use the CLI for compression and bundles. Files are processed on-device without uploads or accounts.
 
 ## Web app
 
@@ -8,6 +8,7 @@
 - [Create ROM patches](https://rom-weaver.com/create-patch): Create patches with format-aware settings and distributable bundles.
 - [Identify a ROM](https://rom-weaver.com/identify-rom): Match a ROM's game, region, revision, and known dump name by checksum, locally in the browser.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
+- [Markdown documentation index](https://rom-weaver.com/docs.md): Generated Markdown index for every published documentation page.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
 - [Use cheats guide](https://rom-weaver.com/docs/use-cheats): Bake ROM cheats into a ROM from the browser Apply workflow.
