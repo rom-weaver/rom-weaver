@@ -264,6 +264,9 @@ describe("apply workflow view - empty bench", () => {
       fireEvent.change(input, { target: { value: "3610a686" } });
       fireEvent.submit(search);
     });
+    await vi.waitFor(() => expect(container.querySelector(".identify-search-result-btn--version")).toBeTruthy());
+    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+    fireEvent.click(container.querySelector(".identify-search-result-btn--version") as HTMLButtonElement);
     await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
     // A match lays the whole run out, the way a patches-only bundle does.
     expect(container.querySelector(".drop.hero")).toBeNull();
@@ -317,6 +320,9 @@ describe("apply workflow view - empty bench", () => {
       fireEvent.change(input, { target: { value: "3610a686" } });
       fireEvent.submit(search);
     });
+    await vi.waitFor(() => expect(container.querySelector(".identify-search-result-btn--version")).toBeTruthy());
+    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+    fireEvent.click(container.querySelector(".identify-search-result-btn--version") as HTMLButtonElement);
     await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",

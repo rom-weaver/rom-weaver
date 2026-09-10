@@ -1215,7 +1215,7 @@ impl CliApp {
 
         let result = IdentifyResult {
             status,
-            input: input.to_string_lossy().replace('\\', "/"),
+            input: input.to_string_lossy().into_owned(),
             detected_platform,
             checksums,
             checksum_variants,

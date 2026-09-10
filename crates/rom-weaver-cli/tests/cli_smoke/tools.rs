@@ -97,6 +97,90 @@ fn tools_ppf_undo_restores_the_original_rom() {
 }
 
 #[test]
+fn tools_ppf_undo_stdout_matches_file_output_and_keeps_sources() {
+    let temp = setup_temp_dir();
+    let original = b"AAAAAAAAAAAAAAAA".to_vec();
+    let mut patched = original.clone();
+    patched[4..7].copy_from_slice(b"XYZ");
+    let patch_bytes = build_ppf3_undo_patch(&[(
+        4,
+        vec![b'X', b'Y', b'Z'],
+        vec![original[4], original[5], original[6]],
+    )]);
+    let rom_path = temp.child("patched.bin");
+    let patch_path = temp.child("update.ppf");
+    let output_path = temp.child("restored.bin");
+    fs::write(rom_path.path(), &patched).expect("rom fixture");
+    fs::write(patch_path.path(), &patch_bytes).expect("patch fixture");
+
+    command_stdout(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom_path.path().to_str().expect("rom path"),
+            "--patch",
+            patch_path.path().to_str().expect("patch path"),
+            "--output",
+            output_path.path().to_str().expect("output path"),
+        ],
+        0,
+    );
+    let stdout = command_stdout(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom_path.path().to_str().expect("rom path"),
+            "--patch",
+            patch_path.path().to_str().expect("patch path"),
+            "--output",
+            "-",
+        ],
+        0,
+    );
+
+    assert_eq!(stdout, fs::read(output_path.path()).expect("file output"));
+    assert_eq!(fs::read(rom_path.path()).expect("ROM source"), patched);
+    assert_eq!(
+        fs::read(patch_path.path()).expect("PPF source"),
+        patch_bytes
+    );
+}
+
+#[test]
+fn tools_ppf_undo_failure_to_stdout_writes_no_bytes_and_keeps_sources() {
+    let temp = setup_temp_dir();
+    let rom_path = temp.child("patched.bin");
+    let patch_path = temp.child("update.ppf");
+    let patched = b"AAAAAAAAAAAAAAAA".to_vec();
+    let patch_bytes = build_ppf3_patch_without_undo(&[(4, vec![b'X', b'Y', b'Z'])]);
+    fs::write(rom_path.path(), &patched).expect("rom fixture");
+    fs::write(patch_path.path(), &patch_bytes).expect("patch fixture");
+
+    let stdout = command_stdout(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom_path.path().to_str().expect("rom path"),
+            "--patch",
+            patch_path.path().to_str().expect("patch path"),
+            "--output",
+            "-",
+        ],
+        1,
+    );
+
+    assert!(stdout.is_empty(), "a failed undo must not write stdout");
+    assert_eq!(fs::read(rom_path.path()).expect("ROM source"), patched);
+    assert_eq!(
+        fs::read(patch_path.path()).expect("PPF source"),
+        patch_bytes
+    );
+}
+
+#[test]
 fn tools_ppf_undo_rejects_a_patch_without_undo_data() {
     let temp = setup_temp_dir();
     let rom_path = temp.child("patched.bin");

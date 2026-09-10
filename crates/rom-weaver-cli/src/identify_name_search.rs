@@ -338,6 +338,13 @@ pub(super) struct SearchScratch {
     osa_current: Vec<usize>,
 }
 
+/// The strongest score each query token receives from one platform's
+/// canonical name and aliases. This is computed once per platform, then
+/// merged into each title that platform owns.
+pub(super) struct SystemMatch {
+    scores: Vec<Option<TokenScore>>,
+}
+
 impl NameQuery {
     pub(super) fn new(query: &str) -> Result<Self> {
         let normalized = normalize(query);
@@ -459,6 +466,65 @@ impl NameQuery {
         self.offer_title_scores(&text, prefix_weight, scratch);
         scratch.text = text;
         self.finish_score(name_length, scratch)
+    }
+
+    /// Score one platform's canonical name and aliases for reuse across its
+    /// titles.
+    pub(super) fn score_systems<'a>(
+        &self,
+        systems: impl IntoIterator<Item = &'a str>,
+        scratch: &mut SearchScratch,
+    ) -> SystemMatch {
+        scratch.best.clear();
+        scratch.best.resize(self.tokens.len(), None);
+        for system in systems {
+            normalize_into(system, &mut scratch.text);
+            let text = std::mem::take(&mut scratch.text);
+            self.offer_title_scores(&text, 0, scratch);
+            scratch.text = text;
+        }
+        SystemMatch {
+            scores: scratch.best.clone(),
+        }
+    }
+
+    /// The quality that selects one platform from a shared title row. Literal
+    /// platform tokens outrank corrections so `snes` does not also select
+    /// `nes` through one insertion.
+    pub(super) fn system_match_rank(&self, systems: &SystemMatch) -> Option<(usize, i64, i64)> {
+        let mut literal = 0;
+        let mut distance = 0_i64;
+        let mut quality = 0_i64;
+        let mut matched = false;
+        for score in systems.scores.iter().flatten() {
+            matched = true;
+            literal += usize::from(score.literal);
+            distance = distance.saturating_add(score.distance as i64);
+            quality = quality.saturating_add(score.quality);
+        }
+        matched.then_some((literal, -distance, quality))
+    }
+
+    /// Score a title with a platform match. Platform terms only fill query
+    /// tokens the title does not match, so title matches keep their score and
+    /// ordering when a system term is added.
+    pub(super) fn score_title_with_system_match(
+        &self,
+        name: &str,
+        systems: &SystemMatch,
+        scratch: &mut SearchScratch,
+    ) -> Option<(i64, bool)> {
+        if let Some(score) = self.score_title(name, scratch) {
+            return Some((score, true));
+        }
+        let name_length = i64::try_from(scratch.text.chars().count()).unwrap_or(i64::MAX);
+        for (best, system_score) in scratch.best.iter_mut().zip(&systems.scores) {
+            if best.is_none() {
+                *best = *system_score;
+            }
+        }
+        self.finish_score(name_length, scratch)
+            .map(|score| (score, false))
     }
 }
 

@@ -278,15 +278,18 @@ Pass --json for the machine-readable form."
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cli_command() -> clap::Command {
-    crate::cli_inputs::decorate(Cli::command().mut_subcommand("checksum", |command| {
-        command.arg(
-            clap::Arg::new("digest")
-                .long("digest")
-                .action(ArgAction::SetTrue)
-                .conflicts_with_all(["json", "dry_run"])
-                .help("Print only the digest; requires one --algo (no labels or elapsed time)"),
-        )
-    }))
+    crate::streams::decorate(crate::cli_inputs::decorate(Cli::command().mut_subcommand(
+        "checksum",
+        |command| {
+            command.arg(
+                clap::Arg::new("digest")
+                    .long("digest")
+                    .action(ArgAction::SetTrue)
+                    .conflicts_with_all(["json", "dry_run"])
+                    .help("Print only the digest; requires one --algo (no labels or elapsed time)"),
+            )
+        },
+    )))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -489,7 +492,7 @@ fn run_cli() -> ExitCode {
     // `apply --emit-bundle`.
     let is_apply_tui =
         matches!(&command, Commands::Patch(PatchCommands::Apply(apply)) if apply.tui);
-    if is_apply_tui && !options.dry_run {
+    if is_apply_tui && !options.dry_run && !crate::streams::handles(&command, None) {
         if !interactive {
             eprintln!(
                 "--tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs"
@@ -500,6 +503,18 @@ fn run_cli() -> ExitCode {
         return finish_run(run_apply_tui(command, options, reporter, prompter));
     }
     install_cancel_handler();
+    let stdin_name = matches.subcommand().and_then(|(name, args)| {
+        if matches!(name, "extract" | "compress") {
+            args.get_one::<String>("stdin_name").map(String::as_str)
+        } else {
+            None
+        }
+    });
+    if crate::streams::handles(&command, stdin_name) {
+        return finish_run(crate::streams::run(
+            command, options, reporter, prompter, stdin_name,
+        ));
+    }
     if digest && let Commands::Checksum(command) = command {
         return finish_run(crate::checksum_output::run(
             command, options, reporter, prompter,

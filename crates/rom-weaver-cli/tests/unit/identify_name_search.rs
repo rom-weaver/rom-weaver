@@ -33,6 +33,15 @@ fn title_hit(query: &str, title: &str) -> Option<i64> {
     query.score_title(title, &mut SearchScratch::default())
 }
 
+fn title_system_hit(query: &str, title: &str, systems: &[&str]) -> Option<i64> {
+    let query = NameQuery::new(query).expect("a non-empty query");
+    let mut scratch = SearchScratch::default();
+    let systems = query.score_systems(systems.iter().copied(), &mut scratch);
+    query
+        .score_title_with_system_match(title, &systems, &mut scratch)
+        .map(|(score, _)| score)
+}
+
 fn names(query: &str, games: &[PackGame]) -> Vec<String> {
     let parsed = NameQuery::new(query).expect("a non-empty query");
     search_packs(&parsed, &[games])
@@ -117,6 +126,33 @@ fn title_scores_accept_bounded_typos_and_transpositions() {
 #[test]
 fn title_scores_fold_unicode_before_fuzzy_matching() {
     assert!(title_hit("pokemno", "Pokémon Red").is_some());
+}
+
+#[test]
+fn title_scores_match_canonical_system_names_and_aliases() {
+    let systems = [
+        "Nintendo Super Nintendo Entertainment System",
+        "snes",
+        "super nintendo",
+        "super famicom",
+    ];
+    assert!(title_system_hit("mario snes", "Super Mario World", &systems).is_some());
+    assert!(title_system_hit("super famicom mario", "Super Mario World", &systems).is_some());
+    assert!(
+        title_system_hit(
+            "nintendo super nintendo entertainment system mario",
+            "Super Mario World",
+            &systems,
+        )
+        .is_some()
+    );
+}
+
+#[test]
+fn title_scores_allow_system_only_and_typo_queries() {
+    let systems = ["Sony PlayStation", "playstation", "psx"];
+    assert!(title_system_hit("playstation", "Final Fantasy VII", &systems).is_some());
+    assert!(title_system_hit("final fantazy playstatoin", "Final Fantasy VII", &systems).is_some());
 }
 
 #[test]

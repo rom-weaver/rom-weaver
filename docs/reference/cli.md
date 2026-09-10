@@ -7,6 +7,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 
 - [Commands](#commands)
   - [Alternate names](#alternate-names)
+- [Binary pipelines](#binary-pipelines)
 - [Reaching inside archives](#reaching-inside-archives)
 - [Identify](#identify)
   - [Identify flags](#identify-flags)
@@ -74,6 +75,8 @@ Output flags remain `-o`/`--output` on commands that accept them. `patch create`
 
 `identify`, `probe`, and `checksum` accept `-` as either the positional file or the `--input` value to read from stdin.
 
+Native `extract` and `compress` also accept input `-`. Their [binary pipeline options](#binary-pipelines) control stdin filenames and binary stdout.
+
 See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
 ### Alternate names
@@ -116,6 +119,30 @@ In human output, a dry run shows the plan and a no-write notice. JSON plans carr
 rom-weaver only asks interactive questions when stdin and stderr are both terminals and `--json` is off. Otherwise, it decides on its own or fails.
 
 `rom-weaver formats` prints the same support matrix as [Supported formats](formats.md), for the build you are running. Add `--json` for a machine-readable copy.
+
+## Binary pipelines
+
+Native `extract` and `compress` accept `-` as an input path or as `--output`. Native `patch create`, `patch apply` (including both `weave` spellings), `trim`, `save set`, and `tools ppf-undo` also accept `--output -`. `./-` names a literal file called `-`. These conventions do not change the JSON/WASM command schema. Other commands keep their existing output behavior.
+
+| Option or condition | Behavior |
+| --- | --- |
+| Input `-` | Reads stdin into a private temporary file. Compression accepts one stdin input alongside disk inputs. Repeated stdin inputs are an error. |
+| `--stdin-name NAME` | Names the temporary input and its archive entry. The default is `stdin.bin`. Only valid with input `-`; directory components, `/`, `\`, `:`, `.` and `..` are rejected. The extension can affect format and ROM detection. |
+| `compress --output -` | Requires an explicit `--format`. Writes the completed compressed file to stdout. Existing format and codec restrictions apply. |
+| `extract --output -` | Writes exactly one final regular file. Nested extraction retains its normal behavior. Zero or multiple final files are an error; `--select` can narrow the selection. CUE/GDI sheets require companion files and cannot be streamed. |
+| `patch create --output -` | Requires `--format`. Conflicts with `--plan` and `--checksum-name`. Writes the completed patch. |
+| `patch apply --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Conflicts with `--tui` and `--emit-bundle`. Requires one final regular file; disc sheets with companion files cannot be streamed. |
+| `trim --output -` | Requires exactly one trim-eligible source. Conflicts with `--in-place` and `--extension`. Writes the trimmed or restored file. |
+| `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
+| `tools ppf-undo --output -` | Writes the restored ROM. |
+| Binary stdout | Refuses terminal output and conflicts with `--json` and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
+| Stdin with `--dry-run` | Fails before reading stdin. Dry runs require an input file. |
+
+This is disk-backed pipeline support, not incremental streaming. Operations finish in private temporary storage before the CLI copies the result to stdout. It needs space for the input spool, intermediate files, and output. Normal completion and errors remove the private staging directory; forced termination can leave it behind. The copy uses bounded memory and checks cancellation between reads.
+
+Operation failures and ambiguous extraction produce no binary stdout. A later stdout write failure can leave a partial stream. A closed pipe exits without a panic and retains the successful operation status; other write errors fail. Shell redirection can create or truncate its destination before rom-weaver runs, independently of `--force`.
+
+Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an-archive-pipeline).
 
 ## Reaching inside archives
 

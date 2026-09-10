@@ -30,10 +30,10 @@
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 283000,
-        "maxRawBytes": 294000,
-        "expectedBrotliBytes": 76500,
-        "maxBrotliBytes": 79500
+        "expectedRawBytes": 295000,
+        "maxRawBytes": 306000,
+        "expectedBrotliBytes": 79500,
+        "maxBrotliBytes": 82500
       },
       {
         "name": "Save Editor JavaScript",

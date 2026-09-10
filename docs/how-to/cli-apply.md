@@ -6,6 +6,7 @@ Apply one patch or an ordered chain in the terminal, handle headers and byte ord
 ## Table of contents
 
 - [Apply one or more patches](#apply-one-or-more-patches)
+- [Pipe the patched ROM to another program](#pipe-the-patched-rom-to-another-program)
 - [Pick one patch out of an archive](#pick-one-patch-out-of-an-archive)
 - [Verify the ROM before and after](#verify-the-rom-before-and-after)
 - [Apply a patch made for a headerless ROM](#apply-a-patch-made-for-a-headerless-rom)
@@ -39,6 +40,19 @@ An output extension matching the selected ROM leaf writes a plain ROM, so `trans
 For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Bundle applies keep their bundle-provided output name; a bundle without one still requires `--output`.
 
 Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops before anything is written - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
+
+## Pipe the patched ROM to another program
+
+Use `--output -` and `--no-compress` to send the patched ROM to a compressor:
+
+```bash
+rom-weaver patch apply \
+  --input original.sfc \
+  --patch translation.bps \
+  --no-compress --output - | gzip > translated.sfc.gz
+```
+
+To have rom-weaver produce the archive itself, replace `--no-compress` with `--compress-format zip` and redirect stdout to a ZIP file. The operation finishes in temporary storage before it writes stdout. See the [binary pipeline reference](../reference/cli.md#binary-pipelines) for storage requirements and restrictions.
 
 ## Pick one patch out of an archive
 

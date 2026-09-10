@@ -1006,7 +1006,7 @@ msgstr "Could not prepare the output for EmulatorJS."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.searchPlaceholder"
-msgstr "CRC32, MD5, SHA-1, or game name"
+msgstr "Game, system, or checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

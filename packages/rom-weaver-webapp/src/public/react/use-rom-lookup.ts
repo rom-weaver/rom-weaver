@@ -14,7 +14,7 @@ import { identifyHashAlgorithm } from "../../types/identify.ts";
 /** Smallest name the search accepts; one character matches most of the index. */
 const MIN_QUERY_LENGTH = 2;
 
-/** Most titles a name search shows. */
+const SEARCH_DELAY_MS = 300;
 
 /**
  * How many pack records a title's release lookup reads before the exact-title
@@ -58,20 +58,22 @@ type RomLookupMessages = {
 
 type RomLookupState = {
   busy: boolean;
+  checksum: ParsedBundleChecks | undefined;
   error: string;
   result: RomLookupResult | undefined;
   stage: string;
   text: string;
   /** Titles a name search found across every platform. */
   titles: ExpectedRomTitle[];
-  /** The title whose versions are listed; `versions` belongs to it. */
+  /** The title selected for a release lookup; absent for checksum matches. */
   title: ExpectedRomTitle | undefined;
-  /** Every release of `title` in its platform's pack. */
+  /** Release choices from the selected title or a checksum lookup. */
   versions: ParsedIdentifyTitleMatch[];
 };
 
 const IDLE: RomLookupState = {
   busy: false,
+  checksum: undefined,
   error: "",
   result: undefined,
   stage: "",
@@ -96,12 +98,13 @@ const describeError = (error: unknown, fallback: string) => (error instanceof Er
  * characters is a checksum the router sends to its packs; anything else is a
  * name the title index answers across every platform, and choosing a title
  * lists its releases from that platform's pack. Either route ends in the same
- * expected-ROM result. Every lookup starts from an explicit submit or click,
- * never from typing, because a checksum lookup loads whole packs.
+ * expected-ROM result. Typing waits for a pause before searching. Releases
+ * MUST remain choices until the user selects their expected checksums.
  */
 const useRomLookup = (messages: RomLookupMessages) => {
   const [state, setState] = useState<RomLookupState>(IDLE);
   const abortRef = useRef<AbortController | undefined>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // A late answer from a superseded lookup must not overwrite a newer one.
   const runRef = useRef(0);
   const mountedRef = useRef(true);
@@ -109,20 +112,27 @@ const useRomLookup = (messages: RomLookupMessages) => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      clearTimeout(timerRef.current);
       abortRef.current?.abort();
     };
   }, []);
 
-  const begin = useCallback(() => {
+  const cancel = useCallback(() => {
+    clearTimeout(timerRef.current);
+    timerRef.current = undefined;
     runRef.current += 1;
     abortRef.current?.abort();
+  }, []);
+
+  const begin = useCallback(() => {
+    cancel();
     const controller = new AbortController();
     abortRef.current = controller;
     // The previous answer stays up while the next one loads: a card the user
     // is refining MUST NOT vanish and flip the bench back to the hero.
     setState((current) => ({ ...current, busy: true, error: "", stage: "" }));
     return { controller, run: runRef.current };
-  }, []);
+  }, [cancel]);
 
   const stale = useCallback(
     (run: number, controller: AbortController) =>
@@ -142,15 +152,10 @@ const useRomLookup = (messages: RomLookupMessages) => {
     setState((current) => ({ ...current, busy: false, error, stage: "" }));
   }, []);
 
-  const setText = useCallback((text: string) => {
-    setState((current) => ({ ...current, error: "", text }));
-  }, []);
-
   const clear = useCallback(() => {
-    runRef.current += 1;
-    abortRef.current?.abort();
+    cancel();
     setState(IDLE);
-  }, []);
+  }, [cancel]);
 
   const searchHash = useCallback(
     async (hash: string) => {
@@ -171,11 +176,11 @@ const useRomLookup = (messages: RomLookupMessages) => {
         setState((current) => ({
           ...current,
           busy: false,
-          result: { checks, foundBy: "checksum", identification: found },
+          checksum: checks,
           stage: "",
           title: undefined,
           titles: [],
-          versions: [],
+          versions: found.matches,
         }));
       } catch (error) {
         if (stale(run, controller)) return;
@@ -212,6 +217,7 @@ const useRomLookup = (messages: RomLookupMessages) => {
           busy: false,
           stage: "",
           title: undefined,
+          checksum: undefined,
           titles: found.titles,
           versions: [],
         }));
@@ -223,37 +229,74 @@ const useRomLookup = (messages: RomLookupMessages) => {
     [begin, fail, messages, onProgress, stale],
   );
 
+  const setText = useCallback(
+    (text: string, composing = false) => {
+      cancel();
+      setState((current) => ({
+        ...current,
+        busy: false,
+        checksum: undefined,
+        error: "",
+        stage: "",
+        text,
+        title: undefined,
+        titles: [],
+        versions: [],
+      }));
+      if (composing) return;
+      const query = text.trim();
+      if (query.length < MIN_QUERY_LENGTH) return;
+      const hex = query.toLowerCase();
+      if (/^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH) {
+        if (identifyHashAlgorithm(hex)) timerRef.current = setTimeout(() => void searchHash(hex), SEARCH_DELAY_MS);
+        return;
+      }
+      timerRef.current = setTimeout(() => void searchName(query), SEARCH_DELAY_MS);
+    },
+    [cancel, searchHash, searchName],
+  );
+
   const search = useCallback(async () => {
+    cancel();
     const text = state.text.trim();
     if (!text) return;
     const hex = text.toLowerCase();
     if (/^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH) return searchHash(hex);
     return searchName(text);
-  }, [searchHash, searchName, state.text]);
+  }, [cancel, searchHash, searchName, state.text]);
 
-  const choose = useCallback((match: ParsedIdentifyTitleMatch) => {
-    setState((current) => ({
-      ...current,
-      result: {
-        checks: checksForMatch(match),
-        foundBy: "name",
-        identification: { matches: [match], status: "matched" },
-      },
-      title: undefined,
-      titles: [],
-      versions: [],
-    }));
-  }, []);
+  const choose = useCallback(
+    (match: ParsedIdentifyTitleMatch) => {
+      cancel();
+      setState((current) => {
+        const record = checksForMatch(match);
+        return {
+          ...current,
+          busy: false,
+          error: "",
+          stage: "",
+          result: {
+            checks: {
+              ...record,
+              checksums: { ...record.checksums, ...current.checksum?.checksums },
+            },
+            foundBy: current.checksum ? "checksum" : "name",
+            identification: { matches: [match], status: "matched" },
+          },
+          checksum: undefined,
+          title: undefined,
+          titles: [],
+          versions: [],
+        };
+      });
+    },
+    [cancel],
+  );
 
-  /**
-   * A title names one game on one platform; its pack lists every release of
-   * it. One release is an answer on its own, so it is chosen outright; several
-   * are listed for the user to pick the region or revision.
-   */
   const chooseTitle = useCallback(
     async (title: ExpectedRomTitle) => {
       const { controller, run } = begin();
-      setState((current) => ({ ...current, title, versions: [] }));
+      setState((current) => ({ ...current, checksum: undefined, title, versions: [] }));
       try {
         const found = await searchExpectedRomByName(title.slug, title.name, {
           limit: VERSIONS_LIMIT,
@@ -266,26 +309,20 @@ const useRomLookup = (messages: RomLookupMessages) => {
         }
         const releases = found ? releasesOf(title, found.matches) : [];
         if (!releases.length) return fail(messages.versionsNoMatch);
-        if (releases.length === 1 && releases[0]) {
-          setState((current) => ({ ...current, busy: false, stage: "" }));
-          choose(releases[0]);
-          return;
-        }
         setState((current) => ({ ...current, busy: false, stage: "", versions: releases }));
       } catch (error) {
         if (stale(run, controller)) return;
         fail(describeError(error, messages.failed));
       }
     },
-    [begin, choose, fail, messages, onProgress, stale],
+    [begin, fail, messages, onProgress, stale],
   );
 
   /** Back from a title's releases to the title list, which is kept. */
   const leaveTitle = useCallback(() => {
-    runRef.current += 1;
-    abortRef.current?.abort();
+    cancel();
     setState((current) => ({ ...current, busy: false, error: "", stage: "", title: undefined, versions: [] }));
-  }, []);
+  }, [cancel]);
 
   return { ...state, choose, chooseTitle, clear, leaveTitle, search, setText };
 };

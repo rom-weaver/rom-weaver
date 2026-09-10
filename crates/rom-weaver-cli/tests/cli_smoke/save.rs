@@ -248,6 +248,84 @@ fn save_set_dry_run_and_write_are_atomic_and_reparseable() {
 }
 
 #[test]
+fn save_set_stdout_matches_file_output_and_keeps_the_source() {
+    let temp = setup_temp_dir();
+    let save = write_fixture(&temp);
+    let output = temp.child("edited.sav");
+    let original = fs::read(&save).expect("source save");
+
+    command_stdout(
+        &[
+            "save",
+            "set",
+            save.to_str().expect("save path"),
+            "trainer.money=999999",
+            "--output",
+            output.path().to_str().expect("output path"),
+        ],
+        0,
+    );
+    let stdout = command_stdout(
+        &[
+            "save",
+            "set",
+            save.to_str().expect("save path"),
+            "trainer.money=999999",
+            "--output",
+            "-",
+        ],
+        0,
+    );
+
+    assert_eq!(stdout, fs::read(output.path()).expect("file output"));
+    assert_eq!(fs::read(&save).expect("source save"), original);
+}
+
+#[test]
+fn save_set_noop_stdout_emits_the_original_bytes_and_keeps_the_source() {
+    let temp = setup_temp_dir();
+    let save = write_fixture(&temp);
+    let original = fs::read(&save).expect("source save");
+
+    let stdout = command_stdout(
+        &[
+            "save",
+            "set",
+            save.to_str().expect("save path"),
+            "trainer.money=5000",
+            "--output",
+            "-",
+        ],
+        0,
+    );
+
+    assert_eq!(stdout, original);
+    assert_eq!(fs::read(&save).expect("source save"), original);
+}
+
+#[test]
+fn save_set_failure_to_stdout_writes_no_bytes_and_keeps_the_source() {
+    let temp = setup_temp_dir();
+    let save = write_fixture(&temp);
+    let original = fs::read(&save).expect("source save");
+
+    let stdout = command_stdout(
+        &[
+            "save",
+            "set",
+            save.to_str().expect("save path"),
+            "trainer.money=1000000",
+            "--output",
+            "-",
+        ],
+        1,
+    );
+
+    assert!(stdout.is_empty(), "a failed edit must not write stdout");
+    assert_eq!(fs::read(&save).expect("source save"), original);
+}
+
+#[test]
 fn save_commands_route_an_alttp_sram_through_the_shared_handler() {
     let temp = setup_temp_dir();
     let save = temp.child("zelda.srm");

@@ -695,7 +695,22 @@ const loadTitleIndex = async (): Promise<LoadedTitleIndex> => {
     packs: parsed.packs.length,
     titles: parsed.titles.length,
   });
-  return { blob: new Blob([bytes], { type: "application/json" }), fileName: entry.file };
+  // System names MUST come from the same catalog that labels the results.
+  // Enrich the verified index once so older data also supports system queries.
+  const systems = parsed.packs.map((slug) => {
+    const system = systemForSlug(index, catalog, slug);
+    const platform = findCatalogPlatformBySlug(catalog, slug);
+    return [...new Set([slug, system?.platform, platform?.canonicalPlatform, ...(platform?.aliases ?? [])])].filter(
+      (name): name is string => Boolean(name),
+    );
+  });
+  const searchable = JSON.stringify({
+    format: TITLE_INDEX_FORMAT,
+    packs: parsed.packs,
+    systems,
+    titles: parsed.titles.map((title) => [title.name, title.packs]),
+  });
+  return { blob: new Blob([searchable], { type: "application/json" }), fileName: entry.file };
 };
 
 const getTitleIndex = (): Promise<LoadedTitleIndex> => {
@@ -715,7 +730,7 @@ type IdentifyTitleHit = {
   slug: string;
 };
 
-/** Fetch, verify, and validate the raw title index before the WASM search stages it. */
+/** Validate the title index and attach catalog system names before WASM stages it. */
 const loadIdentifyTitleIndex = async (onProgress?: (progress: { message?: string }) => void) => {
   if (!titleIndexPromise) onProgress?.({ message: "Loading the game titles…" });
   return getTitleIndex();
