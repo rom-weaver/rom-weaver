@@ -5,7 +5,7 @@ import os from "node:os";
 import { brotliCompressSync } from "node:zlib";
 import { join } from "node:path";
 import test from "node:test";
-import { buildIdentifyReleaseData } from "./build-identify-release-data.mjs";
+import { buildIdentifyReleaseData, parseArgs } from "./build-identify-release-data.mjs";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -106,6 +106,29 @@ test("creates a missing release archive directory", () => {
   });
   assert.equal(result.archive, archive);
   assert.ok(readFileSync(archive).length > 0);
+});
+
+test("tree-only builds the share trees and no archive", () => {
+  const { input, root } = fixture({ grouped: true });
+  const archive = join(root, "target", "rom-weaver-identify-data.tar.br");
+  const result = buildIdentifyReleaseData({
+    archive,
+    input,
+    out: join(root, "release"),
+    tree: true,
+  });
+  assert.equal(result.archive, null);
+  assert.equal(result.sha256, null);
+  assert.equal(result.optional[0].archive, null);
+  assert.ok(existsSync(join(result.dataDir, "index.json")));
+  assert.ok(existsSync(join(result.optional[0].dataDir, "index.json")));
+  assert.equal(existsSync(join(root, "target")), false);
+});
+
+test("--tree-only is the CI spelling of the tree option", () => {
+  assert.equal(parseArgs(["--tree-only"]).tree, true);
+  assert.equal(parseArgs([]).tree, false);
+  assert.throws(() => parseArgs(["--tree"]), /unknown argument: --tree/);
 });
 
 test("separates default packs from complete optional group archives", () => {
