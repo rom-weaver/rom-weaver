@@ -21,6 +21,8 @@ pub(crate) mod manpages;
 #[cfg(not(target_arch = "wasm32"))]
 mod render;
 mod save_command;
+#[cfg(not(target_arch = "wasm32"))]
+mod stdout_output;
 
 pub use cli::*;
 #[cfg(not(target_arch = "wasm32"))]
@@ -1034,8 +1036,13 @@ impl ProgressSink for JsonProgressSink {
     fn emit(&self, event: ProgressEvent) {
         match serde_json::to_string(&event) {
             Ok(serialized) => {
-                println!("{serialized}");
-                let _ = io::Write::flush(&mut io::stdout());
+                #[cfg(not(target_arch = "wasm32"))]
+                crate::stdout_output::write(format_args!("{serialized}\n"));
+                #[cfg(target_arch = "wasm32")]
+                {
+                    println!("{serialized}");
+                    let _ = io::Write::flush(&mut io::stdout());
+                }
             }
             Err(error) => eprintln!("failed to serialize progress event: {error}"),
         }
