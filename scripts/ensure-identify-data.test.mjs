@@ -31,6 +31,10 @@ import {
   CHECKSUM_ROUTER_FORMAT,
   encodeChecksumRouter,
 } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
+import {
+  encodeTitleIndex,
+  TITLE_INDEX_FORMAT,
+} from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
 
 function buildCurrentDataDir() {
   const work = mkdtempSync(join(os.tmpdir(), "rw-ensure-identify-"));
@@ -113,11 +117,33 @@ function buildCurrentDataDir() {
     rawBytes: routerBytes.length,
     sha256: createHash("sha256").update(routerBytes).digest("hex"),
   };
+  const titleBytes = Buffer.from(
+    `${encodeTitleIndex(
+      systems.map((system) => ({
+        name: system.platform,
+        slugs: [system.file.slice(0, -".pack".length)],
+      })),
+    )}\n`,
+    "utf8",
+  );
+  writeFileSync(join(dataDir, "title-index.json"), titleBytes);
+  writeFileSync(join(dataDir, "title-index.json.br"), titleBytes);
+  const titleIndex = {
+    brotliBytes: titleBytes.length,
+    brotliFile: "title-index.json.br",
+    file: "title-index.json",
+    format: TITLE_INDEX_FORMAT,
+    packs: systems.length,
+    rawBytes: titleBytes.length,
+    sha256: createHash("sha256").update(titleBytes).digest("hex"),
+    titles: systems.length,
+  };
   writeFileSync(
     join(dataDir, "index.json"),
     JSON.stringify({
       catalog: "catalog.json",
       checksumRoutes,
+      titleIndex,
       format: INDEX_FORMAT,
       cheats,
       sources: {
@@ -283,6 +309,42 @@ test("hasCurrentData rejects an index that never recorded the checksum router", 
     const indexPath = join(dataDir, "index.json");
     const index = JSON.parse(readFileSync(indexPath, "utf8"));
     delete index.checksumRoutes;
+    writeFileSync(indexPath, JSON.stringify(index, null, 2));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects a data dir without the title index", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    rmSync(join(dataDir, "title-index.json"));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects a corrupt title index", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const titlePath = join(dataDir, "title-index.json");
+    const bytes = readFileSync(titlePath);
+    bytes[bytes.length - 1] ^= 0xff;
+    writeFileSync(titlePath, bytes);
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects an index that never recorded the title index", async () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const indexPath = join(dataDir, "index.json");
+    const index = JSON.parse(readFileSync(indexPath, "utf8"));
+    delete index.titleIndex;
     writeFileSync(indexPath, JSON.stringify(index, null, 2));
     assert.equal(hasCurrentData(dataDir), false);
   } finally {

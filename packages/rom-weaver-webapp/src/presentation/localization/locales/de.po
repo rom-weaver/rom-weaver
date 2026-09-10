@@ -60,6 +60,111 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.namePlatformChange"
+#~ msgstr "Ändern"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashInvalidChars"
+#~ msgstr "Prüfsummen enthalten nur die Hex-Zeichen 0-9 und a-f."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.namePlatformFirst"
+#~ msgstr "Wählen Sie zuerst eine Plattform"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.nameResults"
+#~ msgstr "Wählen Sie das benötigte ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashPlaceholder"
+#~ msgstr "CRC32, MD5 oder SHA-1"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.namePlaceholder"
+#~ msgstr "Spielname"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashDisclosure"
+#~ msgstr "Per Prüfsumme identifizieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.nameDisclosure"
+#~ msgstr "Nach Spielnamen suchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashLabel"
+#~ msgstr "Suchen Sie ein bestimmtes ROM?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.namePlatformEmpty"
+#~ msgstr "Keine Plattform passt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashRefine"
+#~ msgstr "Nicht das gemeinte ROM?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.namePlatformLabel"
+#~ msgstr "Plattform"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashSearch"
+#~ msgstr "Suchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.nameSearch"
+#~ msgstr "Suchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashSearchAgain"
+#~ msgstr "Erneut suchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.hashSearching"
+#~ msgstr "Suche läuft…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.nameSearching"
+#~ msgstr "Suche läuft…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.nameFailed"
+#~ msgstr "Die Namenssuche ist fehlgeschlagen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.namePlatformsFailed"
+#~ msgstr "Die Plattformliste konnte nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.namePlatformPlaceholder"
+#~ msgstr "Tippen, um Plattformen zu filtern"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.identify.nameLabel"
+#~ msgstr "Welches Spiel brauchen Sie?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu — entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -650,11 +755,6 @@ msgstr "CD-Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformChange"
-msgstr "Ändern"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
 msgstr "und das Ergebnis oder ein teilbares Bundle herunterladen —"
 
@@ -735,23 +835,18 @@ msgstr "Prüfsummen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashInvalidChars"
-msgstr "Prüfsummen enthalten nur die Hex-Zeichen 0-9 und a-f."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.replaceHelp"
 msgstr "Wähle eine Patch-Datei oder ein Archiv, um diesen Patch zu ersetzen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformFirst"
-msgstr "Wählen Sie zuerst eine Plattform"
+msgid "ui.apply.bundleTutorial.safeBundle.title"
+msgstr "Sicheres Bundle wählen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.safeBundle.title"
-msgstr "Sicheres Bundle wählen"
+msgid "ui.identify.titleResults"
+msgstr "Wählen Sie das benötigte Spiel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -770,8 +865,8 @@ msgstr "Wähle die ROM, für die dieser Patch erstellt wurde."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameResults"
-msgstr "Wählen Sie das benötigte ROM"
+msgid "ui.identify.versionResults"
+msgstr "Wählen Sie die Version von {title} für {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -910,8 +1005,8 @@ msgstr "Die Ausgabe konnte nicht für EmulatorJS vorbereitet werden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashPlaceholder"
-msgstr "CRC32, MD5 oder SHA-1"
+msgid "ui.identify.searchPlaceholder"
+msgstr "CRC32, MD5, SHA-1 oder Spielname"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1176,7 +1271,7 @@ msgstr "Beta-Tools aktivieren (Identifizieren, Trimmen und PPF rückgängig mach
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalid"
-msgstr "Geben Sie 8 (CRC32), 32 (MD5) oder 40 (SHA-1) Hex-Zeichen ein."
+msgstr "Geben Sie 8 (CRC32), 32 (MD5) oder 40 (SHA-1) Hex-Zeichen oder einen Spielnamen ein."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1365,6 +1460,11 @@ msgstr "Per Prüfsumme gefunden – füge die ROM zur Prüfung hinzu"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.sourceInfo.expectationMetaName"
+msgstr "Per Spielname gefunden – füge die ROM zur Prüfung hinzu"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.fullInstallGuide"
 msgstr "Vollständige Installationsanleitung"
 
@@ -1372,11 +1472,6 @@ msgstr "Vollständige Installationsanleitung"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullTable"
 msgstr "vollständige Tabelle"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlaceholder"
-msgstr "Spielname"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1465,13 +1560,8 @@ msgstr "Identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashDisclosure"
-msgstr "Per Prüfsumme identifizieren"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.nameDisclosure"
-msgstr "Nach Spielnamen suchen"
+msgid "ui.identify.searchDisclosure"
+msgstr "Per Prüfsumme oder Spielnamen identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1725,11 +1815,6 @@ msgstr "Protokoll"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashLabel"
-msgstr "Suchen Sie ein bestimmtes ROM?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.pending"
 msgstr "Dieses ROM wird in der Titeldatenbank gesucht. Die Zeilen werden gefüllt, sobald die Prüfsummen vorliegen."
 
@@ -1930,6 +2015,11 @@ msgstr "Kein kompatibler Patch gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.nameNoMatch"
+msgstr "Kein Spiel in den Identifikationsdaten hat diesen Namen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.webappItem1"
 msgstr "Keine Installation, kein Konto. Öffne eine Seite und lege Dateien ab."
 
@@ -1950,13 +2040,8 @@ msgstr "Keine Offline-Dateien sind zwischengespeichert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformEmpty"
-msgstr "Keine Plattform passt"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.nameNoMatch"
-msgstr "Kein ROM in den Daten dieser Plattform hat diesen Namen."
+msgid "ui.identify.hashNoMatch"
+msgstr "Kein ROM in den Identifikationsdaten hat diese Prüfsumme."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1975,7 +2060,7 @@ msgstr "Nicht die erwartete ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashRefine"
+msgid "ui.identify.searchRefine"
 msgstr "Nicht das gemeinte ROM?"
 
 #. js-lingui-explicit-id
@@ -2112,6 +2197,11 @@ msgstr "Original-ROM (automatisch)"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.originalRom"
 msgstr "Original-ROM{member}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.versionsBack"
+msgstr "Andere Spiele"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2306,11 +2396,6 @@ msgstr "Wähle, was zur Aufgabe passt. Die Ausgabedaten sind in beiden Fällen i
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.platform"
-msgstr "Plattform"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformLabel"
 msgstr "Plattform"
 
 #. js-lingui-explicit-id
@@ -2650,27 +2735,17 @@ msgstr "{size} gespart"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearch"
+msgid "ui.identify.search"
 msgstr "Suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearch"
-msgstr "Suchen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearchAgain"
+msgid "ui.identify.searchAgain"
 msgstr "Erneut suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearching"
-msgstr "Suche läuft…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearching"
+msgid "ui.identify.searching"
 msgstr "Suche läuft…"
 
 #. js-lingui-explicit-id
@@ -2996,17 +3071,17 @@ msgstr "Die Identifikationsdaten unterstützen diese Eingabe nicht."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.nameUnavailable"
-msgstr "Die Identifikationsdaten dieser Plattform sind auf diesem Gerät nicht verfügbar."
+msgstr "Die Identifikationsdaten sind auf diesem Gerät nicht verfügbar, daher können keine Namen gesucht werden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hashUnavailable"
+msgstr "Die Identifikationsdaten sind auf diesem Gerät nicht verfügbar, daher kann diese Prüfsumme nicht nachgeschlagen werden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.before"
 msgstr "Der Name endet auf"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.nameFailed"
-msgstr "Die Namenssuche ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3040,8 +3115,8 @@ msgstr "Die gepatchte ROM mit geprüften Prüfsummen. Speichere die Kette als Bu
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformsFailed"
-msgstr "Die Plattformliste konnte nicht geladen werden."
+msgid "ui.identify.versionsNoMatch"
+msgstr "Die Daten dieser Plattform führen keine Version dieses Spiels."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3062,6 +3137,11 @@ msgstr "Die ROM-Karte hält Name, Quelldateien, Prüfsummen und Dateisteuerung z
 #: src/presentation/localization/messages.ts
 msgid "ui.home.frontendsTitle"
 msgstr "Derselbe Rust-Kern, in einem Tab oder einer Shell."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.searchFailed"
+msgstr "Die Suche ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3233,11 +3313,6 @@ msgstr "Anleitungsschritte"
 msgid "ui.output.type"
 msgstr "Typ"
 
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformPlaceholder"
-msgstr "Tippen, um Plattformen zu filtern"
-
 #~ msgid "ui.apply.validation.overrideChecksum"
 #~ msgstr "Trotz abweichender Patch- und ROM-Prüfung anwenden"
 
@@ -3344,6 +3419,11 @@ msgstr "Version"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.versionResultsList"
+msgstr "Versionen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.github"
 msgstr "Quelltext auf GitHub"
 
@@ -3381,11 +3461,6 @@ msgstr "Was dieser Patch ändert"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Neuigkeiten"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.nameLabel"
-msgstr "Welches Spiel brauchen Sie?"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3456,6 +3531,11 @@ msgstr "Dein Werkzeugkasten für ROMs und Disc-Images"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.title"
 msgstr "Deine ROMs. Deine Änderungen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.sourceInfo.expectationAuthorityName"
+msgstr "deiner Suche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

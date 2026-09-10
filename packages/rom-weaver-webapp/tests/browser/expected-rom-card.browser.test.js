@@ -8,9 +8,9 @@ installPatcherTestHooks();
 const EXPECTED_CARD = "#rom-weaver-bundle-rom-expectation";
 
 const getExpectationCard = () => document.querySelector(EXPECTED_CARD);
-const getHashForm = () => document.getElementById("rom-weaver-rom-hash-search");
-const getHashInput = () => document.getElementById("rom-weaver-rom-hash");
-const getHashError = () => document.querySelector("#rom-weaver-rom-hash-search .identify-hash-error");
+const getHashForm = () => document.getElementById("rom-weaver-rom-search-form");
+const getHashInput = () => document.getElementById("rom-weaver-rom-search");
+const getHashError = () => document.querySelector("#rom-weaver-rom-search-form .identify-search-error");
 
 const getExpectationChecks = () =>
   Array.from(document.querySelectorAll(`${EXPECTED_CARD} .ck`)).map((row) =>
@@ -60,24 +60,26 @@ test("a patch's declared source ROM shows the expected ROM card", async () => {
   expect(getExpectationChecks().length).toBeGreaterThan(0);
 });
 
-/* The lookup's own answers are covered in tests/unit/hooks/rom-hash-lookup.ts,
+/* The lookup's own answers are covered in tests/unit/hooks/rom-lookup.test.ts,
    where the seam can be stubbed. Mocking a module here would make Vitest
    re-instrument the whole apply import graph, which deadlocks the browser
    runner under its normal concurrency - so this file stays mock-free and
    asserts only what needs a real page: the control, and the validation that
    happens before any lookup. */
-test("the empty apply page shows checksum search that validates before looking up", async () => {
+test("the empty apply page shows the ROM search that validates before looking up", async () => {
   mount(createElement(ApplyPatchForm, {}));
 
   await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
-  expect(getHashForm().querySelector("label")?.textContent).toBe("Identify by checksum");
+  expect(getHashForm().querySelector("label")?.textContent).toBe("Identify by checksum or game name");
   expect(getHashInput().getBoundingClientRect().height).toBeGreaterThan(0);
-  expect(getHashInput().placeholder).toBe("CRC32, MD5, or SHA-1");
+  expect(getHashInput().placeholder).toBe("CRC32, MD5, SHA-1, or game name");
   expect(document.querySelector(".ghost-steps")).not.toBeNull();
 
-  submitHash("zzzz");
-  await expect.poll(() => getHashError()?.textContent || "", { timeout: 30000 }).toContain("hex characters");
-  submitHash("abc");
+  // Hex of no checksum length is a mistyped checksum; one letter is too short
+  // to be a name. Both stop before any lookup.
+  submitHash("abc123abc123");
   await expect.poll(() => getHashError()?.textContent || "", { timeout: 30000 }).toContain("8 (CRC32)");
+  submitHash("m");
+  await expect.poll(() => getHashError()?.textContent || "", { timeout: 30000 }).toContain("at least 2 characters");
   expect(getExpectationCard()).toBeNull();
 });

@@ -197,8 +197,9 @@ export const buildIdentifyReleaseData = (options) => {
       });
     copyFileSync(join(input, licenseFile), join(dataDir, licenseFile));
     const archiveGroups = group.default ? groups : [group];
-    // The checksum router is browser-only; a release archive never carries it.
-    const { checksumRoutes: _checksumRoutes, ...indexWithoutRouter } = index;
+    // The checksum router and the title index are browser-only; a release
+    // archive never carries either.
+    const { checksumRoutes: _checksumRoutes, titleIndex: _titleIndex, ...indexWithoutRouter } = index;
     const groupIndex = { ...indexWithoutRouter, cheats, groups: archiveGroups, systems };
     const groupCatalog = Array.isArray(catalog.platforms)
       ? {

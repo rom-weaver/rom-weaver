@@ -38,6 +38,11 @@ import {
   parseChecksumRouter,
   routeChecksums,
 } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
+import {
+  parseTitleIndex,
+  searchTitleIndex,
+  TITLE_INDEX_FORMAT,
+} from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
 
 const NES = "Nintendo - Nintendo Entertainment System";
 
@@ -460,6 +465,7 @@ test("the builder emits deterministic mixed and fallback-only RWFP1 packs", asyn
     "catalog.json",
     "index.json",
     "checksum-routes.bin",
+    "title-index.json",
   ]) {
     assert.deepEqual(readFileSync(join(outDir, file)), readFileSync(join(outDir2, file)), file);
   }
@@ -560,6 +566,64 @@ test("the builder emits a checksum router that routes every pack key", async () 
     `${NES},Tandy - Color Computer`,
   ]);
   assert.deepEqual(readFileSync(join(outDir2, "checksum-routes.bin")), bytes);
+});
+
+test("the builder emits a title index that finds every pack's base titles", async () => {
+  const work = tempDir("title-index");
+  const cacheDir = join(work, "cache");
+  const outDir = join(work, "out");
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "dat/Nintendo - Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(
+    cacheDir,
+    "libretro",
+    LIBRETRO_REVISION,
+    "metadat/no-intro/Nintendo - Nintendo Entertainment System.dat",
+    LIBRETRO_DAT,
+  );
+  writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenNES.dat", OPENGOOD_DAT);
+  writeCachedDat(cacheDir, "opengood", OPENGOOD_REVISION, "OpenCoCo.dat", OPENGOOD_DAT);
+  writeCachedDat(
+    cacheDir,
+    "opengood-headered",
+    OPENGOOD_HEADERED_REVISION,
+    "OpenNES.Headered.dat",
+    OPENGOOD_HEADERED_DAT,
+  );
+  const args = ["--cache-dir", cacheDir, "--out", outDir, "--only", `${NES},Tandy - Color Computer`];
+  await main(args);
+
+  const index = JSON.parse(readFileSync(join(outDir, "index.json"), "utf8"));
+  const entry = index.titleIndex;
+  assert.equal(entry.format, TITLE_INDEX_FORMAT);
+  assert.equal(entry.file, "title-index.json");
+  assert.ok(entry.titles > 0);
+  assert.equal(entry.packs, index.systems.length);
+  const bytes = readFileSync(join(outDir, entry.file));
+  assert.equal(bytes.length, entry.rawBytes);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), entry.sha256);
+  assert.equal(entry.brotliFile, "title-index.json.br");
+  assert.equal(readFileSync(join(outDir, entry.brotliFile)).length, entry.brotliBytes);
+
+  const titleIndex = parseTitleIndex(bytes.toString("utf8"));
+  assert.deepEqual([...titleIndex.packs].sort(), index.systems.map(({ slug }) => slug).sort());
+  // The dump tags are stripped, so both regional variants fold to one title.
+  const hits = searchTitleIndex(titleIndex, "Alpha Quest");
+  assert.deepEqual(
+    hits.map(({ name }) => name),
+    ["Alpha Quest"],
+  );
+  assert.ok(hits[0].slugs.includes("nintendo-nintendo-entertainment-system"));
+  assert.equal(searchTitleIndex(titleIndex, "no such game").length, 0);
+
+  const outDir2 = join(work, "out2");
+  await main(["--cache-dir", cacheDir, "--out", outDir2, "--only", `${NES},Tandy - Color Computer`]);
+  assert.deepEqual(readFileSync(join(outDir2, "title-index.json")), bytes);
 });
 
 // The identify build used to shell out to `tar`, and the Windows CI job (whose

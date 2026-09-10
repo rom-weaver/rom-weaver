@@ -9,6 +9,7 @@ ROMWeaver builds deterministic RWFP1 packs from pinned Libretro and OpenGood dat
 - [Source policy](#source-policy)
 - [RWFP1 records](#rwfp1-records)
 - [Checksum router](#checksum-router)
+- [Title index](#title-index)
 - [Browser installation](#browser-installation)
 - [Native installation](#native-installation)
 - [Cheat shards](#cheat-shards)
@@ -63,9 +64,23 @@ The browser uses the router when it identifies a bare checksum. Each pack filter
 
 The router is browser data only. The native CLI searches every installed pack for a bare checksum, and `scripts/build-identify-release-data.mjs` removes `checksumRoutes` from every release index.
 
+## Title index
+
+`title-index.json` holds every pack's base game titles in one file, so a name search covers all platforms without loading a pack and without the reader choosing a platform first. A base title is a game name with its first ` (` or ` [` tag group and everything after it removed, so the regional and dump-tag variants of one game collapse into a single row.
+
+The file is JSON: a sorted array of pack slugs and an array of `[displayName, [packIndex, ...]]` rows, ordered by the normalized title then the display name. Normalization lowercases, folds accented Latin letters to ASCII, and collapses every run of non-alphanumeric characters into one space - the same rules as the CLI name search in `crates/rom-weaver-cli/src/identify_name_search.rs`. A title that several packs hold carries one row naming every pack.
+
+The index stores base titles only. One row per game record would be 5.4 MB Brotli against 1.6 MB for base titles; the regional variants of a chosen title come from that platform's pack.
+
+A search tokenizes the query and keeps titles whose normalized form contains every token. Results are ordered by exact normalized equality, then a normalized prefix match, then the position of the first token, then the shorter title, then the name.
+
+`index.json` records the file under `titleIndex` with its size, SHA-256, title count, and pack count. The ordering is fixed, so a rebuild over the same titles is byte-identical. The shared builder and reader live in `packages/rom-weaver-webapp/src/lib/identify/title-index.mjs`.
+
+The title index is browser data only. The native CLI searches an installed pack directly, and `scripts/build-identify-release-data.mjs` removes `titleIndex` from every release index.
+
 ## Browser installation
 
-The web build emits each pack as a Brotli static asset. The service worker precaches `index.json` and `catalog.json` with the app under one service-worker revision. Packs and the checksum router are not precached: the background warm-up downloads the default group, which includes the router, and the optional groups the user has ticked in Settings.
+The web build emits each pack as a Brotli static asset. The service worker precaches `index.json` and `catalog.json` with the app under one service-worker revision. Packs, the checksum router, and the title index are not precached: the background warm-up downloads the default group, which includes the router and the title index, and the optional groups the user has ticked in Settings.
 
 The Settings page can install a complete optional group. The service worker checks every pack before it marks the group as installed.
 

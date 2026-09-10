@@ -32,6 +32,7 @@ import {
   cheatShardFileName,
 } from "./import-libretro-cheats.mjs";
 import { CHECKSUM_ROUTER_FORMAT } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
+import { TITLE_INDEX_FORMAT } from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
 
 const scriptDir = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const rootDir = resolve(scriptDir, "..");
@@ -86,6 +87,21 @@ const hasCurrentChecksumRouter = (dataDir, entry) => {
   const routerPath = join(dataDir, entry.file);
   if (!existsSync(routerPath)) return false;
   const bytes = readFileSync(routerPath);
+  if (bytes.length !== entry.rawBytes || sha256(bytes) !== entry.sha256) return false;
+  if (!entry.brotliFile) return true;
+  const brotliPath = join(dataDir, entry.brotliFile);
+  return existsSync(brotliPath) && readFileSync(brotliPath).length === entry.brotliBytes;
+};
+
+// The browser searches every platform's game names through this file, so data
+// built before the title index existed - or with an index that no longer
+// matches index.json - is stale and MUST be rebuilt.
+const hasCurrentTitleIndex = (dataDir, entry) => {
+  if (!entry || entry.format !== TITLE_INDEX_FORMAT || typeof entry.file !== "string") return false;
+  if (!Number.isSafeInteger(entry.rawBytes) || typeof entry.sha256 !== "string") return false;
+  const indexPath = join(dataDir, entry.file);
+  if (!existsSync(indexPath)) return false;
+  const bytes = readFileSync(indexPath);
   if (bytes.length !== entry.rawBytes || sha256(bytes) !== entry.sha256) return false;
   if (!entry.brotliFile) return true;
   const brotliPath = join(dataDir, entry.brotliFile);
@@ -156,6 +172,7 @@ export const hasCurrentData = (dataDir = defaultDataDir) => {
   if (!existsSync(licensePath) || readFileSync(licensePath).length === 0) return false;
   if (!hasCurrentCatalog(dataDir)) return false;
   if (!hasCurrentChecksumRouter(dataDir, index.checksumRoutes)) return false;
+  if (!hasCurrentTitleIndex(dataDir, index.titleIndex)) return false;
   if (!hasCurrentCheats(dataDir, index.cheats)) return false;
   if (!Array.isArray(index.systems)) return false;
   if (

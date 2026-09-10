@@ -7,6 +7,7 @@ import {
   parseChecksumRouter,
   routeChecksums,
 } from "../../src/lib/identify/checksum-router.mjs";
+import { encodeTitleIndex } from "../../src/lib/identify/title-index.mjs";
 
 const SHA256_ABC = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
@@ -349,5 +350,104 @@ describe("checksum routing", () => {
     await loadIdentifyPacks({ checksums: { crc32: PS_CRC32 } });
 
     expect(second.mock.calls.filter((call) => String(call[0]).includes(".bin"))).toHaveLength(1);
+  });
+});
+
+const TITLE_ENTRIES = [
+  { name: "Metroid Fusion", slugs: ["nintendo-game-boy-advance"] },
+  { name: "Sonic the Hedgehog", slugs: ["sega-32x", "sega-mega-drive-genesis"] },
+];
+
+const titleIndexBody = () => `${encodeTitleIndex(TITLE_ENTRIES)}\n`;
+
+const stubTitleFetch = async (
+  options: { body?: string; overrides?: Record<string, unknown>; status?: number } = {},
+) => {
+  const body = options.body ?? titleIndexBody();
+  const bytes = new TextEncoder().encode(body);
+  const index = {
+    format: "rom-weaver-identify-system-pack-v1",
+    systems: INDEX_SYSTEMS,
+    titleIndex: {
+      file: "title-index.json",
+      format: "rom-weaver-identify-title-index-v1",
+      rawBytes: bytes.length,
+      sha256: await sha256(bytes),
+      ...options.overrides,
+    },
+  };
+  const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("title-index.json")) {
+      if (options.status) return new Response("nope", { status: options.status });
+      return new Response(bytes);
+    }
+    if (url.pathname.endsWith("identify-index.json")) return new Response(JSON.stringify(index));
+    return new Response(new TextEncoder().encode("abc"));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+};
+
+describe("searchIdentifyTitles", () => {
+  it("returns one row per pack that holds the matching base title", async () => {
+    await stubTitleFetch();
+    const { searchIdentifyTitles } = await import("../../src/platform/browser/identify-packs.ts");
+
+    expect(await searchIdentifyTitles("sonic")).toEqual([
+      { name: "Sonic the Hedgehog", platform: "Sega 32X", slug: "sega-32x" },
+      { name: "Sonic the Hedgehog", platform: "Sega Mega Drive _ Genesis", slug: "sega-mega-drive-genesis" },
+    ]);
+    expect(await searchIdentifyTitles("")).toEqual([]);
+    expect(await searchIdentifyTitles("no such game")).toEqual([]);
+  });
+
+  it("honours the limit and caches the parsed index until the cache is reset", async () => {
+    const first = await stubTitleFetch();
+    const { resetIdentifyPackCache, searchIdentifyTitles } =
+      await import("../../src/platform/browser/identify-packs.ts");
+    expect(await searchIdentifyTitles("o", { limit: 1 })).toHaveLength(2);
+    await searchIdentifyTitles("metroid");
+    expect(first.mock.calls.filter((call) => String(call[0]).includes("title-index.json"))).toHaveLength(1);
+
+    resetIdentifyPackCache();
+    const second = await stubTitleFetch();
+    await searchIdentifyTitles("metroid");
+    expect(second.mock.calls.filter((call) => String(call[0]).includes("title-index.json"))).toHaveLength(1);
+  });
+
+  it("reports an index without a title index as unavailable data", async () => {
+    stubFetch();
+    const { IdentifyDataUnavailableError, searchIdentifyTitles } =
+      await import("../../src/platform/browser/identify-packs.ts");
+    await expect(searchIdentifyTitles("sonic")).rejects.toBeInstanceOf(IdentifyDataUnavailableError);
+    await expect(searchIdentifyTitles("sonic")).rejects.toThrow(/lists no title index/u);
+  });
+
+  it("reports a failed request, a size mismatch, a checksum mismatch, and a corrupt file", async () => {
+    await stubTitleFetch({ status: 503 });
+    const { searchIdentifyTitles } = await import("../../src/platform/browser/identify-packs.ts");
+    await expect(searchIdentifyTitles("sonic")).rejects.toThrow(/HTTP 503/u);
+
+    vi.resetModules();
+    await stubTitleFetch({ overrides: { rawBytes: 3 } });
+    const sized = await import("../../src/platform/browser/identify-packs.ts");
+    await expect(sized.searchIdentifyTitles("sonic")).rejects.toThrow(/size is invalid/u);
+
+    vi.resetModules();
+    await stubTitleFetch({ overrides: { sha256: SHA256_ABC } });
+    const hashed = await import("../../src/platform/browser/identify-packs.ts");
+    await expect(hashed.searchIdentifyTitles("sonic")).rejects.toThrow(/checksum is invalid/u);
+
+    vi.resetModules();
+    await stubTitleFetch({ body: "{not json" });
+    const corrupt = await import("../../src/platform/browser/identify-packs.ts");
+    await expect(corrupt.searchIdentifyTitles("sonic")).rejects.toThrow(/title index is invalid/u);
+  });
+
+  it("rejects a title index naming a pack the catalog and index do not know", async () => {
+    await stubTitleFetch({ body: `${encodeTitleIndex([{ name: "Ghost", slugs: ["not-a-pack"] }])}\n` });
+    const { searchIdentifyTitles } = await import("../../src/platform/browser/identify-packs.ts");
+    await expect(searchIdentifyTitles("ghost")).rejects.toThrow(/names unknown packs: not-a-pack/u);
   });
 });

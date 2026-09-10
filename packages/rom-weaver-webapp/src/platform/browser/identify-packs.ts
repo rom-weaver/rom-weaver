@@ -15,6 +15,7 @@ import {
   parseChecksumRouter,
   routeChecksums,
 } from "../../lib/identify/checksum-router.mjs";
+import { parseTitleIndex, searchTitleIndex, TITLE_INDEX_FORMAT } from "../../lib/identify/title-index.mjs";
 import {
   findCatalogPlatformBySlug,
   parseIdentifyCatalog,
@@ -36,6 +37,19 @@ type ChecksumRoutesEntry = {
   packs?: number;
   rawBytes: number;
   sha256: string;
+};
+
+/** Every pack's base game titles in one file, so a name query needs no platform. */
+type TitleIndex = ReturnType<typeof parseTitleIndex>;
+
+/** `titleIndex` in index.json: the single title index file and its verification data. */
+type TitleIndexEntry = {
+  file: string;
+  format?: string;
+  packs?: number;
+  rawBytes: number;
+  sha256: string;
+  titles?: number;
 };
 
 type IdentifySystem = {
@@ -73,6 +87,7 @@ type IdentifyIndex = {
   /** Cheat shards built beside the packs; parsed by lib/cheats/loader.ts. */
   cheats?: unknown[];
   checksumRoutes?: ChecksumRoutesEntry;
+  titleIndex?: TitleIndexEntry;
   format: string;
   /** Upstream database revisions, logged so a page and a worker can be compared. */
   sources?: Record<string, { revision?: string; release?: string }>;
@@ -249,6 +264,7 @@ const assetUrl = (name: string) => new URL(`${DATA_ROOT}${name}`, document.baseU
 let indexPromise: Promise<IdentifyIndex> | undefined;
 let catalogPromise: Promise<IdentifyCatalog | undefined> | undefined;
 let checksumRouterPromise: Promise<ChecksumRouter> | undefined;
+let titleIndexPromise: Promise<TitleIndex> | undefined;
 const packPromises = new Map<string, Promise<BrowserIdentifyPack>>();
 
 /** Drop every cached index, catalog, and pack promise so a retry rereads local assets. */
@@ -256,6 +272,7 @@ const resetIdentifyPackCache = () => {
   indexPromise = undefined;
   catalogPromise = undefined;
   checksumRouterPromise = undefined;
+  titleIndexPromise = undefined;
   packPromises.clear();
 };
 
@@ -612,6 +629,117 @@ const getChecksumRouter = (): Promise<ChecksumRouter> => {
 };
 
 /**
+ * Fetch, verify, and parse `title-index.json`. A name search with no index is
+ * an UNAVAILABLE database, never an empty result: an index without
+ * `titleIndex` is an older deployment, and answering "no match" from it would
+ * be a lie. Every pack slug the file names MUST name a loadable pack.
+ */
+const loadTitleIndex = async (): Promise<TitleIndex> => {
+  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
+  const entry = index.titleIndex;
+  if (!entry?.file) {
+    logger.error("identify index has no title index", { systems: index.systems.length });
+    throw new IdentifyDataUnavailableError("The ROM identify index lists no title index");
+  }
+  if (entry.format !== TITLE_INDEX_FORMAT || !entry.sha256) {
+    logger.error("title index entry is invalid", { format: entry.format, hasSha256: Boolean(entry.sha256) });
+    throw new IdentifyDataUnavailableError("The ROM identify title index entry is invalid");
+  }
+  const url = assetUrl(entry.file);
+  url.searchParams.set("sha256", entry.sha256);
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (cause) {
+    logger.error("title index request failed", { error: describe(cause), url: url.href });
+    throw new IdentifyDataUnavailableError(`ROM identify title index request failed: ${describe(cause)}`, { cause });
+  }
+  if (!response.ok) {
+    logger.error("title index request failed", { status: response.status, url: url.href });
+    throw new IdentifyDataUnavailableError(`ROM identify title index request failed with HTTP ${response.status}`);
+  }
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength !== entry.rawBytes) {
+    logger.error("title index size mismatch", {
+      actualBytes: bytes.byteLength,
+      expectedBytes: entry.rawBytes,
+      file: entry.file,
+    });
+    throw new IdentifyDataUnavailableError(`ROM identify title index size is invalid: ${entry.file}`);
+  }
+  const actualSha256 = await sha256Hex(bytes);
+  if (actualSha256 !== entry.sha256) {
+    logger.error("title index checksum mismatch", {
+      actualSha256,
+      expectedSha256: entry.sha256,
+      file: entry.file,
+    });
+    throw new IdentifyDataUnavailableError(`ROM identify title index checksum is invalid: ${entry.file}`);
+  }
+  let parsed: TitleIndex;
+  try {
+    parsed = parseTitleIndex(new TextDecoder().decode(bytes));
+  } catch (cause) {
+    logger.error("title index is invalid", { error: describe(cause), file: entry.file });
+    throw new IdentifyDataUnavailableError(`ROM identify title index is invalid: ${describe(cause)}`, { cause });
+  }
+  const unknown = parsed.packs.filter((slug) => !systemForSlug(index, catalog, slug));
+  if (unknown.length) {
+    logger.error("title index names unknown packs", { file: entry.file, unknown: unknown.join(" ") });
+    throw new IdentifyDataUnavailableError(`ROM identify title index names unknown packs: ${unknown.join(" ")}`);
+  }
+  logger.debug("title index loaded", {
+    bytes: bytes.byteLength,
+    packs: parsed.packs.length,
+    titles: parsed.titles.length,
+  });
+  return parsed;
+};
+
+const getTitleIndex = (): Promise<TitleIndex> => {
+  if (!titleIndexPromise) {
+    titleIndexPromise = loadTitleIndex().catch((error) => {
+      titleIndexPromise = undefined;
+      throw error;
+    });
+  }
+  return titleIndexPromise;
+};
+
+/** One title hit: the base title and the one pack it was found in. */
+type IdentifyTitleHit = {
+  name: string;
+  platform: string;
+  slug: string;
+};
+
+/**
+ * Base game titles matching `query` across every platform, one row per pack
+ * that holds the title. The rows carry base titles only; the regional variants
+ * of a chosen title come from that platform's pack.
+ */
+const searchIdentifyTitles = async (
+  query: string,
+  options: { limit?: number; onProgress?: (progress: { message?: string }) => void; signal?: AbortSignal } = {},
+): Promise<IdentifyTitleHit[]> => {
+  // The first search pays the index download; later ones answer from memory.
+  if (!titleIndexPromise) options.onProgress?.({ message: "Loading the game titles…" });
+  const [index, catalog, titleIndex] = await Promise.all([getIndex(), getCatalog(), getTitleIndex()]);
+  options.signal?.throwIfAborted();
+  const limit = options.limit ?? 50;
+  const rows: IdentifyTitleHit[] = [];
+  for (const hit of searchTitleIndex(titleIndex, query, { limit })) {
+    for (const slug of hit.slugs) {
+      const system = systemForSlug(index, catalog, slug);
+      if (!system) continue;
+      rows.push({ name: hit.name, platform: system.platform, slug });
+    }
+  }
+  logger.debug("identify title search", { query, results: rows.length });
+  return rows;
+};
+
+/**
  * Load the packs an input could match. Throws {@link IdentifyDataUnavailableError}
  * when the database - not the ROM - is the problem.
  */
@@ -677,29 +805,6 @@ const loadIdentifyPackSelection = async (
   return { packs };
 };
 
-/** One platform a name search can be scoped to: its pack slug and display name. */
-type IdentifyPlatformOption = {
-  platform: string;
-  slug: string;
-};
-
-/**
- * Every platform that owns a loadable pack, sorted by display name. A name
- * query carries no checksum, so it cannot be routed the way a digest is; the
- * user MUST pick one of these first and the search then loads that pack alone.
- */
-const listIdentifyPlatforms = async (): Promise<IdentifyPlatformOption[]> => {
-  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
-  const bySlug = new Map<string, IdentifyPlatformOption>();
-  for (const system of index.systems) bySlug.set(system.slug, { platform: system.platform, slug: system.slug });
-  for (const entry of catalog?.platforms || []) {
-    if (!bySlug.has(entry.packSlug)) {
-      bySlug.set(entry.packSlug, { platform: entry.canonicalPlatform, slug: entry.packSlug });
-    }
-  }
-  return [...bySlug.values()].sort((left, right) => left.platform.localeCompare(right.platform));
-};
-
 /**
  * The single pack a chosen platform owns, by catalog pack slug or by any
  * platform name the catalog aliases. Sibling widening MUST NOT apply here: a
@@ -740,14 +845,14 @@ export {
   identifyGroupIdsForHints,
   IdentifyDataUnavailableError,
   installIdentifyPackGroup,
-  listIdentifyPlatforms,
   listOptionalIdentifyPackGroups,
   loadIdentifyPackForPlatform,
   loadIdentifyIndexAndCatalog,
   loadIdentifyPacks,
   loadIdentifyPackSelection,
   resetIdentifyPackCache,
+  searchIdentifyTitles,
   selectIdentifySlugs,
   setIdentifyPackGroupWanted,
 };
-export type { BrowserIdentifyPack, IdentifyPackGroupState, IdentifyPlatformOption };
+export type { BrowserIdentifyPack, IdentifyPackGroupState, IdentifyTitleHit };

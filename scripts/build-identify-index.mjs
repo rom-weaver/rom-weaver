@@ -26,6 +26,14 @@ import {
   parseChecksumRouter,
   routeChecksums,
 } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
+import {
+  baseTitle,
+  encodeTitleIndex,
+  normalizeTitle,
+  parseTitleIndex,
+  searchTitleIndex,
+  TITLE_INDEX_FORMAT,
+} from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(SCRIPT_DIR, "..");
@@ -2362,6 +2370,70 @@ async function writeChecksumRouter(filters, samples, options) {
   return entry;
 }
 
+const TITLE_INDEX_FILE = "title-index.json";
+// Self-test sample per pack. A base title the index dropped means the search
+// would hide games, so the build MUST fail instead of shipping it.
+const TITLE_INDEX_SAMPLE = 32;
+
+/** Evenly strided titles across the pack, so the self-test is not just the first rows. */
+function sampleTitles(titles) {
+  if (titles.length <= TITLE_INDEX_SAMPLE) return titles.slice();
+  const stride = titles.length / TITLE_INDEX_SAMPLE;
+  return Array.from({ length: TITLE_INDEX_SAMPLE }, (_, i) => titles[Math.floor(i * stride)]);
+}
+
+// Every distinct searchable base title in a pack. Regional variants collapse
+// into one. A name that is punctuation alone (ScummVM ships a game called `!`)
+// normalizes to nothing and can never be matched, so it is dropped here rather
+// than shipped as a row no query can reach.
+function collectTitles(games) {
+  const titles = new Set();
+  for (const game of games) {
+    const title = baseTitle(game.name);
+    if (title && normalizeTitle(title)) titles.add(title);
+  }
+  return [...titles];
+}
+
+async function writeTitleIndex(entries, samples, options) {
+  const json = `${encodeTitleIndex(entries)}\n`;
+  const bytes = Buffer.from(json, "utf8");
+  const index = parseTitleIndex(json);
+  for (const { slug, titles } of samples) {
+    for (const title of titles) {
+      const hit = searchTitleIndex(index, title, { limit: 200 }).find(
+        (candidate) => candidate.slugs.includes(slug),
+      );
+      if (!hit) throw new Error(`title index self-test failed: ${title} does not resolve to ${slug}`);
+    }
+  }
+  const outPath = path.join(options.outPath, TITLE_INDEX_FILE);
+  await writeFile(outPath, bytes);
+  const entry = {
+    format: TITLE_INDEX_FORMAT,
+    file: TITLE_INDEX_FILE,
+    rawBytes: bytes.length,
+    sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+    titles: index.titles.length,
+    packs: index.packs.length,
+  };
+  if (options.brotli) {
+    const compressed = brotliCompressBuffer(bytes, {
+      parameterProfile: "default",
+      quality: options.brotliQuality,
+    });
+    await writeFile(`${outPath}.br`, compressed);
+    entry.brotliFile = `${TITLE_INDEX_FILE}.br`;
+    entry.brotliBytes = compressed.length;
+  }
+  console.error(
+    `[identify] wrote ${TITLE_INDEX_FILE} (${formatBytes(entry.rawBytes)}` +
+      `${entry.brotliBytes ? `, br ${formatBytes(entry.brotliBytes)}` : ""}` +
+      `, ${entry.titles} title(s), ${entry.packs} pack(s))`,
+  );
+  return entry;
+}
+
 async function writeSystemPackV1(platform, gamesInfo, options) {
   console.error(`[identify] ${platform}: building RWFP1 pack`);
   const games = gamesInfo.games;
@@ -2539,6 +2611,8 @@ export async function main(argv = process.argv.slice(2)) {
   const cheats = [];
   const routerFilters = [];
   const routerSamples = [];
+  const titleEntries = [];
+  const titleSamples = [];
   for (const platform of selected) {
     const games = await readPlatformGames(platform, options, paths);
     const system = await writeSystemPackV1(platform, games, options);
@@ -2547,8 +2621,12 @@ export async function main(argv = process.argv.slice(2)) {
     const keys = collectRouterKeys(games.games);
     routerFilters.push(buildPackFilter(system.slug, keys));
     routerSamples.push({ slug: system.slug, keys: sampleRouterKeys(keys) });
+    const titles = collectTitles(games.games);
+    for (const name of titles) titleEntries.push({ name, slugs: [system.slug] });
+    titleSamples.push({ slug: system.slug, titles: sampleTitles(titles) });
   }
   const checksumRoutes = await writeChecksumRouter(routerFilters, routerSamples, options);
+  const titleIndex = await writeTitleIndex(titleEntries, titleSamples, options);
 
   // The catalog always lists every configured platform. The pack itself may be
   // absent when this invocation built a subset, so clients can still resolve a
@@ -2589,6 +2667,7 @@ export async function main(argv = process.argv.slice(2)) {
   const index = {
     format: INDEX_FORMAT,
     checksumRoutes,
+    titleIndex,
     hashStrategy: "crc-primary-md5-sha1-fallback-per-system",
     catalog: "catalog.json",
     sources: {
@@ -2662,6 +2741,10 @@ export async function main(argv = process.argv.slice(2)) {
         checksumRouterBytes: checksumRoutes.rawBytes,
         checksumRouterHuman: formatBytes(checksumRoutes.rawBytes),
         checksumRouterBrotliBytes: checksumRoutes.brotliBytes ?? 0,
+        titleIndexBytes: titleIndex.rawBytes,
+        titleIndexHuman: formatBytes(titleIndex.rawBytes),
+        titleIndexBrotliBytes: titleIndex.brotliBytes ?? 0,
+        titleIndexTitles: titleIndex.titles,
       },
       null,
       2,

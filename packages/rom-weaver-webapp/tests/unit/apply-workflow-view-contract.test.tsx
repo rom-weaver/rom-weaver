@@ -244,15 +244,15 @@ describe("apply workflow view - empty bench", () => {
     const { container } = renderView({ ui: createEmptyPatcherUiState() });
     // Apply keeps the optional checksum path out of the primary drop target.
     const step = container.querySelector("section.step.unified-drop-step") as HTMLElement;
-    const search = step.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
+    const search = step.querySelector("#rom-weaver-rom-search-form") as HTMLElement;
     const drop = step.querySelector("#rom-weaver-row-unified-drop") as HTMLElement;
     expect(search).toBeTruthy();
     expect(search.compareDocumentPosition(drop) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     expect(container.querySelector(".drop.hero")).toBeTruthy();
     expect(search.closest(".cks-body")).toBeNull();
-    expect(search.querySelector("label")?.textContent).toBe("Identify by checksum");
+    expect(search.querySelector("label")?.textContent).toBe("Identify by checksum or game name");
 
-    const input = container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
+    const input = container.querySelector("#rom-weaver-rom-search") as HTMLInputElement;
     await act(async () => {
       fireEvent.change(input, { target: { value: "abcd" } });
     });
@@ -275,16 +275,16 @@ describe("apply workflow view - empty bench", () => {
     );
     // The search moves into 0x02 as the refine row, keeping what was typed.
     const romStep = container.querySelector("#rom-weaver-row-file-rom") as HTMLElement;
-    const refine = romStep.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
-    expect(refine.classList.contains("identify-hash--compact")).toBe(true);
-    expect((refine.querySelector("#rom-weaver-rom-hash") as HTMLInputElement).value).toBe("3610a686");
-    expect(step.querySelector("#rom-weaver-rom-hash-search")).toBeNull();
+    const refine = romStep.querySelector("#rom-weaver-rom-search-form") as HTMLElement;
+    expect(refine.classList.contains("identify-search--compact")).toBe(true);
+    expect((refine.querySelector("#rom-weaver-rom-search") as HTMLInputElement).value).toBe("3610a686");
+    expect(step.querySelector("#rom-weaver-rom-search-form")).toBeNull();
     expect(step.textContent).toContain("Add the ROM or patches");
 
     // Clearing the card restores the hero with an empty search.
     fireEvent.click(romStep.querySelector('button[aria-label="Clear the expected ROM"]') as HTMLButtonElement);
     await vi.waitFor(() => expect(container.querySelector(".drop.hero")).toBeTruthy());
-    expect((container.querySelector("#rom-weaver-rom-hash") as HTMLInputElement).value).toBe("");
+    expect((container.querySelector("#rom-weaver-rom-search") as HTMLInputElement).value).toBe("");
   });
 
   it("keeps the checksum search open in 0x02 while patches wait for a ROM", async () => {
@@ -305,14 +305,14 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero")).toBeNull();
     const romStep = container.querySelector("#rom-weaver-row-file-rom") as HTMLElement;
     expect(romStep.textContent).toContain("Choose your original ROM");
-    const search = romStep.querySelector("#rom-weaver-rom-hash-search") as HTMLElement;
+    const search = romStep.querySelector("#rom-weaver-rom-search-form") as HTMLElement;
     expect(search).toBeTruthy();
     // The search stands open, as in the hero: no drawer to click first.
     expect(search.closest(".cks-body")).toBeNull();
-    expect(romStep.querySelector(".identify-hash-disclosure")).toBeNull();
-    expect(search.querySelector(".identify-hash-label")?.textContent).toBeTruthy();
+    expect(romStep.querySelector(".identify-search-disclosure")).toBeNull();
+    expect(search.querySelector(".identify-search-label")?.textContent).toBeTruthy();
 
-    const input = romStep.querySelector("#rom-weaver-rom-hash") as HTMLInputElement;
+    const input = romStep.querySelector("#rom-weaver-rom-search") as HTMLInputElement;
     await act(async () => {
       fireEvent.change(input, { target: { value: "3610a686" } });
       fireEvent.submit(search);
@@ -322,9 +322,9 @@ describe("apply workflow view - empty bench", () => {
       "Metroid Fusion (USA)",
     );
     // The match replaces the open search with the refine row - one search per step.
-    const forms = romStep.querySelectorAll("#rom-weaver-rom-hash-search");
+    const forms = romStep.querySelectorAll("#rom-weaver-rom-search-form");
     expect(forms).toHaveLength(1);
-    expect(forms[0]?.classList.contains("identify-hash--compact")).toBe(true);
+    expect(forms[0]?.classList.contains("identify-search--compact")).toBe(true);
   });
 
   it("loads the sample into the existing drop pipeline without navigating", async () => {
