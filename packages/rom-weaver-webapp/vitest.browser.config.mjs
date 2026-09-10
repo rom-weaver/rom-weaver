@@ -170,5 +170,6 @@ export default mergeConfig(baseConfig, {
         : fileURLToPath(new URL("../../dist/coverage/react-browser", import.meta.url)),
     },
     include: ["tests/browser/**/*.browser.test.js"],
+    setupFiles: ["./tests/setup/browser-defines.js"],
   },
 });

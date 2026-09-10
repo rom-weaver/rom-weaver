@@ -86,6 +86,7 @@ export default defineConfig({
     },
     include: ["tests/wasm/*.test.mjs"],
     isolate: true,
+    setupFiles: ["./tests/setup/browser-defines.js"],
     testTimeout: 180_000,
   },
 });

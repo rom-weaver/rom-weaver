@@ -226,6 +226,7 @@ Without `-o` or `--output`, `save set` writes a free sibling name such as `game-
 `--game GAME_ID` selects a compatible handler when recognition is ambiguous. `--rom-sha1 SHA1` supplies a known ROM identity to recognition. The SHA-1 value contains 40 hexadecimal characters.
 
 [Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
+
 ## Cheats
 
 `cheat list --input ROM` detects the ROM's system, reads that system's shard from the cheat-database directory, matches the game, and prints one row per cheat: ID, delivery, raw code, description. `--json` puts the same data in `details.cheat_list`.
