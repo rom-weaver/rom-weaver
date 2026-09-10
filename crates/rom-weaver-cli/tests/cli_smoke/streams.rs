@@ -911,3 +911,21 @@ fn trim_stdout_rejects_multiple_results_without_changing_inputs() {
     assert_eq!(fs::read(first.path()).unwrap(), bytes);
     assert_eq!(fs::read(second.path()).unwrap(), bytes);
 }
+
+#[test]
+fn trim_stdout_explains_when_no_input_is_eligible() {
+    let temp = setup_temp_dir();
+    let input = temp.child("plain.txt");
+    let source = b"not a ROM";
+    fs::write(input.path(), source).unwrap();
+    let output = binary()
+        .args(["trim", input.path().to_str().unwrap(), "-o", "-"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("output - produced no file"), "{stderr}");
+    assert!(stderr.contains("no trim-eligible inputs found"), "{stderr}");
+    assert_eq!(fs::read(input.path()).unwrap(), source);
+}

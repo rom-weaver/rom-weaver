@@ -298,6 +298,12 @@ fn run_staged(
         .get("path")
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| invalid("output - needs a reported output path"))?;
+    if !Path::new(path).try_exists()? {
+        let label = terminal
+            .as_ref()
+            .map_or("operation reported no output", |event| event.label.as_str());
+        return Err(invalid(&format!("output - produced no file: {label}")));
+    }
     let path = fs::canonicalize(path)?;
     if !path.starts_with(fs::canonicalize(&out_dir)?) || !path.is_file() {
         return Err(invalid(
