@@ -19,11 +19,13 @@ import {
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
   createEmptyPpfUndoSessionState,
+  createEmptySaveEditorSessionState,
   createEmptyTrimSessionState,
   createEmptyValidationState,
   type PatcherSessionState,
   type StartupState,
   type PpfUndoSessionState,
+  type SaveEditorSessionState,
   type TrimSessionState,
   type ValidationState,
   type WebappView,
@@ -38,6 +40,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "identify",
   "trim",
   "ppf-undo",
+  "save-editor",
   "test",
   "whats-new",
 ];
@@ -47,7 +50,8 @@ const normalizeWorkflowView = (value: unknown): WebappView | null => {
   return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
-const isBetaWorkflowView = (view: WebappView): boolean => view === "identify" || view === "trim" || view === "ppf-undo";
+const isBetaWorkflowView = (view: WebappView): boolean =>
+  view === "identify" || view === "trim" || view === "ppf-undo" || view === "save-editor";
 
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
@@ -61,6 +65,7 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   identify: "identify-rom",
   patcher: "apply-patch",
   "ppf-undo": "ppf-undo",
+  "save-editor": "save-editor",
   test: "test-rom",
   trim: "trim-rom",
   "whats-new": "whats-new",
@@ -85,6 +90,7 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   identify: "identify",
   "identify.html": "identify",
   "ppf-undo": "ppf-undo",
+  "save-editor": "save-editor",
   test: "test",
   "test.html": "test",
   trim: "trim",
@@ -159,6 +165,7 @@ type WebappState = {
   currentView: WebappView;
   patcherSession: PatcherSessionState;
   ppfUndoSession: PpfUndoSessionState;
+  saveEditorSession: SaveEditorSessionState;
   trimSession: TrimSessionState;
   settingsDialogOpen: boolean;
   settings: SettingsState;
@@ -251,6 +258,7 @@ const createWebappRootController = (options: ControllerOptions) => {
       status: "loading",
     },
     ppfUndoSession: createEmptyPpfUndoSessionState(),
+    saveEditorSession: createEmptySaveEditorSessionState(),
     trimSession: createEmptyTrimSessionState(),
     validation: emptyValidation(),
   }));
@@ -397,6 +405,7 @@ const createWebappRootController = (options: ControllerOptions) => {
         settingsDialogOpen: false,
         startup: { message: "", status: "ready" },
         ppfUndoSession: createEmptyPpfUndoSessionState(),
+        saveEditorSession: createEmptySaveEditorSessionState(),
         trimSession: createEmptyTrimSessionState(),
         validation: emptyValidation(),
       });
@@ -535,6 +544,11 @@ const createWebappRootController = (options: ControllerOptions) => {
       const nextActive = !!active;
       if (store.getState().ppfUndoSession.active === nextActive) return;
       setState({ ppfUndoSession: { active: nextActive } });
+    },
+    setSaveEditorSessionState(active: unknown) {
+      const nextActive = !!active;
+      if (store.getState().saveEditorSession.active === nextActive) return;
+      setState({ saveEditorSession: { active: nextActive } });
     },
     setTrimOutputFormat(format: unknown) {
       updateTrimSession({ outputFormat: typeof format === "string" ? format : "" });

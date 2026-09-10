@@ -24,6 +24,7 @@ describe("rom-weaver command boundary helpers", () => {
       "trim",
       "patch",
       "bundle",
+      "save",
       "tools",
       "plan-extract-batch",
     ]);
@@ -51,6 +52,29 @@ describe("rom-weaver command boundary helpers", () => {
     );
 
     expect(collectRomWeaverRunInputPaths(request)).toEqual(["/work/game.gba", "/work/gba.pack"]);
+  });
+
+  it("builds generated save command branches", () => {
+    const command = createRomWeaverCommand("save-set", {
+      assignments: ["trainer.money=999999"],
+      dry_run: true,
+      game: "pokemon-emerald",
+      input: "/work/game.sav",
+    });
+    expect(command).toEqual({
+      args: {
+        args: {
+          assignments: ["trainer.money=999999"],
+          dry_run: true,
+          game: "pokemon-emerald",
+          input: "/work/game.sav",
+        },
+        type: "set",
+      },
+      type: "save",
+    });
+    expect(getRomWeaverCommandLabel(command)).toBe("save-set");
+    expect(collectRomWeaverRunInputPaths(command)).toEqual(["/work/game.sav"]);
   });
 
   it("builds cheat commands and collects only the local ROM path", () => {

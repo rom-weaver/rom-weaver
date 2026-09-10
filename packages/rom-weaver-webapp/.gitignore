@@ -1,6 +1,6 @@
 node_modules/
 dist/
-.vitest-attachments/
+.vitest/
 src/wasm/*.wasm
 src/wasm/*.wasm.br
 src/wasm/*.wasm.prod.sha256

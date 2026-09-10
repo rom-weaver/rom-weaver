@@ -15,6 +15,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [`identify database` subcommands](#identify-database-subcommands)
   - [Identify result](#identify-result)
 - [Checksum](#checksum)
+- [Save Editor](#save-editor)
 - [Cheats](#cheats)
 - [Patching](#patching)
   - [Inputs](#inputs)
@@ -55,6 +56,11 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `bundle create` | Write a `rom-weaver-bundle.json` recipe from local files. |
 | `bundle parse` | Read a bundle recipe and report what it points at. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
+| `save identify` | Report save recognition, format, integrity, and active slot. |
+| `save inspect` | Report the sections and generic field schema for a supported save. |
+| `save get` | Read one field by its stable field ID. |
+| `save set` | Check and apply one or more atomic `FIELD=VALUE` edits. |
+| `save export-schema` | Report the generic field schema for a checked save. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
 | `setup` | Install the offline identify database. |
 | `completions` | Print a tab-completion script for your shell. |
@@ -209,6 +215,18 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 ## Checksum
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
+
+## Save Editor
+
+All five `save` commands take a save path. `identify`, `inspect`, `get`, and `export-schema` do not write a file. `get` also takes one field ID.
+
+`save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing.
+
+Without `-o` or `--output`, `save set` writes a free sibling name such as `game-edited.sav`. It adds a number when that name exists. An explicit output path must not exist unless `--force` is present. The output path must not name the source file.
+
+`--game GAME_ID` selects a compatible handler when recognition is ambiguous. `--rom-sha1 SHA1` supplies a known ROM identity to recognition. The SHA-1 value contains 40 hexadecimal characters.
+
+[Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
 
 ## Cheats
 

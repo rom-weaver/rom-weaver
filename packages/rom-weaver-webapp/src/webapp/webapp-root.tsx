@@ -5,6 +5,7 @@ import {
   House,
   Package,
   RotateCcw,
+  Save as SaveIcon,
   ScanSearch,
   Scissors,
   Settings,
@@ -74,6 +75,7 @@ import {
   IdentifyRouteForm,
   preloadWorkflowRoute,
   PpfUndoRouteForm,
+  SaveEditorRouteForm,
   TrimPatchRoute,
   WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
@@ -121,6 +123,15 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     icon: <RotateCcw aria-hidden="true" />,
     id: "ppf-undo",
     label: "PPF undo",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "save-editor",
+    icon: <SaveIcon aria-hidden="true" />,
+    id: "save-editor",
+    label: "Save Editor",
     placement: "more",
   },
 ];
@@ -709,6 +720,7 @@ function WebappRoot({
     patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
     romFilePresent: state.patcherSession.romFilePresent,
     ppfUndoActive: state.ppfUndoSession?.active ?? false,
+    saveEditorActive: state.saveEditorSession?.active ?? false,
     trimState: state.trimSession,
     webappState: state,
   });
@@ -856,6 +868,13 @@ function WebappRoot({
                   <PpfUndoRouteForm
                     onSessionChange={actions.onPpfUndoSessionChange}
                     pageDrop={pageDropFor("ppf-undo")}
+                  />,
+                )}
+                {workflowPanel(
+                  "save-editor",
+                  <SaveEditorRouteForm
+                    onSessionChange={actions.onSaveEditorSessionChange}
+                    pageDrop={pageDropFor("save-editor")}
                   />,
                 )}
                 {state.currentView === "docs" || state.currentView === "whats-new" ? null : <DropVeil />}

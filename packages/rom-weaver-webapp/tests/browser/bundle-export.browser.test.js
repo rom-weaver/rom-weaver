@@ -178,7 +178,9 @@ test("export bundle bundles the session from main-page options with a checks-onl
   const patchEntry = result.bundle.patches[0];
   expect(patchEntry.id).toBeTruthy();
   expect(patchEntry.version).toBe("1.4.0");
-  expect(patchEntry.path).toBe("change.ips");
+  // The entry carries the replacement source, matching the file name the patch
+  // row shows after the replace above.
+  expect(patchEntry.path).toBe("replacement.ips");
   expect(patchEntry.optional).toBe(true);
   expect(patchEntry.name).toBe("Core change");
   expect(patchEntry.author).toBe("Weaver");

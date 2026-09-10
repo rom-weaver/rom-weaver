@@ -45,6 +45,7 @@ Procedures for specific tasks.
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
+- [Edit a Generation III save](how-to/edit-gen3-saves.md): inspect and safely edit an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save in the browser or CLI.
 
 ### From the terminal
 
@@ -72,6 +73,7 @@ Facts to look up. No advice, no steps.
 - [Supported formats](reference/formats.md): the full patch, container, codec, checksum, trim, and header support tables.
 - [Cheat database](reference/cheat-database.md): supported systems, delivery classes, matching, storage, and licensing.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
+- [Save Editor support](reference/save-editor.md): supported games, editable fields, recognition rules, and integrity checks.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
 - [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v2.schema.json): the machine-readable bundle format.
 - [Runtime configuration](hosting/env-vars.md): environment variables and browser diagnostic handles.
@@ -104,6 +106,7 @@ Background on the engine, formats, and design decisions.
 - [Development guide](development/development.md): prerequisites, setup, native and WASM builds, the dev server, tests, generated files, and worktrees.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
 - [ROM identify data](development/identify-data.md): rebuild the Libretro and OpenGood packs.
+- [Save Editor development](development/save-editor.md): shared handler architecture, integrity boundary, and the eight-step contributor flow.
 - [References](development/references.md): format specifications and upstream reference implementations.
 
 - [CI workflows](development/ci.md) and [local CI checks](development/reproduce-ci-locally.md).
