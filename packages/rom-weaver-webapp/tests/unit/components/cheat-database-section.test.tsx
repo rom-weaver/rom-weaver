@@ -407,3 +407,46 @@ describe("CheatDatabaseSection platform resolution", () => {
     );
   });
 });
+
+describe("CheatDatabaseSection save as patch", () => {
+  it("stays disabled until a ROM cheat is On", async () => {
+    const onSaveAsPatch = vi.fn(async () => "smw - Infinite lives.ips");
+    const view = render(<CheatDatabaseSection {...props} onSaveAsPatch={onSaveAsPatch} />);
+    const save = () => view.getByRole("button", { name: /Save as patch/u }) as HTMLButtonElement;
+    await waitFor(() => expect(save().disabled).toBe(true));
+
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(save().disabled).toBe(false));
+  });
+
+  it("bakes the ROM cheats that are On and reports the created file", async () => {
+    const onSaveAsPatch = vi.fn(async () => "smw - Infinite lives.ips");
+    const view = render(<CheatDatabaseSection {...props} onSaveAsPatch={onSaveAsPatch} />);
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+
+    fireEvent.click(view.getByRole("button", { name: /Save as patch/u }));
+    await waitFor(() =>
+      expect(view.getByRole("status").textContent).toBe(
+        "Created smw - Infinite lives.ips from the 1 ROM cheat that is On.",
+      ),
+    );
+    const baked = onSaveAsPatch.mock.calls[0]?.[0] as ClassifiedCheatRecord[];
+    expect(baked.map(({ record }) => record.id)).toEqual(["cheat-1"]);
+  });
+
+  it("shows the failure instead of a status line", async () => {
+    const onSaveAsPatch = vi.fn(async () => {
+      throw new Error("patch create failed");
+    });
+    const view = render(<CheatDatabaseSection {...props} onSaveAsPatch={onSaveAsPatch} />);
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+    fireEvent.click(view.getByRole("button", { name: /Save as patch/u }));
+    await waitFor(() => expect(view.getByRole("alert").textContent).toBe("patch create failed"));
+  });
+});

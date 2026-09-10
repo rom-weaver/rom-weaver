@@ -282,7 +282,14 @@ export type CheatKind = "game-genie" | "pro-action-replay" | "xploder";
 
 export type CheatTarget = "cartridge-rom" | "runtime-memory" | "unknown";
 
-export type CheatWrite = { offset: number, value: number, width: number, };
+export type CheatWrite = { offset: number, value: number, width: number,
+/**
+ * The compare byte the code carried, when it had one and the resolver
+ * matched it against this offset. `None` means the code carried no compare
+ * byte, so the offset is a best-effort bank guess rather than a verified
+ * match.
+ */
+compare?: number | null, };
 
 export type CheatRecord = { id: string, system: CheatSystem, gameId: string, description: string, rawCode: string | null, codeKind?: CheatKind, rawFields: { [key in string]: string }, sourceFile: string, sourceIndex: number, sourceRevision: string, };
 

@@ -118,6 +118,14 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   private manualOutputName = false;
   private originalSession?: SourceSession<TSource>;
   private modifiedSession?: SourceSession<TSource>;
+  /**
+   * Cheat codes that stand in for a modified ROM. When set, the engine bakes
+   * them into the original and diffs the result, so no modified source is
+   * staged and none is required to run.
+   */
+  private cheatCodes: string[] = [];
+  private cheatCodeSystem?: string;
+  private cheatCodeKind?: string;
 
   constructor(
     runtime: WorkflowRuntime,
@@ -152,6 +160,24 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
 
   async setModified(source: TSource | TSource[]): Promise<void> {
     return this.setSource("setModified", "modified", source);
+  }
+
+  /**
+   * Replace the modified ROM with cheat codes. An empty list restores the
+   * modified-source requirement. Callers MUST clear any staged modified source
+   * themselves; a staged source and codes together are rejected by the engine.
+   */
+  async setCheatCodes(codes: readonly string[], system?: string, kind?: string): Promise<void> {
+    return this.mutate("setCheatCodes", async () => {
+      this.cheatCodes = codes.map((code) => String(code || "").trim()).filter((code) => !!code);
+      this.cheatCodeSystem = system;
+      this.cheatCodeKind = kind;
+      if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
+    });
+  }
+
+  private usesCheatCodes(): boolean {
+    return this.cheatCodes.length > 0;
   }
 
   /**
@@ -203,7 +229,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       const patchType = this.getPatchType();
       if (!SUPPORTED_CREATE_PATCH_TYPES.has(patchType))
         throw new RomWeaverError("UNSUPPORTED_FORMAT", `Unsupported patch type: ${patchType}`);
-      const supportedCreateFormats = getCreatePatchFormatsForSizes(original.state.size, modified.state.size);
+      const supportedCreateFormats = getCreatePatchFormatsForSizes(original.state.size, modified?.state.size);
       if (!supportedCreateFormats.includes(patchType)) {
         throw new RomWeaverError(
           "UNSUPPORTED_FORMAT",
@@ -220,7 +246,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
       const rawSize = result.sizeSummary?.rawSize ?? result.sizeSummary?.outputSize ?? result.output.size;
       return {
-        modified: this.toSelectedInputInfo(modified, "modified"),
+        ...(modified ? { modified: this.toSelectedInputInfo(modified, "modified") } : {}),
         original: this.toSelectedInputInfo(original, "original"),
         output,
         sizeSummary: { ...result.sizeSummary, outputSize: output.size, rawSize },
@@ -265,8 +291,10 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   private computeReady(): boolean {
     const original = this.getSelectedSourceOwner(this.originalSession);
     const modified = this.getSelectedSourceOwner(this.modifiedSession);
-    if (!(original && modified)) return false;
+    if (!original) return false;
     if (original.state.status !== "ready" || !original.state.selectedCandidateId) return false;
+    if (this.usesCheatCodes()) return !!this.outputName.trim();
+    if (!modified) return false;
     if (modified.state.status !== "ready" || !modified.state.selectedCandidateId) return false;
     return !!this.outputName.trim();
   }
@@ -398,7 +426,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
   }
 
   private buildAutomaticOutputName() {
-    const modified = this.getModified();
+    const modified = this.usesCheatCodes() ? null : this.getModified();
     const original = this.getOriginal();
     const sourceFileName = modified?.fileName || original?.fileName;
     if (!sourceFileName) return this.outputName;
@@ -426,13 +454,20 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
 
   private createPatchInput(): CreatePatchInput {
     const original = this.getSelectedSourceOwner(this.originalSession);
-    const modified = this.getSelectedSourceOwner(this.modifiedSession);
-    if (!(original && modified))
+    const modified = this.usesCheatCodes() ? undefined : this.getSelectedSourceOwner(this.modifiedSession);
+    if (!original) throw new RomWeaverError("INVALID_INPUT", "Original and modified sources are required");
+    if (!(modified || this.usesCheatCodes()))
       throw new RomWeaverError("INVALID_INPUT", "Original and modified sources are required");
     const preparedOriginal = this.getPreparedPatchSource(original);
-    const preparedModified = this.getPreparedPatchSource(modified);
+    const preparedModified = modified ? this.getPreparedPatchSource(modified) : undefined;
     return {
-      modified: (preparedModified || modified.source) as never,
+      ...(this.usesCheatCodes()
+        ? {
+            codes: [...this.cheatCodes],
+            ...(this.cheatCodeKind ? { codeKind: this.cheatCodeKind } : {}),
+            ...(this.cheatCodeSystem ? { codeSystem: this.cheatCodeSystem } : {}),
+          }
+        : { modified: ((preparedModified || modified?.source) ?? undefined) as never }),
       options: {
         ...this.createExecutionOptions(),
         onProgress: (progress) => {
@@ -452,18 +487,19 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
       },
       original: (preparedOriginal || original.source) as never,
       originalCrc32: original.state.checksums?.crc32,
-      selectedModifiedEntryName: preparedModified ? undefined : modified.selectedArchiveEntry,
+      selectedModifiedEntryName: preparedModified ? undefined : modified?.selectedArchiveEntry,
       selectedOriginalEntryName: preparedOriginal ? undefined : original.selectedArchiveEntry,
     };
   }
 
-  private getRunSourcesReady(): [StagedSource<TSource>, StagedSource<TSource>] {
+  private getRunSourcesReady(): [StagedSource<TSource>, StagedSource<TSource> | undefined] {
     const original = this.getSelectedSourceOwner(this.originalSession);
-    const modified = this.getSelectedSourceOwner(this.modifiedSession);
-    if (!(original && modified))
-      throw new RomWeaverError("INVALID_INPUT", "Original and modified sources are required");
+    const modified = this.usesCheatCodes() ? undefined : this.getSelectedSourceOwner(this.modifiedSession);
+    if (!original) throw new RomWeaverError("INVALID_INPUT", "Original and modified sources are required");
     if (original.state.status !== "ready" || !original.state.selectedCandidateId)
       throw new RomWeaverError("AMBIGUOUS_SELECTION", "Original source requires candidate selection");
+    if (this.usesCheatCodes()) return [original, undefined];
+    if (!modified) throw new RomWeaverError("INVALID_INPUT", "Original and modified sources are required");
     if (modified.state.status !== "ready" || !modified.state.selectedCandidateId)
       throw new RomWeaverError("AMBIGUOUS_SELECTION", "Modified source requires candidate selection");
     return [original, modified];
