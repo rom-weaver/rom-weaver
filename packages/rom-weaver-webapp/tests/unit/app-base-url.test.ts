@@ -35,6 +35,21 @@ describe("readAppBaseUrl", () => {
     expect(new URL(at("/roms/index.html")).pathname).toBe("/roms/");
   });
 
+  test("uses the stamped <base> on the 404 page instead of the missed path", () => {
+    const base = document.createElement("base");
+    base.href = "/";
+    document.head.append(base);
+    document.documentElement.dataset.page = "not-found";
+    try {
+      expect(new URL(at("/assets/")).pathname).toBe("/");
+      base.href = "/roms/";
+      expect(new URL(at("/roms/missing/deeper/")).pathname).toBe("/roms/");
+    } finally {
+      base.remove();
+      delete document.documentElement.dataset.page;
+    }
+  });
+
   test("drops any query and hash so it is usable as a base", () => {
     const base = new URL(at("/apply-patch/?bundle=first-weave.zip#frag"));
     expect(base.search).toBe("");

@@ -131,6 +131,10 @@ const readWorkflowViewFromPath = (pathname?: string): WebappView | null => {
  */
 const readAppBaseUrl = (): string => {
   if (typeof window === "undefined") return "/";
+  // The 404 page is served at whatever path missed, so its location says
+  // nothing about the app base. The build stamps that page with a <base>
+  // tag for the same reason, and its assets already resolve through it.
+  if (document.documentElement.dataset.page === "not-found") return document.baseURI;
   const baseUrl = new URL(window.location.href);
   const pathSegments = baseUrl.pathname.split("/");
   while (pathSegments.at(-1) === "") pathSegments.pop();
