@@ -48,6 +48,28 @@ fn formats_json_reports_capabilities_from_the_registries() {
 }
 
 #[test]
+fn man_install_json_reports_the_installed_page() {
+    let temp = setup_temp_dir();
+    let stdout = command_stdout(
+        &[
+            "man",
+            "patch",
+            "apply",
+            "--install",
+            "--json",
+            "--man-dir",
+            temp.path().to_str().expect("man directory"),
+        ],
+        0,
+    );
+    let report = parse_single_json_line(&stdout);
+    assert_eq!(report["command"], "man");
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(report["details"]["installed_pages"], 1);
+    assert!(temp.path().join("rom-weaver-patch-apply.1").exists());
+}
+
+#[test]
 fn bare_invocation_prints_full_help() {
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
     let assert = command.assert().code(2);
@@ -55,6 +77,80 @@ fn bare_invocation_prints_full_help() {
     // Full help, not the one-line usage error: the subcommand list is present.
     assert!(stderr.contains("Commands:"), "{stderr}");
     assert!(stderr.contains("compress"), "{stderr}");
+}
+
+#[cfg(unix)]
+#[test]
+fn closed_stdout_does_not_panic_or_interrupt_file_outputs() {
+    use std::os::{fd::OwnedFd, unix::net::UnixStream};
+
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    fs::write(input.path(), b"rom bytes").expect("input fixture");
+    let archive = temp.child("game.zip");
+    let input_path = input.path().to_str().expect("input path");
+    let archive_path = archive.path().to_str().expect("archive path");
+    for args in [
+        vec!["formats"],
+        vec!["formats", "--json"],
+        vec!["completions", "bash"],
+        vec!["man", "patch", "apply"],
+        vec!["bundle", "schema"],
+        vec!["formats", "--dry-run", "--json"],
+        vec!["checksum", "-i", input_path],
+        vec!["checksum", "-i", input_path, "--json"],
+        vec!["compress", "-i", input_path, "-o", archive_path, "--json"],
+    ] {
+        let (reader, writer) = UnixStream::pair().expect("stdout pair");
+        drop(reader);
+        let writer: OwnedFd = writer.into();
+        let output = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"))
+            .args(&args)
+            .stdout(writer)
+            .output()
+            .expect("run command");
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert!(output.stderr.is_empty(), "{args:?}: {output:?}");
+    }
+    assert!(
+        archive.path().exists(),
+        "closed stdout must not abort compression"
+    );
+    let extracted = temp.child("extracted");
+    command_stdout(
+        &[
+            "extract",
+            "-i",
+            archive_path,
+            "-o",
+            extracted.path().to_str().expect("extraction path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(extracted.path().join("game.bin")).expect("extracted ROM"),
+        b"rom bytes"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn stdout_write_failure_has_a_controlled_nonzero_exit() {
+    let output = std::process::Command::new(assert_cmd::cargo::cargo_bin("rom-weaver"))
+        .arg("formats")
+        .stdout(
+            File::options()
+                .write(true)
+                .open("/dev/full")
+                .expect("full device"),
+        )
+        .output()
+        .expect("run command");
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("cannot write stdout"), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
 }
 
 #[test]

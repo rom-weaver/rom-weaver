@@ -68,9 +68,11 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 
 `-h` prints a one-line summary of each option; `--help` prints the full explanation, including the extra detail on flags like `--patch-header`.
 
-Nearly every command takes `-i`/`--input` and `-o`/`--output`; `patch create` is the exception, taking `--original` and `--modified` instead. The other short flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e` extension, `-n` dry run, `-v` verbose, and `-q` quiet. Run `rom-weaver <command> --help` for the full list.
+`probe`, `checksum`, `identify`, and `extract` accept one positional `FILE` instead of `-i`/`--input`. Supplying both forms is an error. `compress` and `trim` accept multiple positional files and repeated `--input` values; mixed forms retain their command-line order. `--` ends option parsing for filenames that start with `-`. The native aliases do not change the JSON/WASM command schema.
 
-`identify`, `probe`, and `checksum` accept `-` as the `--input` value to read from stdin.
+Output flags remain `-o`/`--output` on commands that accept them. `patch create` takes `--original` and `--modified`. The other short flags are `-j` threads, `-f` format, `-s` select, `-a` algorithm, `-e` extension, `-n` dry run, `-v` verbose, and `-q` quiet. `rom-weaver <command> --help` lists each command's flags.
+
+`identify`, `probe`, and `checksum` accept `-` as either the positional file or the `--input` value to read from stdin.
 
 See [Read from a pipeline](../how-to/identify-and-hash-files.md#read-from-a-pipeline) for examples.
 
@@ -91,11 +93,11 @@ Codecs are stricter. Each format accepts only the codec names in its own row of 
 
 Every command accepts these global flags, listed under `Global options` in its help:
 
-- `--json` prints operation reports as one JSON object per line instead of human-readable output. Asset generators such as `bundle schema` and `completions` keep their native schema or script output.
+- `--json` prints operation reports as one JSON object per line instead of human-readable output. Asset generators such as `bundle schema`, `completions`, and `man` without `--install` keep their native output. `man --install --json` reports the installed page count and output directory as a JSON event.
 - `--progress` and `--no-progress` override the automatic choice, which is to show progress on a terminal and hide it when output is piped.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. Logging is off unless you ask for it, and it is separate from the normal output.
 - `-v`, `-vv`, and `-vvv` are shorthand for info, debug, and trace.
-- `-q`/`--quiet` logs errors only.
+- `-q`/`--quiet` logs errors only and hides successful write summaries. Query results and dry-run plans remain visible. Progress is controlled separately by `--progress` and `--no-progress`.
 - `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
 - `--color` and `--no-color` override colored output. The flag wins over the `NO_COLOR` environment variable, which wins over the terminal-vs-piped default. `--color` keeps color even when piped, though the live progress bar stays terminal-only.
 
@@ -215,6 +217,10 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 ## Checksum
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
+
+Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json` and `--dry-run`.
+
+`--digest` retains the normal input semantics: archives open automatically, `--no-extract` hashes the archive bytes, and `--start`/`--length` select a byte range. It is not a checksum-file verification mode.
 
 ## Save Editor
 
@@ -384,7 +390,9 @@ The full support matrix - every patch format, container and compressed ROM or di
 ## JSON output
 
 
-Pass `--json` to make operation commands emit one JSON object per line, including progress, status, warnings, selected inputs, and emitted-file metadata where relevant. JSON mode disables interactive selection, making it the stable interface for scripts. Commands that generate an asset, such as `bundle schema` and `completions`, still write that asset in its native format.
+Pass `--json` to make operation commands emit one JSON object per line, including progress, status, warnings, selected inputs, and emitted-file metadata where relevant. JSON mode disables interactive selection, making it the stable interface for scripts. Commands that generate an asset, such as `bundle schema`, `completions`, and `man` without `--install`, still write that asset in its native format.
+
+A closed stdout pipe does not cause a panic or interrupt file creation. The command finishes its work and retains its operation exit status. Other stdout write errors produce a diagnostic on stderr and a nonzero exit status.
 
 ```bash
 rom-weaver --json probe --input game.sfc | jq

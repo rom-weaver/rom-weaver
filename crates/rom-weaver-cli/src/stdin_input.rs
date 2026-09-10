@@ -22,7 +22,7 @@ pub(crate) use wasm::spool_stdin_if_dash;
 mod native {
     use super::STDIN_INPUT_SENTINEL;
     use std::fs::{self, File, OpenOptions};
-    use std::io::{self, Write};
+    use std::io::{self, Read, Write};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -50,21 +50,34 @@ mod native {
         if input.as_os_str() != STDIN_INPUT_SENTINEL {
             return Ok(None);
         }
-        let path = create_temp_file()?;
+        let (path, file) = create_temp_file()?;
         trace!(path = %path.display(), "spooling stdin to temp file");
-        let mut file = File::create(&path)?;
-        let bytes = io::copy(&mut io::stdin().lock(), &mut file)?;
-        file.flush()?;
+        spool_reader_to_file(input, &mut io::stdin().lock(), path, file)
+    }
+
+    pub(super) fn spool_reader_to_file<R: Read>(
+        input: &mut PathBuf,
+        reader: &mut R,
+        path: PathBuf,
+        mut file: File,
+    ) -> crate::Result<Option<StdinSpool>> {
+        let spool = StdinSpool { path: path.clone() };
+        let copied = (|| -> io::Result<u64> {
+            let bytes = io::copy(reader, &mut file)?;
+            file.flush()?;
+            Ok(bytes)
+        })();
         drop(file);
+        let bytes = copied?;
         trace!(path = %path.display(), bytes, "spooled stdin to temp file");
-        *input = path.clone();
-        Ok(Some(StdinSpool { path }))
+        *input = path;
+        Ok(Some(spool))
     }
 
     /// Reserve a unique, freshly-created temp path (no `tempfile` dependency).
     /// Uniqueness comes from the pid plus a process-monotonic counter;
     /// `create_new` guards against colliding with a stale file from a prior run.
-    fn create_temp_file() -> crate::Result<PathBuf> {
+    fn create_temp_file() -> crate::Result<(PathBuf, File)> {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir();
         let pid = std::process::id();
@@ -76,7 +89,7 @@ mod native {
                 .create_new(true)
                 .open(&candidate)
             {
-                Ok(_) => return Ok(candidate),
+                Ok(file) => return Ok((candidate, file)),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(error) => return Err(error.into()),
             }
@@ -93,3 +106,7 @@ mod wasm {
         Ok(None)
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "../tests/unit/stdin_input.rs"]
+mod tests;

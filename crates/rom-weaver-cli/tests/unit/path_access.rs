@@ -107,15 +107,15 @@ fn writable_dir_passes_and_leaves_no_probe_behind() {
 }
 
 #[test]
-fn a_leftover_probe_is_cleaned_up_and_still_proves_writability() {
+fn a_user_file_with_the_old_probe_name_is_preserved() {
     let temp = assert_fs::TempDir::new().expect("temp dir");
     let leftover = temp.child(".rom-weaver-write-probe");
-    leftover.write_binary(b"").expect("leftover probe");
+    leftover.write_binary(b"user data").expect("user file");
 
     assert!(check_writable_dir(temp.path()).is_ok());
-    assert!(
-        !leftover.path().exists(),
-        "the leftover probe must not survive the check"
+    assert_eq!(
+        fs::read(leftover.path()).expect("read user file"),
+        b"user data"
     );
 }
 

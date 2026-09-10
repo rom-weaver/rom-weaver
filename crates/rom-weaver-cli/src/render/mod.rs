@@ -51,16 +51,16 @@ impl Surface {
 
     /// A plain line (used for label-only summaries).
     pub fn line(&self, text: &str) {
-        println!("{text}");
+        crate::stdout_output::write(format_args!("{text}\n"));
     }
 
     /// A dimmed contextual note.
     pub fn note(&self, text: &str) {
         if self.color {
-            println!("{}", text.dimmed());
+            crate::stdout_output::write(format_args!("{}\n", text.dimmed()));
             return;
         }
-        println!("{text}");
+        crate::stdout_output::write(format_args!("{text}\n"));
     }
 
     /// An error line (red in Rich), written to stderr.
@@ -104,12 +104,12 @@ impl Surface {
         for (key, value) in pairs {
             let pad = " ".repeat(width.saturating_sub(key.chars().count()));
             if self.color {
-                println!(
-                    "{}{pad}  {value}",
+                crate::stdout_output::write(format_args!(
+                    "{}{pad}  {value}\n",
                     key.truecolor(ACCENT.0, ACCENT.1, ACCENT.2)
-                );
+                ));
             } else {
-                println!("{key}{pad}  {value}");
+                crate::stdout_output::write(format_args!("{key}{pad}  {value}\n"));
             }
         }
     }
@@ -142,7 +142,7 @@ impl Surface {
                     line.push_str(&" ".repeat(pad));
                 }
             }
-            println!("{}", line.trim_end());
+            crate::stdout_output::write(format_args!("{}\n", line.trim_end()));
         }
     }
 }

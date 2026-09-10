@@ -127,13 +127,13 @@ fn flags(value: &Value, keys: &[&str]) -> String {
 pub fn print_formats(json_output: bool) {
     let report = report();
     if json_output {
-        println!(
-            "{}",
+        crate::stdout_output::write(format_args!(
+            "{}\n",
             serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string())
-        );
+        ));
         return;
     }
-    println!("Container formats");
+    crate::stdout_output::write(format_args!("Container formats\n"));
     for format in report
         .get("containers")
         .and_then(Value::as_array)
@@ -144,15 +144,14 @@ pub fn print_formats(json_output: bool) {
         let codecs = strings(format, "codecs");
         let extensions = extensions.iter().map(String::as_str).collect::<Vec<_>>();
         let codecs = codecs.iter().map(String::as_str).collect::<Vec<_>>();
-        println!(
-            "  {name:<8} {:<18} extensions: {:<28} codecs: {}",
+        crate::stdout_output::write(format_args!(
+            "  {name:<8} {:<18} extensions: {:<28} codecs: {}\n",
             flags(format, &["create", "extract"]),
             join(&extensions),
             join(&codecs)
-        );
+        ));
     }
-    println!();
-    println!("Patch formats");
+    crate::stdout_output::write(format_args!("\nPatch formats\n"));
     for format in report
         .get("patches")
         .and_then(Value::as_array)
@@ -161,13 +160,14 @@ pub fn print_formats(json_output: bool) {
         let name = format.get("name").and_then(Value::as_str).unwrap_or("?");
         let extensions = strings(format, "extensions");
         let extensions = extensions.iter().map(String::as_str).collect::<Vec<_>>();
-        println!(
-            "  {name:<8} {:<22} extensions: {}",
+        crate::stdout_output::write(format_args!(
+            "  {name:<8} {:<22} extensions: {}\n",
             flags(format, &["apply", "create", "parse"]),
             join(&extensions)
-        );
+        ));
     }
-    println!();
-    println!("Checksum algorithms");
-    println!("  {}", supported_algorithms().join(", "));
+    crate::stdout_output::write(format_args!(
+        "\nChecksum algorithms\n  {}\n",
+        supported_algorithms().join(", ")
+    ));
 }

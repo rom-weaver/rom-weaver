@@ -155,7 +155,7 @@ struct Cli {
             global = true,
             conflicts_with_all = ["log_level", "verbose"],
             help_heading = GLOBAL_HELP_HEADING,
-            help = "Log errors only"
+            help = "Hide write summaries and log errors only; keep query results and dry-run plans"
         )
     )]
     quiet: bool,
@@ -278,7 +278,15 @@ Pass --json for the machine-readable form."
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn cli_command() -> clap::Command {
-    Cli::command()
+    crate::cli_inputs::decorate(Cli::command().mut_subcommand("checksum", |command| {
+        command.arg(
+            clap::Arg::new("digest")
+                .long("digest")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["json", "dry_run"])
+                .help("Print only the digest; requires one --algo (no labels or elapsed time)"),
+        )
+    }))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -338,6 +346,11 @@ fn color_override(color: bool, no_color: bool) -> Option<bool> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
+    crate::stdout_output::finish(run_cli())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_cli() -> ExitCode {
     // Two-step parse (matches + derive) instead of `Cli::parse()`: positional
     // `--patch-header` occurrences bind to the preceding `--patch`, and only the
     // raw `ArgMatches` argv indices preserve that interleave order.
@@ -346,6 +359,33 @@ pub fn main_entry() -> ExitCode {
         Ok(cli) => cli,
         Err(error) => error.exit(),
     };
+    if let CliCommand::App(command) = &mut cli.command
+        && let Err(error) = crate::cli_inputs::resolve(command, &matches)
+    {
+        error.format(&mut cli_command()).exit();
+    }
+    let digest = matches
+        .subcommand_matches("checksum")
+        .is_some_and(|matches| matches.get_flag("digest"));
+    if digest && (cli.json || cli.dry_run) {
+        cli_command()
+            .error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--digest cannot be used with --json or --dry-run",
+            )
+            .exit();
+    }
+    if digest
+        && let CliCommand::App(Commands::Checksum(command)) = &cli.command
+        && command.algo.len() != 1
+    {
+        cli_command()
+            .error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--digest requires exactly one algorithm; use --algo ALGO",
+            )
+            .exit();
+    }
     // `completions` is a native-only concern: emit the script and exit before
     // any command runs. `cli_command()` rebuilds the same clap tree the parse
     // used, so the generated script covers every real subcommand.
@@ -355,7 +395,9 @@ pub fn main_entry() -> ExitCode {
         }
         let shell = *shell;
         let mut command = cli_command();
-        clap_complete::generate(shell, &mut command, "rom-weaver", &mut io::stdout());
+        let mut script = Vec::new();
+        clap_complete::generate(shell, &mut command, "rom-weaver", &mut script);
+        crate::stdout_output::write(format_args!("{}", String::from_utf8_lossy(&script)));
         return ExitCode::SUCCESS;
     }
     if let CliCommand::Man {
@@ -379,7 +421,7 @@ pub fn main_entry() -> ExitCode {
         if cli.dry_run {
             return print_native_dry_run_plan("bundle-schema", Vec::new(), cli.json);
         }
-        print!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA);
+        crate::stdout_output::write(format_args!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA));
         return ExitCode::SUCCESS;
     }
     // `weave` is a top-level spelling of `patch apply`; fold it into the shared
@@ -458,6 +500,11 @@ pub fn main_entry() -> ExitCode {
         return finish_run(run_apply_tui(command, options, reporter, prompter));
     }
     install_cancel_handler();
+    if digest && let Commands::Checksum(command) = command {
+        return finish_run(crate::checksum_output::run(
+            command, options, reporter, prompter,
+        ));
+    }
     finish_run(run_command(command, options, reporter, prompter))
 }
 
@@ -498,11 +545,31 @@ fn run_man_command(
         };
         match rom_weaver_app::manpages::write_man_pages(&pages, &output_dir, selected_page) {
             Ok(count) => {
-                println!(
+                let label = format!(
                     "installed {count} man page{} to {}",
                     if count == 1 { "" } else { "s" },
                     output_dir.display()
                 );
+                if json {
+                    let mut report = OperationReport::succeeded(
+                        OperationFamily::Command,
+                        None,
+                        "install",
+                        label,
+                        Some(100.0),
+                        None,
+                    );
+                    report.details = Some(serde_json::json!({
+                        "installed_pages": count,
+                        "output_dir": output_dir,
+                    }));
+                    crate::stdout_output::write(format_args!(
+                        "{}\n",
+                        serde_json::json!(report.into_event("man"))
+                    ));
+                } else {
+                    crate::stdout_output::write(format_args!("{label}\n"));
+                }
                 ExitCode::SUCCESS
             }
             Err(error) => {
@@ -514,7 +581,10 @@ fn run_man_command(
             }
         }
     } else {
-        print!("{}", String::from_utf8_lossy(&pages[&selected]));
+        crate::stdout_output::write(format_args!(
+            "{}",
+            String::from_utf8_lossy(&pages[&selected])
+        ));
         ExitCode::SUCCESS
     }
 }
@@ -547,16 +617,16 @@ fn print_native_dry_run_plan(command: &str, writes: Vec<String>, json: bool) -> 
     }));
     if json {
         match serde_json::to_string(&report.into_event(command)) {
-            Ok(event) => println!("{event}"),
+            Ok(event) => crate::stdout_output::write(format_args!("{event}\n")),
             Err(error) => {
                 eprintln!("failed to serialize dry-run plan: {error}");
                 return ExitCode::from(1);
             }
         }
     } else {
-        println!("{label}");
+        crate::stdout_output::write(format_args!("{label}\n"));
         if !read_only {
-            println!("writes: {writes_label}");
+            crate::stdout_output::write(format_args!("writes: {writes_label}\n"));
         }
     }
     ExitCode::SUCCESS
