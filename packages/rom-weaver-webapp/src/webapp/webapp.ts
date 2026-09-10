@@ -407,6 +407,7 @@ const renderWebappRoot = (): undefined => {
       }
     : state;
   const webappRoot = createElement(WebappClientRoot, {
+    assetBaseUrl: shouldHydrate ? "/" : readAppBaseUrl(),
     actions: {
       onCancelConfirmation: () => closeConfirmationDialog(false),
       onCloseSettings: () => {
