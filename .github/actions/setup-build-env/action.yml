@@ -358,40 +358,15 @@ runs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ steps.versions.outputs.playwright }}-${{ steps.versions.outputs.browsers }}
 
-    # The built packs, not the DAT downloads: `ensure-identify-data.mjs` sees a
-    # current tree (revisions + pack list checked against index.json) and skips
-    # both the download and the build outright. The key hashes the builder, so
-    # any change to pack contents misses by construction. A miss primes the
-    # cache here, using the root dependencies installed above.
-    #
-    # The key and the cross-OS flag MUST stay identical to
-    # `.github/actions/identify-data`, so the webapp jobs that run on every
-    # push keep the one entry warm that the rarer Rust and Windows jobs read.
-    # Two keys for the same 94 MB tree let the Rust-side entry age out under
-    # the 10 GB cache cap, and every full run then rebuilt the packs twice.
-    - name: Restore identify data cache
+    # `.github/actions/identify-data` MUST stay the only definition of the
+    # identify cache key, so the webapp jobs that run on every push keep the
+    # one entry warm that the rarer Rust and Windows jobs read. A second key
+    # for the same 94 MB tree ages out under the 10 GB cache cap.
+    - name: Prepare identify data
       if: inputs.identify-data-cache == 'true'
-      id: identify-data-cache
-      uses: actions/cache/restore@v6
+      uses: ./.github/actions/identify-data
       with:
-        path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs') }}
-        enableCrossOsArchive: true
-
-    - name: Build identify data
-      if: inputs.identify-data-cache == 'true' && steps.identify-data-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: node scripts/ensure-identify-data.mjs
-
-    # Pull requests can restore main's cache but cannot share caches with other
-    # pull requests. Only main saves this large, byte-identical data set.
-    - name: Save identify data cache
-      if: inputs.identify-data-cache == 'true' && inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.identify-data-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
-      with:
-        path: crates/rom-weaver-cli/data/identify/v1
-        key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs') }}
-        enableCrossOsArchive: true
+        cache-save: ${{ inputs.cache-save }}
 
     # Keyed on the lock file, whose per-file SHA-256 list fully determines the
     # tree; `ensure-emulatorjs.mjs` re-verifies every restored file against it,
