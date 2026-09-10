@@ -5,7 +5,11 @@ import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-ti
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
 import type { ExpectedRomTitle } from "../../../../lib/apply/expected-rom-lookup.ts";
 import { identifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
-import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../../../../types/identify.ts";
+import type {
+  ParsedIdentifyExpectedComponent,
+  ParsedIdentifyResolution,
+  ParsedIdentifyTitleMatch,
+} from "../../../../types/identify.ts";
 import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import { useUiLocalizer } from "../../settings-context.tsx";
 import type { RomLookupMessages, useRomLookup } from "../../use-rom-lookup.ts";
@@ -224,22 +228,73 @@ const RomExpectationCard = ({
    so the platform is what separates two rows with the same name. */
 const RomTitleRow = ({ onChoose, title }: { onChoose: () => void; title: ExpectedRomTitle }) => (
   <li className="identify-search-result">
-    <button className="btn identify-search-result-btn" onClick={onChoose} type="button">
+    <button className="identify-search-result-btn" onClick={onChoose} type="button">
       <span className="identify-search-result-name">{title.name}</span>
       <span className="identify-search-result-meta">{title.platform}</span>
     </button>
   </li>
 );
 
-/* One release of a chosen title. The name leads; region, revision, and dump
-   tags follow, because those are what separate two releases of one game. */
+const releaseComponentName = (component: ParsedIdentifyExpectedComponent) => {
+  if (component.filename) return component.filename;
+  if (component.track !== undefined) return `Track ${component.track}`;
+  if (component.role) return component.role.replaceAll("_", " ");
+  return `Component ${component.ordinal + 1}`;
+};
+
+/* Expected checksums stay inside the release's one button. ChecksumRow is a
+   button of its own, so using it here would create nested controls. */
+const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedComponent[] | undefined }) => {
+  const available = (components || [])
+    .map((component) => ({
+      component,
+      checksums: EXPECTED_ROM_CHECK_ORDER.flatMap((algorithm) => {
+        const value = component[algorithm];
+        return value ? [[expectedCheckLabel(algorithm), value] as const] : [];
+      }),
+    }))
+    .filter(({ checksums }) => checksums.length);
+  if (!available.length) return null;
+  const hasMultipleComponents = (components?.length || 0) > 1;
+  return (
+    <span className="identify-search-result-checks">
+      {available.map(({ component, checksums }) => (
+        <span
+          className="identify-search-result-component"
+          key={`${component.ordinal}/${component.filename || component.role}`}
+        >
+          {hasMultipleComponents ? (
+            <span className="identify-search-result-component-name">{releaseComponentName(component)}</span>
+          ) : null}
+          <span className="identify-search-result-checksum-values">
+            {checksums.map(([algorithm, value]) => (
+              <span className="identify-search-result-checksum" key={algorithm}>
+                <span className="identify-search-result-checksum-label">{algorithm}</span>
+                <span className="mono">{value}</span>
+              </span>
+            ))}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+};
+
+/* One release of a chosen title. The name leads; platform, region, revision,
+   and dump tags separate releases. Its expected checksums let the user choose
+   the exact dump before this one button selects it. */
 const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; onChoose: () => void }) => {
-  const details = [match.region, match.revision, ...(match.dumpTags || [])].filter(Boolean);
+  const details = [match.platform, match.region, match.revision, ...(match.dumpTags || [])].filter(Boolean);
   return (
     <li className="identify-search-result">
-      <button className="btn identify-search-result-btn" onClick={onChoose} type="button">
+      <button
+        className="identify-search-result-btn identify-search-result-btn--version"
+        onClick={onChoose}
+        type="button"
+      >
         <span className="identify-search-result-name">{match.name}</span>
         {details.length ? <span className="identify-search-result-meta">{details.join(" · ")}</span> : null}
+        <ReleaseChecksums components={match.expectedComponents} />
       </button>
     </li>
   );
@@ -279,6 +334,7 @@ const RomSearch = ({
   const chosen = lookup.title;
   return (
     <form
+      aria-busy={lookup.busy || undefined}
       className={`identify-search identify-search--${variant}`}
       id={`${inputId}-form`}
       onSubmit={(event) => {
@@ -294,9 +350,10 @@ const RomSearch = ({
           aria-invalid={lookup.error ? "true" : undefined}
           autoComplete="off"
           className="input identify-search-input"
-          disabled={lookup.busy}
           id={inputId}
-          onChange={(event) => lookup.setText(event.currentTarget.value)}
+          onChange={(event) => lookup.setText(event.currentTarget.value, (event.nativeEvent as InputEvent).isComposing)}
+          onCompositionEnd={(event) => lookup.setText(event.currentTarget.value, false)}
+          onCompositionStart={(event) => lookup.setText(event.currentTarget.value, true)}
           placeholder={localizer.message("ui.identify.searchPlaceholder")}
           spellCheck={false}
           type="text"
@@ -315,6 +372,11 @@ const RomSearch = ({
           <span className="identify-search-submit-text">{submitLabel}</span>
         </button>
       </div>
+      {lookup.busy ? (
+        <p aria-live="polite" className="sr-only" role="status">
+          {submitLabel}
+        </p>
+      ) : null}
       {lookup.error ? (
         <p className="identify-search-error" role="alert">
           {lookup.error}
@@ -334,7 +396,7 @@ const RomSearch = ({
           <p className="identify-search-results-label">{localizer.message("ui.identify.titleResults")}</p>
         </div>
       ) : null}
-      {chosen && lookup.versions.length ? (
+      {lookup.versions.length ? (
         <ul aria-label={localizer.message("ui.identify.versionResultsList")} className="identify-search-results">
           {lookup.versions.map((match) => (
             <RomVersionRow key={versionKey(match)} match={match} onChoose={() => lookup.choose(match)} />

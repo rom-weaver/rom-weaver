@@ -136,6 +136,10 @@ test("rom-weaver title search uses the WASM scorer for typos and stable title or
       JSON.stringify({
         format: "rom-weaver-identify-title-index-v1",
         packs: ["nes", "gen"],
+        systems: [
+          ["Nintendo Entertainment System", "nes"],
+          ["Sega Mega Drive", "genesis", "gen"],
+        ],
         titles: [
           ["Zelda", [0]],
           ["The Legend of Zelda", [0]],
@@ -172,6 +176,11 @@ test("rom-weaver title search uses the WASM scorer for typos and stable title or
       "The Legend of Zelda - A Link to the Past",
     ]);
     expect((await search("hedgrog")).map((match) => match.name)).toContain("Sonic the Hedgehog");
+    expect(await search("sonic gen")).toEqual([
+      expect.objectContaining({ name: "Sonic the Hedgehog", slugs: ["gen"] }),
+    ]);
+    expect(await search("genesis")).toEqual([expect.objectContaining({ name: "Sonic the Hedgehog", slugs: ["gen"] })]);
+    expect(await search("sonic nintendo")).toEqual([]);
   } finally {
     await staged.cleanup().catch(() => undefined);
   }

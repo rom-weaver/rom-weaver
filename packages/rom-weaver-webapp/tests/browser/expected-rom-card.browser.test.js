@@ -72,7 +72,7 @@ test("the empty apply page shows the ROM search that validates before looking up
   await expect.poll(() => !!getHashForm(), { timeout: 30000 }).toBe(true);
   expect(getHashForm().querySelector("label")?.textContent).toBe("Identify by checksum or game name");
   expect(getHashInput().getBoundingClientRect().height).toBeGreaterThan(0);
-  expect(getHashInput().placeholder).toBe("CRC32, MD5, SHA-1, or game name");
+  expect(getHashInput().placeholder).toBe("Game, system, or checksum");
   expect(document.querySelector(".ghost-steps")).not.toBeNull();
 
   // Hex of no checksum length is a mistyped checksum; one letter is too short

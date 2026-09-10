@@ -760,9 +760,19 @@
   align-items: baseline;
   justify-content: flex-start;
   width: 100%;
+  min-height: var(--ctl);
+  padding: var(--sp-s);
+  font-size: 0.85rem;
+  font-weight: 600;
   text-align: start;
+  cursor: pointer;
+  background: transparent;
   border: 0;
   border-radius: 0;
+}
+.rw-app .identify-search-result-btn--version {
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 .rw-app .identify-search-result-name {
   min-width: 0;
@@ -771,6 +781,49 @@
 .rw-app .identify-search-result-meta {
   font-size: 0.8rem;
   color: var(--ink-3);
+}
+.rw-app .identify-search-result-checks {
+  display: grid;
+  flex: 1 0 100%;
+  gap: var(--sp-2xs);
+  min-width: 0;
+}
+.rw-app .identify-search-result-component {
+  display: grid;
+  gap: var(--sp-2xs);
+  min-width: 0;
+}
+.rw-app .identify-search-result-component + .identify-search-result-component {
+  padding-block-start: var(--sp-2xs);
+  border-block-start: 1px solid var(--seam);
+}
+.rw-app .identify-search-result-component-name {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.rw-app .identify-search-result-checksum-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2xs) var(--sp-s);
+  min-width: 0;
+}
+.rw-app .identify-search-result-checksum {
+  display: inline-flex;
+  gap: var(--sp-s);
+  min-width: 0;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+.rw-app .identify-search-result-checksum-label {
+  flex: none;
+  color: var(--ink-3);
+}
+.rw-app .identify-search-result-checksum .mono {
+  min-width: 0;
+  font-weight: 400;
+  overflow-wrap: anywhere;
 }
 @media (hover: hover) {
   .rw-app .identify-search-result-btn:hover {

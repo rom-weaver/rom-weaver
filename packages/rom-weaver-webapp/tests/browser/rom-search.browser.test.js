@@ -113,9 +113,19 @@ afterEach(() => {
 
 test("one box takes a checksum or a name, with no platform to choose first", async () => {
   expect(getForm().querySelector("label").textContent).toBe("Identify by checksum or game name");
-  expect(getInput().placeholder).toBe("CRC32, MD5, SHA-1, or game name");
+  expect(getInput().placeholder).toBe("Game, system, or checksum");
   expect(getInput().disabled).toBe(false);
   expect(document.querySelector("select")).toBeNull();
+});
+
+test("typing searches after a pause without submitting the form", async () => {
+  searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION] });
+  type(getInput(), "metroid gba");
+
+  await waitFor(() => getResults().length === 1);
+  expect(searchExpectedRomTitles).toHaveBeenCalledExactlyOnceWith("metroid gba", expect.anything());
+  expect(getResults()[0]).toContain("Metroid Fusion");
+  expect(getInput().disabled).toBe(false);
 });
 
 test("a name search lists titles across every platform", async () => {
@@ -166,6 +176,18 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   expect(getResults()[0]).toContain("verified dump");
   expect(getResults()[1]).toContain("Metroid Fusion (Europe)");
 
+  host.style.width = "350px";
+  for (const button of document.querySelectorAll(".identify-search-result-btn--version")) {
+    const bounds = button.getBoundingClientRect();
+    for (const checksum of button.querySelectorAll(".identify-search-result-checksum")) {
+      const checkBounds = checksum.getBoundingClientRect();
+      expect(checkBounds.top).toBeGreaterThanOrEqual(bounds.top);
+      expect(checkBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
+      expect(checkBounds.right).toBeLessThanOrEqual(bounds.right);
+      expect(checksum.scrollWidth).toBeLessThanOrEqual(checksum.clientWidth + 1);
+    }
+  }
+
   // The way back keeps the titles found.
   document.querySelector(".identify-search-back").click();
   await waitFor(() => getResults().length === 2 && getResults()[1]?.includes("Zero Mission"));
@@ -182,7 +204,7 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   expect(getResults()).toEqual([]);
 });
 
-test("a title with one release is chosen outright", async () => {
+test("a title with one release stays selectable", async () => {
   searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION] });
   searchExpectedRomByName.mockResolvedValue({ matches: [FUSION_USA], status: "matched" });
 
@@ -190,17 +212,26 @@ test("a title with one release is chosen outright", async () => {
   await waitFor(() => getResults().length === 1);
   document.querySelector(".identify-search-result-btn").click();
 
+  await waitFor(() => getResults().length === 1 && getResults()[0]?.includes("Metroid Fusion (USA)"));
+  expect(getResults()[0]).toContain("d7ae93df");
+  expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+  document.querySelector(".identify-search-result-btn").click();
+
   await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
   expect(document.querySelector("#rom-weaver-bundle-rom-expectation").textContent).toContain("Metroid Fusion (USA)");
 });
 
-test("a checksum in the same box answers directly", async () => {
+test("a checksum lists releases before the user selects one", async () => {
   lookupExpectedRom.mockResolvedValue({ matches: [FUSION_USA], status: "matched" });
 
   submit("D7AE93DF");
-  await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
+  await waitFor(() => getResults().length === 1 && getResults()[0]?.includes("Metroid Fusion (USA)"));
 
   expect(lookupExpectedRom).toHaveBeenCalledTimes(1);
   expect(lookupExpectedRom.mock.calls[0][0]).toEqual({ checksums: { crc32: "d7ae93df" } });
   expect(searchExpectedRomTitles).not.toHaveBeenCalled();
+  expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+
+  document.querySelector(".identify-search-result-btn").click();
+  await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
 });

@@ -1088,7 +1088,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identify.searchRefine": msg({ id: "ui.identify.searchRefine", message: "Not the ROM you meant?" }),
   "ui.identify.searchPlaceholder": msg({
     id: "ui.identify.searchPlaceholder",
-    message: "CRC32, MD5, SHA-1, or game name",
+    message: "Game, system, or checksum",
   }),
   "ui.identify.search": msg({ id: "ui.identify.search", message: "Search" }),
   "ui.identify.searchAgain": msg({ id: "ui.identify.searchAgain", message: "Search again" }),

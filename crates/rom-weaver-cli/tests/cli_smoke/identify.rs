@@ -721,6 +721,98 @@ fn identify_searches_title_index_including_partial_names_and_typos() {
 }
 
 #[test]
+fn identify_title_index_searches_system_names_and_aliases() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["nes", "snes", "sony-playstation"],
+            "systems": [
+                ["Nintendo Entertainment System", "nes", "famicom"],
+                ["Nintendo Super Nintendo Entertainment System", "snes", "super nintendo", "super famicom"],
+                ["Sony PlayStation", "playstation", "psx"]
+            ],
+            "titles": [
+                ["Mario's Time Machine", [0, 1]],
+                ["Super Mario World", [1]],
+                ["Crash Bandicoot", [2]]
+            ]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+    for (query, expected_name, expected_slugs) in [
+        ("mario snes", "Mario's Time Machine", vec!["snes"]),
+        ("super famicom mario", "Super Mario World", vec!["snes"]),
+        (
+            "playstation crahs",
+            "Crash Bandicoot",
+            vec!["sony-playstation"],
+        ),
+        ("snes", "Super Mario World", vec!["snes"]),
+    ] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--title-index",
+                index.path().to_str().expect("index path"),
+                "--name",
+                query,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        let hits = json["details"]["identifyTitles"]["matches"]
+            .as_array()
+            .expect("title matches");
+        let hit = hits
+            .iter()
+            .find(|hit| hit["name"] == expected_name)
+            .unwrap_or_else(|| panic!("missing {expected_name} for {query}"));
+        assert_eq!(hit["slugs"], serde_json::json!(expected_slugs), "{query}");
+    }
+}
+
+#[test]
+fn identify_title_index_uses_builtin_system_aliases_when_systems_are_absent() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["nintendo-super-nintendo-entertainment-system"],
+            "titles": [["Super Mario World", [0]]]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            index.path().to_str().expect("index path"),
+            "--name",
+            "super famicom mario",
+            "--json",
+        ],
+        0,
+    );
+    let json = parse_single_json_line(&output);
+    let hits = json["details"]["identifyTitles"]["matches"]
+        .as_array()
+        .expect("title matches");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(
+        hits[0]["slugs"],
+        serde_json::json!(["nintendo-super-nintendo-entertainment-system"])
+    );
+}
+
+#[test]
 fn identify_title_index_rejects_invalid_rows_even_when_query_does_not_match() {
     let temp = setup_temp_dir();
     let index = temp.child("titles.json");
