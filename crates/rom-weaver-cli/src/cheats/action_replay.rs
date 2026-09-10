@@ -13,8 +13,11 @@ pub(crate) fn decode(normalized: &str, system: CheatSystem, raw: &str) -> Result
     match system {
         CheatSystem::Nes => decode_nes(normalized, raw),
         CheatSystem::Snes => decode_snes(normalized, raw),
-        CheatSystem::Genesis => decode_genesis(normalized, raw),
-        CheatSystem::GameBoy => decode_gameboy(normalized, raw),
+        CheatSystem::Genesis | CheatSystem::Sega32x => decode_genesis(normalized, raw),
+        CheatSystem::GameBoy | CheatSystem::GameBoyColor => decode_gameboy(normalized, raw),
+        CheatSystem::MasterSystem | CheatSystem::GameGear | CheatSystem::Sg1000 => {
+            decode_sega8(normalized, system, raw)
+        }
         CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => Err(coded(
             "cheat_bad_system",
             "Pro Action Replay codes do not support this system",
@@ -151,6 +154,35 @@ fn decode_gameboy(code: &str, raw: &str) -> Result<DecodedCode> {
         kind: CheatKind::ProActionReplay,
         address,
         value,
+        compare: None,
+        width: 1,
+    })
+}
+
+/// Sega 8-bit Pro Action Replay: `00AA-AAVV` - a fixed `00` prefix, a 16-bit
+/// address, and the value byte.
+fn decode_sega8(code: &str, system: CheatSystem, raw: &str) -> Result<DecodedCode> {
+    require_hex(code, raw)?;
+    // The emulator `AAAA:VV` form patches work RAM while the game runs.
+    if code.len() == 6 && raw.contains(':') {
+        return Err(coded(
+            "cheat_ram_address",
+            "Sega 8-bit `address:value` codes target work RAM and cannot be baked into a ROM file",
+            raw,
+        ));
+    }
+    if code.len() != 8 || !code.starts_with("00") {
+        return Err(coded(
+            "cheat_bad_code",
+            "Sega 8-bit Pro Action Replay codes must be 8 hex digits starting with 00",
+            raw,
+        ));
+    }
+    Ok(DecodedCode {
+        system,
+        kind: CheatKind::ProActionReplay,
+        address: parse_hex(&code[2..6], raw)?,
+        value: parse_hex(&code[6..8], raw)?,
         compare: None,
         width: 1,
     })

@@ -28,19 +28,29 @@ const rootDir = process.cwd();
 const SHARED_CHUNK_MIN_SIZE = 30_000;
 const repoRoot = path.resolve(rootDir, "../..");
 const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", "identify", "v1");
+const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
+// Packs and cheat shards ship only as `.br` sidecars; the license text is
+// inlined into the attribution bundle instead of served as an asset.
 const identifyDataSources = Object.fromEntries(
   fs
     .readdirSync(identifyDataDir)
-    .filter((name) => !name.endsWith(".pack"))
+    .filter((name) => {
+      if (name.endsWith(".pack")) return false;
+      if (name.startsWith("cheats-") && name.endsWith(".json")) return false;
+      return name !== identifyDataIndex.sources?.libretro?.licenseFile;
+    })
     .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
 );
-const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
 const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
 const identifyPackEntry = (system) => ({
   sha256: system.sha256,
   sizeBytes: system.rawBytes || 0,
   url: `assets/identify-${system.file}?sha256=${system.sha256}`,
 });
+// A cheat shard installs with the group that owns its platform's pack, so the
+// Settings toggle, the warm-up and `install-group` all carry cheats along.
+const identifyCheatEntriesForSlugs = (slugs) =>
+  (identifyDataIndex.cheats ?? []).filter((entry) => slugs.includes(entry.slug)).map(identifyPackEntry);
 // Default packs are downloaded by the background warm-up rather than precached:
 // they are three quarters of what a first visit would otherwise pull down, and
 // an identify run fetches whatever it needs on demand long before the warm-up
@@ -53,7 +63,11 @@ const identifyChecksumRouterEntries = identifyDataIndex.checksumRoutes
 const identifyDefaultPackGroup = {
   id: "default",
   label: "Built-in systems",
-  packs: [...identifyPackGroups.defaultSystems.map(identifyPackEntry), ...identifyChecksumRouterEntries],
+  packs: [
+    ...identifyPackGroups.defaultSystems.map(identifyPackEntry),
+    ...identifyCheatEntriesForSlugs(identifyPackGroups.defaultSystems.map((system) => system.slug)),
+    ...identifyChecksumRouterEntries,
+  ],
   required: true,
 };
 const identifyOptionalPackGroups = [
@@ -63,11 +77,14 @@ const identifyOptionalPackGroups = [
     .map((group) => ({
       id: group.id,
       label: group.label,
-      packs: group.systems.map((slug) => {
-        const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
-        if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
-        return identifyPackEntry(system);
-      }),
+      packs: [
+        ...group.systems.map((slug) => {
+          const system = identifyDataIndex.systems.find((candidate) => candidate.slug === slug);
+          if (!system) throw new Error(`identify group ${group.id} names unknown system ${slug}`);
+          return identifyPackEntry(system);
+        }),
+        ...identifyCheatEntriesForSlugs(group.systems),
+      ],
     })),
 ];
 
@@ -832,7 +849,13 @@ const writeBrotliSidecars = () => {
       };
       const sidecarUrls = [`/assets/${wasmNames[0]}`];
       assertSidecarTypeIsKnown(sidecarUrls[0]);
-      if (fs.readdirSync(assetsDir).some((name) => name.startsWith("identify-") && name.endsWith(".pack.br"))) {
+      // Packs and cheat shards are staged as `.br`-only sidecars, all under one
+      // wildcard include; each still needs a known content type.
+      const identifySidecars = fs
+        .readdirSync(assetsDir)
+        .filter((name) => name.startsWith("identify-") && (name.endsWith(".pack.br") || name.endsWith(".json.br")));
+      if (identifySidecars.length > 0) {
+        for (const name of identifySidecars) assertSidecarTypeIsKnown(`/assets/${name.slice(0, -3)}`);
         sidecarUrls.push("/assets/identify-*");
       }
       for (const name of fs.readdirSync(assetsDir)) {
@@ -1361,7 +1384,13 @@ export default defineConfig(({ command, mode }) => {
           manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
           // The checksum router is warm-up data like the packs, so neither
           // the raw file nor its brotli sidecar joins the precache.
-          globIgnores: ["**/*.map", "assets/identify-*.pack.br", "assets/identify-*.bin", "assets/identify-*.bin.br"],
+          globIgnores: [
+            "**/*.map",
+            "assets/identify-*.pack.br",
+            "assets/identify-*.bin",
+            "assets/identify-*.bin.br",
+            "assets/identify-cheats-*.json.br",
+          ],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
             // offline, a route the user has not visited yet has nothing in the runtime

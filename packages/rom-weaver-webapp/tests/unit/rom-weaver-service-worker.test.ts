@@ -691,6 +691,9 @@ describe("identify pack route", () => {
     const matches = (request: Request) => match({ request, url: new URL(request.url) });
 
     expect(matches(new Request(PACK_URL))).toBe(true);
+    expect(matches(new Request(`${APP_ORIGIN}/assets/identify-checksum-routes.bin`))).toBe(true);
+    expect(matches(new Request(`${APP_ORIGIN}/assets/identify-cheats-nintendo-game-boy.json?sha256=aa`))).toBe(true);
+    expect(matches(new Request(`${APP_ORIGIN}/assets/identify-index.json`))).toBe(false);
     expect(matches(new Request(`${APP_ORIGIN}/assets/other.pack`))).toBe(false);
     expect(matches(new Request("https://other.test/assets/identify-computers.pack"))).toBe(false);
   });

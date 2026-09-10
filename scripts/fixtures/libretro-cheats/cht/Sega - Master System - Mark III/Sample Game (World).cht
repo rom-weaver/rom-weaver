@@ -1,0 +1,11 @@
+cheat0_desc = "Infinite lives (Game Genie)"
+cheat0_code = "1F2-3C4"
+cheat0_enable = false
+
+cheat1_desc = "Max score (Action Replay, RAM)"
+cheat1_code = "00C00001"
+cheat1_enable = false
+
+cheat2_desc = "Invincible (Fusion RAM code)"
+cheat2_code = "C000:01"
+cheat2_enable = false

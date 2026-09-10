@@ -20,6 +20,8 @@ import type {
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionProbeResult } from "../../types/workflow-runtime-types.ts";
+import type { CheatRecord, ClassifiedCheatRecord } from "../cheats/model.ts";
+import type { CheatWriteConflict } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import type { CompressionLevelProfile, PatchBasisMode, PatchValidationPlan } from "../../wasm/index.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
 import {
@@ -703,6 +705,11 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
   const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
   const addHeader = Boolean((input.options as { addHeader?: unknown } | undefined)?.addHeader);
   return {
+    cheatRecords: Array.isArray(options?.cheatRecords)
+      ? options.cheatRecords
+      : Array.isArray(options?.cheat_records)
+        ? options.cheat_records
+        : [],
     headerModes: getPatchApplyHeaderModes(options, removeHeader),
     ignoreChecksumValidation:
       (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true,
@@ -779,6 +786,7 @@ const getPatchApplyExecution = (input: RuntimePatchApplyWorkerInput, outputPath:
     threadOptions.singleThreadNoPool || (threadOptions.hasBpsPatch && !threadOptions.threadArg);
   const syncAccessMode = threadOptions.hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command = createRomWeaverCommand("patch-apply", {
+    ...(commandOptions.cheatRecords.length ? { cheat_records: commandOptions.cheatRecords } : {}),
     ...(commandOptions.headerModes.length ? { patch_header: commandOptions.headerModes } : {}),
     ignore_checksum_validation: commandOptions.ignoreChecksumValidation,
     input: input.romFilePath,
@@ -921,6 +929,47 @@ const invokeRomWeaverPatchApplyWorker = async (
       return createPatchApplyResult(input, outputFileName, outputPath, result);
     },
   );
+};
+
+type RomWeaverCheatResult = {
+  conflicts: CheatWriteConflict[];
+  records: ClassifiedCheatRecord[];
+};
+
+const parseCheatCommandResult = (result: RomWeaverJsonResult): RomWeaverCheatResult => {
+  const terminal = getTerminalEvent(result);
+  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : undefined);
+  const cheats = asRecord(details?.cheats);
+  if (!(cheats && Array.isArray(cheats.records) && Array.isArray(cheats.conflicts))) {
+    throw withRomWeaverFailureKind(new Error("Cheat classification result was missing or malformed"), result);
+  }
+  return {
+    conflicts: cheats.conflicts as CheatWriteConflict[],
+    records: cheats.records as ClassifiedCheatRecord[],
+  };
+};
+
+const invokeRomWeaverCheatWorker = async (input: {
+  inputPath: string;
+  knownInputPaths?: string[];
+  logLevel?: LogLevel | string;
+  records: CheatRecord[];
+  signal?: AbortSignal;
+}): Promise<RomWeaverCheatResult> => {
+  const command = createRomWeaverCommand("cheat", {
+    input: input.inputPath,
+    records: input.records,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      signal: input.signal,
+    }),
+  );
+  ensureRomWeaverSuccess(result, "Cheat classification failed");
+  return parseCheatCommandResult(result);
 };
 
 const invokeRomWeaverCreatePatchCandidatesWorker = async (
@@ -1587,6 +1636,7 @@ const invokeRomWeaverBundleCreateWorker = async (
 export {
   invokeRomWeaverBundleCreateWorker,
   invokeRomWeaverBundleParseWorker,
+  invokeRomWeaverCheatWorker,
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,

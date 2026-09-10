@@ -199,6 +199,31 @@ const IN_SOURCE_DEPENDENCIES = [
     ],
   },
 ];
+const IDENTIFY_DATA_DIR = path.join(REPO_ROOT, "crates", "rom-weaver-cli", "data", "identify", "v1");
+
+// The Libretro database supplies the identify DATs and the cheat shards, so
+// one attribution row covers the whole adapted data set.
+// The build pins the revision and copies the license text into the data dir.
+function identifyDataRows() {
+  const indexPath = path.join(IDENTIFY_DATA_DIR, "index.json");
+  if (!fs.existsSync(indexPath)) {
+    throw new Error(`${indexPath} is missing; run node scripts/ensure-identify-data.mjs first`);
+  }
+  const libretro = JSON.parse(fs.readFileSync(indexPath, "utf8")).sources?.libretro;
+  if (!libretro?.revision || !libretro.licenseFile) {
+    throw new Error(`${indexPath} records no Libretro source revision and license file`);
+  }
+  return [
+    {
+      kind: "data",
+      license: libretro.license,
+      licenseFiles: [path.join(IDENTIFY_DATA_DIR, libretro.licenseFile)],
+      name: "libretro/libretro-database",
+      source: `${libretro.url}/tree/${libretro.revision}`,
+      version: libretro.revision,
+    },
+  ];
+}
 
 /**
  * Run `cargo metadata` and parse the JSON document.
@@ -469,10 +494,13 @@ function main() {
   const cargo = cargoRows(metadata);
   const source = inSourceRows();
   const npm = target === "cli" ? [] : loadWebappRows();
-  const cliRows = [...cargo, ...source];
+  // The CLI ships the identify packs and cheat shards natively; the webapp
+  // serves the same data, so both scopes carry the Libretro row.
+  const identifyData = identifyDataRows();
+  const cliRows = [...cargo, ...source, ...identifyData];
   const rowsByScope = {
     cli: cliRows,
-    webapp: npm,
+    webapp: [...npm, ...identifyData],
     combined: [...cliRows, ...npm],
   };
   const scopes =
