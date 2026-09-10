@@ -10,7 +10,7 @@
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  inline-size: min(520px, calc(100vw - 24px));
+  inline-size: min(600px, calc(100vw - 24px));
   max-block-size: min(70vh, 32rem);
   padding: var(--sp-xs);
   background: var(--plate);
@@ -72,7 +72,7 @@
 }
 .rw-app .find-option {
   display: grid;
-  grid-template-columns: 4.2em minmax(0, 1fr) auto;
+  grid-template-columns: 4.2em minmax(0, auto) minmax(0, 1fr);
   gap: var(--sp-s);
   align-items: center;
   inline-size: 100%;

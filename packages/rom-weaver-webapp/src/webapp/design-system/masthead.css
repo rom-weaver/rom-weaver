@@ -1,10 +1,10 @@
 /* ═══ masthead ═══
-   One fixed-breakpoint grid: brand | centered rail | actions. Roomy desktop
-   mirrors the side tracks so the rail centers on the masthead; the snug band
-   protects the rail's remaining space. There is exactly one layout decision
-   ("does the rail fit?") and it lives in the media queries marked ▼ below - no
-   ResizeObserver, no data-masthead-layout, no measuring. Below the dock threshold
-   the primary nav moves to a fixed bottom dock, so the masthead never wraps. */
+   One fixed-breakpoint grid: brand | link group on the first row, the rail
+   centered on a row of its own beneath them. There is exactly one layout
+   decision ("does the rail fit?") and it lives in the media queries marked ▼
+   below - no ResizeObserver, no data-masthead-layout, no measuring. A tab label
+   is never clipped or hidden at any width. Below the dock threshold the primary
+   nav moves to a fixed bottom dock, and the masthead is one row again. */
 .rw-app .skip-link {
   position: fixed;
   inset-block-start: var(--sp-s);
@@ -23,8 +23,8 @@
   transform: none;
 }
 
-/* brand and actions always keep their intrinsic width; the rail gets the
-   leftover, centers itself, and scrolls when squeezed - collision-free at every
+/* brand and actions always keep their intrinsic width; the rail gets a full
+   row, centers itself, and scrolls when squeezed - collision-free at every
    width and locale. The brand's min-content floor is what keeps the wordmark
    whole. */
 .rw-app .masthead {
@@ -487,9 +487,9 @@ html.vt-theme .mode-rail .mode {
   position: relative;
   z-index: 1;
   display: inline-flex;
-  gap: var(--sp-s);
+  gap: var(--sp-xs);
   align-items: center;
-  padding: var(--sp-s) var(--sp-l);
+  padding: var(--sp-s);
   font-size: 0.8rem;
   font-weight: 650;
   color: var(--ink-2);
@@ -550,7 +550,7 @@ html.vt-theme .mode-rail .mode {
   display: inline-flex;
   gap: var(--sp-xs);
   align-items: center;
-  padding: var(--sp-s) var(--sp-l);
+  padding: var(--sp-s);
   font-size: 0.8rem;
   font-weight: 650;
   color: var(--ink-3);
@@ -698,7 +698,8 @@ html.vt-theme .mode-rail .mode {
 }
 .rw-app .more-head {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: var(--sp-xs);
   padding-block-end: var(--sp-xs);
   margin-block-end: var(--sp-xs);
@@ -847,8 +848,8 @@ html.vt-theme .mode-rail .mode {
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-/* Desktop keeps the important destinations compact; the tooltip and aria-label
-   carry their names without turning the actions cluster into another nav. */
+/* The stateful controls (runtime status, theme, accent) stay glyph-only; the
+   tooltip and aria-label carry their names. */
 .rw-app .tool-text {
   display: none;
 }
@@ -970,51 +971,30 @@ html.vt-theme .mode-rail .mode {
   transform: rotate(-90deg) scale(0.5);
 }
 
-/* ── the responsive ladder: three ranges, one threshold each ──
-   The nav is top row or dock, never a second row. The tabs keep their icon +
-   label pairing at every rail width, tightening (not shedding) in the snug band
-   above the dock handoff. */
+/* ── the responsive ladder: two ranges, one threshold ──
+   Every tab keeps its icon + label pairing at every width: a label is never
+   clipped, ellipsized or hidden. Below the dock threshold the rail is the
+   bottom dock. Above it, brand | rail | link group share the top row: the rail
+   centers in the middle track, i.e. between the brand and the link group, and
+   its tabs scroll if a narrow column cannot hold them all rather than pushing
+   the rail to a second row. */
 @media (min-width: 1000px) {
-  /* Equal side tracks center the top rail against the app column rather than
-     against the leftover space between the brand and action group. The tracks
-     MUST floor at their content: a `0` floor lets a wide rail starve them, and
-     the brand's sub-row cannot shrink, so it paints under the rail. With the
-     floor the rail is what gives way (it scrolls). The snug band keeps its
-     tighter tab padding below. */
   .rw-app .masthead {
-    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    column-gap: var(--sp-s);
   }
   .rw-app .brand {
+    grid-row: 1;
     grid-column: 1;
     justify-self: start;
   }
   .rw-app .modes {
+    grid-row: 1;
     grid-column: 2;
   }
   .rw-app .masthead-tools {
+    grid-row: 1;
     grid-column: 3;
-  }
-}
-
-/* Snug band: the five full labels do not fit beside the brand and the action
-   group until ~1280px. The tabs first lose their outer padding, then, below
-   1180px, every tab but the selected one keeps only its glyph. The hidden labels
-   stay in the accessible name - they are clipped, not removed. Ellipsizing every
-   label was the previous answer and it cut every two-word label. */
-@media (min-width: 1000px) and (max-width: 1279px) {
-  .rw-app .mode {
-    gap: var(--sp-xs);
-    padding: var(--sp-s) var(--sp-m);
-  }
-}
-@media (min-width: 1000px) and (max-width: 1179px) {
-  .rw-app .mode:not([aria-selected="true"]) .mode-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    white-space: nowrap;
-    clip-path: inset(50%);
   }
 }
 /* ▼ dock threshold: the single number that replaced data-masthead-layout */
@@ -1037,9 +1017,6 @@ html.vt-theme .mode-rail .mode {
   }
   .rw-app .mobile-more {
     display: inline-flex;
-  }
-  .rw-app .masthead-settings {
-    display: none;
   }
   .rw-app .dock .mobile-more {
     position: relative;

@@ -1290,6 +1290,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tools.app": msg({ id: "ui.tools.app", message: "App" }),
   "ui.tools.beta": msg({ id: "ui.tools.beta", message: "Beta" }),
   "ui.tools.github": msg({ id: "ui.tools.github", message: "View source on GitHub" }),
+  "ui.tools.githubShort": msg({ id: "ui.tools.githubShort", message: "GitHub" }),
   "ui.tools.language": msg({ id: "ui.tools.language", message: "Language" }),
   "ui.tools.log": msg({ id: "ui.tools.log", message: "Log" }),
   "ui.tools.more": msg({ id: "ui.tools.more", message: "More" }),

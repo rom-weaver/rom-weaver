@@ -194,8 +194,8 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
   mountWebappRoot();
-  // The rail holds the three workflows; Docs is reference and files under More
-  // with the beta tools, which stay hidden while the setting is off.
+  // The rail holds the three workflows; Docs lives in the More menu (Project),
+  // and the beta tools file under More, hidden while the setting is off.
   await expect
     .poll(() =>
       [...document.querySelectorAll('.mode-rail [role="tab"]')]
@@ -265,8 +265,6 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
     if (width >= 1000) {
-      expect(getComputedStyle(document.querySelector(".masthead-settings .tool-text")).display).toBe("none");
-      expect(document.querySelector(".masthead-settings .tip")?.textContent).toBe("Settings");
       // More sits in the nav now, so it is named like the tabs beside it rather
       // than tooltipped like the actions cluster it left. The label is a flex
       // item inside `.mode-more`, so its computed display blockifies - that it
@@ -275,10 +273,13 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
       expect(getComputedStyle(moreLabel).display).not.toBe("none");
       expect(moreLabel.textContent).toBe("More");
       expect(document.querySelector(".desktop-more .mode-more .tip")).toBeNull();
-      await page.getByRole("button", { name: "Settings" }).first().hover();
-      await expect.poll(() => getComputedStyle(document.querySelector(".masthead-settings .tip")).opacity).toBe("1");
+      // Every destination lives in More.
+      await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
+      await expect.element(page.getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
+    } else {
+      await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
+      await expect.element(page.getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
     }
-    await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
     await page.getByRole("button", { name: "More" }).click();
   }
   await page.viewport(1280, 900);
@@ -547,8 +548,9 @@ test("mobile More carries app utilities plus the external links, and the footer 
     ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
     ["Support", "https://ko-fi.com/brandonocasey"],
   ]) {
+    // The footer carries the external link on the phone.
     const link = page.getByRole("link", { name: label });
-    await expect.element(link).toBeInTheDocument();
+    await expect.element(link.first()).toBeInTheDocument();
     expect([...footer.querySelectorAll("a")].some((node) => node.getAttribute("href") === href)).toBe(true);
   }
   const mastheadStatus = document.querySelector(".masthead-status");
