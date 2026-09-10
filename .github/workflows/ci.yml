@@ -168,16 +168,10 @@ jobs:
     name: Docker build (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    needs: [changes, identify-release-data]
+    needs: changes
     if: >-
-      always()
-      && github.ref_type != 'tag'
-      && needs.changes.result == 'success'
+      github.ref_type != 'tag'
       && needs.changes.outputs.docker_matrix != '[]'
-      && (
-        !contains(needs.changes.outputs.docker_matrix, 'rom-weaver-cli')
-        || needs.identify-release-data.result == 'success'
-      )
     permissions:
       contents: read
       # Read to restore the cache; write so a merge to main can refresh it and
@@ -204,33 +198,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The CLI source and prebuilt paths used to generate the same identify
-      # tree inside every architecture's Docker build. Download the one tree
-      # that `identify-release-data` packages, while leaving the release binary
-      # compile inside the source image.
-      - name: Download CLI identify data
-        if: matrix.name == 'CLI'
-        uses: actions/download-artifact@v8
-        with:
-          name: ci-identify-release-data
-          path: target
-
-      # The webapp build runs `ensure-identify-data.mjs`, which inside Docker
-      # rebuilt every pack from the source archives on both legs: ~360s of the
-      # app stage, reproducing the tree the Actions cache already holds.
-      # Restore it here (building and saving only on a miss, exactly as the
-      # Rust jobs do) and stage it where `.dockerignore` lets the context carry
-      # it; the Dockerfile copies it in with `IDENTIFY_DATA=prebuilt`. The
-      # packs are byte-identical on every architecture, so both legs use it.
+      # Both images used to generate the identify tree inside every
+      # architecture's Docker build: the webapp build runs
+      # `ensure-identify-data.mjs`, which rebuilt every pack from the source
+      # archives on both legs (~360s of the app stage), and the CLI image ran
+      # the release packaging on top of that. Restore the packs from the
+      # Actions cache instead (building and saving only on a miss, exactly as
+      # the Rust jobs do), stage them where `.dockerignore` lets the context
+      # carry them, and pass `IDENTIFY_DATA=prebuilt`. The packs are
+      # byte-identical on every architecture, so both legs use them.
       - uses: actions/setup-node@v7
-        if: matrix.name == 'webapp'
         with:
           node-version: 24
           package-manager-cache: false
 
-      - name: Prepare webapp identify data
-        if: matrix.name == 'webapp'
+      - name: Prepare identify data
         uses: ./.github/actions/identify-data
+
+      # The release tree the CLI image copies to /share. Tree only: the
+      # .tar.br archives are a release-fan-out product nothing here consumes.
+      - name: Build CLI identify release tree
+        if: matrix.name == 'CLI'
+        run: node scripts/build-identify-release-data.mjs --tree-only
 
       - name: Stage webapp identify data
         if: matrix.name == 'webapp'
@@ -686,49 +675,13 @@ jobs:
         # the packaged tarball before a real publish.
         run: node scripts/ci/check-package-includes.mjs
 
-  identify-release-data:
-    name: Package identify data
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: changes
-    if: >-
-      github.ref_type != 'tag'
-      && (
-        needs.changes.outputs.rust == 'true'
-        || contains(needs.changes.outputs.docker_matrix, 'rom-weaver-cli')
-      )
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Prepare ROM identify data
-        uses: ./.github/actions/identify-data
-
-      - name: Build identify data archive
-        run: node scripts/build-identify-release-data.mjs
-
-      - name: Upload identify data
-        uses: actions/upload-artifact@v7
-        with:
-          name: ci-identify-release-data
-          path: |
-            target/identify-release/share
-            target/rom-weaver-identify-data*.tar.br
-          if-no-files-found: error
-          retention-days: 1
-
   # CI and release share the native target list and build action.
   # Ordinary pull requests build entries marked `pr`; release pull requests, main, and dispatches build every target.
   cli-platforms:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
-    needs: [changes, identify-release-data]
+    needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_INCREMENTAL: "0"
@@ -741,12 +694,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Download identify data
-        uses: actions/download-artifact@v8
-        with:
-          name: ci-identify-release-data
-          path: target
-
+      # Each leg builds its own identify release tree from the cached packs
+      # rather than waiting on a packaging job: the tree is seconds of pure
+      # node, and a separate runner cost more in queue time than it saved.
       - uses: ./.github/actions/build-cli-platform
         with:
           package: ${{ matrix.package }}
@@ -756,6 +706,7 @@ jobs:
           msvc-arch: ${{ matrix.msvc_arch }}
           msvc-host: ${{ matrix.msvc_host }}
           cache-save: ${{ github.ref == 'refs/heads/main' }}
+          identify-release-tree: build
 
       - name: Verify release CLI
         if: matrix.package != 'linux-arm64-musl'
@@ -1038,8 +989,11 @@ jobs:
           'rust-windows=${{ needs.rust-windows.result }}'
 
   # Build and upload the deployable bundle before the static quality gates. The
-  # Docker and deploy paths can then consume it while the node-only tests and
-  # Lighthouse checks still run as required Webapp dependencies below.
+  # Docker and deploy paths can then consume it while Lighthouse still runs as
+  # a required Webapp dependency below. The asset size gate runs here on the
+  # bundle it just built, as a non-fatal step: a size failure must not stop
+  # Lighthouse, Docker, or the deploy from consuming the artifact, so the step
+  # records its outcome in `size` and the `webapp` aggregate makes it required.
   webapp-build:
     name: Webapp (build)
     runs-on: ubuntu-24.04
@@ -1047,6 +1001,7 @@ jobs:
     needs: [changes, wasm]
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
+      size: ${{ steps.size.outcome }}
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
       contents: read
@@ -1081,8 +1036,8 @@ jobs:
       - name: Build
         run: npm --prefix packages/rom-weaver-webapp run build
 
-      # Consumed by `docker-prebuilt`, `webapp-size`, and the static audit job,
-      # so each validates the exact bundle produced here.
+      # Consumed by `docker-prebuilt` and the static audit job, so each
+      # validates the exact bundle produced here.
       - name: Upload webapp bundle
         id: webapp-bundle
         uses: actions/upload-artifact@v7
@@ -1092,44 +1047,40 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
-  # Run the node-only webapp checks in parallel with the WASM-dependent build and
-  # static audit jobs. This job does not download the WASM or bundle artifacts.
-  webapp-fast:
-    name: Webapp (fast)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: [changes]
-    if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup-build-env
+      # The gate compares this build against the last one on the default branch, so it needs no
+      # hand-maintained numbers - see the Performance budgets section of docs/development/ci.md. Only main writes the
+      # baseline, which is why the restore below carries no exact-key hit and never fails closed:
+      # a pull request with no cached baseline reports its sizes and passes.
+      - name: Restore size baseline
+        if: github.ref != 'refs/heads/main'
+        uses: actions/cache/restore@v6
         with:
-          tools: node rust
-          cargo-cache: "false"
-          webapp-deps: "true"
+          path: dist/size-baseline.json
+          key: webapp-size-baseline-${{ github.sha }}
+          restore-keys: webapp-size-baseline-
 
-      # The docs routes include the generated wasm attribution (notices.md,
-      # NOTICE, WEBAPP_NOTICE) which knip and the vitest config load; it is
-      # gitignored and normally produced beside the wasm artifact. Unless the
-      # module happens to be cached, webapp-fast has none, so generate it here.
-      # cargo metadata resolves the crate graph; no .wasm module is needed.
-      - name: Generate webapp attribution
-        run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
+      - name: Asset size gates
+        id: size
+        continue-on-error: true
+        run: >-
+          npm --prefix packages/rom-weaver-webapp run check:size --
+          ${{ github.ref == 'refs/heads/main'
+          && format('--write-baseline {0}/dist/size-baseline.json', github.workspace)
+          || format('--baseline {0}/dist/size-baseline.json', github.workspace) }}
 
-      - name: Webapp script tests
-        run: npm --prefix packages/rom-weaver-webapp run test:scripts
-
-      - name: Lint
-        run: npm --prefix packages/rom-weaver-webapp run lint
-
-      - name: Unit tests
-        run: npm --prefix packages/rom-weaver-webapp run test:unit
+      # Saved only from main, so every pull request measures against the same published sizes
+      # rather than against whatever branch last ran. cache-cleanup.yml keeps the newest
+      # generation of this key family and deletes the rest.
+      - name: Save size baseline
+        if: github.ref == 'refs/heads/main' && steps.size.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: dist/size-baseline.json
+          key: webapp-size-baseline-${{ github.sha }}
 
   # Consume the prebuilt WASM module for the build-script contract and the exact
   # bundle uploaded by webapp-build for Lighthouse. The node-only script, lint,
-  # and unit checks run in webapp-fast without waiting on the WASM artifact.
+  # and unit checks run ahead of the browser suite in webapp-browser.
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
@@ -1240,86 +1191,19 @@ jobs:
             --field description="$description" \
             --field target_url="$LIGHTHOUSE_REPORT_URL"
 
-  # Check the exact bundle uploaded by `webapp-build`. This is separate from
-  # Lighthouse so a size failure cannot stop the audit or any of the browser
-  # jobs; the `webapp` aggregate still makes the failure required.
-  webapp-size:
-    name: Webapp (size)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    needs: [changes, webapp-build]
-    if: >-
-      ${{ !cancelled() && github.ref_type != 'tag'
-      && needs.changes.outputs.webapp == 'true' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup-build-env
-        if: needs.webapp-build.outputs.bundle == 'success'
-        with:
-          tools: node
-          cargo-cache: "false"
-
-      - name: Download webapp bundle
-        if: needs.webapp-build.outputs.bundle == 'success'
-        uses: actions/download-artifact@v8
-        with:
-          name: webapp-dist
-          path: packages/rom-weaver-webapp/dist
-
-      # The gate compares this build against the last one on the default branch, so it needs no
-      # hand-maintained numbers - see the Performance budgets section of docs/development/ci.md. Only main writes the
-      # baseline, which is why the restore below carries no exact-key hit and never fails closed:
-      # a pull request with no cached baseline reports its sizes and passes.
-      - name: Restore size baseline
-        if: >-
-          ${{ needs.webapp-build.outputs.bundle == 'success'
-          && github.ref != 'refs/heads/main' }}
-        uses: actions/cache/restore@v6
-        with:
-          path: dist/size-baseline.json
-          key: webapp-size-baseline-${{ github.sha }}
-          restore-keys: webapp-size-baseline-
-
-      - name: Asset size gates
-        if: needs.webapp-build.outputs.bundle == 'success'
-        run: >-
-          npm --prefix packages/rom-weaver-webapp run check:size --
-          ${{ github.ref == 'refs/heads/main'
-          && format('--write-baseline {0}/dist/size-baseline.json', github.workspace)
-          || format('--baseline {0}/dist/size-baseline.json', github.workspace) }}
-
-      # Saved only from main, so every pull request measures against the same published sizes
-      # rather than against whatever branch last ran. cache-cleanup.yml keeps the newest
-      # generation of this key family and deletes the rest.
-      - name: Save size baseline
-        if: >-
-          ${{ needs.webapp-build.outputs.bundle == 'success'
-          && github.ref == 'refs/heads/main' }}
-        uses: actions/cache/save@v6
-        with:
-          path: dist/size-baseline.json
-          key: webapp-size-baseline-${{ github.sha }}
-
-      - name: Report skipped size gate
-        if: needs.webapp-build.outputs.bundle != 'success'
-        run: echo "Asset size gates skipped because webapp-build did not upload webapp-dist"
-
-  # Split the longest webapp suite across two runners because in-process concurrency is already capped.
-  # The aggregate treats the matrix as one dependency, so either failing shard fails Webapp.
+  # The node-only checks (script tests, lint, unit tests) followed by the whole
+  # browser suite on one runner. This suite was once split across two shards
+  # and the node-only checks had a runner of their own; both were folded back
+  # because the org's concurrent-job cap, not per-job length, sets the wall
+  # clock of a busy CI - every runner saved is a job that is not queued. At
+  # ~8 min this job still finishes inside the Lighthouse job's tail.
+  # `BROWSER_TEST_SHARD=<i>/<n>` still works for a local split.
   webapp-browser:
-    name: Webapp (browser ${{ matrix.shard }}/2)
+    name: Webapp (browser)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
-    strategy:
-      # One shard's failure must not cancel the other: both logs are wanted, and
-      # the retry-in-isolation pass makes a half-reported run hard to read.
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1330,18 +1214,28 @@ jobs:
           cargo-cache: "false"
           webapp-deps: "true"
 
+      # Carries the generated wasm attribution (notices.md, NOTICE,
+      # WEBAPP_NOTICE) that knip and the vitest config load.
       - name: Download WASM artifact
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
-      - name: Browser tests (parallel)
+      - name: Webapp script tests
+        run: npm --prefix packages/rom-weaver-webapp run test:scripts
+
+      - name: Lint
+        run: npm --prefix packages/rom-weaver-webapp run lint
+
+      - name: Unit tests
+        run: npm --prefix packages/rom-weaver-webapp run test:unit
+
+      - name: Browser tests
         env:
           # ubuntu-24.04 already ships Chrome, so this job does not need to
           # download Playwright's Chromium or install its system dependencies.
           ROM_WEAVER_SYSTEM_CHROME: "1"
-          BROWSER_TEST_SHARD: ${{ matrix.shard }}/2
         run: npm --prefix packages/rom-weaver-webapp run test:browser
 
   # The direct WASM/browser contract. UI-only changes cannot affect this layer,
@@ -1380,21 +1274,19 @@ jobs:
 
   # Chromium journeys, accessibility states, and the channel-icon drift check.
   # This stays selected for every webapp change: it has caught regressions in
-  # rendered documentation as well as application code. The a11y shard stays
-  # whole for its CSS-coverage union; the two journey shards split the raw and
-  # archive workflows.
+  # rendered documentation as well as application code. One runner for the
+  # whole suite: it once ran as three shards (a11y, raw journeys, archive
+  # journeys), folded back for the same concurrency-cap reason as
+  # webapp-browser. The runner script's `--a11y` / `--journeys-raw` /
+  # `--journeys-archive` flags still select a slice locally.
   webapp-e2e:
-    name: Webapp (E2E, ${{ matrix.shard }})
+    name: Webapp (E2E)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     env:
       ROM_WEAVER_SYSTEM_CHROME: "1"
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [a11y, journeys-raw, journeys-archive]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -1418,11 +1310,10 @@ jobs:
       # colours. Re-renders them in memory and diffs. Uses the same system
       # Chrome as the E2E suite.
       - name: Channel icons up to date
-        if: matrix.shard == 'journeys-archive'
         run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
 
       - name: Webapp E2E
-        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp -- --${{ matrix.shard }}
+        run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 
   webapp-webkit-e2e:
     name: Webapp (WebKit E2E)
@@ -1463,7 +1354,7 @@ jobs:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, webapp-fast, webapp-build, webapp-static, webapp-size, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
+    needs: [changes, webapp-build, webapp-static, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -1474,10 +1365,9 @@ jobs:
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
           '${{ needs.changes.outputs.webapp }}'
-          'webapp-fast=${{ needs.webapp-fast.result }}'
           'webapp-build=${{ needs.webapp-build.result }}'
+          'webapp-size=${{ needs.webapp-build.outputs.size || needs.webapp-build.result }}'
           'webapp-static=${{ needs.webapp-static.result }}'
-          'webapp-size=${{ needs.webapp-size.result }}'
           'webapp-browser=${{ needs.webapp-browser.result }}'
           'webapp-e2e=${{ needs.webapp-e2e.result }}'
           'webapp-webkit-e2e=${{ needs.webapp-webkit-e2e.result }}'
