@@ -1,10 +1,12 @@
 /* ═══ masthead ═══
-   One fixed-breakpoint grid: brand | link group on the first row, the rail
-   centered on a row of its own beneath them. There is exactly one layout
-   decision ("does the rail fit?") and it lives in the media queries marked ▼
-   below - no ResizeObserver, no data-masthead-layout, no measuring. A tab label
-   is never clipped or hidden at any width. Below the dock threshold the primary
-   nav moves to a fixed bottom dock, and the masthead is one row again. */
+   One fixed-breakpoint grid: brand | centered rail | actions. Roomy desktop
+   mirrors the side tracks so the rail centers on the masthead rather than on
+   the leftover space between the brand and the action group; the snug band
+   protects the rail's remaining space. There is exactly one layout decision
+   ("does the rail fit?") and it lives in the media queries marked ▼ below - no
+   ResizeObserver, no data-masthead-layout, no measuring. A tab label is never
+   clipped or hidden at any width. Below the dock threshold the primary nav
+   moves to a fixed bottom dock, so the masthead never wraps. */
 .rw-app .skip-link {
   position: fixed;
   inset-block-start: var(--sp-s);
@@ -23,8 +25,8 @@
   transform: none;
 }
 
-/* brand and actions always keep their intrinsic width; the rail gets a full
-   row, centers itself, and scrolls when squeezed - collision-free at every
+/* brand and actions always keep their intrinsic width; the rail gets the
+   leftover, centers itself, and scrolls when squeezed - collision-free at every
    width and locale. The brand's min-content floor is what keeps the wordmark
    whole. */
 .rw-app .masthead {
@@ -974,13 +976,15 @@ html.vt-theme .mode-rail .mode {
 /* ── the responsive ladder: two ranges, one threshold ──
    Every tab keeps its icon + label pairing at every width: a label is never
    clipped, ellipsized or hidden. Below the dock threshold the rail is the
-   bottom dock. Above it, brand | rail | link group share the top row: the rail
-   centers in the middle track, i.e. between the brand and the link group, and
-   its tabs scroll if a narrow column cannot hold them all rather than pushing
-   the rail to a second row. */
+   bottom dock. Above it, brand | rail | link group share the top row. The side
+   tracks are mirrors: both grow to the widest side, so the rail centers on the
+   masthead rather than on the gap between the brand and the link group. They
+   MUST floor at their content - a `0` floor lets a wide rail starve them and
+   the brand paints under it - so on a narrow desktop the rail is what gives
+   way, scrolling while the mirrored tracks stay centered on what room is left. */
 @media (min-width: 1000px) {
   .rw-app .masthead {
-    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
     column-gap: var(--sp-s);
   }
   .rw-app .brand {
