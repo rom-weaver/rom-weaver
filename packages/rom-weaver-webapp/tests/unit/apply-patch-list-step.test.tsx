@@ -125,6 +125,19 @@ describe("ApplyPatchListStep", () => {
     expect(container.textContent).toContain("Patch source loaded");
   });
 
+  it("takes the strip header option away while cheats are on", () => {
+    const offered = renderList().container.querySelector(
+      "#rom-weaver-patch-header-mode-0 option[value='strip']",
+    ) as HTMLOptionElement;
+    expect(offered.disabled).toBe(false);
+
+    const guarded = renderList({ stripDisabled: true }).container.querySelector(
+      "#rom-weaver-patch-header-mode-0 option[value='strip']",
+    ) as HTMLOptionElement;
+    expect(guarded.disabled).toBe(true);
+    expect(guarded.title).toContain("header");
+  });
+
   it("updates patch options, metadata, replacement, removal, and toggles", async () => {
     const patchStack = stack();
     const onBundleMetaChange = vi.fn();

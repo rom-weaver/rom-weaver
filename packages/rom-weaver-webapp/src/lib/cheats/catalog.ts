@@ -1,5 +1,6 @@
 import { type IdentifyCatalog, normalizePlatformAlias, resolveCatalogPlatform } from "../identify/identify-catalog.ts";
 import {
+  type CheatManualOnlySystem,
   type ClassifiedCheatRecord,
   type CheatDatabaseEntry,
   type CheatDatabaseIndex,
@@ -63,6 +64,35 @@ export const resolveCheatDatabaseEntry = (
   const override = EXTENSION_OVERRIDES.find((rule) => rule.from === slug && rule.extension === extension);
   if (override && index.entries.some((entry) => entry.slug === override.to)) slug = override.to;
   return index.entries.find((entry) => entry.slug === slug);
+};
+
+/**
+ * Platform aliases for the systems the code decoder handles but no cheat shard
+ * covers. They mirror the identify catalog's alias list, so a deployment that
+ * ships no catalog resolves the same names.
+ */
+const MANUAL_ONLY_PLATFORM_ALIASES: Record<CheatManualOnlySystem, string[]> = {
+  playstation: ["sony playstation", "playstation", "psx", "ps1"],
+};
+
+/**
+ * The manual-only cheat system for a ROM, or `undefined`. Callers MUST use this
+ * only when `resolveCheatDatabaseEntry` found no shard: a system with a shard
+ * is never manual-only.
+ */
+export const resolveManualOnlyCheatSystem = (
+  catalog: IdentifyCatalog | undefined,
+  identity: Pick<CheatRomIdentity, "platform"> | null,
+): CheatManualOnlySystem | undefined => {
+  const platform = identity?.platform;
+  if (!platform) return undefined;
+  const names = [platform, resolveCatalogPlatform(catalog, platform)?.canonicalPlatform ?? ""]
+    .filter(Boolean)
+    .map(normalizePlatformAlias);
+  const found = Object.entries(MANUAL_ONLY_PLATFORM_ALIASES).find(([, aliases]) =>
+    aliases.some((alias) => names.includes(alias)),
+  );
+  return found ? (found[0] as CheatManualOnlySystem) : undefined;
 };
 
 const normalizeText = (value: string): string =>

@@ -13,8 +13,20 @@ const CHEAT_DATABASE_SYSTEMS = [
 /** The Rust `CheatSystem` identifier a shard's records carry. */
 export type CheatDatabaseSystem = (typeof CHEAT_DATABASE_SYSTEMS)[number];
 
+/**
+ * Systems the code decoder handles but no cheat shard covers. The wire value is
+ * the Rust `CheatSystem` variant name, not its CLI alias.
+ */
+const CHEAT_MANUAL_ONLY_SYSTEMS = ["playstation"] as const;
+
+/** Every system a hand-entered code can be classified against. */
+export type CheatManualSystem = CheatDatabaseSystem | (typeof CHEAT_MANUAL_ONLY_SYSTEMS)[number];
+
+/** A system that reaches the step through manual entry alone. */
+export type CheatManualOnlySystem = (typeof CHEAT_MANUAL_ONLY_SYSTEMS)[number];
+
 type CheatCodeKind = "game-genie" | "pro-action-replay" | "xploder";
-type RustCheatSystem = CheatDatabaseSystem;
+type RustCheatSystem = CheatManualSystem;
 
 export type CheatRecord = {
   id: string;
@@ -122,13 +134,13 @@ export type ManualCheatKindOverride = "auto" | CheatCodeKind;
 type ManualCheatRequest = {
   code: string;
   description: string;
-  system: CheatDatabaseSystem;
+  system: CheatManualSystem;
   kind: ManualCheatKindOverride;
 };
 
 export type ManualCheatResult = {
   record: ClassifiedCheatRecord;
-  detectedSystem: CheatDatabaseSystem;
+  detectedSystem: CheatManualSystem;
   detectedType: string;
 };
 
@@ -141,6 +153,9 @@ export type DatabaseCheatClassifier = (
 
 export const isCheatDatabaseSystem = (value: string | undefined): value is CheatDatabaseSystem =>
   CHEAT_DATABASE_SYSTEMS.some((system) => system === value);
+
+export const isCheatManualSystem = (value: string | undefined): value is CheatManualSystem =>
+  isCheatDatabaseSystem(value) || CHEAT_MANUAL_ONLY_SYSTEMS.some((system) => system === value);
 
 export const isSelectableCheat = (record: ClassifiedCheatRecord): boolean => record.resolution.type === "romBakeable";
 
