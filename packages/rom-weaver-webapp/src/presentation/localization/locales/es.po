@@ -436,12 +436,12 @@ msgstr "automático (conservar)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoBase"
-msgstr "auto (ROM base)"
+msgstr "auto (ROM original)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.autoPrevious"
-msgstr "auto (anterior)"
+msgstr "auto (Salida del parche anterior)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
