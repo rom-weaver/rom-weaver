@@ -1216,10 +1216,10 @@ describe("webapp responsive navigation", () => {
         expect(getComputedStyle(label).textOverflow).not.toBe("ellipsis");
         expect(getComputedStyle(label).maxWidth).toBe("none");
       }
-      // the link group keeps its labels too
-      for (const label of host.querySelectorAll(".masthead-links .tool-text")) {
-        expect(getComputedStyle(label).display).not.toBe("none");
-        expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
+      // the link group stays glyph-only; each name rides its tooltip
+      for (const link of host.querySelectorAll(".masthead-links .tool-link")) {
+        expect(link.querySelector(".tool-text")).toBeNull();
+        expect(link.querySelector(".tip")?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
       }
     }
   });

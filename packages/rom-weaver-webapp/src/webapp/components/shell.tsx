@@ -1218,13 +1218,10 @@ const Masthead = ({
   const moreTabs = tabs.filter(isMoreMenuTab);
   // What's new has no WorkflowTab entry; it lives in More's Project group.
   const currentInMore = currentTab === "whats-new" || moreTabs.some((tab) => tab.id === currentTab);
-  // Docs, GitHub, Support and Settings sit in the top-right link group on the
-  // rail layout, so the desktop More menu does not list them a second time.
-  // The phone More menu keeps all four: the link group hides below the dock
-  // threshold.
+  // Docs, GitHub, Support and Settings also sit in the top-right link group on
+  // the rail layout. Below the dock threshold the group hides and the phone
+  // More menu is the only way to reach them.
   const docsTab = moreTabs.find((tab) => tab.id === "docs");
-  const desktopMoreTabs = moreTabs.filter((tab) => tab !== docsTab);
-  const desktopCurrentInMore = currentTab === "whats-new" || desktopMoreTabs.some((tab) => tab.id === currentTab);
   const settingsLabel = localizer.message("ui.settings.title");
   const githubLabel = localizer.message("ui.tools.github");
   const supportLabel = localizer.message("ui.footer.donate");
@@ -1355,19 +1352,23 @@ const Masthead = ({
           </span>
         </span>
         <div className="masthead-tools" ref={toolsRef}>
-          {/* The link group: every destination reads as icon plus label, at
-              every width the group is shown. Below the dock threshold it is
-              hidden and the phone More menu carries the same four entries. */}
+          {/* The link group: Docs, GitHub, Support and Settings stay glyph-only,
+              with the tooltip and aria-label carrying each name. Docs also
+              stays in the More menu; below the dock threshold the group hides
+              and the phone More menu carries all four. */}
           <span className="masthead-links">
             {docsTab ? (
               <a
                 aria-current={currentTab === docsTab.id ? "page" : undefined}
                 className="tool tool-link masthead-docs"
+                aria-label={docsTab.label}
                 href={docsTab.href}
                 onClick={(event) => activateTabOnClick(event, docsTab.id, onSelectTab)}
               >
                 {docsTab.icon}
-                <span className="tool-text">{docsTab.label}</span>
+                <span aria-hidden="true" className="tip">
+                  {docsTab.label}
+                </span>
               </a>
             ) : null}
             {githubHref ? (
@@ -1380,13 +1381,14 @@ const Masthead = ({
                 target="_blank"
               >
                 <Github aria-hidden="true" />
-                <span aria-hidden="true" className="tool-text">
+                <span aria-hidden="true" className="tip">
                   {localizer.message("ui.tools.githubShort")}
                 </span>
               </a>
             ) : null}
             {donateHref ? (
               <a
+                aria-label={supportLabel}
                 className="tool tool-link masthead-support"
                 href={donateHref}
                 onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
@@ -1394,12 +1396,15 @@ const Masthead = ({
                 target="_blank"
               >
                 <Heart aria-hidden="true" />
-                <span className="tool-text">{supportLabel}</span>
+                <span aria-hidden="true" className="tip">
+                  {supportLabel}
+                </span>
               </a>
             ) : null}
             <button
               aria-expanded={settingsOpen}
               aria-haspopup="dialog"
+              aria-label={settingsLabel}
               className="tool tool-link masthead-settings"
               onClick={onOpenSettings}
               onFocus={onPreloadSettings}
@@ -1408,7 +1413,9 @@ const Masthead = ({
               type="button"
             >
               <Settings aria-hidden="true" />
-              <span className="tool-text">{settingsLabel}</span>
+              <span aria-hidden="true" className="tip">
+                {settingsLabel}
+              </span>
             </button>
             <span aria-hidden="true" className="masthead-links-sep" />
           </span>
@@ -1489,7 +1496,7 @@ const Masthead = ({
               <MoreMenu
                 autoFocusFirst={utilityViaKeyboard}
                 buttonClassName="mode-more"
-                current={desktopCurrentInMore}
+                current={currentInMore}
                 className="desktop-more"
                 confirmExternalNavigation={confirmExternalNavigation}
                 localizer={localizer}
@@ -1499,7 +1506,7 @@ const Masthead = ({
                 onOpenLog={onOpenLog}
                 onOpenStatus={onOpenStatus}
                 onOpenStorage={onOpenStorage ?? onOpenLog}
-                moreTabs={desktopMoreTabs}
+                moreTabs={moreTabs}
                 onOpenWorkflowTab={onSelectTab}
                 onPreloadLog={onPreloadLog}
                 onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}

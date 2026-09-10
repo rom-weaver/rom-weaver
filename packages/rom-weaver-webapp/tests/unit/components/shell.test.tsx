@@ -101,14 +101,20 @@ describe("Masthead", () => {
     // accent - Reset lives in the workflow panel head, and More is nav level
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(7);
     const links = container.querySelector(".masthead-links") as HTMLElement;
-    expect(
-      Array.from(links.querySelectorAll<HTMLElement>(".tool-link")).map((link) => link.textContent?.trim()),
-    ).toEqual(["Docs", "GitHub", "Support", "Settings"]);
-    // Every link keeps its label beside the glyph; none wears a tooltip.
-    expect(links.querySelector(".tip")).toBeNull();
+    // Glyph only: every name rides the tooltip and the aria-label.
+    expect(links.querySelector(".tool-text")).toBeNull();
+    expect(Array.from(links.querySelectorAll<HTMLElement>(".tip")).map((tip) => tip.textContent?.trim())).toEqual([
+      "Docs",
+      "GitHub",
+      "Support",
+      "Settings",
+    ]);
     expect(within(links).getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
     expect(within(links).getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe(
       "https://example.com/repo",
+    );
+    expect(within(links).getByRole("link", { name: "Support" }).getAttribute("href")).toBe(
+      "https://example.com/donate",
     );
     expect(within(links).getByRole("button", { name: "Settings" }).classList.contains("masthead-settings")).toBe(true);
     expect(container.querySelector(".actions-sep")).toBeNull();
@@ -164,18 +170,19 @@ describe("Masthead", () => {
     expect(menuStatus.classList.contains("more-status")).toBe(true);
     expect(menuStatus.getAttribute("data-sw")).toBe("active");
     expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
-    // Docs, GitHub, Support and Settings live in the top-right link group on
-    // this layout, so the desktop menu does not list them again.
-    expect(queryByRole("menuitem", { name: "Docs" })).toBeNull();
+    // Docs stays in the More menu beside the glyph-only link group; GitHub,
+    // Support and Settings live only in the top-right group on this layout.
+    // Real links: a middle-click or "open in new tab" still reaches the route.
+    expect(getByRole("menuitem", { name: "Docs" }).getAttribute("href")).toBe("docs");
     expect(queryByRole("menuitem", { name: "View source on GitHub" })).toBeNull();
     expect(queryByRole("menuitem", { name: "Support" })).toBeNull();
     expect(queryByRole("menuitem", { name: "Settings" })).toBeNull();
-    expect(queryByRole("group", { name: "Docs" })).toBeNull();
     // With the selected workflow in the rail, More is not "you are here".
     expect(more.classList.contains("is-current")).toBe(false);
     expect(getByRole("menuitem", { name: "Trim Beta" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "PPF undo Beta" })).toBeTruthy();
     expect(getByRole("group", { name: "Tools" })).toBeTruthy();
+    expect(getByRole("group", { name: "Docs" })).toBeTruthy();
     expect(getByRole("group", { name: "Project" })).toBeTruthy();
     expect(getByRole("menuitem", { name: "What\u2019s new" })).toBeTruthy();
     // The head row keeps the app's own surfaces one tap away on desktop too.
@@ -204,10 +211,10 @@ describe("Masthead", () => {
     expect(order).toEqual(["brand", "masthead-tools", "modes"]);
   });
 
-  it("marks the Docs link current on desktop and More current on the phone", () => {
+  it("marks both the Docs link and More current when Docs is selected", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
     expect(container.querySelector(".masthead-docs")?.getAttribute("aria-current")).toBe("page");
-    expect(container.querySelector(".desktop-more .mode-more.is-current")).toBeNull();
+    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
     expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
   });
 

@@ -856,34 +856,21 @@ html.vt-theme .mode-rail .mode {
 /* `.mode-more` is nav level, so it is named like the tabs beside it rather than
    tooltipped like the actions cluster it left. */
 .rw-app .dock-action .tool-text,
-.rw-app .mode-more .tool-text,
-.rw-app .tool-link .tool-text {
+.rw-app .mode-more .tool-text {
   display: inline;
 }
 
 /* ── the link group ──
-   Docs, GitHub, Support and Settings, as one set of ghost buttons that share
-   the `.tool` chrome but keep their label beside the glyph. The label is the
-   accessible name, so none of them wears a tooltip. */
+   Docs, GitHub, Support and Settings, as one set of ghost icons that share the
+   `.tool` chrome but stay glyph-only; the tooltip and aria-label carry each
+   name. */
 .rw-app .masthead-links {
   display: inline-flex;
   gap: var(--sp-2xs);
   align-items: center;
 }
 .rw-app .tool-link {
-  display: inline-flex;
-  gap: var(--sp-xs);
-  align-items: center;
-  width: auto;
-  padding-inline: var(--sp-m);
-  font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  white-space: nowrap;
   text-decoration: none;
-}
-.rw-app .tool-link svg {
-  flex: none;
 }
 /* "you are here" for Docs: a boxed state, not a color alone, since Support beside
    it wears the same accent color at rest. */
