@@ -2,8 +2,10 @@ import { Check, ChevronRight, X } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
+import type { Localizer } from "../../../../presentation/localization/index.ts";
 import type { IdentifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import { ChecksumList, type ChecksumPendingGroup, ChecksumRow, PendingChecks } from "./checksum-list.tsx";
 import { FileProgress } from "./feedback.tsx";
 
@@ -14,24 +16,27 @@ type TrimFixDetails = {
   trimmedInputBytes?: number;
 };
 
-const getTrimFixLabel = (trim: TrimFixDetails | null | undefined) => {
+const getTrimFixLabel = (trim: TrimFixDetails | null | undefined, localizer: Localizer) => {
   if (!trim?.detected) return "";
   const details = [
     typeof trim.trimmedInputBytes === "number" ? formatByteSize(trim.trimmedInputBytes) : "",
-    trim.mode ? `mode ${trim.mode}` : "",
-    trim.preservedDownloadPlayCert ? "download-play cert preserved" : "",
+    trim.mode ? localizer.message("ui.sourceInfo.trimMode", { mode: trim.mode }) : "",
+    trim.preservedDownloadPlayCert ? localizer.message("ui.sourceInfo.trimCert") : "",
   ].filter(Boolean);
-  return details.length ? `Detected (${details.join(" · ")})` : "Detected";
+  return details.length
+    ? localizer.message("ui.sourceInfo.trimDetectedDetails", { details: details.join(" · ") })
+    : localizer.message("ui.sourceInfo.trimDetected");
 };
 
 /* Trim padding detail (bytes/mode/cert), shown as a labeled sub-group inside the
    Checks drawer only when trim padding was actually detected. */
 const TrimFixGroup = ({ trim }: { trim?: TrimFixDetails | null }) => {
+  const localizer = useUiLocalizer();
   if (!trim?.detected) return null;
   return (
     <div className="ck-group">
-      <div className="ck-group-head">Trim</div>
-      <ChecksumRow label="TRIM" value={getTrimFixLabel(trim)} />
+      <div className="ck-group-head">{localizer.message("ui.sourceInfo.trim")}</div>
+      <ChecksumRow label="TRIM" value={getTrimFixLabel(trim, localizer)} />
     </div>
   );
 };
@@ -42,20 +47,24 @@ const formatExtractTimingMs = (ms?: number): string | undefined =>
 /* Decode/checksum/overlap split for the extract that produced this file, shown as a
    labeled sub-group inside the same Checks drawer as the checksums. */
 const ExtractTimingGroup = ({ timing }: { timing?: ExtractTiming }) => {
+  const localizer = useUiLocalizer();
   if (!timing) return null;
   const decode = formatExtractTimingMs(timing.decodeMs);
   const checksum = formatExtractTimingMs(timing.checksumMs);
   const overlap = formatExtractTimingMs(timing.overlapMs);
   const total = formatExtractTimingMs(timing.totalMs);
   if (!(decode || checksum || overlap)) return null;
-  const head = timing.threaded && timing.workers ? `Extract timing (${timing.workers} threads)` : "Extract timing";
+  const head =
+    timing.threaded && timing.workers
+      ? localizer.message("ui.sourceInfo.extractTimingThreads", { workers: timing.workers })
+      : localizer.message("ui.sourceInfo.extractTiming");
   return (
     <div className="ck-group">
       <div className="ck-group-head">{head}</div>
-      {decode ? <ChecksumRow label="DECODE" value={decode} /> : null}
-      {checksum ? <ChecksumRow label="CHECKSUM" value={checksum} /> : null}
-      {overlap ? <ChecksumRow label="OVERLAP" value={overlap} /> : null}
-      {total ? <ChecksumRow label="TOTAL" value={total} /> : null}
+      {decode ? <ChecksumRow label={localizer.message("ui.sourceInfo.decode")} value={decode} /> : null}
+      {checksum ? <ChecksumRow label={localizer.message("ui.sourceInfo.checksum")} value={checksum} /> : null}
+      {overlap ? <ChecksumRow label={localizer.message("ui.sourceInfo.overlap")} value={overlap} /> : null}
+      {total ? <ChecksumRow label={localizer.message("ui.sourceInfo.total")} value={total} /> : null}
     </div>
   );
 };
@@ -109,20 +118,24 @@ const hasExpectedMismatch = (
 };
 
 /** Drawer-header ✗ for a failed expectation - click for what it means. */
-const ExpectedMismatchInfo = () => (
-  <InfoToggle
-    ariaLabel="Not the expected ROM"
-    className="expected-mismatch-info"
-    icon={<X aria-hidden="true" />}
-    panelClassName="dry-apply-pop"
-    portalPanel
-    title="Not the expected ROM"
-  >
-    <strong>Not the expected ROM</strong>
-    <p>This ROM's name or checks do not match what this run expects - see the Expected rows below.</p>
-    <p>You can still continue, but the result may differ from what the expectation's author intended.</p>
-  </InfoToggle>
-);
+const ExpectedMismatchInfo = () => {
+  const localizer = useUiLocalizer();
+  const title = localizer.message("ui.sourceInfo.expectedMismatch");
+  return (
+    <InfoToggle
+      ariaLabel={title}
+      className="expected-mismatch-info"
+      icon={<X aria-hidden="true" />}
+      panelClassName="dry-apply-pop"
+      portalPanel
+      title={title}
+    >
+      <strong>{title}</strong>
+      <p>{localizer.message("ui.sourceInfo.expectedMismatchDetails")}</p>
+      <p>{localizer.message("ui.sourceInfo.expectedMismatchContinue")}</p>
+    </InfoToggle>
+  );
+};
 
 /** One computed hash set the expectation can match: the base checksums or a
  * transform variant's. */
@@ -158,6 +171,7 @@ const MatchedExpectedGroup = ({
   expected: SourceInfoExpectedChecks;
   matched: ComputedCheckSet;
 }) => {
+  const localizer = useUiLocalizer();
   const expectedChecksums = expected.checksums || {};
   const expectedSize = typeof expected.size === "number" ? String(expected.size) : "";
   const rowValue = (algorithm: keyof SourceInfoChecksums) =>
@@ -168,11 +182,11 @@ const MatchedExpectedGroup = ({
     <div className="ck-group" id="rom-weaver-rom-expected-checks">
       <div className="ck-group-head">
         {matched.label}
-        <span className="ck-mark ok" title="The staged ROM matches what this run expects">
+        <span className="ck-mark ok" title={localizer.message("ui.sourceInfo.expectedMatch")}>
           <Check aria-hidden="true" />
-          <span className="sr-only">matches</span>
+          <span className="sr-only">{localizer.message("ui.checks.matches")}</span>
         </span>
-        <span className="ck-head-note">Expected</span>
+        <span className="ck-head-note">{localizer.message("ui.sourceInfo.expected")}</span>
       </div>
       {rowValue("crc32") ? <ChecksumRow label="CRC32" mark={rowMark("crc32")} value={rowValue("crc32")} /> : null}
       {byteValue ? (
@@ -202,6 +216,7 @@ const CollapsedVariantGroups = ({
   databaseVariantId?: string;
   variants: ChecksumVariant[];
 }) => {
+  const localizer = useUiLocalizer();
   const [open, setOpen] = useState(false);
   const count = (baseRows ? 1 : 0) + variants.length;
   if (!count) return null;
@@ -209,7 +224,7 @@ const CollapsedVariantGroups = ({
     <>
       <button aria-expanded={open} className="ck-more" onClick={() => setOpen(!open)} type="button">
         <ChevronRight aria-hidden="true" className="chev-i" />
-        {open ? "Hide" : "Show"} {count} more {count === 1 ? "variant" : "variants"}
+        {localizer.messageCount(open ? "ui.sourceInfo.hideVariants" : "ui.sourceInfo.showVariants", count)}
       </button>
       {open ? (
         <>
@@ -230,6 +245,7 @@ const CollapsedVariantGroups = ({
    not assert. They answer "what else is this ROM supposed to be" without
    pretending to be an authored expectation, so they carry no match mark. */
 const DatabaseCheckRows = ({ checksums }: { checksums?: Record<string, string> }) => {
+  const localizer = useUiLocalizer();
   const algorithms = Object.keys(checksums || {}).sort();
   if (!algorithms.length) return null;
   return (
@@ -237,7 +253,7 @@ const DatabaseCheckRows = ({ checksums }: { checksums?: Record<string, string> }
       {algorithms.map((algorithm) => (
         <ChecksumRow
           key={algorithm}
-          label={`${EXPECTED_CHECK_LABELS[algorithm] || algorithm.toUpperCase()} (db)`}
+          label={`${EXPECTED_CHECK_LABELS[algorithm] || algorithm.toUpperCase()} (${localizer.message("ui.sourceInfo.database")})`}
           value={checksums?.[algorithm] || ""}
         />
       ))}
@@ -260,6 +276,7 @@ const ExpectedChecksGroup = ({
   /** A compared field disagreed: the head carries the ✗ / "No match" verdict. */
   mismatch?: boolean;
 }) => {
+  const localizer = useUiLocalizer();
   const expectedChecksums = expected?.checksums || {};
   const expectedSize = typeof expected?.size === "number" ? String(expected.size) : "";
   if (!(Object.keys(expectedChecksums).length || expectedSize)) return null;
@@ -271,13 +288,13 @@ const ExpectedChecksGroup = ({
   return (
     <div className="ck-group" id="rom-weaver-rom-expected-checks">
       <div className="ck-group-head">
-        Expected
+        {localizer.message("ui.sourceInfo.expected")}
         {mismatch ? (
           <>
-            <span className="ck-mark bad" title="This ROM does not match what this run expects">
+            <span className="ck-mark bad" title={localizer.message("ui.sourceInfo.expectedMismatch")}>
               <X aria-hidden="true" />
             </span>
-            <span className="ck-head-note">No match</span>
+            <span className="ck-head-note">{localizer.message("ui.sourceInfo.noMatch")}</span>
           </>
         ) : null}
       </div>
@@ -328,9 +345,10 @@ const buildStagingGroups = (
   pending: ChecksumPendingGroup[],
   expected: SourceInfoExpectedChecks | undefined,
   hasExpected: boolean,
+  localizer: Localizer,
 ): ChecksumPendingGroup[] => {
   const variantCount = pending.filter((group) => group.id !== "raw").length;
-  const baseLabel = variantCount ? "Unchanged" : "Computed";
+  const baseLabel = localizer.message(variantCount ? "ui.sourceInfo.unchanged" : "ui.sourceInfo.computed");
   const groups = pending.map((group) =>
     group.id === "raw" && (variantCount || hasExpected) ? { ...group, label: baseLabel } : group,
   );
@@ -378,12 +396,17 @@ const FilledCheckRow = ({
   databaseValue?: string;
   label: string;
 }) => {
+  const localizer = useUiLocalizer();
   const fromDatabase = !computed && !!databaseValue;
   const value = computed || databaseValue || "";
   if (!value) return <ChecksumRow label={label} value="" />;
   return (
     <ChecksumRow
-      ariaLabel={fromDatabase ? `Copy ${label} from the identification database` : `Copy ${label}`}
+      ariaLabel={
+        fromDatabase
+          ? localizer.message("ui.sourceInfo.copyDatabase", { label })
+          : localizer.message("ui.checks.copy", { label })
+      }
       className={fromDatabase ? "ck-db" : undefined}
       copyValue={value}
       label={label}
@@ -484,7 +507,7 @@ const SourceInfoList = ({
   defaultOpen = false,
   expected,
   extractTiming,
-  label = "Checks",
+  label,
   lead,
   onToggle,
   open,
@@ -518,13 +541,14 @@ const SourceInfoList = ({
   /** Trim-padding probe; surfaces a "Trim" group only when padding is detected. */
   trim?: TrimFixDetails | null;
 }) => {
+  const localizer = useUiLocalizer();
   const hasExpected = !!(Object.keys(expected?.checksums || {}).length || typeof expected?.size === "number");
   if (pending?.length) {
     return (
       <PendingChecks
         defaultOpen={defaultOpen}
-        groups={buildStagingGroups(pending, expected, hasExpected)}
-        label={label}
+        groups={buildStagingGroups(pending, expected, hasExpected, localizer)}
+        label={label ?? localizer.message("ui.checks.title")}
         onToggle={onToggle}
         open={open}
       />
@@ -539,7 +563,7 @@ const SourceInfoList = ({
   // to match - an unlabeled block alongside labeled groups reads as if it
   // belonged to the first one.
   const variantRows = (checksumVariants || []).filter((variant) => !isBaseVariantId(variant.id));
-  const baseGroupLabel = variantRows.length ? "Unchanged" : "Computed";
+  const baseGroupLabel = localizer.message(variantRows.length ? "ui.sourceInfo.unchanged" : "ui.sourceInfo.computed");
   // A record matched through `raw`/`manual` describes the file itself, so its
   // values complete the base rows; any other variant id sends them to that
   // variant's group instead, where the bytes they describe actually live.
@@ -574,7 +598,7 @@ const SourceInfoList = ({
     <ChecksumList
       action={expectedMismatch ? <ExpectedMismatchInfo /> : undefined}
       defaultOpen={defaultOpen}
-      label={label}
+      label={label ?? localizer.message("ui.checks.title")}
       lead={progress ? <FileProgress {...progress} /> : lead}
       onToggle={onToggle}
       open={open}
@@ -641,9 +665,16 @@ const DiscTracksPanel = ({
   onToggle?: (open: boolean) => void;
   timing?: ReactNode;
 }) => {
+  const localizer = useUiLocalizer();
   if (!tracks.length) return null;
   return (
-    <ChecksumList defaultOpen={false} label="Checks" onToggle={onToggle} open={open} timing={timing}>
+    <ChecksumList
+      defaultOpen={false}
+      label={localizer.message("ui.checks.title")}
+      onToggle={onToggle}
+      open={open}
+      timing={timing}
+    >
       {tracks.map((track) => {
         const hasBytes = typeof track.bytes === "number" && Number.isFinite(track.bytes);
         return (

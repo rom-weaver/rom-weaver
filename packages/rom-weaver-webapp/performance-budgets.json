@@ -5,7 +5,7 @@
       {
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 33700,
+        "expectedRawBytes": 34000,
         "maxRawBytes": 35400,
         "expectedBrotliBytes": 7950,
         "maxBrotliBytes": 8350
@@ -15,10 +15,10 @@
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2225000,
-        "maxRawBytes": 2260000,
-        "expectedBrotliBytes": 584000,
-        "maxBrotliBytes": 592000
+        "expectedRawBytes": 2281000,
+        "maxRawBytes": 2330000,
+        "expectedBrotliBytes": 594500,
+        "maxBrotliBytes": 608000
       },
       {
         "name": "CSS",

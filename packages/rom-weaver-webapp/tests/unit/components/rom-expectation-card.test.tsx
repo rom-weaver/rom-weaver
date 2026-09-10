@@ -1,11 +1,17 @@
 // @vitest-environment happy-dom
 import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { loadCatalog } from "../../../src/presentation/localization/catalog.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import {
   compareRomExpectation,
   RomExpectationCard,
 } from "../../../src/public/react/components/ds/rom-expectation-card.tsx";
 import type { ParsedIdentifyResolution } from "../../../src/types/identify.ts";
+
+beforeAll(async () => {
+  await loadCatalog("es");
+});
 
 const matched = (expectedComponents: Record<string, string | number>[]): ParsedIdentifyResolution => ({
   matches: [
@@ -74,6 +80,21 @@ describe("RomExpectationCard", () => {
     expect(expectedGroups(container)).toHaveLength(0);
     expect(container.textContent).toContain("Expected by a patch");
     expect(rows(container).some((row) => row.includes("1024"))).toBe(true);
+  });
+
+  it("localizes the expected-ROM card while keeping its checksum rows", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "es" }}>
+        <RomExpectationCard
+          expectation={{ checks: { checksums: { crc32: "abcd1234" }, size: 1024 }, source: "patch" }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(container.textContent).toContain("ROM esperada");
+    expect(container.textContent).toContain("Esperada por un parche");
+    expect(rows(container).some((row) => row.includes("CRC32 abcd1234"))).toBe(true);
+    expect(rows(container).some((row) => row.includes("BYTES 1024"))).toBe(true);
   });
 });
 

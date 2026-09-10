@@ -6,7 +6,7 @@ import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
 import { identifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../../../../types/identify.ts";
 import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
-import type { useUiLocalizer } from "../../settings-context.tsx";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import type { useRomHashLookup } from "../../use-rom-hash-lookup.ts";
 import type { useRomNameLookup } from "../../use-rom-name-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
@@ -72,18 +72,26 @@ const databaseOnlyChecks = (
 /** Where an expected-ROM check came from; it decides the card's meta line. */
 type RomExpectationSource = "bundle" | "manual" | "patch";
 
-const ROM_EXPECTATION_META: Record<RomExpectationSource, string> = {
-  bundle: "ROM not included - provide it yourself",
-  manual: "Found by checksum - add the ROM to verify it",
-  patch: "Expected by a patch - provide this ROM",
+const ROM_EXPECTATION_META: Record<
+  RomExpectationSource,
+  "ui.sourceInfo.expectationMetaBundle" | "ui.sourceInfo.expectationMetaManual" | "ui.sourceInfo.expectationMetaPatch"
+> = {
+  bundle: "ui.sourceInfo.expectationMetaBundle",
+  manual: "ui.sourceInfo.expectationMetaManual",
+  patch: "ui.sourceInfo.expectationMetaPatch",
 };
 
 /* Who asserted the checks, for the merged group's head note. The database name
    follows it, so the note reads "by the bundle · No-Intro". */
-const ROM_EXPECTATION_AUTHORITY: Record<RomExpectationSource, string> = {
-  bundle: "by the bundle",
-  manual: "your checksum",
-  patch: "by the patch",
+const ROM_EXPECTATION_AUTHORITY: Record<
+  RomExpectationSource,
+  | "ui.sourceInfo.expectationAuthorityBundle"
+  | "ui.sourceInfo.expectationAuthorityManual"
+  | "ui.sourceInfo.expectationAuthorityPatch"
+> = {
+  bundle: "ui.sourceInfo.expectationAuthorityBundle",
+  manual: "ui.sourceInfo.expectationAuthorityManual",
+  patch: "ui.sourceInfo.expectationAuthorityPatch",
 };
 
 /** What the workflow expects the ROM to be, and where that expectation came from. */
@@ -141,6 +149,7 @@ const RomExpectationCard = ({
   onRemove?: () => void;
   removeLabel?: string;
 }) => {
+  const localizer = useUiLocalizer();
   const identified = identification?.status === "matched" ? identification.matches[0] : undefined;
   // Several titles share the checksum: the drawer that lists them is the answer,
   // so it opens on arrival instead of hiding behind an untitled card.
@@ -150,33 +159,41 @@ const RomExpectationCard = ({
   const title =
     (identification ? uniqueIdentifyDisplayNames(identification.matches)[0] || "" : "") ||
     expectation.name ||
-    (ambiguous ? identifyMatchCountLabel(identification?.matches.length ?? 0) : "Expected ROM");
+    (ambiguous
+      ? identifyMatchCountLabel(identification?.matches.length ?? 0)
+      : localizer.message("ui.sourceInfo.expectedRom"));
   // The check's own values win over the database's: only one of the two was
   // authored as an expectation, and it is the one the run will verify against.
   const merged = { ...database?.checksums, ...own };
   const mergedSize = expectation.checks?.size ?? database?.size;
   // An identified title is a display name over the placeholder file name, so
   // the card reads like the ROM card it becomes once the file lands.
-  const extractName = identification ? { displayName: title, fileName: "Expected ROM" } : { fileName: title };
+  const extractName = identification
+    ? { displayName: title, fileName: localizer.message("ui.sourceInfo.expectedRom") }
+    : { fileName: title };
   return (
     <div className="cards bundle-rom-expectation" id={id}>
       <FileCard
-        meta={<span>{ROM_EXPECTATION_META[expectation.source]}</span>}
+        meta={<span>{localizer.message(ROM_EXPECTATION_META[expectation.source])}</span>}
         name={<ExtractName {...extractName} />}
         {...(onRemove ? { onRemove } : {})}
         {...(removeLabel ? { removeLabel } : {})}
       >
         {identification ? <IdentifyDrawer defaultOpen={ambiguous} identification={identification} /> : null}
-        <ChecksumList defaultOpen label="Checks" sublabel="expected">
+        <ChecksumList
+          defaultOpen
+          label={localizer.message("ui.checks.title")}
+          sublabel={localizer.message("ui.sourceInfo.expected")}
+        >
           {identified ? (
             <div className="ck-group">
               {/* The head note says who asserted the checks and which database
                   filled in the rest, so nobody reads a hint as a check. */}
               <div className="ck-group-head">
-                Expected
+                {localizer.message("ui.sourceInfo.expected")}
                 <span className="ck-head-note">
-                  {ROM_EXPECTATION_AUTHORITY[expectation.source]}
-                  {` · ${identified.database || "identify data"}`}
+                  {localizer.message(ROM_EXPECTATION_AUTHORITY[expectation.source])}
+                  {` · ${identified.database || localizer.message("ui.sourceInfo.identifyData")}`}
                 </span>
               </div>
               <ExpectedCheckRows checksums={merged} size={mergedSize} />

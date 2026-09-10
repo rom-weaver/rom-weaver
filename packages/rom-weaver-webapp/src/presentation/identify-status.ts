@@ -1,4 +1,4 @@
-import type { IdentifyCondition, IdentifyQuality, IdentifyStatus } from "../types/identify.ts";
+import type { IdentifyStatus } from "../types/identify.ts";
 
 /**
  * The four identification outcomes, in the words the workflow status, the
@@ -28,27 +28,6 @@ const IDENTIFY_STATUS_MARK: Readonly<Record<IdentifyStatus, IdentifyStatusMark>>
   matched: { glyph: "✓", label: "Identified", tone: "ok" },
   unavailable: { glyph: "!", label: "Identification unavailable", tone: "warn" },
   unknown: { glyph: "–", label: "No checksum match", tone: "bad" },
-};
-
-/**
- * Match-quality badges for set-aware results. `metadata_only` is the
- * weakest claim - the database knew the title but could not verify the bytes -
- * so its wording never says "verified".
- */
-const IDENTIFY_QUALITY_LABEL: Readonly<Record<IdentifyQuality, string>> = {
-  exact: "Exact match",
-  metadata_only: "Metadata only",
-  partial: "Partial match",
-};
-
-/**
- * Structured non-match causes. Both are actionable states, distinct from a
- * plain "no match": the database is missing, or the media shape has no
- * canonicalization profile yet.
- */
-const IDENTIFY_CONDITION_LABEL: Readonly<Record<IdentifyCondition, string>> = {
-  database_required: "Database required",
-  unsupported_media_profile: "Media profile not supported",
 };
 
 /** Reader-facing source names for the machine source ids the packs carry.
@@ -155,8 +134,6 @@ const identifyComponentEvidenceLabel = (matched: number, total: number): string 
 const identifyMatchCountLabel = (count: number): string => `${count} possible ${count === 1 ? "match" : "matches"}`;
 
 export {
-  IDENTIFY_CONDITION_LABEL,
-  IDENTIFY_QUALITY_LABEL,
   IDENTIFY_STATUS_LABEL,
   IDENTIFY_STATUS_MARK,
   identifyComponentEvidenceLabel,

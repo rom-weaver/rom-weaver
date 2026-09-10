@@ -1,6 +1,7 @@
 import { CircleX, TriangleAlert, X } from "lucide-react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { prefersReducedMotion } from "./flat-transition.ts";
 
@@ -17,7 +18,7 @@ const Notice = ({
   id,
   children,
   className,
-  dismissLabel = "Dismiss",
+  dismissLabel,
   onDismiss,
 }: {
   level: NoticeLevel;
@@ -27,13 +28,21 @@ const Notice = ({
   dismissLabel?: string;
   onDismiss?: () => void;
 }) => {
+  const localizer = useUiLocalizer();
+  const resolvedDismissLabel = dismissLabel ?? localizer.message("ui.common.dismiss");
   const Icon = level === "error" ? CircleX : TriangleAlert;
   return (
     <div className={join("notice", level, className)} id={id} role={level === "error" ? "alert" : "status"}>
       <Icon aria-hidden="true" />
       <span className="body notice-copy">{children}</span>
       {onDismiss ? (
-        <button aria-label={dismissLabel} className="x notice-x" onClick={onDismiss} title={dismissLabel} type="button">
+        <button
+          aria-label={resolvedDismissLabel}
+          className="x notice-x"
+          onClick={onDismiss}
+          title={resolvedDismissLabel}
+          type="button"
+        >
           <X aria-hidden="true" />
         </button>
       ) : null}
@@ -83,7 +92,7 @@ const InlineProgress = ({
   tight,
   id,
   onCancel,
-  cancelLabel = "Cancel operation",
+  cancelLabel,
 }: {
   label: ReactNode;
   value?: ReactNode;
@@ -94,6 +103,8 @@ const InlineProgress = ({
   onCancel?: () => void;
   cancelLabel?: string;
 }) => {
+  const localizer = useUiLocalizer();
+  const resolvedCancelLabel = cancelLabel ?? localizer.message("ui.common.cancelOperation");
   const progress = (
     <div className={join("prog", tight && "tight")}>
       <div className="lab">
@@ -117,7 +128,13 @@ const InlineProgress = ({
     <div className="prog-panel runprog" id={id}>
       {progress}
       <div className="prog-actions">
-        <button aria-label={cancelLabel} className="cancel" onClick={onCancel} title={cancelLabel} type="button">
+        <button
+          aria-label={resolvedCancelLabel}
+          className="cancel"
+          onClick={onCancel}
+          title={resolvedCancelLabel}
+          type="button"
+        >
           <X aria-hidden="true" />
         </button>
       </div>
@@ -133,39 +150,37 @@ type FileProgressProps = Parameters<typeof InlineProgress>[0];
  * panel (the apply form's live-run look) so the output-step progress lines up
  * with the card content above it.
  */
-const FileProgress = ({
-  onCancel,
-  cancelLabel = "Cancel operation",
-  id,
-  run,
-  ...progress
-}: FileProgressProps & { run?: boolean }) => (
-  <div aria-busy="true" className={join("prog-panel fileprog", run && "runprog")} id={id}>
-    <div className="prog">
-      <div className="lab">
-        <span className="what">{progress.label}</span>
+const FileProgress = ({ onCancel, cancelLabel, id, run, ...progress }: FileProgressProps & { run?: boolean }) => {
+  const localizer = useUiLocalizer();
+  const resolvedCancelLabel = cancelLabel ?? localizer.message("ui.common.cancelOperation");
+  return (
+    <div aria-busy="true" className={join("prog-panel fileprog", run && "runprog")} id={id}>
+      <div className="prog">
+        <div className="lab">
+          <span className="what">{progress.label}</span>
+        </div>
+        <ProgressTrack indeterminate={progress.indeterminate} percent={progress.percent} />
+        <div className="sub mono">
+          <span />
+          <span className="run-pct">{progress.value ?? "-"}</span>
+        </div>
       </div>
-      <ProgressTrack indeterminate={progress.indeterminate} percent={progress.percent} />
-      <div className="sub mono">
-        <span />
-        <span className="run-pct">{progress.value ?? "-"}</span>
-      </div>
+      {onCancel ? (
+        <div className="prog-actions">
+          <button
+            aria-label={resolvedCancelLabel}
+            className="cancel stage-cancel"
+            onClick={onCancel}
+            title={resolvedCancelLabel}
+            type="button"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
     </div>
-    {onCancel ? (
-      <div className="prog-actions">
-        <button
-          aria-label={cancelLabel}
-          className="cancel stage-cancel"
-          onClick={onCancel}
-          title={cancelLabel}
-          type="button"
-        >
-          <X aria-hidden="true" />
-        </button>
-      </div>
-    ) : null}
-  </div>
-);
+  );
+};
 
 type DownloadMeta = {
   format?: string;
@@ -177,25 +192,30 @@ type DownloadMeta = {
   total?: string;
 };
 
-const RunButtonDownloadSummary = ({ download }: { download: DownloadMeta }) => (
-  <>
-    <span className="sr-only">Download </span>
-    {download.format ? <span className="dl-kind mono dl-fmt">{download.format}</span> : null}
-    {download.name ? <span className="dl-delta mono dl-name">{download.name}</span> : null}
-    {download.size ? (
-      <span className="dl-size mono dl-sz">
-        {download.size}
-        {download.savedSize ? <> &middot; saved {download.savedSize}</> : null}
-        {download.ratio ? <> &middot; {download.ratio}</> : null}
-      </span>
-    ) : null}
-    {download.total ? (
-      <span className="dl-total mono">
-        <b>{download.total}</b>
-      </span>
-    ) : null}
-  </>
-);
+const RunButtonDownloadSummary = ({ download }: { download: DownloadMeta }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <>
+      <span className="sr-only">{localizer.message("ui.common.download")} </span>
+      {download.format ? <span className="dl-kind mono dl-fmt">{download.format}</span> : null}
+      {download.name ? <span className="dl-delta mono dl-name">{download.name}</span> : null}
+      {download.size ? (
+        <span className="dl-size mono dl-sz">
+          {download.size}
+          {download.savedSize ? (
+            <> &middot; {localizer.message("ui.output.savedSize", { size: download.savedSize })}</>
+          ) : null}
+          {download.ratio ? <> &middot; {download.ratio}</> : null}
+        </span>
+      ) : null}
+      {download.total ? (
+        <span className="dl-total mono">
+          <b>{download.total}</b>
+        </span>
+      ) : null}
+    </>
+  );
+};
 
 /**
  * A finished run swaps the progress panel for a shorter result, so the button

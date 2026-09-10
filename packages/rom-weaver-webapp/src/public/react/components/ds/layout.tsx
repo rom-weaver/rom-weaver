@@ -3,6 +3,7 @@ import { type ReactNode, type Ref, useId, useLayoutEffect, useRef, useState } fr
 import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 import { perfNow, recordDrop } from "../../../../lib/runtime/perf-latency.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 
 // Stamp the perceived-latency start for each incoming file so the eventual
@@ -78,11 +79,15 @@ const StepSection = ({
  * Clickable "i" info mark with a viewport-aware popover. Content is the
  * caller's - typically a `.info-list` bullet list.
  */
-const InfoPopover = ({ title = "More info", children }: { title?: string; children: ReactNode }) => (
-  <InfoToggle ariaLabel={title} portalPanel title={title}>
-    {children}
-  </InfoToggle>
-);
+const InfoPopover = ({ title, children }: { title?: string; children: ReactNode }) => {
+  const localizer = useUiLocalizer();
+  const resolvedTitle = title ?? localizer.message("ui.common.moreInfo");
+  return (
+    <InfoToggle ariaLabel={resolvedTitle} portalPanel title={resolvedTitle}>
+      {children}
+    </InfoToggle>
+  );
+};
 
 /**
  * Drag-and-drop / click-to-browse file affordance backed by a hidden file
@@ -101,7 +106,7 @@ const DropZone = ({
   multiple,
   accept,
   disabled,
-  reading: readingLabel = "Reading folder…",
+  reading: readingLabel,
   onBrowseStart,
   onDropStart,
   onFiles,
@@ -136,6 +141,7 @@ const DropZone = ({
   inputId?: string;
   inputRef?: Ref<HTMLInputElement>;
 }) => {
+  const localizer = useUiLocalizer();
   const generatedInputId = useId();
   const resolvedInputId = inputId || generatedInputId;
   const [dragging, setDragging] = useState(false);
@@ -177,7 +183,7 @@ const DropZone = ({
   // cloth; in the compact add-row it rides inline in the button.
   const renderLabelBody = () =>
     reading ? (
-      <span>{readingLabel}</span>
+      <span>{readingLabel ?? localizer.message("ui.drop.readingFolder")}</span>
     ) : labelCoarse ? (
       <>
         <span className="pointer-copy fine">{label}</span>
@@ -278,7 +284,7 @@ const DropZone = ({
       )}
       <input
         accept={accept}
-        aria-label={typeof label === "string" ? label : "Add files"}
+        aria-label={typeof label === "string" ? label : localizer.message("ui.drop.addFiles")}
         className="sr-only"
         disabled={disabled}
         id={resolvedInputId}
