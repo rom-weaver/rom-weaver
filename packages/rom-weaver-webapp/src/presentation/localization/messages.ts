@@ -106,6 +106,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.sourceInfo.expectationAuthorityManual",
     message: "your checksum",
   }),
+  "ui.sourceInfo.expectationAuthorityName": msg({
+    id: "ui.sourceInfo.expectationAuthorityName",
+    message: "your search",
+  }),
   "ui.sourceInfo.expectationAuthorityPatch": msg({
     id: "ui.sourceInfo.expectationAuthorityPatch",
     message: "by the patch",
@@ -117,6 +121,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.sourceInfo.expectationMetaManual": msg({
     id: "ui.sourceInfo.expectationMetaManual",
     message: "Found by checksum - add the ROM to verify it",
+  }),
+  "ui.sourceInfo.expectationMetaName": msg({
+    id: "ui.sourceInfo.expectationMetaName",
+    message: "Found by game name - add the ROM to verify it",
   }),
   "ui.sourceInfo.expectationMetaPatch": msg({
     id: "ui.sourceInfo.expectationMetaPatch",
@@ -1028,7 +1036,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Add a supported ROM, raw or in an archive, to test the game in the browser emulator.",
   }),
   "ui.hero.supportedFormats": msg({ id: "ui.hero.supportedFormats", message: "Supported formats" }),
-  "ui.identify.hashDisclosure": msg({ id: "ui.identify.hashDisclosure", message: "Identify by checksum" }),
   "ui.hero.createThesis": msg({
     id: "ui.hero.createThesis",
     message: "Make a patch.",
@@ -1074,56 +1081,53 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Keep the game.",
   }),
   "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "Lose the padding." }),
+  "ui.identify.searchDisclosure": msg({
+    id: "ui.identify.searchDisclosure",
+    message: "Identify by checksum or game name",
+  }),
+  "ui.identify.searchRefine": msg({ id: "ui.identify.searchRefine", message: "Not the ROM you meant?" }),
+  "ui.identify.searchPlaceholder": msg({
+    id: "ui.identify.searchPlaceholder",
+    message: "CRC32, MD5, SHA-1, or game name",
+  }),
+  "ui.identify.search": msg({ id: "ui.identify.search", message: "Search" }),
+  "ui.identify.searchAgain": msg({ id: "ui.identify.searchAgain", message: "Search again" }),
+  "ui.identify.searching": msg({ id: "ui.identify.searching", message: "Searching…" }),
+  "ui.identify.searchFailed": msg({ id: "ui.identify.searchFailed", message: "The search failed." }),
   "ui.identify.hashInvalid": msg({
     id: "ui.identify.hashInvalid",
-    message: "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters.",
+    message: "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters, or a game name.",
   }),
-  "ui.identify.hashInvalidChars": msg({
-    id: "ui.identify.hashInvalidChars",
-    message: "Checksums use only the hex characters 0-9 and a-f.",
+  "ui.identify.hashNoMatch": msg({
+    id: "ui.identify.hashNoMatch",
+    message: "No ROM in the identification data has this checksum.",
   }),
-  "ui.identify.hashPlaceholder": msg({
-    id: "ui.identify.hashPlaceholder",
-    message: "CRC32, MD5, or SHA-1",
+  "ui.identify.hashUnavailable": msg({
+    id: "ui.identify.hashUnavailable",
+    message: "The identification data is not available on this device, so this checksum cannot be looked up.",
   }),
-  "ui.identify.hashLabel": msg({
-    id: "ui.identify.hashLabel",
-    message: "Looking for a specific ROM?",
-  }),
-  "ui.identify.hashRefine": msg({ id: "ui.identify.hashRefine", message: "Not the ROM you meant?" }),
-  "ui.identify.hashSearch": msg({ id: "ui.identify.hashSearch", message: "Search" }),
-  "ui.identify.hashSearchAgain": msg({ id: "ui.identify.hashSearchAgain", message: "Search again" }),
-  "ui.identify.hashSearching": msg({ id: "ui.identify.hashSearching", message: "Searching…" }),
-  "ui.identify.nameDisclosure": msg({ id: "ui.identify.nameDisclosure", message: "Identify by game name" }),
-  "ui.identify.nameFailed": msg({ id: "ui.identify.nameFailed", message: "The name search failed." }),
-  "ui.identify.nameLabel": msg({ id: "ui.identify.nameLabel", message: "Which game do you need?" }),
-  "ui.identify.nameNoMatch": msg({
-    id: "ui.identify.nameNoMatch",
-    message: "No ROM in this platform's data has that name.",
-  }),
-  "ui.identify.namePlaceholder": msg({ id: "ui.identify.namePlaceholder", message: "Game name" }),
-  "ui.identify.namePlatformChange": msg({ id: "ui.identify.namePlatformChange", message: "Change" }),
-  "ui.identify.namePlatformEmpty": msg({ id: "ui.identify.namePlatformEmpty", message: "No platform matches" }),
-  "ui.identify.namePlatformFirst": msg({ id: "ui.identify.namePlatformFirst", message: "Choose a platform first" }),
-  "ui.identify.namePlatformLabel": msg({ id: "ui.identify.namePlatformLabel", message: "Platform" }),
-  "ui.identify.namePlatformPlaceholder": msg({
-    id: "ui.identify.namePlatformPlaceholder",
-    message: "Type to filter platforms",
-  }),
-  "ui.identify.namePlatformsFailed": msg({
-    id: "ui.identify.namePlatformsFailed",
-    message: "The platform list could not be loaded.",
-  }),
-  "ui.identify.nameResults": msg({ id: "ui.identify.nameResults", message: "Choose the ROM you need" }),
-  "ui.identify.nameSearch": msg({ id: "ui.identify.nameSearch", message: "Search" }),
-  "ui.identify.nameSearching": msg({ id: "ui.identify.nameSearching", message: "Searching…" }),
   "ui.identify.nameTooShort": msg({
     id: "ui.identify.nameTooShort",
     message: "Enter at least 2 characters of the game name.",
   }),
+  "ui.identify.nameNoMatch": msg({
+    id: "ui.identify.nameNoMatch",
+    message: "No game in the identification data has that name.",
+  }),
   "ui.identify.nameUnavailable": msg({
     id: "ui.identify.nameUnavailable",
-    message: "The identification data for this platform is not available on this device.",
+    message: "The identification data is not available on this device, so names cannot be searched.",
+  }),
+  "ui.identify.titleResults": msg({ id: "ui.identify.titleResults", message: "Choose the game you need" }),
+  "ui.identify.versionResults": msg({
+    id: "ui.identify.versionResults",
+    message: "Choose the version of {title} for {platform}",
+  }),
+  "ui.identify.versionResultsList": msg({ id: "ui.identify.versionResultsList", message: "Versions" }),
+  "ui.identify.versionsBack": msg({ id: "ui.identify.versionsBack", message: "Other games" }),
+  "ui.identify.versionsNoMatch": msg({
+    id: "ui.identify.versionsNoMatch",
+    message: "The platform's data lists no version of this game.",
   }),
   "ui.log.emptyFilter": msg({ id: "ui.log.emptyFilter", message: "No lines match “{q}”" }),
   "ui.log.filter": msg({ id: "ui.log.filter", message: "Filter" }),

@@ -96,6 +96,7 @@ const searchExpectedRomTitles = async (
   try {
     const titles = await searchIdentifyTitles(query, {
       ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
+      ...(options.onProgress ? { onProgress: options.onProgress } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     });
     return { status: "ok", titles };

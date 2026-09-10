@@ -720,8 +720,10 @@ type IdentifyTitleHit = {
  */
 const searchIdentifyTitles = async (
   query: string,
-  options: { limit?: number; signal?: AbortSignal } = {},
+  options: { limit?: number; onProgress?: (progress: { message?: string }) => void; signal?: AbortSignal } = {},
 ): Promise<IdentifyTitleHit[]> => {
+  // The first search pays the index download; later ones answer from memory.
+  if (!titleIndexPromise) options.onProgress?.({ message: "Loading the game titles…" });
   const [index, catalog, titleIndex] = await Promise.all([getIndex(), getCatalog(), getTitleIndex()]);
   options.signal?.throwIfAborted();
   const limit = options.limit ?? 50;

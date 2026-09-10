@@ -14,9 +14,10 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { RomInputPanels } from "../../public/react/components/ds/rom-input-panels.tsx";
 import {
   compareRomExpectation,
-  ROM_HASH_LOOKUP_MESSAGES,
+  ROM_LOOKUP_MESSAGES,
+  romLookupSource,
   RomExpectationCard,
-  RomHashSearch,
+  RomSearch,
   type RomExpectation,
 } from "../../public/react/components/ds/rom-expectation-card.tsx";
 import { RelatedStrip } from "./related-strip.tsx";
@@ -24,7 +25,7 @@ import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { useRomHashLookup } from "../../public/react/use-rom-hash-lookup.ts";
+import { useRomLookup } from "../../public/react/use-rom-lookup.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
 
@@ -123,7 +124,7 @@ const IdentifyForm = ({
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
   const [file, setFile] = useState<File | null>(null);
-  const romHashLookup = useRomHashLookup(ROM_HASH_LOOKUP_MESSAGES(localizer));
+  const romLookup = useRomLookup(ROM_LOOKUP_MESSAGES(localizer));
   const [result, setResult] = useState<ParsedIdentifyResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -264,8 +265,8 @@ const IdentifyForm = ({
   /* A pasted checksum that the local data recognized is an expectation: it says
      which ROM this run is about before any file exists, and the staged ROM is
      then compared against it. */
-  const expectation: RomExpectation | undefined = romHashLookup.result
-    ? { checks: romHashLookup.result.checks, source: "manual" }
+  const expectation: RomExpectation | undefined = romLookup.result
+    ? { checks: romLookup.result.checks, source: romLookupSource(romLookup.result.foundBy) }
     : undefined;
   const expectationChecks = expectation?.checks;
   const hadExpectationRef = useRef(false);
@@ -308,7 +309,7 @@ const IdentifyForm = ({
       {/* Retry replays the file or the still-entered hash; with neither there is
           nothing to replay, so the button MUST NOT look actionable. */}
       <RunButton
-        disabled={busy || !(file || romHashLookup.text.trim())}
+        disabled={busy || !(file || romLookup.text.trim())}
         icon={<RotateCcw aria-hidden="true" />}
         onClick={retry}
       >
@@ -347,8 +348,8 @@ const IdentifyForm = ({
         supported={IDENTIFY_SUPPORTED_FILES}
         afterDropZone={
           heroShown ? (
-            <div className="identify-hash-island">
-              <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} />
+            <div className="identify-search-island">
+              <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} />
             </div>
           ) : null
         }
@@ -434,11 +435,11 @@ const IdentifyForm = ({
               <RomExpectationCard
                 expectation={expectation}
                 id={`${containerId}-expected-rom`}
-                identification={romHashLookup.result?.identification}
-                onRemove={romHashLookup.clear}
+                identification={romLookup.result?.identification}
+                onRemove={romLookup.clear}
                 removeLabel="Clear the expected ROM"
               />
-              <RomHashSearch idPrefix={containerId} localizer={localizer} lookup={romHashLookup} variant="compact" />
+              <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} variant="compact" />
             </>
           }
           items={[]}

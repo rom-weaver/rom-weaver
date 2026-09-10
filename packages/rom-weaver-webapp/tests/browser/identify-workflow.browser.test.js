@@ -14,8 +14,16 @@ const { identifyHash, identifyRom } = vi.hoisted(() => ({ identifyHash: vi.fn(),
 vi.mock("../../src/platform/browser/browser-api.ts", () => ({ identifyHash, identifyRom }));
 // The checksum search is the shared expected-ROM lookup, not a file identify
 // run, so it answers through the identify-data seam both pages use.
-const { lookupExpectedRom } = vi.hoisted(() => ({ lookupExpectedRom: vi.fn() }));
-vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => ({ lookupExpectedRom }));
+const { lookupExpectedRom, searchExpectedRomByName, searchExpectedRomTitles } = vi.hoisted(() => ({
+  lookupExpectedRom: vi.fn(),
+  searchExpectedRomByName: vi.fn(),
+  searchExpectedRomTitles: vi.fn(),
+}));
+vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => ({
+  lookupExpectedRom,
+  searchExpectedRomByName,
+  searchExpectedRomTitles,
+}));
 
 const { IdentifyForm } = await import("../../src/webapp/components/identify-form.tsx");
 
@@ -93,6 +101,8 @@ beforeEach(async () => {
   identifyHash.mockReset();
   identifyRom.mockReset();
   lookupExpectedRom.mockReset();
+  searchExpectedRomByName.mockReset();
+  searchExpectedRomTitles.mockReset();
 });
 
 afterEach(() => {
@@ -276,17 +286,17 @@ for (const [width, height] of [
 }
 
 const setHashInput = (value) => {
-  const input = host.querySelector(".identify-hash-input");
+  const input = host.querySelector(".identify-search-input");
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
   descriptor?.set?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 };
 
-test("an empty form shows the ghost steps next to the checksum search", async () => {
+test("an empty form shows the ghost steps next to the ROM search", async () => {
   await mountIdentifyForm();
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
-  expect(host.querySelector(".identify-hash-input")).not.toBeNull();
-  expect(host.querySelector(".identify-hash-label")?.textContent).toBe("Identify by checksum");
+  expect(host.querySelector(".identify-search-input")).not.toBeNull();
+  expect(host.querySelector(".identify-search-label")?.textContent).toBe("Identify by checksum or game name");
 });
 
 test("a pasted checksum raises the expected-ROM card without a file", async () => {
@@ -307,14 +317,16 @@ test("a pasted checksum raises the expected-ROM card without a file", async () =
   expect(host.textContent).toContain("Add the ROM to verify it");
 });
 
-test("an invalid checksum shows the inline error and never runs", async () => {
+test("text that is not a checksum searches the titles, and no title is not an answer", async () => {
+  searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [] });
   await mountIdentifyForm();
   setHashInput("not-a-hash");
   buttonMatching(/^\s*Search\s*$/).click();
-  await waitForText("hex characters");
+  await waitForText("No game in the identification data");
 
   expect(lookupExpectedRom).not.toHaveBeenCalled();
-  expect(host.querySelector(".identify-hash-error")).not.toBeNull();
+  expect(searchExpectedRomTitles).toHaveBeenCalledWith("not-a-hash", expect.anything());
+  expect(host.querySelector(".identify-search-error")).not.toBeNull();
   // A non-answer never opens 0x02: the hero and its ghost steps stay put.
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
   expect(host.querySelector(".unified-drop-step--hero")).not.toBeNull();
@@ -322,12 +334,12 @@ test("an invalid checksum shows the inline error and never runs", async () => {
 
 test("a wrong-length checksum names the accepted lengths", async () => {
   await mountIdentifyForm();
-  setHashInput("abc123");
+  setHashInput("abc123abc123");
   buttonMatching(/^\s*Search\s*$/).click();
   await waitForText("40 (SHA-1)");
 
   expect(lookupExpectedRom).not.toHaveBeenCalled();
-  expect(host.querySelector(".identify-hash-error")).not.toBeNull();
+  expect(host.querySelector(".identify-search-error")).not.toBeNull();
 });
 
 test("staging a file keeps the expectation and verifies the ROM against it", async () => {
@@ -348,7 +360,7 @@ test("staging a file keeps the expectation and verifies the ROM against it", asy
   await openDrawers();
   // A staged ROM answers 0x01, so the search steps aside the way it does on
   // apply; the expectation it found survives as Expected rows on the card.
-  expect(host.querySelector(".identify-hash-input")).toBeNull();
+  expect(host.querySelector(".identify-search-input")).toBeNull();
   await waitFor(() => host.querySelector("#rom-weaver-rom-expected-checks"));
   expect(host.querySelector(".card.ok")).not.toBeNull();
 });
