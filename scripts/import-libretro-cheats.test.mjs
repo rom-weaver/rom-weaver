@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import test from "node:test";
 
 import { LIBRETRO_PLATFORM_PATHS, packGroupFor } from "./build-identify-index.mjs";
@@ -18,16 +16,68 @@ import {
 } from "./import-libretro-cheats.mjs";
 
 const REVISION = "4968f556a0bf749378901086646b78bc78703b88";
-const FIXTURE_ROOT = path.join(import.meta.dirname, "fixtures", "libretro-cheats");
 const NES_DIRECTORY = "cht/Nintendo - Nintendo Entertainment System";
 
+// Synthetic Libretro `.cht` inputs. They are hand-written, not copied from the
+// Libretro database, so they exercise parser edge cases without shipping data.
+const NES_FIXTURES = Object.freeze({
+  "Test Game (USA).cht": `# The count is wrong on purpose.
+cheats = 1
+
+cheat0_desc = "Infinite \\"Things\\""
+cheat0_code = "AAAA-BBBB+CCCC-DDDD"
+cheat0_enable = false
+cheat0_unknown_field = "keep\\\\this"
+
+cheat2_desc = Duplicate description
+cheat2_code = "7E1234??"
+cheat2_enable = false
+
+cheat7_desc = Duplicate description
+cheat7_code = "01050EC6;013F0DC6"
+cheat7_enable = false
+cheat7_address = "4660"
+cheat7_value = "63"
+cheat7_handler = "1"
+cheat7_big_endian = "false"
+`,
+  "Test Game (USA) (Game Genie).cht": `cheats = 2
+cheat4_desc = "Infinite \\"Things\\""
+cheat4_code = "AAAA-BBBB+CCCC-DDDD"
+cheat4_enable = true
+cheat4_unknown_field = "keep\\\\this"
+
+cheat9_desc = "A distinct variant"
+cheat9_code = "AAAA-BBBC"
+cheat9_enable = false
+
+cheat11_desc = "A distinct variant"
+cheat11_code = "AAAA-BBBC"
+cheat11_enable = true
+`,
+  "Unknown Homebrew (World).cht": `cheat3_desc = "Public-domain fixture"
+cheat3_code = 0010:01
+cheat3_enable = false
+`,
+});
+const MASTER_SYSTEM_SAMPLE_GAME = `cheat0_desc = "Infinite lives (Game Genie)"
+cheat0_code = "1F2-3C4"
+cheat0_enable = false
+
+cheat1_desc = "Max score (Action Replay, RAM)"
+cheat1_code = "00C00001"
+cheat1_enable = false
+
+cheat2_desc = "Invincible (Fusion RAM code)"
+cheat2_code = "C000:01"
+cheat2_enable = false
+`;
+
 const fixtureFiles = () =>
-  ["Test Game (USA).cht", "Test Game (USA) (Game Genie).cht", "Unknown Homebrew (World).cht"].map(
-    (name) => ({
-      sourcePath: `${NES_DIRECTORY}/${name}`,
-      text: readFileSync(path.join(FIXTURE_ROOT, ...NES_DIRECTORY.split("/"), name), "utf8"),
-    }),
-  );
+  Object.entries(NES_FIXTURES).map(([name, text]) => ({
+    sourcePath: `${NES_DIRECTORY}/${name}`,
+    text,
+  }));
 
 // The shape parseLibretroGames emits for one platform game record.
 const identifyGames = () => [
@@ -79,11 +129,7 @@ test("every cheat platform is an identify platform in the default group", () => 
 });
 
 test("parseCht tolerates real-world indexes, counts, quoting, and fields", () => {
-  const source = readFileSync(
-    path.join(FIXTURE_ROOT, ...NES_DIRECTORY.split("/"), "Test Game (USA).cht"),
-    "utf8",
-  );
-  const records = parseCht(source, {
+  const records = parseCht(NES_FIXTURES["Test Game (USA).cht"], {
     sourceFile: "cht/Test Game (USA).cht",
     sourceRevision: REVISION,
   });
@@ -344,13 +390,11 @@ test("a game left with only dropped records disappears from the shard", () => {
 
 test("Master System fixture keeps the Game Genie code and drops the RAM codes", () => {
   const directory = "cht/Sega - Master System - Mark III";
-  const text = readFileSync(
-    path.join(FIXTURE_ROOT, ...directory.split("/"), "Sample Game (World).cht"),
-    "utf8",
-  );
   const shard = buildCheatShard({
     cheatSystem: "mastersystem",
-    files: [{ sourcePath: `${directory}/Sample Game (World).cht`, text }],
+    files: [
+      { sourcePath: `${directory}/Sample Game (World).cht`, text: MASTER_SYSTEM_SAMPLE_GAME },
+    ],
     releases: [],
     sourceRevision: REVISION,
   });
