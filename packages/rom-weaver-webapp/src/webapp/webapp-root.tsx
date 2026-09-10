@@ -343,7 +343,12 @@ function WebappRoot({
   urlSession,
   docsSlug = "docs",
   notFound = false,
+  assetBaseUrl,
 }: WebappRootProps) {
+  // The prerendered shell resolves asset links against "/" (no window to read
+  // the origin from), so hydration passes the same value and only the render
+  // after it adopts the real base - otherwise React sees every href mismatch.
+  const resolvedAssetBaseUrl = assetBaseUrl ?? readAppBaseUrl();
   useEntryAnimationLock();
   useEffect(() => {
     if (notFound) return;
@@ -725,11 +730,11 @@ function WebappRoot({
     webappState: state,
   });
   return (
-    <RomWeaverSettingsProvider assetBaseUrl={readAppBaseUrl()} settings={state.settings}>
+    <RomWeaverSettingsProvider assetBaseUrl={resolvedAssetBaseUrl} settings={state.settings}>
       <div className={pageDragging ? "rw-app rw-page-dragging" : "rw-app"} id="column">
         <div className="app">
           <Masthead
-            homeHref={readAppBaseUrl()}
+            homeHref={resolvedAssetBaseUrl}
             channelBadge={CHANNEL_BADGE}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}
@@ -807,7 +812,7 @@ function WebappRoot({
                   // landing page starts a veil's height down the page.
                   <div className="panel" hidden={state.currentView !== "home"}>
                     <Suspense fallback={null}>
-                      <HomePageRoute baseUrl={readAppBaseUrl()} />
+                      <HomePageRoute baseUrl={resolvedAssetBaseUrl} />
                     </Suspense>
                   </div>
                 ) : null}

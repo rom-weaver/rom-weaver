@@ -11,7 +11,6 @@ import { dedupeTree } from "../../scripts/dedupe-tree.mjs";
 import { resolveIdentifyPackGroups } from "../../scripts/identify-pack-groups.mjs";
 import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
-import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
@@ -1351,7 +1350,6 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       compileLinguiCatalogs(),
       docsVirtualModule(DOC_ROUTES),
-      brandMarkAssets(),
       shareWorkerRuntimeChunks(),
       serveRootStaticAssets(appChannel, appChannelLabel),
       serveEmulatorJsAssets(),

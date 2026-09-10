@@ -210,6 +210,15 @@
           installing: "Installing offline copy",
           ready: "Offline ready",
         };
+        // Lucide class names for the same glyphs, so React finds the class it
+        // renders on the svg and does not report a hydration mismatch on it.
+        const iconClasses = {
+          active: "lucide-cloud-check",
+          disabled: "lucide-cloud-off",
+          installing: "lucide-loader-circle",
+          ready: "lucide-package-check",
+          update: "lucide-cloud-download",
+        };
         const serviceWorkerEnabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
         // The wording above is the English source. In another locale React owns
         // the strings, so only the glyph and the state attribute are resolved
@@ -217,9 +226,11 @@
         const english = (document.documentElement.lang || "en").indexOf("en") === 0;
         const setRuntimeStatus = (state) => {
           statusSlot.dataset.sw = state;
+          statusIcon.setAttribute("class", `lucide ${iconClasses[state]}`);
           statusIcon.innerHTML = glyphs[state];
           if (!english) return;
           statusSlot.setAttribute("aria-label", wording[state]);
+          statusSlot.setAttribute("title", wording[state]);
           statusText.textContent = wording[state];
         };
 

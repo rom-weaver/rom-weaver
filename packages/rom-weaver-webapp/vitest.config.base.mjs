@@ -1,5 +1,4 @@
 import { coverageConfigDefaults, defineConfig } from "vitest/config";
-import { brandMarkAssets } from "./scripts/brand-mark-assets.mjs";
 import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 
@@ -39,7 +38,7 @@ export default defineConfig({
     },
   },
   // The docs route imports its rendered guides from `virtual:rom-weaver-docs`.
-  plugins: [compileLinguiCatalogs(), docsVirtualModule(), brandMarkAssets()],
+  plugins: [compileLinguiCatalogs(), docsVirtualModule()],
   publicDir: false,
   test: {
     hookTimeout: 60000,

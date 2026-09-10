@@ -61,9 +61,6 @@ let mountedRoot = null;
 let host = null;
 let noMotion = null;
 let fetchSpy = null;
-// The real fetch, captured before the changelog stub below wraps it, so asset
-// requests (the brand-mark SVGs) still reach the server.
-const nativeFetch = globalThis.fetch.bind(globalThis);
 
 // Kill entrance/expand animation + transition timing so colours are sampled at
 // their settled values, never a mid-fade frame (matching the live-app audit).
@@ -143,6 +140,11 @@ const parseColor = (value) => {
   if (!match) throw new Error(`Cannot parse colour "${value}"`);
   const parts = match[1].split(",").map((part) => Number.parseFloat(part.trim()));
   return { a: parts[3] ?? 1, b: parts[2] ?? 0, g: parts[1] ?? 0, r: parts[0] ?? 0 };
+};
+
+const hexToRgbString = (hex) => {
+  const value = Number.parseInt(hex.slice(1), 16);
+  return `rgb(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255})`;
 };
 
 const relativeLuminance = ({ r, g, b }) => {
@@ -1072,14 +1074,11 @@ describe("accent dye-lot accessibility", () => {
 
             if (badge) {
               expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
-              const markSrc = host.querySelector("img.brand-mark")?.getAttribute("src") || "";
-              expect(markSrc).toMatch(new RegExp(`assets/brand-mark-${accent.value}-[0-9a-f]{8}\\.svg$`));
-              const markSvg = await (await nativeFetch(markSrc)).text();
-              expect(markSvg).toContain("<svg");
-              expect(markSvg).toContain(accent.swatch);
-              expect(markSvg).toContain("#f6ecda");
-              expect(markSvg).toContain('stroke="#f6ecda" stroke-width="5"');
-              expect(markSvg).not.toContain("#88a9cb");
+              // The mark is inline and dyed by --thread, so the accent band must
+              // carry the live swatch rather than a baked-in image colour.
+              const band = host.querySelector(".brand-mark-band");
+              expect(band).toBeTruthy();
+              expect(getComputedStyle(band).stroke).toBe(hexToRgbString(accent.swatch));
             }
 
             const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });

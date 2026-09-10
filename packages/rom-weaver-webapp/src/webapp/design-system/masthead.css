@@ -57,10 +57,15 @@
 }
 /* brand sizes ride one fluid scale: 30px @360 → ~40px @720 → 46px cap */
 .rw-app .brand-mark {
+  display: block;
   width: clamp(32px, 2.6vw + 21px, 46px);
   height: auto;
   aspect-ratio: 1;
   border-radius: 8px;
+}
+/* The accent band is the one part of the mark that re-dyes; the rest is chassis. */
+.rw-app .brand-mark-band {
+  stroke: var(--thread);
 }
 .rw-app .brand-copy {
   display: block;
