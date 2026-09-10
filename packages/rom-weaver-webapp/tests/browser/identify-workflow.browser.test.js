@@ -292,6 +292,13 @@ const setHashInput = (value) => {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 };
 
+const chooseRelease = async (name) => {
+  await waitFor(() =>
+    [...host.querySelectorAll(".identify-search-result-btn")].find((button) => button.textContent.includes(name)),
+  );
+  [...host.querySelectorAll(".identify-search-result-btn")].find((button) => button.textContent.includes(name)).click();
+};
+
 test("an empty form shows the ghost steps next to the ROM search", async () => {
   await mountIdentifyForm();
   expect(host.querySelector(".ghost-steps")).not.toBeNull();
@@ -304,7 +311,8 @@ test("a pasted checksum raises the expected-ROM card without a file", async () =
   await mountIdentifyForm();
   setHashInput("3610A686");
   buttonMatching(/^\s*Search\s*$/).click();
-  await waitForText("Metroid Fusion (USA)");
+  await chooseRelease("Metroid Fusion (USA)");
+  await waitFor(() => host.querySelector("#identify-container-expected-rom"));
 
   expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "3610a686" } }, expect.anything());
   const card = host.querySelector("#identify-container-expected-rom");
@@ -353,7 +361,8 @@ test("staging a file keeps the expectation and verifies the ROM against it", asy
   // The staged candidate carries crc32 abcd1234, so this is the matching paste.
   setHashInput("abcd1234");
   buttonMatching(/^\s*Search\s*$/).click();
-  await waitForText("Metroid Fusion (USA)");
+  await chooseRelease("Metroid Fusion (USA)");
+  await waitFor(() => host.querySelector("#identify-container-expected-rom"));
 
   await selectRom("other.gba");
   await runIdentify();
@@ -375,7 +384,8 @@ test("a staged ROM that misses the pasted checksum faults the step", async () =>
   await mountIdentifyForm();
   setHashInput("deadbeef");
   buttonMatching(/^\s*Search\s*$/).click();
-  await waitForText("Metroid Fusion (USA)");
+  await chooseRelease("Metroid Fusion (USA)");
+  await waitFor(() => host.querySelector("#identify-container-expected-rom"));
 
   await selectRom("other.gba");
   await runIdentify();

@@ -40,6 +40,11 @@ const searchChecksum = async (container: HTMLElement, hash: string) => {
   if (!input) throw new Error("the checksum search input is missing");
   fireEvent.change(input, { target: { value: hash } });
   fireEvent.submit(input.closest("form") as HTMLFormElement);
+  await waitFor(() => expect(container.querySelector(".identify-search-result-btn--version")).not.toBeNull());
+  const choice = container.querySelector<HTMLButtonElement>(".identify-search-result-btn--version");
+  if (!choice) throw new Error("the checksum result choice is missing");
+  expect(container.querySelector("#identify-container-expected-rom")).toBeNull();
+  fireEvent.click(choice);
   await waitFor(() => expect(container.querySelector("#identify-container-expected-rom")).not.toBeNull());
 };
 

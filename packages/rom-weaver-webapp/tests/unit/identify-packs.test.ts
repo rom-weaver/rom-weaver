@@ -361,7 +361,7 @@ const TITLE_ENTRIES = [
 const titleIndexBody = () => `${encodeTitleIndex(TITLE_ENTRIES)}\n`;
 
 const stubTitleFetch = async (
-  options: { body?: string; overrides?: Record<string, unknown>; status?: number } = {},
+  options: { body?: string; catalog?: unknown; overrides?: Record<string, unknown>; status?: number } = {},
 ) => {
   const body = options.body ?? titleIndexBody();
   const bytes = new TextEncoder().encode(body);
@@ -378,6 +378,7 @@ const stubTitleFetch = async (
   };
   const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
     const url = new URL(String(input));
+    if (url.pathname.endsWith("catalog.json") && options.catalog) return new Response(JSON.stringify(options.catalog));
     if (url.pathname.endsWith("title-index.json")) {
       if (options.status) return new Response("nope", { status: options.status });
       return new Response(bytes);
@@ -390,13 +391,20 @@ const stubTitleFetch = async (
 };
 
 describe("loadIdentifyTitleIndex", () => {
-  it("returns the validated raw blob and caches it until reset", async () => {
+  it("adds system names to the validated blob and caches it until reset", async () => {
     const first = await stubTitleFetch();
     const { loadIdentifyTitleIndex, resetIdentifyPackCache } =
       await import("../../src/platform/browser/identify-packs.ts");
     const loaded = await loadIdentifyTitleIndex();
     expect(loaded.fileName).toBe("title-index.json");
-    expect(await loaded.blob.text()).toBe(titleIndexBody());
+    expect(JSON.parse(await loaded.blob.text())).toEqual({
+      ...JSON.parse(titleIndexBody()),
+      systems: [
+        ["nintendo-game-boy-advance", "Nintendo Game Boy Advance"],
+        ["sega-32x", "Sega 32X"],
+        ["sega-mega-drive-genesis", "Sega Mega Drive _ Genesis"],
+      ],
+    });
     await loadIdentifyTitleIndex();
     expect(first.mock.calls.filter((call) => String(call[0]).includes("title-index.json"))).toHaveLength(1);
 
@@ -404,6 +412,33 @@ describe("loadIdentifyTitleIndex", () => {
     const second = await stubTitleFetch();
     await (await import("../../src/platform/browser/identify-packs.ts")).loadIdentifyTitleIndex();
     expect(second.mock.calls.filter((call) => String(call[0]).includes("title-index.json"))).toHaveLength(1);
+  });
+
+  it("includes catalog aliases and canonical names for system matching", async () => {
+    await stubTitleFetch({
+      catalog: {
+        format: "rom-weaver-identify-catalog-v1",
+        platforms: [
+          {
+            aliases: ["gba", "gameboy advance"],
+            canonicalPlatform: "Nintendo Game Boy Advance",
+            packSlug: "nintendo-game-boy-advance",
+            packSha256: SHA256_ABC,
+            source: "libretro",
+          },
+        ],
+      },
+    });
+    const { loadIdentifyTitleIndex } = await import("../../src/platform/browser/identify-packs.ts");
+    const loaded = await loadIdentifyTitleIndex();
+    const parsed = JSON.parse(await loaded.blob.text());
+    expect(parsed.systems[0]).toEqual([
+      "nintendo-game-boy-advance",
+      "Nintendo Game Boy Advance",
+      "gba",
+      "gameboy advance",
+    ]);
+    expect(parsed.titles).toEqual(JSON.parse(titleIndexBody()).titles);
   });
 
   it("reports an index without a title index as unavailable data", async () => {

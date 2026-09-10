@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
 import { createElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   lookupExpectedRom,
@@ -53,6 +53,8 @@ beforeEach(() => {
   mockedTitles.mockReset();
 });
 
+afterEach(() => vi.useRealTimers());
+
 describe("useRomLookup", () => {
   const search = async (text: string) => {
     const hook = renderHook(() => useRomLookup(MESSAGES));
@@ -62,6 +64,105 @@ describe("useRomLookup", () => {
     });
     return hook;
   };
+
+  it("searches the latest typed name after a pause", async () => {
+    vi.useFakeTimers();
+    mockedTitles.mockResolvedValue({ status: "ok", titles: [TITLE] });
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+    act(() => hook.result.current.setText("he"));
+    await act(() => vi.advanceTimersByTimeAsync(200));
+    act(() => hook.result.current.setText("hello snes"));
+    await act(() => vi.advanceTimersByTimeAsync(299));
+    expect(mockedTitles).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(mockedTitles).toHaveBeenCalledExactlyOnceWith("hello snes", expect.anything());
+    expect(hook.result.current.titles).toEqual([TITLE]);
+  });
+
+  it("waits for composition to end before searching", async () => {
+    vi.useFakeTimers();
+    mockedTitles.mockResolvedValue({ status: "ok", titles: [TITLE] });
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+    act(() => hook.result.current.setText("ma"));
+    act(() => hook.result.current.setText("mario", true));
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    expect(mockedTitles).not.toHaveBeenCalled();
+    expect(hook.result.current.text).toBe("mario");
+    act(() => hook.result.current.setText("mario", false));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(mockedTitles).toHaveBeenCalledExactlyOnceWith("mario", expect.anything());
+  });
+
+  it("does not repeat an explicit submit after the typing delay", async () => {
+    vi.useFakeTimers();
+    mockedTitles.mockResolvedValue({ status: "ok", titles: [TITLE] });
+    const hook = await search("hello");
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(mockedTitles).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.titles).toEqual([TITLE]);
+  });
+
+  it("cancels a request immediately on editing and ignores its late answer", async () => {
+    vi.useFakeTimers();
+    let resolve!: (value: { status: "ok"; titles: (typeof TITLE)[] }) => void;
+    mockedTitles.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+    act(() => hook.result.current.setText("hello"));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    const signal = mockedTitles.mock.calls[0]?.[1]?.signal;
+    expect(hook.result.current.busy).toBe(true);
+    act(() => hook.result.current.setText("m"));
+    expect(signal?.aborted).toBe(true);
+    await act(async () => resolve({ status: "ok", titles: [TITLE] }));
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    expect(hook.result.current.titles).toEqual([]);
+    expect(hook.result.current.error).toBe("");
+    expect(hook.result.current.busy).toBe(false);
+    expect(mockedTitles).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not search during incomplete checksum input", async () => {
+    vi.useFakeTimers();
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+    act(() => hook.result.current.setText("deadbeef123"));
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    expect(mockedLookup).not.toHaveBeenCalled();
+    expect(mockedTitles).not.toHaveBeenCalled();
+    expect(hook.result.current.error).toBe("");
+  });
+
+  it("shows live checksum matches and selects the chosen record's checksums", async () => {
+    vi.useFakeTimers();
+    const first = match("First", { expectedComponents: [{ crc32: "deadbeef", md5: "1".repeat(32) }] });
+    const second = match("Second", { expectedComponents: [{ crc32: "deadbeef", md5: "2".repeat(32) }] });
+    mockedLookup.mockResolvedValue({ status: "ambiguous", matches: [first, second] });
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+    act(() => hook.result.current.setText("DEADBEEF"));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(hook.result.current.result).toBeUndefined();
+    expect(hook.result.current.versions).toEqual([first, second]);
+    act(() => hook.result.current.choose(second));
+    expect(hook.result.current.result?.foundBy).toBe("checksum");
+    expect(hook.result.current.result?.checks.checksums).toEqual({ crc32: "deadbeef", md5: "2".repeat(32) });
+    expect(hook.result.current.result?.identification.matches).toEqual([second]);
+  });
+
+  it("cancels delayed searches on clear and unmount", async () => {
+    vi.useFakeTimers();
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+    act(() => hook.result.current.setText("hello"));
+    act(() => hook.result.current.clear());
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    act(() => hook.result.current.setText("world"));
+    hook.unmount();
+    await act(() => vi.advanceTimersByTimeAsync(500));
+    expect(mockedTitles).not.toHaveBeenCalled();
+  });
 
   it("rejects hex text of no known checksum length instead of searching it as a name", async () => {
     const hook = await search("abc123abc123");
@@ -87,7 +188,11 @@ describe("useRomLookup", () => {
     const hook = await search("  D7AE93DF ");
 
     expect(mockedLookup).toHaveBeenCalledWith({ checksums: { crc32: "d7ae93df" } }, expect.anything());
-    await waitFor(() => expect(hook.result.current.result).toBeDefined());
+    expect(hook.result.current.result).toBeUndefined();
+    const choice = hook.result.current.versions[0];
+    if (!choice) throw new Error("The checksum result is missing");
+    act(() => hook.result.current.choose(choice));
+    expect(hook.result.current.result).toBeDefined();
     expect(hook.result.current.result?.checks).toEqual({ checksums: { crc32: "d7ae93df" } });
     expect(hook.result.current.result?.identification.matches[0]?.name).toBe("Hello World (USA)");
     expect(hook.result.current.error).toBe("");
@@ -189,8 +294,7 @@ describe("useRomLookup", () => {
     expect(unavailable.result.current.titles).toEqual([]);
   });
 
-  // One release is an answer on its own; several need the user to pick one.
-  it("chooses a title's only release outright, ignoring sequels", async () => {
+  it("shows a title's only release for checksum selection, ignoring sequels", async () => {
     mockedTitles.mockResolvedValue({ status: "ok", titles: [TITLE] });
     mockedByName.mockResolvedValue({
       matches: [match("Hello World 2 (USA)"), match("Hello World (USA)")],
@@ -203,10 +307,10 @@ describe("useRomLookup", () => {
     });
 
     expect(mockedByName).toHaveBeenCalledWith("test-system", "Hello World", expect.anything());
-    expect(hook.result.current.result?.identification.matches[0]?.name).toBe("Hello World (USA)");
-    expect(hook.result.current.versions).toEqual([]);
-    expect(hook.result.current.titles).toEqual([]);
-    expect(hook.result.current.title).toBeUndefined();
+    expect(hook.result.current.result).toBeUndefined();
+    expect(hook.result.current.versions).toEqual([match("Hello World (USA)")]);
+    expect(hook.result.current.titles).toEqual([TITLE]);
+    expect(hook.result.current.title).toEqual(TITLE);
   });
 
   // The pack search ranks every superstring of the title too, so the sequel
@@ -242,7 +346,11 @@ describe("useRomLookup", () => {
   it("clears the text, the lists, and the result together", async () => {
     mockedLookup.mockResolvedValue({ matches: [match("Hello World (USA)")], status: "matched" });
     const hook = await search("d7ae93df");
-    await waitFor(() => expect(hook.result.current.result).toBeDefined());
+    expect(hook.result.current.result).toBeUndefined();
+    const choice = hook.result.current.versions[0];
+    if (!choice) throw new Error("The checksum result is missing");
+    act(() => hook.result.current.choose(choice));
+    expect(hook.result.current.result).toBeDefined();
 
     act(() => hook.result.current.clear());
 
