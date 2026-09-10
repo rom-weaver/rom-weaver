@@ -492,7 +492,7 @@ fn run_cli() -> ExitCode {
     // `apply --emit-bundle`.
     let is_apply_tui =
         matches!(&command, Commands::Patch(PatchCommands::Apply(apply)) if apply.tui);
-    if is_apply_tui && !options.dry_run {
+    if is_apply_tui && !options.dry_run && !crate::streams::handles(&command, None) {
         if !interactive {
             eprintln!(
                 "--tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs"

@@ -667,3 +667,247 @@ fn broken_stdout_pipe_ends_cleanly_after_staged_work() {
     );
     assert!(output.stderr.is_empty(), "broken pipe emitted an error");
 }
+
+#[test]
+fn patch_streams_match_file_output_and_preserve_sources() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.gba");
+    let modified = temp.child("modified.gba");
+    let patch = temp.child("change.bps");
+    let source = build_test_gba_rom(0x4000);
+    let mut target = source.clone();
+    target[0x200] ^= 0xff;
+    fs::write(original.path(), &source).unwrap();
+    fs::write(modified.path(), &target).unwrap();
+    let create = [
+        "patch",
+        "create",
+        "--original",
+        original.path().to_str().unwrap(),
+        "--modified",
+        modified.path().to_str().unwrap(),
+        "--format",
+        "bps",
+    ];
+    let mut file_args = create.to_vec();
+    file_args.extend(["-o", patch.path().to_str().unwrap()]);
+    command_stdout(&file_args, 0);
+    let mut stream_args = create.to_vec();
+    stream_args.extend(["-o", "-", "--progress", "--verbose"]);
+    assert_eq!(
+        command_stdout(&stream_args, 0),
+        fs::read(patch.path()).unwrap()
+    );
+
+    for prefix in [
+        vec!["patch", "apply"],
+        vec!["weave"],
+        vec!["patch", "weave"],
+    ] {
+        let mut args = prefix;
+        args.extend([
+            "--input",
+            original.path().to_str().unwrap(),
+            "--patch",
+            patch.path().to_str().unwrap(),
+            "--no-compress",
+            "-o",
+            "-",
+            "--progress",
+            "--verbose",
+        ]);
+        assert_eq!(command_stdout(&args, 0), target);
+    }
+    let archive = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().unwrap(),
+            "--patch",
+            patch.path().to_str().unwrap(),
+            "--compress-format",
+            "zip",
+            "-o",
+            "-",
+        ],
+        0,
+    );
+    let compressed = temp.child("patched.zip");
+    fs::write(compressed.path(), archive).unwrap();
+    assert_eq!(
+        command_stdout(
+            &["extract", compressed.path().to_str().unwrap(), "-o", "-"],
+            0
+        ),
+        target
+    );
+    assert_eq!(fs::read(original.path()).unwrap(), source);
+    assert_eq!(fs::read(modified.path()).unwrap(), target);
+}
+
+#[test]
+fn binary_patch_output_rejects_ambiguous_formats_and_side_effects() {
+    let temp = setup_temp_dir();
+    for args in [
+        vec!["patch", "create", "--original", "missing", "-o", "-"],
+        vec![
+            "patch",
+            "create",
+            "--original",
+            "missing",
+            "-f",
+            "bps",
+            "-o",
+            "-",
+            "--plan",
+        ],
+        vec![
+            "patch",
+            "create",
+            "--original",
+            "missing",
+            "-f",
+            "bps",
+            "-o",
+            "-",
+            "--checksum-name",
+        ],
+        vec!["patch", "apply", "--input", "missing", "-o", "-"],
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            "missing",
+            "-o",
+            "-",
+            "--no-compress",
+            "--emit-bundle",
+            "bundle.json",
+        ],
+        vec![
+            "weave",
+            "--input",
+            "missing",
+            "-o",
+            "-",
+            "--no-compress",
+            "--tui",
+        ],
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            "missing",
+            "-o",
+            "-",
+            "--no-compress",
+            "--json",
+        ],
+        vec![
+            "patch",
+            "apply",
+            "--input",
+            "missing",
+            "-o",
+            "-",
+            "--no-compress",
+            "--dry-run",
+        ],
+    ] {
+        let output = binary()
+            .current_dir(temp.path())
+            .args(&args)
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty(), "{args:?}");
+        assert!(!output.stderr.is_empty());
+    }
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn trim_stdout_matches_file_output_and_leaves_source_unchanged() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.gba");
+    let output = temp.child("trimmed.gba");
+    let mut source = build_test_gba_rom(0x3456);
+    source.resize(0x8000, 0xff);
+    fs::write(input.path(), &source).unwrap();
+    command_stdout(
+        &[
+            "trim",
+            input.path().to_str().unwrap(),
+            "-o",
+            output.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    let trimmed = fs::read(output.path()).unwrap();
+    assert!(trimmed.len() < source.len());
+    assert_eq!(
+        command_stdout(&["trim", input.path().to_str().unwrap(), "-o", "-"], 0),
+        trimmed
+    );
+    assert_eq!(
+        command_stdout(&["trim", output.path().to_str().unwrap(), "-o", "-"], 0),
+        trimmed
+    );
+    assert_eq!(fs::read(input.path()).unwrap(), source);
+}
+
+#[test]
+fn failed_patch_stream_leaves_stdout_empty_and_removes_staging() {
+    let temp = setup_temp_dir();
+    let staging = temp.child("staging");
+    fs::create_dir(staging.path()).unwrap();
+    let output = binary()
+        .args([
+            "patch",
+            "create",
+            "--original",
+            "missing",
+            "--modified",
+            "missing-too",
+            "-f",
+            "bps",
+            "-o",
+            "-",
+        ])
+        .env("TMPDIR", staging.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(fs::read_dir(staging.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn trim_stdout_rejects_multiple_results_without_changing_inputs() {
+    let temp = setup_temp_dir();
+    let first = temp.child("first.gba");
+    let second = temp.child("second.gba");
+    let bytes = build_test_gba_rom(0x4000);
+    fs::write(first.path(), &bytes).unwrap();
+    fs::write(second.path(), &bytes).unwrap();
+    let output = binary()
+        .args([
+            "trim",
+            first.path().to_str().unwrap(),
+            second.path().to_str().unwrap(),
+            "-o",
+            "-",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(fs::read(first.path()).unwrap(), bytes);
+    assert_eq!(fs::read(second.path()).unwrap(), bytes);
+}

@@ -14,10 +14,13 @@ use rom_weaver_core::{
 };
 use tracing::trace;
 
-use crate::{Commands, Result, RomWeaverError, RunCommandOptions, run_command_outcome};
+use crate::{
+    Commands, PatchCommands, Result, RomWeaverError, RunCommandOptions, SaveCommands,
+    ToolsCommands, run_command_outcome,
+};
 
 pub(crate) fn decorate(command: clap::Command) -> clap::Command {
-    ["extract", "compress"].into_iter().fold(command, |command, name| {
+    let command = ["extract", "compress"].into_iter().fold(command, |command, name| {
         command.mut_subcommand(name, |command| {
             command
                 .arg(clap::Arg::new("stdin_name").long("stdin-name").value_name("NAME")
@@ -25,6 +28,26 @@ pub(crate) fn decorate(command: clap::Command) -> clap::Command {
                 .mut_arg("input", |arg| arg.help("Input path; - reads stdin using a temporary file"))
                 .mut_arg("output", |arg| arg.help("Output path; - writes one binary result to stdout (compress requires --format)"))
         })
+    });
+    command
+        .mut_subcommand("trim", decorate_output)
+        .mut_subcommand("weave", decorate_output)
+        .mut_subcommand("patch", |command| {
+            command
+                .mut_subcommand("apply", decorate_output)
+                .mut_subcommand("create", decorate_output)
+        })
+        .mut_subcommand("save", |command| {
+            command.mut_subcommand("set", decorate_output)
+        })
+        .mut_subcommand("tools", |command| {
+            command.mut_subcommand("ppf-undo", decorate_output)
+        })
+}
+
+fn decorate_output(command: clap::Command) -> clap::Command {
+    command.mut_arg("output", |arg| {
+        arg.help("Output path; - writes one completed binary file to stdout")
     })
 }
 
@@ -44,6 +67,15 @@ fn stdout_requested(command: &Commands) -> bool {
     match command {
         Commands::Extract(args) => args.output == Path::new("-"),
         Commands::Compress(args) => args.output == Path::new("-"),
+        Commands::Patch(PatchCommands::Apply(args)) => {
+            args.output.as_deref() == Some(Path::new("-"))
+        }
+        Commands::Patch(PatchCommands::Create(args)) => {
+            args.output.as_deref() == Some(Path::new("-"))
+        }
+        Commands::Trim(args) => args.output.as_deref() == Some(Path::new("-")),
+        Commands::Save(SaveCommands::Set(args)) => args.output.as_deref() == Some(Path::new("-")),
+        Commands::Tools(ToolsCommands::PpfUndo(args)) => args.output == Path::new("-"),
         _ => false,
     }
 }
@@ -122,6 +154,43 @@ fn validate(command: &Commands, options: &RunCommandOptions, name: Option<&str>)
     {
         return Err(invalid("compress output - requires --format FORMAT"));
     }
+    match command {
+        Commands::Patch(PatchCommands::Create(args)) => {
+            if args.plan || args.checksum_name {
+                return Err(invalid(
+                    "patch create output - cannot use --plan or --checksum-name",
+                ));
+            }
+            if args
+                .format
+                .as_ref()
+                .is_none_or(|format| format.trim().is_empty())
+            {
+                return Err(invalid("patch create output - requires --format FORMAT"));
+            }
+        }
+        Commands::Patch(PatchCommands::Apply(args)) => {
+            if args.tui || args.emit_bundle.is_some() {
+                return Err(invalid(
+                    "patch apply output - cannot use --tui or --emit-bundle",
+                ));
+            }
+            if !args.no_compress && args.compress_format.is_none() {
+                return Err(invalid(
+                    "patch apply output - requires --no-compress or --compress-format FORMAT",
+                ));
+            }
+        }
+        Commands::Trim(args) if args.in_place || args.extension.is_some() => {
+            return Err(invalid(
+                "trim output - cannot use --in-place or --extension",
+            ));
+        }
+        Commands::Save(SaveCommands::Set(args)) if args.dry_run => {
+            return Err(invalid("output - cannot be combined with --dry-run"));
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -164,10 +233,31 @@ fn run_staged(
     options.interactive_selection_enabled = false;
     let out_dir = staging.0.join("output");
     fs::create_dir(&out_dir)?;
+    let payload = out_dir.join("payload");
+    let mut fallback = None;
+    let mut unchanged_save = None;
     match &mut command {
         Commands::Extract(args) => args.output = out_dir.clone(),
-        Commands::Compress(args) => args.output = out_dir.join("payload"),
-        _ => unreachable!("only extract and compress accept stream outputs"),
+        Commands::Compress(args) => args.output = payload.clone(),
+        Commands::Patch(PatchCommands::Apply(args)) => args.output = Some(payload.clone()),
+        Commands::Patch(PatchCommands::Create(args)) => {
+            args.output = Some(payload.clone());
+            fallback = Some(payload.clone());
+        }
+        Commands::Trim(args) => {
+            args.output = Some(payload.clone());
+            fallback = Some(payload.clone());
+        }
+        Commands::Save(SaveCommands::Set(args)) => {
+            unchanged_save = Some(args.input.clone());
+            args.output = Some(payload.clone());
+            fallback = Some(payload.clone());
+        }
+        Commands::Tools(ToolsCommands::PpfUndo(args)) => {
+            args.output = payload.clone();
+            fallback = Some(payload.clone());
+        }
+        _ => unreachable!("stream outputs are checked before staging"),
     }
     let terminal = Arc::new(Mutex::new(None));
     let sink = Arc::new(BinaryProgressSink {
@@ -179,11 +269,25 @@ fn run_staged(
         return Ok(ExitCode::from(outcome.exit_code));
     }
     let terminal = terminal.lock().unwrap_or_else(|error| error.into_inner());
+    if let Some(input) = unchanged_save
+        && terminal
+            .as_ref()
+            .and_then(|event: &ProgressEvent| event.details.as_ref())
+            .and_then(|details| details.pointer("/save_editor/result/preview/changed"))
+            .and_then(serde_json::Value::as_bool)
+            == Some(false)
+    {
+        let mut source = File::open(input)?;
+        let mut output = File::create_new(&payload)?;
+        copy_cancelable(&mut source, &mut output)?;
+    }
+    let fallback_files = fallback.map(|path| vec![serde_json::json!({ "path": path })]);
     let files = terminal
         .as_ref()
         .and_then(|event: &ProgressEvent| event.details.as_ref())
         .and_then(|details| details.get("emitted_files"))
         .and_then(serde_json::Value::as_array)
+        .or(fallback_files.as_ref())
         .ok_or_else(|| invalid("output - needs a reported output file"))?;
     if files.len() != 1 {
         return Err(invalid(
@@ -243,7 +347,16 @@ struct BinaryProgressSink {
 impl ProgressSink for BinaryProgressSink {
     fn emit(&self, event: ProgressEvent) {
         if event.status == OperationStatus::Succeeded {
-            if matches!(event.command.as_str(), "extract" | "compress") {
+            if matches!(
+                event.command.as_str(),
+                "extract"
+                    | "compress"
+                    | "patch-apply"
+                    | "patch-create"
+                    | "trim"
+                    | "save-set"
+                    | "tools-ppf-undo"
+            ) {
                 *self
                     .terminal
                     .lock()
