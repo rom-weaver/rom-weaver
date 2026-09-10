@@ -5,22 +5,23 @@
 # wasm builds depend on it - but means nothing drives those pins forward. These
 # schedules do.
 #
-# Grouping is aggressive on purpose: one PR per ecosystem per week reviewed
+# Grouping is aggressive on purpose: one PR per ecosystem per run reviewed
 # properly beats twenty single-crate PRs that get rubber-stamped. Security
 # updates are exempt from grouping and open immediately.
 #
-# Every schedule fires at 03:00 America/New_York so the burst of PRs, and the
-# CI runs they start, lands while nobody is pushing to main and competing for
-# the runner pool. Dependabot has no "only between" window: `time` is the
-# check time, and rebases or security updates can still open at other hours.
+# Every schedule fires daily at 03:00 in a fixed UTC-5 (`Etc/GMT+5`, no DST
+# shift) so the burst of PRs, and the CI runs they start, lands while nobody is
+# pushing to main and competing for the runner pool. Dependabot has no "only
+# between" window: `time` is the check time, and rebases or security updates
+# can still open at other hours.
 version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
       time: "03:00"
-      timezone: America/New_York
+      timezone: Etc/GMT+5
     open-pull-requests-limit: 5
     groups:
       rust-dependencies:
@@ -42,9 +43,9 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
       time: "03:00"
-      timezone: America/New_York
+      timezone: Etc/GMT+5
     open-pull-requests-limit: 5
     groups:
       root-npm:
@@ -54,9 +55,9 @@ updates:
   - package-ecosystem: npm
     directory: /packages/rom-weaver-webapp
     schedule:
-      interval: weekly
+      interval: daily
       time: "03:00"
-      timezone: America/New_York
+      timezone: Etc/GMT+5
     open-pull-requests-limit: 5
     groups:
       # React and the toolchain move together often enough that splitting them
@@ -74,9 +75,9 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
       time: "03:00"
-      timezone: America/New_York
+      timezone: Etc/GMT+5
     groups:
       actions:
         patterns: ["*"]

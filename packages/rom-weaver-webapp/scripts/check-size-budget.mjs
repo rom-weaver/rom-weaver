@@ -172,46 +172,90 @@ export function checkAssetBudgetCoverage(config, distDir = DIST_DIR) {
   return { failures: problems.length, problems };
 }
 
-export function evaluateSizeBudget(budget, measured) {
-  if (measured.rawBytes > budget.maxRawBytes || measured.brotliBytes > budget.maxBrotliBytes) return "error";
-  if (measured.rawBytes > budget.expectedRawBytes || measured.brotliBytes > budget.expectedBrotliBytes)
-    return "warning";
+/** Growth a baseline size may absorb before it counts. The percentage carries the intent; the floor
+ * keeps a small asset from tripping on a few bytes of hash or minifier churn. Each tier has its own
+ * floor and `noiseBytes` MUST stay below `floorBytes`: one shared floor collapses the warning band to
+ * nothing for every asset small enough that the floor outweighs both percentages. */
+const allowance = (baselineBytes, percent, floorBytes) =>
+  baselineBytes + Math.max((baselineBytes * percent) / 100, floorBytes);
+
+/** A baseline generation older than the current schema is not a baseline. Treating a missing field as
+ * zero growth would pass every size silently, which is the one failure this gate cannot report. */
+const comparable = (baseline) => Number.isFinite(baseline?.rawBytes) && Number.isFinite(baseline?.brotliBytes);
+
+/** Sizes are judged against the last build of the default branch, never against a number in the
+ * config file. A missing or unreadable baseline (first run of a budget, evicted cache) reports and
+ * does not fail: a gate that cannot see what it compares against MUST NOT block the pull request. */
+export function evaluateSizeBudget(drift, measured, baseline) {
+  if (!comparable(baseline)) return "unknown";
+  const over = (percent, floorBytes) =>
+    measured.rawBytes > allowance(baseline.rawBytes, percent, floorBytes) ||
+    measured.brotliBytes > allowance(baseline.brotliBytes, percent, floorBytes);
+  if (over(drift.maxPercent, drift.floorBytes)) return "error";
+  if (over(drift.warnPercent, drift.noiseBytes)) return "warning";
   return "pass";
 }
 
 const kib = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
-const difference = (actual, expected) => `${actual >= expected ? "+" : ""}${kib(actual - expected)}`;
+// Sub-KiB in bytes: the tiers act on growth far below the 0.1 KiB this rounds to, so a KiB-only
+// delta would report "+0.0 KiB" beside the annotation that just failed the build.
+const difference = (actual, baseline) => {
+  const grown = actual - baseline;
+  return `${grown >= 0 ? "+" : "-"}${Math.abs(grown) < 1024 ? `${Math.abs(grown)} B` : kib(Math.abs(grown))}`;
+};
 
-export function runSizeBudget(config, distDir = DIST_DIR) {
+export function runSizeBudget(config, distDir = DIST_DIR, baseline = null) {
+  const { drift } = config.assetSizes;
   const rows = [];
   let failures = 0;
   for (const budget of config.assetSizes.budgets) {
     const measured = measureSizeBudget(distDir, budget, config.assetSizes.brotliQuality);
-    const severity = evaluateSizeBudget(budget, measured);
-    const detail =
-      `raw ${kib(measured.rawBytes)} (${difference(measured.rawBytes, budget.expectedRawBytes)}), ` +
-      `brotli ${kib(measured.brotliBytes)} (${difference(measured.brotliBytes, budget.expectedBrotliBytes)})`;
-    rows.push({ ...measured, budget, detail, severity });
+    const baselineEntry = baseline?.budgets?.[budget.name] ?? null;
+    const severity = evaluateSizeBudget(drift, measured, baselineEntry);
+    const detail = baselineEntry
+      ? `raw ${kib(measured.rawBytes)} (${difference(measured.rawBytes, baselineEntry.rawBytes)}), ` +
+        `brotli ${kib(measured.brotliBytes)} (${difference(measured.brotliBytes, baselineEntry.brotliBytes)})`
+      : `raw ${kib(measured.rawBytes)}, brotli ${kib(measured.brotliBytes)}, no baseline to compare against`;
+    rows.push({ ...measured, baseline: baselineEntry, budget, detail, severity });
     process.stdout.write(`${severity.toUpperCase().padEnd(7)} ${budget.name}: ${detail}\n`);
     if (severity === "warning")
-      process.stdout.write(`::warning title=Asset size budget::${budget.name} exceeded its expected size; ${detail}\n`);
+      process.stdout.write(
+        `::warning title=Asset size drift::${budget.name} grew more than ${drift.warnPercent}% ` +
+          `over ${baseline.commit ?? "the baseline"}; ${detail}\n`,
+      );
     if (severity === "error") {
       failures += 1;
-      process.stdout.write(`::error title=Asset size budget::${budget.name} exceeded its maximum size; ${detail}\n`);
+      process.stdout.write(
+        `::error title=Asset size drift::${budget.name} grew more than ${drift.maxPercent}% ` +
+          `over ${baseline.commit ?? "the baseline"}; ${detail}\n`,
+      );
     }
   }
   return { failures, rows };
 }
 
-const summary = (rows) =>
+export function baselineFromRows(rows, commit) {
+  return {
+    budgets: Object.fromEntries(
+      rows.map(({ brotliBytes, budget, rawBytes }) => [budget.name, { brotliBytes, rawBytes }]),
+    ),
+    commit,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+const summary = (rows, baseline) =>
   [
     "### Asset size budgets",
     "",
-    "| Asset | Files | Raw | Brotli | Result |",
-    "| --- | ---: | ---: | ---: | --- |",
+    baseline?.commit ? `Compared against \`${baseline.commit}\` on the default branch.` : "No baseline available.",
+    "",
+    "| Asset | Files | Raw | Brotli | Change | Result |",
+    "| --- | ---: | ---: | ---: | ---: | --- |",
     ...rows.map(
-      ({ brotliBytes, budget, fileCount, rawBytes, severity }) =>
-        `| ${budget.name} | ${fileCount} | ${kib(rawBytes)} | ${kib(brotliBytes)} | ${severity} |`,
+      ({ baseline: entry, brotliBytes, budget, fileCount, rawBytes, severity }) =>
+        `| ${budget.name} | ${fileCount} | ${kib(rawBytes)} | ${kib(brotliBytes)} | ` +
+        `${entry ? difference(brotliBytes, entry.brotliBytes) : "-"} | ${severity} |`,
     ),
     "",
   ].join("\n");
@@ -230,15 +274,47 @@ export function reportWorkerRuntimeChunk(distDir = DIST_DIR) {
   return failures;
 }
 
-export function main() {
+const optionValue = (argv, name) => {
+  const index = argv.indexOf(name);
+  if (index === -1) return null;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} needs a file path`);
+  return value;
+};
+
+const readBaseline = (baselinePath) => {
+  if (baselinePath && fs.existsSync(baselinePath)) {
+    try {
+      return JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+    } catch (error) {
+      // A corrupt cache entry must not block every pull request until someone deletes it by hand.
+      process.stdout.write(
+        `::warning title=Asset size drift::Ignoring an unreadable size baseline at ${baselinePath}: ${error.message}\n`,
+      );
+      return null;
+    }
+  }
+  process.stdout.write(`No size baseline at ${baselinePath ?? "<unset>"}; reporting sizes without a gate.\n`);
+  return null;
+};
+
+export function main(argv = process.argv.slice(2)) {
   const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-  const result = runSizeBudget(config);
+  const baseline = readBaseline(optionValue(argv, "--baseline"));
+  const result = runSizeBudget(config, DIST_DIR, baseline);
   const chunkFailures = reportWorkerRuntimeChunk();
   const coverage = checkAssetBudgetCoverage(config);
   if (coverage.failures === 0)
     process.stdout.write("PASS    Asset budget coverage: every split asset has one budget\n");
   for (const problem of coverage.problems) process.stdout.write(`ERROR   Asset budget coverage: ${problem}\n`);
-  if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary(result.rows));
+  if (process.env.GITHUB_STEP_SUMMARY)
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary(result.rows, baseline));
+  const writePath = optionValue(argv, "--write-baseline");
+  if (writePath) {
+    fs.mkdirSync(path.dirname(writePath), { recursive: true });
+    fs.writeFileSync(writePath, `${JSON.stringify(baselineFromRows(result.rows, process.env.GITHUB_SHA), null, 2)}\n`);
+    process.stdout.write(`Wrote size baseline to ${writePath}\n`);
+  }
   return result.failures + chunkFailures + coverage.failures === 0 ? 0 : 1;
 }
 
