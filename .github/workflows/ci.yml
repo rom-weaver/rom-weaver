@@ -951,8 +951,7 @@ jobs:
     timeout-minutes: 90
     needs: changes
     if: >-
-      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
-      && needs.changes.outputs.rust == 'true'
+      github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
       # The mise legs get this from .config/mise.toml's [env]; this leg bypasses mise.
@@ -1082,6 +1081,7 @@ jobs:
           'rust-host=${{ needs.rust-host.result }}'
           'rust-lint=${{ needs.rust-lint.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
+          'rust-windows=${{ needs.rust-windows.result }}'
 
       # Same `!cancelled()` as the job above, for the same reason: this has to
       # report even when the step before it failed, but a cancelled run is not a
@@ -1094,7 +1094,6 @@ jobs:
           '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_matrix == 'true' }}'
           'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
           'rust-macos=${{ needs.rust-macos.result }}'
-          'rust-windows=${{ needs.rust-windows.result }}'
 
   # Keep node-only checks on the shorter Lighthouse job so the browser suite
   # can start immediately without adding another runner to the queue.

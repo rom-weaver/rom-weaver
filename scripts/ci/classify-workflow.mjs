@@ -41,7 +41,7 @@ runMain(() => {
   });
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
-  // Event-gated macOS, Windows, arm64 runtime, and prebuilt-image jobs share this full-matrix decision.
+  // Event-gated macOS, arm64 runtime, and prebuilt-image jobs share this full-matrix decision.
   const fullMatrix = eventName !== "pull_request" || releasePullRequest;
   const output = `${formatChanges(
     classifyChanges(paths ?? [], paths === null, eventName, headRef),
