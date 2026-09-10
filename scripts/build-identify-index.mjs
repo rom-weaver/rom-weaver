@@ -9,7 +9,6 @@ import readline from "node:readline";
 import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-
 import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
 import {
   CHEAT_PLATFORMS,
@@ -31,7 +30,6 @@ import {
   encodeTitleIndex,
   normalizeTitle,
   parseTitleIndex,
-  searchTitleIndex,
   TITLE_INDEX_FORMAT,
 } from "../packages/rom-weaver-webapp/src/lib/identify/title-index.mjs";
 
@@ -734,7 +732,9 @@ export async function extractArchiveMembers({ archive, members, sourceRoot }) {
   if (missing.length) {
     throw new Error(`archive ${path.basename(archive)} is missing: ${missing.join(", ")}`);
   }
-  return new Map([...wanted].map(([member, relative]) => [member, path.join(sourceRoot, relative)]));
+  return new Map(
+    [...wanted].map(([member, relative]) => [member, path.join(sourceRoot, relative)]),
+  );
 }
 
 // Tar entry names use `/` on every platform and may carry a `./` prefix.
@@ -2399,12 +2399,13 @@ async function writeTitleIndex(entries, samples, options) {
   const json = `${encodeTitleIndex(entries)}\n`;
   const bytes = Buffer.from(json, "utf8");
   const index = parseTitleIndex(json);
+  const byTitle = new Map(index.titles.map((row) => [row.normalized, row]));
   for (const { slug, titles } of samples) {
     for (const title of titles) {
-      const hit = searchTitleIndex(index, title, { limit: 200 }).find(
-        (candidate) => candidate.slugs.includes(slug),
-      );
-      if (!hit) throw new Error(`title index self-test failed: ${title} does not resolve to ${slug}`);
+      const hit = byTitle.get(normalizeTitle(title));
+      if (!hit?.packs.some((pack) => index.packs[pack] === slug)) {
+        throw new Error(`title index self-test failed: ${title} does not resolve to ${slug}`);
+      }
     }
   }
   const outPath = path.join(options.outPath, TITLE_INDEX_FILE);
@@ -2617,7 +2618,8 @@ export async function main(argv = process.argv.slice(2)) {
     const games = await readPlatformGames(platform, options, paths);
     const system = await writeSystemPackV1(platform, games, options);
     systems.push(system);
-    if (CHEAT_PLATFORMS[platform]) cheats.push(await writeCheatShard(platform, games.games, options));
+    if (CHEAT_PLATFORMS[platform])
+      cheats.push(await writeCheatShard(platform, games.games, options));
     const keys = collectRouterKeys(games.games);
     routerFilters.push(buildPackFilter(system.slug, keys));
     routerSamples.push({ slug: system.slug, keys: sampleRouterKeys(keys) });

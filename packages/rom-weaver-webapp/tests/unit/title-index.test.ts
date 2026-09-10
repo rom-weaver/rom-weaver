@@ -5,7 +5,6 @@ import {
   encodeTitleIndex,
   normalizeTitle,
   parseTitleIndex,
-  searchTitleIndex,
   TITLE_INDEX_FORMAT,
 } from "../../src/lib/identify/title-index.mjs";
 
@@ -92,45 +91,5 @@ describe("parseTitleIndex", () => {
     ["[]", /not an object/u],
   ])("rejects %s", (text, message) => {
     expect(() => parseTitleIndex(text)).toThrow(message);
-  });
-});
-
-describe("searchTitleIndex", () => {
-  const index = parseTitleIndex(
-    encodeTitleIndex([
-      { name: "Sonic", slugs: ["gen"] },
-      { name: "Sonic the Hedgehog", slugs: ["gen"] },
-      { name: "Sonic the Hedgehog 2", slugs: ["gen", "gg"] },
-      { name: "Dr. Robotnik's Mean Bean Machine", slugs: ["gen"] },
-      { name: "Super Sonic Racer", slugs: ["snes"] },
-    ]),
-  );
-
-  it("ranks exact, then prefix, then earlier first-token position", () => {
-    expect(searchTitleIndex(index, "sonic").map(({ name }) => name)).toEqual([
-      "Sonic",
-      "Sonic the Hedgehog",
-      "Sonic the Hedgehog 2",
-      "Super Sonic Racer",
-    ]);
-    expect(searchTitleIndex(index, "sonic hedgehog").map(({ name }) => name)).toEqual([
-      "Sonic the Hedgehog",
-      "Sonic the Hedgehog 2",
-    ]);
-  });
-
-  it("requires every token to be a substring and returns the pack slugs", () => {
-    expect(searchTitleIndex(index, "robotnik bean")).toEqual([
-      { name: "Dr. Robotnik's Mean Bean Machine", slugs: ["gen"] },
-    ]);
-    expect(searchTitleIndex(index, "sonic mario")).toEqual([]);
-    expect(searchTitleIndex(index, "hedgehog 2")[0]?.slugs).toEqual(["gen", "gg"]);
-  });
-
-  it("returns nothing for an empty query and honours the limit", () => {
-    expect(searchTitleIndex(index, "")).toEqual([]);
-    expect(searchTitleIndex(index, "  -- ")).toEqual([]);
-    expect(searchTitleIndex(index, "sonic", { limit: 2 })).toHaveLength(2);
-    expect(searchTitleIndex(index, "sonic", { limit: 0 })).toEqual([]);
   });
 });

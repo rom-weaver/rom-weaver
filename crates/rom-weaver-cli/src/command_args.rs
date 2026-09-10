@@ -681,6 +681,17 @@ pub struct IdentifyCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "title-index",
+            value_name = "JSON",
+            help = "Search a cross-platform title index with --name instead of database packs"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub title_index: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long = "limit",
             value_name = "N",
             help = "Maximum number of matches --name returns [default: 50]"

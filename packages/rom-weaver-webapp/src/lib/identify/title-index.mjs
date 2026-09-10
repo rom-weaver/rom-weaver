@@ -1,5 +1,5 @@
 /**
- * Browser-only title index: every pack's base game titles in one file, so a
+ * Cross-platform title index: every pack's base game titles in one file, so a
  * name query can name the platforms that hold a title without loading a pack
  * and without the user choosing a platform first.
  *
@@ -375,47 +375,4 @@ const parseTitleIndex = (text) => {
   return { packs, titles };
 };
 
-/**
- * Titles whose normalized form contains every token of the query, best first.
- * An empty query matches nothing: a blank search box MUST NOT list 247k rows.
- * @param {TitleIndex} index
- * @param {string} query
- * @param {{ limit?: number }} [options]
- * @returns {TitleEntry[]}
- */
-const searchTitleIndex = (index, query, options = {}) => {
-  const limit = options.limit ?? 50;
-  const normalizedQuery = normalizeTitle(query);
-  if (!normalizedQuery || limit <= 0) return [];
-  const tokens = normalizedQuery.split(" ").filter(Boolean);
-  if (!tokens.length) return [];
-  const firstToken = tokens[0] ?? "";
-  /** @type {{ row: TitleRow; rank: number; position: number }[]} */
-  const hits = [];
-  for (const row of index.titles) {
-    let matched = true;
-    for (const token of tokens) {
-      const found = row.normalized.indexOf(token);
-      if (found === -1) {
-        matched = false;
-        break;
-      }
-    }
-    if (!matched) continue;
-    const position = row.normalized.indexOf(firstToken);
-    const rank = row.normalized === normalizedQuery ? 0 : row.normalized.startsWith(normalizedQuery) ? 1 : 2;
-    hits.push({ position, rank, row });
-  }
-  hits.sort(
-    (left, right) =>
-      left.rank - right.rank ||
-      left.position - right.position ||
-      left.row.normalized.length - right.row.normalized.length ||
-      compareStrings(left.row.name, right.row.name),
-  );
-  return hits
-    .slice(0, limit)
-    .map(({ row }) => ({ name: row.name, slugs: row.packs.map((packIndex) => index.packs[packIndex] ?? "") }));
-};
-
-export { baseTitle, encodeTitleIndex, normalizeTitle, parseTitleIndex, searchTitleIndex, TITLE_INDEX_FORMAT };
+export { baseTitle, encodeTitleIndex, normalizeTitle, parseTitleIndex, TITLE_INDEX_FORMAT };

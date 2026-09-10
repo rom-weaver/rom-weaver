@@ -15,7 +15,7 @@ import {
   parseChecksumRouter,
   routeChecksums,
 } from "../../lib/identify/checksum-router.mjs";
-import { parseTitleIndex, searchTitleIndex, TITLE_INDEX_FORMAT } from "../../lib/identify/title-index.mjs";
+import { parseTitleIndex, TITLE_INDEX_FORMAT } from "../../lib/identify/title-index.mjs";
 import {
   findCatalogPlatformBySlug,
   parseIdentifyCatalog,
@@ -39,8 +39,10 @@ type ChecksumRoutesEntry = {
   sha256: string;
 };
 
-/** Every pack's base game titles in one file, so a name query needs no platform. */
-type TitleIndex = ReturnType<typeof parseTitleIndex>;
+type LoadedTitleIndex = {
+  blob: Blob;
+  fileName: string;
+};
 
 /** `titleIndex` in index.json: the single title index file and its verification data. */
 type TitleIndexEntry = {
@@ -264,7 +266,7 @@ const assetUrl = (name: string) => new URL(`${DATA_ROOT}${name}`, document.baseU
 let indexPromise: Promise<IdentifyIndex> | undefined;
 let catalogPromise: Promise<IdentifyCatalog | undefined> | undefined;
 let checksumRouterPromise: Promise<ChecksumRouter> | undefined;
-let titleIndexPromise: Promise<TitleIndex> | undefined;
+let titleIndexPromise: Promise<LoadedTitleIndex> | undefined;
 const packPromises = new Map<string, Promise<BrowserIdentifyPack>>();
 
 /** Drop every cached index, catalog, and pack promise so a retry rereads local assets. */
@@ -634,7 +636,7 @@ const getChecksumRouter = (): Promise<ChecksumRouter> => {
  * `titleIndex` is an older deployment, and answering "no match" from it would
  * be a lie. Every pack slug the file names MUST name a loadable pack.
  */
-const loadTitleIndex = async (): Promise<TitleIndex> => {
+const loadTitleIndex = async (): Promise<LoadedTitleIndex> => {
   const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
   const entry = index.titleIndex;
   if (!entry?.file) {
@@ -676,7 +678,7 @@ const loadTitleIndex = async (): Promise<TitleIndex> => {
     });
     throw new IdentifyDataUnavailableError(`ROM identify title index checksum is invalid: ${entry.file}`);
   }
-  let parsed: TitleIndex;
+  let parsed: ReturnType<typeof parseTitleIndex>;
   try {
     parsed = parseTitleIndex(new TextDecoder().decode(bytes));
   } catch (cause) {
@@ -693,10 +695,10 @@ const loadTitleIndex = async (): Promise<TitleIndex> => {
     packs: parsed.packs.length,
     titles: parsed.titles.length,
   });
-  return parsed;
+  return { blob: new Blob([bytes], { type: "application/json" }), fileName: entry.file };
 };
 
-const getTitleIndex = (): Promise<TitleIndex> => {
+const getTitleIndex = (): Promise<LoadedTitleIndex> => {
   if (!titleIndexPromise) {
     titleIndexPromise = loadTitleIndex().catch((error) => {
       titleIndexPromise = undefined;
@@ -713,29 +715,24 @@ type IdentifyTitleHit = {
   slug: string;
 };
 
-/**
- * Base game titles matching `query` across every platform, one row per pack
- * that holds the title. The rows carry base titles only; the regional variants
- * of a chosen title come from that platform's pack.
- */
-const searchIdentifyTitles = async (
-  query: string,
-  options: { limit?: number; onProgress?: (progress: { message?: string }) => void; signal?: AbortSignal } = {},
+/** Fetch, verify, and validate the raw title index before the WASM search stages it. */
+const loadIdentifyTitleIndex = async (onProgress?: (progress: { message?: string }) => void) => {
+  if (!titleIndexPromise) onProgress?.({ message: "Loading the game titles…" });
+  return getTitleIndex();
+};
+
+const mapIdentifyTitleSearchMatches = async (
+  matches: Array<{ name: string; slugs: string[] }>,
 ): Promise<IdentifyTitleHit[]> => {
-  // The first search pays the index download; later ones answer from memory.
-  if (!titleIndexPromise) options.onProgress?.({ message: "Loading the game titles…" });
-  const [index, catalog, titleIndex] = await Promise.all([getIndex(), getCatalog(), getTitleIndex()]);
-  options.signal?.throwIfAborted();
-  const limit = options.limit ?? 50;
+  const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
   const rows: IdentifyTitleHit[] = [];
-  for (const hit of searchTitleIndex(titleIndex, query, { limit })) {
-    for (const slug of hit.slugs) {
+  for (const match of matches) {
+    for (const slug of match.slugs) {
       const system = systemForSlug(index, catalog, slug);
-      if (!system) continue;
-      rows.push({ name: hit.name, platform: system.platform, slug });
+      if (!system) throw new IdentifyDataUnavailableError(`ROM identify title index names unknown pack: ${slug}`);
+      rows.push({ name: match.name, platform: system.platform, slug });
     }
   }
-  logger.debug("identify title search", { query, results: rows.length });
   return rows;
 };
 
@@ -851,7 +848,8 @@ export {
   loadIdentifyPacks,
   loadIdentifyPackSelection,
   resetIdentifyPackCache,
-  searchIdentifyTitles,
+  loadIdentifyTitleIndex,
+  mapIdentifyTitleSearchMatches,
   selectIdentifySlugs,
   setIdentifyPackGroupWanted,
 };

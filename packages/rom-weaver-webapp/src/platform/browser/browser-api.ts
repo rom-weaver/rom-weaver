@@ -259,6 +259,16 @@ const identifyChecks = async (
 /** Options for a name search; `limit` caps how many titles come back. */
 type BrowserIdentifyNameOptions = BrowserIdentifyHashOptions & { limit?: number };
 
+type BrowserIdentifyTitle = {
+  name: string;
+  platform: string;
+  slug: string;
+};
+
+type BrowserIdentifyTitleSearch =
+  | { status: "ok"; titles: BrowserIdentifyTitle[] }
+  | { status: "unavailable"; titles: []; unavailableReason: string };
+
 /**
  * Search the identify data by game name inside ONE platform. A name carries no
  * checksum, so the router cannot narrow it and a bare query would pull tens of
@@ -327,6 +337,56 @@ const identifyName = async (
     };
   } finally {
     await Promise.all(staged.map((entry) => entry.cleanup().catch(() => undefined)));
+  }
+};
+
+/**
+ * Search every platform's validated title index through WASM. The index stays
+ * a raw staged file so Rust owns normalization, scoring, and result ordering.
+ */
+const identifyTitles = async (
+  query: string,
+  options: BrowserIdentifyNameOptions = {},
+): Promise<BrowserIdentifyTitleSearch> => {
+  const name = query.trim();
+  if (!name) throw new Error("Identify needs a name to search for.");
+  const workerIo = browserRuntime.workerIo;
+  if (!workerIo) throw new Error("The rom-weaver identify runtime is unavailable.");
+  const { IdentifyDataUnavailableError, loadIdentifyTitleIndex, mapIdentifyTitleSearchMatches } =
+    await import("./identify-packs.ts");
+  let titleIndex: Awaited<ReturnType<typeof loadIdentifyTitleIndex>>;
+  try {
+    titleIndex = await loadIdentifyTitleIndex(options.onProgress);
+  } catch (error) {
+    if (!(error instanceof IdentifyDataUnavailableError)) throw error;
+    return { status: "unavailable", titles: [], unavailableReason: error.message };
+  }
+  options.signal?.throwIfAborted();
+  const { invokeRomWeaverIdentifyTitlesWorker } = await import("../../lib/runtime/wasm-command-runtime.ts");
+  const staged = await workerIo.stageSource({
+    fallbackFileName: titleIndex.fileName,
+    pathPrefix: "identify-title-index",
+    pathPrefixInPath: true,
+    scope: "checksum",
+    source: titleIndex.blob,
+  });
+  try {
+    const result = await invokeRomWeaverIdentifyTitlesWorker(
+      {
+        knownInputPaths: [staged.filePath],
+        name,
+        signal: options.signal,
+        titleIndexPath: staged.filePath,
+        ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
+      },
+      options.onProgress,
+    );
+    return { status: "ok", titles: await mapIdentifyTitleSearchMatches(result.matches) };
+  } catch (error) {
+    if (!(error instanceof IdentifyDataUnavailableError)) throw error;
+    return { status: "unavailable", titles: [], unavailableReason: error.message };
+  } finally {
+    await staged.cleanup().catch(() => undefined);
   }
 };
 
@@ -470,6 +530,7 @@ export {
   identifyChecks,
   identifyHash,
   identifyName,
+  identifyTitles,
   identifyRom,
   ingestRom,
   preloadBrowserRuntime,

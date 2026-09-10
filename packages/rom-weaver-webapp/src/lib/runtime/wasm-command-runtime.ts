@@ -41,8 +41,8 @@ import {
   normalizeCompressionLevelProfile,
 } from "./compression-codec-args.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
-import { parseIdentifyCommandResult, parseIngestResult } from "./ingest-result.ts";
-import type { ParsedIdentifyCommandResult } from "./ingest-result.ts";
+import { parseIdentifyCommandResult, parseIdentifyTitleSearchResult, parseIngestResult } from "./ingest-result.ts";
+import type { ParsedIdentifyCommandResult, ParsedIdentifyTitleSearchResult } from "./ingest-result.ts";
 import {
   getPatchApplyOutputFileName,
   getPatchValidationRequirements,
@@ -1484,6 +1484,65 @@ const invokeRomWeaverIdentifyNameWorker = async (
   return { ...parsed, timing: getRunResultTiming(result) };
 };
 
+/**
+ * Search the validated cross-platform title index through WASM. The index is
+ * staged by the browser API because it owns fetch, checksum, and cleanup.
+ */
+const invokeRomWeaverIdentifyTitlesWorker = async (
+  input: {
+    knownInputPaths?: string[];
+    limit?: number;
+    logLevel?: LogLevel | string;
+    name: string;
+    signal?: AbortSignal;
+    titleIndexPath: string;
+  },
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<ParsedIdentifyTitleSearchResult & { timing: ReturnType<typeof getRunResultTiming> }> => {
+  const name = input.name.trim();
+  if (!name) throw new Error("Identify name is required");
+  const titleIndexPath = input.titleIndexPath.trim();
+  if (!titleIndexPath) throw new Error("Identify title index path is required");
+  const requestedLimit = input.limit;
+  let limit: number | undefined;
+  if (requestedLimit === Infinity) limit = 0xffff_ffff;
+  else if (typeof requestedLimit === "number" && Number.isFinite(requestedLimit) && requestedLimit >= 0) {
+    limit = Math.min(Math.floor(requestedLimit), 0xffff_ffff);
+  }
+  const command = createRomWeaverCommand("identify", {
+    name,
+    title_index: titleIndexPath,
+    ...(limit === undefined ? {} : { limit }),
+  });
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson identify title search dispatch", {
+    command,
+    limit,
+    name,
+    titleIndexPath,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      knownInputPaths: input.knownInputPaths,
+      logLevel: input.logLevel,
+      onEvent: relaySimpleProgress(onProgress),
+      onLog,
+      signal: input.signal,
+    }),
+  );
+  if (!(result.ok && result.exitCode === 0)) {
+    await throwRomWeaverFailureWithBrowserOutputContext(result, "Identify failed", `identify \`${name}\``);
+  }
+  const terminal = getLastEvent(result);
+  const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
+  const parsed = parseIdentifyTitleSearchResult(details);
+  if (!parsed) {
+    throw withRomWeaverFailureKind(new Error("Identify title search result was missing or malformed"), result);
+  }
+  return { ...parsed, timing: getRunResultTiming(result) };
+};
+
 // Parse a rom-weaver-bundle.json bundle (plain, compressed, or bundled in an archive) via the `bundle parse`
 // command. Bundled ROM/patch members are extracted into `extractDirPath`; the parsed result's
 // `extracted` source refs point at those leaves.
@@ -1721,6 +1780,7 @@ export {
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverIdentifyHashWorker,
   invokeRomWeaverIdentifyNameWorker,
+  invokeRomWeaverIdentifyTitlesWorker,
   invokeRomWeaverIngestWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,

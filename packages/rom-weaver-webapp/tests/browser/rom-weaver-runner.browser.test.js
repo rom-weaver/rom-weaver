@@ -129,6 +129,54 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
   }
 });
 
+test("rom-weaver title search uses the WASM scorer for typos and stable title ordering", async () => {
+  await warmupRomWeaverRunner();
+  const index = new Blob(
+    [
+      JSON.stringify({
+        format: "rom-weaver-identify-title-index-v1",
+        packs: ["nes", "gen"],
+        titles: [
+          ["Zelda", [0]],
+          ["The Legend of Zelda", [0]],
+          ["Zelda II - The Adventure of Link", [0]],
+          ["The Legend of Zelda - A Link to the Past", [0]],
+          ["Sonic the Hedgehog", [1]],
+        ],
+      }),
+    ],
+    { type: "application/json" },
+  );
+  const staged = await browserRuntime.workerIo.stageSource({
+    fallbackFileName: "title-index.json",
+    pathPrefix: "title-search",
+    pathPrefixInPath: true,
+    scope: "bench",
+    source: index,
+  });
+  const search = async (name) => {
+    const result = await runRomWeaverJson(
+      { args: { limit: 0xffff_ffff, name, title_index: staged.filePath }, type: "identify" },
+      { knownInputPaths: [staged.filePath] },
+    );
+    expectRunSucceeded(result);
+    return result.events.at(-1)?.details?.identifyTitles?.matches || [];
+  };
+
+  try {
+    const zelda = await search("zelda");
+    expect(zelda.map((match) => match.name)).toEqual([
+      "Zelda",
+      "Zelda II - The Adventure of Link",
+      "The Legend of Zelda",
+      "The Legend of Zelda - A Link to the Past",
+    ]);
+    expect((await search("hedgrog")).map((match) => match.name)).toContain("Sonic the Hedgehog");
+  } finally {
+    await staged.cleanup().catch(() => undefined);
+  }
+});
+
 test("rom-weaver runner lazily creates selected archive extract outputs", async () => {
   await warmupRomWeaverRunner();
 

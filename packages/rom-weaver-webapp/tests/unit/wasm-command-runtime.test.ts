@@ -7,6 +7,7 @@ import {
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverIdentifyHashWorker,
+  invokeRomWeaverIdentifyTitlesWorker,
   invokeRomWeaverIngestWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
@@ -559,6 +560,41 @@ describe("invokeRomWeaverIdentifyHashWorker", () => {
     await expect(invokeRomWeaverIdentifyHashWorker({ hash: "abc" })).rejects.toThrow(
       /no database loaded|Identify failed/,
     );
+  });
+});
+
+describe("invokeRomWeaverIdentifyTitlesWorker", () => {
+  const titleSearchDetails = () => ({
+    identifyTitles: { matches: [{ name: "The Legend of Zelda", score: 0, slugs: ["nintendo-nes"] }] },
+  });
+
+  it("stages the title-index path in the identify command and maps infinity to u32::MAX", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult(titleSearchDetails()));
+
+    await expect(
+      invokeRomWeaverIdentifyTitlesWorker({ name: " zelda ", titleIndexPath: " /db/titles.json ", limit: Infinity }),
+    ).resolves.toMatchObject({ matches: [{ name: "The Legend of Zelda", score: 0, slugs: ["nintendo-nes"] }] });
+
+    expect(lastCall()[0]).toEqual({
+      args: { limit: 0xffff_ffff, name: "zelda", title_index: "/db/titles.json" },
+      type: "identify",
+    });
+  });
+
+  it("uses the command default when no limit is requested", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult(titleSearchDetails()));
+
+    await invokeRomWeaverIdentifyTitlesWorker({ name: "zelda", titleIndexPath: "/db/titles.json" });
+
+    expect(lastCall()[0].args).not.toHaveProperty("limit");
+  });
+
+  it("rejects malformed title-search output", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(succeededResult({ identifyTitles: { matches: [{ name: "Zelda" }] } }));
+
+    await expect(
+      invokeRomWeaverIdentifyTitlesWorker({ name: "zelda", titleIndexPath: "/db/titles.json" }),
+    ).rejects.toThrow("Identify title search result was missing or malformed");
   });
 });
 

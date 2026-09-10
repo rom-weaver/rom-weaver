@@ -389,65 +389,55 @@ const stubTitleFetch = async (
   return fetchMock;
 };
 
-describe("searchIdentifyTitles", () => {
-  it("returns one row per pack that holds the matching base title", async () => {
-    await stubTitleFetch();
-    const { searchIdentifyTitles } = await import("../../src/platform/browser/identify-packs.ts");
-
-    expect(await searchIdentifyTitles("sonic")).toEqual([
-      { name: "Sonic the Hedgehog", platform: "Sega 32X", slug: "sega-32x" },
-      { name: "Sonic the Hedgehog", platform: "Sega Mega Drive _ Genesis", slug: "sega-mega-drive-genesis" },
-    ]);
-    expect(await searchIdentifyTitles("")).toEqual([]);
-    expect(await searchIdentifyTitles("no such game")).toEqual([]);
-  });
-
-  it("honours the limit and caches the parsed index until the cache is reset", async () => {
+describe("loadIdentifyTitleIndex", () => {
+  it("returns the validated raw blob and caches it until reset", async () => {
     const first = await stubTitleFetch();
-    const { resetIdentifyPackCache, searchIdentifyTitles } =
+    const { loadIdentifyTitleIndex, resetIdentifyPackCache } =
       await import("../../src/platform/browser/identify-packs.ts");
-    expect(await searchIdentifyTitles("o", { limit: 1 })).toHaveLength(2);
-    await searchIdentifyTitles("metroid");
+    const loaded = await loadIdentifyTitleIndex();
+    expect(loaded.fileName).toBe("title-index.json");
+    expect(await loaded.blob.text()).toBe(titleIndexBody());
+    await loadIdentifyTitleIndex();
     expect(first.mock.calls.filter((call) => String(call[0]).includes("title-index.json"))).toHaveLength(1);
 
     resetIdentifyPackCache();
     const second = await stubTitleFetch();
-    await searchIdentifyTitles("metroid");
+    await (await import("../../src/platform/browser/identify-packs.ts")).loadIdentifyTitleIndex();
     expect(second.mock.calls.filter((call) => String(call[0]).includes("title-index.json"))).toHaveLength(1);
   });
 
   it("reports an index without a title index as unavailable data", async () => {
     stubFetch();
-    const { IdentifyDataUnavailableError, searchIdentifyTitles } =
+    const { IdentifyDataUnavailableError, loadIdentifyTitleIndex } =
       await import("../../src/platform/browser/identify-packs.ts");
-    await expect(searchIdentifyTitles("sonic")).rejects.toBeInstanceOf(IdentifyDataUnavailableError);
-    await expect(searchIdentifyTitles("sonic")).rejects.toThrow(/lists no title index/u);
+    await expect(loadIdentifyTitleIndex()).rejects.toBeInstanceOf(IdentifyDataUnavailableError);
+    await expect(loadIdentifyTitleIndex()).rejects.toThrow(/lists no title index/u);
   });
 
   it("reports a failed request, a size mismatch, a checksum mismatch, and a corrupt file", async () => {
     await stubTitleFetch({ status: 503 });
-    const { searchIdentifyTitles } = await import("../../src/platform/browser/identify-packs.ts");
-    await expect(searchIdentifyTitles("sonic")).rejects.toThrow(/HTTP 503/u);
+    const { loadIdentifyTitleIndex } = await import("../../src/platform/browser/identify-packs.ts");
+    await expect(loadIdentifyTitleIndex()).rejects.toThrow(/HTTP 503/u);
 
     vi.resetModules();
     await stubTitleFetch({ overrides: { rawBytes: 3 } });
     const sized = await import("../../src/platform/browser/identify-packs.ts");
-    await expect(sized.searchIdentifyTitles("sonic")).rejects.toThrow(/size is invalid/u);
+    await expect(sized.loadIdentifyTitleIndex()).rejects.toThrow(/size is invalid/u);
 
     vi.resetModules();
     await stubTitleFetch({ overrides: { sha256: SHA256_ABC } });
     const hashed = await import("../../src/platform/browser/identify-packs.ts");
-    await expect(hashed.searchIdentifyTitles("sonic")).rejects.toThrow(/checksum is invalid/u);
+    await expect(hashed.loadIdentifyTitleIndex()).rejects.toThrow(/checksum is invalid/u);
 
     vi.resetModules();
     await stubTitleFetch({ body: "{not json" });
     const corrupt = await import("../../src/platform/browser/identify-packs.ts");
-    await expect(corrupt.searchIdentifyTitles("sonic")).rejects.toThrow(/title index is invalid/u);
+    await expect(corrupt.loadIdentifyTitleIndex()).rejects.toThrow(/title index is invalid/u);
   });
 
   it("rejects a title index naming a pack the catalog and index do not know", async () => {
     await stubTitleFetch({ body: `${encodeTitleIndex([{ name: "Ghost", slugs: ["not-a-pack"] }])}\n` });
-    const { searchIdentifyTitles } = await import("../../src/platform/browser/identify-packs.ts");
-    await expect(searchIdentifyTitles("ghost")).rejects.toThrow(/names unknown packs: not-a-pack/u);
+    const { loadIdentifyTitleIndex } = await import("../../src/platform/browser/identify-packs.ts");
+    await expect(loadIdentifyTitleIndex()).rejects.toThrow(/names unknown packs: not-a-pack/u);
   });
 });

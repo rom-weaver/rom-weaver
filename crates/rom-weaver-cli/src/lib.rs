@@ -1455,6 +1455,9 @@ pub use identify_command::{
 #[path = "identify_name_search.rs"]
 mod identify_name_search;
 
+mod identify_title_search;
+pub use identify_title_search::{IdentifyTitleSearchMatch, IdentifyTitleSearchResult};
+
 #[path = "identify_builtin.rs"]
 mod identify_builtin;
 

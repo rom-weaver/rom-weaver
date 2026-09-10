@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,6 +11,8 @@ import {
 import type { ParsedIdentifyTitleMatch } from "../../../src/types/identify.ts";
 import { useExpectedRomIdentification } from "../../../src/public/react/use-expected-rom-identification.ts";
 import { useRomLookup } from "../../../src/public/react/use-rom-lookup.ts";
+import { RomSearch } from "../../../src/public/react/components/ds/rom-expectation-card.tsx";
+import { createBrowserLocalizer } from "../../../src/presentation/localization/index.ts";
 
 // Every lookup reaches the identify data through one seam; stubbing that seam
 // tests the hooks' state machines without the runtime.
@@ -149,9 +152,30 @@ describe("useRomLookup", () => {
 
     const hook = await search("hello");
 
-    expect(mockedTitles).toHaveBeenCalledWith("hello", expect.objectContaining({ limit: 50 }));
+    expect(mockedTitles).toHaveBeenCalledWith("hello", expect.objectContaining({ limit: Infinity }));
     expect(hook.result.current.titles).toEqual([TITLE]);
     expect(hook.result.current.result).toBeUndefined();
+  });
+
+  it("makes matches after the first 50 accessible and resets for a new search", async () => {
+    const titles = Array.from({ length: 50 }, (_, index) => ({ ...TITLE, name: `Zelda ${index}` }));
+    titles.push({ ...TITLE, name: "The Legend of Zelda" });
+    mockedTitles.mockResolvedValue({ status: "ok", titles });
+    const hook = await search("zelda");
+    const localizer = createBrowserLocalizer();
+    const view = render(createElement(RomSearch, { lookup: hook.result.current, localizer }));
+    expect(view.queryByText("The Legend of Zelda")).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: /More/u }));
+    expect(view.getByText("The Legend of Zelda")).toBeTruthy();
+    expect(view.queryByRole("button", { name: /More/u })).toBeNull();
+    view.rerender(
+      createElement(RomSearch, {
+        lookup: { ...hook.result.current, titles: [...titles] },
+        localizer,
+      }),
+    );
+    expect(view.queryByText("The Legend of Zelda")).toBeNull();
+    expect(view.getByRole("button", { name: /More/u })).toBeTruthy();
   });
 
   it("separates an unknown name from unavailable data", async () => {
