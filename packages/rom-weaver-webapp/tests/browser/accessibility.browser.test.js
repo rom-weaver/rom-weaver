@@ -1094,9 +1094,9 @@ describe("accent dye-lot accessibility", () => {
 });
 
 describe("webapp responsive navigation", () => {
-  // The ladder is fixed breakpoints and nothing else: two rows >= 1000px (the
-  // rail on its own row under the brand and link group, centered between them),
-  // bottom dock below 1000px. No measurement, no data-masthead-layout.
+  // The ladder is fixed breakpoints and nothing else: mirrored side tracks
+  // center the rail on the masthead >= 1000px, bottom dock below 1000px. No
+  // measurement, no data-masthead-layout.
   const ALL_TABS = [
     ...PAGE_TABS,
     {
@@ -1215,18 +1215,17 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the desktop rail centers between the brand and the action group", async () => {
+  test("the desktop rail centers on the masthead across top-row widths", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {
       await setViewport({ height: 900, width });
       await renderMastheadOnly(PAGE_TABS);
 
-      const brand = host.querySelector(".brand").getBoundingClientRect();
-      const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
+      const masthead = host.querySelector(".masthead").getBoundingClientRect();
       const modes = host.querySelector(".modes").getBoundingClientRect();
-      const gapCenter = (brand.right + tools.left) / 2;
+      const mastheadCenter = masthead.left + masthead.width / 2;
       const modesCenter = modes.left + modes.width / 2;
 
-      expect(Math.abs(modesCenter - gapCenter)).toBeLessThanOrEqual(1);
+      expect(Math.abs(modesCenter - mastheadCenter)).toBeLessThanOrEqual(1);
     }
   });
 
