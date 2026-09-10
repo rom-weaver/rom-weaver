@@ -1096,15 +1096,8 @@ jobs:
           'rust-macos=${{ needs.rust-macos.result }}'
           'rust-windows=${{ needs.rust-windows.result }}'
 
-  # Build and upload the deployable bundle before the static quality gates. The
-  # Docker and deploy paths can then consume it while Lighthouse still runs as
-  # a required Webapp dependency below. The asset size gate runs here on the
-  # bundle it just built, as a non-fatal step: a size failure must not stop
-  # Lighthouse, Docker, or the deploy from consuming the artifact, so the step
-  # records its outcome in `size` and the `webapp` aggregate makes it required.
-  # Consume the prebuilt WASM module for the build-script contract and the exact
-  # bundle uploaded by wasm for Lighthouse. The node-only script, lint,
-  # and unit checks run ahead of the browser suite in webapp-browser.
+  # Keep node-only checks on the shorter Lighthouse job so the browser suite
+  # can start immediately without adding another runner to the queue.
   webapp-static:
     name: Webapp (static)
     runs-on: ubuntu-24.04
@@ -1130,24 +1123,28 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
-      # Lives here rather than in the `rust` job because
-      # scripts/wasm/rom-weaver-runtime-utils.test.mjs asserts the built module
-      # imports only env functions the runtime provides - it reads the real
-      # .wasm and needs the artifact downloaded above.
+      # Vite reads the identify index while loading the config for lint.
+      - name: Prepare identify data
+        uses: ./.github/actions/identify-data
+
+      # The runtime import contract reads the built module downloaded above.
       - name: Build script tests
         run: node --test scripts/*.test.mjs scripts/wasm/*.test.mjs
+
+      - name: Webapp script tests
+        run: npm --prefix packages/rom-weaver-webapp run test:scripts
+
+      - name: Lint
+        run: npm --prefix packages/rom-weaver-webapp run lint
+
+      - name: Unit tests
+        run: npm --prefix packages/rom-weaver-webapp run test:unit
 
       - name: Download webapp bundle
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
           path: packages/rom-weaver-webapp/dist
-
-      # The Lighthouse runner calls ensure-identify-data before it serves the
-      # bundle. Without the cached packs that script rebuilds every pack from
-      # the source archives, ~7 min of a job whose audits take 2.
-      - name: Prepare identify data
-        uses: ./.github/actions/identify-data
 
       # Audits the bundle built above, served by the repository's own preview
       # server (HTTP/2, brotli sidecars, production cache headers), never the
@@ -1221,13 +1218,7 @@ jobs:
             --field description="$description" \
             --field target_url="$LIGHTHOUSE_REPORT_URL"
 
-  # The node-only checks (script tests, lint, unit tests) followed by the whole
-  # browser suite on one runner. This suite was once split across two shards
-  # and the node-only checks had a runner of their own; both were folded back
-  # because the org's concurrent-job cap, not per-job length, sets the wall
-  # clock of a busy CI - every runner saved is a job that is not queued. At
-  # ~8 min this job still finishes inside the Lighthouse job's tail.
-  # `BROWSER_TEST_SHARD=<i>/<n>` still works for a local split.
+  # One runner avoids extra queueing under the organisation's concurrency cap.
   webapp-browser:
     name: Webapp (browser)
     runs-on: ubuntu-24.04
@@ -1251,15 +1242,6 @@ jobs:
         with:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
-
-      - name: Webapp script tests
-        run: npm --prefix packages/rom-weaver-webapp run test:scripts
-
-      - name: Lint
-        run: npm --prefix packages/rom-weaver-webapp run lint
-
-      - name: Unit tests
-        run: npm --prefix packages/rom-weaver-webapp run test:unit
 
       - name: Browser tests
         env:
