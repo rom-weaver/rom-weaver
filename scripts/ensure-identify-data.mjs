@@ -28,6 +28,7 @@ import {
 import {
   CHEAT_PLATFORMS,
   CHEAT_SHARD_FORMAT,
+  CHEAT_SHARD_SCHEMA_VERSION,
   cheatShardFileName,
 } from "./import-libretro-cheats.mjs";
 import { CHECKSUM_ROUTER_FORMAT } from "../packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs";
@@ -80,8 +81,7 @@ const hasCurrentCatalog = (dataDir) => {
 // the router existed - or with a router that no longer matches index.json - is
 // stale and MUST be rebuilt.
 const hasCurrentChecksumRouter = (dataDir, entry) => {
-  if (!entry || entry.format !== CHECKSUM_ROUTER_FORMAT || typeof entry.file !== "string")
-    return false;
+  if (!entry || entry.format !== CHECKSUM_ROUTER_FORMAT || typeof entry.file !== "string") return false;
   if (!Number.isSafeInteger(entry.rawBytes) || typeof entry.sha256 !== "string") return false;
   const routerPath = join(dataDir, entry.file);
   if (!existsSync(routerPath)) return false;
@@ -94,6 +94,15 @@ const hasCurrentChecksumRouter = (dataDir, entry) => {
 
 // Cheat shards are built from the same Libretro archive as the packs, so a data
 // dir that predates them, or whose shard set or bytes drifted, MUST be rebuilt.
+// The bytes every shard of the current format and revision starts with, the
+// way the pack check reads the RWFP1 magic: a shard the index still matches
+// but that an older builder wrote fails here.
+const cheatShardHeader = (entry) =>
+  Buffer.from(
+    `{"schemaVersion":${CHEAT_SHARD_SCHEMA_VERSION},"system":${JSON.stringify(entry.cheatSystem)},` +
+      `"sourceRevision":${JSON.stringify(LIBRETRO_REVISION)},"games":[`,
+  );
+
 const hasCurrentCheats = (dataDir, entries) => {
   if (!Array.isArray(entries)) return false;
   const slugs = entries.map((entry) => entry.slug).sort();
@@ -102,13 +111,13 @@ const hasCurrentCheats = (dataDir, entries) => {
   return entries.every((entry) => {
     const spec = CHEAT_PLATFORMS[entry.platform];
     if (!spec || spec.cheatSystem !== entry.cheatSystem) return false;
-    if (entry.format !== CHEAT_SHARD_FORMAT || entry.file !== cheatShardFileName(entry.slug))
-      return false;
+    if (entry.format !== CHEAT_SHARD_FORMAT || entry.file !== cheatShardFileName(entry.slug)) return false;
     if (entry.group !== packGroupFor(entry.platform)) return false;
     const shardPath = join(dataDir, entry.file);
     if (!existsSync(shardPath)) return false;
     const bytes = readFileSync(shardPath);
     if (bytes.length !== entry.rawBytes || sha256(bytes) !== entry.sha256) return false;
+    if (!bytes.subarray(0, cheatShardHeader(entry).length).equals(cheatShardHeader(entry))) return false;
     if (!entry.brotliFile || !Number.isSafeInteger(entry.brotliBytes)) return false;
     const brotliPath = join(dataDir, entry.brotliFile);
     return existsSync(brotliPath) && readFileSync(brotliPath).length === entry.brotliBytes;

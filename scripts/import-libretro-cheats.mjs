@@ -6,8 +6,16 @@
 
 import { createHash } from "node:crypto";
 
+import {
+  CHEAT_SHARD_SCHEMA_VERSION,
+  canonicalJson,
+  cheatIdFromHex,
+  cheatIdSource,
+  storeCheat,
+} from "../packages/rom-weaver-webapp/src/lib/cheats/shard-format.mjs";
+
+export { CHEAT_SHARD_SCHEMA_VERSION };
 export const CHEAT_SHARD_FORMAT = "rom-weaver-cheat-shard-v1";
-export const CHEAT_SHARD_SCHEMA_VERSION = 1;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_LINE_BYTES = 256 * 1024;
 const MAX_FILES_PER_SYSTEM = 20_000;
@@ -106,8 +114,7 @@ const STRUCTURED_RUNTIME_FIELDS = new Set([
 const hasStructuredRuntimeSemantics = (record) =>
   Object.keys(record.rawFields ?? {}).some((name) => STRUCTURED_RUNTIME_FIELDS.has(name));
 
-const containsParameterPlaceholder = (value) =>
-  value.includes("?") || value.toUpperCase().includes("XX");
+const containsParameterPlaceholder = (value) => value.includes("?") || value.toUpperCase().includes("XX");
 
 const isHex = (value, length) => value.length === length && /^[0-9a-fA-F]+$/u.test(value);
 
@@ -249,8 +256,7 @@ export function isBakeableCandidate(cheatSystem, record) {
   if (rawCode === null || rawCode === undefined || rawCode.trim() === "") return false;
   if (hasStructuredRuntimeSemantics(record)) return false;
   if (containsParameterPlaceholder(rawCode)) return false;
-  const subcodes =
-    cheatSystem === "gameboyadvance" ? splitXploderCodes(rawCode) : splitCodes(rawCode);
+  const subcodes = cheatSystem === "gameboyadvance" ? splitXploderCodes(rawCode) : splitCodes(rawCode);
   if (subcodes.length === 0) return false;
   const subcodeIsRam = SUBCODE_RAM_CHECKS[cheatSystem];
   if (!subcodeIsRam) return true;
@@ -364,13 +370,10 @@ export function parseCht(source, options = {}) {
     const match = /^cheat(\d+)_(.+)$/u.exec(key);
     if (!match) continue;
     const sourceIndex = Number(match[1]);
-    if (!Number.isSafeInteger(sourceIndex))
-      fail(`${sourceFile}:${lineIndex + 1} has an invalid cheat index.`);
+    if (!Number.isSafeInteger(sourceIndex)) fail(`${sourceFile}:${lineIndex + 1} has an invalid cheat index.`);
     if (!records.has(sourceIndex)) {
       if (records.size >= (options.maxRecords ?? MAX_RECORDS_PER_FILE)) {
-        fail(
-          `${sourceFile} has more than ${options.maxRecords ?? MAX_RECORDS_PER_FILE} cheat records.`,
-        );
+        fail(`${sourceFile} has more than ${options.maxRecords ?? MAX_RECORDS_PER_FILE} cheat records.`);
       }
       records.set(sourceIndex, new Map());
     }
@@ -414,30 +417,17 @@ const stripDeviceAnnotation = (name) => {
 };
 
 const codeKindForTitle = (title, cheatSystem) => {
-  const annotations = [...title.matchAll(/\(([^()]*)\)/gu)].map((match) =>
-    match[1].trim().toLowerCase(),
-  );
+  const annotations = [...title.matchAll(/\(([^()]*)\)/gu)].map((match) => match[1].trim().toLowerCase());
   if (annotations.includes("game genie")) return "game-genie";
   if (
     cheatSystem === "gameboyadvance" &&
     annotations.some((annotation) =>
-      [
-        "action replay",
-        "code breaker",
-        "gameshark",
-        "pro action replay",
-        "xploder",
-        "xplorer",
-      ].includes(annotation),
+      ["action replay", "code breaker", "gameshark", "pro action replay", "xploder", "xplorer"].includes(annotation),
     )
   ) {
     return "xploder";
   }
-  if (
-    annotations.some((annotation) =>
-      ["action replay", "gameshark", "pro action replay"].includes(annotation),
-    )
-  ) {
+  if (annotations.some((annotation) => ["action replay", "gameshark", "pro action replay"].includes(annotation))) {
     return "pro-action-replay";
   }
   return null;
@@ -473,32 +463,15 @@ const titleMetadata = (title, datRegion) => {
   };
 };
 
-const canonicalJson = (value) => {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-};
-
-const stableId = (prefix, value) =>
-  `${prefix}_${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
+const sha256Hex = (value) => createHash("sha256").update(value).digest("hex");
 
 export const stableGameId = (cheatSystem, normalizedTitle) =>
-  stableId("game", `${cheatSystem}\0${normalizedTitle}`);
+  `game_${sha256Hex(`${cheatSystem}\0${normalizedTitle}`).slice(0, 24)}`;
 
-export const stableCheatId = (cheatSystem, gameId, record) => {
-  const identityFields = Object.fromEntries(
-    Object.entries(record.rawFields).filter(([key]) => key !== "enable"),
-  );
-  return stableId(
-    "cheat",
-    `${cheatSystem}\0${gameId}\0${record.codeKind ?? ""}\0${canonicalJson(identityFields)}`,
-  );
-};
+// The ID a reader derives when it expands the shard (shard-format.mjs and the
+// Rust loader); the builder uses it only to merge duplicate records.
+export const stableCheatId = (cheatSystem, gameId, record) =>
+  cheatIdFromHex(sha256Hex(cheatIdSource(cheatSystem, gameId, record.codeKind, record.rawFields)));
 
 // Codepoint comparison, never localeCompare: ICU collation varies by machine
 // and would break the byte-identical rebuild promise the identify data makes.
@@ -542,9 +515,10 @@ const releaseIndex = (releases) => {
 };
 
 /**
- * Build one platform's shard. `files` are `{ sourcePath, text }` pairs whose
- * paths are archive-relative (`cht/<platform>/<title>.cht`); `releases` come
- * from {@link releasesFromIdentifyGames}.
+ * Build one platform's shard in the stored form shard-format.mjs documents.
+ * `files` are `{ sourcePath, text }` pairs whose paths are archive-relative
+ * (`cht/<platform>/<title>.cht`); `releases` come from
+ * {@link releasesFromIdentifyGames}.
  */
 export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }) {
   if (!cheatSystem) fail("buildCheatShard needs a cheatSystem.");
@@ -602,28 +576,30 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
   console.error(`[cheats] ${cheatSystem}: dropped ${droppedCount} record(s) that can never bake`);
 
   const serializedGames = [...games.values()]
-    .map((game) => ({
-      checksums: [...game.checksums.values()].sort((left, right) =>
-        compare(checksumKey(left), checksumKey(right)),
-      ),
-      cheats: [...game.cheats.values()].sort(
-        (left, right) =>
-          compare(left.sourceFile, right.sourceFile) || left.sourceIndex - right.sourceIndex,
-      ),
-      id: game.id,
-      normalizedTitle: game.normalizedTitle,
-      regions: [...game.regions].sort(compare),
-      revisions: [...game.revisions].sort(compare),
-      sourceFiles: [...game.sourceFiles].sort(compare),
-      title: game.title,
-    }))
+    .map((game) => {
+      const sourceFiles = [...game.sourceFiles].sort(compare);
+      return {
+        checksums: [...game.checksums.values()].sort((left, right) => compare(checksumKey(left), checksumKey(right))),
+        cheats: [...game.cheats.values()]
+          .sort((left, right) => compare(left.sourceFile, right.sourceFile) || left.sourceIndex - right.sourceIndex)
+          .map((record) => storeCheat(record, sourceFiles)),
+        id: game.id,
+        normalizedTitle: game.normalizedTitle,
+        regions: [...game.regions].sort(compare),
+        revisions: [...game.revisions].sort(compare),
+        sourceFiles,
+        title: game.title,
+      };
+    })
     .filter((game) => game.cheats.length > 0)
-    .sort(
-      (left, right) =>
-        compare(left.normalizedTitle, right.normalizedTitle) || compare(left.id, right.id),
-    );
+    .sort((left, right) => compare(left.normalizedTitle, right.normalizedTitle) || compare(left.id, right.id));
 
-  return { schemaVersion: CHEAT_SHARD_SCHEMA_VERSION, system: cheatSystem, games: serializedGames };
+  return {
+    schemaVersion: CHEAT_SHARD_SCHEMA_VERSION,
+    system: cheatSystem,
+    sourceRevision,
+    games: serializedGames,
+  };
 }
 
 export const encodeCheatShard = (shard) => Buffer.from(`${JSON.stringify(shard)}\n`, "utf8");

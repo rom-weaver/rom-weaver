@@ -18,6 +18,9 @@
     // Source-of-truth message catalog; consumed by `lingui extract` via static
     // analysis (not a JS import), so its exports are externally used.
     "src/presentation/localization/messages.ts",
+    // Shared with the identify data build (scripts/import-libretro-cheats.mjs
+    // at the repository root), which is outside this package's project globs.
+    "src/lib/cheats/shard-format.mjs",
   ],
   "project": [
     // .css intentionally excluded: knip has no built-in css compiler and a

@@ -25,11 +25,7 @@ import {
   slugifyPlatform,
 } from "./build-identify-index.mjs";
 import { hasCurrentData } from "./ensure-identify-data.mjs";
-import {
-  CHEAT_PLATFORMS,
-  CHEAT_SHARD_FORMAT,
-  cheatShardFileName,
-} from "./import-libretro-cheats.mjs";
+import { CHEAT_PLATFORMS, CHEAT_SHARD_FORMAT, cheatShardFileName } from "./import-libretro-cheats.mjs";
 import {
   buildPackFilter,
   CHECKSUM_ROUTER_FORMAT,
@@ -84,7 +80,7 @@ function buildCurrentDataDir() {
     const slug = slugifyPlatform(platform);
     const file = cheatShardFileName(slug);
     const bytes = Buffer.from(
-      `${JSON.stringify({ schemaVersion: 1, system: spec.cheatSystem, games: [] })}\n`,
+      `${JSON.stringify({ schemaVersion: 1, system: spec.cheatSystem, sourceRevision: LIBRETRO_REVISION, games: [] })}\n`,
     );
     writeFileSync(join(dataDir, file), bytes);
     writeFileSync(join(dataDir, `${file}.br`), bytes);
@@ -104,9 +100,7 @@ function buildCurrentDataDir() {
     };
   });
   const routerBytes = Buffer.from(
-    encodeChecksumRouter(
-      systems.map((system) => buildPackFilter(system.file.slice(0, -".pack".length), [])),
-    ),
+    encodeChecksumRouter(systems.map((system) => buildPackFilter(system.file.slice(0, -".pack".length), []))),
   );
   writeFileSync(join(dataDir, "checksum-routes.bin"), routerBytes);
   writeFileSync(join(dataDir, "checksum-routes.bin.br"), routerBytes);

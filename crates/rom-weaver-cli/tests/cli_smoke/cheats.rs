@@ -360,9 +360,18 @@ fn master_system_action_replay_ram_code_is_rejected() {
     );
 }
 
-/// A cheat-database directory holding one synthetic NES shard. `crc32` is the
-/// checksum of [`nes_rom`], so the checksum path can be exercised without a
-/// real dump.
+/// The IDs the loader derives for the synthetic shard's four records: the
+/// first 24 hex digits of SHA-256 over
+/// `nes NUL game_test NUL NUL {"code":<code>,"desc":<description>}`, as
+/// `cheatIdSource` in the webapp's `shard-format.mjs` computes them.
+const CHEAT_ROM: &str = "cheat_5dab2c1d036a60f251b61b60";
+const CHEAT_RAM: &str = "cheat_41671ecff0dd0821b913536d";
+const CHEAT_C1: &str = "cheat_e96f1cb6d8e0208c8abcca11";
+const CHEAT_C2: &str = "cheat_06d5d82fb0b3c7efe0e1cfb5";
+
+/// A cheat-database directory holding one synthetic NES shard in the stored
+/// form the data build writes. `crc32` is the checksum of [`nes_rom`], so the
+/// checksum path can be exercised without a real dump.
 fn write_cheat_database(temp: &TempDir, rom: &[u8]) -> String {
     let directory = temp.child("cheatdb");
     fs::create_dir_all(directory.path()).expect("cheat database directory");
@@ -371,16 +380,18 @@ fn write_cheat_database(temp: &TempDir, rom: &[u8]) -> String {
     let shard = serde_json::json!({
         "schemaVersion": 1,
         "system": "nes",
+        "sourceRevision": "testrevision",
         "games": [{
             "id": "game_test",
             "title": "Test Game",
             "normalizedTitle": "test game",
+            "sourceFiles": ["test.cht"],
             "checksums": [{ "crc32": format!("{:08x}", crc.sum()) }],
             "cheats": [
-                cheat_entry("cheat_rom", "Team runs faster", "AKE-LVS", 0),
-                cheat_entry("cheat_ram", "High score", "0025:63", 1),
-                cheat_entry("cheat_c1", "Conflict one", "BD86:49", 2),
-                cheat_entry("cheat_c2", "Conflict two", "BD86:4A", 3),
+                cheat_entry("Team runs faster", "AKE-LVS", 0),
+                cheat_entry("High score", "0025:63", 1),
+                cheat_entry("Conflict one", "BD86:49", 2),
+                cheat_entry("Conflict two", "BD86:4A", 3),
             ],
         }],
     });
@@ -407,17 +418,12 @@ fn write_cheat_database(temp: &TempDir, rom: &[u8]) -> String {
     directory.path().to_str().expect("path").to_owned()
 }
 
-fn cheat_entry(id: &str, description: &str, code: &str, index: usize) -> Value {
+fn cheat_entry(description: &str, code: &str, index: usize) -> Value {
     serde_json::json!({
-        "id": id,
-        "system": "nes",
-        "gameId": "game_test",
         "description": description,
         "rawCode": code,
-        "rawFields": { "desc": description, "code": code },
-        "sourceFile": "test.cht",
+        "sourceFile": 0,
         "sourceIndex": index,
-        "sourceRevision": "testrevision",
     })
 }
 
@@ -458,7 +464,7 @@ fn cheat_list_matches_by_checksum_and_reports_delivery() {
     );
     let entries = list["entries"].as_array().expect("entries");
     assert_eq!(entries.len(), 4);
-    assert_eq!(entries[0]["id"], "cheat_rom");
+    assert_eq!(entries[0]["id"], CHEAT_ROM);
     assert_eq!(entries[0]["delivery"], "rom");
     assert_eq!(entries[0]["code"], "AKE-LVS");
     assert_eq!(entries[1]["delivery"], "unsupported");
@@ -540,7 +546,7 @@ fn patch_apply_bakes_database_cheats_and_refuses_unbakeable_ones() {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_rom",
+            CHEAT_ROM,
             "--output",
             &output_s,
             "--no-compress",
@@ -562,7 +568,7 @@ fn patch_apply_bakes_database_cheats_and_refuses_unbakeable_ones() {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_ram",
+            CHEAT_RAM,
             "--output",
             &output_s,
             "--no-compress",
@@ -595,9 +601,9 @@ fn patch_create_lists_the_cheats_it_skipped() {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_rom",
+            CHEAT_ROM,
             "--cheat",
-            "cheat_ram",
+            CHEAT_RAM,
             "--output",
             &output_s,
             "--json",
@@ -628,9 +634,9 @@ fn conflicting_rom_cheats_fail_until_allowed() {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_c1",
+            CHEAT_C1,
             "--cheat",
-            "cheat_c2",
+            CHEAT_C2,
             "--output",
             &output_s,
             "--no-compress",
@@ -644,7 +650,7 @@ fn conflicting_rom_cheats_fail_until_allowed() {
     let label = failed["label"].as_str().expect("label");
     assert!(label.contains("cheat_write_conflict"), "{label}");
     assert!(
-        label.contains("cheat_c1") && label.contains("cheat_c2"),
+        label.contains(CHEAT_C1) && label.contains(CHEAT_C2),
         "{label}"
     );
 
@@ -698,7 +704,7 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_rom",
+            CHEAT_ROM,
             "--output",
             &bundle_s,
             "--json",
@@ -707,7 +713,7 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
     ));
     assert_eq!(report["status"], "succeeded");
     let cheats = &report["details"]["bundle_create"]["bundle"]["cheats"];
-    assert_eq!(cheats[0]["id"], "cheat_rom");
+    assert_eq!(cheats[0]["id"], CHEAT_ROM);
     assert_eq!(cheats[0]["code"], "AKE-LVS");
     assert_eq!(cheats[0]["revision"], "testrevision");
 
@@ -721,7 +727,7 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_ram",
+            CHEAT_RAM,
             "--output",
             temp.child("refused.json").path().to_str().expect("path"),
             "--json",
@@ -775,7 +781,7 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_rom",
+            CHEAT_ROM,
             "--output",
             &direct_s,
             "--no-compress",
@@ -894,7 +900,7 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_rom",
+            CHEAT_ROM,
             "--output",
             output.path().to_str().expect("path"),
             "--emit-bundle",
@@ -913,7 +919,7 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
     let parsed: Value =
         serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted bundle"))
             .expect("bundle json");
-    assert_eq!(parsed["cheats"][0]["id"], "cheat_rom");
+    assert_eq!(parsed["cheats"][0]["id"], CHEAT_ROM);
     assert_eq!(parsed["cheats"][0]["code"], "AKE-LVS");
     assert!(parsed["patches"].as_array().expect("patches").is_empty());
 }
@@ -947,7 +953,7 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
     let bundle = write_cheats_only_bundle(
         &temp,
         "optional-only-bundle.json",
-        serde_json::json!([{ "id": "cheat_ram", "optional": true }]),
+        serde_json::json!([{ "id": CHEAT_RAM, "optional": true }]),
     );
     let output = temp.child("patched.nes");
 
@@ -973,7 +979,7 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
         label.contains("every cheat this bundle records was skipped"),
         "{label}"
     );
-    assert!(label.contains("cheat_ram"), "{label}");
+    assert!(label.contains(CHEAT_RAM), "{label}");
     assert!(!label.contains("was not executed"), "{label}");
     assert!(!output.path().exists());
 }
@@ -994,8 +1000,8 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
         &temp,
         "twin-bundle.json",
         serde_json::json!([
-            { "id": "cheat_rom", "code": "AKE-LVS" },
-            { "id": "cheat_rom", "optional": true },
+            { "id": CHEAT_ROM, "code": "AKE-LVS" },
+            { "id": CHEAT_ROM, "optional": true },
         ]),
     );
     let output = temp.child("patched.nes");
@@ -1031,7 +1037,7 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
             .expect("bundle json");
     let cheats = parsed["cheats"].as_array().expect("cheats");
     assert_eq!(cheats.len(), 1, "{cheats:?}");
-    assert_eq!(cheats[0]["id"], "cheat_rom");
+    assert_eq!(cheats[0]["id"], CHEAT_ROM);
 }
 
 #[test]
@@ -1048,7 +1054,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
             "version": 1,
             "rom": { "path": "game.nes" },
             "patches": [],
-            "cheats": [{ "id": "cheat_rom" }],
+            "cheats": [{ "id": CHEAT_ROM }],
         }))
         .expect("spec json"),
     )
@@ -1068,7 +1074,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1);
-    assert_eq!(cheats[0]["id"], "cheat_rom");
+    assert_eq!(cheats[0]["id"], CHEAT_ROM);
 
     // With --cheat the selection replaces them rather than appending.
     let replaced = parse_single_json_line(&command_stdout(
@@ -1080,7 +1086,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
             "--cheat-database",
             &database,
             "--cheat",
-            "cheat_rom",
+            CHEAT_ROM,
             "--output",
             &output_s,
             "--force",
@@ -1092,7 +1098,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1, "{cheats:?}");
-    assert_eq!(cheats[0]["id"], "cheat_rom");
+    assert_eq!(cheats[0]["id"], CHEAT_ROM);
     assert_eq!(cheats[0]["code"], "AKE-LVS");
 }
 
