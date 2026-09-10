@@ -1384,14 +1384,17 @@ export default defineConfig(({ command, mode }) => {
           // Logical default-pack URLs resolve to Brotli sidecars at install time.
           // Optional groups enter a separate local cache only after an explicit install.
           manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
-          // The checksum router is warm-up data like the packs, so neither
-          // the raw file nor its brotli sidecar joins the precache.
+          // The checksum router and the title index are warm-up data like the
+          // packs, so neither the raw files nor their brotli sidecars join the
+          // precache.
           globIgnores: [
             "**/*.map",
             "assets/identify-*.pack.br",
             "assets/identify-*.bin",
             "assets/identify-*.bin.br",
             "assets/identify-cheats-*.json.br",
+            "assets/identify-title-index.json",
+            "assets/identify-title-index.json.br",
           ],
           globPatterns: [
             // Every route ships its own prerendered document, so precache them all:
