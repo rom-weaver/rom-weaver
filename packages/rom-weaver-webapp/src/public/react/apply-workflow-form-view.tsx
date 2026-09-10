@@ -1895,7 +1895,7 @@ function ApplyWorkflowFormView({
    * The 0x04 cheats step; receives the same finished-stage accent as the ROM and
    * patch steps, plus the header-strip guard the header controls derive.
    */
-  cheats?: (state: { headerStripConflict: string; woven: boolean }) => ReactNode;
+  cheats?: (state: { headerStripConflict: string; onNeedsRom: () => void; woven: boolean }) => ReactNode;
   /** At least one cheat card's switch is On. */
   cheatsOn?: boolean;
   controllers: {
@@ -2379,7 +2379,11 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          {cheats?.({ headerStripConflict: cheatHeaderStripConflict, woven: wovenSteps })}
+          {cheats?.({
+            headerStripConflict: cheatHeaderStripConflict,
+            onNeedsRom: openUnifiedPicker,
+            woven: wovenSteps,
+          })}
 
           <WorkflowOutputStep
             action={renderOutputAction}

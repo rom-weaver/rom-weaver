@@ -1855,10 +1855,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
-        cheats={({ headerStripConflict, woven }) => (
+        cheats={({ headerStripConflict, onNeedsRom, woven }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
+            onNeedsRom={onNeedsRom}
             onSaveAsPatch={saveCheatsAsPatch}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
