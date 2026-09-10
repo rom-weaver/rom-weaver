@@ -645,6 +645,11 @@ msgstr "chd-, rvz/wia/gcz- und z3ds-Dateien werden vor dem Patchen dekomprimiert
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.cheats"
+msgstr "Cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.rom.title"
 msgstr "Start-ROM prüfen"
 
@@ -721,7 +726,7 @@ msgstr "Wähle Ausgabename, Format, Komprimierung und Header. Drücke dann Anwen
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Wähle die ROM, für die dieser Patch erstellt wurde, oder nutze die Überschreibung in 0x04."
+msgstr "Wähle die ROM, für die dieser Patch erstellt wurde, oder nutze die Überschreibung in 0x05."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2205,12 +2210,12 @@ msgstr "Wähle, was zur Aufgabe passt. Die Ausgabedaten sind in beiden Fällen i
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformLabel"
+msgid "ui.identifyDrawer.platform"
 msgstr "Plattform"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identifyDrawer.platform"
+msgid "ui.identify.namePlatformLabel"
 msgstr "Plattform"
 
 #. js-lingui-explicit-id
@@ -2535,12 +2540,12 @@ msgstr "{size} gespart"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearch"
+msgid "ui.identify.hashSearch"
 msgstr "Suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearch"
+msgid "ui.identify.nameSearch"
 msgstr "Suchen"
 
 #. js-lingui-explicit-id
@@ -2550,12 +2555,12 @@ msgstr "Erneut suchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearching"
+msgid "ui.identify.hashSearching"
 msgstr "Suche läuft…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearching"
+msgid "ui.identify.nameSearching"
 msgstr "Suche läuft…"
 
 #. js-lingui-explicit-id

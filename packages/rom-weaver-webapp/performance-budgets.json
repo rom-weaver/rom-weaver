@@ -15,20 +15,20 @@
         "directory": "assets",
         "extension": ".js",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2210000,
-        "maxRawBytes": 2275000,
-        "expectedBrotliBytes": 573000,
-        "maxBrotliBytes": 587000
+        "expectedRawBytes": 2281000,
+        "maxRawBytes": 2330000,
+        "expectedBrotliBytes": 594500,
+        "maxBrotliBytes": 608000
       },
       {
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 221000,
-        "maxRawBytes": 226000,
-        "expectedBrotliBytes": 35100,
-        "maxBrotliBytes": 35500
+        "expectedRawBytes": 226500,
+        "maxRawBytes": 231000,
+        "expectedBrotliBytes": 36400,
+        "maxBrotliBytes": 37000
       },
       {
         "name": "WASM",

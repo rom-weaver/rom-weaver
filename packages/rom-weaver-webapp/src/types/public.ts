@@ -31,6 +31,9 @@ type AppliedPatchInfo = {
 };
 
 type ApplyResult<TDestination> = {
+  cheats?: {
+    rom: number;
+  };
   inputs: SelectedInputInfo[];
   output: PublicOutput<TDestination>;
   outputs: PublicOutput<TDestination>[];

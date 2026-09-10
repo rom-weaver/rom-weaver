@@ -645,6 +645,11 @@ msgstr "chd, rvz/wia/gcz, and z3ds files are decompressed before patching."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.cheats"
+msgstr "Cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.rom.title"
 msgstr "Check the starting ROM"
 
@@ -721,7 +726,7 @@ msgstr "Choose the output name, format, compression, and header. Then press Appl
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Choose the ROM that this patch was made for, or use the override in 0x04."
+msgstr "Choose the ROM that this patch was made for, or use the override in 0x05."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2205,12 +2210,12 @@ msgstr "Pick the one that fits the job. Output bytes are identical either way."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformLabel"
+msgid "ui.identifyDrawer.platform"
 msgstr "Platform"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identifyDrawer.platform"
+msgid "ui.identify.namePlatformLabel"
 msgstr "Platform"
 
 #. js-lingui-explicit-id
@@ -2535,12 +2540,12 @@ msgstr "saved {size}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearch"
+msgid "ui.identify.hashSearch"
 msgstr "Search"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearch"
+msgid "ui.identify.nameSearch"
 msgstr "Search"
 
 #. js-lingui-explicit-id
@@ -2550,12 +2555,12 @@ msgstr "Search again"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearching"
+msgid "ui.identify.hashSearching"
 msgstr "Searching…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearching"
+msgid "ui.identify.nameSearching"
 msgstr "Searching…"
 
 #. js-lingui-explicit-id

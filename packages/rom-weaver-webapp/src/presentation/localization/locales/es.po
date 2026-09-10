@@ -645,6 +645,11 @@ msgstr "Los archivos chd, rvz/wia/gcz y z3ds se descomprimen antes de aplicar pa
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.cheats"
+msgstr "Trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.rom.title"
 msgstr "Comprueba la ROM inicial"
 
@@ -721,7 +726,7 @@ msgstr "Elige el nombre, formato, compresión y encabezado de salida. Luego puls
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Elige la ROM para la que se creó este parche o usa la anulación en 0x04."
+msgstr "Elige la ROM para la que se creó este parche o usa la anulación en 0x05."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2205,12 +2210,12 @@ msgstr "Elige la que se adapte al trabajo. Los bytes de salida son idénticos en
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.namePlatformLabel"
+msgid "ui.identifyDrawer.platform"
 msgstr "Plataforma"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identifyDrawer.platform"
+msgid "ui.identify.namePlatformLabel"
 msgstr "Plataforma"
 
 #. js-lingui-explicit-id
@@ -2535,12 +2540,12 @@ msgstr "{size} ahorrados"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearch"
+msgid "ui.identify.hashSearch"
 msgstr "Buscar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearch"
+msgid "ui.identify.nameSearch"
 msgstr "Buscar"
 
 #. js-lingui-explicit-id
@@ -2550,12 +2555,12 @@ msgstr "Buscar de nuevo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.nameSearching"
+msgid "ui.identify.hashSearching"
 msgstr "Buscando…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.hashSearching"
+msgid "ui.identify.nameSearching"
 msgstr "Buscando…"
 
 #. js-lingui-explicit-id

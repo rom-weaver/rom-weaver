@@ -769,7 +769,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.validationMismatchOverride": msg({
     id: "ui.patch.validationMismatchOverride",
-    message: "Choose the ROM that this patch was made for, or use the override in 0x04.",
+    message: "Choose the ROM that this patch was made for, or use the override in 0x05.",
   }),
   "ui.patch.version": msg({ id: "ui.patch.version", message: "Version" }),
   "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "Available actions" }),
@@ -1139,6 +1139,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
   "ui.step.apply": msg({ id: "ui.step.apply", message: "Apply" }),
+  "ui.step.cheats": msg({ id: "ui.step.cheats", message: "Cheats" }),
   "ui.step.identify": msg({ id: "ui.step.identify", message: "Identify" }),
   "ui.step.modified": msg({ id: "ui.step.modified", message: "Modified" }),
   "ui.step.original": msg({ id: "ui.step.original", message: "Original" }),
