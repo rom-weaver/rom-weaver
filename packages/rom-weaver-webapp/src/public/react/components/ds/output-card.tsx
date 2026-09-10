@@ -1,6 +1,7 @@
 import { ScanSearch, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { Drawer, DrawerReadout } from "./drawer.tsx";
 import { DropdownSelect } from "./dropdown-select.tsx";
@@ -74,26 +75,30 @@ const OutputCard = ({
   fileName,
   onFileNameChange,
   fileNamePlaceholder,
-  fileNameLabel = "Output filename",
+  fileNameLabel,
   fileNameId,
   format,
   formatOptions,
   onFormatChange,
-  formatLabel = "Output format",
+  formatLabel,
   formatId,
   compress,
   disabled,
   action,
   nameSource,
 }: OutputCardProps) => {
+  const localizer = useUiLocalizer();
+  const resolvedFileNameLabel = fileNameLabel || localizer.message("ui.output.filename");
+  const resolvedFormatLabel = formatLabel || localizer.message("ui.output.format");
+  const resolvedCompressionFormatLabel = compress?.formatLabel || localizer.message("ui.output.type");
   // The format selector appends the extension, so a name that already ends in
   // an output-looking extension would be saved doubled (`game.zip.zip`).
   const doubledExtension = detectOutputLikeExtension(fileName);
   const compressionFields =
     compress?.formatOptions?.length && compress.onFormatChange ? (
-      <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>
+      <OutputField label={resolvedCompressionFormatLabel} labelInfo={compress.formatInfo}>
         <DropdownSelect
-          aria-label={compress.formatLabel || "Type"}
+          aria-label={resolvedCompressionFormatLabel}
           className="select"
           disabled={disabled}
           id={compress.formatId}
@@ -114,15 +119,15 @@ const OutputCard = ({
         <p aria-live="polite" className="patch-off-note outname-ext-warn" role="alert">
           <TriangleAlert aria-hidden="true" />
           <span>
-            The name ends in <code>.{doubledExtension}</code>, an output extension. The format selector adds the
-            extension — remove it to avoid a doubled name.
+            {localizer.message("ui.output.doubledExtension.before")} <code>.{doubledExtension}</code>
+            {localizer.message("ui.output.doubledExtension.after")}
           </span>
         </p>
       ) : null}
       <div className="outbar">
         <div className="fname fname-group">
           <textarea
-            aria-label={fileNameLabel}
+            aria-label={resolvedFileNameLabel}
             className="input mono outname"
             disabled={disabled}
             id={fileNameId}
@@ -139,7 +144,7 @@ const OutputCard = ({
           />
           <span className="sep" />
           <DropdownSelect
-            aria-label={formatLabel}
+            aria-label={resolvedFormatLabel}
             className="select mono"
             disabled={disabled}
             id={formatId}
@@ -158,11 +163,15 @@ const OutputCard = ({
         <Drawer
           bodyClassName="optsbody"
           className="optsblock outopts"
-          label="Options"
+          label={localizer.message("ui.output.options")}
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
           readouts={
             <>
-              {nameSource ? <DrawerReadout label="Name">{nameSource.on ? "Ident" : "File"}</DrawerReadout> : null}
+              {nameSource ? (
+                <DrawerReadout label={localizer.message("ui.output.name")}>
+                  {nameSource.on ? localizer.message("ui.output.identified") : localizer.message("ui.output.file")}
+                </DrawerReadout>
+              ) : null}
               {compress?.readouts}
             </>
           }
@@ -171,7 +180,7 @@ const OutputCard = ({
               only. Phrased as "not saved" rather than "overrides your defaults"
               because a few options (Apply's ROM header) have no saved default at
               all. Said once at the top, since it holds for every option below. */}
-          <p className="optsnote">These choices are not saved. Change your defaults in Settings.</p>
+          <p className="optsnote">{localizer.message("ui.output.notSaved")}</p>
           <div className="optsgrid">
             {nameSource ? (
               <div className="optsgroup opts-name-source">
@@ -183,7 +192,7 @@ const OutputCard = ({
                     type="checkbox"
                   />
                   <ScanSearch aria-hidden="true" />
-                  <span>Name from identified title</span>
+                  <span>{localizer.message("ui.output.nameFromIdentified")}</span>
                   <span className="mono outname-source-name">{nameSource.identifiedName}</span>
                 </label>
               </div>

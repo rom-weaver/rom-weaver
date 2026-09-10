@@ -152,16 +152,19 @@ fn serialize_cheat_patch(
 
 impl CliApp {
     /// Resolve the cheat system from an explicit override or by detecting the
-    /// ROM header.
+    /// ROM header. `flag` names the option the caller took `override_id` from,
+    /// so the error tells the user which spelling to correct.
     pub(super) fn cheat_system_for(
         &self,
         source: &Path,
         override_id: Option<&str>,
+        flag: &str,
     ) -> Result<CheatSystem> {
         if let Some(id) = override_id.map(str::trim).filter(|id| !id.is_empty()) {
             return CheatSystem::parse(id).ok_or_else(|| {
                 RomWeaverError::Validation(format!(
-                    "unknown --code-system `{id}`; expected nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gba, or psx"
+                    "unknown {flag} `{id}`; expected nes, snes, genesis, 32x, sms, gamegear, \
+                     sg1000, gameboy, gameboy-color, gba, or psx"
                 ))
             });
         }
@@ -173,7 +176,7 @@ impl CliApp {
                 cheat_system_from_header(matched.header, source)?.ok_or_else(
                     || {
                         RomWeaverError::Validation(format!(
-                            "could not map detected ROM header ({}) for `{}` to a cheat system; pass --code-system",
+                            "could not map detected ROM header ({}) for `{}` to a cheat system; pass {flag}",
                             matched.profile_name(),
                             source.display()
                         ))
@@ -228,7 +231,7 @@ impl CliApp {
             context,
             temp_paths,
         } = request;
-        let system = self.cheat_system_for(source, system_override)?;
+        let system = self.cheat_system_for(source, system_override, "--code-system")?;
         let rom = fs::read(source)?;
         trace!(
             source = %source.display(),
@@ -259,9 +262,12 @@ impl CliApp {
         ))
     }
 
+    /// `allow_conflicts` turns a same-offset disagreement from an error into
+    /// last-one-wins, which is what `--allow-cheat-conflicts` asks for.
     pub(super) fn resolve_database_cheat_writes(
         rom: &[u8],
         records: &[CheatRecord],
+        allow_conflicts: bool,
     ) -> Result<(Vec<CheatWrite>, CheatApplySummary)> {
         let system = records.first().map(|record| record.system).ok_or_else(|| {
             RomWeaverError::Validation("no cheat records were selected".to_string())
@@ -292,7 +298,7 @@ impl CliApp {
             }
         }
         let conflicts = cheats::detect_write_conflicts(&record_writes);
-        if let Some(conflict) = conflicts.first() {
+        if let Some(conflict) = conflicts.first().filter(|_| !allow_conflicts) {
             return Err(RomWeaverError::ValidationCode(
                 ValidationCodeError::new("cheat_write_conflict")
                     .with_message("selected ROM cheats write different values at the same offset")
@@ -314,6 +320,32 @@ impl CliApp {
         ))
     }
 
+    /// Bake selected database records into a copy of `source`, writing the
+    /// patched ROM to `dest`.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn write_database_cheat_patched_rom(
+        source: &Path,
+        records: &[CheatRecord],
+        allow_conflicts: bool,
+        dest: &Path,
+    ) -> Result<CheatApplySummary> {
+        let mut rom = fs::read(source)?;
+        let (writes, summary) =
+            Self::resolve_database_cheat_writes(&rom, records, allow_conflicts)?;
+        trace!(
+            source = %source.display(),
+            records = records.len(),
+            writes = writes.len(),
+            "baking database cheats into ROM"
+        );
+        cheats::apply_writes(&mut rom, summary.system, &writes)?;
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(dest, rom)?;
+        Ok(summary)
+    }
+
     /// Apply the resolved cheat writes to a copy of `source`, writing the patched
     /// ROM to `dest`.
     pub(super) fn write_cheat_patched_rom(
@@ -324,7 +356,7 @@ impl CliApp {
         kind_id: &str,
         dest: &Path,
     ) -> Result<CheatApplySummary> {
-        let system = self.cheat_system_for(source, system_override)?;
+        let system = self.cheat_system_for(source, system_override, "--code-system")?;
         let mut rom = fs::read(source)?;
         trace!(
             source = %source.display(),

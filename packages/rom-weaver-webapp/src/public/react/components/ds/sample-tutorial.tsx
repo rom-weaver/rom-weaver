@@ -7,6 +7,7 @@ import {
   ListChecks,
   ListOrdered,
   Package,
+  RefreshCw,
   Scissors,
   SlidersHorizontal,
   ToggleRight,
@@ -27,7 +28,7 @@ import {
   type GuidedSample,
   requestOnboardingDismiss,
 } from "../../guided-sample-start.ts";
-import { useRomWeaverSettings } from "../../settings-context.tsx";
+import { useRomWeaverSettings, useUiLocalizer } from "../../settings-context.tsx";
 import { SwapIcon } from "./swap-icon.tsx";
 
 const startLogger = createLogger("sample-tutorial");
@@ -48,6 +49,7 @@ type SampleTutorialAction =
   | "play"
   | "remove"
   | "reorder"
+  | "replace"
   | "swap"
   | "toggle";
 
@@ -105,6 +107,7 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   play: Gamepad2,
   remove: X,
   reorder: ListOrdered,
+  replace: RefreshCw,
   swap: SwapIcon,
   toggle: ToggleRight,
 };
@@ -272,6 +275,7 @@ const SampleTutorialStart = ({
   startAction?: SampleTutorialAction;
   secondaryAction?: SampleTutorialAction;
 }) => {
+  const localizer = useUiLocalizer();
   const StartIcon = ACTION_ICONS[startAction];
   const SecondaryIcon = ACTION_ICONS[secondaryAction];
   const popId = useId();
@@ -332,14 +336,14 @@ const SampleTutorialStart = ({
         <span aria-hidden="true" className="sample-tutorial-start-beacon">
           !
         </span>
-        New here?
+        {localizer.message("ui.tutorial.new")}
       </button>
       {/* Mounted only while open: the closed popover would otherwise ship in
           the prerendered shell - four inline SVGs and all - on every page. */}
       {open ? (
         <div className="sample-tutorial-start-pop" id={popId}>
           <span aria-hidden="true" className="sample-tutorial-start-head mono">
-            Get started
+            {localizer.message("ui.tutorial.start")}
           </span>
           <a
             aria-busy={loading}
@@ -355,7 +359,7 @@ const SampleTutorialStart = ({
             <span aria-hidden="true" className="sample-tutorial-start-action-icon">
               <StartIcon />
             </span>
-            {loading ? "Loading practice files…" : label}
+            {loading ? localizer.message("ui.tutorial.loading") : label}
           </a>
           {secondaryLabel && onSecondaryStart && secondaryHref ? (
             <a
@@ -372,7 +376,7 @@ const SampleTutorialStart = ({
               <span aria-hidden="true" className="sample-tutorial-start-action-icon">
                 <SecondaryIcon />
               </span>
-              {loading ? "Loading practice files…" : secondaryLabel}
+              {loading ? localizer.message("ui.tutorial.loading") : secondaryLabel}
             </a>
           ) : null}
           <a className="sample-tutorial-start-action sample-tutorial-start-download" download href={href}>
@@ -390,7 +394,7 @@ const SampleTutorialStart = ({
             }}
             type="button"
           >
-            Don't show this again (re-enable in Settings)
+            {localizer.message("ui.tutorial.dismiss")}
           </button>
         </div>
       ) : null}
@@ -409,6 +413,8 @@ const SampleTutorial = ({
   ready: boolean;
   steps: readonly SampleTutorialStep[];
 }) => {
+  const localizer = useUiLocalizer();
+  const instructionsLabel = localizer.message("ui.tutorial.instructions");
   const bodyId = useId();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -755,7 +761,12 @@ const SampleTutorial = ({
         role="dialog"
         tabIndex={-1}
       >
-        <button aria-label="Exit tutorial" className="sample-tutorial-exit" onClick={endGuide} type="button">
+        <button
+          aria-label={localizer.message("ui.tutorial.exit")}
+          className="sample-tutorial-exit"
+          onClick={endGuide}
+          type="button"
+        >
           <X aria-hidden="true" />
         </button>
         <span aria-hidden="true" className="sample-tutorial-beacon">
@@ -765,18 +776,20 @@ const SampleTutorial = ({
             together with its content is never announced, so only the copy
             inside it is keyed per step. */}
         {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the overflowing tutorial copy must be keyboard-scrollable. */}
-        <section aria-label="Tutorial instructions" className="sample-tutorial-copy-area" tabIndex={0}>
+        <section aria-label={instructionsLabel} className="sample-tutorial-copy-area" tabIndex={0}>
           <div aria-live="polite" className="sample-tutorial-live">
             <div className="sample-tutorial-copy" key={copyKey}>
               <span className="sample-tutorial-kicker mono">
-                {live ? `Guided workbench · ${stepIndex + 1}/${steps.length}` : "Preparing workbench…"}
+                {live
+                  ? localizer.message("ui.tutorial.step", { step: stepIndex + 1, total: steps.length })
+                  : localizer.message("ui.tutorial.preparing")}
               </span>
-              <h2 id={titleId}>{live ? step.title : "Loading the practice files"}</h2>
+              <h2 id={titleId}>{live ? step.title : localizer.message("ui.tutorial.loadingTitle")}</h2>
               <p id={bodyId}>{live ? step.body : loadingBody}</p>
               {live ? null : (
                 <div
-                  aria-label="Loading practice files"
-                  aria-valuetext="Preparing the guided workbench"
+                  aria-label={localizer.message("ui.tutorial.loadingProgress")}
+                  aria-valuetext={localizer.message("ui.tutorial.preparingProgress")}
                   className="sample-tutorial-progress"
                   role="progressbar"
                 >
@@ -784,7 +797,7 @@ const SampleTutorial = ({
                 </div>
               )}
               {live && step.actions?.length ? (
-                <ul aria-label="Available actions" className="sample-tutorial-action-list">
+                <ul aria-label={localizer.message("ui.tutorial.actions")} className="sample-tutorial-action-list">
                   {step.actions.map(([action, label]) => {
                     const Icon = ACTION_ICONS[action];
                     return (
@@ -800,11 +813,7 @@ const SampleTutorial = ({
               ) : null}
             </div>
           </div>
-          {live ? (
-            <p className="sample-tutorial-end-hint">
-              The top-right X exits; the final action button also ends the tutorial.
-            </p>
-          ) : null}
+          {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
         </section>
         <div className="sample-tutorial-actions">
           {live ? (
@@ -817,7 +826,7 @@ const SampleTutorial = ({
               }}
               type="button"
             >
-              Back
+              {localizer.message("ui.tutorial.back")}
             </button>
           ) : null}
           {live ? (
@@ -832,7 +841,7 @@ const SampleTutorial = ({
               }}
               type="button"
             >
-              {finalStep ? "Done" : "Continue"}
+              {finalStep ? localizer.message("ui.tutorial.done") : localizer.message("ui.tutorial.continue")}
             </button>
           ) : null}
         </div>

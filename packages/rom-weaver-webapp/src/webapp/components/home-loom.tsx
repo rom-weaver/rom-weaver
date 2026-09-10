@@ -173,7 +173,11 @@ const draw = (
   }
 };
 
-const HomeLoom = (): React.ReactElement => {
+type HomeLoomProps = {
+  ariaLabel: string;
+};
+
+const HomeLoom = ({ ariaLabel }: HomeLoomProps): React.ReactElement => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -239,14 +243,7 @@ const HomeLoom = (): React.ReactElement => {
   }, []);
 
   return (
-    <canvas
-      aria-label="The original ROM drawn as vertical threads, with three patches woven across it in order, one colored band per patch."
-      className="home-loom-canvas"
-      height={400}
-      ref={canvasRef}
-      role="img"
-      width={560}
-    />
+    <canvas aria-label={ariaLabel} className="home-loom-canvas" height={400} ref={canvasRef} role="img" width={560} />
   );
 };
 

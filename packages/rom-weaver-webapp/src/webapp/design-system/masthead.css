@@ -976,10 +976,13 @@ html.vt-theme .mode-rail .mode {
    above the dock handoff. */
 @media (min-width: 1000px) {
   /* Equal side tracks center the top rail against the app column rather than
-     against the leftover space between the brand and action group. The snug
-     band keeps its tighter tab padding below. */
+     against the leftover space between the brand and action group. The tracks
+     MUST floor at their content: a `0` floor lets a wide rail starve them, and
+     the brand's sub-row cannot shrink, so it paints under the rail. With the
+     floor the rail is what gives way (it scrolls). The snug band keeps its
+     tighter tab padding below. */
   .rw-app .masthead {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
   }
   .rw-app .brand {
     grid-column: 1;
@@ -993,15 +996,25 @@ html.vt-theme .mode-rail .mode {
   }
 }
 
-@media (min-width: 1000px) and (max-width: 1159px) {
+/* Snug band: the five full labels do not fit beside the brand and the action
+   group until ~1280px. The tabs first lose their outer padding, then, below
+   1180px, every tab but the selected one keeps only its glyph. The hidden labels
+   stay in the accessible name - they are clipped, not removed. Ellipsizing every
+   label was the previous answer and it cut every two-word label. */
+@media (min-width: 1000px) and (max-width: 1279px) {
   .rw-app .mode {
     gap: var(--sp-xs);
     padding: var(--sp-s) var(--sp-m);
   }
-  .rw-app .mode .mode-label {
-    max-width: 9ch;
+}
+@media (min-width: 1000px) and (max-width: 1179px) {
+  .rw-app .mode:not([aria-selected="true"]) .mode-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
     overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: nowrap;
+    clip-path: inset(50%);
   }
 }
 /* ▼ dock threshold: the single number that replaced data-masthead-layout */

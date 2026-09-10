@@ -1,3 +1,4 @@
+import { createLocalizer, type Localizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import { isCompressedInputFileName } from "./apply-session-inputs.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
@@ -24,8 +25,19 @@ type OutputSizeSummary = ReturnType<typeof createOutputSizeSummary>;
  * engine decides during the apply, from where the patch's records land, so
  * naming an outcome here would be a guess the run can contradict.
  */
-const formatHeaderAutoLabel = (decided: boolean | undefined, mode: string | undefined): string =>
-  decided ? `header auto (${mode || "keep"})` : "header auto";
+const formatHeaderAutoLabel = (
+  decided: boolean | undefined,
+  mode: string | undefined,
+  localizer: Localizer = createLocalizer("en"),
+): string => {
+  if (!decided) return localizer.message("ui.patch.headerAuto");
+  const resolvedMode = mode || "keep";
+  const label =
+    resolvedMode === "keep" || resolvedMode === "strip"
+      ? localizer.message(`ui.patch.headerMode.${resolvedMode}`)
+      : resolvedMode;
+  return localizer.message("ui.patch.headerAutoResolved", { mode: label });
+};
 
 interface UiViewStateInput {
   busy: boolean;

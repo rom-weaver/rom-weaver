@@ -5,6 +5,7 @@ import {
   House,
   Package,
   RotateCcw,
+  Save as SaveIcon,
   ScanSearch,
   Scissors,
   Settings,
@@ -74,6 +75,7 @@ import {
   IdentifyRouteForm,
   preloadWorkflowRoute,
   PpfUndoRouteForm,
+  SaveEditorRouteForm,
   TrimPatchRoute,
   WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
@@ -121,6 +123,15 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     icon: <RotateCcw aria-hidden="true" />,
     id: "ppf-undo",
     label: "PPF undo",
+    placement: "more",
+  },
+  {
+    beta: true,
+    group: "tools",
+    href: "save-editor",
+    icon: <SaveIcon aria-hidden="true" />,
+    id: "save-editor",
+    label: "Save Editor",
     placement: "more",
   },
 ];
@@ -420,10 +431,14 @@ function WebappRoot({
         window.setTimeout(preloadDialogsWhenIdle, 0);
       }
     };
-    // A guide never reaches the ROM engine, so it warms the dialogs and leaves
-    // the runtime preload to the workflow tabs.
+    // A guide and the landing page never reach the ROM engine, so they warm the
+    // dialogs only and leave the runtime preload to the workflow tabs. Preloading
+    // here compiles the WASM module and starts both WASI worker pools, which lands
+    // on the main thread right after first paint and blocks it; the workflow tab
+    // the visitor clicks through to preloads the same runtime, memoized, so the
+    // engine is still warmed exactly once.
     let cancelPreload: () => void = () => undefined;
-    if (state.currentView === "docs") {
+    if (state.currentView === "docs" || state.currentView === "home") {
       scheduleDialogPreload();
     } else {
       cancelPreload = scheduleBrowserRuntimePreload(() => {
@@ -705,6 +720,7 @@ function WebappRoot({
     patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
     romFilePresent: state.patcherSession.romFilePresent,
     ppfUndoActive: state.ppfUndoSession?.active ?? false,
+    saveEditorActive: state.saveEditorSession?.active ?? false,
     trimState: state.trimSession,
     webappState: state,
   });
@@ -852,6 +868,13 @@ function WebappRoot({
                   <PpfUndoRouteForm
                     onSessionChange={actions.onPpfUndoSessionChange}
                     pageDrop={pageDropFor("ppf-undo")}
+                  />,
+                )}
+                {workflowPanel(
+                  "save-editor",
+                  <SaveEditorRouteForm
+                    onSessionChange={actions.onSaveEditorSessionChange}
+                    pageDrop={pageDropFor("save-editor")}
                   />,
                 )}
                 {state.currentView === "docs" || state.currentView === "whats-new" ? null : <DropVeil />}

@@ -20,6 +20,7 @@ mod interactive;
 pub(crate) mod manpages;
 #[cfg(not(target_arch = "wasm32"))]
 mod render;
+mod save_command;
 
 pub use cli::*;
 #[cfg(not(target_arch = "wasm32"))]
@@ -197,9 +198,21 @@ unpacking, use `probe`."
     Ingest(IngestCommand),
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        command(hide = true, about = "Classify database cheats against a ROM")
+        command(
+            about = "List the cheat database's entries for a ROM",
+            long_about = "\
+List the cheat database's entries for a ROM.
+
+`cheat list` identifies the ROM's system, loads that system's shard from the
+cheat-database directory, matches the game by checksum and then by title, and
+prints every cheat with whether it can be baked into the ROM.
+
+To use a cheat, bake it: `patch create --code`, then `patch apply`."
+        )
     )]
-    Cheat(CheatCommand),
+    // Boxed like the other large command structs so `CliCommand`'s flattened
+    // `App` variant stays small.
+    Cheat(Box<CheatCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
@@ -254,6 +267,11 @@ footer recording what was cut."
         )
     )]
     Bundle(BundleCommands),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(subcommand, about = "Inspect and edit supported persistent game saves")
+    )]
+    Save(SaveCommands),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(subcommand, about = "One-off recovery tools")
@@ -420,6 +438,42 @@ PPF3 format. Without it there is nothing to reverse from."
         )
     )]
     PpfUndo(PpfUndoCommand),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case", tag = "type", content = "args")]
+#[cfg_attr(
+    feature = "typescript-types",
+    ts(rename_all = "kebab-case", tag = "type", content = "args")
+)]
+pub enum SaveCommands {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Identify a supported game save without changing it")
+    )]
+    Identify(SaveIdentifyCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Show the sections and fields in a supported game save")
+    )]
+    Inspect(SaveInspectCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Read one field from a supported game save")
+    )]
+    Get(SaveGetCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Write validated field changes to a new game save")
+    )]
+    Set(SaveSetCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Print the generic field schema for a supported game save")
+    )]
+    ExportSchema(SaveExportSchemaCommand),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1437,6 +1491,10 @@ mod extract_batch;
 
 #[path = "cheat_command.rs"]
 mod cheat_command;
+#[cfg(not(target_arch = "wasm32"))]
+mod cheat_database;
+#[cfg(not(target_arch = "wasm32"))]
+mod cheat_resolution;
 mod cheats;
 mod cheats_apply;
 pub use cheat_command::CheatCommandResult;
@@ -1462,10 +1520,12 @@ pub use patch_commands::{PatchCreateFormatPolicyMetadata, patch_create_format_po
 mod patch_filename_checksum;
 use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_requirements};
 
+#[cfg(not(target_arch = "wasm32"))]
+mod bundle_cheats;
 mod bundle_schema;
 pub use bundle_schema::{
-    BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_VERSION, BundleChecks, BundleOutput,
-    BundlePatchEntry, BundleRom, RomWeaverBundle,
+    BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_VERSION, BundleCheatEntry, BundleChecks,
+    BundleOutput, BundlePatchEntry, BundleRom, RomWeaverBundle,
 };
 
 mod patch_plan;
@@ -1491,13 +1551,15 @@ pub use bundle_create::BundleCreateResult;
 
 mod command_args;
 pub use command_args::{
-    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatCommand, ChecksumCommand,
-    CompressCommand, ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands,
-    IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand,
-    IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand,
-    IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP,
-    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand, PatchValidateCommand,
-    PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SetupCommand, TrimCommand,
+    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatAction, CheatCommand,
+    CheatSelectionArgs, ChecksumCommand, CompressCommand, ExtractCommand, IdentifyCommand,
+    IdentifyDatabaseCommands, IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand,
+    IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand,
+    IdentifyDatabaseUpdateCommand, IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT,
+    PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
+    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand,
+    SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
+    SaveSetCommand, SetupCommand, TrimCommand,
 };
 
 mod expect_tokens;

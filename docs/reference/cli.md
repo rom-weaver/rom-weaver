@@ -15,6 +15,8 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [`identify database` subcommands](#identify-database-subcommands)
   - [Identify result](#identify-result)
 - [Checksum](#checksum)
+- [Save Editor](#save-editor)
+- [Cheats](#cheats)
 - [Patching](#patching)
   - [Inputs](#inputs)
   - [Output and compression](#output-and-compression)
@@ -25,6 +27,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Validation](#validation)
 - [Patch creation metadata](#patch-creation-metadata)
 - [Bundles](#bundles)
+  - [Bundle cheats](#bundle-cheats)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
@@ -45,12 +48,18 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
 | `trim` | Cut the padding off a ROM, or put it back. |
+| `cheat list` | List the cheat database's entries for a ROM, with each one's delivery. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
 | `patch validate` | Check patch application without keeping an output ROM. |
 | `bundle create` | Write a `rom-weaver-bundle.json` recipe from local files. |
 | `bundle parse` | Read a bundle recipe and report what it points at. |
 | `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
+| `save identify` | Report save recognition, format, integrity, and active slot. |
+| `save inspect` | Report the sections and generic field schema for a supported save. |
+| `save get` | Read one field by its stable field ID. |
+| `save set` | Check and apply one or more atomic `FIELD=VALUE` edits. |
+| `save export-schema` | Report the generic field schema for a checked save. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
 | `setup` | Install the offline identify database. |
 | `completions` | Print a tab-completion script for your shell. |
@@ -206,6 +215,42 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
 
+## Save Editor
+
+All five `save` commands take a save path. `identify`, `inspect`, `get`, and `export-schema` do not write a file. `get` also takes one field ID.
+
+`save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing.
+
+Without `-o` or `--output`, `save set` writes a free sibling name such as `game-edited.sav`. It adds a number when that name exists. An explicit output path must not exist unless `--force` is present. The output path must not name the source file.
+
+`--game GAME_ID` selects a compatible handler when recognition is ambiguous. `--rom-sha1 SHA1` supplies a known ROM identity to recognition. The SHA-1 value contains 40 hexadecimal characters.
+
+[Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
+
+## Cheats
+
+`cheat list --input ROM` detects the ROM's system, reads that system's shard from the cheat-database directory, matches the game, and prints one row per cheat: ID, delivery, raw code, description. `--json` puts the same data in `details.cheat_list`.
+
+`rom-weaver setup` installs the shards along with the identify packs. A shard may be Brotli compressed (`<slug>.json.br`) or plain (`<slug>.json`); the compressed copy wins when both are present.
+
+Delivery is `rom` or `unsupported`. The match class is `exact` (a checksum matched), `title` (the file name matched a game title), or `manual` (`--game`). Every run prints the CC-BY-SA-4.0 attribution line once.
+
+The shared flags below are also on `patch apply` and `patch create`, under the `Cheats` help heading.
+
+| Flag | Meaning |
+| --- | --- |
+| `--cheat ID_OR_DESCRIPTION` | Select one cheat by record ID or by exact description. Repeatable. A description that matches more than one entry fails with `cheat_selector_ambiguous`. |
+| `--cheat-database DIR` | The directory holding the shards. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then `<identify database directory>/cheats`. |
+| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
+| `--game ID` | Use this database game ID instead of matching by checksum or title. |
+| `--allow-cheat-conflicts` | Let a later cheat overwrite an earlier one at the same offset. Without it, two `rom` cheats writing different values to one byte fail with `cheat_write_conflict`. |
+
+`patch apply --cheat` bakes the selected entries into the output ROM, after the patch chain. Selecting an `unsupported` entry fails the run.
+
+`patch create --cheat` puts the `rom` entries in the patch and names the rest in `details.skipped_cheats`. Without `--cheat` it uses every cheat the matched game holds.
+
+The directory layout is in [Cheat database reference](cheat-database.md). The recipes are in [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
+
 ## Patching
 
 The flags shared by `patch apply` (also spelled `weave`) and `patch validate`. The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
@@ -280,9 +325,30 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
 | `--bundle ARCHIVE`, `--no-bundle-rom` | Archive packaging and exclusion of ROM bytes. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
-| `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec. |
+| `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec: `--patch` replaces the spec's patch chain and `--cheat` replaces its `cheats` array, in both cases wholesale. |
+| `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the bundle's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
 
 Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. A ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected.
+
+### Bundle cheats
+
+The optional top-level `cheats` array records the cheat selection that produced a build, in selection order. `bundle create --cheat` and `patch apply --emit-bundle` write it. A bundle needs at least one `patches` entry or one `cheats` entry.
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Cheat database record ID. Required. An exact description is also accepted; one that matches several records fails with `cheat_selector_ambiguous`. |
+| `source`, `revision` | The database the ID belongs to and the revision it was selected against. |
+| `description` | The record's description. |
+| `code` | Raw code snapshot, so the entry still applies when the database is absent. |
+| `optional` | When true an unresolvable entry is skipped and named in the report; omitted or false makes it fail the apply. |
+
+Applying a bundle resolves each entry by `id` through the cheat database at `--cheat-database`, then falls back to `code`. An entry that resolves to nothing, or that the ROM's bytes cannot bake, fails the apply unless it is `optional`. Entries bake after the patch chain, so the result equals the same `patch apply --cheat`. Write conflicts fail with `cheat_write_conflict` unless `--allow-cheat-conflicts` is given.
+
+`patch apply --without-cheats` ignores the whole `cheats` array and runs only the patch chain. It is all-or-nothing; there is no per-cheat filter. A bundle with no patches and `--without-cheats` fails, because nothing is left to run.
+
+When every recorded cheat is `optional` and none resolves, a bundle with no patches fails and names each skipped entry.
+
+`bundle parse` names each cheat and whether it is optional.
 
 `bundle parse` accepts archive selection options for packaged bundles. A plain JSON recipe references paths and has no archive members to unpack. [Bundles from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
 

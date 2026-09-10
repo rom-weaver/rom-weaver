@@ -152,6 +152,7 @@ pub struct CheatRecord {
     pub system: CheatSystem,
     pub game_id: String,
     pub description: String,
+    #[serde(default)]
     pub raw_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]

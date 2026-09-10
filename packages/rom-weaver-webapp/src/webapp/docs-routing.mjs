@@ -43,6 +43,11 @@ const DOC_SOURCES = Object.freeze([
     label: "Fix checksum errors",
     slug: "docs/fix-checksum-errors",
   }),
+  Object.freeze({
+    file: "how-to/edit-gen3-saves.md",
+    label: "Edit Generation III saves",
+    slug: "docs/edit-gen3-saves",
+  }),
   Object.freeze({ file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
   Object.freeze({
     file: "how-to/verify-downloads.md",
@@ -70,6 +75,11 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/fix-permission-errors",
   }),
   Object.freeze({ file: "reference/cli.md", label: "CLI reference", slug: "docs/cli" }),
+  Object.freeze({
+    file: "reference/save-editor.md",
+    label: "Save Editor support",
+    slug: "docs/game-save-support",
+  }),
   Object.freeze({
     file: "reference/formats.md",
     label: "Supported formats",
@@ -120,6 +130,11 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "hosting/webapp-runtime-status.md", label: "Webapp status", slug: "docs/webapp-status" }),
   Object.freeze({ file: "development/ARCHITECTURE.md", label: "Architecture", slug: "docs/architecture" }),
   Object.freeze({ file: "development/development.md", label: "Development", slug: "docs/development" }),
+  Object.freeze({
+    file: "development/save-editor.md",
+    label: "Save Editor development",
+    slug: "docs/game-save-development",
+  }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
   Object.freeze({ file: "legal/about.md", label: "About", slug: "docs/about" }),
   Object.freeze({ file: "wasm/notices.md", group: "Legal", label: "Notices", slug: "docs/notices" }),
