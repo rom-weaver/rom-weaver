@@ -348,7 +348,9 @@ function WebappRoot({
   // The prerendered shell resolves asset links against "/" (no window to read
   // the origin from), so hydration passes the same value and only the render
   // after it adopts the real base - otherwise React sees every href mismatch.
-  const resolvedAssetBaseUrl = assetBaseUrl ?? readAppBaseUrl();
+  // The 404 page can be served from any path, so its location says nothing
+  // about the app base; like its tabs, it assumes a root deployment.
+  const resolvedAssetBaseUrl = assetBaseUrl ?? (notFound ? "/" : readAppBaseUrl());
   useEntryAnimationLock();
   useEffect(() => {
     if (notFound) return;
