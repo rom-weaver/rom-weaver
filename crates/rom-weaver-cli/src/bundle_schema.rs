@@ -36,9 +36,47 @@ pub struct RomWeaverBundle {
     pub rom: Option<BundleRom>,
     /// Ordered: array order is the apply order.
     pub patches: Vec<BundlePatchEntry>,
+    /// Cheat selections baked into the ROM after the patch chain, in selection
+    /// order. Optional: a bundle without it is a plain patch recipe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub cheats: Vec<BundleCheatEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output: Option<BundleOutput>,
+}
+
+/// One cheat selection a bundle reproduces. `id` names the record in the
+/// local cheat database; `code` is the raw-code snapshot that lets a
+/// ROM-bakeable entry still apply when the database is absent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(deny_unknown_fields)]
+pub struct BundleCheatEntry {
+    /// Cheat database record ID. An exact description is also accepted, so a
+    /// hand-authored bundle can name a cheat the way `cheat list` prints it.
+    pub id: String,
+    /// Which database the ID belongs to, for example `libretro-database`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub source: Option<String>,
+    /// The database revision the selection was made against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub description: Option<String>,
+    /// Raw code snapshot, so the entry still applies when the local cheat
+    /// database is absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub code: Option<String>,
+    /// An optional cheat is skipped (and named in the report) when it cannot
+    /// be resolved; omitted/false makes an unresolvable entry fail the apply.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub optional: bool,
 }
 
 /// The input ROM a bundle's patch chain applies to.
@@ -212,7 +250,7 @@ mod schema_tests {
             .get("properties")
             .and_then(serde_json::Value::as_object)
             .expect("schema declares top-level properties");
-        for key in ["$schema", "version", "rom", "patches", "output"] {
+        for key in ["$schema", "version", "rom", "patches", "cheats", "output"] {
             assert!(
                 properties.contains_key(key),
                 "schema is missing top-level property `{key}`"

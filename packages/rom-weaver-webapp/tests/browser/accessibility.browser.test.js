@@ -1094,10 +1094,10 @@ describe("accent dye-lot accessibility", () => {
 });
 
 describe("webapp responsive navigation", () => {
-  // The ladder is three fixed breakpoints and nothing else: single row >= 1000px
-  // (compact tab padding and a 9ch label clamp in the 1000-1159px band), bottom
-  // dock below 1000px. No measurement, no data-masthead-layout, and never a
-  // second masthead row.
+  // The ladder is fixed breakpoints and nothing else: single row >= 1000px
+  // (compact tab padding below 1280px, and below 1180px only the selected tab
+  // keeps its label), bottom dock below 1000px. No measurement, no
+  // data-masthead-layout, and never a second masthead row.
   const ALL_TABS = [
     ...PAGE_TABS,
     {
@@ -1188,14 +1188,26 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the rail tightens rather than sheds labels in the snug band", async () => {
+  test("the rail tightens, then keeps only the selected label, in the snug band", async () => {
     await setViewport({ height: 900, width: 1100 });
     await renderMastheadOnly(ALL_TABS);
     const snugPadding = Number.parseFloat(getComputedStyle(host.querySelector(".mode")).paddingInlineStart);
-    const label = host.querySelector(".mode .mode-label");
-    // icons AND labels at every rail width - the labels only clamp
-    expect(getComputedStyle(label).display).not.toBe("none");
-    expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
+    const selectedLabel = host.querySelector('.mode[aria-selected="true"] .mode-label');
+    const otherLabel = host.querySelector('.mode[aria-selected="false"] .mode-label');
+    // the selected tab reads in full; the others keep their label in the
+    // accessible name but paint only their glyph - never an ellipsis
+    expect(selectedLabel.getBoundingClientRect().width).toBeGreaterThan(20);
+    expect(otherLabel.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    expect(getComputedStyle(otherLabel).display).not.toBe("none");
+    expect(otherLabel.textContent.length).toBeGreaterThan(0);
+
+    await setViewport({ height: 900, width: 1200 });
+    await renderMastheadOnly(ALL_TABS);
+    for (const label of host.querySelectorAll(".mode .mode-label")) {
+      expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
+      expect(getComputedStyle(label).textOverflow).not.toBe("ellipsis");
+    }
+    expect(Number.parseFloat(getComputedStyle(host.querySelector(".mode")).paddingInlineStart)).toBe(snugPadding);
 
     await setViewport({ height: 900, width: 1280 });
     await renderMastheadOnly(ALL_TABS);

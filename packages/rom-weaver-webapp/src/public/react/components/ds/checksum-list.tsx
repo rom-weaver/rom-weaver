@@ -1,5 +1,6 @@
 import { Check, Copy, ListChecks, X } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { Drawer, DrawerMark, DrawerReadout } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
@@ -47,6 +48,7 @@ const ChecksumRow = ({
   bad?: boolean;
   mark?: "bad" | "ok";
 }) => {
+  const localizer = useUiLocalizer();
   const text = copyValue ?? (typeof value === "string" ? value : "");
   const { copied, copy } = useClipboardCopy(text);
   const fit = typeof value === "string" && value.length >= FIT_VALUE_MIN_CHARS;
@@ -54,7 +56,12 @@ const ChecksumRow = ({
 
   return (
     <button
-      aria-label={ariaLabel ?? `Copy ${typeof label === "string" ? label : "value"}`}
+      aria-label={
+        ariaLabel ??
+        localizer.message("ui.checks.copy", {
+          label: typeof label === "string" ? label : localizer.message("ui.checks.value"),
+        })
+      }
       className={join(
         "ck mono",
         className,
@@ -68,9 +75,16 @@ const ChecksumRow = ({
       {hasLabel ? <span className="ck-k">{label}</span> : null}
       <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>
       {mark ? (
-        <span className={join("ck-mark", mark)} title={mark === "ok" ? "Matches the ROM" : "Does not match the ROM"}>
+        <span
+          className={join("ck-mark", mark)}
+          title={
+            mark === "ok" ? localizer.message("ui.checks.matchesRom") : localizer.message("ui.checks.mismatchesRom")
+          }
+        >
           {mark === "ok" ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-          <span className="sr-only">{mark === "ok" ? "matches" : "mismatch"}</span>
+          <span className="sr-only">
+            {mark === "ok" ? localizer.message("ui.checks.matches") : localizer.message("ui.checks.mismatch")}
+          </span>
         </span>
       ) : null}
       <span aria-hidden="true" className={join("copy", copied && "copied")}>
@@ -190,7 +204,7 @@ type ChecksumPendingGroup = {
  */
 const PendingChecks = ({
   groups,
-  label = "Checks",
+  label,
   groupClassName = "ck-group",
   defaultOpen,
   open,
@@ -202,27 +216,35 @@ const PendingChecks = ({
   defaultOpen?: boolean;
   open?: boolean;
   onToggle?: (open: boolean) => void;
-}) => (
-  <ChecksumList defaultOpen={defaultOpen} label={label} onToggle={onToggle} open={open}>
-    {groups.map((group) => {
-      if (group.content) return <Fragment key={group.id}>{group.content}</Fragment>;
-      const rows = (group.rows || []).map((row) => (
-        <PendingChecksumRow
-          key={`${group.id}:${row.id ?? `${typeof row.label === "string" ? row.label : "row"}:${row.length}`}`}
-          label={row.label}
-          length={row.length}
-        />
-      ));
-      return group.label ? (
-        <div className={groupClassName} key={group.id}>
-          <div className="ck-group-head">{group.label}</div>
-          {rows}
-        </div>
-      ) : (
-        <Fragment key={group.id}>{rows}</Fragment>
-      );
-    })}
-  </ChecksumList>
-);
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <ChecksumList
+      defaultOpen={defaultOpen}
+      label={label ?? localizer.message("ui.checks.title")}
+      onToggle={onToggle}
+      open={open}
+    >
+      {groups.map((group) => {
+        if (group.content) return <Fragment key={group.id}>{group.content}</Fragment>;
+        const rows = (group.rows || []).map((row) => (
+          <PendingChecksumRow
+            key={`${group.id}:${row.id ?? `${typeof row.label === "string" ? row.label : "row"}:${row.length}`}`}
+            label={row.label}
+            length={row.length}
+          />
+        ));
+        return group.label ? (
+          <div className={groupClassName} key={group.id}>
+            <div className="ck-group-head">{group.label}</div>
+            {rows}
+          </div>
+        ) : (
+          <Fragment key={group.id}>{rows}</Fragment>
+        );
+      })}
+    </ChecksumList>
+  );
+};
 
 export { ChecksumList, type ChecksumPendingGroup, ChecksumRow, FIT_VALUE_MIN_CHARS, PendingChecks, PendingChecksumRow };

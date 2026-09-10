@@ -155,7 +155,6 @@ describe("ApplyPatchListStep", () => {
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Include folder/first" }));
     expect(onTogglePatch).toHaveBeenCalledWith(0);
-    fireEvent.click(container.querySelector("#rom-weaver-patch-menu-0") as HTMLButtonElement);
     fireEvent.click(container.querySelector("#rom-weaver-patch-replace-0") as HTMLButtonElement);
     const replacement = new File(["patch"], "replacement.ips", { type: "application/octet-stream" });
     fireEvent.change(container.querySelector("#rom-weaver-patch-replace-input-0") as HTMLInputElement, {
@@ -188,6 +187,32 @@ describe("ApplyPatchListStep", () => {
       expect.objectContaining({ inputChecks: expect.objectContaining({ checksums: expect.any(Object) }) }),
     );
     await waitFor(() => expect(container.querySelector("#rom-weaver-patch-input-md5-0")).toBeNull());
+  });
+
+  it("keeps common patch actions visible and disables impossible or busy moves", () => {
+    const patchStack = stack();
+    const { container, rerender } = renderList({ patchStack });
+
+    expect(screen.getAllByRole("button", { name: "Move up" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Move down" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Replace patch" })).toHaveLength(2);
+    expect(container.querySelector("#rom-weaver-patch-move-up-0")?.hasAttribute("disabled")).toBe(true);
+    expect(container.querySelector("#rom-weaver-patch-move-down-0")?.hasAttribute("disabled")).toBe(false);
+    expect(container.querySelector("#rom-weaver-patch-move-up-1")?.hasAttribute("disabled")).toBe(false);
+    expect(container.querySelector("#rom-weaver-patch-move-down-1")?.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(container.querySelector("#rom-weaver-patch-move-down-0") as HTMLButtonElement);
+    fireEvent.click(container.querySelector("#rom-weaver-patch-move-up-1") as HTMLButtonElement);
+    expect(patchStack.reorder).toHaveBeenNthCalledWith(1, 0, 1);
+    expect(patchStack.reorder).toHaveBeenNthCalledWith(2, 1, 0);
+
+    rerender(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyPatchListStep patches={[item(0, { canRemove: false }), item(1)]} patchStack={patchStack} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector("#rom-weaver-patch-move-down-0")?.hasAttribute("disabled")).toBe(true);
+    expect(container.querySelector("#rom-weaver-patch-move-up-1")?.hasAttribute("disabled")).toBe(true);
   });
 
   it("supports bulk metadata, order editing, and an order repair action", () => {

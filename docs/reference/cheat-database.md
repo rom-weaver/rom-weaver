@@ -7,9 +7,10 @@
 - [Delivery classes](#delivery-classes)
 - [Match classes](#match-classes)
 - [Data source](#data-source)
+- [CLI database directory](#cli-database-directory)
 - [Storage and network behavior](#storage-and-network-behavior)
 - [Preserved source fields](#preserved-source-fields)
-- [Bundle status](#bundle-status)
+- [Bundles](#bundles)
 
 <!-- END doctoc -->
 
@@ -65,6 +66,35 @@ Game titles and release checksums come from the same Libretro DAT files that bui
 
 The build drops, before packaging, every record that can never bake: structured RetroArch entries, placeholder codes, and codes whose literal address is provably runtime memory for that system.
 
+## CLI database directory
+
+The CLI reads the same shards the webapp serves, from a directory on disk.
+
+| Path | Contents |
+| --- | --- |
+| `nintendo-nintendo-entertainment-system.json.br` | Nintendo Entertainment System shard. |
+| `nintendo-super-nintendo-entertainment-system.json.br` | Super Nintendo Entertainment System shard. |
+| `sega-mega-drive-genesis.json.br` | Sega Genesis / Mega Drive shard. |
+| `sega-master-system-mark-iii.json.br` | Sega Master System shard. |
+| `sega-game-gear.json.br` | Sega Game Gear shard. |
+| `sega-32x.json.br` | Sega 32X shard. |
+| `nintendo-game-boy.json.br` | Game Boy shard. |
+| `nintendo-game-boy-color.json.br` | Game Boy Color shard. |
+| `nintendo-game-boy-advance.json.br` | Game Boy Advance shard. |
+| `manifest.json` | Source name, source revision, source URL, and license. Optional. |
+
+Each shard may also be a plain `<slug>.json`, or carry the `cheats-<slug>` prefix the repository's own data directory uses. When several forms are present the CLI reads the `.json.br` copy.
+
+The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABASE`, then `cheats` inside the [identify database directory](cli.md#identify-database-directory). `ROM_WEAVER_DATA_DIR` moves the base the same way it moves the identify data.
+
+`rom-weaver setup` installs the shards there along with the identify packs; they travel in the same archive. A missing shard is an error naming the file it looked for and the command that installs it.
+
+Regenerating them from a libretro checkout works too:
+
+```bash
+node scripts/import-libretro-cheats.mjs --output-dir ~/.local/share/rom-weaver/identify/cheats
+```
+
 ## Storage and network behavior
 
 Each shard is one identify data asset (`assets/identify-cheats-<platform slug>.json`) listed in the identify index with its size and SHA-256. The app loads only the detected or selected platform.
@@ -85,9 +115,15 @@ Each imported record keeps the original code, every `cheatN_*` value, unknown fi
 
 ROMWeaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 
-## Bundle status
+## Bundles
 
-Bundles do not store cheat selections in this release. Stable cheat IDs, source records, revisions, and delivery classes provide the data for later bundle support.
+A bundle's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot.
+
+`bundle create --cheat` and `patch apply --emit-bundle` write the array. Applying the bundle resolves each entry by `id` against the database at `--cheat-database`, and falls back to its `code` snapshot when the database is absent. An unresolvable entry fails the apply unless it is marked `optional`.
+
+For the field list, see [CLI reference](cli.md#bundle-cheats).
+
+For the CLI task, see [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 
 For the browser task, see [Use cheats in the browser](../how-to/use-browser-cheats.md).
 

@@ -5,7 +5,7 @@
       {
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 33700,
+        "expectedRawBytes": 34000,
         "maxRawBytes": 35400,
         "expectedBrotliBytes": 7950,
         "maxBrotliBytes": 8350
@@ -30,10 +30,10 @@
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 275000,
-        "maxRawBytes": 286000,
-        "expectedBrotliBytes": 74500,
-        "maxBrotliBytes": 77500
+        "expectedRawBytes": 283000,
+        "maxRawBytes": 294000,
+        "expectedBrotliBytes": 76500,
+        "maxBrotliBytes": 79500
       },
       {
         "name": "Save Editor JavaScript",
@@ -51,20 +51,20 @@
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 228000,
-        "maxRawBytes": 237000,
-        "expectedBrotliBytes": 36600,
-        "maxBrotliBytes": 37600
+        "expectedRawBytes": 234500,
+        "maxRawBytes": 244000,
+        "expectedBrotliBytes": 37300,
+        "maxBrotliBytes": 38800
       },
       {
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 7285000,
-        "maxRawBytes": 7502000,
-        "expectedBrotliBytes": 1912000,
-        "maxBrotliBytes": 1989000
+        "expectedRawBytes": 7490000,
+        "maxRawBytes": 7760000,
+        "expectedBrotliBytes": 1975000,
+        "maxBrotliBytes": 2045000
       }
     ]
   },

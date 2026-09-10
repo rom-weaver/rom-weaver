@@ -34,6 +34,7 @@
     "docs/man/rom-weaver-bundle-create.1",
     "docs/man/rom-weaver-bundle-parse.1",
     "docs/man/rom-weaver-bundle-schema.1",
+    "docs/man/rom-weaver-cheat.1",
     "docs/man/rom-weaver-checksum.1",
     "docs/man/rom-weaver-completions.1",
     "docs/man/rom-weaver-compress.1",

@@ -1292,6 +1292,17 @@ archive with one at its root, and you passed no --patch of your own."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "without-cheats",
+            help_heading = "Archive/bundle",
+            help = "Ignore every cheat the bundle records and run only its patch chain"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub without_cheats: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             visible_alias = "raw",
             help_heading = "Basic",
@@ -1596,6 +1607,12 @@ output is written back in the order the input arrived in."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub cheat_records: Vec<crate::cheats::CheatRecord>,
+    /// Native cheat-database selection. `serde(skip)` keeps the wasm wire and
+    /// the generated TypeScript unchanged; the webapp sends `cheat_records`.
+    #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub cheat_selection: CheatSelectionArgs,
     // Native-only authoring conveniences (serde/ts skip keeps them off the
     // wasm wire + generated TS; the webapp has its own bundle export).
     #[cfg_attr(
@@ -2184,6 +2201,11 @@ apply and verifies the input, as long as the file name survives."
     #[serde(default = "default_code_kind")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub code_kind: String,
+    /// Native cheat-database selection; see `PatchApplyCommand::cheat_selection`.
+    #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub cheat_selection: CheatSelectionArgs,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2712,6 +2734,17 @@ patches reads left to right:
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output_header: Option<PatchApplyOutputHeaderMode>,
+    /// Cheat selections to record in the bundle. The wasm/JSON boundary sets
+    /// this directly; the native CLI fills it from `--cheat`/`--cht`.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub cheats: Vec<crate::BundleCheatEntry>,
+    /// Native cheat-database selection; see `PatchApplyCommand::cheat_selection`.
+    #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub cheat_selection: CheatSelectionArgs,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2991,7 +3024,12 @@ impl BundleCreateCommand {
 pub struct CheatCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(short = 'i', long = "input", value_name = "ROM")
+        arg(
+            short = 'i',
+            long = "input",
+            value_name = "ROM",
+            help = "The ROM the cheats are for. Its header picks the cheat shard and its bytes decide each cheat's delivery"
+        )
     )]
     pub input: PathBuf,
     /// Direct records for the JSON/WASM boundary. The native argv parser does
@@ -2999,6 +3037,89 @@ pub struct CheatCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     pub records: Vec<crate::cheats::CheatRecord>,
+    // Native-only argv surface. `serde(skip)` keeps the JSON/WASM wire and the
+    // generated TypeScript exactly as the webapp already sees them.
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(value_name = "ACTION", help = "list: print the matched game's cheats")
+    )]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub action: CheatAction,
+    #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
+    #[serde(skip)]
+    #[cfg_attr(feature = "typescript-types", ts(skip))]
+    pub selection: CheatSelectionArgs,
+}
+
+/// What `rom-weaver cheat` does. The JSON/WASM boundary never sets this and
+/// keeps the classify behaviour the webapp calls.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
+pub enum CheatAction {
+    /// Classify `records` supplied over the JSON boundary.
+    #[cfg_attr(not(target_arch = "wasm32"), value(skip))]
+    #[default]
+    Classify,
+    /// Print the cheats the database holds for the input ROM.
+    List,
+}
+
+/// Cheat-database lookup and selection flags, shared by `cheat`, `patch apply`,
+/// and `patch create`.
+#[derive(Clone, Debug, Default)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+pub struct CheatSelectionArgs {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "cheat",
+            value_name = "ID_OR_DESCRIPTION",
+            action = ArgAction::Append,
+            help_heading = "Cheats",
+            help = "Database cheat to use, by record ID or exact description. Repeat for each cheat"
+        )
+    )]
+    pub cheats: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "cheat-database",
+            value_name = "DIR",
+            help_heading = "Cheats",
+            help = "Directory holding manifest.json and the <system>.json cheat shards. Defaults to $ROM_WEAVER_CHEAT_DATABASE, then the per-user data directory"
+        )
+    )]
+    pub cheat_database: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "cheat-system",
+            value_name = "SYS",
+            help_heading = "Cheats",
+            help = "Console the cheat shard is for (nes, snes, genesis, gameboy, gameboy-color, gba), when the ROM header does not say"
+        )
+    )]
+    pub cheat_system: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "game",
+            value_name = "ID",
+            help_heading = "Cheats",
+            help = "Use this database game ID instead of matching the ROM by checksum or title"
+        )
+    )]
+    pub game: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "allow-cheat-conflicts",
+            help_heading = "Cheats",
+            help = "Let a later cheat overwrite an earlier one at the same offset instead of failing"
+        )
+    )]
+    pub allow_cheat_conflicts: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

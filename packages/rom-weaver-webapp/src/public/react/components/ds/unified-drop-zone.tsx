@@ -71,7 +71,7 @@ const UnifiedDropZone = ({
   onDropStart,
   onFiles,
   supported,
-  title = "Inputs",
+  title,
   ...dropZoneProps
 }: UnifiedDropZoneProps) => {
   const localizer = useUiLocalizer();
@@ -99,7 +99,7 @@ const UnifiedDropZone = ({
   ) : null;
   const popover =
     info || supported?.length ? (
-      <InfoPopover title="Input handling">
+      <InfoPopover title={localizer.message("ui.drop.inputHandling")}>
         {info}
         {supportedFormats}
       </InfoPopover>
@@ -119,13 +119,13 @@ const UnifiedDropZone = ({
       className={big ? "is-input is-empty unified-drop-step unified-drop-step--hero" : "is-input unified-drop-step"}
       headerAction={{
         disabled: dropZoneProps.disabled,
-        label: "Add files",
+        label: localizer.message("ui.drop.addFiles"),
         onClick: () => inputRef.current?.click(),
       }}
       headerExtra={headerExtra}
       info={popover}
       num={num}
-      title={title}
+      title={title ?? localizer.message("ui.drop.inputs")}
     >
       {beforeDropZone}
       <DropZone

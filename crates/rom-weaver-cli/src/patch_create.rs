@@ -41,10 +41,12 @@ fn solid_create_options(args: &PatchCreateCommand) -> Option<PatchCreateFormatOp
 /// patch says what it does without a sidecar. A caller-supplied comment wins.
 fn fill_solid_comment_with_codes(
     options: Option<&mut PatchCreateFormatOptions>,
-    summary: &CheatApplySummary,
+    summary: Option<&CheatApplySummary>,
     codes: &[String],
 ) {
     if let Some(PatchCreateFormatOptions::Solid(metadata)) = options
+        && let Some(summary) = summary
+        && !codes.is_empty()
         && metadata.extended
         && metadata.comment.is_none()
     {
@@ -477,60 +479,47 @@ impl CliApp {
             return self.finish("patch-create", report);
         }
 
-        // Derive the modified ROM from cheat codes when `--code` is given,
-        // otherwise require an explicit `--modified`. The synthesized ROM is a
-        // temp file under the context's temp namespace, which the diff-based
-        // create below treats like any other; the namespace is reclaimed when
-        // the context drops, so no explicit cleanup is needed.
-        let mut cheat_summary = None;
-        let modified_path: PathBuf = if !args.codes.is_empty() {
-            if args.modified.is_some() {
+        if let Some(report) = self.require_readable_path(
+            "patch-create",
+            OperationFamily::Patch,
+            Some(requested_format.clone()),
+            &args.original,
+            probe_threads.clone(),
+        ) {
+            return self.finish("patch-create", report);
+        }
+        if let Some(report) = self.require_writable_output_parent(
+            "patch-create",
+            OperationFamily::Patch,
+            Some(requested_format.clone()),
+            &output,
+            probe_threads.clone(),
+        ) {
+            return self.finish("patch-create", report);
+        }
+
+        // Derive the modified ROM from cheat codes when `--code` or `--cheat` is
+        // given, otherwise require an explicit `--modified`. A synthesized ROM is
+        // a temp file under the context's temp namespace, which the diff-based
+        // create below treats like any other; the namespace is reclaimed when the
+        // context drops, so no explicit cleanup is needed.
+        #[cfg(not(target_arch = "wasm32"))]
+        let native_cheat_selection = !args.cheat_selection.cheats.is_empty();
+        let PatchCreateModifiedSource {
+            modified_path,
+            cheat_summary,
+            #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
+            skipped_cheats,
+        } = match self.resolve_patch_create_modified(&args, &context) {
+            Ok(source) => source,
+            Err((stage, message)) => {
                 return self.finish(
                     "patch-create",
-                    fail(
-                        Some(requested_format.clone()),
-                        "validate",
-                        "--modified cannot be combined with --code".to_string(),
-                    ),
+                    fail(Some(requested_format.clone()), stage, message),
                 );
             }
-            let dest = context
-                .temp_paths()
-                .next_path("patch-create-cheat-modified", Some("bin"));
-            match self.write_cheat_patched_rom(
-                &args.original,
-                &args.codes,
-                args.code_system.as_deref(),
-                &args.code_kind,
-                &dest,
-            ) {
-                Ok(summary) => {
-                    fill_solid_comment_with_codes(solid_options.as_mut(), &summary, &args.codes);
-                    cheat_summary = Some(summary);
-                    dest
-                }
-                Err(error) => {
-                    return self.finish(
-                        "patch-create",
-                        fail(Some(requested_format.clone()), "prepare", error.to_string()),
-                    );
-                }
-            }
-        } else {
-            match args.modified.clone() {
-                Some(path) => path,
-                None => {
-                    return self.finish(
-                        "patch-create",
-                        fail(
-                            Some(requested_format.clone()),
-                            "validate",
-                            "patch create requires --modified or --code".to_string(),
-                        ),
-                    );
-                }
-            }
         };
+        fill_solid_comment_with_codes(solid_options.as_mut(), cheat_summary.as_ref(), &args.codes);
         if let Some(report) = self.require_readable_path(
             "patch-create",
             OperationFamily::Patch,
@@ -682,9 +671,82 @@ impl CliApp {
         {
             report.label = format!("{}; {}", report.label, summary.label());
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        if report.status == OperationStatus::Succeeded && native_cheat_selection {
+            report = Self::annotate_patch_create_cheats(report, &create_output, &skipped_cheats);
+        }
         if report.status == OperationStatus::Succeeded && args.checksum_name {
             report = Self::attach_emitted_files_details(report, vec![create_output.clone()], None);
         }
         self.finish("patch-create", report)
     }
+
+    /// Decide which ROM the patch is diffed against, and what the cheat
+    /// selection produced on the way. The error carries the stage the failed
+    /// report should name.
+    fn resolve_patch_create_modified(
+        &self,
+        args: &PatchCreateCommand,
+        context: &OperationContext,
+    ) -> std::result::Result<PatchCreateModifiedSource, (&'static str, String)> {
+        // Native-only: the cheat database lives on disk and `cheat_selection`
+        // is `serde(skip)`, so a wasm run never carries a selection.
+        #[cfg(not(target_arch = "wasm32"))]
+        if !args.cheat_selection.cheats.is_empty() {
+            let plan = self
+                .plan_patch_create_cheats(crate::cheat_resolution::PatchCreateCheatRequest {
+                    original: &args.original,
+                    selection: &args.cheat_selection,
+                    has_other_source: args.modified.is_some() || !args.codes.is_empty(),
+                    context,
+                })
+                .map_err(|error| ("prepare", error.to_string()))?;
+            return Ok(PatchCreateModifiedSource {
+                modified_path: plan.modified,
+                cheat_summary: Some(plan.summary),
+                skipped_cheats: plan.skipped,
+            });
+        }
+        if !args.codes.is_empty() {
+            if args.modified.is_some() {
+                return Err((
+                    "validate",
+                    "--modified cannot be combined with --code".to_string(),
+                ));
+            }
+            let dest = context
+                .temp_paths()
+                .next_path("patch-create-cheat-modified", Some("bin"));
+            let summary = self
+                .write_cheat_patched_rom(
+                    &args.original,
+                    &args.codes,
+                    args.code_system.as_deref(),
+                    &args.code_kind,
+                    &dest,
+                )
+                .map_err(|error| ("prepare", error.to_string()))?;
+            return Ok(PatchCreateModifiedSource {
+                modified_path: dest,
+                cheat_summary: Some(summary),
+                ..PatchCreateModifiedSource::default()
+            });
+        }
+        let modified_path = args.modified.clone().ok_or((
+            "validate",
+            "patch create requires --modified or --code".to_string(),
+        ))?;
+        Ok(PatchCreateModifiedSource {
+            modified_path,
+            ..PatchCreateModifiedSource::default()
+        })
+    }
+}
+
+/// The ROM `patch create` diffs against, plus what the cheat selection produced.
+#[derive(Default)]
+struct PatchCreateModifiedSource {
+    modified_path: PathBuf,
+    cheat_summary: Option<crate::cheats_apply::CheatApplySummary>,
+    skipped_cheats: Vec<String>,
 }

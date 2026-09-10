@@ -1,5 +1,6 @@
 import { Crosshair, X } from "lucide-react";
 import type { CSSProperties, ReactNode, Ref } from "react";
+import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { DropdownArrow } from "./dropdown-select.tsx";
 
@@ -21,24 +22,27 @@ const RemoveButton = ({ onClick, label }: { onClick: () => void; label: string }
 );
 
 /** "Apply patch into" target group shown on a patch's meta line. */
-const FileTargetPill = ({ label, bad, onClick }: { label: ReactNode; bad?: boolean; onClick?: () => void }) => (
-  <span className={join("target-grp", bad && "bad")}>
-    <Crosshair aria-hidden="true" />
-    {onClick ? (
-      <button
-        aria-label="Apply patch into"
-        className="meta-target-select mono ptgt-sel"
-        onClick={onClick}
-        type="button"
-      >
-        <span className="ptgt-name">{label}</span>
-        <DropdownArrow className="ptgt-chev" />
-      </button>
-    ) : (
-      <span className="meta-target-static mono">{label}</span>
-    )}
-  </span>
-);
+const FileTargetPill = ({ label, bad, onClick }: { label: ReactNode; bad?: boolean; onClick?: () => void }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <span className={join("target-grp", bad && "bad")}>
+      <Crosshair aria-hidden="true" />
+      {onClick ? (
+        <button
+          aria-label={localizer.message("ui.file.patchTarget")}
+          className="meta-target-select mono ptgt-sel"
+          onClick={onClick}
+          type="button"
+        >
+          <span className="ptgt-name">{label}</span>
+          <DropdownArrow className="ptgt-chev" />
+        </button>
+      ) : (
+        <span className="meta-target-static mono">{label}</span>
+      )}
+    </span>
+  );
+};
 
 const FileCard = ({
   state,
@@ -46,7 +50,7 @@ const FileCard = ({
   index,
   hideName = false,
   onRemove,
-  removeLabel = "Remove",
+  removeLabel,
   menu,
   patch = false,
   handle,
@@ -96,12 +100,15 @@ const FileCard = ({
   verifyBar?: boolean;
   children?: ReactNode;
 }) => {
+  const localizer = useUiLocalizer();
   const actions = (
     <div className="card-actions">
       <div className="card-btns">
         {handle}
         {menu}
-        {onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
+        {onRemove ? (
+          <RemoveButton label={removeLabel ?? localizer.message("ui.common.remove")} onClick={onRemove} />
+        ) : null}
       </div>
     </div>
   );
@@ -130,7 +137,7 @@ const FileCard = ({
       ) : null}
       {hideName ? (
         onRemove ? (
-          <RemoveButton label={removeLabel} onClick={onRemove} />
+          <RemoveButton label={removeLabel ?? localizer.message("ui.common.remove")} onClick={onRemove} />
         ) : null
       ) : (
         <div className="card-top">
