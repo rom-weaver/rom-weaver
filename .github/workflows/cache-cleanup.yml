@@ -1,12 +1,16 @@
 name: Cache cleanup
 
-# Reclaim branch-local caches from closed pull requests and older keyed cache
-# generations before they evict live main-branch caches from the 10 GiB budget.
-# This runs on a schedule because Dependabot and fork close events have a read-only token.
+# Reclaim closed pull-request caches and restore-safe superseded generations
+# before they evict main-branch caches from the 10 GiB budget. workflow_run
+# uses this default-branch workflow, never a pull request's workflow code.
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   schedule:
-    # A Cargo.lock change can add a full cache generation, so clean before a daily sweep would run.
-    - cron: "0 3,9,15,21 * * *"
+    # GitHub can delay workflow_run delivery. This is the fallback for that case.
+    - cron: "17 3 * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -20,116 +24,24 @@ jobs:
     name: Reap stale caches
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == github.event.repository.default_branch
+      && github.event.workflow_run.head_repository.full_name == github.repository)
     permissions:
-      # Cache deletion needs Actions write access; this job does not check out repository contents.
+      contents: read
       actions: write
       pull-requests: read
     steps:
-      - name: Delete caches belonging to closed pull requests
+      # Do not use workflow_run.head_sha: a CI run from a pull request can name
+      # untrusted code. The branch filter and this ref keep the writer trusted.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Delete stale Actions caches
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          before=$(gh api "repos/${GH_REPO}/actions/cache/usage" \
-            --jq .active_caches_size_in_bytes)
-
-          # Cache a PR's state per number: one PR routinely owns several
-          # entries (rust-host, wasm-check, wasm, node-modules, ...) and there
-          # is no reason to re-query the API for each.
-          declare -A state
-          deleted=0
-          freed=0
-
-          # `gh cache list` paginates at 100; the cap is generous enough that
-          # anything beyond it is handled by tomorrow's run.
-          while IFS=$'\t' read -r id ref size; do
-            [[ "$ref" =~ ^refs/pull/([0-9]+)/merge$ ]] || continue
-            pr="${BASH_REMATCH[1]}"
-
-            if [ -z "${state[$pr]+set}" ]; then
-              state[$pr]=$(gh pr view "$pr" --json state --jq .state 2>/dev/null || echo UNKNOWN)
-            fi
-
-            # Only CLOSED and MERGED are safe to reap. UNKNOWN means the API
-            # call failed - skip rather than guess, since deleting an open
-            # PR's cache just makes its next run slower for no reason.
-            case "${state[$pr]}" in
-              CLOSED|MERGED) ;;
-              *) continue ;;
-            esac
-
-            if gh cache delete "$id" >/dev/null 2>&1; then
-              deleted=$((deleted + 1))
-              freed=$((freed + size))
-              echo "deleted cache $id (PR #${pr}, ${state[$pr]}, $((size / 1048576)) MB)"
-            else
-              echo "::warning::failed to delete cache $id (PR #${pr})"
-            fi
-          done < <(gh cache list --limit 100 --json id,ref,sizeInBytes \
-            --jq '.[] | [.id, .ref, .sizeInBytes] | @tsv')
-
-          after=$(gh api "repos/${GH_REPO}/actions/cache/usage" \
-            --jq .active_caches_size_in_bytes)
-
-          {
-            echo "### Actions cache cleanup"
-            echo ""
-            echo "| | MB |"
-            echo "|---|---|"
-            echo "| before | $((before / 1048576)) |"
-            echo "| after | $((after / 1048576)) |"
-            echo "| reclaimed | $((freed / 1048576)) |"
-            echo "| limit | 10240 |"
-            echo ""
-            echo "Deleted **${deleted}** cache entries belonging to closed pull requests."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Retain only the newest hash-suffixed key generation in each ref scope.
-      # wasm-prod is exempt because it restores only an exact commit fingerprint.
-      - name: Delete superseded cache generations
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          deleted=0
-          freed=0
-
-          while IFS=$'\t' read -r id key size; do
-            if gh cache delete "$id" >/dev/null 2>&1; then
-              deleted=$((deleted + 1))
-              freed=$((freed + size))
-              echo "deleted superseded cache $key ($((size / 1048576)) MB)"
-            else
-              echo "::warning::failed to delete cache $id ($key)"
-            fi
-          done < <(gh cache list --limit 100 --json id,key,ref,sizeInBytes,createdAt \
-            --jq 'map(. + {family: (.key | sub("(-[0-9a-f]{8,64})+$"; ""))})
-              | map(select(.key | startswith("wasm-prod-") | not))
-              | group_by([.ref, .family])[]
-              | sort_by(.createdAt) | .[:-1][]
-              | [.id, .key, .sizeInBytes] | @tsv')
-
-          after=$(gh api "repos/${GH_REPO}/actions/cache/usage" \
-            --jq .active_caches_size_in_bytes)
-
-          {
-            echo "### Superseded cache generations"
-            echo ""
-            echo "| | MB |"
-            echo "|---|---|"
-            echo "| reclaimed | $((freed / 1048576)) |"
-            echo "| after | $((after / 1048576)) |"
-            echo "| limit | 10240 |"
-            echo ""
-            echo "Deleted **${deleted}** cache entries superseded by a newer generation."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          # A repository sitting at the cap is evicting caches it still needs,
-          # which shows up only as unexplained cold builds. Say so out loud.
-          if [ "$after" -gt $((9 * 1024 * 1024 * 1024)) ]; then
-            echo "::warning::Actions cache is at $((after / 1048576)) MB of 10240 MB after cleanup - entries that are still live are being evicted."
-          fi
+        run: node scripts/ci/cache-cleanup.mjs

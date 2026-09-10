@@ -6,17 +6,74 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  assertPrebuiltWebappDist,
   assertNoProductionDocsSamples,
   assertSingleDocsHeading,
   buildWorkerReuseManifestCase,
   checkCssCoverage,
   computeDocsRouteSlugs,
   hasVisiblePrerenderedShell,
+  resolveE2EBuild,
   resolveE2EShard,
   runAuditPhases,
   sha256,
   shouldRejectUnauthorized,
 } from "./run-webapp-e2e.mjs";
+
+describe("resolveE2EBuild", () => {
+  it("keeps local E2E builds on the development channel", () => {
+    assert.deepEqual(resolveE2EBuild({}), { channel: "dev", source: "build" });
+  });
+
+  it("uses the downloaded production bundle only when requested", () => {
+    assert.deepEqual(resolveE2EBuild({ ROM_WEAVER_CHANNEL: "prod", ROM_WEAVER_E2E_USE_PREBUILT_DIST: "1" }), {
+      channel: "prod",
+      source: "prebuilt",
+    });
+  });
+
+  it("rejects a prebuilt bundle requested with a different channel", () => {
+    assert.throws(
+      () => resolveE2EBuild({ ROM_WEAVER_CHANNEL: "dev", ROM_WEAVER_E2E_USE_PREBUILT_DIST: "1" }),
+      /ROM_WEAVER_E2E_USE_PREBUILT_DIST=1 requires ROM_WEAVER_CHANNEL=prod/,
+    );
+  });
+});
+
+describe("assertPrebuiltWebappDist", () => {
+  const productionBundle = {
+    "index.html": "<!doctype html>",
+    "manifest.json": JSON.stringify({ name: "rom-weaver", short_name: "rom-weaver" }),
+  };
+  const readBundle = (files) => (file) => {
+    if (!(file in files)) throw new Error("ENOENT");
+    return files[file];
+  };
+
+  it("accepts the required production bundle files", () => {
+    assert.doesNotThrow(() => assertPrebuiltWebappDist(readBundle(productionBundle)));
+  });
+
+  it("rejects an absent downloaded file", () => {
+    assert.throws(
+      () => assertPrebuiltWebappDist(readBundle({ "manifest.json": productionBundle["manifest.json"] })),
+      /webapp-dist is missing index.html: ENOENT/,
+    );
+  });
+
+  it("rejects a channel-specific bundle", () => {
+    assert.throws(
+      () =>
+        assertPrebuiltWebappDist(
+          readBundle({
+            ...productionBundle,
+            "manifest.json": JSON.stringify({ name: "rom-weaver dev", short_name: "rom-weaver dev" }),
+          }),
+        ),
+      /webapp-dist is not a production bundle/,
+    );
+  });
+});
 
 describe("resolveE2EShard", () => {
   it("runs the complete suite when no shard is given", () => {

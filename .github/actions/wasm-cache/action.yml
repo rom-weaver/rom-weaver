@@ -155,7 +155,7 @@ runs:
         if [ "$HIT" = "true" ]; then
           echo "**WASM cache hit** (${VARIANT}) - restored, skipping the ~6.5 min build." >> "$GITHUB_STEP_SUMMARY"
         elif [ "$SAVE" = "false" ]; then
-          echo "**WASM cache miss** (${VARIANT}) - read-only caller, nothing to build here." >> "$GITHUB_STEP_SUMMARY"
+          echo "**WASM cache miss** (${VARIANT}) - restore-only action; the caller handles the miss." >> "$GITHUB_STEP_SUMMARY"
         else
           echo "**WASM cache miss** (${VARIANT}) - building from source." >> "$GITHUB_STEP_SUMMARY"
         fi
