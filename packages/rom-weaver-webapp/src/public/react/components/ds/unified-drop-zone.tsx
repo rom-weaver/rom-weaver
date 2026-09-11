@@ -38,7 +38,7 @@ type UnifiedDropZoneProps = {
   /** Full per-bucket extension support for the format disclosure and input help. */
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
-  lead?: { line1: MessageId; line2: MessageId; description: MessageId };
+  lead?: { line1: MessageId; line2: MessageId; description: MessageId; guide?: { href: string; label: MessageId } };
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
   title?: ReactNode;
@@ -111,6 +111,11 @@ const UnifiedDropZone = ({
         <span className="lead-line lead-accent">{localizer.message(lead.line2)}</span>
       </span>
       <span className="lead-description">{localizer.message(lead.description)}</span>
+      {lead.guide ? (
+        <a className="lead-guide" href={lead.guide.href}>
+          {localizer.message(lead.guide.label)}
+        </a>
+      ) : null}
       <span className="lead-sub mono">{localizer.message("ui.hero.local")}</span>
     </div>
   ) : undefined;

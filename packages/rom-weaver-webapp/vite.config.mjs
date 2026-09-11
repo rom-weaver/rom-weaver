@@ -13,13 +13,14 @@ import { brotliCompressFile } from "../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "./functions/assets/content-types.js";
 import { compileLinguiCatalogs } from "./scripts/compile-lingui-catalogs.mjs";
 import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
+import { readDocLastmod, writeDocsMarkdown } from "./scripts/docs-discovery.mjs";
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
-import { createDocsRouteHtml, DOC_ROUTES } from "./src/webapp/docs-pages.mjs";
-import { readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
+import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
+import { DOC_SOURCES, readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -282,6 +283,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   if (requestPath.endsWith(".html")) res.setHeader("Content-Type", "text/html; charset=utf-8");
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
   else if (requestPath.endsWith(".txt")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  else if (requestPath.endsWith(".md")) res.setHeader("Content-Type", "text/markdown; charset=utf-8");
   else if (requestPath.endsWith(".avif")) res.setHeader("Content-Type", "image/avif");
   else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
   else if (requestPath.endsWith(".zip")) res.setHeader("Content-Type", "application/zip");
@@ -515,7 +517,10 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
   <url><loc>https://rom-weaver.com/create-patch</loc></url>
   <url><loc>https://rom-weaver.com/identify-rom</loc></url>
   <url><loc>https://rom-weaver.com/test-rom</loc></url>
-${DOC_ROUTES.map(({ slug }) => `  <url><loc>https://rom-weaver.com/${slug}</loc></url>`).join("\n")}
+${DOC_SOURCES.map((source) => {
+  const lastmod = readDocLastmod(docSourcePath(source), repoRoot);
+  return `  <url><loc>https://rom-weaver.com/${source.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
+}).join("\n")}
 </urlset>
 `;
 
@@ -649,6 +654,8 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         fs.mkdirSync(path.dirname(directoryIndexPath), { recursive: true });
         fs.writeFileSync(extensionlessPath, docsHtml);
         fs.writeFileSync(directoryIndexPath, docsHtml);
+        const source = DOC_SOURCES.find((entry) => entry.slug === route.slug);
+        writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source));
       }
       for (const [slug, html] of [
         ["apply-patch", applyHtml],
@@ -772,9 +779,13 @@ const writeCloudflareHeadersAsset = (channel) => {
       // over the wire) and makes a browser download rather than display them.
       const licenseContentType =
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
+      const markdownHeaders = DOC_SOURCES.map(
+        ({ slug }) =>
+          `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,
+      ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/rom-weaver-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/rom-weaver-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}\n${markdownHeaders}`,
       );
     },
     configResolved(config) {

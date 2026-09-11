@@ -1009,12 +1009,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.applyDescription": msg({
     id: "ui.hero.applyDescription",
-    message: "Add a ROM and its patches, then download the patched ROM or a reusable bundle.",
+    message: "Add a ROM with BPS, IPS, UPS, xdelta, or other patches. Download the patched ROM or a reusable bundle.",
   }),
+  "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
   "ui.hero.createDescription": msg({
     id: "ui.hero.createDescription",
-    message: "Compare original and modified ROMs, raw or in archives, to create a patch others can apply.",
+    message:
+      "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches.",
   }),
+  "ui.hero.createGuide": msg({ id: "ui.hero.createGuide", message: "Read the Create guide" }),
   "ui.hero.identifyDescription": msg({
     id: "ui.hero.identifyDescription",
     message: "Match your ROM’s checksum against the local database to find its exact dump name.",

@@ -299,6 +299,19 @@
   color: var(--ink-2);
   text-wrap: pretty;
 }
+.rw-app .hero-lead .lead-guide {
+  font-size: var(--badge-fs);
+  font-weight: 700;
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .hero-lead .lead-guide:hover {
+    color: var(--thread);
+  }
+}
+.rw-app .hero-lead .lead-guide:active {
+  color: var(--thread);
+}
 .rw-app .hero-lead .lead-sub {
   display: inline-flex;
   gap: var(--sp-s);
