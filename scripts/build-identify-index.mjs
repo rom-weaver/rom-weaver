@@ -341,7 +341,6 @@ export const OPENGOOD_ONLY_PLATFORMS = Object.freeze({
   "Sega - Pico": ["OpenPico.dat"],
   "SAM Coupé": ["OpenSAMC.dat"],
   "Sega - Master System": ["OpenSMS.dat"],
-  "Super Nintendo Entertainment System - SPC Music": ["OpenSPC.dat"],
   "Watara - Supervision": ["OpenSV.dat"],
   "Nintendo - Virtual Boy": ["OpenVBoy.dat"],
   "GCE - Vectrex": ["OpenVECT.dat"],
