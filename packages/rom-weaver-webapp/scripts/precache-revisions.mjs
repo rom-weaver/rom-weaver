@@ -5,19 +5,21 @@ import path from "node:path";
 // Workbox reads `revision: null` as "this URL is self-versioned": the file name
 // carries a content hash, so the precached copy is current forever and the
 // worker never re-fetches it. vite-plugin-pwa stamps that on everything under
-// assets/, which is true of every emitted bundle - and false for the identify
-// index and catalog, whose names are fixed so a deployment can advertise a new
-// pack set. Precached under a null revision they instead FREEZE at whatever a
-// device stored first: a nightly that cached the RWFP5 index kept serving it
-// after the format became RWFP1, and every lookup on that device failed with
-// "ROM identify index is invalid" while the origin served the new file.
+// assets/, which is true of every emitted bundle - and false for identify data
+// files with fixed names. Precached under a null revision they instead FREEZE at
+// whatever a device stored first: a nightly that cached the RWFP5 index kept
+// serving it after the format became RWFP1, and every lookup on that device
+// failed with "ROM identify index is invalid" while the origin served the new
+// file. (The index and catalog names now carry a content hash; the packs,
+// router, and shards still do not.)
 //
 // So: any asset whose name carries no hash gets a real one, from its bytes.
 const HASHED_NAME = /-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/u;
 
 // Identify data files keep fixed names that can look hashed to the pattern
-// above (`identify-checksum-routes.bin`), so they MUST always get a content
-// revision. Bundles such as `identify-packs-<hash>.js` are still self-versioned.
+// above (`identify-checksum-routes.bin`), so they always get a content
+// revision; one on an already hashed manifest is harmless. Bundles such as
+// `identify-packs-<hash>.js` are still self-versioned.
 const IDENTIFY_DATA_NAME = /^identify-.*\.(?:json|bin|pack)$/u;
 
 const isSelfVersioned = (url) => {
