@@ -68,8 +68,11 @@ type WorkflowTab = {
   href: string;
   icon: ReactNode;
   id: string;
+  /** Full name: Find, the document title, and the More menu use it. */
   label: string;
   placement?: "rail" | "more";
+  /** Short name for the rail and the dock, where the icon carries the noun. */
+  railLabel?: string;
 };
 type MoreMenuGroup = "tools" | "docs";
 const isMoreMenuTab = (tab: WorkflowTab) => tab.placement === "more";
@@ -234,7 +237,7 @@ const ModeRail = ({
                 tabIndex={tab.id === focusedId ? 0 : -1}
               >
                 {tab.icon}
-                <span className="mode-label">{tab.label}</span>
+                <span className="mode-label">{tab.railLabel ?? tab.label}</span>
               </a>
             ))}
           </div>
@@ -303,7 +306,7 @@ const PhoneDock = ({
               tabIndex={tab.id === focusedId ? 0 : -1}
             >
               {tab.icon}
-              <span>{tab.label}</span>
+              <span>{tab.railLabel ?? tab.label}</span>
             </a>
           ))}
         </div>

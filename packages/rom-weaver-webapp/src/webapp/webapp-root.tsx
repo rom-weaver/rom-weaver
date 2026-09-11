@@ -83,9 +83,21 @@ import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
   // "Apply Patch": the tab both applies patch chains and edits/exports them as bundles.
-  { href: "apply-patch", icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply Patch" },
-  { href: "create-patch", icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create Patch" },
-  { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM" },
+  {
+    href: "apply-patch",
+    icon: <ApplyBandaidIcon className="apply-tab-icon" />,
+    id: "patcher",
+    label: "Apply Patch",
+    railLabel: "Apply",
+  },
+  {
+    href: "create-patch",
+    icon: <GitCompare aria-hidden="true" />,
+    id: "creator",
+    label: "Create Patch",
+    railLabel: "Create",
+  },
+  { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM", railLabel: "Test" },
   // Reference rather than a workflow: a More entry under Project.
   { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
   {
