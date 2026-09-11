@@ -273,7 +273,8 @@ const normalizeTitle = (text) => {
 /**
  * The display title with the first ` (` or ` [` tag group and everything after
  * it removed. A name that opens with a tag keeps its whole name: an empty
- * title would be unsearchable.
+ * title would be unsearchable. Trailing English articles MUST move before
+ * the title so catalog spellings group together across packs.
  * @param {string} name
  * @returns {string}
  */
@@ -281,7 +282,10 @@ const baseTitle = (name) => {
   const text = String(name ?? "");
   const cuts = [text.indexOf(" ("), text.indexOf(" [")].filter((index) => index !== -1);
   const base = (cuts.length ? text.slice(0, Math.min(...cuts)) : text).trim();
-  return base || text.trim();
+  return (base || text.trim()).replace(
+    /^(.+?),\s+(the|an|a)(?=\s*(?:$|[-:–—]))/iu,
+    (_, title, article) => `${article[0].toUpperCase()}${article.slice(1).toLowerCase()} ${title}`,
+  );
 };
 
 /**
@@ -302,7 +306,7 @@ const encodeTitleIndex = (entries) => {
   const byNormalized = new Map();
   const packSlugs = new Set();
   for (const entry of entries) {
-    const name = String(entry?.name ?? "").trim();
+    const name = baseTitle(entry?.name ?? "");
     if (!name) continue;
     const normalized = normalizeTitle(name);
     if (!normalized) continue;
