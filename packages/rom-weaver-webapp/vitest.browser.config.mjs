@@ -92,6 +92,8 @@ const readDownloadStream = (stream, maxBytes) =>
   });
 
 export default mergeConfig(baseConfig, {
+  // Missing assets MUST return 404 so browser tests cannot parse the app shell as data.
+  appType: "mpa",
   optimizeDeps: {
     include: ["@bjorn3/browser_wasi_shim"],
   },
