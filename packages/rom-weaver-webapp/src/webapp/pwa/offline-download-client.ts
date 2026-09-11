@@ -94,8 +94,8 @@ const createOfflineDownloadClient = ({
     const current = inFlight.get(request.url);
     if (current) return (await current).clone();
     const pending = downloadFile(request, onBytes, fetchFile)
-      .then((response) => {
-        if (!response.ok) inFlight.delete(request.url);
+      .then(async (response) => {
+        if (!(response.ok && (await loadPlans()).has(request.url))) inFlight.delete(request.url);
         return response;
       })
       .catch((error) => {
