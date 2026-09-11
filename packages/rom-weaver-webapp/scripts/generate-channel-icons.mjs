@@ -21,7 +21,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "./brand-mark-assets.mjs";
+import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

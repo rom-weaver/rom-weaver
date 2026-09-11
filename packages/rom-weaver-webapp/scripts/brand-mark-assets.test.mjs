@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
 import { ACCENTS } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "./brand-mark-assets.mjs";
+import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 
 const logo = fs.readFileSync(new URL("../src/assets/app/root/logo.svg", import.meta.url), "utf8");
 

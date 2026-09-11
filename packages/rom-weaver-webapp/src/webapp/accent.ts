@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
+import logo from "../assets/app/root/logo.svg?raw";
 import { createLogger } from "../lib/logging.ts";
 import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
+import { tintBrandMark } from "./brand-mark-assets.mjs";
 
 /**
  * Accent dye lots. The accent is the second theme axis alongside dark/light:
@@ -17,6 +19,9 @@ const logger = createLogger("accent");
 
 type Accent = (typeof ACCENTS)[number]["value"];
 const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
+const FAVICON_URLS = new Map(
+  ACCENTS.map((accent) => [accent.value, `data:image/svg+xml,${encodeURIComponent(tintBrandMark(logo, accent))}`]),
+);
 
 const isAccent = (value: unknown): value is Accent => typeof value === "string" && ACCENT_VALUES.includes(value);
 
@@ -67,6 +72,10 @@ const applyAccent = (value: unknown) => {
     if (animate) armAccentAnimation(document.documentElement);
     if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute("data-accent");
     else document.documentElement.setAttribute("data-accent", accent);
+    const faviconUrl = FAVICON_URLS.get(accent);
+    if (faviconUrl) {
+      document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.setAttribute("href", faviconUrl);
+    }
   }
   logger.trace("Applied accent", { accent, animate, changed, requested: value });
   if (changed) for (const listener of listeners) listener();

@@ -1,6 +1,9 @@
-import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
+import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
 
-// Static icons MUST carry the channel accent without depending on the app's CSS.
+/**
+ * @param {string} svg
+ * @param {{ swatch: string }} accent
+ */
 const tintBrandMark = (svg, accent) => {
   const base = ACCENTS.find((entry) => entry.value === DEFAULT_ACCENT);
   if (!base) throw new Error(`brand marks: unknown default accent '${DEFAULT_ACCENT}'`);
