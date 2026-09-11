@@ -39,14 +39,13 @@ const stubFetch = (
     routerBytes?: Uint8Array;
   } = {},
 ) => {
-  const fetchMock = vi.fn(async (input: URL | RequestInfo, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith("checksum-routes.bin")) {
       if (!options.routerBytes) return new Response("nope", { status: 404 });
       return new Response(options.routerBytes);
     }
-    if (url.pathname.endsWith("identify-index.json")) {
-      expect(init).toEqual({ cache: "no-cache" });
+    if (url.pathname.endsWith("identify-index-test.json")) {
       if (options.indexStatus) return new Response("nope", { status: options.indexStatus });
       return new Response(
         JSON.stringify(options.index ?? { format: "rom-weaver-identify-system-pack-v1", systems: INDEX_SYSTEMS }),
@@ -378,12 +377,13 @@ const stubTitleFetch = async (
   };
   const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
     const url = new URL(String(input));
-    if (url.pathname.endsWith("catalog.json") && options.catalog) return new Response(JSON.stringify(options.catalog));
+    if (url.pathname.endsWith("identify-catalog-test.json") && options.catalog)
+      return new Response(JSON.stringify(options.catalog));
     if (url.pathname.endsWith("title-index.json")) {
       if (options.status) return new Response("nope", { status: options.status });
       return new Response(bytes);
     }
-    if (url.pathname.endsWith("identify-index.json")) return new Response(JSON.stringify(index));
+    if (url.pathname.endsWith("identify-index-test.json")) return new Response(JSON.stringify(index));
     return new Response(new TextEncoder().encode("abc"));
   });
   vi.stubGlobal("fetch", fetchMock);

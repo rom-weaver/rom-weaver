@@ -8,6 +8,8 @@ declare global {
   const __VERSION_IS_TAGGED__: boolean;
   const __APP_CHANNEL__: string;
   const __APP_CHANNEL_LABEL__: string;
+  /** Hashed file names of the identify manifests under `assets/`; the catalog is null when the data set has none. */
+  const __IDENTIFY_MANIFEST_FILES__: { catalog: string | null; index: string };
   const __SERVICE_WORKER_ENABLED__: boolean;
   const __SERVICE_WORKER_UPDATE_INTERVAL_MS__: number;
 
