@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
 import { Fragment, useState } from "react";
-import { identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
+import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
 import type { ExpectedRomTitle } from "../../../../lib/apply/expected-rom-lookup.ts";
@@ -281,10 +281,12 @@ const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedCo
 };
 
 /* One release of a chosen title. The name leads; platform, region, revision,
-   and dump tags separate releases. Its expected checksums let the user choose
-   the exact dump before this one button selects it. */
+   and dump tags separate releases. The tags are decoded ("Verified dump", not
+   "!") so the kind of dump reads as plainly as its checksums, which let the
+   user choose the exact dump before this one button selects it. */
 const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; onChoose: () => void }) => {
-  const details = [match.platform, match.region, match.revision, ...(match.dumpTags || [])].filter(Boolean);
+  const dumpKinds = (match.dumpTags || []).filter((tag) => tag.trim()).map(identifyDumpTagLabel);
+  const details = [match.platform, match.region, match.revision, ...dumpKinds].filter(Boolean);
   return (
     <li className="identify-search-result">
       <button

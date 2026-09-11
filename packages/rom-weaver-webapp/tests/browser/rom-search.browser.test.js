@@ -44,7 +44,7 @@ const match = (name, extra = {}) => ({
 });
 
 const FUSION_USA = match("Metroid Fusion (USA)", {
-  dumpTags: ["verified dump"],
+  dumpTags: ["!"],
   expectedComponents: [{ crc32: "d7ae93df", md5: "0".repeat(32), sha1: "1".repeat(40), size: 8388608 }],
   region: "USA",
   revision: "Rev 1",
@@ -173,7 +173,9 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   // Region, revision, and dump tags are what separate two releases of one game.
   expect(getResults()[0]).toContain("USA");
   expect(getResults()[0]).toContain("Rev 1");
-  expect(getResults()[0]).toContain("verified dump");
+  // The pack's "!" code is decoded into the kind of dump it stands for.
+  expect(getResults()[0]).toContain("Verified dump");
+  expect(getResults()[0]).not.toContain("!");
   expect(getResults()[1]).toContain("Metroid Fusion (Europe)");
 
   host.style.width = "350px";
