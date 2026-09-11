@@ -174,13 +174,15 @@ The build includes directory-index pages for its workflow and documentation rout
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, the equivalent cache policy is:
 
 ```text
-/assets/*                     Cache-Control: public, max-age=31536000, immutable
-/rom-weaver-service-worker.js Cache-Control: no-cache
+/assets/*                      Cache-Control: public, max-age=31536000, immutable
+/assets/identify-index.json    Cache-Control: no-cache
+/assets/identify-catalog.json  Cache-Control: no-cache
+/rom-weaver-service-worker.js  Cache-Control: no-cache
 ```
 
 Earlier releases served the service worker as `cache-service-worker.js`. If your host config still names that path, change it to `rom-weaver-service-worker.js`.
 
-Only `/assets/*` uses immutable caching because those filenames contain content hashes. Do not apply that policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
+Only `/assets/*` uses immutable caching, because those URLs are content-addressed: build output carries a hash in the filename, and the identify packs, cheat shards, checksum router, and title index are requested with a `?sha256=` query that changes whenever their bytes do. The two exceptions are `identify-index.json` and `identify-catalog.json`, the manifests that carry those hashes: a cached manifest hides a newer identify data set until it expires, so they must be revalidated. Do not apply the immutable policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
 
 ## Cross-origin isolation
 
