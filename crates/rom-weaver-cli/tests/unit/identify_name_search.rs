@@ -247,6 +247,40 @@ fn a_good_dump_outranks_a_shorter_bad_dump() {
 }
 
 #[test]
+fn a_non_quality_tag_does_not_demote_a_dump() {
+    // GoodTools brackets hold codes that say nothing about dump quality:
+    // `[C]` is Game Boy Color support and `[BF]` is a Bung fix.
+    let mut color = game("Zelda (U) [C]");
+    color.dump_tags = vec!["C".to_string()];
+    let mut bung = game("Zelda Oracle of Ages (U) [BF]");
+    bung.dump_tags = vec!["BF".to_string()];
+    let mut bad = game("Zelda (U) [b1]");
+    bad.dump_tags = vec!["b1".to_string()];
+    let ordered = names("zelda", &[bad, bung, color]);
+    assert_eq!(
+        ordered,
+        vec![
+            "Zelda (U) [C]",
+            "Zelda Oracle of Ages (U) [BF]",
+            "Zelda (U) [b1]",
+        ]
+    );
+}
+
+#[test]
+fn a_quality_tag_alongside_a_non_quality_tag_still_demotes() {
+    let mut color_bad = game("Zelda (U) [C][b1]");
+    color_bad.dump_tags = vec!["C".to_string(), "b1".to_string()];
+    let mut color = game("Zelda Oracle of Ages (U) [C]");
+    color.dump_tags = vec!["C".to_string()];
+    let ordered = names("zelda", &[color_bad, color]);
+    assert_eq!(
+        ordered,
+        vec!["Zelda Oracle of Ages (U) [C]", "Zelda (U) [C][b1]"]
+    );
+}
+
+#[test]
 fn a_dump_tag_token_still_filters_to_tagged_dumps() {
     let mut bad = game("Mario (U) [b1]");
     bad.dump_tags = vec!["b1".to_string()];

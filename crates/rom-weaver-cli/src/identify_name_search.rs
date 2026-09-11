@@ -111,13 +111,20 @@ fn normalize(text: &str) -> String {
     out
 }
 
-/// Whether a pack record is a verified good dump. GoodTools marks one with
-/// `[!]`; the Libretro (No-Intro and Redump) records carry no dump tags at
-/// all, and those databases list verified dumps only, so an untagged record
-/// counts as good. Every other tag (`b`, `o`, `h`, `p`, `t`, `f`, `a`, `T`)
-/// marks a dump a reader searching by name rarely wants first.
+/// Whether a pack record is a good dump: nothing marks it as a lesser one.
+/// GoodTools marks a verified dump with `[!]`, and the Libretro (No-Intro and
+/// Redump) records carry no dump tags at all, so both count as good. A tag
+/// whose code the label table names (`b`, `o`, `h`, `p`, `t`, `f`, `a`, `T`,
+/// `n`) marks a dump a reader searching by name rarely wants first.
+///
+/// A tag is any bracketed group of a GoodTools name, and most of those are not
+/// dump-quality codes at all: the Game Boy Color pack alone carries `[C]` on
+/// 8197 records and `[BF]` on 54. Such a tag MUST NOT demote its record, so
+/// only a code the table names counts against it.
 fn is_good_dump(game: &PackGame) -> bool {
-    game.dump_tags.is_empty() || game.dump_tags.iter().any(|tag| tag == "!")
+    game.dump_tags
+        .iter()
+        .all(|tag| tag == "!" || dump_tag_code(tag).is_none())
 }
 
 /// The label-table code a dump tag belongs to, or `None` for a code the table
