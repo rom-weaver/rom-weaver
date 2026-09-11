@@ -512,24 +512,15 @@ function WebappRoot({
   const preloadLogDialog = useCallback(() => {
     void loadLogDialog().catch(() => undefined);
   }, []);
-  // Every What's new affordance - the version chip, the update notification,
-  // and the runtime chip while it is amber - lands on the What's new route.
   const openWhatsNew = useCallback(() => {
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
   }, [actions]);
-  // The runtime chip reports a state, and Status is where that state is
-  // explained - except in the one state that asks for an action. An amber chip
-  // is an update waiting, so it goes where the update is described.
   const openStatusTab = useCallback(() => {
-    if (pageUpdate.ready) {
-      openWhatsNew();
-      return;
-    }
     preloadLogDialog();
     setLogTab("status");
     setLogOpen(true);
-  }, [openWhatsNew, pageUpdate.ready, preloadLogDialog]);
+  }, [preloadLogDialog]);
   const openStorageTab = useCallback(() => {
     preloadLogDialog();
     setLogTab("storage");

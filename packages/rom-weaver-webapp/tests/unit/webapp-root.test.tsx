@@ -224,14 +224,13 @@ describe("the unified dialog", () => {
     expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("sends the Status control to What's new while an update is waiting", async () => {
-    const { called, container } = await renderRoot({ updateReady: true });
+  it("opens on Status while an update is waiting", async () => {
+    const { container } = await renderRoot({ updateReady: true });
 
     openFromMore(container, "Status");
 
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
-    // No dialog opens for this path - it is a route switch, not a tab.
-    expect(container.querySelector("dialog.log-dlg")).toBeNull();
+    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).not.toBeNull());
+    expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
   it("opens on Storage and on Logs", async () => {
