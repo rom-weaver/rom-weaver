@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { adoptShellLoom, createLoom } from "../home-loom-runtime.ts";
 
 /**
  * The hero illustration: vertical warp threads are the original ROM, and three
@@ -9,169 +10,11 @@ import { useEffect, useRef } from "react";
  * Canvas rather than SVG because the weave is ~70 rounded rects redrawn per
  * frame during the intro and on every theme or accent change; as markup that is
  * a DOM subtree the prerendered shell would have to carry and hydrate.
- */
-
-const WARP_COLUMNS = 22;
-const WEFT_ROWS = 3;
-/** One per patch in the legend: translation.bps, bugfix.ips, undub.xdelta. */
-const WEFT_TOKENS = ["--loom-weft-1", "--loom-weft-2", "--loom-weft-3"];
-/** Keep in step with the aspect-ratio pair in home.css, which reserves the box. */
-const NARROW_ASPECT = 2.4;
-const WIDE_ASPECT = 1.4;
-const NARROW_MAX_WIDTH = 880;
-const DRAW_MS = 900;
-const STAGGER_MS = 520;
-const START_DELAY_MS = 300;
-/**
- * Outlasts the .45s --thread crossfade accents.css arms on an accent change.
- * accent.ts sets data-accent as the crossfade starts, so the dyes are still the
- * old ones when the observer fires and have to be sampled until they settle.
- */
-const REDYE_MS = 600;
-
-type LoomPalette = {
-  shuttle: string;
-  warpA: string;
-  warpB: string;
-  well: string;
-  wefts: string[];
-};
-
-type LoomLayout = {
-  cellWidth: number;
-  height: number;
-  pad: number;
-  warpWidth: number;
-  weftHeight: number;
-  weftTops: number[];
-  width: number;
-};
-
-const readToken = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-/**
- * Read every dye once per theme or accent change. Reading them inside draw()
- * would force a style recalculation on each of the intro's frames.
  *
- * The weft and shuttle tokens are registered as <color> in tokens.css, which is
- * what makes their color-mix() values compute to a colour canvas can paint.
+ * The drawing lives in home-loom-runtime.ts because the prerendered document
+ * starts the intro before this component mounts (home-loom-shell.ts); the mount
+ * adopts that running loop rather than drawing over it from frame zero.
  */
-const readPalette = (): LoomPalette => ({
-  shuttle: readToken("--shuttle"),
-  warpA: readToken("--warp-a"),
-  warpB: readToken("--warp-b"),
-  well: readToken("--well"),
-  wefts: WEFT_TOKENS.map(readToken),
-});
-
-const measure = (canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): LoomLayout => {
-  const cssWidth = canvas.clientWidth || 560;
-  // A tall swatch beside the headline on desktop, a short band under it on
-  // phones so the hero still clears the fixed dock.
-  const aspect = window.innerWidth < NARROW_MAX_WIDTH ? NARROW_ASPECT : WIDE_ASPECT;
-  const ratio = Math.min(2, window.devicePixelRatio || 1);
-  const width = cssWidth;
-  const height = Math.round(cssWidth / aspect);
-  canvas.width = Math.round(width * ratio);
-  canvas.height = Math.round(height * ratio);
-  canvas.style.height = `${height}px`;
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  const pad = Math.round(width * 0.032);
-  const weftHeight = Math.max(14, Math.min(34, height * 0.085));
-  const gap = (height - pad * 2 - WEFT_ROWS * weftHeight) / (WEFT_ROWS + 1);
-  return {
-    cellWidth: (width - pad * 2) / WARP_COLUMNS,
-    height,
-    pad,
-    warpWidth: ((width - pad * 2) / WARP_COLUMNS) * 0.62,
-    weftHeight,
-    weftTops: WEFT_TOKENS.map((_, row) => pad + gap * (row + 1) + weftHeight * row),
-    width,
-  };
-};
-
-const roundedRect = (
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-): void => {
-  context.beginPath();
-  context.moveTo(x + radius, y);
-  context.lineTo(x + width - radius, y);
-  context.quadraticCurveTo(x + width, y, x + width, y + radius);
-  context.lineTo(x + width, y + height - radius);
-  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  context.lineTo(x + radius, y + height);
-  context.quadraticCurveTo(x, y + height, x, y + height - radius);
-  context.lineTo(x, y + radius);
-  context.quadraticCurveTo(x, y, x + radius, y);
-  context.closePath();
-};
-
-const draw = (
-  context: CanvasRenderingContext2D,
-  layout: LoomLayout,
-  palette: LoomPalette,
-  progress: number[],
-): void => {
-  const { cellWidth, height, pad, warpWidth, weftHeight, weftTops, width } = layout;
-  const { warpA, warpB } = palette;
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = palette.well;
-  roundedRect(context, 0, 0, width, height, 8);
-  context.fill();
-  // The warp: the original ROM. Alternating tones so the over/under reads.
-  for (let column = 0; column < WARP_COLUMNS; column += 1) {
-    context.fillStyle = column % 2 ? warpB : warpA;
-    roundedRect(
-      context,
-      pad + column * cellWidth + (cellWidth - warpWidth) / 2,
-      pad - 6,
-      warpWidth,
-      height - pad * 2 + 12,
-      3,
-    );
-    context.fill();
-  }
-  for (let row = 0; row < WEFT_ROWS; row += 1) {
-    const reached = progress[row] ?? 0;
-    if (reached <= 0) continue;
-    const reach = pad + (width - pad * 2) * reached;
-    const top = weftTops[row] ?? 0;
-    context.save();
-    context.beginPath();
-    context.rect(0, top - 2, reach, weftHeight + 4);
-    context.clip();
-    context.fillStyle = palette.wefts[row] ?? "";
-    roundedRect(context, pad - 8, top, width - pad * 2 + 16, weftHeight, 4);
-    context.fill();
-    // Plain weave: every other warp thread passes back over the weft.
-    for (let column = 0; column < WARP_COLUMNS; column += 1) {
-      if ((column + row) % 2 !== 0) continue;
-      context.fillStyle = column % 2 ? warpB : warpA;
-      roundedRect(
-        context,
-        pad + column * cellWidth + (cellWidth - warpWidth) / 2,
-        top - 3,
-        warpWidth,
-        weftHeight + 6,
-        3,
-      );
-      context.fill();
-    }
-    context.restore();
-    if (reached < 1) {
-      // The shuttle carrying the row that is still in flight.
-      context.fillStyle = palette.shuttle;
-      const shuttle = Math.min(14, weftHeight * 0.6);
-      roundedRect(context, reach - 6, top + weftHeight / 2 - shuttle / 2, shuttle * 1.6, shuttle, shuttle / 2);
-      context.fill();
-    }
-  }
-};
 
 type HomeLoomProps = {
   ariaLabel: string;
@@ -182,68 +25,25 @@ const HomeLoom = ({ ariaLabel }: HomeLoomProps): React.ReactElement => {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!(canvas && context)) return undefined;
-    let layout = measure(canvas, context);
-    let palette = readPalette();
-    const progress = [0, 0, 0];
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const redraw = () => draw(context, layout, palette, progress);
-    const remeasure = () => {
-      layout = measure(canvas, context);
-      redraw();
-    };
-    let redyeFrame = 0;
-    const redye = () => {
-      const started = performance.now();
-      const sample = (now: number) => {
-        palette = readPalette();
-        redraw();
-        if (now - started < REDYE_MS) redyeFrame = requestAnimationFrame(sample);
-      };
-      cancelAnimationFrame(redyeFrame);
-      sample(started);
-    };
-
-    let frame = 0;
-    if (reduceMotion.matches) {
-      progress.fill(1);
-      redraw();
-    } else {
-      const start = performance.now();
-      const tick = (now: number) => {
-        const elapsed = now - start;
-        let done = true;
-        for (let row = 0; row < WEFT_ROWS; row += 1) {
-          const local = Math.min(1, Math.max(0, (elapsed - START_DELAY_MS - row * STAGGER_MS) / DRAW_MS));
-          progress[row] = 1 - (1 - local) ** 3;
-          if (local < 1) done = false;
-        }
-        redraw();
-        if (!done) frame = requestAnimationFrame(tick);
-      };
-      redraw();
-      frame = requestAnimationFrame(tick);
-    }
-
-    // The weave is painted from CSS custom properties, so it has to be redrawn
-    // whenever the theme or the accent that defines them changes.
-    const themeObserver = new MutationObserver(redye);
-    themeObserver.observe(document.documentElement, {
-      attributeFilter: ["data-accent", "data-theme"],
-      attributes: true,
-    });
-    window.addEventListener("resize", remeasure);
-    return () => {
-      cancelAnimationFrame(frame);
-      cancelAnimationFrame(redyeFrame);
-      themeObserver.disconnect();
-      window.removeEventListener("resize", remeasure);
-    };
+    if (!canvas) return undefined;
+    const loom = adoptShellLoom(canvas) ?? createLoom(canvas);
+    return () => loom?.stop();
   }, []);
 
+  // suppressHydrationWarning: the shell script has already resized the canvas
+  // to device pixels by the time React hydrates it, so the width and height
+  // attributes never match the 560x400 box rendered here. Both owners size the
+  // canvas the same way, so the mismatch is the expected state, not a bug.
   return (
-    <canvas aria-label={ariaLabel} className="home-loom-canvas" height={400} ref={canvasRef} role="img" width={560} />
+    <canvas
+      aria-label={ariaLabel}
+      className="home-loom-canvas"
+      height={400}
+      ref={canvasRef}
+      role="img"
+      suppressHydrationWarning
+      width={560}
+    />
   );
 };
 

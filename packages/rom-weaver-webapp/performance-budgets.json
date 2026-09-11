@@ -5,10 +5,10 @@
       {
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 35900,
-        "maxRawBytes": 36600,
-        "expectedBrotliBytes": 8000,
-        "maxBrotliBytes": 8350
+        "expectedRawBytes": 36500,
+        "maxRawBytes": 37200,
+        "expectedBrotliBytes": 9200,
+        "maxBrotliBytes": 9550
       },
       {
         "name": "JavaScript",
