@@ -1398,7 +1398,7 @@ jobs:
           webapp-deps: "true"
           emulatorjs-cache: "true"
           playwright: "true"
-          playwright-browsers: webkit
+          playwright-browsers: chromium webkit
 
       - uses: ./.github/actions/download-identify-data
 
