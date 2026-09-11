@@ -5,6 +5,7 @@ import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-ti
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
 import type { ExpectedRomTitle } from "../../../../lib/apply/expected-rom-lookup.ts";
 import { identifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
+import { displayTitle } from "../../../../lib/identify/title-index.mjs";
 import type {
   ParsedIdentifyExpectedComponent,
   ParsedIdentifyResolution,
@@ -292,7 +293,7 @@ const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; o
         onClick={onChoose}
         type="button"
       >
-        <span className="identify-search-result-name">{match.name}</span>
+        <span className="identify-search-result-name">{displayTitle(match.name)}</span>
         {details.length ? <span className="identify-search-result-meta">{details.join(" · ")}</span> : null}
         <ReleaseChecksums components={match.expectedComponents} />
       </button>

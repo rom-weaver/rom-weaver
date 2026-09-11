@@ -343,6 +343,22 @@ describe("useRomLookup", () => {
     expect(hook.result.current.titles).toEqual([]);
   });
 
+  it("keeps different checksums as release choices and excludes numeral aliases", async () => {
+    const title = { ...TITLE, name: "The Legend IV" };
+    const first = match("Legend IV, The (USA)", { expectedComponents: [{ crc32: "11111111" }] });
+    const second = match("The Legend IV (Europe)", { expectedComponents: [{ crc32: "22222222" }] });
+    const alias = match("The Legend 4 (USA)", { expectedComponents: [{ crc32: "33333333" }] });
+    mockedTitles.mockResolvedValue({ status: "ok", titles: [title] });
+    mockedByName.mockResolvedValue({ matches: [first, second, alias], status: "matched" });
+    const hook = await search("legend 4");
+    await act(async () => {
+      await hook.result.current.chooseTitle(title);
+    });
+    expect(hook.result.current.versions).toEqual([first, second]);
+    act(() => hook.result.current.choose(second));
+    expect(hook.result.current.result?.checks.checksums).toEqual({ crc32: "22222222" });
+  });
+
   it("clears the text, the lists, and the result together", async () => {
     mockedLookup.mockResolvedValue({ matches: [match("Hello World (USA)")], status: "matched" });
     const hook = await search("d7ae93df");

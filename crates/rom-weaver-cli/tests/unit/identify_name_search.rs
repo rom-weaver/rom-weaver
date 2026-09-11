@@ -164,6 +164,85 @@ fn short_and_numeric_tokens_stay_literal() {
 }
 
 #[test]
+fn title_scores_match_canonical_roman_and_decimal_numerals_both_ways() {
+    assert!(title_hit("final fantasy 4", "Final Fantasy IV").is_some());
+    assert!(title_hit("FINAL FANTASY iv", "Final Fantasy 4").is_some());
+    assert!(title_hit("mega man x", "Mega Man 10").is_some());
+    assert!(title_hit("mega man 10", "Mega Man X").is_some());
+}
+
+#[test]
+fn numeral_aliases_stay_full_canonical_tokens() {
+    assert!(title_hit("4", "Quest IV").is_some());
+    assert!(title_hit("4", "Quest XIV").is_none());
+    assert!(title_hit("4", "Ivory Tower").is_none());
+    assert!(title_hit("04", "Quest IV").is_none());
+    assert!(title_hit("3", "Quest IIV").is_none());
+    assert!(title_hit("iv", "Civilization").is_none());
+    assert!(title_hit("iv", "Civilization IV").is_some());
+    assert!(title_hit("x", "Mega Man Xtreme").is_none());
+    assert!(title_hit("x", "Mega Man XIV").is_none());
+    assert!(title_hit("x", "Mega Man 10").is_some());
+    assert!(title_hit("xiii", "Quest XII").is_none());
+    assert!(title_hit("xviii", "Quest XVII").is_none());
+    assert!(title_hit("xiii", "Quest 13").is_some());
+}
+
+#[test]
+fn numeral_aliases_apply_to_titles_and_alternates_but_not_systems_or_tags() {
+    let mut alternate = game("Dragon Warrior");
+    alternate.alternate_names = vec!["Dragon Quest IV".to_string()];
+    assert!(hit("dragon quest 4", &alternate).is_some());
+
+    let mut tagged = game("Dragon Warrior");
+    tagged.dump_tags = vec!["iv".to_string()];
+    assert!(hit("4", &tagged).is_none());
+    assert!(title_system_hit("4", "Dragon Warrior", &["Console IV"]).is_none());
+}
+
+#[test]
+fn literal_numerals_outrank_aliases_before_dump_quality() {
+    let mut literal = game("Mega Man 10");
+    literal.dump_tags = vec!["b1".to_string()];
+    let mut alias = game("Mega Man X");
+    alias.dump_tags = vec!["!".to_string()];
+    assert_eq!(
+        names("mega man 10", &[alias, literal]),
+        vec!["Mega Man 10", "Mega Man X"],
+    );
+}
+
+#[test]
+fn an_alias_with_a_typo_matches_but_ranks_below_a_match_without_typos() {
+    let mixed = title_hit("adventur 4", "Adventure IV").expect("mixed match");
+    let aliases = title_hit("adventure 4", "Adventure IV").expect("alias match");
+    assert!(mixed < aliases);
+}
+
+#[test]
+fn a_literal_numeral_outranks_an_alias_with_equal_typo_distance() {
+    let literal = title_hit("adventur iv", "Adventure IV").expect("literal match");
+    let alias = title_hit("adventur iv", "Adventure 4").expect("alias match");
+    assert!(literal > alias);
+}
+
+#[test]
+fn fewer_typos_outrank_multiple_literal_numerals() {
+    let query = "adventure iv v vi";
+    let closer = title_hit(query, "Adventxure 4 5 6").unwrap();
+    let farther = title_hit(query, "Adventxxure IV V VI").unwrap();
+    assert!(closer > farther);
+}
+
+#[test]
+fn numeral_spellings_remain_separate_search_rows() {
+    let ordered = names("mega man 10", &[game("Mega Man X"), game("Mega Man 10")]);
+    assert_eq!(ordered, vec!["Mega Man 10", "Mega Man X"]);
+    let ordered = names("mega man x", &[game("Mega Man 10"), game("Mega Man X")]);
+    assert_eq!(ordered, vec!["Mega Man X", "Mega Man 10"]);
+}
+
+#[test]
 fn literal_title_match_outranks_a_fuzzy_match() {
     let exact = title_hit("zelda", "Zelda II").expect("exact title hit");
     let fuzzy = title_hit("zelda", "Zelad II").expect("fuzzy title hit");

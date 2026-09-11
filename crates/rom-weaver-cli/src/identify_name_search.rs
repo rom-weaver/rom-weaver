@@ -24,6 +24,32 @@ const MAX_TOKEN_QUALITY: i64 = TOKEN_BASE
     + WORD_START_BONUS
     + NAME_WEIGHT;
 
+/// Canonical Roman numerals that commonly occur in game titles and their
+/// decimal spellings. These aliases are search-only: pack records retain the
+/// source title text that identifies their checksums.
+const NUMERAL_ALIASES: &[(&str, &str)] = &[
+    ("i", "1"),
+    ("ii", "2"),
+    ("iii", "3"),
+    ("iv", "4"),
+    ("v", "5"),
+    ("vi", "6"),
+    ("vii", "7"),
+    ("viii", "8"),
+    ("ix", "9"),
+    ("x", "10"),
+    ("xi", "11"),
+    ("xii", "12"),
+    ("xiii", "13"),
+    ("xiv", "14"),
+    ("xv", "15"),
+    ("xvi", "16"),
+    ("xvii", "17"),
+    ("xviii", "18"),
+    ("xix", "19"),
+    ("xx", "20"),
+];
+
 /// Human labels for the raw GoodTools dump codes a pack stores. A dump tag is
 /// one or two characters, so it MUST match on equality only, never fuzzily.
 /// Query normalization drops punctuation, so a code that is punctuation (`!`)
@@ -170,6 +196,7 @@ struct QueryToken {
     text: String,
     characters: Vec<char>,
     typo_limit: Option<usize>,
+    numeral_alias: Option<&'static str>,
 }
 
 impl QueryToken {
@@ -184,27 +211,44 @@ impl QueryToken {
         } else {
             Some(2)
         };
+        let numeral_alias =
+            NUMERAL_ALIASES
+                .iter()
+                .find_map(|(roman, decimal)| match text.as_str() {
+                    token if token == *roman => Some(*decimal),
+                    token if token == *decimal => Some(*roman),
+                    _ => None,
+                });
         Self {
             text,
             characters,
             typo_limit,
+            numeral_alias,
         }
     }
 }
 
 /// One matched query token. Ordering this type puts literal matches first,
-/// then lower edit distances, then field and position quality.
+/// then numeral aliases, then typo corrections. Field and position quality
+/// break ties within each class.
 #[derive(Clone, Copy, Debug)]
 struct TokenScore {
-    literal: bool,
+    kind: TokenMatchKind,
     distance: usize,
     quality: i64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum TokenMatchKind {
+    Typo,
+    NumeralAlias,
+    Literal,
+}
+
 impl TokenScore {
     fn better_than(self, other: Self) -> bool {
-        (self.literal && !other.literal)
-            || (self.literal == other.literal
+        self.kind > other.kind
+            || (self.kind == other.kind
                 && (self.distance < other.distance
                     || (self.distance == other.distance && self.quality > other.quality)))
     }
@@ -229,7 +273,7 @@ fn literal_token_score(token: &QueryToken, candidate: &str) -> Option<TokenScore
                 }
             }
             let score = TokenScore {
-                literal: true,
+                kind: TokenMatchKind::Literal,
                 distance: 0,
                 quality,
             };
@@ -244,6 +288,28 @@ fn literal_token_score(token: &QueryToken, candidate: &str) -> Option<TokenScore
         }
     }
     best
+}
+
+/// Score one whole normalized word. Numeral literals and aliases MUST use
+/// this path, so short Roman numerals cannot match inside ordinary words or
+/// longer numerals such as `xiv`.
+fn whole_word_token_score(
+    token: &QueryToken,
+    candidate: &str,
+    matched_word: &str,
+    kind: TokenMatchKind,
+) -> Option<TokenScore> {
+    let base = TOKEN_BASE + RUN_WEIGHT * token.characters.len().min(RUN_LENGTH_CAP) as i64;
+    candidate
+        .split(' ')
+        .enumerate()
+        .find_map(|(word_index, word)| {
+            (word == matched_word).then_some(TokenScore {
+                kind,
+                distance: 0,
+                quality: base + WORD_START_BONUS + EXACT_WORD_BONUS - word_index.min(20) as i64,
+            })
+        })
 }
 
 /// The bounded optimal-string-alignment distance. OSA is the restricted
@@ -302,15 +368,25 @@ fn osa_distance_at_most(
 }
 
 /// Score one token against normalized candidate text. A literal token always
-/// scores above a fuzzy token. Fuzzy work is bounded by the typo limit and is
-/// done only for title words whose lengths can possibly be within that limit.
+/// scores above a numeral alias, which scores above a fuzzy token. Fuzzy work
+/// is bounded by the typo limit and is done only for title words whose lengths
+/// can possibly be within that limit.
 fn token_score(
     token: &QueryToken,
     candidate: &str,
     scratch: &mut SearchScratch,
+    allow_numeral_alias: bool,
 ) -> Option<TokenScore> {
-    if let Some(score) = literal_token_score(token, candidate) {
+    let literal_score = if allow_numeral_alias && token.numeral_alias.is_some() {
+        whole_word_token_score(token, candidate, &token.text, TokenMatchKind::Literal)
+    } else {
+        literal_token_score(token, candidate)
+    };
+    if let Some(score) = literal_score {
         return Some(score);
+    }
+    if allow_numeral_alias && let Some(alias) = token.numeral_alias {
+        return whole_word_token_score(token, candidate, alias, TokenMatchKind::NumeralAlias);
     }
     let limit = token.typo_limit?;
     let base = TOKEN_BASE + RUN_WEIGHT * token.characters.len().min(RUN_LENGTH_CAP) as i64;
@@ -320,7 +396,7 @@ fn token_score(
             continue;
         };
         let score = TokenScore {
-            literal: false,
+            kind: TokenMatchKind::Typo,
             distance,
             quality: base - word_index.min(20) as i64,
         };
@@ -392,7 +468,7 @@ impl NameQuery {
 
     fn offer_title_scores(&self, candidate: &str, weight: i64, scratch: &mut SearchScratch) {
         for (index, token) in self.tokens.iter().enumerate() {
-            if let Some(score) = token_score(token, candidate, scratch) {
+            if let Some(score) = token_score(token, candidate, scratch, true) {
                 Self::offer(
                     &mut scratch.best[index],
                     TokenScore {
@@ -404,10 +480,9 @@ impl NameQuery {
         }
     }
 
-    /// Encode the lexicographic token ordering into a sortable score. The
-    /// good-dump weight exceeds every title-quality contribution, and the
-    /// distance weight exceeds both, so total edit distance beats dump
-    /// quality, which beats field, position, and title length.
+    /// Weights MUST keep literal-only matches above numeral aliases and
+    /// aliases above typo corrections. Within each class, distance ranks
+    /// before token kinds, dump quality, field, position, and title length.
     fn finish_score(
         &self,
         name_length: i64,
@@ -416,32 +491,36 @@ impl NameQuery {
     ) -> Option<i64> {
         let mut total_distance = 0_i64;
         let mut quality = -name_length.min(NAME_LENGTH_PENALTY_CAP);
-        let mut all_literal = true;
+        let mut weakest_match = TokenMatchKind::Literal;
+        let mut match_kind_total = 0_i64;
         for score in &scratch.best {
             let score = (*score)?;
             total_distance = total_distance.saturating_add(score.distance as i64);
             quality = quality.saturating_add(score.quality);
-            all_literal &= score.literal;
+            weakest_match = weakest_match.min(score.kind);
+            match_kind_total = match_kind_total.saturating_add(score.kind as i64);
         }
         let token_count = i64::try_from(self.tokens.len()).unwrap_or(i64::MAX);
         let secondary_range = (MAX_TOKEN_QUALITY + 2)
             .saturating_mul(token_count)
             .saturating_add(NAME_LENGTH_PENALTY_CAP);
         let good_dump_weight = secondary_range.saturating_add(1);
-        let distance_weight = good_dump_weight.saturating_mul(2);
-        let literal_bonus =
-            distance_weight.saturating_mul(token_count.saturating_mul(2).saturating_add(1));
+        let token_kind_weight = good_dump_weight.saturating_mul(2);
+        let token_range = token_count.saturating_mul(2).saturating_add(1);
+        let distance_weight = token_kind_weight.saturating_mul(token_range);
+        let match_kind_weight = distance_weight.saturating_mul(token_range);
         Some(
             quality
                 .saturating_add(if good_dump { good_dump_weight } else { 0 })
                 .saturating_sub(total_distance.saturating_mul(distance_weight))
-                .saturating_add(if all_literal { literal_bonus } else { 0 }),
+                .saturating_add((weakest_match as i64).saturating_mul(match_kind_weight))
+                .saturating_add(match_kind_total.saturating_mul(token_kind_weight)),
         )
     }
 
     /// The game's score, or `None` when any query token matches none of the
     /// game's name, alternate names or dump tags. Every token MUST match.
-    /// Among games at the same edit distance, verified good dumps rank first.
+    /// Among games with equal edit distance and token kinds, good dumps rank first.
     /// Each candidate string is normalized once, so the cost per game stays
     /// proportional to its own text and not to the query length.
     pub(super) fn score(&self, game: &PackGame, scratch: &mut SearchScratch) -> Option<i64> {
@@ -464,7 +543,7 @@ impl NameQuery {
                     Self::offer(
                         &mut scratch.best[index],
                         TokenScore {
-                            literal: true,
+                            kind: TokenMatchKind::Literal,
                             distance: 0,
                             quality: TOKEN_BASE + TAG_WEIGHT,
                         },
@@ -506,7 +585,11 @@ impl NameQuery {
         for system in systems {
             normalize_into(system, &mut scratch.text);
             let text = std::mem::take(&mut scratch.text);
-            self.offer_title_scores(&text, 0, scratch);
+            for (index, token) in self.tokens.iter().enumerate() {
+                if let Some(score) = token_score(token, &text, scratch, false) {
+                    Self::offer(&mut scratch.best[index], score);
+                }
+            }
             scratch.text = text;
         }
         SystemMatch {
@@ -524,7 +607,7 @@ impl NameQuery {
         let mut matched = false;
         for score in systems.scores.iter().flatten() {
             matched = true;
-            literal += usize::from(score.literal);
+            literal += usize::from(score.kind == TokenMatchKind::Literal);
             distance = distance.saturating_add(score.distance as i64);
             quality = quality.saturating_add(score.quality);
         }

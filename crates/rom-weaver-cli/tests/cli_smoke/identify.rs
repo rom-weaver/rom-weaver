@@ -721,6 +721,53 @@ fn identify_searches_title_index_including_partial_names_and_typos() {
 }
 
 #[test]
+fn identify_title_index_searches_roman_and_decimal_numerals_without_merging_rows() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["default", "optional"],
+            "defaultPacks": [true, false],
+            "titles": [
+                ["Mega Man X", [0]],
+                ["Mega Man 10", [1]],
+                ["Mega Man XIV", [1]]
+            ]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+
+    for (query, expected) in [
+        ("mega man 10", vec!["Mega Man 10", "Mega Man X"]),
+        // Numeral literals are full tokens, so `x` cannot match inside `xiv`.
+        ("MEGA MAN x", vec!["Mega Man X", "Mega Man 10"]),
+    ] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--title-index",
+                index.path().to_str().expect("index path"),
+                "--name",
+                query,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        let hits = json["details"]["identifyTitles"]["matches"]
+            .as_array()
+            .expect("title matches")
+            .iter()
+            .map(|hit| hit["name"].as_str().expect("title name"))
+            .collect::<Vec<_>>();
+        assert_eq!(hits, expected, "query {query}");
+    }
+}
+
+#[test]
 fn identify_title_index_searches_system_names_and_aliases() {
     let temp = setup_temp_dir();
     let index = temp.child("titles.json");

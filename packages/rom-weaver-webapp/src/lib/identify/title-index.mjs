@@ -271,10 +271,33 @@ const normalizeTitle = (text) => {
 };
 
 /**
+ * Move a known trailing article to the front for display. Source names and
+ * checksum-based record identity MUST remain unchanged.
+ * @param {string} name
+ * @returns {string}
+ */
+const displayTitle = (name) => {
+  const text = String(name ?? "").trim();
+  const cuts = [text.indexOf(" ("), text.indexOf(" ["), text.search(/\s+[-–—]|[:–—]|-(?=\s)/u)].filter(
+    (index) => index !== -1,
+  );
+  const end = cuts.length ? Math.min(...cuts) : text.length;
+  const title = text
+    .slice(0, end)
+    .replace(
+      /^(.+?),\s+(the|an|a|le|la|les|l['’]|un|une|el|los|las|una|il|lo|gli|der|die|das|ein|eine|de|het|een)$/iu,
+      (_, stem, article) => {
+        const prefix = `${article[0].toUpperCase()}${article.slice(1).toLowerCase()}`.replace("’", "'");
+        return `${prefix}${prefix.endsWith("'") ? "" : " "}${stem.trim()}`;
+      },
+    );
+  return title + text.slice(end);
+};
+
+/**
  * The display title with the first ` (` or ` [` tag group and everything after
  * it removed. A name that opens with a tag keeps its whole name: an empty
- * title would be unsearchable. Trailing English articles MUST move before
- * the title so catalog spellings group together across packs.
+ * title would be unsearchable.
  * @param {string} name
  * @returns {string}
  */
@@ -282,10 +305,7 @@ const baseTitle = (name) => {
   const text = String(name ?? "");
   const cuts = [text.indexOf(" ("), text.indexOf(" [")].filter((index) => index !== -1);
   const base = (cuts.length ? text.slice(0, Math.min(...cuts)) : text).trim();
-  return (base || text.trim()).replace(
-    /^(.+?),\s+(the|an|a)(?=\s*(?:$|[-:–—]))/iu,
-    (_, title, article) => `${article[0].toUpperCase()}${article.slice(1).toLowerCase()} ${title}`,
-  );
+  return displayTitle(base || text.trim());
 };
 
 /**
@@ -379,4 +399,4 @@ const parseTitleIndex = (text) => {
   return { packs, titles };
 };
 
-export { baseTitle, encodeTitleIndex, normalizeTitle, parseTitleIndex, TITLE_INDEX_FORMAT };
+export { baseTitle, displayTitle, encodeTitleIndex, normalizeTitle, parseTitleIndex, TITLE_INDEX_FORMAT };

@@ -9,6 +9,11 @@ import {
 import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
 
 describe("formatIdentifyTitle", () => {
+  it("unifies display articles without modifying source records", () => {
+    const match = Object.freeze({ name: "Aktienspiel, Das (G) [!]", alternateNames: ["Das Aktienspiel (G) [!]"] });
+    expect(uniqueIdentifyDisplayNames([match])).toEqual(["Das Aktienspiel (G) [!]", "Das Aktienspiel (Germany)"]);
+    expect(match.name).toBe("Aktienspiel, Das (G) [!]");
+  });
   it("expands GoodTools regions and keeps the source name available", () => {
     const source = "Pokemon - Emerald Version (UE) [!]";
 
