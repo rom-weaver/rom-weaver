@@ -1296,7 +1296,7 @@ msgstr "Cada generación de consolas trajo su propio formato. Tráelos todos."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliFoot"
-msgstr "Todos los métodos de instalación, con sumas de verificación y completado de shell, están en la guía de instalación."
+msgstr "Cargo, cargo-binstall y mise instalan solo el ejecutable, por lo que necesitan rom-weaver setup para descargar las bases de datos de identify y de cheats. Todos los métodos de instalación, con sumas de verificación y completado de shell, están en la guía de instalación."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

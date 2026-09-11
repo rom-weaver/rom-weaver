@@ -62,7 +62,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `save set` | Check and apply one or more atomic `FIELD=VALUE` edits. |
 | `save export-schema` | Report the generic field schema for a checked save. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
-| `setup` | Install the offline identify database. |
+| `setup` | Install the offline identify and cheat databases. |
 | `completions` | Print a tab-completion script for your shell. |
 | `man` | Print one generated manpage or install all generated manpages. |
 
@@ -161,7 +161,7 @@ Installed packs live in one directory. The default is the per-user data director
 
 ### `setup`
 
-`rom-weaver setup` installs the identify database into the directory above, downloading it from this version's GitHub release. It is for installs that ship only the executable, such as `cargo binstall` and `cargo install`; Homebrew, scoop, npm, and the install script place the database beside the binary already.
+`rom-weaver setup` installs the identify packs and the cheat shards into the directory above, downloading them from this version's GitHub release. It is for installs that ship only the executable - `cargo install`, `cargo binstall`, and `mise`; Homebrew, scoop, npm, the install scripts, and the Docker image place that data beside the binary already, and `setup` only reports on those.
 
 - `--database-dir DIR` installs somewhere other than the per-user data directory.
 - `--force` downloads again even when the database is already installed.

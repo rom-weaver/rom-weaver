@@ -582,7 +582,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.checksums": msg({ id: "ui.home.checksums", message: "Checksums" }),
   "ui.home.cliFoot": msg({
     id: "ui.home.cliFoot",
-    message: "Every install method, with checksums and shell completions, is in the install guide.",
+    message:
+      "Cargo, cargo-binstall, and mise install the executable alone, so they need rom-weaver setup to download the identify and cheat databases. Every install method, with checksums and shell completions, is in the install guide.",
   }),
   "ui.home.cliItem1": msg({ id: "ui.home.cliItem1", message: "Native builds for Linux, macOS, and Windows." }),
   "ui.home.cliItem2": msg({

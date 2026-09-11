@@ -240,7 +240,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="k">{localizer.message("ui.home.installWith")}</span>
               <pre>{`brew install rom-weaver/tap/rom-weaver
 npm install --global rom-weaver
-cargo install rom-weaver-cli
+cargo install rom-weaver-cli && rom-weaver setup
 docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
             </div>
             <p className="foot">{localizer.message("ui.home.cliFoot")}</p>
