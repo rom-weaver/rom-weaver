@@ -1005,11 +1005,6 @@ msgstr "Could not prepare the output for EmulatorJS."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.searchPlaceholder"
-msgstr "Game, system, or checksum"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "Create {format} Bundle"
 
@@ -1472,6 +1467,11 @@ msgstr "Full install guide"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullTable"
 msgstr "full table"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.searchPlaceholder"
+msgstr "Game, system, or checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2637,6 +2637,11 @@ msgstr "Reset"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsDescription"
 msgstr "Restore the original ROM with a PPF3 patch that includes undo data."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.searchAsYouType"
+msgstr "Results appear as you type - no need to press Search."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

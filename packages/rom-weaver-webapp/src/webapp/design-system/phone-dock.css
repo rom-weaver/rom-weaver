@@ -141,6 +141,23 @@
     width: 100%;
     margin-top: var(--sp-m);
   }
+  /* The keyboard covers everything under the focused box, so on a phone the
+     answer lists above it: results head, list, then the "more" button, all
+     ahead of the label and row. Status and error keep their place under the
+     row; use-keep-input-visible.ts scrolls them clear of the keyboard. The
+     form is a wrapping flex row, so order alone moves them. The accepted
+     cost: tab order still follows the DOM, so focus leaves the box for the
+     list above it. */
+  .rw-app .identify-search-results-head {
+    order: -3;
+  }
+  .rw-app .identify-search-results {
+    order: -2;
+  }
+  .rw-app .identify-search-more {
+    flex-basis: 100%;
+    order: -1;
+  }
 
   .rw-app .info-btn::after {
     inset: auto;

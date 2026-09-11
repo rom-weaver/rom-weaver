@@ -1005,11 +1005,6 @@ msgstr "Die Ausgabe konnte nicht für EmulatorJS vorbereitet werden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.searchPlaceholder"
-msgstr "Spiel, System oder Prüfsumme"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "{format}-Bundle erstellen"
 
@@ -1472,6 +1467,11 @@ msgstr "Vollständige Installationsanleitung"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullTable"
 msgstr "vollständige Tabelle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.searchPlaceholder"
+msgstr "Spiel, System oder Prüfsumme"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2637,6 +2637,11 @@ msgstr "Zurücksetzen"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsDescription"
 msgstr "Stelle die Original-ROM mit einem PPF3-Patch wieder her, der Undo-Daten enthält."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.searchAsYouType"
+msgstr "Die Ergebnisse erscheinen, während Sie tippen - Suchen müssen Sie nicht drücken."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
