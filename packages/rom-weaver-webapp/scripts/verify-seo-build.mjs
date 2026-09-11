@@ -104,6 +104,16 @@ assertExcludes(headers, "/assets/identify-index", "identify manifest cache rule"
 // response with no Cache-Control at all, so Pages filled in its own browser TTL.
 assertExcludes(headers, "/rom-weaver-service-worker.js\n  ! Cache-Control", "service worker cache rule");
 assertIncludes(read("_routes.json"), '"/assets/identify-*"', "identify assets Function route");
+const routes = read("_routes.json");
+assertExcludes(routes, '"/assets/offline-chunk-*"', "offline download chunks Function route");
+const generatedDownloadFiles = fs
+  .readdirSync(distDir)
+  .filter((name) => /^offline-downloads-[a-f\d]{64}\.json$/u.test(name));
+if (generatedDownloadFiles.length > 0) throw new Error("offline download manifest was generated");
+const offlineChunkFiles = fs
+  .readdirSync(path.join(distDir, "assets"))
+  .filter((name) => name.startsWith("offline-chunk-"));
+if (offlineChunkFiles.length > 0) throw new Error("offline download chunk asset was generated");
 // Cloudflare caches 103 Early Hints separately from the document. Hashed URLs in a
 // wildcard Link header can therefore outlive the deployment that emitted them and preload
 // dead assets. The HTML already carries the exact module, stylesheet, and font URLs; keep
@@ -414,6 +424,7 @@ if (production) {
 // route - the one case no test navigates through. Assert it here instead, where the
 // generated manifest is on disk.
 const precacheManifest = read("rom-weaver-service-worker.js");
+assertExcludes(precacheManifest, '"downloadManifest":true', "offline download manifest precache entry");
 const identifyPrecacheEntry = (system) =>
   `"revision":"${system.sha256}","url":"assets/identify-${system.file}?sha256=${system.sha256}"`;
 assertIncludes(precacheManifest, '"404.html"', "404 precache entry");

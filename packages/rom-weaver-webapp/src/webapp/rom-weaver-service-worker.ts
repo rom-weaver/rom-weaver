@@ -14,7 +14,6 @@ import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.t
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
-import { createOfflineDownloadClient } from "./pwa/offline-download-client.ts";
 import { keepResourceTimingsRecording, withMeasuredEncodedSize } from "./pwa/response-encoded-size.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
@@ -32,7 +31,6 @@ type OfflinePrecacheEntry = {
   url: string;
   install?: boolean;
   sizeBytes?: number;
-  downloadManifest?: boolean;
 };
 declare let self: ServiceWorkerGlobalScope;
 
@@ -68,9 +66,8 @@ const EMULATORJS_CACHE_PREFIX = `${MANAGED_CACHE_PREFIX}emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
 const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
 const DEFERRED_CACHE_NAME = `${MANAGED_CACHE_PREFIX}app-deferred`;
-const DOWNLOAD_CACHE_NAME = `${MANAGED_CACHE_PREFIX}download-chunks`;
 const CACHE_POLICY = createServiceWorkerCachePolicy({
-  additionalCacheNames: [DEFERRED_CACHE_NAME, DOWNLOAD_CACHE_NAME],
+  additionalCacheNames: [DEFERRED_CACHE_NAME],
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsCachePrefix: EMULATORJS_CACHE_PREFIX,
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
@@ -277,7 +274,6 @@ const INITIAL_MANIFEST = PRECACHE_MANIFEST.filter((entry) => typeof entry === "s
 const DEFERRED_MANIFEST = PRECACHE_MANIFEST.filter(
   (entry): entry is OfflinePrecacheEntry => typeof entry !== "string" && entry.install === false,
 );
-const DOWNLOAD_MANIFEST = PRECACHE_MANIFEST.find((entry) => typeof entry !== "string" && entry.downloadManifest);
 
 const PRECACHE_PROGRESS_THROTTLE_MS = 200;
 // Written beside the bundle by the build's manifestTransform, because workbox
@@ -493,14 +489,9 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
     return withCrossOriginIsolationHeaders(cachedResponse, credentialless) || cachedResponse;
   }
 
-  const fetchedResponse = await offlineDownloads.download(
-    toCredentiallessNoCorsRequest(request, credentialless),
-    undefined,
-    fetchForInteractive,
-  );
+  const fetchedResponse = await fetchForInteractive(toCredentiallessNoCorsRequest(request, credentialless));
   if (fetchedResponse.ok) {
     await cache.put(request, await withMeasuredEncodedSize(request.url, fetchedResponse.clone()));
-    await offlineDownloads.release(request);
   }
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
@@ -523,21 +514,11 @@ const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
   fetch(input, { ...init, priority: "low" } as RequestInit);
 const fetchForInteractive = (input: Request | string, init?: RequestInit) => fetch(input, init);
 
-const offlineDownloads = createOfflineDownloadClient({
-  cacheName: DOWNLOAD_CACHE_NAME,
-  manifestUrl: typeof DOWNLOAD_MANIFEST === "object" ? DOWNLOAD_MANIFEST.url : undefined,
-  scope: self.registration.scope,
-  fetcher: fetchForWarmup,
-  matchManifest: matchPrecache,
-  log: logServiceWorker,
-});
-
 const deferredPrecache = createDeferredPrecache({
   entries: DEFERRED_MANIFEST,
   cacheName: DEFERRED_CACHE_NAME,
   scope: self.registration.scope,
-  download: offlineDownloads.download,
-  release: offlineDownloads.release,
+  download: fetchForWarmup,
 });
 
 registerRoute(
@@ -550,8 +531,6 @@ registerRoute(
 );
 
 const offlineWarmup = createOfflineWarmup({
-  downloadFile: offlineDownloads.download,
-  releaseFile: offlineDownloads.release,
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsVersion: __EMULATORJS_VERSION__,
   fetchForWarmup,
@@ -685,7 +664,6 @@ self.addEventListener("activate", (event) => {
       })
       .then(() => self.clients.claim())
       .then(() => deferredPrecache.cleanup())
-      .then(() => offlineDownloads.cleanup())
       // Restore the persisted COEP mode so a respawned worker keeps serving require-corp if a prior
       // session already degraded to it, instead of resetting to the credentialless default.
       .then(() => ensureCoepModeHydrated())
