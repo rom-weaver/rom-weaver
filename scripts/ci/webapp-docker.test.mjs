@@ -57,3 +57,14 @@ test("the default source build prepares identify data before WASM attribution", 
   assert.ok(prepare >= 0 && compile > prepare);
   assert.ok(!instructions.some((line) => line.startsWith("COPY target/identify-data/v1 ")));
 });
+
+test("source builds install the pinned icon renderer before building the webapp", () => {
+  for (const wasm of ["source", "prebuilt"]) {
+    const instructions = inheritedInstructions("app", { WASM: wasm, IDENTIFY_DATA: "source" });
+    const install = instructions.findIndex((line) =>
+      line.includes("npm ci") && line.includes("npm exec -- playwright install --with-deps --only-shell chromium"),
+    );
+    const build = instructions.findIndex((line) => line.includes("npm --prefix packages/rom-weaver-webapp run build"));
+    assert.ok(install >= 0 && build > install, `WASM=${wasm} needs the package-pinned renderer before its build`);
+  }
+});

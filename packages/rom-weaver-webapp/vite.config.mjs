@@ -18,6 +18,7 @@ import { readDocLastmod, writeDocsMarkdown } from "./scripts/docs-discovery.mjs"
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
+import { generatedChannelAssetPath } from "./scripts/generated-icon-assets.mjs";
 import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
@@ -120,20 +121,14 @@ const docsScreenshotSources = Object.fromEntries(
   DOCS_SCREENSHOT_NAMES.map((name) => [`/docs/screenshots/${name}`, path.join(repoRoot, "docs", "screenshots", name)]),
 );
 
-// Channels without generated assets MUST fall back to the stock icons.
-const channelAssetPath = (channel, name) => {
-  const override = path.join(rootAssetDir, "channels", channel, name);
-  return fs.existsSync(override) ? override : path.join(rootAssetDir, name);
-};
-
 const rootStaticAssetSourcesForChannel = (channel) => ({
   "/_redirects": path.join(rootAssetDir, "_redirects"),
-  "/apple-touch-icon.png": channelAssetPath(channel, "apple-touch-icon.png"),
-  "/favicon.ico": channelAssetPath(channel, "favicon.ico"),
-  "/icon-maskable-192.png": channelAssetPath(channel, "icon-maskable-192.png"),
-  "/icon-maskable-512.png": channelAssetPath(channel, "icon-maskable-512.png"),
+  "/apple-touch-icon.png": generatedChannelAssetPath(channel, "apple-touch-icon.png"),
+  "/favicon.ico": generatedChannelAssetPath(channel, "favicon.ico"),
+  "/icon-maskable-192.png": generatedChannelAssetPath(channel, "icon-maskable-192.png"),
+  "/icon-maskable-512.png": generatedChannelAssetPath(channel, "icon-maskable-512.png"),
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
-  "/logo.svg": channelAssetPath(channel, "logo.svg"),
+  "/logo.svg": generatedChannelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
   "/social-preview.avif": path.join(repoRoot, "design", "social-preview.avif"),
   "/social-preview.png": path.join(repoRoot, "design", "social-preview.png"),

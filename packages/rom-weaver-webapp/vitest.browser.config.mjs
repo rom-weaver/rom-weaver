@@ -1,10 +1,12 @@
 import { Buffer } from "node:buffer";
 import { execSync } from "node:child_process";
+import fs from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { mergeConfig } from "vitest/config";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
+import { generatedChannelAssetPath } from "./scripts/generated-icon-assets.mjs";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -35,6 +37,36 @@ const testIdentifyAssetFiles = new Map([
   ["assets/identify-index.json", JSON.stringify({ format: "rom-weaver-identify-system-pack-v1", systems: [] })],
   ["assets/identify-catalog.json", JSON.stringify({ format: "rom-weaver-identify-catalog-v1", platforms: [] })],
 ]);
+const generatedRootIconAssets = new Map(
+  [
+    ["/apple-touch-icon.png", "apple-touch-icon.png"],
+    ["/favicon.ico", "favicon.ico"],
+    ["/icon-maskable-192.png", "icon-maskable-192.png"],
+    ["/icon-maskable-512.png", "icon-maskable-512.png"],
+    ["/logo.svg", "logo.svg"],
+  ].map(([requestPath, name]) => [requestPath, generatedChannelAssetPath("dev", name)]),
+);
+const generatedRootIconContentType = (requestPath) => {
+  if (requestPath.endsWith(".ico")) return "image/x-icon";
+  if (requestPath.endsWith(".svg")) return "image/svg+xml";
+  return "image/png";
+};
+const serveGeneratedRootIconAssets = {
+  configureServer(server) {
+    server.middlewares.use((request, response, next) => {
+      const requestPath = request.url?.split("?")[0] ?? "";
+      const sourcePath = generatedRootIconAssets.get(requestPath);
+      if (!sourcePath) {
+        next();
+        return;
+      }
+      response.setHeader("Content-Type", generatedRootIconContentType(requestPath));
+      response.end(fs.readFileSync(sourcePath));
+    });
+  },
+  enforce: "pre",
+  name: "rom-weaver-generated-root-icons",
+};
 const serveFirstSampleAssets = {
   configureServer(server) {
     server.middlewares.use((request, response, next) => {
@@ -119,7 +151,7 @@ export default mergeConfig(baseConfig, {
   optimizeDeps: {
     include: ["@bjorn3/browser_wasi_shim"],
   },
-  plugins: [serveFirstSampleAssets, serveTestIdentifyAssets],
+  plugins: [serveGeneratedRootIconAssets, serveFirstSampleAssets, serveTestIdentifyAssets],
   publicDir: fileURLToPath(new URL("./src/assets/app/root", import.meta.url)),
   resolve: {
     alias: {

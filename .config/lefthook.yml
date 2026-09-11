@@ -30,14 +30,16 @@ pre-commit:
     cargo-machete:
       glob: "*.toml"
       run: mise run machete
-    # Scoped to the three inputs the committed channel icons are rendered from,
-    # so the browser only launches on commits that could actually stale them.
+    # Scoped to channel-icon inputs so generated assets are deterministic before
+    # a commit. The files stay ignored under dist/generated-assets.
     channel-icons:
       glob:
         - "packages/rom-weaver-webapp/src/assets/app/root/logo.svg"
         - "packages/rom-weaver-webapp/design/icon-masters/*"
-        - "packages/rom-weaver-webapp/src/webapp/accent.ts"
-      run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
+        - "packages/rom-weaver-webapp/src/webapp/accent-palette.mjs"
+        - "packages/rom-weaver-webapp/src/webapp/brand-mark-assets.mjs"
+        - "packages/rom-weaver-webapp/scripts/generate-channel-icons.mjs"
+      run: npm --prefix packages/rom-weaver-webapp run icons:channels && npm --prefix packages/rom-weaver-webapp run icons:channels:check
     react-lint:
       glob: "packages/rom-weaver-webapp/**"
       run: npm --prefix packages/rom-weaver-webapp run lint:code

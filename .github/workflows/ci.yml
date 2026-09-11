@@ -654,7 +654,17 @@ jobs:
 
       - name: Build webapp
         if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
+
+      # The build generates ignored channel assets from tracked masters. Render
+      # a second time and compare it with the build output before upload.
+      - name: Channel icon output is deterministic
+        if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: "1"
+        run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
 
       # Browser E2E, Lighthouse, and Docker MUST consume this exact bundle.
       - name: Upload webapp bundle
@@ -1167,6 +1177,8 @@ jobs:
         run: node --test scripts/*.test.mjs scripts/wasm/*.test.mjs
 
       - name: Webapp script tests
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:scripts
 
       - name: Lint
@@ -1361,13 +1373,6 @@ jobs:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
-      # The per-channel app icons are committed, not built, so nothing else would
-      # notice them going stale against logo.svg / the icon masters / an accent's
-      # colours. Re-renders them in memory and diffs. Uses the same system
-      # Chrome as the E2E suite.
-      - name: Channel icons up to date
-        run: npm --prefix packages/rom-weaver-webapp run icons:channels:check
-
       - name: Webapp E2E
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp
 
@@ -1393,7 +1398,7 @@ jobs:
           webapp-deps: "true"
           emulatorjs-cache: "true"
           playwright: "true"
-          playwright-browsers: webkit
+          playwright-browsers: chromium webkit
 
       - uses: ./.github/actions/download-identify-data
 

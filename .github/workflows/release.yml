@@ -281,6 +281,7 @@ jobs:
         if: steps.release-pr.outputs.found == 'true'
         env:
           ROM_WEAVER_CHANNEL: prod
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run build
 
       # capture:screenshots loads first-weave.zip and the first-create sample
@@ -530,6 +531,7 @@ jobs:
       - name: Package static webapp release asset
         env:
           ROM_WEAVER_CHANNEL: ${{ contains(needs.release.outputs.version, '-') && 'beta' || 'prod' }}
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: |
           npm --prefix packages/rom-weaver-webapp run build
           tar --create --gzip \
