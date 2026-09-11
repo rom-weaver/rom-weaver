@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -790,4 +790,46 @@ test("J2ME is absent from the catalog and cannot be selected", async () => {
   assert.equal(LIBRETRO_PLATFORM_PATHS["Mobile - J2ME"], undefined);
   assert.ok(LIBRETRO_DAT_PATHS.every((name) => !name.includes("J2ME")));
   await assert.rejects(main(["--only", "Mobile - J2ME"]), /Platform\(s\) are not configured/u);
+});
+
+test("platform jobs must be a positive integer", async () => {
+  for (const value of ["0", "-1", "1.5", "2junk", "Infinity"]) {
+    await assert.rejects(main(["--jobs", value]), /--jobs must be a positive integer/u);
+  }
+});
+
+test("serial, parallel, and cached builds emit identical files", async (t) => {
+  const work = tempDir("parallel");
+  t.after(() => rmSync(work, { recursive: true, force: true }));
+  const platforms = ["CHIP-8", "DOS", "Cave Story"];
+  const outputs = [];
+  for (const [run, jobs] of [1, 4, 2].entries()) {
+    const cacheDir = join(work, run === 0 ? "serial-cache" : "parallel-cache");
+    const outDir = join(work, `out-${run}`);
+    const sourceRoot = join(cacheDir, "libretro", LIBRETRO_REVISION);
+    mkdirSync(sourceRoot, { recursive: true });
+    writeFileSync(join(sourceRoot, "LICENSE"), "CC-BY-SA-4.0");
+    for (const platform of platforms) {
+      writeCachedDat(cacheDir, "libretro", LIBRETRO_REVISION, `dat/${platform}.dat`, LIBRETRO_DAT);
+    }
+    await main([
+      "--cache-dir",
+      cacheDir,
+      "--out",
+      outDir,
+      "--only",
+      platforms.join(","),
+      "--jobs",
+      String(jobs),
+    ]);
+    outputs.push(
+      new Map(
+        readdirSync(outDir)
+          .sort()
+          .map((name) => [name, readFileSync(join(outDir, name))]),
+      ),
+    );
+  }
+  assert.deepEqual(outputs[1], outputs[0]);
+  assert.deepEqual(outputs[2], outputs[0]);
 });

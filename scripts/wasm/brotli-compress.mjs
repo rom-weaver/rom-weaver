@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import zlib from "node:zlib";
 
@@ -28,21 +29,23 @@ const CACHE_ROOT = path.resolve(
 const CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const cacheEnabled = () => process.env.ROM_WEAVER_BROTLI_CACHE !== "0";
 
-let pruned = false;
+const brotliCompress = promisify(zlib.brotliCompress);
+const brotliDecompress = promisify(zlib.brotliDecompress);
+const prunedCacheRoots = new Set();
 
 // Hashed asset names change on every content change, so entries are abandoned
 // rather than replaced and the directory would otherwise grow without bound.
-const pruneCache = (now) => {
-  if (pruned) return;
-  pruned = true;
+const pruneCache = (cacheRoot, now) => {
+  if (prunedCacheRoots.has(cacheRoot)) return;
+  prunedCacheRoots.add(cacheRoot);
   let names = [];
   try {
-    names = fs.readdirSync(CACHE_ROOT);
+    names = fs.readdirSync(cacheRoot);
   } catch {
     return;
   }
   for (const name of names) {
-    const entry = path.join(CACHE_ROOT, name);
+    const entry = path.join(cacheRoot, name);
     try {
       if (now - fs.statSync(entry).mtimeMs > CACHE_MAX_AGE_MS) fs.rmSync(entry, { force: true });
     } catch {
@@ -51,9 +54,32 @@ const pruneCache = (now) => {
   }
 };
 
-const cacheEntryPath = (source, quality, parameterProfile) =>
+const pruneCacheAsync = async (cacheRoot, now) => {
+  if (prunedCacheRoots.has(cacheRoot)) return;
+  prunedCacheRoots.add(cacheRoot);
+  let names = [];
+  try {
+    names = await fs.promises.readdir(cacheRoot);
+  } catch {
+    return;
+  }
+  await Promise.all(
+    names.map(async (name) => {
+      const entry = path.join(cacheRoot, name);
+      try {
+        if ((await fs.promises.stat(entry)).mtimeMs < now - CACHE_MAX_AGE_MS) {
+          await fs.promises.rm(entry, { force: true });
+        }
+      } catch {
+        // A concurrent build may have pruned or replaced it already.
+      }
+    }),
+  );
+};
+
+const cacheEntryPath = (cacheRoot, source, quality, parameterProfile) =>
   path.join(
-    CACHE_ROOT,
+    cacheRoot,
     `${crypto
       .createHash("sha256")
       .update(source)
@@ -64,6 +90,19 @@ const cacheEntryPath = (source, quality, parameterProfile) =>
         "hex",
       )}-q${quality}-${parameterProfile}-size${source.byteLength}-brotli${BROTLI_VERSION}.br`,
   );
+
+const brotliParameters = (source, quality, parameterProfile) => {
+  const normalizedQuality = Number(quality);
+  if (parameterProfile !== "default" && parameterProfile !== "large-window") {
+    throw new Error(`unknown Brotli parameter profile: ${parameterProfile}`);
+  }
+  const params = { [zlib.constants.BROTLI_PARAM_QUALITY]: normalizedQuality };
+  if (parameterProfile === "large-window") {
+    params[zlib.constants.BROTLI_PARAM_LGWIN] = BROTLI_LGWIN;
+    params[zlib.constants.BROTLI_PARAM_SIZE_HINT] = source.byteLength;
+  }
+  return { normalizedQuality, params };
+};
 
 // Verified by decompressing rather than trusted on the strength of its name: a
 // truncated entry, or one written by a Node whose brotli emits different bytes,
@@ -94,6 +133,63 @@ const writeCachedBrotli = (entryPath, compressed) => {
   }
 };
 
+const readCachedBrotliAsync = async (entryPath, source) => {
+  try {
+    const cached = await fs.promises.readFile(entryPath);
+    const decompressed = await brotliDecompress(cached);
+    if (!decompressed.equals(source)) return null;
+    await fs.promises.utimes(entryPath, new Date(), new Date());
+    return cached;
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedBrotliAsync = async (entryPath, compressed) => {
+  const temporaryPath = `${entryPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  try {
+    await fs.promises.mkdir(path.dirname(entryPath), { recursive: true });
+    await fs.promises.writeFile(temporaryPath, compressed);
+    await fs.promises.rename(temporaryPath, entryPath);
+  } catch {
+    // A cache miss is only ever a slow build, never a wrong one.
+  } finally {
+    try {
+      await fs.promises.rm(temporaryPath, { force: true });
+    } catch {
+      // Another process may have removed the temporary file already.
+    }
+  }
+};
+
+/**
+ * Compress a Buffer without blocking the event loop and cache the deterministic
+ * result in the caller-owned directory.
+ */
+export async function brotliCompressBufferCached(
+  source,
+  { quality, parameterProfile = "large-window", cacheDir },
+) {
+  if (!Buffer.isBuffer(source)) throw new TypeError("source must be a Buffer");
+  if (typeof cacheDir !== "string" || cacheDir.length === 0) {
+    throw new TypeError("cacheDir must be a non-empty path string");
+  }
+
+  const { normalizedQuality, params } = brotliParameters(source, quality, parameterProfile);
+  const cacheRoot = path.resolve(cacheDir);
+  const entryPath = cacheEntryPath(cacheRoot, source, normalizedQuality, parameterProfile);
+
+  if (cacheEnabled()) {
+    await pruneCacheAsync(cacheRoot, Date.now());
+    const cached = await readCachedBrotliAsync(entryPath, source);
+    if (cached) return { cached: true, compressed: cached };
+  }
+
+  const compressed = await brotliCompress(source, { params });
+  if (cacheEnabled()) await writeCachedBrotliAsync(entryPath, compressed);
+  return { cached: false, compressed };
+}
+
 export function brotliCompressFile({
   inputPath,
   outputPath,
@@ -103,11 +199,11 @@ export function brotliCompressFile({
   const source = fs.readFileSync(inputPath);
   const normalizedQuality = Number(quality);
   const entryPath = cacheEnabled()
-    ? cacheEntryPath(source, normalizedQuality, parameterProfile)
+    ? cacheEntryPath(CACHE_ROOT, source, normalizedQuality, parameterProfile)
     : null;
 
   if (entryPath) {
-    pruneCache(Date.now());
+    pruneCache(CACHE_ROOT, Date.now());
     const cached = readCachedBrotli(entryPath, source);
     if (cached) {
       fs.writeFileSync(outputPath, cached);
@@ -125,15 +221,7 @@ export function brotliCompressFile({
 }
 
 export function brotliCompressBuffer(source, { quality, parameterProfile = "large-window" }) {
-  const normalizedQuality = Number(quality);
-  if (parameterProfile !== "default" && parameterProfile !== "large-window") {
-    throw new Error(`unknown Brotli parameter profile: ${parameterProfile}`);
-  }
-  const params = { [zlib.constants.BROTLI_PARAM_QUALITY]: normalizedQuality };
-  if (parameterProfile === "large-window") {
-    params[zlib.constants.BROTLI_PARAM_LGWIN] = BROTLI_LGWIN;
-    params[zlib.constants.BROTLI_PARAM_SIZE_HINT] = source.byteLength;
-  }
+  const { params } = brotliParameters(source, quality, parameterProfile);
   return zlib.brotliCompressSync(source, {
     params,
   });

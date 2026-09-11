@@ -9,7 +9,7 @@ import readline from "node:readline";
 import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
+import { brotliCompressBufferCached } from "./wasm/brotli-compress.mjs";
 import {
   CHEAT_PLATFORMS,
   CHEAT_SHARD_FORMAT,
@@ -551,6 +551,7 @@ Options:
   --cache-dir <path>       Download and game-cache directory. Defaults to ${DEFAULT_CACHE_DIR}
   --force-row-cache        Rebuild the per-system game cache even if it matches.
   --download-only          Download/resolve sources, then stop.
+  --jobs <n>               Concurrent platform builds (default: up to 4 CPUs).
   --no-brotli              Do not emit <pack>.br files.
   --brotli-quality <n>     Brotli quality 0-11. Defaults to 11.
   --max-objects <n>        Parse only the first n games per system (smoke tests).
@@ -567,6 +568,7 @@ function parseArgs(argv) {
     brotliQuality: 11,
     cacheDir: process.env.ROM_WEAVER_IDENTIFY_CACHE_DIR || DEFAULT_CACHE_DIR,
     downloadOnly: false,
+    jobs: Math.min(4, os.availableParallelism()),
     forceRowCache: false,
     maxObjects: undefined,
     only: [],
@@ -584,6 +586,7 @@ function parseArgs(argv) {
     };
 
     if (arg === "--cache-dir") options.cacheDir = readValue();
+    else if (arg === "--jobs") options.jobs = Number(readValue());
     else if (arg === "--out") options.outPath = readValue();
     else if (arg === "--only") {
       for (const name of readValue().split(",")) {
@@ -603,6 +606,9 @@ function parseArgs(argv) {
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
+  }
+  if (!Number.isSafeInteger(options.jobs) || options.jobs < 1) {
+    throw new Error("--jobs must be a positive integer");
   }
   if (
     !Number.isInteger(options.brotliQuality) ||
@@ -909,10 +915,15 @@ async function writeCheatShard(platform, games, options) {
     group: packGroupFor(platform),
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(bytes, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(bytes, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     entry.brotliFile = `${fileName}.br`;
     entry.brotliBytes = compressed.length;
@@ -1725,7 +1736,7 @@ function resolveSelection(options) {
     );
   }
   if (missing.length) console.error(`[identify] skipping ${missing.length} unknown platform(s)`);
-  return selected.filter((platform) => configured.has(platform)).sort();
+  return [...new Set(selected.filter((platform) => configured.has(platform)))].sort();
 }
 
 async function* readGames(gamesPath) {
@@ -2351,10 +2362,15 @@ async function writeChecksumRouter(filters, samples, options) {
     packs: filters.length,
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(bytes, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(bytes, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     entry.brotliFile = `${CHECKSUM_ROUTER_FILE}.br`;
     entry.brotliBytes = compressed.length;
@@ -2416,10 +2432,15 @@ async function writeTitleIndex(entries, samples, options) {
     packs: index.packs.length,
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(bytes, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(bytes, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     entry.brotliFile = `${TITLE_INDEX_FILE}.br`;
     entry.brotliBytes = compressed.length;
@@ -2435,10 +2456,14 @@ async function writeTitleIndex(entries, samples, options) {
 async function writeSystemPackV1(platform, gamesInfo, options) {
   console.error(`[identify] ${platform}: building RWFP1 pack`);
   const games = gamesInfo.games;
+  const started = performance.now();
   const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV1(
     platform,
     games,
     gamesInfo.source,
+  );
+  console.error(
+    `[identify] ${platform}: pack encoded in ${Math.round(performance.now() - started)} ms`,
   );
   const fileName = `${gamesInfo.slug}.pack`;
   const outPath = path.join(options.outPath, fileName);
@@ -2460,10 +2485,15 @@ async function writeSystemPackV1(platform, gamesInfo, options) {
     },
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(pack, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(pack, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     system.brotliFile = `${fileName}.br`;
     system.brotliBytes = compressed.length;
@@ -2536,6 +2566,48 @@ export function buildCatalogPlatforms(systems) {
   return platforms;
 }
 
+// Workers MUST retain selection order in the indexes and finish before a failed build returns.
+async function buildSelectedPlatforms(selected, options, paths) {
+  const results = Array.from({ length: selected.length });
+  let next = 0;
+  let stopped = false;
+  const worker = async () => {
+    while (!stopped && next < selected.length) {
+      const position = next++;
+      const platform = selected[position];
+      try {
+        const started = performance.now();
+        const games = await readPlatformGames(platform, options, paths);
+        const system = await writeSystemPackV1(platform, games, options);
+        const cheat = CHEAT_PLATFORMS[platform]
+          ? await writeCheatShard(platform, games.games, options)
+          : undefined;
+        const keys = collectRouterKeys(games.games);
+        const titles = collectTitles(games.games);
+        results[position] = {
+          system,
+          cheat,
+          filter: buildPackFilter(system.slug, keys),
+          routerSample: { slug: system.slug, keys: sampleRouterKeys(keys) },
+          titleEntries: titles.map((name) => ({ name, slugs: [system.slug] })),
+          titleSample: { slug: system.slug, titles: sampleTitles(titles) },
+        };
+        console.error(
+          `[identify] ${platform}: complete in ${Math.round(performance.now() - started)} ms`,
+        );
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  };
+  const workers = Array.from({ length: Math.min(options.jobs, selected.length) }, worker);
+  const outcomes = await Promise.allSettled(workers);
+  const failed = outcomes.find((outcome) => outcome.status === "rejected");
+  if (failed) throw failed.reason;
+  return results;
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.printPlatforms) {
@@ -2605,25 +2677,13 @@ export async function main(argv = process.argv.slice(2)) {
     path.join(options.outPath, LIBRETRO_LICENSE_FILE),
     await readFile(paths.libretro.get("LICENSE")),
   );
-  const systems = [];
-  const cheats = [];
-  const routerFilters = [];
-  const routerSamples = [];
-  const titleEntries = [];
-  const titleSamples = [];
-  for (const platform of selected) {
-    const games = await readPlatformGames(platform, options, paths);
-    const system = await writeSystemPackV1(platform, games, options);
-    systems.push(system);
-    if (CHEAT_PLATFORMS[platform])
-      cheats.push(await writeCheatShard(platform, games.games, options));
-    const keys = collectRouterKeys(games.games);
-    routerFilters.push(buildPackFilter(system.slug, keys));
-    routerSamples.push({ slug: system.slug, keys: sampleRouterKeys(keys) });
-    const titles = collectTitles(games.games);
-    for (const name of titles) titleEntries.push({ name, slugs: [system.slug] });
-    titleSamples.push({ slug: system.slug, titles: sampleTitles(titles) });
-  }
+  const built = await buildSelectedPlatforms(selected, options, paths);
+  const systems = built.map((entry) => entry.system);
+  const cheats = built.flatMap((entry) => (entry.cheat ? [entry.cheat] : []));
+  const routerFilters = built.map((entry) => entry.filter);
+  const routerSamples = built.map((entry) => entry.routerSample);
+  const titleEntries = built.flatMap((entry) => entry.titleEntries);
+  const titleSamples = built.map((entry) => entry.titleSample);
   const checksumRoutes = await writeChecksumRouter(routerFilters, routerSamples, options);
   const titleIndex = await writeTitleIndex(titleEntries, titleSamples, options);
 
