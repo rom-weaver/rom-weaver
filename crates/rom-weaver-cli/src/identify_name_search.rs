@@ -111,6 +111,15 @@ fn normalize(text: &str) -> String {
     out
 }
 
+/// Whether a pack record is a verified good dump. GoodTools marks one with
+/// `[!]`; the Libretro (No-Intro and Redump) records carry no dump tags at
+/// all, and those databases list verified dumps only, so an untagged record
+/// counts as good. Every other tag (`b`, `o`, `h`, `p`, `t`, `f`, `a`, `T`)
+/// marks a dump a reader searching by name rarely wants first.
+fn is_good_dump(game: &PackGame) -> bool {
+    game.dump_tags.is_empty() || game.dump_tags.iter().any(|tag| tag == "!")
+}
+
 /// The label-table code a dump tag belongs to, or `None` for a code the table
 /// does not name.
 ///
@@ -389,9 +398,15 @@ impl NameQuery {
     }
 
     /// Encode the lexicographic token ordering into a sortable score. The
-    /// dynamic distance weight exceeds every title-quality contribution, so
-    /// total edit distance always beats field, position, and title length.
-    fn finish_score(&self, name_length: i64, scratch: &SearchScratch) -> Option<i64> {
+    /// good-dump weight exceeds every title-quality contribution, and the
+    /// distance weight exceeds both, so total edit distance beats dump
+    /// quality, which beats field, position, and title length.
+    fn finish_score(
+        &self,
+        name_length: i64,
+        good_dump: bool,
+        scratch: &SearchScratch,
+    ) -> Option<i64> {
         let mut total_distance = 0_i64;
         let mut quality = -name_length.min(NAME_LENGTH_PENALTY_CAP);
         let mut all_literal = true;
@@ -405,11 +420,13 @@ impl NameQuery {
         let secondary_range = (MAX_TOKEN_QUALITY + 2)
             .saturating_mul(token_count)
             .saturating_add(NAME_LENGTH_PENALTY_CAP);
-        let distance_weight = secondary_range.saturating_add(1);
+        let good_dump_weight = secondary_range.saturating_add(1);
+        let distance_weight = good_dump_weight.saturating_mul(2);
         let literal_bonus =
             distance_weight.saturating_mul(token_count.saturating_mul(2).saturating_add(1));
         Some(
             quality
+                .saturating_add(if good_dump { good_dump_weight } else { 0 })
                 .saturating_sub(total_distance.saturating_mul(distance_weight))
                 .saturating_add(if all_literal { literal_bonus } else { 0 }),
         )
@@ -417,6 +434,7 @@ impl NameQuery {
 
     /// The game's score, or `None` when any query token matches none of the
     /// game's name, alternate names or dump tags. Every token MUST match.
+    /// Among games at the same edit distance, verified good dumps rank first.
     /// Each candidate string is normalized once, so the cost per game stays
     /// proportional to its own text and not to the query length.
     pub(super) fn score(&self, game: &PackGame, scratch: &mut SearchScratch) -> Option<i64> {
@@ -447,7 +465,7 @@ impl NameQuery {
                 }
             }
         }
-        self.finish_score(name_length, scratch)
+        self.finish_score(name_length, is_good_dump(game), scratch)
     }
 
     /// Score one title with the same normalization and token rules as pack
@@ -465,7 +483,8 @@ impl NameQuery {
         };
         self.offer_title_scores(&text, prefix_weight, scratch);
         scratch.text = text;
-        self.finish_score(name_length, scratch)
+        // A base title carries no dump tags, so every title scores as good.
+        self.finish_score(name_length, true, scratch)
     }
 
     /// Score one platform's canonical name and aliases for reuse across its
@@ -523,7 +542,7 @@ impl NameQuery {
                 *best = *system_score;
             }
         }
-        self.finish_score(name_length, scratch)
+        self.finish_score(name_length, true, scratch)
             .map(|score| (score, false))
     }
 }

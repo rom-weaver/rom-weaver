@@ -74,7 +74,7 @@ The index stores base titles only. One row per game record would be 5.4 MB Brotl
 
 A search requires every query token to match. Literal matches anywhere in a title rank before spelling corrections. The shared Rust scorer in `crates/rom-weaver-cli/src/identify_name_search.rs` ranks corrections by edit distance and also serves searches over installed packs.
 
-The distance is optimal string alignment (restricted Damerau–Levenshtein). An insertion, deletion, substitution, or adjacent letter swap counts as one edit. Words of four to six characters allow one edit; longer words allow two. Shorter words and tokens containing numbers match literally. Total edit distance ranks before word position and title length.
+The distance is optimal string alignment (restricted Damerau–Levenshtein). An insertion, deletion, substitution, or adjacent letter swap counts as one edit. Words of four to six characters allow one edit; longer words allow two. Shorter words and tokens containing numbers match literally. Total edit distance ranks before word position and title length. A search over installed packs also ranks verified good dumps (a `!` dump tag, or no dump tags at all) above every other dump at the same edit distance; the title index holds base titles without tags, so this rule does not apply there.
 
 `index.json` records the file under `titleIndex` with its size, SHA-256, title count, and pack count. The ordering is fixed, so a rebuild over the same titles is byte-identical. The shared builder and reader live in `packages/rom-weaver-webapp/src/lib/identify/title-index.mjs`.
 
