@@ -88,7 +88,7 @@ The web build emits each pack as a Brotli static asset. The service worker preca
 
 The Settings page can install a complete optional group. The service worker checks every pack before it marks the group as installed.
 
-Computer systems and DOS use the `optional-computers` group. MicroW8, PICO-8, TIC-80, and WASM-4 use the `optional-fantasy` group. LowRes NX remains in the default group.
+Computer systems use the `optional-computers` group.
 
 An identify run that needs a pack outside the installed groups fetches that single pack on demand and caches it. The service worker verifies its SHA-256 before it stores it.
 

@@ -165,7 +165,7 @@ The producer restores the source-exact pack cache first. On a miss, the builder 
 
 A separate content cache reuses compressed bytes when their raw content, Brotli parameters, and Brotli library version match. Cache reads decompress and compare the result with the raw input. Corrupt entries rebuild. Entries unused for fourteen days are pruned. CI restores this cache on a pack-cache miss and saves new generations only on `main`; the cache cleanup removes superseded generations. Source archives do not enter the Actions cache.
 
-Build logs show pack-encoding time, compression time or a content-cache hit, and total time per platform. The retained packs and sidecars keep their previous bytes. J2ME is excluded from the source manifest and generated catalog.
+Build logs show pack-encoding time, compression time or a content-cache hit, and total time per platform. The retained packs and sidecars keep their previous bytes. J2ME, Palm OS, Symbian, PSID music, DOS, ScummVM, and fantasy consoles are excluded from the generated catalog.
 
 ### Performance budgets
 

@@ -215,10 +215,8 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 
 `optional-computers` contains these families:
 
-- Amstrad, Atari computers, Commodore, DOS, Enterprise, Memotech, MSX, and SAM Coupé.
+- Amstrad, Atari computers, Commodore, Enterprise, Memotech, MSX, and SAM Coupé.
 - Sharp, Sinclair, Tandy, Tangerine, Thomson, and Videoton.
-
-`optional-fantasy` contains MicroW8, PICO-8, TIC-80, and WASM-4. LowRes NX remains built in.
 
 ### Identify result
 
