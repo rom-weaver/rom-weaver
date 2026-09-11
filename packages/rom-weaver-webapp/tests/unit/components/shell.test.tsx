@@ -107,9 +107,10 @@ describe("Masthead", () => {
     fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    // the stateful controls (status, theme, accent) - Reset lives in the
-    // workflow panel head, More is nav level, and every destination is in More
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(3);
+    // Find plus the stateful controls (status, theme, accent) - Reset lives in
+    // the workflow panel head, More is nav level, and every destination is in More
+    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
+    expect(container.querySelector(".masthead-tools .tool.find-trigger")?.getAttribute("aria-label")).toBe("Find");
     expect(container.querySelector(".masthead-links")).toBeNull();
     expect(container.querySelector(".actions-sep")).toBeNull();
     expect(container.querySelector(".tool-support")).toBeNull();

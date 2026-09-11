@@ -22,7 +22,7 @@ import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
-import { FindPalette } from "./find-palette.tsx";
+import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -68,8 +68,11 @@ type WorkflowTab = {
   href: string;
   icon: ReactNode;
   id: string;
+  /** Full name: Find, the document title, and the More menu use it. */
   label: string;
   placement?: "rail" | "more";
+  /** Short name for the rail and the dock, where the icon carries the noun. */
+  railLabel?: string;
 };
 type MoreMenuGroup = "tools" | "docs";
 const isMoreMenuTab = (tab: WorkflowTab) => tab.placement === "more";
@@ -234,7 +237,7 @@ const ModeRail = ({
                 tabIndex={tab.id === focusedId ? 0 : -1}
               >
                 {tab.icon}
-                <span className="mode-label">{tab.label}</span>
+                <span className="mode-label">{tab.railLabel ?? tab.label}</span>
               </a>
             ))}
           </div>
@@ -303,7 +306,7 @@ const PhoneDock = ({
               tabIndex={tab.id === focusedId ? 0 : -1}
             >
               {tab.icon}
-              <span>{tab.label}</span>
+              <span>{tab.railLabel ?? tab.label}</span>
             </a>
           ))}
         </div>
@@ -502,12 +505,14 @@ const UtilityMenu = ({
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
   /* Rendered hidden and revealed here: the beta-tools setting is client-only, so
-     the prerendered shell must not disagree with the first hydration pass. The
-     whole Tools group toggles, heading included, so an empty group never shows. */
+     the prerendered shell must not disagree with the first hydration pass. Beta
+     entries share the Tools group with the always-on tools; the group itself
+     toggles only when every entry in it is beta, so an empty group never shows. */
   useEffect(() => {
     const enabled = !!(toolsEnabled && onOpenWorkflowTab);
-    for (const group of menuRef.current?.querySelectorAll<HTMLElement>("[data-more-beta-group]") ?? []) {
-      group.hidden = !enabled;
+    const selector = "[data-more-beta-group], [data-more-beta-item]";
+    for (const node of menuRef.current?.querySelectorAll<HTMLElement>(selector) ?? []) {
+      node.hidden = !enabled;
     }
   }, [onOpenWorkflowTab, toolsEnabled]);
 
@@ -544,16 +549,17 @@ const UtilityMenu = ({
     action();
   };
 
-  const groupTabs = (group: MoreMenuGroup, beta: boolean) =>
-    (moreTabs ?? []).filter((tab) => (tab.group ?? "tools") === group && !!tab.beta === beta);
-  const betaTabs = groupTabs("tools", true);
-  const toolTabs = groupTabs("tools", false);
-  const docsTabs = groupTabs("docs", false);
+  const groupTabs = (group: MoreMenuGroup) => (moreTabs ?? []).filter((tab) => (tab.group ?? "tools") === group);
+  const toolTabs = groupTabs("tools");
+  const docsTabs = groupTabs("docs");
+  const toolsAllBeta = toolTabs.length > 0 && toolTabs.every((tab) => tab.beta);
   // A real link, so middle-click and "open in new tab" keep working; a plain
   // activation routes through the same handler the rail uses.
   const workflowItem = (tab: WorkflowTab) => (
     <a
+      data-more-beta-item={tab.beta ? "" : undefined}
       data-more-workflow={tab.id}
+      hidden={tab.beta}
       href={tab.href}
       key={tab.id}
       onClick={(event) => {
@@ -640,14 +646,8 @@ const UtilityMenu = ({
           <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
         </>
       ) : null}
-      {betaTabs.length > 0 ? (
-        <fieldset className="more-group" data-more-beta-group="" hidden>
-          <legend className="more-group-label">{localizer.message("ui.tools.tools")}</legend>
-          {betaTabs.map((tab) => workflowItem(tab))}
-        </fieldset>
-      ) : null}
       {toolTabs.length > 0 ? (
-        <fieldset className="more-group">
+        <fieldset className="more-group" data-more-beta-group={toolsAllBeta ? "" : undefined} hidden={toolsAllBeta}>
           <legend className="more-group-label">{localizer.message("ui.tools.tools")}</legend>
           {toolTabs.map((tab) => workflowItem(tab))}
         </fieldset>
@@ -1185,12 +1185,16 @@ const Masthead = ({
     else if (action.type === "changelog") onSelectTab("whats-new");
     else if (action.type === "external") openExternalFromFind(action.href, confirmExternalNavigation);
   };
-  // ⌘K / Ctrl+K from anywhere; the trigger that owns focus return is the one
-  // the current layout shows, which the dock threshold decides.
+  // `/` from anywhere outside a text field, plus ⌘K / Ctrl+K as the command-
+  // palette alias; the trigger that owns focus return is the one the current
+  // layout shows, which the dock threshold decides.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || event.key.toLowerCase() !== "k") return;
-      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.altKey) return;
+      const modified = event.metaKey || event.ctrlKey;
+      const chord = modified && !event.shiftKey && event.key.toLowerCase() === "k";
+      const slash = !modified && event.key === "/" && !isTextEntryTarget(event.target);
+      if (!(chord || slash)) return;
       // A modal dialog makes the shell inert; the shortcut must not open a
       // palette nobody can reach behind its backdrop.
       if (document.querySelector("dialog[open]")) return;
@@ -1342,20 +1346,6 @@ const Masthead = ({
           tabs={tabs}
           trailing={
             <>
-              <span className="desktop-find">
-                <button
-                  aria-controls="find-palette"
-                  aria-expanded={findOpen && findPlacement === "desktop"}
-                  aria-haspopup="dialog"
-                  className="mode-more mode-find"
-                  onClick={() => toggleFind("desktop")}
-                  ref={desktopFindRef}
-                  type="button"
-                >
-                  <Search aria-hidden="true" />
-                  <span className="tool-text">{findLabel}</span>
-                </button>
-              </span>
               <MoreMenu
                 autoFocusFirst={utilityViaKeyboard}
                 buttonClassName="mode-more"
@@ -1387,6 +1377,27 @@ const Masthead = ({
           }
         />
         <div className="masthead-tools" ref={toolsRef}>
+          {/* Desktop Find is a glyph like its neighbours, with its key beside
+              the icon; the name lives in the tooltip and the accessible label. */}
+          <span className="desktop-find">
+            <button
+              aria-controls="find-palette"
+              aria-expanded={findOpen && findPlacement === "desktop"}
+              aria-haspopup="dialog"
+              aria-keyshortcuts="/ Control+K Meta+K"
+              aria-label={findLabel}
+              className="tool find-trigger"
+              onClick={() => toggleFind("desktop")}
+              ref={desktopFindRef}
+              title={`${findLabel} (${FIND_SHORTCUT_HINT})`}
+              type="button"
+            >
+              <Search aria-hidden="true" />
+              <span aria-hidden="true" className="find-trigger-key">
+                {FIND_SHORTCUT_HINT}
+              </span>
+            </button>
+          </span>
           <button
             aria-haspopup="dialog"
             aria-label={runtimeTitle}
@@ -1505,6 +1516,15 @@ const Masthead = ({
 };
 
 const localizerFindLabel = (localizer: Localizer) => localizer.message("ui.find.label");
+
+/** `/` MUST keep typing into a field; only a bare `/` on the page opens Find. */
+const isTextEntryTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return (
+    target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement
+  );
+};
 
 /** Find's external rows open like the footer links: guarded when a job is running. */
 const openExternalFromFind = (href: string, confirmExternalNavigation?: (href: string) => Promise<boolean>) => {

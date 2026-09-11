@@ -1,8 +1,9 @@
 /* ═══ Find ═══
    One box for tools, settings, app surfaces and guides. Its trigger is a
-   button in the rail and a dock action on phones; the palette itself is one
-   element that the dock threshold repositions: a dropdown under the masthead
-   on desktop, a sheet above the dock on phones. */
+   search-field button in the masthead actions on desktop and a dock action on
+   phones; the palette itself is one element that the dock threshold
+   repositions: a dropdown under the masthead on desktop, a sheet above the
+   dock on phones. */
 .rw-app .find-palette {
   position: absolute;
   inset-block-start: calc(100% + var(--sp-xs));
@@ -10,7 +11,7 @@
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  inline-size: min(600px, calc(100vw - 24px));
+  inline-size: min(800px, calc(100vw - 24px));
   max-block-size: min(70vh, 32rem);
   padding: var(--sp-xs);
   background: var(--plate);
@@ -121,10 +122,28 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
-/* The rail trigger is a sibling of More: nav level, never a tab. */
+/* The desktop trigger is a `.tool` glyph like status, theme and accent, so the
+   actions cluster stays one family; the key chip beside the icon is what says
+   "type this" without a word of label. */
 .rw-app .desktop-find {
   position: relative;
   display: inline-flex;
+}
+.rw-app .tool.find-trigger {
+  display: inline-flex;
+  gap: var(--sp-2xs);
+  align-items: center;
+  width: auto;
+  padding-inline: var(--sp-xs) 5px;
+}
+.rw-app .find-trigger-key {
+  padding: 0 5px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink-3);
+  border: 1px solid var(--seam);
+  border-radius: 4px;
 }
 @media (prefers-reduced-motion: reduce) {
   .rw-app .find-palette {

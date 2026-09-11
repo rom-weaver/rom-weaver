@@ -15,9 +15,8 @@ const KIND_MESSAGE: Record<
   tool: "ui.find.kindTool",
 };
 
-/** The chord as the visitor's keyboard writes it. */
-const shortcutHint = () =>
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl+K";
+/** The key shown beside Find. `/` is the web's search key; ⌘K / Ctrl+K stays a silent alias. */
+const FIND_SHORTCUT_HINT = "/";
 
 const isPlainActivation = (event: React.MouseEvent) =>
   event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
@@ -152,7 +151,7 @@ const FindPalette = ({
           value={query}
         />
         <span aria-hidden="true" className="find-key">
-          {shortcutHint()}
+          {FIND_SHORTCUT_HINT}
         </span>
       </div>
       <p aria-live="polite" className="sr-only" id={statusId} role="status">
@@ -213,4 +212,4 @@ const FindPalette = ({
   );
 };
 
-export { FindPalette };
+export { FIND_SHORTCUT_HINT, FindPalette };
