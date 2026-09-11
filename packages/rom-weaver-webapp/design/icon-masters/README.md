@@ -12,7 +12,7 @@ Source SVGs for the pre-rendered PNGs in `../../src/assets/app/root/`. Each wrap
 
 ## Geometry
 
-The logo uses a 32 × 32 viewBox. The cartridge fills 30 × 30 units; the disc carries a 5.6-unit hub ring around a 3.1-unit centre, and both bands are 3.15 units wide. The bands interlace - cream over accent at the left crossing, accent over cream at the right - and a 4.4-unit charcoal casing stroke opens the gap at each crossing. Geometry is traced from the reference render in `design/logo-concepts/thread-weave.png` at the repository root; band centres match it to within 0.35 units. The hub ring only resolves above roughly 64 px, so it reads as a grey smudge in the 30 px masthead and the 16 px favicon.
+The logo uses a 32 × 32 viewBox. It is not drawn by hand: `scripts/trace-logo.mjs` traces `design/logo-concepts/thread-weave.png` with potrace, one layer per brand colour, and writes both `logo.svg` and `brand-mark.tsx`. Pixels are snapped to the palette first, so the accent layer is a single `#d9690f` fill that `tintBrandMark` re-dyes and `--thread` overrides. Cream touching the image border is flood-filled away, so the mark stays transparent outside the cartridge. Re-run the script after changing the reference render; `--check` fails when the two outputs drift from it. The hub ring only resolves above roughly 64 px, so it reads as a grey smudge in the 30 px masthead and the 16 px favicon.
 
 The launcher masters center the mark on an opaque charcoal background. The maskable master keeps the mark inside the central 80%-diameter safe circle.
 

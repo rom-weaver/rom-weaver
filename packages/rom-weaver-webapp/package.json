@@ -58,6 +58,8 @@
     "i18n:extract": "lingui extract",
     "icons:channels": "node scripts/generate-channel-icons.mjs",
     "icons:channels:check": "node scripts/generate-channel-icons.mjs --check",
+    "logo:trace": "node scripts/trace-logo.mjs",
+    "logo:trace:check": "node scripts/trace-logo.mjs --check",
     "icons:optimize": "run-s icons:optimize:png icons:optimize:ico",
     "icons:optimize:ico": "node scripts/optimize-ico.mjs src/assets/app/root/favicon.ico",
     "icons:optimize:png": "node scripts/optimize-png.mjs --verify src/assets/app/root design",

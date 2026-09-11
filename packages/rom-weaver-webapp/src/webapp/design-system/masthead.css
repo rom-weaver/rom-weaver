@@ -65,9 +65,10 @@
   aspect-ratio: 1;
   border-radius: 8px;
 }
-/* The accent band is the one part of the mark that re-dyes; the rest is chassis. */
+/* The accent band is the one part of the mark that re-dyes; the rest is chassis.
+   The traced mark paints it as a filled region, not a stroked path. */
 .rw-app .brand-mark-band {
-  stroke: var(--thread);
+  fill: var(--thread);
 }
 .rw-app .brand-copy {
   display: block;
