@@ -76,6 +76,24 @@ test("Lighthouse gates use the median and the configured warn/error bands", () =
   assert.equal(evaluateThreshold(201, { expected: 100, maximum: 200 }, false), "error");
 });
 
+test("Lighthouse TBT tolerates one representative clean run", () => {
+  const config = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        import.meta.dirname,
+        "..",
+        "packages",
+        "rom-weaver-webapp",
+        "performance-budgets.json",
+      ),
+      "utf8",
+    ),
+  );
+  const threshold = config.lighthouse.metrics["total-blocking-time"];
+  assert.equal(threshold.aggregation, "optimistic");
+  assert.equal(aggregate([818, 46.5, 848], threshold.aggregation, false), 46.5);
+});
+
 // The gates audit a locally served production build, so every audit in the four
 // budgeted categories has to run. Skipping one silently reweights its category:
 // dropping `is-crawlable` alone would rescore SEO over 9 audits instead of
