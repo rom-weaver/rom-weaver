@@ -226,6 +226,64 @@ fn an_alternate_name_matches_but_ranks_below_the_primary_name() {
 }
 
 #[test]
+fn a_good_dump_outranks_a_shorter_bad_dump() {
+    let mut bad = game("Mario (U) [b1]");
+    bad.dump_tags = vec!["b1".to_string()];
+    let mut verified = game("Super Mario Bros (E) [!]");
+    verified.dump_tags = vec!["!".to_string()];
+    let untagged = game("Super Mario Bros 2 (USA)");
+    let mut hack = game("Mario (U) [h1C]");
+    hack.dump_tags = vec!["h1C".to_string()];
+    let ordered = names("mario", &[bad, hack, untagged, verified]);
+    assert_eq!(
+        ordered,
+        vec![
+            "Super Mario Bros (E) [!]",
+            "Super Mario Bros 2 (USA)",
+            "Mario (U) [b1]",
+            "Mario (U) [h1C]",
+        ]
+    );
+}
+
+#[test]
+fn a_dump_tag_token_still_filters_to_tagged_dumps() {
+    let mut bad = game("Mario (U) [b1]");
+    bad.dump_tags = vec!["b1".to_string()];
+    let mut verified = game("Mario (U) [!]");
+    verified.dump_tags = vec!["!".to_string()];
+    let untagged = game("Mario (USA)");
+    assert_eq!(
+        names(
+            "mario bad",
+            &[verified.clone(), untagged.clone(), bad.clone()]
+        ),
+        vec!["Mario (U) [b1]"]
+    );
+    assert_eq!(
+        names(
+            "mario b1",
+            &[verified.clone(), untagged.clone(), bad.clone()]
+        ),
+        vec!["Mario (U) [b1]"]
+    );
+    assert_eq!(
+        names("mario verified", &[verified, untagged, bad]),
+        vec!["Mario (U) [!]"]
+    );
+}
+
+#[test]
+fn an_exact_bad_dump_outranks_a_fuzzy_good_dump() {
+    let mut bad = game("Zelda (U) [b1]");
+    bad.dump_tags = vec!["b1".to_string()];
+    let mut typo = game("Zelad (U) [!]");
+    typo.dump_tags = vec!["!".to_string()];
+    let ordered = names("zelda", &[typo, bad]);
+    assert_eq!(ordered, vec!["Zelda (U) [b1]", "Zelad (U) [!]"]);
+}
+
+#[test]
 fn a_shorter_name_wins_a_tie() {
     let ordered = names(
         "mario",
