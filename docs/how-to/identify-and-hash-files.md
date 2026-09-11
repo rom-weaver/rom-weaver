@@ -64,9 +64,9 @@ Check what is installed with `rom-weaver identify database list`. A result with 
 
 ## Install an optional group
 
-Choose `optional-arcade`, `optional-computers`, `optional-engines`, `optional-fantasy`, `optional-mobile`, or `optional-extended`.
+Choose `optional-arcade`, `optional-computers`, `optional-engines`, `optional-mobile`, or `optional-extended`.
 
-The `optional-computers` group contains computer systems and DOS. The `optional-fantasy` group contains MicroW8, PICO-8, TIC-80, and WASM-4. LowRes NX stays installed by default.
+The `optional-computers` group contains the supported computer systems.
 
 Install one group:
 

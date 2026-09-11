@@ -9,7 +9,7 @@ import readline from "node:readline";
 import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { brotliCompressBuffer } from "./wasm/brotli-compress.mjs";
+import { brotliCompressBufferCached } from "./wasm/brotli-compress.mjs";
 import {
   CHEAT_PLATFORMS,
   CHEAT_SHARD_FORMAT,
@@ -70,8 +70,7 @@ export const LIBRETRO_LICENSE = "CC-BY-SA-4.0";
 // terms to travel with the adapted DAT and cheat data.
 export const LIBRETRO_LICENSE_FILE = "libretro-database-LICENSE";
 export const IDENTIFY_GENERATION_DATE = "2026-08-27";
-// This is the complete pinned source manifest: the 52 root DATs, 92 No-Intro
-// DATs, and 22 Redump DATs. Do not replace it with a live directory listing.
+// The source manifest MUST stay pinned rather than follow a live directory listing.
 export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Amstrad - CPC.dat",
   "dat/Arduboy Inc - Arduboy.dat",
@@ -84,7 +83,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Commodore - CD32.dat",
   "dat/DICE.dat",
   "dat/DOOM.dat",
-  "dat/DOS.dat",
   "dat/Dinothawr.dat",
   "dat/Enterprise - 128.dat",
   "dat/Flashback.dat",
@@ -92,10 +90,7 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Handheld Electronic Game.dat",
   "dat/Infocom - Z-Machine.dat",
   "dat/Jump 'n Bump.dat",
-  "dat/LowRes NX.dat",
   "dat/Lutro.dat",
-  "dat/MicroW8.dat",
-  "dat/Mobile - J2ME.dat",
   "dat/MrBoom.dat",
   "dat/NEC - PC-98.dat",
   "dat/Nintendo - GameCube.dat",
@@ -103,7 +98,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Nintendo - Super Nintendo Entertainment System.dat",
   "dat/Nintendo - Wii U.dat",
   "dat/Nintendo - Wii.dat",
-  "dat/PICO-8.dat",
   "dat/PuzzleScript.dat",
   "dat/Quake II.dat",
   "dat/Quake III.dat",
@@ -111,19 +105,16 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/RPG Maker.dat",
   "dat/Rick Dangerous.dat",
   "dat/SNK - Neo Geo.dat",
-  "dat/ScummVM.dat",
   "dat/Sega - Saturn.dat",
   "dat/Sinclair - ZX 81.dat",
   "dat/Sinclair - ZX Spectrum.dat",
   "dat/Sony - PlayStation 3.dat",
   "dat/Sony - PlayStation Minis.dat",
   "dat/System.dat",
-  "dat/TIC-80.dat",
   "dat/Tomb Raider.dat",
   "dat/Uzebox.dat",
   "dat/Videoton - TV-Computer.dat",
   "dat/Vircon32.dat",
-  "dat/WASM-4.dat",
   "dat/Wolfenstein 3D.dat",
   "metadat/no-intro/Arduboy Inc - Arduboy.dat",
   "metadat/no-intro/Atari - 2600.dat",
@@ -163,9 +154,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "metadat/no-intro/Microsoft - XBOX 360 (Title Updates).dat",
   "metadat/no-intro/Microsoft - Xbox 360 (Digital).dat",
   "metadat/no-intro/Microsoft - Xbox 360.dat",
-  "metadat/no-intro/Mobile - J2ME.dat",
-  "metadat/no-intro/Mobile - Palm OS.dat",
-  "metadat/no-intro/Mobile - Symbian.dat",
   "metadat/no-intro/Mobile - Zeebo.dat",
   "metadat/no-intro/NEC - PC Engine - TurboGrafx 16.dat",
   "metadat/no-intro/NEC - PC Engine SuperGrafx.dat",
@@ -337,7 +325,6 @@ export const OPENGOOD_ONLY_PLATFORMS = Object.freeze({
   "SNK - Neo Geo Pocket Color": ["OpenNGPx.NGC.dat"],
   "Tangerine - Oric": ["OpenOric.dat"],
   "NEC - PC Engine and TurboGrafx-16": ["OpenPCE.dat"],
-  "Commodore - PSID": ["OpenPSID.dat"],
   "Sega - Pico": ["OpenPico.dat"],
   "SAM Coupé": ["OpenSAMC.dat"],
   "Sega - Master System": ["OpenSMS.dat"],
@@ -517,15 +504,14 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
 
 const DEFAULT_PACK_SET = new Set(DEFAULT_PACK_PLATFORMS);
 const COMPUTER_PACK_PATTERN =
-  /^(?:Amstrad|Commodore|DOS$|Enterprise|Memotech|Microsoft - MSX|SAM Coupé|Sharp|Sinclair|Tandy|Tangerine|Thomson|Videoton)|^Atari - (?:8-bit Family|ST$)/u;
+  /^(?:Amstrad|Commodore|Enterprise|Memotech|Microsoft - MSX|SAM Coupé|Sharp|Sinclair|Tandy|Tangerine|Thomson|Videoton)|^Atari - (?:8-bit Family|ST$)/u;
 export const packGroupFor = (platform) => {
   if (DEFAULT_PACK_SET.has(platform)) return "default";
   if (COMPUTER_PACK_PATTERN.test(platform)) return "optional-computers";
-  if (/^(?:LowRes NX|MicroW8|PICO-8|TIC-80|WASM-4)$/u.test(platform)) return "optional-fantasy";
-  if (/Mobile|Palm OS|J2ME|Symbian|Zeebo/u.test(platform)) return "optional-mobile";
+  if (/Mobile|Zeebo/u.test(platform)) return "optional-mobile";
   if (/HBMAME|Atomiswave|Naomi|Arcade|Neo Geo$/u.test(platform)) return "optional-arcade";
   if (
-    /DOOM|Quake|ScummVM|Cave Story|Cannonball|Dinothawr|Flashback|Lutro|MrBoom|PuzzleScript|RPG Maker|Rick Dangerous|Tomb Raider|Wolfenstein/u.test(
+    /DOOM|Quake|Cave Story|Cannonball|Dinothawr|Flashback|Lutro|MrBoom|PuzzleScript|RPG Maker|Rick Dangerous|Tomb Raider|Wolfenstein/u.test(
       platform,
     )
   )
@@ -554,6 +540,7 @@ Options:
   --cache-dir <path>       Download and game-cache directory. Defaults to ${DEFAULT_CACHE_DIR}
   --force-row-cache        Rebuild the per-system game cache even if it matches.
   --download-only          Download/resolve sources, then stop.
+  --jobs <n>               Concurrent platform builds (default: up to 4 CPUs).
   --no-brotli              Do not emit <pack>.br files.
   --brotli-quality <n>     Brotli quality 0-11. Defaults to 11.
   --max-objects <n>        Parse only the first n games per system (smoke tests).
@@ -570,6 +557,7 @@ function parseArgs(argv) {
     brotliQuality: 11,
     cacheDir: process.env.ROM_WEAVER_IDENTIFY_CACHE_DIR || DEFAULT_CACHE_DIR,
     downloadOnly: false,
+    jobs: Math.min(4, os.availableParallelism()),
     forceRowCache: false,
     maxObjects: undefined,
     only: [],
@@ -587,6 +575,7 @@ function parseArgs(argv) {
     };
 
     if (arg === "--cache-dir") options.cacheDir = readValue();
+    else if (arg === "--jobs") options.jobs = Number(readValue());
     else if (arg === "--out") options.outPath = readValue();
     else if (arg === "--only") {
       for (const name of readValue().split(",")) {
@@ -606,6 +595,9 @@ function parseArgs(argv) {
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
+  }
+  if (!Number.isSafeInteger(options.jobs) || options.jobs < 1) {
+    throw new Error("--jobs must be a positive integer");
   }
   if (
     !Number.isInteger(options.brotliQuality) ||
@@ -912,10 +904,15 @@ async function writeCheatShard(platform, games, options) {
     group: packGroupFor(platform),
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(bytes, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(bytes, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     entry.brotliFile = `${fileName}.br`;
     entry.brotliBytes = compressed.length;
@@ -1728,7 +1725,7 @@ function resolveSelection(options) {
     );
   }
   if (missing.length) console.error(`[identify] skipping ${missing.length} unknown platform(s)`);
-  return selected.filter((platform) => configured.has(platform)).sort();
+  return [...new Set(selected.filter((platform) => configured.has(platform)))].sort();
 }
 
 async function* readGames(gamesPath) {
@@ -2354,10 +2351,15 @@ async function writeChecksumRouter(filters, samples, options) {
     packs: filters.length,
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(bytes, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(bytes, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     entry.brotliFile = `${CHECKSUM_ROUTER_FILE}.br`;
     entry.brotliBytes = compressed.length;
@@ -2383,9 +2385,7 @@ function sampleTitles(titles) {
 }
 
 // Every distinct searchable base title in a pack. Regional variants collapse
-// into one. A name that is punctuation alone (ScummVM ships a game called `!`)
-// normalizes to nothing and can never be matched, so it is dropped here rather
-// than shipped as a row no query can reach.
+// into one. Names that normalize to nothing MUST be omitted because no query can match them.
 function collectTitles(games) {
   const titles = new Set();
   for (const game of games) {
@@ -2419,10 +2419,15 @@ async function writeTitleIndex(entries, samples, options) {
     packs: index.packs.length,
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(bytes, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(bytes, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     entry.brotliFile = `${TITLE_INDEX_FILE}.br`;
     entry.brotliBytes = compressed.length;
@@ -2438,10 +2443,14 @@ async function writeTitleIndex(entries, samples, options) {
 async function writeSystemPackV1(platform, gamesInfo, options) {
   console.error(`[identify] ${platform}: building RWFP1 pack`);
   const games = gamesInfo.games;
+  const started = performance.now();
   const { componentCount, pack, routedKeys, sharedComponents } = buildSystemPackV1(
     platform,
     games,
     gamesInfo.source,
+  );
+  console.error(
+    `[identify] ${platform}: pack encoded in ${Math.round(performance.now() - started)} ms`,
   );
   const fileName = `${gamesInfo.slug}.pack`;
   const outPath = path.join(options.outPath, fileName);
@@ -2463,10 +2472,15 @@ async function writeSystemPackV1(platform, gamesInfo, options) {
     },
   };
   if (options.brotli) {
-    const compressed = brotliCompressBuffer(pack, {
+    const compressionStarted = performance.now();
+    const { compressed, cached } = await brotliCompressBufferCached(pack, {
       parameterProfile: "default",
       quality: options.brotliQuality,
+      cacheDir: path.join(options.cacheDir, "brotli"),
     });
+    console.error(
+      `[identify] ${path.basename(outPath)}: brotli ${cached ? "cache hit" : "compressed"} in ${Math.round(performance.now() - compressionStarted)} ms`,
+    );
     await writeFile(`${outPath}.br`, compressed);
     system.brotliFile = `${fileName}.br`;
     system.brotliBytes = compressed.length;
@@ -2539,6 +2553,48 @@ export function buildCatalogPlatforms(systems) {
   return platforms;
 }
 
+// Workers MUST retain selection order in the indexes and finish before a failed build returns.
+async function buildSelectedPlatforms(selected, options, paths) {
+  const results = Array.from({ length: selected.length });
+  let next = 0;
+  let stopped = false;
+  const worker = async () => {
+    while (!stopped && next < selected.length) {
+      const position = next++;
+      const platform = selected[position];
+      try {
+        const started = performance.now();
+        const games = await readPlatformGames(platform, options, paths);
+        const system = await writeSystemPackV1(platform, games, options);
+        const cheat = CHEAT_PLATFORMS[platform]
+          ? await writeCheatShard(platform, games.games, options)
+          : undefined;
+        const keys = collectRouterKeys(games.games);
+        const titles = collectTitles(games.games);
+        results[position] = {
+          system,
+          cheat,
+          filter: buildPackFilter(system.slug, keys),
+          routerSample: { slug: system.slug, keys: sampleRouterKeys(keys) },
+          titleEntries: titles.map((name) => ({ name, slugs: [system.slug] })),
+          titleSample: { slug: system.slug, titles: sampleTitles(titles) },
+        };
+        console.error(
+          `[identify] ${platform}: complete in ${Math.round(performance.now() - started)} ms`,
+        );
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  };
+  const workers = Array.from({ length: Math.min(options.jobs, selected.length) }, worker);
+  const outcomes = await Promise.allSettled(workers);
+  const failed = outcomes.find((outcome) => outcome.status === "rejected");
+  if (failed) throw failed.reason;
+  return results;
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.printPlatforms) {
@@ -2608,25 +2664,13 @@ export async function main(argv = process.argv.slice(2)) {
     path.join(options.outPath, LIBRETRO_LICENSE_FILE),
     await readFile(paths.libretro.get("LICENSE")),
   );
-  const systems = [];
-  const cheats = [];
-  const routerFilters = [];
-  const routerSamples = [];
-  const titleEntries = [];
-  const titleSamples = [];
-  for (const platform of selected) {
-    const games = await readPlatformGames(platform, options, paths);
-    const system = await writeSystemPackV1(platform, games, options);
-    systems.push(system);
-    if (CHEAT_PLATFORMS[platform])
-      cheats.push(await writeCheatShard(platform, games.games, options));
-    const keys = collectRouterKeys(games.games);
-    routerFilters.push(buildPackFilter(system.slug, keys));
-    routerSamples.push({ slug: system.slug, keys: sampleRouterKeys(keys) });
-    const titles = collectTitles(games.games);
-    for (const name of titles) titleEntries.push({ name, slugs: [system.slug] });
-    titleSamples.push({ slug: system.slug, titles: sampleTitles(titles) });
-  }
+  const built = await buildSelectedPlatforms(selected, options, paths);
+  const systems = built.map((entry) => entry.system);
+  const cheats = built.flatMap((entry) => (entry.cheat ? [entry.cheat] : []));
+  const routerFilters = built.map((entry) => entry.filter);
+  const routerSamples = built.map((entry) => entry.routerSample);
+  const titleEntries = built.flatMap((entry) => entry.titleEntries);
+  const titleSamples = built.map((entry) => entry.titleSample);
   const checksumRoutes = await writeChecksumRouter(routerFilters, routerSamples, options);
   const titleIndex = await writeTitleIndex(titleEntries, titleSamples, options);
 
@@ -2704,7 +2748,6 @@ export async function main(argv = process.argv.slice(2)) {
       { id: "optional-arcade", label: "Arcade", default: false },
       { id: "optional-computers", label: "Computers", default: false },
       { id: "optional-engines", label: "Game engines", default: false },
-      { id: "optional-fantasy", label: "Fantasy consoles", default: false },
       { id: "optional-mobile", label: "Mobile", default: false },
       { id: "optional-extended", label: "Extended systems", default: false },
     ].map((group) => ({

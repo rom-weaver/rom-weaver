@@ -1,0 +1,11 @@
+name: Download ROM identify data
+description: Download the identify packs prepared by this CI run.
+
+runs:
+  using: composite
+  steps:
+    - name: Download identify packs
+      uses: actions/download-artifact@v8
+      with:
+        name: identify-data
+        path: crates/rom-weaver-cli/data/identify
