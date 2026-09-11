@@ -763,7 +763,8 @@ const writeCloudflareHeadersAsset = (channel) => {
         ...crossOriginIsolationHeaders,
         // Deploys replace the whole asset set, so HTML held past a redeploy
         // references hashed URLs that now 404 - force revalidation on every
-        // document load. /assets/* and the SW script detach this below.
+        // document load. The service worker script needs the same treatment and
+        // inherits it from here; only /assets/* detaches it below.
         "Cache-Control": "no-cache",
         "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
@@ -785,7 +786,14 @@ const writeCloudflareHeadersAsset = (channel) => {
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/rom-weaver-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}\n${markdownHeaders}`,
+        // The two identify manifests carry the content hashes every pack URL is
+        // fetched with, so they are the one thing under /assets/ that MUST be
+        // revalidated. On Pages these rules never fire - the assets Function
+        // claims /assets/identify-* and _headers does not apply to a URL a
+        // Function claims, so the Function sets the same value itself (see
+        // assetCacheControl in functions/assets/content-types.js). They are
+        // written for hosts that serve dist/ with no Function.
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}\n${markdownHeaders}`,
       );
     },
     configResolved(config) {
@@ -873,9 +881,6 @@ const writeBrotliSidecars = () => {
         sidecarUrls.push("/assets/identify-*");
       }
       for (const name of fs.readdirSync(assetsDir)) {
-        // The identify index is mutable so a deployment can advertise a new
-        // pack set without an immutable sidecar masking the update.
-        if (name === "identify-index.json" || name === "identify-catalog.json") continue;
         // `.map` sidecars are devtools-only: nothing on a normal page load
         // requests them, so a q11 pass and a _routes.json include each would
         // buy nothing and eat the include budget.
@@ -891,10 +896,10 @@ const writeBrotliSidecars = () => {
           continue;
         }
         assertSidecarTypeIsKnown(`/assets/${name}`);
-        const route =
-          name.startsWith("identify-") && (name.endsWith(".pack") || name.endsWith(".bin"))
-            ? "/assets/identify-*"
-            : `/assets/${name}`;
+        // Every identify asset rides the one wildcard include staged above. An exact
+        // entry per pack, shard, and manifest would be redundant and eat the budget
+        // asserted below.
+        const route = name.startsWith("identify-") ? "/assets/identify-*" : `/assets/${name}`;
         if (!sidecarUrls.includes(route)) sidecarUrls.push(route);
       }
       if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {

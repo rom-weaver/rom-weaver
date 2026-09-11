@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { assetCacheControl, isMutableAsset } from "../../functions/assets/content-types.js";
 import { matchPagesHeaders, parsePagesHeaders } from "../../scripts/pages-headers.mjs";
 
 // The shape writeCloudflareHeadersAsset emits.
 const headersFile = `/*
   Cross-Origin-Embedder-Policy: require-corp
+  Cache-Control: no-cache
   Content-Signal: ai-train=no, search=yes, ai-input=yes
   ! Link
 
@@ -12,9 +14,6 @@ const headersFile = `/*
 
 /assets/identify-index.json
   Cache-Control: no-cache
-
-/rom-weaver-service-worker.js
-  Cache-Control: no-cache
 `;
 
 const rules = parsePagesHeaders(headersFile);
@@ -22,6 +21,7 @@ const rules = parsePagesHeaders(headersFile);
 describe("pages _headers matching", () => {
   it("applies the /* block to a document", () => {
     expect(matchPagesHeaders(rules, "/")).toEqual({
+      "Cache-Control": "no-cache",
       "Content-Signal": "ai-train=no, search=yes, ai-input=yes",
       "Cross-Origin-Embedder-Policy": "require-corp",
     });
@@ -37,7 +37,9 @@ describe("pages _headers matching", () => {
     expect(matched["Cross-Origin-Embedder-Policy"]).toBe("require-corp");
   });
 
-  it("lets a later exact rule win over an earlier wildcard", () => {
+  // The script has no rule of its own: a rule that unsets Cache-Control to restate
+  // the same value is what dropped the header in production, so /* now owns it.
+  it("revalidates the service worker script through the broad rule", () => {
     expect(matchPagesHeaders(rules, "/rom-weaver-service-worker.js")["Cache-Control"]).toBe("no-cache");
   });
 
@@ -48,8 +50,19 @@ describe("pages _headers matching", () => {
     );
   });
 
+  // /index.html keeps the broad rule's no-cache: the immutable splat covers only /assets/.
   it("keeps a splat from leaking across a path it does not cover", () => {
-    expect(matchPagesHeaders(rules, "/index.html")["Cache-Control"]).toBeUndefined();
+    expect(matchPagesHeaders(rules, "/index.html")["Cache-Control"]).toBe("no-cache");
+  });
+
+  it("keeps the identify manifests revalidated and everything else immutable", () => {
+    expect(assetCacheControl("/assets/identify-index.json")).toBe("no-cache");
+    expect(assetCacheControl("/assets/identify-catalog.json")).toBe("no-cache");
+    expect(isMutableAsset("/assets/identify-catalog.json")).toBe(true);
+    for (const pathname of ["/assets/identify-sega-32x.pack", "/assets/index-abc.js"]) {
+      expect(isMutableAsset(pathname)).toBe(false);
+      expect(assetCacheControl(pathname)).toBe("public, max-age=31536000, immutable");
+    }
   });
 
   it("ignores comments, blank lines, and indented lines with no pattern", () => {

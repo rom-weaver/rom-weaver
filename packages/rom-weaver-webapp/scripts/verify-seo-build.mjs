@@ -23,6 +23,9 @@ const read = (name) => fs.readFileSync(path.join(distDir, name), "utf8");
 const assertIncludes = (source, expected, label) => {
   if (!source.includes(expected)) throw new Error(`${label} is missing ${JSON.stringify(expected)}`);
 };
+const assertExcludes = (source, unexpected, label) => {
+  if (source.includes(unexpected)) throw new Error(`${label} must not be present: ${JSON.stringify(unexpected)}`);
+};
 // The parser-time resolver in index.html finds its slots by class, so what has
 // to hold is that the class is ON the element - not that it is the element's
 // whole class attribute. Prerendered markup composes class lists (`sub-chip
@@ -98,11 +101,19 @@ assertIncludes(
   "/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache",
   "identify index cache headers",
 );
-assertIncludes(
-  headers,
-  "/rom-weaver-service-worker.js\n  ! Cache-Control\n  Cache-Control: no-cache",
-  "service worker cache headers",
-);
+// The service worker script takes its no-cache from the `/*` block. A rule of its
+// own that unset Cache-Control only to restate the same value left the deployed
+// response with no Cache-Control at all, so Pages filled in its own browser TTL.
+assertExcludes(headers, "/rom-weaver-service-worker.js\n  ! Cache-Control", "service worker cache rule");
+// Both identify manifests are served by the assets Function, which is where their
+// no-cache comes from on Pages - _headers does not apply to a URL a Function claims.
+// The route include is what keeps them on that path.
+assertIncludes(read("_routes.json"), '"/assets/identify-*"', "identify assets Function route");
+for (const name of ["identify-index.json.br", "identify-catalog.json.br"]) {
+  if (!fs.existsSync(path.join(distDir, "assets", name))) {
+    throw new Error(`identify manifest sidecar is missing: assets/${name}`);
+  }
+}
 // Cloudflare caches 103 Early Hints separately from the document. Hashed URLs in a
 // wildcard Link header can therefore outlive the deployment that emitted them and preload
 // dead assets. The HTML already carries the exact module, stylesheet, and font URLs; keep
