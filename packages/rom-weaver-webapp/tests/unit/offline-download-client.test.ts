@@ -182,6 +182,28 @@ describe("offline download client", () => {
     expect(await (await cacheStorage.open(CACHE_NAME)).keys()).toEqual([]);
   });
 
+  it("deduplicates active direct downloads but retries bytes rejected by a caller", async () => {
+    let attempts = 0;
+    const client = createOfflineDownloadClient({
+      cacheName: CACHE_NAME,
+      fetcher: async () => {
+        attempts += 1;
+        return new Response(attempts === 1 ? "corrupt" : "recovered");
+      },
+      log: () => undefined,
+      manifestUrl: "offline-downloads-build.json",
+      matchManifest: async () => Response.json({}),
+      scope: SCOPE,
+    });
+    const request = new Request(new URL("identify/pack.bin", SCOPE));
+    const [first, concurrent] = await Promise.all([client.download(request), client.download(request)]);
+    expect(await first.text()).toBe("corrupt");
+    expect(await concurrent.text()).toBe("corrupt");
+    expect(attempts).toBe(1);
+    expect(await (await client.download(request)).text()).toBe("recovered");
+    expect(attempts).toBe(2);
+  });
+
   it("retries a direct download after the server recovers", async () => {
     let attempts = 0;
     const client = createOfflineDownloadClient({
