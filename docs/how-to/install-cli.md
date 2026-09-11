@@ -14,6 +14,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
   - [cargo-binstall](#cargo-binstall)
   - [mise](#mise)
 - [Source install](#source-install)
+  - [Install the data without a network](#install-the-data-without-a-network)
 - [Run in Docker](#run-in-docker)
 - [Install shell completions](#install-shell-completions)
 - [Development checkout](#development-checkout)
@@ -146,6 +147,16 @@ rom-weaver setup
 ```
 
 `setup` downloads them from the matching GitHub release, so a source build of an unreleased commit has no data to fetch. Build the data locally in that case with `node scripts/ensure-identify-data.mjs`; see [Identify data](../development/identify-data.md).
+
+### Install the data without a network
+
+On a machine that cannot reach GitHub, download `rom-weaver-identify-data.tar.br` from the [release page](https://github.com/rom-weaver/rom-weaver/releases) on a machine that can, copy it across, and point `setup` at it:
+
+```bash
+rom-weaver setup --from rom-weaver-identify-data.tar.br
+```
+
+One archive serves as many machines as you like. Use the archive built for the version you installed; `setup` verifies every pack against the index inside it and fails rather than install a mismatched database.
 
 ## Run in Docker
 

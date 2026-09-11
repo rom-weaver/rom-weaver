@@ -164,9 +164,10 @@ Installed packs live in one directory. The default is the per-user data director
 `rom-weaver setup` installs the identify packs and the cheat shards into the directory above, downloading them from this version's GitHub release. It is for installs that ship only the executable - `cargo install`, `cargo binstall`, and `mise`; Homebrew, scoop, npm, the install scripts, and the Docker image place that data beside the binary already, and `setup` only reports on those.
 
 - `--database-dir DIR` installs somewhere other than the per-user data directory.
+- `--from ARCHIVE` installs a local `rom-weaver-identify-data.tar.br` and makes no network request. The archive must be the one built for this version; its packs are verified against the index it carries.
 - `--force` downloads again even when the database is already installed.
 
-Without `--force` an installed database is reported, not re-downloaded, so the command is safe to repeat. JSON output carries `packs`, `downloaded`, and `database_dir`.
+Without `--force` an installed database is reported, not re-downloaded, so the command is safe to repeat. `--from` states the intent to install that archive, so it replaces an installed database the way `--force` does. JSON output carries `packs`, `downloaded`, and `database_dir`; `downloaded` is `false` for a `--from` install.
 
 ### `identify database` subcommands
 
