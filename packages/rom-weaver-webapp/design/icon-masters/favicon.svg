@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>rom-weaver favicon</title>
+  <rect width="64" height="64" rx="10" fill="#20282d"/>
+  <path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/>
+    <path class="brand-mark-accent" fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/>
+</svg>

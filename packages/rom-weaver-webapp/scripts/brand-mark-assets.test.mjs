@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
 import { ACCENTS } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "./brand-mark-assets.mjs";
+import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 
 const logo = fs.readFileSync(new URL("../src/assets/app/root/logo.svg", import.meta.url), "utf8");
 
-test("rejects a source missing the accent band", () => {
-  assert.throws(() => tintBrandMark(logo.replaceAll("#d9690f", "#000000"), ACCENTS[1]), /missing the accent band/);
+test("rejects a source missing the accent color", () => {
+  assert.throws(() => tintBrandMark(logo.replaceAll("#d9690f", "#000000"), ACCENTS[1]), /missing the accent color/);
 });
 
 for (const [channel, accentName] of Object.entries({ beta: "woad", nightly: "verdigris", preview: "plum" })) {
@@ -15,6 +15,16 @@ for (const [channel, accentName] of Object.entries({ beta: "woad", nightly: "ver
     const accent = ACCENTS.find((entry) => entry.value === accentName);
     const source = fs.readFileSync(
       new URL(`../src/assets/app/root/channels/${channel}/logo.svg`, import.meta.url),
+      "utf8",
+    );
+    assert.equal(source, tintBrandMark(logo, accent));
+  });
+}
+
+for (const accent of ACCENTS) {
+  test(`${accent.value} reusable logo matches its accent`, () => {
+    const source = fs.readFileSync(
+      new URL(`../../../design/logo-variants/${accent.value}.svg`, import.meta.url),
       "utf8",
     );
     assert.equal(source, tintBrandMark(logo, accent));

@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
+import logo from "../assets/app/root/logo.svg?raw";
 import { createLogger } from "../lib/logging.ts";
 import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
+import { tintBrandMark } from "./brand-mark-assets.mjs";
 
 /**
  * Accent dye lots. The accent is the second theme axis alongside dark/light:
@@ -17,6 +19,9 @@ const logger = createLogger("accent");
 
 type Accent = (typeof ACCENTS)[number]["value"];
 const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
+const FAVICON_URLS = new Map(
+  ACCENTS.map((accent) => [accent.value, `data:image/svg+xml,${encodeURIComponent(tintBrandMark(logo, accent))}`]),
+);
 
 const isAccent = (value: unknown): value is Accent => typeof value === "string" && ACCENT_VALUES.includes(value);
 
@@ -55,14 +60,6 @@ const armAccentAnimation = (root: HTMLElement) => {
   }, ANIMATION_DURATION_MS);
 };
 
-/**
- * Reflect the accent on the document root. Unknown values fall back to the
- * baseline rather than leaving a stale dye on the element.
- *
- * The CSS tokens key off `<html data-accent>`, but the logo mark is an <img>
- * that CSS can't reach into, so components need the value too - hence the
- * store. Mirrors theme.ts, the other axis of the same appearance system.
- */
 const applyAccent = (value: unknown) => {
   const accent = isAccent(value) ? value : DEFAULT_ACCENT;
   const changed = accent !== current;
@@ -75,6 +72,10 @@ const applyAccent = (value: unknown) => {
     if (animate) armAccentAnimation(document.documentElement);
     if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute("data-accent");
     else document.documentElement.setAttribute("data-accent", accent);
+    const faviconUrl = FAVICON_URLS.get(accent);
+    if (faviconUrl) {
+      document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.setAttribute("href", faviconUrl);
+    }
   }
   logger.trace("Applied accent", { accent, animate, changed, requested: value });
   if (changed) for (const listener of listeners) listener();
