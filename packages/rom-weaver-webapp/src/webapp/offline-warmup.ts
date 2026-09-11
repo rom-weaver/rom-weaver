@@ -3,7 +3,12 @@
  * Progress comes from cached files and unit markers so completed downloads survive worker restarts.
  */
 
-import { bufferedResponse, ENCODED_SIZE_HEADER, encodedSizeOf } from "./pwa/response-encoded-size.ts";
+import {
+  bufferedResponse,
+  ENCODED_SIZE_HEADER,
+  encodedSizeOf,
+  readWithByteProgress,
+} from "./pwa/response-encoded-size.ts";
 
 type IdentifyOptionalPack = { sha256: string; sizeBytes?: number; url: string };
 
@@ -77,12 +82,6 @@ type EmulatorJsManifest = {
 type WarmupFetcher = (request: Request | string, init?: RequestInit) => Promise<Response>;
 
 type OfflineWarmupOptions = {
-  downloadFile?: (
-    request: Request,
-    onBytes: ((delta: number) => void) | undefined,
-    fetcher: WarmupFetcher,
-  ) => Promise<Response>;
-  releaseFile?: (request: Request) => Promise<void>;
   emulatorJsCacheName: string;
   emulatorJsVersion: string;
   /** Low-priority fetch for background warm-up units. */
@@ -142,34 +141,6 @@ const sha256HexOf = async (bytes: ArrayBuffer) => {
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
-/** Read the whole body into memory, reporting per-chunk byte counts as they arrive. */
-const readWithByteProgress = async (response: Response, onBytes?: (delta: number) => void): Promise<ArrayBuffer> => {
-  if (!(response.body && onBytes)) {
-    const buffer = await response.arrayBuffer();
-    onBytes?.(buffer.byteLength);
-    return buffer;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalLength = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      totalLength += value.byteLength;
-      onBytes(value.byteLength);
-    }
-  }
-  const buffer = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    buffer.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return buffer.buffer;
-};
-
 /** Header value as a byte count, or null when it is absent or not a size. */
 const headerBytes = (response: Response, header: string): number | null => {
   if (!response.headers.has(header)) return null;
@@ -204,14 +175,13 @@ const fetchVerifiedPack = async (
   scope: string,
   fetcher: WarmupFetcher,
   onBytes?: (delta: number) => void,
-  downloadFile?: OfflineWarmupOptions["downloadFile"],
 ) => {
   const request = new Request(new URL(pack.url, scope));
-  const response = downloadFile ? await downloadFile(request, onBytes, fetcher) : await fetcher(request);
+  const response = await fetcher(request);
   if (!response.ok) {
     throw new Error(`ROM identify pack download failed with HTTP ${response.status}: ${pack.url}`);
   }
-  const buffer = await readWithByteProgress(response, downloadFile ? undefined : onBytes);
+  const buffer = await readWithByteProgress(response, onBytes);
   const actualSha256 = await sha256HexOf(buffer);
   // The digests go in the message because this error is only ever seen through
   // a caller's log line: expected != actual means this worker's baked pack
@@ -251,8 +221,6 @@ const parseEmulatorJsManifest = (value: unknown): EmulatorJsManifest => {
 };
 
 const createOfflineWarmup = ({
-  downloadFile,
-  releaseFile,
   emulatorJsCacheName,
   emulatorJsVersion,
   fetchForWarmup,
@@ -542,9 +510,8 @@ const createOfflineWarmup = ({
         onBytes?.(pack.sizeBytes || 0);
         continue;
       }
-      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, downloadFile);
+      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes);
       await cache.put(request, response);
-      await releaseFile?.(request);
     }
     await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
     if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === group.id));
@@ -613,13 +580,10 @@ const createOfflineWarmup = ({
       onBytes?.(unit.sizeBytes);
       return;
     }
-    const response = downloadFile
-      ? await downloadFile(new Request(url), onBytes, fetchForWarmup)
-      : await fetchForWarmup(url);
+    const response = await fetchForWarmup(url);
     if (!response.ok) throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
-    const buffer = await readWithByteProgress(response, downloadFile ? undefined : onBytes);
+    const buffer = await readWithByteProgress(response, onBytes);
     await cache.put(url, bufferedResponse(response, buffer, encodedSizeOf(url)));
-    await releaseFile?.(new Request(url));
   };
 
   /** Write the completion marker once no emulatorjs file unit remains. */
@@ -797,15 +761,8 @@ const createOfflineWarmup = ({
       url: requestUrl.pathname,
     });
     // An identify run MAY fetch one pack before group installation. Keep the group marker absent and use interactive priority.
-    const { request: packRequest, response } = await fetchVerifiedPack(
-      pack,
-      scope,
-      fetchForInteractive,
-      undefined,
-      downloadFile,
-    );
+    const { request: packRequest, response } = await fetchVerifiedPack(pack, scope, fetchForInteractive);
     await cache.put(packRequest, response.clone());
-    await releaseFile?.(packRequest);
     return response;
   };
 

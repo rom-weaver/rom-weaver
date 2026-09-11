@@ -548,6 +548,20 @@ describe("offline warm-up (service worker side)", () => {
     await expect(warmup.serveOptionalIdentifyPack(new Request(packUrl))).rejects.toThrow(/checksum/);
   });
 
+  it("retries an original pack after the origin recovers from corrupt bytes", async () => {
+    let attempts = 0;
+    const fetcher = vi.fn(async () => {
+      attempts += 1;
+      return new Response(attempts === 1 ? "tampered-bytes" : PACK_BODY);
+    });
+    const warmup = await createWarmup(fetcher);
+    const groups = await buildGroups();
+    const request = new Request(new URL(groups[0].packs[0].url, SCOPE));
+    await expect(warmup.serveOptionalIdentifyPack(request)).rejects.toThrow(/checksum/);
+    expect(await (await warmup.serveOptionalIdentifyPack(request)).text()).toBe(PACK_BODY);
+    expect(attempts).toBe(2);
+  });
+
   it("installIdentifyGroup writes the group marker with the pack revision", async () => {
     const warmup = await createWarmup();
     const result = await warmup.installIdentifyGroup("optional-computers");

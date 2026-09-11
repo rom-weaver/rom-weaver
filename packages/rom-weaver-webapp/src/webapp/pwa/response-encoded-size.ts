@@ -75,4 +75,42 @@ const withMeasuredEncodedSize = async (url: string, response: Response): Promise
   return bufferedResponse(response, buffer, encodedSizeOf(url));
 };
 
-export { bufferedResponse, ENCODED_SIZE_HEADER, encodedSizeOf, keepResourceTimingsRecording, withMeasuredEncodedSize };
+const readWithByteProgress = async (response: Response, onBytes?: (delta: number) => void): Promise<ArrayBuffer> => {
+  if (!(response.body && onBytes)) {
+    const buffer = await response.arrayBuffer();
+    onBytes?.(buffer.byteLength);
+    return buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        totalLength += value.byteLength;
+        onBytes(value.byteLength);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const buffer = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return buffer.buffer;
+};
+
+export {
+  bufferedResponse,
+  ENCODED_SIZE_HEADER,
+  encodedSizeOf,
+  keepResourceTimingsRecording,
+  readWithByteProgress,
+  withMeasuredEncodedSize,
+};

@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import { brotliCompressSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferredPrecache } from "../../src/webapp/pwa/deferred-precache.ts";
 
@@ -57,6 +59,77 @@ afterEach(() => {
 });
 
 describe("deferred precache", () => {
+  it.each(["br", "identity"])("resumes completed original files over HTTP %s after restart", async (encoding) => {
+    vi.stubGlobal("DecompressionStream", undefined);
+    const requests: string[] = [];
+    let recovered = false;
+    const server = createServer((request, response) => {
+      requests.push(request.url ?? "");
+      if (request.url === "/assets/two.js" && !recovered) {
+        response.writeHead(503).end("unavailable");
+        return;
+      }
+      const body = Buffer.from(request.url === "/assets/one.js" ? "one" : "two!");
+      response.setHeader("Content-Type", "text/javascript");
+      if (encoding === "br") response.setHeader("Content-Encoding", "br");
+      response.end(encoding === "br" ? brotliCompressSync(body) : body);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Missing test server address");
+      const scope = `http://127.0.0.1:${address.port}/`;
+      const options = { cacheName: CACHE_NAME, download: fetch, entries, scope };
+      const first = createDeferredPrecache(options);
+      await expect(first.runNextBatch()).rejects.toThrow("503");
+      expect(await first.state()).toMatchObject({ cachedFiles: 1, cachedBytes: 3 });
+      recovered = true;
+      const restarted = createDeferredPrecache(options);
+      await restarted.runNextBatch();
+      expect(await restarted.state()).toEqual({ cachedFiles: 2, cachedBytes: 7, totalFiles: 2, totalBytes: 7 });
+      expect(await (await restarted.match("assets/two.js"))?.text()).toBe("two!");
+      expect((await restarted.match("assets/two.js"))?.headers.get("Content-Type")).toBe("text/javascript");
+      expect(requests.filter((url) => url === "/assets/one.js")).toHaveLength(1);
+      expect(requests.filter((url) => url === "/assets/two.js")).toHaveLength(2);
+      expect([...cacheStorage.caches.keys()]).toEqual([CACHE_NAME]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
+  it("reports incoming bytes but never commits an interrupted file", async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(streamController) {
+        controller = streamController;
+        controller.enqueue(new TextEncoder().encode("on"));
+      },
+    });
+    let attempts = 0;
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: entries.slice(0, 1),
+      scope: SCOPE,
+      download: async () => {
+        attempts += 1;
+        return attempts === 1 ? new Response(body) : new Response("one");
+      },
+    });
+    const progress: number[] = [];
+    const downloading = queue.serve("assets/one.js", (delta) => progress.push(delta));
+    const rejected = expect(downloading).rejects.toThrow("connection lost");
+    await vi.waitFor(() => expect(progress).toEqual([2]));
+    expect(await queue.state()).toMatchObject({ cachedFiles: 0 });
+    controller?.error(new Error("connection lost"));
+    await rejected;
+    expect(await queue.match("assets/one.js")).toBeUndefined();
+    expect(body.locked).toBe(false);
+    expect(await (await queue.serve("assets/one.js")).text()).toBe("one");
+    expect(attempts).toBe(2);
+    expect(await queue.state()).toMatchObject({ cachedFiles: 1 });
+  });
+
   it("migrates only current revisions from the former full precache", async () => {
     const source = await cacheStorage.open("old-precache");
     await source.put(new URL("assets/one.js?__WB_REVISION__=one", SCOPE), new Response("one"));
@@ -68,7 +141,6 @@ describe("deferred precache", () => {
       download: async () => {
         throw new Error("network must not run during migration");
       },
-      release: async () => undefined,
     });
     await queue.migrate("old-precache");
     expect(await queue.state()).toEqual({ cachedBytes: 3, cachedFiles: 1, totalBytes: 7, totalFiles: 2 });
@@ -84,7 +156,6 @@ describe("deferred precache", () => {
         return new Response("one");
       },
       entries: entries.slice(0, 1),
-      release: async () => undefined,
       scope: SCOPE,
     });
     await first.serve("assets/one.js");
@@ -95,7 +166,6 @@ describe("deferred precache", () => {
         return new Response("unexpected");
       },
       entries: entries.slice(0, 1),
-      release: async () => undefined,
       scope: SCOPE,
     });
     expect(await restarted.state()).toMatchObject({ cachedBytes: 3, cachedFiles: 1, totalFiles: 1 });
@@ -109,7 +179,6 @@ describe("deferred precache", () => {
       cacheName: CACHE_NAME,
       download: async () => new Response("new"),
       entries: [{ revision: "new", sizeBytes: 3, url: "assets/one.js" }],
-      release: async () => undefined,
       scope: SCOPE,
     });
     expect(await revised.state()).toMatchObject({ cachedBytes: 0, cachedFiles: 0 });
@@ -117,22 +186,19 @@ describe("deferred precache", () => {
   });
 
   it("commits each successful file when a later batch file fails", async () => {
-    const released: string[] = [];
     const queue = createDeferredPrecache({
       cacheName: CACHE_NAME,
       download: async (request) =>
         request.url.endsWith("one.js") ? new Response("one") : new Response("failed", { status: 500 }),
       entries,
-      release: async (request) => {
-        released.push(request.url);
-      },
       scope: SCOPE,
     });
 
     await expect(queue.runNextBatch()).rejects.toThrow("HTTP 500");
 
     expect(await queue.state()).toMatchObject({ cachedBytes: 3, cachedFiles: 1, totalBytes: 7, totalFiles: 2 });
-    expect(released).toEqual([new URL("assets/one.js", SCOPE).href]);
+    expect(await (await queue.match("assets/one.js"))?.text()).toBe("one");
+    expect(await queue.match("assets/two.js")).toBeUndefined();
   });
 
   it("deduplicates interactive fetches and completes state only after every batch file is stored", async () => {
@@ -149,7 +215,6 @@ describe("deferred precache", () => {
         return new Response("x");
       },
       entries: many,
-      release: async () => undefined,
       scope: SCOPE,
     });
 
@@ -168,7 +233,6 @@ describe("deferred precache", () => {
         return new Response("shared");
       },
       entries: [{ revision: "shared", sizeBytes: 6, url: "assets/shared.bin" }],
-      release: async () => undefined,
       scope: SCOPE,
     });
     const beforeInteractive = fetched.length;

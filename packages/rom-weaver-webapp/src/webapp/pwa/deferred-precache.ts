@@ -1,3 +1,5 @@
+import { bufferedResponse, encodedSizeOf, readWithByteProgress } from "./response-encoded-size.ts";
+
 type DeferredEntry = { url: string; revision?: string | null; sizeBytes?: number };
 
 type DeferredState = { cachedBytes: number; cachedFiles: number; totalBytes: number; totalFiles: number };
@@ -7,13 +9,11 @@ const createDeferredPrecache = ({
   cacheName,
   scope,
   download,
-  release,
 }: {
   entries: DeferredEntry[];
   cacheName: string;
   scope: string;
-  download: (request: Request, onBytes?: (delta: number) => void) => Promise<Response>;
-  release: (request: Request) => Promise<void>;
+  download: (request: Request) => Promise<Response>;
 }) => {
   const files = entries.map((entry) => {
     const url = new URL(entry.url, scope);
@@ -59,14 +59,12 @@ const createDeferredPrecache = ({
     let pending = inFlight.get(file.key);
     if (!pending) {
       pending = (async () => {
-        const response = await download(
-          new Request(file.url, { cache: file.revision ? "reload" : "default" }),
-          onBytes,
-        );
+        const response = await download(new Request(file.url, { cache: file.revision ? "reload" : "default" }));
         if (!response.ok) throw new Error(`Offline app download failed with HTTP ${response.status}: ${file.url}`);
-        await cache.put(file.key, response.clone());
-        await release(new Request(file.url));
-        return response;
+        const buffer = await readWithByteProgress(response, onBytes);
+        const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
+        await cache.put(file.key, complete.clone());
+        return complete;
       })();
       inFlight.set(file.key, pending);
     }
