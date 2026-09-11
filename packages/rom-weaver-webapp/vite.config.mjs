@@ -135,9 +135,9 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": channelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
-  "/social-preview.avif": path.join(rootDir, "design", "social-preview.avif"),
-  "/social-preview.png": path.join(rootDir, "design", "social-preview.png"),
-  "/social-preview.webp": path.join(rootDir, "design", "social-preview.webp"),
+  "/social-preview.avif": path.join(repoRoot, "design", "social-preview.avif"),
+  "/social-preview.png": path.join(repoRoot, "design", "social-preview.png"),
+  "/social-preview.webp": path.join(repoRoot, "design", "social-preview.webp"),
   ...identifyDataSources,
   ...docsScreenshotSources,
 });
