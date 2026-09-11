@@ -8,6 +8,9 @@
     // Loaded by scripts/prerender.mjs through Vite's ssrLoadModule (a string,
     // not a JS import), so knip cannot trace it.
     "src/webapp/prerender-entry.tsx",
+    // Bundled by vite.config.mjs into an inline script of the prerendered home
+    // shell (a path string, not a JS import), so knip cannot trace it.
+    "src/webapp/home-loom-shell.ts",
     // Invoked by the webapp Dockerfile; Knip does not trace Dockerfile commands.
     "scripts/compress-static-assets.mjs",
     "scripts/version.mjs",

@@ -11,7 +11,7 @@
      fill it rides, where the cream this replaces held 2.4-3.2:1. The mix
      restores that range for every dye lot. */
   --shuttle: color-mix(in srgb, var(--thread-hi) 50%, #fff);
-  /* The hero loom's three patch bands (home-loom.tsx). The bands must stay
+  /* The hero loom's three patch bands (home-loom-runtime.ts). The bands must stay
      apart at a glance, so they are the accent at three weights against the warp
      rather than three hues. */
   --loom-weft-1: var(--thread);
@@ -102,7 +102,7 @@
 }
 
 /* ── canvas-readable dyes ──
-   home-loom.tsx paints these on a <canvas>, and canvas needs a real colour. An
+   home-loom-runtime.ts paints these on a <canvas>, and canvas needs a real colour. An
    unregistered custom property computes to its own text, so a color-mix() would
    reach fillStyle unparsed and paint nothing. Registering them as <color> makes
    the browser compute the mix, so getComputedStyle hands back a colour.

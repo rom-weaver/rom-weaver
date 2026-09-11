@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { render } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadCatalog } from "../../src/presentation/localization/catalog.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
@@ -97,6 +98,52 @@ describe("HomeLoom", () => {
     expect(requestAnimationFrame).not.toHaveBeenCalled();
     expect(context.save.mock.calls.length).toBe(3);
     expect(context.fill.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it("adopts the loop the shell started on the hydrated canvas and stops it on unmount", () => {
+    // A real context, so a mount that ignored the parked loop would start a
+    // second loop and fail the frame assertion below.
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(makeContext());
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    // The prerendered shell: the same markup, already in the document, with the
+    // inline script's loop parked on window for the mount to pick up.
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(<HomeLoom ariaLabel="The original ROM has three patches." />);
+    document.body.append(container);
+    const canvas = container.querySelector("canvas") as HTMLCanvasElement;
+    const shellLoom = { canvas, stop: vi.fn() };
+    (window as Window & { ROM_WEAVER_SHELL_LOOM?: typeof shellLoom }).ROM_WEAVER_SHELL_LOOM = shellLoom;
+
+    const { unmount } = render(<HomeLoom ariaLabel="The original ROM has three patches." />, {
+      container,
+      hydrate: true,
+    });
+    expect(container.querySelector("canvas")).toBe(canvas);
+    expect((window as Window & { ROM_WEAVER_SHELL_LOOM?: unknown }).ROM_WEAVER_SHELL_LOOM).toBeUndefined();
+    // No second loop: the shell's frames keep drawing.
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    expect(shellLoom.stop).not.toHaveBeenCalled();
+    unmount();
+    expect(shellLoom.stop).toHaveBeenCalledTimes(1);
+    container.remove();
+  });
+
+  it("stops a shell loop that draws on another canvas and starts its own", () => {
+    const context = makeContext();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    // Hydration fell back to a client render, so the shell's canvas is gone.
+    const shellLoom = { canvas: document.createElement("canvas"), stop: vi.fn() };
+    (window as Window & { ROM_WEAVER_SHELL_LOOM?: typeof shellLoom }).ROM_WEAVER_SHELL_LOOM = shellLoom;
+
+    render(<HomeLoom ariaLabel="The original ROM has three patches." />);
+    expect(shellLoom.stop).toHaveBeenCalledTimes(1);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect((window as Window & { ROM_WEAVER_SHELL_LOOM?: unknown }).ROM_WEAVER_SHELL_LOOM).toBeUndefined();
   });
 });
 
