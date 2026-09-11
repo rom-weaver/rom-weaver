@@ -1,12 +1,6 @@
 import { Download, GitCompare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  manualCheatId,
-  type CheatManualSystem,
-  type ClassifiedCheatRecord,
-  type DatabaseCheatClassifier,
-  type ManualCheatClassifier,
-} from "../../lib/cheats/index.ts";
+import type { CheatManualSystem } from "../../lib/cheats/index.ts";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
 import type {
@@ -34,6 +28,7 @@ import {
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
+import { createCheatClassifiers } from "./cheat-classifier.ts";
 import { CreateCheatCodesPanel } from "./components/create-cheat-codes-panel.tsx";
 import {
   getCheatCodesPatchName,
@@ -1180,36 +1175,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     if (!original) throw new Error("Add the original ROM before checking cheat codes");
     return original as never;
   }, [original]);
-  const classifyDatabaseCheats = useCallback<DatabaseCheatClassifier>(
-    async (records) => {
-      const { runBrowserCheats } = await loadBrowserApi();
-      return (await runBrowserCheats({ records, rom: getCheatSource() })).records;
-    },
-    [getCheatSource],
-  );
-  const classifyManualCode = useCallback<ManualCheatClassifier>(
-    async ({ code, description, kind, system }) => {
-      const record = {
-        ...(kind === "auto" ? {} : { codeKind: kind }),
-        description,
-        gameId: "manual",
-        id: manualCheatId(system, code, kind),
-        rawCode: code,
-        rawFields: { code, desc: description, enable: "false" },
-        sourceFile: "manual",
-        sourceIndex: 0,
-        sourceRevision: "manual",
-        system,
-      };
-      const { runBrowserCheats } = await loadBrowserApi();
-      const classified = (await runBrowserCheats({ records: [record], rom: getCheatSource() })).records[0];
-      if (!classified) throw new Error("ROMWeaver did not return a cheat classification");
-      return {
-        detectedSystem: system,
-        detectedType: classified.detectedKind || classified.resolution.type,
-        record: classified as ClassifiedCheatRecord,
-      };
-    },
+  const { classifyDatabaseCheats, classifyManualCode } = useMemo(
+    () => createCheatClassifiers(getCheatSource),
     [getCheatSource],
   );
 

@@ -2,14 +2,7 @@ import { bundleCheckTokens, selectBundleMembers, validatePatchDependencies } fro
 import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
-import {
-  cheatDelivery,
-  manualCheatId,
-  type CheatManualSystem,
-  type ClassifiedCheatRecord,
-  type DatabaseCheatClassifier,
-  type ManualCheatClassifier,
-} from "../../lib/cheats/index.ts";
+import { cheatDelivery, type CheatManualSystem, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -30,6 +23,7 @@ import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat } from "./cheat-patch-export-model.ts";
 import { CheatDatabaseSection } from "./components/cheat-database-section.tsx";
+import { createCheatClassifiers } from "./cheat-classifier.ts";
 import {
   type ApplyWorkflowPrepareHandlers,
   type ApplyWorkflowSessionInput,
@@ -1658,36 +1652,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (!source) throw new Error("Wait for ROM staging to finish before checking cheats");
     return source;
   }, [workflowHandle]);
-  const classifyDatabaseCheats = useCallback<DatabaseCheatClassifier>(
-    async (records) => {
-      const { runBrowserCheats } = await loadBrowserApi();
-      return (await runBrowserCheats({ records, rom: getCheatSource() })).records;
-    },
-    [getCheatSource],
-  );
-  const classifyManualCode = useCallback<ManualCheatClassifier>(
-    async ({ code, description, kind, system }) => {
-      const record = {
-        ...(kind === "auto" ? {} : { codeKind: kind }),
-        description,
-        gameId: "manual",
-        id: manualCheatId(system, code, kind),
-        rawCode: code,
-        rawFields: { code, desc: description, enable: "false" },
-        sourceFile: "manual",
-        sourceIndex: 0,
-        sourceRevision: "manual",
-        system,
-      };
-      const { runBrowserCheats } = await loadBrowserApi();
-      const classified = (await runBrowserCheats({ records: [record], rom: getCheatSource() })).records[0];
-      if (!classified) throw new Error("ROMWeaver did not return a cheat classification");
-      return {
-        detectedSystem: system,
-        detectedType: classified.detectedKind || classified.resolution.type,
-        record: classified,
-      };
-    },
+  const { classifyDatabaseCheats, classifyManualCode } = useMemo(
+    () => createCheatClassifiers(getCheatSource),
     [getCheatSource],
   );
   const saveCheatsAsPatch = useCallback(
