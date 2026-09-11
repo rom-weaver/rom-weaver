@@ -29,6 +29,7 @@ const repoRoot = path.resolve(rootDir, "..", "..");
 const assetRoot = path.join(rootDir, "src", "assets", "app", "root");
 const masterRoot = path.join(rootDir, "design", "icon-masters");
 const outputRoot = path.join(assetRoot, "channels");
+const variantRoot = path.join(repoRoot, "design", "logo-variants");
 
 // Channel defaults MUST match src/webapp/build-channel.ts.
 const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "verdigris", preview: "plum" };
@@ -91,32 +92,35 @@ const main = async () => {
   const drift = [];
   let written = 0;
 
+  const emit = (target, buffer) => {
+    const relative = path.relative(repoRoot, target);
+    const existing = fs.existsSync(target) ? fs.readFileSync(target) : null;
+    if (existing && existing.equals(buffer)) return;
+    if (checkOnly) {
+      drift.push(`${relative} (${existing ? `is ${digest(existing)}` : "missing"}, want ${digest(buffer)})`);
+      return;
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, buffer);
+    written += 1;
+    console.log(`  wrote ${relative}`);
+  };
+
   try {
     for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
       const accent = ACCENTS.find((entry) => entry.value === accentName);
       if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
       const channelDir = channel === "production" ? assetRoot : path.join(outputRoot, channel);
-      const emit = (name, buffer) => {
-        const target = path.join(channelDir, name);
-        const relative = path.relative(repoRoot, target);
-        const existing = fs.existsSync(target) ? fs.readFileSync(target) : null;
-        if (existing && existing.equals(buffer)) return;
-        if (checkOnly) {
-          drift.push(`${relative} (${existing ? `is ${digest(existing)}` : "missing"}, want ${digest(buffer)})`);
-          return;
-        }
-        fs.mkdirSync(channelDir, { recursive: true });
-        fs.writeFileSync(target, buffer);
-        written += 1;
-        console.log(`  wrote ${relative}`);
-      };
 
       console.log(channel);
-      emit("logo.svg", Buffer.from(tintBrandMark(fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8"), accent)));
+      emit(
+        path.join(channelDir, "logo.svg"),
+        Buffer.from(tintBrandMark(fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8"), accent)),
+      );
 
       for (const target of RASTER_TARGETS) {
         const master = tintBrandMark(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), accent);
-        emit(target.output, await rasterize(page, master, target.size));
+        emit(path.join(channelDir, target.output), await rasterize(page, master, target.size));
       }
 
       const favicon = tintBrandMark(fs.readFileSync(path.join(masterRoot, "favicon.svg"), "utf8"), accent);
@@ -124,7 +128,12 @@ const main = async () => {
       for (const size of [16, 32, 48, 64]) {
         images.push({ size, png: await rasterize(page, favicon, size) });
       }
-      emit("favicon.ico", encodeFavicon(images));
+      emit(path.join(channelDir, "favicon.ico"), encodeFavicon(images));
+    }
+
+    const logo = fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8");
+    for (const accent of ACCENTS) {
+      emit(path.join(variantRoot, `${accent.value}.svg`), Buffer.from(tintBrandMark(logo, accent)));
     }
   } finally {
     await browser.close();

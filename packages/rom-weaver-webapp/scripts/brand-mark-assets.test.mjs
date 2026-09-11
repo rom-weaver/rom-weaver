@@ -20,3 +20,13 @@ for (const [channel, accentName] of Object.entries({ beta: "woad", nightly: "ver
     assert.equal(source, tintBrandMark(logo, accent));
   });
 }
+
+for (const accent of ACCENTS) {
+  test(`${accent.value} reusable logo matches its accent`, () => {
+    const source = fs.readFileSync(
+      new URL(`../../../design/logo-variants/${accent.value}.svg`, import.meta.url),
+      "utf8",
+    );
+    assert.equal(source, tintBrandMark(logo, accent));
+  });
+}
