@@ -180,7 +180,7 @@ Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, 
 
 Earlier releases served the service worker as `cache-service-worker.js`. If your host config still names that path, change it to `rom-weaver-service-worker.js`.
 
-Only `/assets/*` uses immutable caching because those filenames contain content hashes. Do not apply that policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
+Only `/assets/*` uses immutable caching, because those URLs are content-addressed: build output, including the two identify manifests, carries a hash in the filename, and the identify packs, cheat shards, checksum router, and title index are requested with a `?sha256=` query that changes whenever their bytes do. Do not apply the immutable policy to HTML, the manifest, `robots.txt`, `sitemap.xml`, or other stable filenames.
 
 ## Cross-origin isolation
 

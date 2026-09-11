@@ -31,6 +31,10 @@ const BROWSER_INSTANCES_BY_NAME = {
   webkit: { browser: "webkit" },
 };
 const firstSampleAssetFiles = createFirstSampleAssetFiles();
+const testIdentifyAssetFiles = new Map([
+  ["assets/identify-index.json", JSON.stringify({ format: "rom-weaver-identify-system-pack-v1", systems: [] })],
+  ["assets/identify-catalog.json", JSON.stringify({ format: "rom-weaver-identify-catalog-v1", platforms: [] })],
+]);
 const serveFirstSampleAssets = {
   configureServer(server) {
     server.middlewares.use((request, response, next) => {
@@ -45,6 +49,24 @@ const serveFirstSampleAssets = {
     });
   },
   name: "rom-weaver-first-sample-assets",
+};
+// Browser tests MUST use a valid local identify index so missing generated data
+// cannot fall through to Vite's HTML shell and turn into a timing-sensitive
+// application error.
+const serveTestIdentifyAssets = {
+  configureServer(server) {
+    server.middlewares.use((request, response, next) => {
+      const requestPath = request.url?.split("?")[0] ?? "";
+      const source = testIdentifyAssetFiles.get(requestPath.slice(1));
+      if (source === undefined) {
+        next();
+        return;
+      }
+      response.setHeader("Content-Type", "application/json");
+      response.end(source);
+    });
+  },
+  name: "rom-weaver-test-identify-assets",
 };
 
 const createBrowserInstances = () => {
@@ -95,7 +117,7 @@ export default mergeConfig(baseConfig, {
   optimizeDeps: {
     include: ["@bjorn3/browser_wasi_shim"],
   },
-  plugins: [serveFirstSampleAssets],
+  plugins: [serveFirstSampleAssets, serveTestIdentifyAssets],
   publicDir: fileURLToPath(new URL("./src/assets/app/root", import.meta.url)),
   resolve: {
     alias: {
