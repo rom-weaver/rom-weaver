@@ -105,7 +105,8 @@ ENV PATH="/root/.cargo/bin:/opt/binaryen/bin:${PATH}" \
 
 WORKDIR /app/packages/rom-weaver-webapp
 COPY packages/rom-weaver-webapp/package.json packages/rom-weaver-webapp/package-lock.json ./
-RUN npm ci
+RUN npm ci \
+    && npm exec -- playwright install --with-deps --only-shell chromium
 
 # The webapp build runs the identify build from `scripts/`, which reads its
 # source archives with node-tar, so the root dependencies are needed too. Both

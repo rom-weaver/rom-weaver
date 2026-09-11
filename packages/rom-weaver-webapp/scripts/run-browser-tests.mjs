@@ -18,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { generateIconAssets } from "./generated-icon-assets.mjs";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEST_DIR = path.join(ROOT_DIR, "tests", "browser");
@@ -220,6 +221,7 @@ export const main = async () => {
     for (const file of files) process.stdout.write(`${path.basename(file)}\n`);
     return;
   }
+  generateIconAssets();
   if (process.env.ROM_WEAVER_COVERAGE === "1") {
     fs.rmSync(COVERAGE_ROOT, { force: true, recursive: true });
   }

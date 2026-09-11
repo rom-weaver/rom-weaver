@@ -1,6 +1,6 @@
 # Icon masters
 
-Source SVGs for the pre-rendered icons in `../../src/assets/app/root/`. The masters use the Cartridge W paths from `../../src/assets/app/root/logo.svg` with fixed colors and padding for each surface.
+Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. The masters use the Cartridge W paths from `../../src/assets/app/root/logo.svg` with fixed colors and padding for each surface.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -32,9 +32,9 @@ From the repository root, regenerate production, beta, nightly, and preview icon
 npm --prefix packages/rom-weaver-webapp run icons:channels
 ```
 
-The generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's W from the accent palette. Commit the generated files with the source changes.
+The generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's W from the accent palette. It writes channel icons and reusable logo variants to the repository `dist/generated-assets/` directory. The build, development server, and script tests run it before they load generated assets. The tracked social preview files in `../../design/` are separate build inputs.
 
-Check the generated icons against their sources:
+Check the generated output against the current masters:
 
 ```sh
 npm --prefix packages/rom-weaver-webapp run icons:channels:check

@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 import { createServer as createViteServer } from "vite";
 import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
+import { generateIconAssets } from "./generated-icon-assets.mjs";
 
 // An unset channel builds as production (see resolveAppChannel in
 // vite.config.mjs), which is right for the release artifacts and for anyone
@@ -565,6 +566,7 @@ const printUrls = (title, port, lanAddresses, certificatePath, { crossOriginIsol
 };
 
 const startDevServer = async (options) => {
+  generateIconAssets();
   const lanAddresses = getLanAddresses();
   const certificate = ensureCertificate(lanAddresses);
   const securityOptions = { crossOriginIsolation: !options.noCoopCoep };

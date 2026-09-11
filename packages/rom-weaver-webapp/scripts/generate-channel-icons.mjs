@@ -8,10 +8,13 @@
  * ImageMagick's SVG delegate does not render these masters exactly. Playwright's
  * chromium is already a dev dependency, so this adds none.
  *
- *   node scripts/generate-channel-icons.mjs [--check]
+ *   node scripts/generate-channel-icons.mjs --output-dir <directory> [--check]
  *
- * --check re-renders into memory and diffs against what's committed, exiting
- * non-zero on drift, so CI can prove the icons match their sources.
+ * Derived icons are build artifacts. They stay outside the webapp's `dist/`,
+ * which Vite clears before every build.
+ *
+ * --check re-renders into memory and diffs against the selected output,
+ * exiting non-zero on drift.
  */
 
 import { createHash } from "node:crypto";
@@ -28,8 +31,32 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const repoRoot = path.resolve(rootDir, "..", "..");
 const assetRoot = path.join(rootDir, "src", "assets", "app", "root");
 const masterRoot = path.join(rootDir, "design", "icon-masters");
-const outputRoot = path.join(assetRoot, "channels");
-const variantRoot = path.join(repoRoot, "design", "logo-variants");
+
+const usage = () => {
+  throw new Error("Usage: node scripts/generate-channel-icons.mjs --output-dir <directory> [--check]");
+};
+
+const parseOptions = (args) => {
+  let checkOnly = false;
+  let outputDir;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--check") {
+      checkOnly = true;
+      continue;
+    }
+    if (argument === "--output-dir") {
+      const candidate = args[index + 1];
+      if (!candidate || candidate.startsWith("--")) usage();
+      outputDir = candidate;
+      index += 1;
+      continue;
+    }
+    usage();
+  }
+  if (!outputDir) usage();
+  return { checkOnly, outputDir: path.resolve(process.cwd(), outputDir) };
+};
 
 // Channel defaults MUST match src/webapp/build-channel.ts.
 const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "verdigris", preview: "plum" };
@@ -59,7 +86,7 @@ const rasterize = async (page, svg, size) => {
   const shot = await page.screenshot({ omitBackground: true, type: "png" });
   // Chrome writes a conservatively-filtered, middling-deflate PNG. Squeeze it
   // here rather than as a later pass so the bytes `--check` compares against
-  // are the bytes that get committed.
+  // are the deployed build assets.
   const optimized = optimizePng(shot);
   assertSamePixels(shot, optimized, `rasterized ${size}px icon`);
   return optimized;
@@ -85,7 +112,9 @@ const encodeFavicon = (images) => {
 };
 
 const main = async () => {
-  const checkOnly = process.argv.includes("--check");
+  const { checkOnly, outputDir } = parseOptions(process.argv.slice(2));
+  const outputRoot = path.join(outputDir, "channel-icons");
+  const variantRoot = path.join(outputDir, "logo-variants");
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
   const browser = await chromium.launch(launchOptions);
   const page = await browser.newPage({ deviceScaleFactor: 1 });
@@ -110,7 +139,7 @@ const main = async () => {
     for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
       const accent = ACCENTS.find((entry) => entry.value === accentName);
       if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
-      const channelDir = channel === "production" ? assetRoot : path.join(outputRoot, channel);
+      const channelDir = path.join(outputRoot, channel);
 
       console.log(channel);
       emit(
