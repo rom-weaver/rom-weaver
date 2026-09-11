@@ -1,6 +1,6 @@
 # Icon masters
 
-Source SVGs for the pre-rendered PNGs in `../../src/assets/app/root/`. Each wraps the inner content of `../../src/assets/app/root/logo.svg` in an opaque `#31343a` background rect plus a scale/offset transform - regenerate them from `logo.svg` if the logo changes.
+Source SVGs for the pre-rendered icons in `../../src/assets/app/root/`. The masters use the Cartridge W paths from `../../src/assets/app/root/logo.svg` with fixed colors and padding for each surface.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -12,28 +12,30 @@ Source SVGs for the pre-rendered PNGs in `../../src/assets/app/root/`. Each wrap
 
 ## Geometry
 
-The logo uses a 32 × 32 viewBox. The cartridge fills 30 × 30 units; the disc hole is 5.5 units wide, and both bands are 5 units wide. A charcoal gap separates the bands at their crossing. A 0.75-unit cream outline sits over a 2-unit charcoal outline, keeping the silhouette visible on both dark and light surfaces. The favicon uses this mark directly, without the launcher padding.
+The logo uses a 64 × 64 viewBox. The cartridge occupies 48 × 56 units, with a W cutout, a recessed top edge, and three contact cuts at the bottom. The small tab at the top right carries the accent color. The paths contain no fonts, strokes, masks, or clip paths.
 
-The launcher masters center the mark on an opaque charcoal background. The maskable master keeps the mark inside the central 80%-diameter safe circle.
+The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon adds a charcoal tile so it stays visible without color-scheme support.
 
-| master | output | scale | offset (x and y) |
-| --- | --- | --- | --- |
-| icon-maskable.svg | icon-maskable-{192,512}.png | 0.63 | 5.92 |
-| apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.80 | 3.2 |
+| Master | Output | Scale | Offset (x and y) | Background |
+| --- | --- | --- | --- | --- |
+| icon-maskable.svg | icon-maskable-{192,512}.png | 0.72 | 8.96 | `#31343a` |
+| apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.80 | 6.4 | `#31343a` |
+| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | 1 | 0 | `#20282d` tile |
 
-`offset = 16 * (1 - scale)`.
+`offset = 32 * (1 - scale)`. The maskable master keeps the mark inside the central 80%-diameter safe circle.
 
 ## Rendering
 
-Run from this directory. Inline the SVG so the temporary HTML does not resolve it relative to `/tmp`:
+From the repository root, regenerate production, beta, nightly, and preview icons:
 
 ```sh
-{ printf '<!doctype html><style>html,body{margin:0}svg{width:100vw;height:100vh}</style>'; cat icon-maskable.svg; } > /tmp/rom-weaver-icon.html
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --headless --disable-gpu --hide-scrollbars \
-  --screenshot=icon-maskable-512.png --window-size=512,512 "file:///tmp/rom-weaver-icon.html"
+npm --prefix packages/rom-weaver-webapp run icons:channels
 ```
 
-Repeat with 192x192 (and 180x180 for apple-touch-icon.svg), then copy the PNGs into `../../src/assets/app/root/`.
+The generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's tab from the accent palette. Commit the generated files with the source changes.
 
-Regenerate beta and nightly icons from the repository root with `npm --prefix packages/rom-weaver-webapp run icons:channels`. The script uses the masters in this directory.
+Check the generated icons against their sources:
+
+```sh
+npm --prefix packages/rom-weaver-webapp run icons:channels:check
+```
