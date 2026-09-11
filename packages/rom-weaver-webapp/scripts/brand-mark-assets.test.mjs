@@ -6,8 +6,8 @@ import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 
 const logo = fs.readFileSync(new URL("../src/assets/app/root/logo.svg", import.meta.url), "utf8");
 
-test("rejects a source missing the accent tab", () => {
-  assert.throws(() => tintBrandMark(logo.replaceAll("#d9690f", "#000000"), ACCENTS[1]), /missing the accent tab/);
+test("rejects a source missing the accent color", () => {
+  assert.throws(() => tintBrandMark(logo.replaceAll("#d9690f", "#000000"), ACCENTS[1]), /missing the accent color/);
 });
 
 for (const [channel, accentName] of Object.entries({ beta: "woad", nightly: "verdigris", preview: "plum" })) {

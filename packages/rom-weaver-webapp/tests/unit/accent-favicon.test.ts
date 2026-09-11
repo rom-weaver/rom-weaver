@@ -39,7 +39,7 @@ describe("accent favicon", () => {
 
   test.each(ACCENTS)("applies $label to the favicon on initial load", (accent) => {
     applyAccent(accent.value);
-    expect(readFavicon().querySelector('pattern rect[x="32"]')?.getAttribute("fill")).toBe(accent.swatch);
+    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe(accent.swatch);
     expect(touchIcon.getAttribute("href")).toBe("/apple-touch-icon.png");
   });
 
@@ -48,9 +48,9 @@ describe("accent favicon", () => {
     const initialUrl = favicon.href;
     applyAccent("teal");
     expect(favicon.href).not.toBe(initialUrl);
-    expect(readFavicon().querySelector('pattern rect[x="32"]')?.getAttribute("fill")).toBe("#2aa0a8");
+    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#2aa0a8");
     applyAccent("chartreuse");
-    expect(readFavicon().querySelector('pattern rect[x="32"]')?.getAttribute("fill")).toBe("#d9690f");
+    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#d9690f");
   });
 
   test("applies the accent when the host page has no favicon link", () => {

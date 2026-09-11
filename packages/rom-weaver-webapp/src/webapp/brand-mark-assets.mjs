@@ -7,7 +7,7 @@ import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
 const tintBrandMark = (svg, accent) => {
   const base = ACCENTS.find((entry) => entry.value === DEFAULT_ACCENT);
   if (!base) throw new Error(`brand marks: unknown default accent '${DEFAULT_ACCENT}'`);
-  if (!svg.includes(base.swatch)) throw new Error("brand marks: source is missing the accent tab");
+  if (!svg.includes(base.swatch)) throw new Error("brand marks: source is missing the accent color");
   return svg.replaceAll(base.swatch, accent.swatch);
 };
 
