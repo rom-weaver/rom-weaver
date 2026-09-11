@@ -393,7 +393,9 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.rw-app .home-install pre {
+.rw-app .home-install-code {
+  box-sizing: border-box;
+  inline-size: 100%;
   padding: 10px 12px;
   margin: 0;
   overflow-x: auto;
@@ -401,13 +403,10 @@
   line-height: 1.5;
   color: var(--ink);
   white-space: pre;
+  resize: none;
   background: var(--well);
   border: 1px solid var(--seam-soft);
   border-radius: var(--r-s);
-}
-.rw-app .home-install pre b {
-  font-weight: 400;
-  color: var(--ink-3);
 }
 .rw-app .home-front .foot {
   font-size: 0.8rem;
