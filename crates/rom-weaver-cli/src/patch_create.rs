@@ -537,7 +537,7 @@ impl CliApp {
                         "requested patch format `{requested_format}` is explicitly not supported: {reason}"
                     )
                 })
-                .unwrap_or_else(|| "requested patch format is not registered".to_string());
+                .unwrap_or_else(|| self.patches.unregistered_create_format_message(&requested_format));
             return self.finish("patch-create", fail(Some(requested_format), "probe", label));
         };
         let sizes = match self.inspect_patch_create_input_sizes(

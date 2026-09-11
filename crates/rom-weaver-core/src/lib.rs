@@ -18,6 +18,7 @@ mod registry;
 mod report_details;
 pub mod save;
 mod selection;
+mod suggest;
 mod threads;
 
 pub use access::{access_advice, effective_ids, in_container};
@@ -92,6 +93,7 @@ pub use save::{
     unwrap_save_container, validate_save_edits,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
+pub use suggest::{closest_name, did_you_mean_suffix};
 pub use threads::{
     SharedThreadPool, ThreadBudget, ThreadCapability, ThreadExecution, ThreadMode,
     physical_memory_bytes,
