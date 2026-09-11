@@ -95,10 +95,14 @@ export const onRequestGet = async ({ request, env, next }) => {
   if (asset.status === 304) return notModified(withAssetHeaders(asset, { cacheControl, contentType }));
   if (isSpaFallback(asset)) return next();
   // Pages may answer with an encoding of its own; "manual" keeps the runtime from
-  // encoding an already-encoded body a second time.
+  // encoding an already-encoded body a second time. The status is carried over
+  // rather than defaulted: a Range request answers 206, and relabelling that 200
+  // would hand the client a partial manifest marked complete.
   const contentEncoding = asset.headers.get("Content-Encoding") ?? undefined;
   return new Response(asset.body, {
     ...(contentEncoding ? { encodeBody: "manual" } : {}),
     headers: withAssetHeaders(asset, { cacheControl, contentEncoding, contentType }),
+    status: asset.status,
+    statusText: asset.statusText,
   });
 };

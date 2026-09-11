@@ -91,6 +91,22 @@ describe("assets function", () => {
     expect(await response.text()).toBe("compressed");
   });
 
+  // Relabelling a 206 as 200 would hand the client a partial manifest marked complete.
+  it("keeps a partial response partial", async () => {
+    const response = await onRequestGet({
+      env: {
+        ASSETS: {
+          fetch: async () => new Response('{"fo', { headers: { "Content-Range": "bytes 0-3/100" }, status: 206 }),
+        },
+      },
+      next: () => NEXT,
+      request: new Request("https://rom-weaver.com/assets/identify-index.json", { headers: { Range: "bytes=0-3" } }),
+    });
+    expect(response.status).toBe(206);
+    expect(response.headers.get("Content-Range")).toBe("bytes 0-3/100");
+    expect(response.headers.get("Cache-Control")).toBe("no-cache");
+  });
+
   it("hands anything else back to the static path", async () => {
     expect(await get("/assets/index-abc.js", {}, {})).toBe(NEXT);
     expect(await get("/assets/index-abc.js", {})).toBe(NEXT);
