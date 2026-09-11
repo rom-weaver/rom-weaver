@@ -2395,8 +2395,13 @@ function collectTitles(games) {
   return [...titles];
 }
 
-async function writeTitleIndex(entries, samples, options) {
-  const json = `${encodeTitleIndex(entries)}\n`;
+async function writeTitleIndex(entries, samples, systems, options) {
+  const encoded = JSON.parse(encodeTitleIndex(entries));
+  const defaults = new Set(
+    systems.filter((system) => packGroupFor(system.platform) === "default").map((system) => system.slug),
+  );
+  encoded.defaultPacks = encoded.packs.map((slug) => defaults.has(slug));
+  const json = `${JSON.stringify(encoded)}\n`;
   const bytes = Buffer.from(json, "utf8");
   const index = parseTitleIndex(json);
   const byTitle = new Map(index.titles.map((row) => [row.normalized, row]));
@@ -2628,7 +2633,7 @@ export async function main(argv = process.argv.slice(2)) {
     titleSamples.push({ slug: system.slug, titles: sampleTitles(titles) });
   }
   const checksumRoutes = await writeChecksumRouter(routerFilters, routerSamples, options);
-  const titleIndex = await writeTitleIndex(titleEntries, titleSamples, options);
+  const titleIndex = await writeTitleIndex(titleEntries, titleSamples, systems, options);
 
   // The catalog always lists every configured platform. The pack itself may be
   // absent when this invocation built a subset, so clients can still resolve a
