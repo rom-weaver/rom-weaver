@@ -1,17 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><title>rom-weaver app icon</title><path fill="#31343a" d="M0 0h32v32H0z"/><g transform="translate(5.92 5.92) scale(0.63)">
-  <defs>
-    <clipPath id="cartridge">
-      <path id="shell" d="M6 1h4q1 0 1 1t1 1h8q1 0 1-1t1-1h4a5 5 0 0 1 5 5v20a5 5 0 0 1-5 5H6a5 5 0 0 1-5-5V6a5 5 0 0 1 5-5Z"/>
-    </clipPath>
-  </defs>
-  <g clip-path="url(#cartridge)">
-    <path fill="#20282d" d="M0 0h32v32H0z"/>
-    <circle cx="16" cy="12" r="7.5" fill="#f6ecda"/>
-    <circle cx="16" cy="12" r="2.75" fill="#20282d"/>
-    <path d="M0 29c14 0 17-9 32-9" fill="none" stroke="#f6ecda" stroke-width="5"/>
-    <path d="M0 20c14 0 17 9 32 9" fill="none" stroke="#20282d" stroke-width="7"/>
-    <path d="M0 20c14 0 17 9 32 9" fill="none" stroke="#d9690f" stroke-width="5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>rom-weaver app icon</title>
+  <path fill="#31343a" d="M0 0h64v64H0z"/>
+  <g transform="translate(8.96 8.96) scale(0.72)">
+    <path fill="#f6ecda" fill-rule="evenodd" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-7v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-4a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Zm2 14 7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/>
+  <path fill="#d9690f" d="M42 4h8a6 6 0 0 1 6 6H42Z"/>
   </g>
-  <use href="#shell" fill="none" stroke="#20282d" stroke-width="2"/>
-  <use href="#shell" fill="none" stroke="#f6ecda" stroke-width="0.75"/>
-</g></svg>
+</svg>

@@ -55,14 +55,6 @@ const armAccentAnimation = (root: HTMLElement) => {
   }, ANIMATION_DURATION_MS);
 };
 
-/**
- * Reflect the accent on the document root. Unknown values fall back to the
- * baseline rather than leaving a stale dye on the element.
- *
- * The CSS tokens key off `<html data-accent>`, but the logo mark is an <img>
- * that CSS can't reach into, so components need the value too - hence the
- * store. Mirrors theme.ts, the other axis of the same appearance system.
- */
 const applyAccent = (value: unknown) => {
   const accent = isAccent(value) ? value : DEFAULT_ACCENT;
   const changed = accent !== current;

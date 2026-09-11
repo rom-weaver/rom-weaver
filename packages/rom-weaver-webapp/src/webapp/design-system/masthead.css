@@ -63,11 +63,11 @@
   width: clamp(32px, 2.6vw + 21px, 46px);
   height: auto;
   aspect-ratio: 1;
+  color: var(--ink);
   border-radius: 8px;
 }
-/* The accent band is the one part of the mark that re-dyes; the rest is chassis. */
-.rw-app .brand-mark-band {
-  stroke: var(--thread);
+.rw-app .brand-mark-accent {
+  fill: var(--thread);
 }
 .rw-app .brand-copy {
   display: block;

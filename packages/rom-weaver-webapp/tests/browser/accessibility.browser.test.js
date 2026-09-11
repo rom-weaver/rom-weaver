@@ -1074,11 +1074,9 @@ describe("accent dye-lot accessibility", () => {
 
             if (badge) {
               expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
-              // The mark is inline and dyed by --thread, so the accent band must
-              // carry the live swatch rather than a baked-in image colour.
-              const band = host.querySelector(".brand-mark-band");
-              expect(band).toBeTruthy();
-              expect(getComputedStyle(band).stroke).toBe(hexToRgbString(accent.swatch));
+              const accentTab = host.querySelector(".brand-mark-accent");
+              expect(accentTab).toBeTruthy();
+              expect(getComputedStyle(accentTab).fill).toBe(hexToRgbString(accent.swatch));
             }
 
             const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });

@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
- * Rasterize the per-channel app icons.
+ * Rasterize the production and per-channel app icons.
  *
- * The back band MUST stay cream; the front band uses the channel accent. Outputs are committed
- * and copied by Vite; regenerate them when the logo or icon masters change.
+ * The cartridge MUST stay cream on the launcher background; only the tab uses the channel accent.
  *
  * Rendering matches design/icon-masters/README.md: headless Chrome, because
  * ImageMagick's SVG delegate does not render these masters exactly. Playwright's
@@ -21,7 +20,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { ACCENTS } from "../src/webapp/accent-palette.mjs";
+import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
 import { tintBrandMark } from "./brand-mark-assets.mjs";
 import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
 
@@ -32,7 +31,7 @@ const masterRoot = path.join(rootDir, "design", "icon-masters");
 const outputRoot = path.join(assetRoot, "channels");
 
 // Channel defaults MUST match src/webapp/build-channel.ts.
-const CHANNEL_ACCENTS = { beta: "woad", nightly: "verdigris", preview: "plum" };
+const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "verdigris", preview: "plum" };
 
 // Sizes come from design/icon-masters/README.md; each master already bakes in
 // its own scale/offset for the mask it targets.
@@ -55,6 +54,7 @@ const rasterize = async (page, svg, size) => {
     `<!doctype html><style>html,body{margin:0;background:transparent}img{display:block;width:${size}px;height:${size}px}</style><img src="${dataUri}">`,
   );
   await page.locator("img").waitFor({ state: "visible" });
+  await page.locator("img").evaluate((img) => img.decode());
   const shot = await page.screenshot({ omitBackground: true, type: "png" });
   // Chrome writes a conservatively-filtered, middling-deflate PNG. Squeeze it
   // here rather than as a later pass so the bytes `--check` compares against
@@ -62,6 +62,25 @@ const rasterize = async (page, svg, size) => {
   const optimized = optimizePng(shot);
   assertSamePixels(shot, optimized, `rasterized ${size}px icon`);
   return optimized;
+};
+
+// ICO directory offsets MUST address the PNG payloads from the start of the file.
+const encodeFavicon = (images) => {
+  const directory = Buffer.alloc(6 + images.length * 16);
+  directory.writeUInt16LE(1, 2);
+  directory.writeUInt16LE(images.length, 4);
+  let offset = directory.length;
+  for (const [index, { size, png }] of images.entries()) {
+    const entry = 6 + index * 16;
+    directory.writeUInt8(size, entry);
+    directory.writeUInt8(size, entry + 1);
+    directory.writeUInt16LE(1, entry + 4);
+    directory.writeUInt16LE(32, entry + 6);
+    directory.writeUInt32LE(png.length, entry + 8);
+    directory.writeUInt32LE(offset, entry + 12);
+    offset += png.length;
+  }
+  return Buffer.concat([directory, ...images.map(({ png }) => png)]);
 };
 
 const main = async () => {
@@ -76,7 +95,7 @@ const main = async () => {
     for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
       const accent = ACCENTS.find((entry) => entry.value === accentName);
       if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
-      const channelDir = path.join(outputRoot, channel);
+      const channelDir = channel === "production" ? assetRoot : path.join(outputRoot, channel);
       const emit = (name, buffer) => {
         const target = path.join(channelDir, name);
         const relative = path.relative(repoRoot, target);
@@ -99,17 +118,24 @@ const main = async () => {
         const master = tintBrandMark(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), accent);
         emit(target.output, await rasterize(page, master, target.size));
       }
+
+      const favicon = tintBrandMark(fs.readFileSync(path.join(masterRoot, "favicon.svg"), "utf8"), accent);
+      const images = [];
+      for (const size of [16, 32, 48, 64]) {
+        images.push({ size, png: await rasterize(page, favicon, size) });
+      }
+      emit("favicon.ico", encodeFavicon(images));
     }
   } finally {
     await browser.close();
   }
 
   if (checkOnly && drift.length) {
-    console.error("\nChannel icons are stale - re-run `npm run icons:channels`:");
+    console.error("\nApp icons are stale - re-run `npm run icons:channels`:");
     for (const entry of drift) console.error(`  ${entry}`);
     process.exit(1);
   }
-  console.log(checkOnly ? "\nChannel icons are up to date." : `\nDone (${written} file(s) changed).`);
+  console.log(checkOnly ? "\nApp icons are up to date." : `\nDone (${written} file(s) changed).`);
 };
 
 await main();
