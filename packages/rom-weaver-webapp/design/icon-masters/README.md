@@ -12,7 +12,7 @@ Source SVGs for the pre-rendered icons in `../../src/assets/app/root/`. The mast
 
 ## Geometry
 
-The logo uses a 64 × 64 viewBox. The cartridge occupies 48 × 56 units, with a W cutout, a recessed top edge, and three contact cuts at the bottom. The small tab at the top right carries the accent color. The paths contain no fonts, strokes, masks, or clip paths.
+The logo uses a 64 × 64 viewBox. The cartridge occupies 48 × 56 units, with an accent-colored W, a recessed top edge, and three centered contact cuts at the bottom. The top-right corner uses the cartridge color. The paths contain no fonts, strokes, masks, or clip paths.
 
 The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon adds a charcoal tile so it stays visible without color-scheme support.
 
@@ -32,7 +32,7 @@ From the repository root, regenerate production, beta, nightly, and preview icon
 npm --prefix packages/rom-weaver-webapp run icons:channels
 ```
 
-The generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's tab from the accent palette. Commit the generated files with the source changes.
+The generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's W from the accent palette. Commit the generated files with the source changes.
 
 Check the generated icons against their sources:
 
