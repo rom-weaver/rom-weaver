@@ -451,6 +451,22 @@ impl PatchRegistry {
             .cloned()
     }
 
+    /// The rejection message for a create format no handler answers to, plus
+    /// the closest create-capable name when `requested` looks like a typo of
+    /// one. Apply-only formats are never suggested: retrying with one of them
+    /// would fail again.
+    pub fn unregistered_create_format_message(&self, requested: &str) -> String {
+        let candidates = self
+            .handlers
+            .iter()
+            .filter(|handler| handler.capabilities().create)
+            .flat_map(|handler| handler.descriptor().name_spellings());
+        format!(
+            "requested patch format is not registered{}",
+            rom_weaver_core::did_you_mean_suffix(requested, candidates)
+        )
+    }
+
     /// Resolve a handler purely from an output path's extension, without opening the file.
     ///
     /// Used when choosing the patch format for `patch create` from the output filename. Returns

@@ -1871,7 +1871,7 @@ impl CliApp {
             .containers
             .find_by_name(compress_format)
             .ok_or_else(|| {
-                RomWeaverError::Validation("requested output format is not registered".to_string())
+                RomWeaverError::Validation(unregistered_output_format_message(compress_format))
             })?;
         if handler.descriptor().extensions.is_empty() {
             return Err(RomWeaverError::Validation(format!(
@@ -4939,7 +4939,7 @@ impl CliApp {
     ) -> Result<(OperationReport, String)> {
         let Some(handler) = self.containers.find_by_name(&plan.format) else {
             return Err(RomWeaverError::Validation(
-                unregistered_output_format_message(),
+                unregistered_output_format_message(&plan.format),
             ));
         };
         let codec_label = plan.codec.as_deref().unwrap_or("default").to_string();

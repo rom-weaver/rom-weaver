@@ -641,11 +641,17 @@ pub fn supported_create_formats_text() -> String {
 }
 
 /// The one rejection message for an output format the registry does not know,
-/// listing what it does know so the fix is on screen.
-pub fn unregistered_output_format_message() -> String {
+/// listing what it does know so the fix is on screen, plus the closest
+/// registered name when `requested` looks like a typo of one.
+pub fn unregistered_output_format_message(requested: &str) -> String {
+    let candidates = CONTAINER_FORMAT_REGISTRY
+        .iter()
+        .filter(|registration| registration.capabilities.create)
+        .flat_map(|registration| registration.descriptor.name_spellings());
     format!(
-        "requested output format is not registered; supported output formats are {}",
-        supported_create_formats_text()
+        "requested output format is not registered; supported output formats are {}{}",
+        supported_create_formats_text(),
+        rom_weaver_core::did_you_mean_suffix(requested, candidates)
     )
 }
 
@@ -734,13 +740,13 @@ impl ContainerRegistry {
     pub fn find_creatable_by_name(&self, name: &str) -> Result<Arc<dyn ContainerHandler>> {
         let Some(handler) = self.find_by_name(name) else {
             return Err(RomWeaverError::Validation(
-                unregistered_output_format_message(),
+                unregistered_output_format_message(name),
             ));
         };
         let capabilities = handler.capabilities();
         if !capabilities.probe_details && !capabilities.extract && !capabilities.create {
             return Err(RomWeaverError::Validation(
-                unregistered_output_format_message(),
+                unregistered_output_format_message(name),
             ));
         }
         if !capabilities.create {

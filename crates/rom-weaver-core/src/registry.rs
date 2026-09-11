@@ -22,6 +22,14 @@ pub struct FormatDescriptor {
 }
 
 impl FormatDescriptor {
+    /// Every spelling `matches_name` accepts, each paired with the canonical
+    /// name, in the shape [`crate::closest_name`] takes.
+    pub fn name_spellings(&self) -> impl Iterator<Item = (&'static str, &'static str)> {
+        std::iter::once(self.name)
+            .chain(self.aliases.iter().copied())
+            .map(|spelling| (spelling, self.name))
+    }
+
     pub fn matches_name(&self, candidate: &str) -> bool {
         let candidate = candidate.trim();
         self.name.eq_ignore_ascii_case(candidate)

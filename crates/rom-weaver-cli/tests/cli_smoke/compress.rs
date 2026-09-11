@@ -357,6 +357,33 @@ fn compress_rejects_unregistered_output_format() {
 }
 
 #[test]
+fn compress_suggests_the_closest_output_format_for_a_typo() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.bin");
+    fs::write(source.path(), [0_u8; 16]).expect("fixture");
+
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--format",
+            "cdh",
+            "--output",
+            temp.child("out.chd").path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("requested output format is not registered"));
+    assert!(label.ends_with("; did you mean `chd`?"), "{label}");
+}
+
+#[test]
 fn compress_without_format_infers_7z_from_output_extension() {
     let temp = setup_temp_dir();
     let source_path = temp.child("source.iso");
