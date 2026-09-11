@@ -217,7 +217,6 @@ jobs:
           apt-packages: imagemagick
           cargo-cache: "false"
           cache-save: "false"
-          playwright: "true"
           webapp-deps: "true"
 
       - name: Resolve tested WASM artifact for screenshots
@@ -288,6 +287,8 @@ jobs:
       # assets, so the published guides show reproducible, copyright-safe data.
       - name: Capture docs screenshots from bundled samples
         if: steps.release-pr.outputs.found == 'true'
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: |
           set -euo pipefail
           node packages/rom-weaver-webapp/scripts/dev-server.mjs preview --port 4173 > screenshot-server.log 2>&1 &

@@ -14,6 +14,7 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_TERM_COLOR: always
+      ROM_WEAVER_SYSTEM_CHROME: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -36,7 +37,6 @@ jobs:
           rust-targets: wasm32-wasip1-threads
           wasi-sdk: "true"
           webapp-deps: "true"
-          playwright: "true"
           identify-data-cache: "true"
 
       - name: Generate webapp attribution

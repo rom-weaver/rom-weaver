@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_TERM_COLOR: always
+      ROM_WEAVER_SYSTEM_CHROME: "1"
       ROM_WEAVER_COVERAGE: "1"
     steps:
       - name: Checkout
@@ -41,7 +42,6 @@ jobs:
           wasi-sdk: "true"
           cache-save: "false"
           webapp-deps: "true"
-          playwright: "true"
           identify-data-cache: "true"
 
       - name: Generate webapp attribution
