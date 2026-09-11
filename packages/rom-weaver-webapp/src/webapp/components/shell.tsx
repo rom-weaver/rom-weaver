@@ -505,12 +505,14 @@ const UtilityMenu = ({
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
   /* Rendered hidden and revealed here: the beta-tools setting is client-only, so
-     the prerendered shell must not disagree with the first hydration pass. The
-     whole Tools group toggles, heading included, so an empty group never shows. */
+     the prerendered shell must not disagree with the first hydration pass. Beta
+     entries share the Tools group with the always-on tools; the group itself
+     toggles only when every entry in it is beta, so an empty group never shows. */
   useEffect(() => {
     const enabled = !!(toolsEnabled && onOpenWorkflowTab);
-    for (const group of menuRef.current?.querySelectorAll<HTMLElement>("[data-more-beta-group]") ?? []) {
-      group.hidden = !enabled;
+    const selector = "[data-more-beta-group], [data-more-beta-item]";
+    for (const node of menuRef.current?.querySelectorAll<HTMLElement>(selector) ?? []) {
+      node.hidden = !enabled;
     }
   }, [onOpenWorkflowTab, toolsEnabled]);
 
@@ -547,16 +549,17 @@ const UtilityMenu = ({
     action();
   };
 
-  const groupTabs = (group: MoreMenuGroup, beta: boolean) =>
-    (moreTabs ?? []).filter((tab) => (tab.group ?? "tools") === group && !!tab.beta === beta);
-  const betaTabs = groupTabs("tools", true);
-  const toolTabs = groupTabs("tools", false);
-  const docsTabs = groupTabs("docs", false);
+  const groupTabs = (group: MoreMenuGroup) => (moreTabs ?? []).filter((tab) => (tab.group ?? "tools") === group);
+  const toolTabs = groupTabs("tools");
+  const docsTabs = groupTabs("docs");
+  const toolsAllBeta = toolTabs.length > 0 && toolTabs.every((tab) => tab.beta);
   // A real link, so middle-click and "open in new tab" keep working; a plain
   // activation routes through the same handler the rail uses.
   const workflowItem = (tab: WorkflowTab) => (
     <a
+      data-more-beta-item={tab.beta ? "" : undefined}
       data-more-workflow={tab.id}
+      hidden={tab.beta}
       href={tab.href}
       key={tab.id}
       onClick={(event) => {
@@ -643,14 +646,8 @@ const UtilityMenu = ({
           <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
         </>
       ) : null}
-      {betaTabs.length > 0 ? (
-        <fieldset className="more-group" data-more-beta-group="" hidden>
-          <legend className="more-group-label">{localizer.message("ui.tools.tools")}</legend>
-          {betaTabs.map((tab) => workflowItem(tab))}
-        </fieldset>
-      ) : null}
       {toolTabs.length > 0 ? (
-        <fieldset className="more-group">
+        <fieldset className="more-group" data-more-beta-group={toolsAllBeta ? "" : undefined} hidden={toolsAllBeta}>
           <legend className="more-group-label">{localizer.message("ui.tools.tools")}</legend>
           {toolTabs.map((tab) => workflowItem(tab))}
         </fieldset>
