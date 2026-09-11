@@ -40,7 +40,7 @@ The raw output lives under `crates/rom-weaver-cli/data/identify/v1`. Git ignores
 
 Libretro is the primary source. OpenGood supplies only hash keys that Libretro does not contain.
 
-The deduplication key contains the hash algorithm, normalized hash, file size, and hash scope. An overlap keeps one lookup record, Libretro metadata, and both provenance entries.
+The deduplication key contains the hash algorithm, normalized hash, file size, and hash scope. An overlap keeps one lookup record and both provenance entries. The OpenGood name takes precedence, with other names retained as alternatives. Headered and headerless OpenGood records also join by their exact source name when that name identifies one record. Display normalization does not add another merge rule.
 
 OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
@@ -70,11 +70,13 @@ The router is browser data only. The native CLI searches every installed pack fo
 
 The file is JSON: a sorted array of pack slugs and an array of `[displayName, [packIndex, ...]]` rows, ordered by the normalized title then the display name. Normalization lowercases, folds accented Latin letters to ASCII, and collapses every run of non-alphanumeric characters into one space - the same rules as the CLI name search in `crates/rom-weaver-cli/src/identify_name_search.rs`. A title that several packs hold carries one row naming every pack.
 
+Known trailing articles move to the front in display labels, including English, French, Spanish, Italian, German, and Dutch forms. For example, `Aktienspiel, Das` displays as `Das Aktienspiel`, and `Legend of Zelda, The` displays as `The Legend of Zelda`. The title index groups these labels for search navigation. Source records and their checksum-specific release choices remain separate under the source policy above.
+
 The index stores base titles only. One row per game record would be 5.4 MB Brotli against 1.6 MB for base titles; the regional variants of a chosen title come from that platform's pack.
 
-A search requires every query token to match. Literal matches anywhere in a title rank before spelling corrections. The shared Rust scorer in `crates/rom-weaver-cli/src/identify_name_search.rs` ranks corrections by edit distance and also serves searches over installed packs.
+A search requires every query token to match. Literal matches rank before numeral aliases, which rank before spelling corrections. Standalone Roman numerals `I` through `XX` and decimal numbers `1` through `20` act as search aliases in titles and alternate names. These numeral tokens require whole-word matches; platform names and dump tags do not use numeral aliases. Case does not affect matching. The index keeps `Final Fantasy IV` and `Final Fantasy 4`, or `Mega Man X` and `Mega Man 10`, as separate title choices. The shared Rust scorer in `crates/rom-weaver-cli/src/identify_name_search.rs` ranks corrections by edit distance and also serves searches over installed packs.
 
-The distance is optimal string alignment (restricted Damerau–Levenshtein). An insertion, deletion, substitution, or adjacent letter swap counts as one edit. Words of four to six characters allow one edit; longer words allow two. Shorter words and tokens containing numbers match literally. Total edit distance ranks before word position and title length. A search over installed packs also ranks good dumps above every other dump at the same edit distance. A record is a good dump when no tag names a lesser one: a `!` tag, no tags at all, or only tags outside the GoodTools quality codes (`[C]`, `[BF]`). The title index holds base titles without tags, so this rule does not apply there.
+The distance is optimal string alignment (restricted Damerau–Levenshtein). An insertion, deletion, substitution, or adjacent letter swap counts as one edit. Words of four to six characters allow one edit; longer words allow two. Spelling correction does not apply to shorter words or tokens containing numbers. Total edit distance ranks before word position and title length. At equal distance, literal token matches rank before aliases. A search over installed packs then prefers good dumps. A record is a good dump when no tag names a lesser one: a `!` tag, no tags at all, or only tags outside the GoodTools quality codes (`[C]`, `[BF]`). The title index holds base titles without tags, so this rule does not apply there.
 
 `index.json` records the file under `titleIndex` with its size, SHA-256, title count, and pack count. The ordering is fixed, so a rebuild over the same titles is byte-identical. The shared builder and reader live in `packages/rom-weaver-webapp/src/lib/identify/title-index.mjs`.
 
