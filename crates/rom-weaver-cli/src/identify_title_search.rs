@@ -6,6 +6,8 @@ use rom_weaver_checksum::identify_catalog::IdentifyCatalog;
 struct TitleIndex {
     format: String,
     packs: Vec<String>,
+    #[serde(default, rename = "defaultPacks")]
+    default_packs: Vec<bool>,
     #[serde(default)]
     systems: Vec<Vec<String>>,
     titles: Vec<(String, Vec<usize>)>,
@@ -15,6 +17,7 @@ struct ScoredTitleHit {
     row: usize,
     score: i64,
     packs: Vec<usize>,
+    has_default_pack: bool,
 }
 
 /// The title index can include canonical platform names and aliases alongside
@@ -81,6 +84,11 @@ pub(super) fn search_title_index(
             "title index is invalid: empty pack slug".to_string(),
         ));
     }
+    if !index.default_packs.is_empty() && index.default_packs.len() != index.packs.len() {
+        return Err(RomWeaverError::Validation(
+            "title index is invalid: defaultPacks must align with packs".to_string(),
+        ));
+    }
     if !index.systems.is_empty()
         && (index.systems.len() != index.packs.len()
             || index
@@ -140,18 +148,24 @@ pub(super) fn search_title_index(
             best_score = Some(best_score.map_or(score, |best: i64| best.max(score)));
         }
         if let Some(score) = title_score {
+            let has_default_pack = !index.default_packs.is_empty()
+                && packs.iter().any(|&pack| index.default_packs[pack]);
             hits.push(ScoredTitleHit {
                 row,
                 score,
                 packs: packs.clone(),
+                has_default_pack,
             });
             continue;
         }
         if let Some(score) = best_score {
+            let has_default_pack = !index.default_packs.is_empty()
+                && matching_packs.iter().any(|&pack| index.default_packs[pack]);
             hits.push(ScoredTitleHit {
                 row,
                 score,
                 packs: matching_packs,
+                has_default_pack,
             });
         }
     }
@@ -159,6 +173,7 @@ pub(super) fn search_title_index(
         right
             .score
             .cmp(&left.score)
+            .then_with(|| right.has_default_pack.cmp(&left.has_default_pack))
             .then_with(|| index.titles[left.row].0.cmp(&index.titles[right.row].0))
     });
     let matched = hits.len();
@@ -167,10 +182,13 @@ pub(super) fn search_title_index(
         .into_iter()
         .map(|hit| {
             let (name, _) = &index.titles[hit.row];
+            let mut packs = hit.packs;
+            if !index.default_packs.is_empty() {
+                packs.sort_by_key(|&pack| !index.default_packs[pack]);
+            }
             IdentifyTitleSearchMatch {
                 name: name.clone(),
-                slugs: hit
-                    .packs
+                slugs: packs
                     .iter()
                     .map(|&pack| index.packs[pack].clone())
                     .collect(),

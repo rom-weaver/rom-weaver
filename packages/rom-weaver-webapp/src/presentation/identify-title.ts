@@ -1,4 +1,5 @@
 import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../types/identify.ts";
+import { displayTitle } from "../lib/identify/title-index.mjs";
 
 const ATOMIC_REGION_LABELS: Readonly<Record<string, string>> = {
   A: "Australia",
@@ -109,13 +110,13 @@ const uniqueIdentifyTitles = (names: readonly string[]): string[] => [
   ...new Set(names.map(formatIdentifyTitle).filter(Boolean)),
 ];
 
-/** Every title a lookup provides, with source names first and readable forms preserved. */
+/** Article order MUST agree with title search labels; region and dump-tag spellings stay available. */
 const uniqueIdentifyDisplayNames = (
   matches: readonly Pick<ParsedIdentifyTitleMatch, "name" | "alternateNames">[],
 ): string[] => {
   const sourceNames = matches.flatMap((match) => [match.name, ...(match.alternateNames ?? [])]);
   const readableNames = matches.map((match) => formatIdentifyTitle(match.name));
-  return [...new Set([...sourceNames, ...readableNames].map((name) => name.trim()).filter(Boolean))];
+  return [...new Set([...sourceNames, ...readableNames].map(displayTitle).filter(Boolean))];
 };
 
 /**

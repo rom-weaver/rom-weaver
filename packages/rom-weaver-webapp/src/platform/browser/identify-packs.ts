@@ -65,6 +65,7 @@ type IdentifySystem = {
   slug: string;
   source: string;
   group?: string;
+  defaultPack?: boolean;
 };
 
 /** Mirrors the worker's IdentifyGroupState reply (see offline-warmup.ts). */
@@ -397,6 +398,14 @@ const identifyPackGroups = (index: IdentifyIndex): IdentifyPackGroup[] => {
 const listOptionalIdentifyPackGroups = async (): Promise<IdentifyPackGroup[]> =>
   identifyPackGroups(await getIndex()).filter((group) => !group.default);
 
+const defaultPackSlugs = (index: IdentifyIndex): Set<string> =>
+  new Set([
+    ...index.systems.filter((system) => system.defaultPack || system.group === "default").map((system) => system.slug),
+    ...identifyPackGroups(index)
+      .filter((group) => group.default)
+      .flatMap((group) => group.systems),
+  ]);
+
 /**
  * Optional pack group ids whose systems overlap the selection the hints
  * produce. Used to bump those groups to the front of the offline warm-up when
@@ -713,9 +722,11 @@ const loadTitleIndex = async (): Promise<LoadedTitleIndex> => {
       (name): name is string => Boolean(name),
     );
   });
+  const defaults = defaultPackSlugs(index);
   const searchable = JSON.stringify({
     format: TITLE_INDEX_FORMAT,
     packs: parsed.packs,
+    defaultPacks: parsed.packs.map((slug) => defaults.has(slug)),
     systems,
     titles: parsed.titles.map((title) => [title.name, title.packs]),
   });
@@ -746,18 +757,24 @@ const loadIdentifyTitleIndex = async (onProgress?: (progress: { message?: string
 };
 
 const mapIdentifyTitleSearchMatches = async (
-  matches: Array<{ name: string; slugs: string[] }>,
+  matches: Array<{ name: string; slugs: string[]; score: number }>,
 ): Promise<IdentifyTitleHit[]> => {
   const [index, catalog] = await Promise.all([getIndex(), getCatalog()]);
-  const rows: IdentifyTitleHit[] = [];
+  const defaults = defaultPackSlugs(index);
+  const rows: Array<{ hit: IdentifyTitleHit; score: number; defaultPack: boolean }> = [];
   for (const match of matches) {
     for (const slug of match.slugs) {
       const system = systemForSlug(index, catalog, slug);
       if (!system) throw new IdentifyDataUnavailableError(`ROM identify title index names unknown pack: ${slug}`);
-      rows.push({ name: match.name, platform: system.platform, slug });
+      rows.push({
+        hit: { name: match.name, platform: system.platform, slug },
+        score: match.score,
+        defaultPack: defaults.has(slug),
+      });
     }
   }
-  return rows;
+  rows.sort((left, right) => right.score - left.score || Number(right.defaultPack) - Number(left.defaultPack));
+  return rows.map((row) => row.hit);
 };
 
 /**

@@ -721,6 +721,53 @@ fn identify_searches_title_index_including_partial_names_and_typos() {
 }
 
 #[test]
+fn identify_title_index_searches_roman_and_decimal_numerals_without_merging_rows() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["default", "optional"],
+            "defaultPacks": [true, false],
+            "titles": [
+                ["Mega Man X", [0]],
+                ["Mega Man 10", [1]],
+                ["Mega Man XIV", [1]]
+            ]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+
+    for (query, expected) in [
+        ("mega man 10", vec!["Mega Man 10", "Mega Man X"]),
+        // Numeral literals are full tokens, so `x` cannot match inside `xiv`.
+        ("MEGA MAN x", vec!["Mega Man X", "Mega Man 10"]),
+    ] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--title-index",
+                index.path().to_str().expect("index path"),
+                "--name",
+                query,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        let hits = json["details"]["identifyTitles"]["matches"]
+            .as_array()
+            .expect("title matches")
+            .iter()
+            .map(|hit| hit["name"].as_str().expect("title name"))
+            .collect::<Vec<_>>();
+        assert_eq!(hits, expected, "query {query}");
+    }
+}
+
+#[test]
 fn identify_title_index_searches_system_names_and_aliases() {
     let temp = setup_temp_dir();
     let index = temp.child("titles.json");
@@ -876,4 +923,191 @@ fn identify_title_index_can_return_matches_beyond_the_default_limit() {
             expected
         );
     }
+}
+
+#[test]
+fn identify_title_index_prefers_default_packs_at_equal_scores_and_in_slug_order() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["optional", "default-a", "default-b"],
+            "defaultPacks": [false, true, true],
+            "titles": [
+                ["Mario A", [0]],
+                ["Mario B", [1]],
+                ["Mario Shared", [0, 2, 1]]
+            ]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            index.path().to_str().expect("index path"),
+            "--name",
+            "mario",
+            "--limit",
+            "1",
+            "--json",
+        ],
+        0,
+    );
+    let hits = parse_single_json_line(&output)["details"]["identifyTitles"]["matches"]
+        .as_array()
+        .expect("title matches")
+        .clone();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["name"], "Mario B");
+
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            index.path().to_str().expect("index path"),
+            "--name",
+            "shared",
+            "--json",
+        ],
+        0,
+    );
+    let hit = &parse_single_json_line(&output)["details"]["identifyTitles"]["matches"][0];
+    assert_eq!(
+        hit["slugs"],
+        serde_json::json!(["default-b", "default-a", "optional"])
+    );
+}
+
+#[test]
+fn identify_title_index_keeps_a_better_optional_match_ahead_of_default_packs() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["optional", "default"],
+            "defaultPacks": [false, true],
+            "titles": [["Mario World", [0]], ["Mario World Extra", [1]]]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            index.path().to_str().expect("index path"),
+            "--name",
+            "mario world",
+            "--limit",
+            "1",
+            "--json",
+        ],
+        0,
+    );
+    let hit = &parse_single_json_line(&output)["details"]["identifyTitles"]["matches"][0];
+    assert_eq!(hit["name"], "Mario World");
+}
+
+#[test]
+fn identify_title_index_does_not_restore_default_packs_excluded_by_system_matches() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        serde_json::to_vec(&serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["optional", "default"],
+            "defaultPacks": [false, true],
+            "systems": [["Optional Console"], ["Default Console"]],
+            "titles": [["Mario", [0, 1]]]
+        }))
+        .expect("index JSON"),
+    )
+    .expect("write title index");
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            index.path().to_str().expect("index path"),
+            "--name",
+            "mario optional console",
+            "--json",
+        ],
+        0,
+    );
+    let hit = &parse_single_json_line(&output)["details"]["identifyTitles"]["matches"][0];
+    assert_eq!(hit["slugs"], serde_json::json!(["optional"]));
+}
+
+#[test]
+fn identify_title_index_keeps_alphabetical_order_without_default_pack_metadata() {
+    let temp = setup_temp_dir();
+    for default_packs in [None, Some(serde_json::json!([]))] {
+        let index = temp.child("titles.json");
+        let mut value = serde_json::json!({
+            "format": "rom-weaver-identify-title-index-v1",
+            "packs": ["optional", "default"],
+            "titles": [["Mario A", [0]], ["Mario B", [1]]]
+        });
+        if let Some(default_packs) = default_packs {
+            value["defaultPacks"] = default_packs;
+        }
+        fs::write(
+            index.path(),
+            serde_json::to_vec(&value).expect("index JSON"),
+        )
+        .expect("write title index");
+        let output = command_stdout(
+            &[
+                "identify",
+                "--title-index",
+                index.path().to_str().expect("index path"),
+                "--name",
+                "mario",
+                "--limit",
+                "1",
+                "--json",
+            ],
+            0,
+        );
+        let hit = &parse_single_json_line(&output)["details"]["identifyTitles"]["matches"][0];
+        assert_eq!(hit["name"], "Mario A");
+    }
+}
+
+#[test]
+fn identify_title_index_rejects_misaligned_default_pack_metadata() {
+    let temp = setup_temp_dir();
+    let index = temp.child("titles.json");
+    fs::write(
+        index.path(),
+        r#"{"format":"rom-weaver-identify-title-index-v1","packs":["nes","snes"],"defaultPacks":[true],"titles":[["Mario",[0]]]}"#,
+    )
+    .expect("write invalid index");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "identify",
+            "--title-index",
+            index.path().to_str().expect("index path"),
+            "--name",
+            "mario",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stderr
+        .clone();
+    assert!(
+        String::from_utf8(output)
+            .expect("stderr")
+            .contains("defaultPacks must align with packs")
+    );
 }

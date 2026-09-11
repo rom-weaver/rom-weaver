@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   baseTitle,
+  displayTitle,
   encodeTitleIndex,
   normalizeTitle,
   parseTitleIndex,
@@ -25,7 +26,7 @@ describe("normalizeTitle", () => {
 describe("baseTitle", () => {
   it("drops the first tag group and everything after it", () => {
     expect(baseTitle("Legend of Zelda, The - A Link to the Past (USA) [!]")).toBe(
-      "Legend of Zelda, The - A Link to the Past",
+      "The Legend of Zelda - A Link to the Past",
     );
     expect(baseTitle("Sonic [b1] (Europe)")).toBe("Sonic");
     expect(baseTitle("Plain Title")).toBe("Plain Title");
@@ -35,9 +36,97 @@ describe("baseTitle", () => {
     expect(baseTitle("(Unknown) Thing")).toBe("(Unknown) Thing");
     expect(baseTitle("[BIOS] Boot ROM")).toBe("[BIOS] Boot ROM");
   });
+
+  it("moves only comma-delimited English articles before the title", () => {
+    expect(baseTitle("Legend of Zelda, The (USA)")).toBe("The Legend of Zelda");
+    expect(baseTitle("Adventure, An [!]")).toBe("An Adventure");
+    expect(baseTitle("Train, A: New World")).toBe("A Train: New World");
+    expect(baseTitle("Legend of Zelda, THE")).toBe("The Legend of Zelda");
+    expect(baseTitle("The Legend of Zelda")).toBe("The Legend of Zelda");
+    expect(baseTitle("Zelda, The Adventure of Link")).toBe("Zelda, The Adventure of Link");
+    expect(baseTitle("Game, Another")).toBe("Game, Another");
+  });
+});
+
+describe("displayTitle", () => {
+  it.each([
+    ["Abadia del Crimen, La", "La Abadia del Crimen"],
+    ["5eme Axe, Le", "Le 5eme Axe"],
+    ["4 Fantastiques, Les", "Les 4 Fantastiques"],
+    ["Aufstand der Dinge, Der", "Der Aufstand der Dinge"],
+    ["3er Reihe, Die", "Die 3er Reihe"],
+    ["Aktienspiel, Das", "Das Aktienspiel"],
+    ["Arte de la Guerra, El", "El Arte de la Guerra"],
+    ["Aguilas, Las", "Las Aguilas"],
+    ["Caballeros, Los", "Los Caballeros"],
+    ["Cuscino rosa, Il", "Il Cuscino rosa"],
+    ["Animali, Gli", "Gli Animali"],
+    ["Amsterdamse Effectenbeurs, De", "De Amsterdamse Effectenbeurs"],
+    ["Grote Wonder, Het", "Het Grote Wonder"],
+    ["Aigle D'Or, L'", "L'Aigle D'Or"],
+    ["Aigle, L’", "L'Aigle"],
+    ["Legend of Zelda, The (U) [!]", "The Legend of Zelda (U) [!]"],
+    ["Ameropa, Das - Juli 1996", "Das Ameropa - Juli 1996"],
+    ["Train, A: New World", "A Train: New World"],
+  ])("formats %s and preserves the suffix", (source, expected) => {
+    expect(displayTitle(source)).toBe(expected);
+    expect(displayTitle(displayTitle(source))).toBe(expected);
+    expect(baseTitle(source)).toBe(baseTitle(expected));
+  });
+
+  it("keeps ordinary commas, subtitle articles, and numeral spellings intact", () => {
+    for (const title of [
+      "Look This Way, Baby",
+      "Game, Another",
+      "Game (Name, The)",
+      "Series - Story, The",
+      "Final Fantasy IV",
+      "Final Fantasy 4",
+      "Mega Man X",
+      "Mega Man 10",
+    ]) {
+      expect(displayTitle(title)).toBe(title);
+    }
+  });
 });
 
 describe("encodeTitleIndex", () => {
+  it("unifies article labels but keeps numeral variants as separate titles", () => {
+    const entries = ["Aktienspiel, Das", "Das Aktienspiel", "Final Fantasy IV", "Final Fantasy 4"].map((name) => ({
+      name,
+      slugs: ["test"],
+    }));
+    expect(parseTitleIndex(encodeTitleIndex(entries)).titles.map(({ name }) => name)).toEqual([
+      "Das Aktienspiel",
+      "Final Fantasy 4",
+      "Final Fantasy IV",
+    ]);
+  });
+  it("groups leading and trailing articles across packs and release variants", () => {
+    const entries = [
+      { name: "The Legend of Zelda", slugs: ["nes"] },
+      { name: "Legend of Zelda, The", slugs: ["fds"] },
+      { name: "Legend of Zelda, The (USA) [!]", slugs: ["nes"] },
+      { name: "Legend of Zelda, The - A Link to the Past", slugs: ["snes"] },
+      { name: "The Legend of Zelda - A Link to the Past", slugs: ["gba"] },
+    ];
+    const encoded = encodeTitleIndex(entries);
+    const index = parseTitleIndex(encoded);
+    expect(index.titles).toEqual([
+      { name: "The Legend of Zelda", normalized: "the legend of zelda", packs: [0, 2] },
+      {
+        name: "The Legend of Zelda - A Link to the Past",
+        normalized: "the legend of zelda a link to the past",
+        packs: [1, 3],
+      },
+    ]);
+    expect(encodeTitleIndex([...entries].reverse())).toBe(encoded);
+    for (const entry of entries) {
+      const title = index.titles.find((row) => row.normalized === normalizeTitle(baseTitle(entry.name)));
+      expect(title?.packs.map((pack) => index.packs[pack])).toEqual(expect.arrayContaining(entry.slugs));
+    }
+  });
+
   it("merges packs per normalized title and is deterministic", () => {
     const json = encodeTitleIndex([
       { name: "Sonic the Hedgehog", slugs: ["sega-32x"] },

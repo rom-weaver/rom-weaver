@@ -626,6 +626,7 @@ test("the builder emits a title index that finds every pack's base titles", asyn
   assert.equal(readFileSync(join(outDir, entry.brotliFile)).length, entry.brotliBytes);
 
   const titleIndex = parseTitleIndex(bytes.toString("utf8"));
+  assert.deepEqual(JSON.parse(bytes.toString("utf8")).defaultPacks, [true, false]);
   assert.deepEqual([...titleIndex.packs].sort(), index.systems.map(({ slug }) => slug).sort());
   // The dump tags are stripped, so both regional variants fold to one title.
   const hits = titleIndex.titles.filter(({ name }) => name === "Alpha Quest");

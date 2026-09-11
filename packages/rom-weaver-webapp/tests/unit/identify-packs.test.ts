@@ -360,13 +360,21 @@ const TITLE_ENTRIES = [
 const titleIndexBody = () => `${encodeTitleIndex(TITLE_ENTRIES)}\n`;
 
 const stubTitleFetch = async (
-  options: { body?: string; catalog?: unknown; overrides?: Record<string, unknown>; status?: number } = {},
+  options: {
+    body?: string;
+    catalog?: unknown;
+    overrides?: Record<string, unknown>;
+    status?: number;
+    systems?: unknown[];
+    groups?: unknown[];
+  } = {},
 ) => {
   const body = options.body ?? titleIndexBody();
   const bytes = new TextEncoder().encode(body);
   const index = {
     format: "rom-weaver-identify-system-pack-v1",
-    systems: INDEX_SYSTEMS,
+    systems: options.systems ?? INDEX_SYSTEMS,
+    groups: options.groups,
     titleIndex: {
       file: "title-index.json",
       format: "rom-weaver-identify-title-index-v1",
@@ -391,6 +399,35 @@ const stubTitleFetch = async (
 };
 
 describe("loadIdentifyTitleIndex", () => {
+  it("attaches default membership from system metadata and pack groups", async () => {
+    await stubTitleFetch({
+      systems: INDEX_SYSTEMS.map((entry) => ({ ...entry, group: entry.slug === "sega-32x" ? "default" : "optional" })),
+      groups: [{ id: "default", default: true, systems: ["nintendo-game-boy-advance"] }],
+    });
+    const { loadIdentifyTitleIndex } = await import("../../src/platform/browser/identify-packs.ts");
+    expect(JSON.parse(await (await loadIdentifyTitleIndex()).blob.text()).defaultPacks).toEqual([true, true, false]);
+  });
+
+  it("ranks default platform rows first only when match scores tie", async () => {
+    await stubTitleFetch({
+      systems: INDEX_SYSTEMS.map((entry) => ({ ...entry, defaultPack: entry.slug === "sega-mega-drive-genesis" })),
+    });
+    const { mapIdentifyTitleSearchMatches } = await import("../../src/platform/browser/identify-packs.ts");
+    const rows = await mapIdentifyTitleSearchMatches([
+      { name: "Best optional hit", slugs: ["nintendo-game-boy-advance"], score: 101 },
+      { name: "Alpha", slugs: ["sega-32x", "sega-mega-drive-genesis"], score: 100 },
+      { name: "Beta", slugs: ["sega-mega-drive-genesis"], score: 100 },
+      { name: "Worse default hit", slugs: ["sega-mega-drive-genesis"], score: 99 },
+    ]);
+    expect(rows.map(({ name, slug }) => [name, slug])).toEqual([
+      ["Best optional hit", "nintendo-game-boy-advance"],
+      ["Alpha", "sega-mega-drive-genesis"],
+      ["Beta", "sega-mega-drive-genesis"],
+      ["Alpha", "sega-32x"],
+      ["Worse default hit", "sega-mega-drive-genesis"],
+    ]);
+  });
+
   it("adds system names to the validated blob and caches it until reset", async () => {
     const first = await stubTitleFetch();
     const { loadIdentifyTitleIndex, resetIdentifyPackCache } =
@@ -399,6 +436,7 @@ describe("loadIdentifyTitleIndex", () => {
     expect(loaded.fileName).toBe("title-index.json");
     expect(JSON.parse(await loaded.blob.text())).toEqual({
       ...JSON.parse(titleIndexBody()),
+      defaultPacks: [false, false, false],
       systems: [
         ["nintendo-game-boy-advance", "Nintendo Game Boy Advance"],
         ["sega-32x", "Sega 32X"],
