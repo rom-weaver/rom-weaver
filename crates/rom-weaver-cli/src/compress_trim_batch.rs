@@ -153,9 +153,9 @@ impl CliApp {
             return self.finish(
                 "compress",
                 fail(
-                    Some(resolved_format),
+                    Some(resolved_format.clone()),
                     "probe",
-                    unregistered_output_format_message(),
+                    unregistered_output_format_message(&resolved_format),
                 ),
             );
         };
@@ -164,9 +164,9 @@ impl CliApp {
             return self.finish(
                 "compress",
                 fail(
-                    Some(resolved_format),
+                    Some(resolved_format.clone()),
                     "probe",
-                    unregistered_output_format_message(),
+                    unregistered_output_format_message(&resolved_format),
                 ),
             );
         }

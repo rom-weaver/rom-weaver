@@ -60,6 +60,8 @@ type RomLookupState = {
   busy: boolean;
   checksum: ParsedBundleChecks | undefined;
   error: string;
+  /** A typed query is waiting out the pause before it searches. */
+  pending: boolean;
   result: RomLookupResult | undefined;
   stage: string;
   text: string;
@@ -75,6 +77,7 @@ const IDLE: RomLookupState = {
   busy: false,
   checksum: undefined,
   error: "",
+  pending: false,
   result: undefined,
   stage: "",
   text: "",
@@ -130,7 +133,7 @@ const useRomLookup = (messages: RomLookupMessages) => {
     abortRef.current = controller;
     // The previous answer stays up while the next one loads: a card the user
     // is refining MUST NOT vanish and flip the bench back to the hero.
-    setState((current) => ({ ...current, busy: true, error: "", stage: "" }));
+    setState((current) => ({ ...current, busy: true, error: "", pending: false, stage: "" }));
     return { controller, run: runRef.current };
   }, [cancel]);
 
@@ -237,6 +240,7 @@ const useRomLookup = (messages: RomLookupMessages) => {
         busy: false,
         checksum: undefined,
         error: "",
+        pending: false,
         stage: "",
         text,
         title: undefined,
@@ -248,16 +252,19 @@ const useRomLookup = (messages: RomLookupMessages) => {
       if (query.length < MIN_QUERY_LENGTH) return;
       const hex = query.toLowerCase();
       if (/^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH) {
-        if (identifyHashAlgorithm(hex)) timerRef.current = setTimeout(() => void searchHash(hex), SEARCH_DELAY_MS);
-        return;
+        if (!identifyHashAlgorithm(hex)) return;
+        timerRef.current = setTimeout(() => void searchHash(hex), SEARCH_DELAY_MS);
+      } else {
+        timerRef.current = setTimeout(() => void searchName(query), SEARCH_DELAY_MS);
       }
-      timerRef.current = setTimeout(() => void searchName(query), SEARCH_DELAY_MS);
+      setState((current) => ({ ...current, pending: true }));
     },
     [cancel, searchHash, searchName],
   );
 
   const search = useCallback(async () => {
     cancel();
+    setState((current) => ({ ...current, pending: false }));
     const text = state.text.trim();
     if (!text) return;
     const hex = text.toLowerCase();
@@ -274,6 +281,7 @@ const useRomLookup = (messages: RomLookupMessages) => {
           ...current,
           busy: false,
           error: "",
+          pending: false,
           stage: "",
           result: {
             checks: {
@@ -321,10 +329,23 @@ const useRomLookup = (messages: RomLookupMessages) => {
   /** Back from a title's releases to the title list, which is kept. */
   const leaveTitle = useCallback(() => {
     cancel();
-    setState((current) => ({ ...current, busy: false, error: "", stage: "", title: undefined, versions: [] }));
+    setState((current) => ({
+      ...current,
+      busy: false,
+      error: "",
+      pending: false,
+      stage: "",
+      title: undefined,
+      versions: [],
+    }));
   }, [cancel]);
 
-  return { ...state, choose, chooseTitle, clear, leaveTitle, search, setText };
+  // Hex text of a wrong length is a checksum still being typed (or pasted
+  // short), which the typed path deliberately leaves unsearched; the box MUST
+  // say so instead of promising results.
+  const hex = state.text.trim().toLowerCase();
+  const incompleteHash = /^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH && !identifyHashAlgorithm(hex);
+  return { ...state, choose, chooseTitle, clear, incompleteHash, leaveTitle, search, setText };
 };
 
 export { useRomLookup, type RomLookupMessages };

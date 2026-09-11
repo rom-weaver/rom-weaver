@@ -37,8 +37,8 @@ const catalogWith = (packSha: string) => ({
 const stubFetch = (packSha: string) => {
   const fetchMock = vi.fn(async (input: URL | RequestInfo) => {
     const url = new URL(String(input));
-    if (url.pathname.endsWith("identify-index.json")) return new Response(JSON.stringify(INDEX));
-    if (url.pathname.endsWith("identify-catalog.json")) return new Response(JSON.stringify(catalogWith(packSha)));
+    if (url.pathname.endsWith("identify-index-test.json")) return new Response(JSON.stringify(INDEX));
+    if (url.pathname.endsWith("identify-catalog-test.json")) return new Response(JSON.stringify(catalogWith(packSha)));
     if (url.pathname.endsWith("sony-playstation.pack")) return new Response(new TextEncoder().encode(PACK_BODY));
     return new Response(new TextEncoder().encode("abc"));
   });

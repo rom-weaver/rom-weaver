@@ -264,6 +264,10 @@ const selectIdentifySlugs = (
 const describe = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
 const assetUrl = (name: string) => new URL(`${DATA_ROOT}${name}`, document.baseURI);
+// The manifests are content-addressed: the build hashes their bytes into the file
+// name, so a bundle always reads the manifest it was built against and the file
+// can be cached as immutable like every other asset.
+const manifestUrl = (file: string) => new URL(`assets/${file}`, document.baseURI);
 let indexPromise: Promise<IdentifyIndex> | undefined;
 let catalogPromise: Promise<IdentifyCatalog | undefined> | undefined;
 let checksumRouterPromise: Promise<ChecksumRouter> | undefined;
@@ -291,10 +295,10 @@ const describeIndexResponse = (response: Response) => ({
 });
 
 const loadIndex = async (): Promise<IdentifyIndex> => {
-  const requestUrl = assetUrl("index.json");
+  const requestUrl = manifestUrl(__IDENTIFY_MANIFEST_FILES__.index);
   let response: Response;
   try {
-    response = await fetch(requestUrl, { cache: "no-cache" });
+    response = await fetch(requestUrl);
   } catch (cause) {
     logger.error("identify index request failed", { error: describe(cause), url: requestUrl.href });
     throw new IdentifyDataUnavailableError(`ROM identify index request failed: ${describe(cause)}`, { cause });
@@ -337,8 +341,13 @@ const loadIndex = async (): Promise<IdentifyIndex> => {
  * every failure resolves to `undefined` instead of throwing.
  */
 const loadCatalog = async (): Promise<IdentifyCatalog | undefined> => {
+  const file = __IDENTIFY_MANIFEST_FILES__.catalog;
+  if (!file) {
+    logger.debug("identify catalog unavailable", { reason: "not built" });
+    return undefined;
+  }
   try {
-    const response = await fetch(assetUrl("catalog.json"), { cache: "no-cache" });
+    const response = await fetch(manifestUrl(file));
     if (!response.ok) {
       logger.debug("identify catalog unavailable", describeIndexResponse(response));
       return undefined;

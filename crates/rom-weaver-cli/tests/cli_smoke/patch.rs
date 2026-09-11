@@ -1250,6 +1250,49 @@ fn patch_apply_reports_pds_as_explicitly_unsupported() {
     );
 }
 
+fn patch_create_label_for_format(temp: &TempDir, format: &str) -> String {
+    let output = command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            temp.child("original.bin").path().to_str().expect("path"),
+            "--modified",
+            temp.child("modified.bin").path().to_str().expect("path"),
+            "--output",
+            temp.child("update.bin").path().to_str().expect("path"),
+            "--format",
+            format,
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    json["label"].as_str().expect("label").to_string()
+}
+
+#[test]
+fn patch_create_suggests_the_closest_create_format_for_a_typo() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("original.bin").path(), b"abcdefgh").expect("fixture");
+    fs::write(temp.child("modified.bin").path(), b"abcdefgi").expect("fixture");
+
+    let label = patch_create_label_for_format(&temp, "ipss");
+    assert!(
+        label.contains("requested patch format is not registered"),
+        "{label}"
+    );
+    assert!(label.ends_with("; did you mean `IPS`?"), "{label}");
+
+    // NINJA1 is apply-only, so a near miss of it MUST NOT be suggested.
+    let label = patch_create_label_for_format(&temp, "ninja");
+    assert_eq!(label, "requested patch format is not registered");
+
+    let label = patch_create_label_for_format(&temp, "not-a-format");
+    assert_eq!(label, "requested patch format is not registered");
+}
+
 #[test]
 fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
     let temp = setup_temp_dir();

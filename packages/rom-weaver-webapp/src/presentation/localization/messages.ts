@@ -1096,6 +1096,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identify.search": msg({ id: "ui.identify.search", message: "Search" }),
   "ui.identify.searchAgain": msg({ id: "ui.identify.searchAgain", message: "Search again" }),
   "ui.identify.searching": msg({ id: "ui.identify.searching", message: "Searching…" }),
+  "ui.identify.searchAsYouType": msg({
+    id: "ui.identify.searchAsYouType",
+    message: "Results appear as you type - no need to press Search.",
+  }),
   "ui.identify.searchFailed": msg({ id: "ui.identify.searchFailed", message: "The search failed." }),
   "ui.identify.hashInvalid": msg({
     id: "ui.identify.hashInvalid",

@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
-import { Fragment, useState } from "react";
-import { identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
+import { Fragment, useRef, useState } from "react";
+import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
 import type { ExpectedRomTitle } from "../../../../lib/apply/expected-rom-lookup.ts";
@@ -13,6 +13,7 @@ import type {
 } from "../../../../types/identify.ts";
 import { IdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import { useUiLocalizer } from "../../settings-context.tsx";
+import { useKeepInputVisible } from "../../use-keep-input-visible.ts";
 import type { RomLookupMessages, useRomLookup } from "../../use-rom-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
 import { ExtractName } from "./extraction-tree.tsx";
@@ -282,10 +283,12 @@ const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedCo
 };
 
 /* One release of a chosen title. The name leads; platform, region, revision,
-   and dump tags separate releases. Its expected checksums let the user choose
-   the exact dump before this one button selects it. */
+   and dump tags separate releases. The tags are decoded ("Verified dump", not
+   "!") so the kind of dump reads as plainly as its checksums, which let the
+   user choose the exact dump before this one button selects it. */
 const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; onChoose: () => void }) => {
-  const details = [match.platform, match.region, match.revision, ...(match.dumpTags || [])].filter(Boolean);
+  const dumpKinds = (match.dumpTags || []).filter((tag) => tag.trim()).map(identifyDumpTagLabel);
+  const details = [match.platform, match.region, match.revision, ...dumpKinds].filter(Boolean);
   return (
     <li className="identify-search-result">
       <button
@@ -311,7 +314,8 @@ const versionKey = (match: ParsedIdentifyTitleMatch) =>
  * The `hero` variant belongs to empty input steps. The `section` variant is
  * the island beside the empty ROM prompt. The `compact` variant refines an
  * existing expectation. A name search lists titles, then the releases of the
- * chosen title, under the row; a checksum answers directly.
+ * chosen title, under the row - above it on a phone, where the keyboard would
+ * cover anything below (phone-dock.css); a checksum answers directly.
  */
 const RomSearch = ({
   idPrefix = "rom-weaver-rom",
@@ -329,10 +333,18 @@ const RomSearch = ({
   const visibleTitleCount = titlePage.titles === lookup.titles ? titlePage.count : 50;
   const inputId = `${idPrefix}-search`;
   const compact = variant === "compact";
+  // The button keeps its name while a typed query waits out the pause: pressing
+  // it then is how the user skips the wait, so it MUST still read as Search.
+  const searching = lookup.busy || lookup.pending;
+  const searchingLabel = lookup.stage || localizer.message("ui.identify.searching");
   const submitLabel = lookup.busy
-    ? lookup.stage || localizer.message("ui.identify.searching")
+    ? searchingLabel
     : localizer.message(compact ? "ui.identify.searchAgain" : "ui.identify.search");
   const chosen = lookup.title;
+  const hasResults = lookup.titles.length > 0 || lookup.versions.length > 0;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  useKeepInputVisible(inputRef, formRef);
   return (
     <form
       aria-busy={lookup.busy || undefined}
@@ -342,6 +354,7 @@ const RomSearch = ({
         event.preventDefault();
         void lookup.search();
       }}
+      ref={formRef}
     >
       <label className="identify-search-label" htmlFor={inputId}>
         {localizer.message(compact ? "ui.identify.searchRefine" : "ui.identify.searchDisclosure")}
@@ -355,7 +368,9 @@ const RomSearch = ({
           onChange={(event) => lookup.setText(event.currentTarget.value, (event.nativeEvent as InputEvent).isComposing)}
           onCompositionEnd={(event) => lookup.setText(event.currentTarget.value, false)}
           onCompositionStart={(event) => lookup.setText(event.currentTarget.value, true)}
+          enterKeyHint="search"
           placeholder={localizer.message("ui.identify.searchPlaceholder")}
+          ref={inputRef}
           spellCheck={false}
           type="text"
           value={lookup.text}
@@ -373,9 +388,14 @@ const RomSearch = ({
           <span className="identify-search-submit-text">{submitLabel}</span>
         </button>
       </div>
-      {lookup.busy ? (
-        <p aria-live="polite" className="sr-only" role="status">
-          {submitLabel}
+      {/* The status line is what tells a typist the box searches on its own:
+          the hint while idle, the accepted checksum lengths while a hex string
+          is still short of one, then the live stage the moment the pause ends. */}
+      {searching || !(lookup.error || hasResults) ? (
+        <p aria-live="polite" className="identify-search-status" role="status">
+          {searching
+            ? searchingLabel
+            : localizer.message(lookup.incompleteHash ? "ui.identify.hashInvalid" : "ui.identify.searchAsYouType")}
         </p>
       ) : null}
       {lookup.error ? (
@@ -413,7 +433,7 @@ const RomSearch = ({
       ) : null}
       {!chosen && lookup.titles.length > visibleTitleCount ? (
         <button
-          className="btn"
+          className="btn identify-search-more"
           onClick={() => setTitlePage({ titles: lookup.titles, count: visibleTitleCount + 50 })}
           type="button"
         >

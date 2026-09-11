@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import "../../src/webapp/design-system/index.css";
 // deferred.css ships lazily in production (webapp.ts loads it at boot); the
@@ -44,7 +45,7 @@ const match = (name, extra = {}) => ({
 });
 
 const FUSION_USA = match("Metroid Fusion (USA)", {
-  dumpTags: ["verified dump"],
+  dumpTags: ["!"],
   expectedComponents: [{ crc32: "d7ae93df", md5: "0".repeat(32), sha1: "1".repeat(40), size: 8388608 }],
   region: "USA",
   revision: "Rev 1",
@@ -82,6 +83,7 @@ const getForm = () => document.getElementById("rom-weaver-rom-search-form");
 const getResults = () =>
   Array.from(document.querySelectorAll(".identify-search-result-btn")).map((button) => button.textContent);
 const getError = () => document.querySelector(".identify-search-error");
+const getStatus = () => document.querySelector(".identify-search-status");
 
 // React tracks an input's value through the prototype setter, so assigning
 // `input.value` directly leaves its onChange unfired and the state stale.
@@ -120,9 +122,14 @@ test("one box takes a checksum or a name, with no platform to choose first", asy
 
 test("typing searches after a pause without submitting the form", async () => {
   searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION] });
+  // The idle box says so, then reports the search the moment typing pauses.
+  expect(getStatus().textContent).toContain("as you type");
+  expect(getInput().enterKeyHint).toBe("search");
   type(getInput(), "metroid gba");
+  expect(getStatus().textContent).toBe("Searching…");
 
   await waitFor(() => getResults().length === 1);
+  expect(getStatus()).toBeNull();
   expect(searchExpectedRomTitles).toHaveBeenCalledExactlyOnceWith("metroid gba", expect.anything());
   expect(getResults()[0]).toContain("Metroid Fusion");
   expect(getInput().disabled).toBe(false);
@@ -142,6 +149,15 @@ test("a name search lists titles across every platform", async () => {
   expect(getResults()[0]).toContain("Nintendo - Game Boy Advance");
   expect(getResults()[2]).toContain("Nintendo - GameCube");
   expect(document.querySelector(".identify-search-results-label").textContent).toBe("Choose the game you need");
+});
+
+test("a checksum still short of a full length says which lengths are accepted", async () => {
+  type(getInput(), "deadbeef123");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  expect(lookupExpectedRom).not.toHaveBeenCalled();
+  expect(getError()).toBeNull();
+  expect(getStatus().textContent).toContain("8 (CRC32), 32 (MD5), or 40 (SHA-1)");
 });
 
 test("a name shorter than two characters never reaches the lookup", async () => {
@@ -173,7 +189,9 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   // Region, revision, and dump tags are what separate two releases of one game.
   expect(getResults()[0]).toContain("USA");
   expect(getResults()[0]).toContain("Rev 1");
-  expect(getResults()[0]).toContain("verified dump");
+  // The pack's "!" code is decoded into the kind of dump it stands for.
+  expect(getResults()[0]).toContain("Verified dump");
+  expect(getResults()[0]).not.toContain("!");
   expect(getResults()[1]).toContain("Metroid Fusion (Europe)");
 
   host.style.width = "350px";
@@ -234,4 +252,20 @@ test("a checksum lists releases before the user selects one", async () => {
 
   document.querySelector(".identify-search-result-btn").click();
   await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
+});
+
+test("a phone lists the answer above the box, where the keyboard cannot cover it", async () => {
+  searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION, ZERO_MISSION] });
+  await page.viewport(390, 844);
+  try {
+    submit("metroid");
+    await waitFor(() => getResults().length === 2);
+    const list = document.querySelector(".identify-search-results");
+    expect(list.getBoundingClientRect().bottom).toBeLessThanOrEqual(getInput().getBoundingClientRect().top);
+    expect(document.querySelector(".identify-search-results-head").getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      list.getBoundingClientRect().top,
+    );
+  } finally {
+    await page.viewport(1280, 900);
+  }
 });

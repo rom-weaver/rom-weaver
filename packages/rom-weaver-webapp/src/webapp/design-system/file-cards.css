@@ -719,6 +719,12 @@
   margin: 0;
   color: var(--fault);
 }
+.rw-app .identify-search-status {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-3);
+}
 /* A name search answers under the row: the titles it found, then the releases
    of the chosen title. Both lists take the full width because the row above
    them is flex-wrapped, and both scroll inside a bounded box so a long answer

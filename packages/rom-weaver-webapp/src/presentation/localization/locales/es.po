@@ -1005,11 +1005,6 @@ msgstr "No se pudo preparar la salida para EmulatorJS."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.searchPlaceholder"
-msgstr "Juego, sistema o suma de verificación"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "Crear bundle {format}"
 
@@ -1472,6 +1467,11 @@ msgstr "Guía completa de instalación"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullTable"
 msgstr "tabla completa"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.searchPlaceholder"
+msgstr "Juego, sistema o suma de verificación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2637,6 +2637,11 @@ msgstr "Restablecer"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsDescription"
 msgstr "Restaura la ROM original con un parche PPF3 que incluya datos para deshacer los cambios."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.searchAsYouType"
+msgstr "Los resultados aparecen mientras escribe - no hace falta pulsar Buscar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
