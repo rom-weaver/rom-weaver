@@ -41,10 +41,13 @@ export function readDocLastmod(file, cwd) {
     const git = (args) =>
       execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     if (git(["status", "--porcelain", "--", gitFile])) return null;
-    const [commit, date = ""] = git(["log", "-1", "--format=%H%n%cI", "--", gitFile]).split("\n");
+    const [commit, timestamp = ""] = git(["log", "-1", "--format=%H%n%ct", "--", gitFile]).split("\n");
+    if (!commit) return null;
+    if (!/^-?\d+$/.test(timestamp)) return null;
     const shallowPath = path.resolve(cwd, git(["rev-parse", "--git-path", "shallow"]));
     if (fs.existsSync(shallowPath) && fs.readFileSync(shallowPath, "utf8").split("\n").includes(commit)) return null;
-    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/.test(date) ? date : null;
+    const date = new Date(Number(timestamp) * 1000);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
   } catch {
     return null;
   }
