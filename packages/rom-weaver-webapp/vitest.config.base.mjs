@@ -26,6 +26,10 @@ export default defineConfig({
     __COMMITS_SINCE_VERSION__: JSON.stringify(0),
     __DIRTY_HASH__: JSON.stringify(""),
     __GIT_BRANCH__: JSON.stringify("dev"),
+    __IDENTIFY_MANIFEST_FILES__: JSON.stringify({
+      catalog: "identify-catalog-test.json",
+      index: "identify-index-test.json",
+    }),
     __VERSION_BRANCH__: JSON.stringify("dev"),
     __SERVICE_WORKER_ENABLED__: "false",
     __SERVICE_WORKER_UPDATE_INTERVAL_MS__: "0",

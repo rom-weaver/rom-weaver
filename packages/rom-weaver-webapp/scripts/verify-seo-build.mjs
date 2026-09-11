@@ -96,24 +96,14 @@ assertIncludes(
   "/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",
   "fingerprinted asset cache headers",
 );
-assertIncludes(
-  headers,
-  "/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache",
-  "identify index cache headers",
-);
+// The identify manifests are content-addressed, so nothing under /assets/ detaches
+// from the immutable rule; a stale bundle reads the manifest it was built against.
+assertExcludes(headers, "/assets/identify-index", "identify manifest cache rule");
 // The service worker script takes its no-cache from the `/*` block. A rule of its
 // own that unset Cache-Control only to restate the same value left the deployed
 // response with no Cache-Control at all, so Pages filled in its own browser TTL.
 assertExcludes(headers, "/rom-weaver-service-worker.js\n  ! Cache-Control", "service worker cache rule");
-// Both identify manifests are served by the assets Function, which is where their
-// no-cache comes from on Pages - _headers does not apply to a URL a Function claims.
-// The route include is what keeps them on that path.
 assertIncludes(read("_routes.json"), '"/assets/identify-*"', "identify assets Function route");
-for (const name of ["identify-index.json.br", "identify-catalog.json.br"]) {
-  if (!fs.existsSync(path.join(distDir, "assets", name))) {
-    throw new Error(`identify manifest sidecar is missing: assets/${name}`);
-  }
-}
 // Cloudflare caches 103 Early Hints separately from the document. Hashed URLs in a
 // wildcard Link header can therefore outlive the deployment that emitted them and preload
 // dead assets. The HTML already carries the exact module, stylesheet, and font URLs; keep
@@ -437,7 +427,9 @@ assertIncludes(precacheManifest, '"404.html"', "404 precache entry");
 // pack itself belongs there: the default set is downloaded by the background
 // warm-up and an identify run fetches on demand what it needs sooner, so
 // precaching them would put ~12 MB in front of the app being usable.
-assertIncludes(precacheManifest, '"assets/identify-index.json"', "identify index precache entry");
+if (!/"assets\/identify-index-[0-9a-f]{16}\.json"/u.test(precacheManifest)) {
+  throw new Error("precache manifest is missing the hashed identify index entry");
+}
 for (const system of identifyDataIndex.systems) {
   if (precacheManifest.includes(identifyPrecacheEntry(system))) {
     throw new Error(`${system.file} must not enter the precache; packs are warmed in the background`);

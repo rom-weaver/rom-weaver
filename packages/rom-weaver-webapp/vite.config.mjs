@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -31,6 +32,22 @@ const identifyDataDir = path.join(repoRoot, "crates", "rom-weaver-cli", "data", 
 const identifyDataIndex = JSON.parse(fs.readFileSync(path.join(identifyDataDir, "index.json"), "utf8"));
 // Packs and cheat shards ship only as `.br` sidecars; the license text is
 // inlined into the attribution bundle instead of served as an asset.
+// The two manifests carry the content hash every pack, shard, router, and title
+// index is fetched with, so a stale manifest would hide a newer data set. They are
+// content-addressed like every emitted bundle: the hash goes in the file name, the
+// bundle imports that name through `__IDENTIFY_MANIFEST_FILES__`, and a build with
+// new data changes both. That keeps the whole of /assets/* immutable.
+const identifyManifestFile = (name) => {
+  const [stem, extension] = name.split(".");
+  const hash = createHash("sha256")
+    .update(fs.readFileSync(path.join(identifyDataDir, name)))
+    .digest("hex");
+  return `identify-${stem}-${hash.slice(0, 16)}.${extension}`;
+};
+const identifyManifestFiles = {
+  catalog: fs.existsSync(path.join(identifyDataDir, "catalog.json")) ? identifyManifestFile("catalog.json") : null,
+  index: identifyManifestFile("index.json"),
+};
 const identifyDataSources = Object.fromEntries(
   fs
     .readdirSync(identifyDataDir)
@@ -39,7 +56,12 @@ const identifyDataSources = Object.fromEntries(
       if (name.startsWith("cheats-") && name.endsWith(".json")) return false;
       return name !== identifyDataIndex.sources?.libretro?.licenseFile;
     })
-    .map((name) => [`/assets/identify-${name}`, path.join(identifyDataDir, name)]),
+    .map((name) => {
+      const assetName = { "catalog.json": identifyManifestFiles.catalog, "index.json": identifyManifestFiles.index }[
+        name
+      ];
+      return [`/assets/${assetName ?? `identify-${name}`}`, path.join(identifyDataDir, name)];
+    }),
 );
 const identifyPackGroups = resolveIdentifyPackGroups(identifyDataIndex);
 const identifyPackEntry = (system) => ({
@@ -786,14 +808,7 @@ const writeCloudflareHeadersAsset = (channel) => {
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        // The two identify manifests carry the content hashes every pack URL is
-        // fetched with, so they are the one thing under /assets/ that MUST be
-        // revalidated. On Pages these rules never fire - the assets Function
-        // claims /assets/identify-* and _headers does not apply to a URL a
-        // Function claims, so the Function sets the same value itself (see
-        // assetCacheControl in functions/assets/content-types.js). They are
-        // written for hosts that serve dist/ with no Function.
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n/assets/identify-index.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n/assets/identify-catalog.json\n  ! Cache-Control\n  Cache-Control: no-cache\n\n${licenseContentType}\n${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${markdownHeaders}`,
       );
     },
     configResolved(config) {
@@ -1353,6 +1368,7 @@ export default defineConfig(({ command, mode }) => {
       __COMMITS_SINCE_VERSION__: JSON.stringify(commitsSinceVersion),
       __DIRTY_HASH__: JSON.stringify(dirtyHash),
       __EMULATORJS_VERSION__: JSON.stringify(emulatorJsLock.version),
+      __IDENTIFY_MANIFEST_FILES__: JSON.stringify(identifyManifestFiles),
       __IDENTIFY_OPTIONAL_PACK_GROUPS__: JSON.stringify(identifyOptionalPackGroups),
       __GIT_BRANCH__: JSON.stringify(gitBranch),
       __VERSION_BRANCH__: JSON.stringify(versionBranch),

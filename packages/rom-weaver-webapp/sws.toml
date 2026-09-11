@@ -156,31 +156,3 @@ source = "**"
 Cross-Origin-Opener-Policy = "same-origin"
 Cross-Origin-Embedder-Policy = "require-corp"
 Cross-Origin-Resource-Policy = "same-origin"
-
-# The identify manifests list every pack with its content hash, and each pack is
-# fetched with that hash in the query. Freezing the packs is safe; freezing the
-# manifest is not - a cached one hides a newer identify data set for as long as
-# it lives, so both manifests revalidate on every load. Everything else under
-# /assets/ keeps the long cache `cache-control-headers` gives it.
-#
-# The isolation headers are repeated here because it is not settled whether sws
-# merges every matching entry or applies one: if it applies one, the `**` entry
-# above never runs for these two paths, and a manifest served without
-# Cross-Origin-Resource-Policy breaks the cross-origin-isolated page that reads it.
-[[advanced.headers]]
-source = "/assets/identify-index.json"
-
-[advanced.headers.headers]
-Cache-Control = "no-cache"
-Cross-Origin-Opener-Policy = "same-origin"
-Cross-Origin-Embedder-Policy = "require-corp"
-Cross-Origin-Resource-Policy = "same-origin"
-
-[[advanced.headers]]
-source = "/assets/identify-catalog.json"
-
-[advanced.headers.headers]
-Cache-Control = "no-cache"
-Cross-Origin-Opener-Policy = "same-origin"
-Cross-Origin-Embedder-Policy = "require-corp"
-Cross-Origin-Resource-Policy = "same-origin"
