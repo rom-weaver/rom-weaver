@@ -18,7 +18,11 @@ const cacheFamily = (key) => {
   }
 
   // These Actions cache steps explicitly restore from the same prefix.
-  if (key.startsWith("ccache-") || key.startsWith("semver-checks-")) {
+  if (
+    key.startsWith("ccache-") ||
+    key.startsWith("semver-checks-") ||
+    key.startsWith("identify-brotli-")
+  ) {
     const family = key.replace(HASH_SUFFIX, "");
     return family === key ? null : family;
   }

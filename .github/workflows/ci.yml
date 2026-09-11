@@ -162,6 +162,45 @@ jobs:
           echo "targets=$matrix" >> "$GITHUB_OUTPUT"
           echo "Deploying ref ${GITHUB_REF_NAME} to: $channels"
 
+  # The packs are content-identical across all runners. Restore or build them
+  # once, then share the exact tree with every selected consumer in this run.
+  # On a warm cache this is one restore plus artifact fan-out; on a miss it
+  # prevents each Rust, WASM, Docker, and browser job from rebuilding it.
+  identify-data:
+    name: Prepare ROM identify data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.rust == 'true' ||
+      needs.changes.outputs.webapp == 'true' ||
+      needs.changes.outputs.docker_matrix != '[]' ||
+      (needs.changes.outputs.deploy_targets != '' &&
+      needs.changes.outputs.deploy_targets != '[]') ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]')
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - uses: ./.github/actions/identify-data
+
+      # These files are already Brotli-compressed where it matters. Avoid
+      # spending CPU recompressing a large tree before every downstream job.
+      - name: Upload identify data
+        uses: actions/upload-artifact@v7
+        with:
+          name: identify-data
+          path: crates/rom-weaver-cli/data/identify
+          if-no-files-found: error
+          compression-level: 0
+
   # Static analysis of the repository's own plumbing - workflows, Node.js
   # scripts, Dockerfiles, and Markdown. Compiles nothing and installs no
   # language toolchain, so it finishes in well under a minute and reports
@@ -238,7 +277,7 @@ jobs:
     name: Docker build (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    needs: changes
+    needs: [changes, identify-data]
     if: >-
       github.ref_type != 'tag'
       && needs.changes.outputs.docker_matrix != '[]'
@@ -272,18 +311,16 @@ jobs:
       # architecture's Docker build: the webapp build runs
       # `ensure-identify-data.mjs`, which rebuilt every pack from the source
       # archives on both legs (~360s of the app stage), and the CLI image ran
-      # the release packaging on top of that. Restore the packs from the
-      # Actions cache instead (building and saving only on a miss, exactly as
-      # the Rust jobs do), stage them where `.dockerignore` lets the context
-      # carry them, and pass `IDENTIFY_DATA=prebuilt`. The packs are
+      # the release packaging on top of that. Download the tree the identify
+      # producer prepared once for this run, stage it where `.dockerignore`
+      # lets the context carry it, and pass `IDENTIFY_DATA=prebuilt`. The packs are
       # byte-identical on every architecture, so both legs use them.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
 
-      - name: Prepare identify data
-        uses: ./.github/actions/identify-data
+      - uses: ./.github/actions/download-identify-data
 
       # The release tree the CLI image copies to /share. Tree only: the
       # .tar.br archives are a release-fan-out product nothing here consumes.
@@ -529,7 +566,7 @@ jobs:
     name: Build WASM module + webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: changes
+    needs: [changes, identify-data]
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
       size: ${{ steps.size.outcome }}
@@ -565,7 +602,6 @@ jobs:
           tools: node rust
           cargo-cache: "false"
           webapp-deps: "true"
-          identify-data-cache: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
 
       - name: Set up WASM build environment
@@ -578,8 +614,9 @@ jobs:
           wasi-sdk: "true"
           ccache: "true"
           webapp-deps: "true"
-          identify-data-cache: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
+
+      - uses: ./.github/actions/download-identify-data
 
       # Never set RUSTFLAGS here: Cargo replaces configured target flags instead
       # of extending them, silently dropping shared-memory, LTO, and exports.
@@ -682,7 +719,7 @@ jobs:
     name: "Rust (Linux: lint + metadata)"
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: changes
+    needs: [changes, identify-data]
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
@@ -707,7 +744,8 @@ jobs:
           rust-components: clippy rustfmt
           ccache: "true"
           webapp-deps: "true"
-          identify-data-cache: "true"
+
+      - uses: ./.github/actions/download-identify-data
 
       - name: Rust format
         run: mise run fmt
@@ -744,7 +782,7 @@ jobs:
     name: "Rust (Linux: tests + package)"
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: changes
+    needs: [changes, identify-data]
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
@@ -758,7 +796,8 @@ jobs:
           tools: node rust nextest
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           ccache: "true"
-          identify-data-cache: "true"
+
+      - uses: ./.github/actions/download-identify-data
 
       # This runner is x86-64, so the test suite MUST compile the vendored LZMA
       # SDK's x86-64 assembly decode loop as well as its portable C fallback.
@@ -767,9 +806,6 @@ jobs:
 
       - name: Rust tests
         run: mise run test-rust
-
-      - name: Prepare ROM identify data for package validation
-        uses: ./.github/actions/identify-data
 
       - name: Verify publishable Rust packages
         # Package each crate exactly as cargo publish would, without uploading.
@@ -789,7 +825,7 @@ jobs:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
-    needs: changes
+    needs: [changes, identify-data]
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_INCREMENTAL: "0"
@@ -802,7 +838,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Each leg builds its own identify release tree from the cached packs
+      # Each leg builds its own identify release tree from the shared packs
       # rather than waiting on a packaging job: the tree is seconds of pure
       # node, and a separate runner cost more in queue time than it saved.
       - uses: ./.github/actions/build-cli-platform
@@ -815,6 +851,7 @@ jobs:
           msvc-host: ${{ matrix.msvc_host }}
           cache-save: ${{ github.ref == 'refs/heads/main' }}
           identify-release-tree: build
+          identify-data-source: artifact
 
       - name: Verify release CLI
         if: matrix.package != 'linux-arm64-musl'
@@ -910,7 +947,7 @@ jobs:
     name: Rust (macOS)
     runs-on: macos-15
     timeout-minutes: 90
-    needs: changes
+    needs: [changes, identify-data]
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
       && needs.changes.outputs.rust == 'true'
@@ -932,7 +969,8 @@ jobs:
         with:
           tools: node rust nextest
           ccache: "true"
-          identify-data-cache: "true"
+
+      - uses: ./.github/actions/download-identify-data
 
       - name: Rust tests
         run: mise run test-rust
@@ -949,7 +987,7 @@ jobs:
     name: Rust (Windows)
     runs-on: windows-2025
     timeout-minutes: 90
-    needs: changes
+    needs: [changes, identify-data]
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
@@ -1028,8 +1066,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
-      - name: Prepare ROM identify data
-        uses: ./.github/actions/identify-data
+      - uses: ./.github/actions/download-identify-data
 
       # The runner image ships cmake and MSVC + LLVM, which is everything the
       # vendored libarchive build needs - the npm platform publish builds this
@@ -1101,7 +1138,7 @@ jobs:
     name: Webapp (static)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, wasm]
+    needs: [changes, wasm, identify-data]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
       contents: read
@@ -1123,8 +1160,7 @@ jobs:
           path: packages/rom-weaver-webapp/src/wasm
 
       # Vite reads the identify index while loading the config for lint.
-      - name: Prepare identify data
-        uses: ./.github/actions/identify-data
+      - uses: ./.github/actions/download-identify-data
 
       # The runtime import contract reads the built module downloaded above.
       - name: Build script tests
@@ -1294,7 +1330,7 @@ jobs:
     name: Webapp (E2E)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, wasm]
+    needs: [changes, wasm, identify-data]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     env:
       ROM_WEAVER_SYSTEM_CHROME: "1"
@@ -1309,8 +1345,9 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
-          identify-data-cache: "true"
           emulatorjs-cache: "true"
+
+      - uses: ./.github/actions/download-identify-data
 
       - name: Download webapp bundle
         uses: actions/download-artifact@v8
@@ -1340,7 +1377,7 @@ jobs:
     # macos-15 tracks the current Playwright WebKit revision; macos-14 pins an obsolete override.
     runs-on: macos-15
     timeout-minutes: 60
-    needs: [changes, wasm]
+    needs: [changes, wasm, identify-data]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     env:
       ROM_WEAVER_E2E_USE_PREBUILT_DIST: "1"
@@ -1354,10 +1391,11 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
-          identify-data-cache: "true"
           emulatorjs-cache: "true"
           playwright: "true"
           playwright-browsers: webkit
+
+      - uses: ./.github/actions/download-identify-data
 
       - name: Download webapp bundle
         uses: actions/download-artifact@v8
@@ -1428,7 +1466,7 @@ jobs:
     name: Webapp deploy (preview, cached wasm)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: changes
+    needs: [changes, identify-data]
     # Same non-gating boundary as `deploy`: a Cloudflare outage must not turn a
     # green build red.
     continue-on-error: true
@@ -1480,6 +1518,7 @@ jobs:
           project: rom-weaver-preview
           branch: ${{ needs.changes.outputs.preview_branch }}
           generate-attribution: "true"
+          identify-data-source: artifact
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
@@ -1523,7 +1562,7 @@ jobs:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [wasm, changes, deploy-preview-fast]
+    needs: [wasm, changes, deploy-preview-fast, identify-data]
     # Deployment was a separate, non-gating workflow before it moved here to
     # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
     # not turn a green main build red and suppress release automation.
@@ -1592,6 +1631,7 @@ jobs:
           label: ${{ matrix.target.label }}
           project: ${{ matrix.target.project }}
           branch: ${{ matrix.target.branch }}
+          identify-data-source: artifact
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 

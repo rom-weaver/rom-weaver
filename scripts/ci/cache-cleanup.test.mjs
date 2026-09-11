@@ -39,6 +39,15 @@ test("keeps the newest cache in each compatible restore scope", () => {
     key: "ccache-build-Linux-aabbccdd",
   });
   const currentCcache = cache({ id: 9, key: "ccache-build-Linux-ddeeff00" });
+  const oldIdentifyBrotli = cache({
+    id: 10,
+    created_at: "2026-09-09T12:00:00Z",
+    key: "identify-brotli-Linux-epoch1-aabbccdd",
+  });
+  const currentIdentifyBrotli = cache({
+    id: 11,
+    key: "identify-brotli-Linux-epoch1-ddeeff00",
+  });
 
   assert.deepEqual(
     supersededCaches([
@@ -51,8 +60,10 @@ test("keeps the newest cache in each compatible restore scope", () => {
       changedRustEnvironment,
       oldCcache,
       currentCcache,
+      oldIdentifyBrotli,
+      currentIdentifyBrotli,
     ]),
-    [old, oldCcache],
+    [old, oldCcache, oldIdentifyBrotli],
   );
 });
 

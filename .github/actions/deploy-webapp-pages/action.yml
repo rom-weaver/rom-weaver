@@ -26,6 +26,11 @@ inputs:
   generate-attribution:
     description: Regenerate the cheap webapp attribution bundle before building.
     default: "false"
+  identify-data-source:
+    description: >-
+      "cache" restores or builds the packs locally; "artifact" downloads the
+      packs prepared by the current CI run.
+    default: cache
   cloudflare-api-token:
     description: CLOUDFLARE_API_TOKEN.
     required: true
@@ -49,8 +54,15 @@ runs:
         tools: ${{ inputs.generate-attribution == 'true' && 'node rust' || 'node' }}
         cargo-cache: "false"
         webapp-deps: "true"
-        identify-data-cache: "true"
         emulatorjs-cache: "true"
+
+    - name: Download ROM identify data
+      if: inputs.identify-data-source == 'artifact'
+      uses: ./.github/actions/download-identify-data
+
+    - name: Prepare ROM identify data
+      if: inputs.identify-data-source == 'cache'
+      uses: ./.github/actions/identify-data
 
     - name: Generate webapp attribution
       if: inputs.generate-attribution == 'true'

@@ -28,6 +28,19 @@ runs:
         key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}
         enableCrossOsArchive: true
 
+    # Cache compressed bytes by content across identify-data generations. The
+    # pack cache above must miss when an input revision changes; this smaller
+    # cache lets an unchanged pack skip its expensive Brotli recompression.
+    - name: Restore identify Brotli cache
+      if: steps.cache.outputs.cache-hit != 'true'
+      id: brotli-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: .cache/identify/brotli
+        key: identify-brotli-${{ runner.os }}-epoch1-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}
+        restore-keys: |
+          identify-brotli-${{ runner.os }}-epoch1-
+
     # Only the rebuild path needs the repository's npm dependencies: the build
     # reads the source archives with node-tar rather than shelling out to `tar`,
     # whose path handling broke this job on Windows. A cache hit makes the next
@@ -41,6 +54,8 @@ runs:
 
     - name: Prepare ROM identify data
       shell: bash
+      env:
+        ROM_WEAVER_IDENTIFY_CACHE_DIR: ${{ github.workspace }}/.cache/identify
       run: node scripts/ensure-identify-data.mjs
 
     # Pull requests can restore main's cache but cannot share caches with other
@@ -52,3 +67,12 @@ runs:
         path: crates/rom-weaver-cli/data/identify/v1
         key: identify-data-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}
         enableCrossOsArchive: true
+
+    # Pull requests can read this content-addressed cache but only main can
+    # write it, so an untrusted fork cannot poison a future build.
+    - name: Save identify Brotli cache
+      if: inputs.cache-save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: .cache/identify/brotli
+        key: identify-brotli-${{ runner.os }}-epoch1-${{ hashFiles('scripts/ensure-identify-data.mjs', 'scripts/build-identify-index.mjs', 'scripts/import-libretro-cheats.mjs', 'scripts/wasm/brotli-compress.mjs', 'packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs', 'packages/rom-weaver-webapp/src/lib/identify/title-index.mjs') }}

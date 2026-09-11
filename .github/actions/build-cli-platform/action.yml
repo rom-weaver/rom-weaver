@@ -44,6 +44,11 @@ inputs:
       target/identify-release (the release fan-out downloads it as an artifact).
     required: false
     default: prebuilt
+  identify-data-source:
+    description: >-
+      "cache" restores or builds the packs locally; "artifact" downloads the
+      packs prepared by the current CI run.
+    default: cache
   registry-url:
     description: >-
       npm registry to configure Node against. The release fan-out needs it for
@@ -152,7 +157,12 @@ runs:
         package-manager-cache: false
         registry-url: ${{ inputs.registry-url }}
 
+    - name: Download ROM identify data
+      if: inputs.identify-data-source == 'artifact'
+      uses: ./.github/actions/download-identify-data
+
     - name: Prepare ROM identify data
+      if: inputs.identify-data-source == 'cache'
       uses: ./.github/actions/identify-data
 
     # Tree only: the .tar.br archives need GNU tar, which macOS and Windows
