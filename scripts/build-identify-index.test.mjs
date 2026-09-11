@@ -6,7 +6,6 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
-  DEFAULT_PACK_PLATFORMS,
   GOODTOOLS_DAT_PATH,
   GOODTOOLS_ARCHIVE_SHA256,
   GOODTOOLS_RELEASE,
@@ -45,10 +44,20 @@ import {
 
 const NES = "Nintendo - Nintendo Entertainment System";
 
-test("fantasy console packs are optional", () => {
-  for (const platform of ["LowRes NX", "MicroW8", "PICO-8", "TIC-80", "WASM-4"]) {
-    assert.ok(!DEFAULT_PACK_PLATFORMS.includes(platform), platform);
-    assert.equal(packGroupFor(platform), "optional-fantasy", platform);
+test("retired catalogs cannot be selected", async () => {
+  for (const platform of [
+    "Commodore - PSID",
+    "Mobile - Palm OS",
+    "Mobile - Symbian",
+    "DOS",
+    "ScummVM",
+    "LowRes NX",
+    "MicroW8",
+    "PICO-8",
+    "TIC-80",
+    "WASM-4",
+  ]) {
+    await assert.rejects(main(["--only", platform]), /Platform\(s\) are not configured/u);
   }
 });
 
@@ -163,10 +172,10 @@ function parsePack(bytes) {
 }
 
 test("the Libretro manifest contains the selected pinned DAT files", () => {
-  assert.equal(LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("dat/")).length, 51);
+  assert.equal(LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("dat/")).length, 44);
   assert.equal(
     LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("metadat/no-intro/")).length,
-    91,
+    89,
   );
   assert.equal(
     LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("metadat/redump/")).length,
@@ -801,7 +810,7 @@ test("platform jobs must be a positive integer", async () => {
 test("serial, parallel, and cached builds emit identical files", async (t) => {
   const work = tempDir("parallel");
   t.after(() => rmSync(work, { recursive: true, force: true }));
-  const platforms = ["CHIP-8", "DOS", "Cave Story"];
+  const platforms = ["CHIP-8", "DOOM", "Cave Story"];
   const outputs = [];
   for (const [run, jobs] of [1, 4, 2].entries()) {
     const cacheDir = join(work, run === 0 ? "serial-cache" : "parallel-cache");

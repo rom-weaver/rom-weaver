@@ -83,7 +83,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Commodore - CD32.dat",
   "dat/DICE.dat",
   "dat/DOOM.dat",
-  "dat/DOS.dat",
   "dat/Dinothawr.dat",
   "dat/Enterprise - 128.dat",
   "dat/Flashback.dat",
@@ -91,9 +90,7 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Handheld Electronic Game.dat",
   "dat/Infocom - Z-Machine.dat",
   "dat/Jump 'n Bump.dat",
-  "dat/LowRes NX.dat",
   "dat/Lutro.dat",
-  "dat/MicroW8.dat",
   "dat/MrBoom.dat",
   "dat/NEC - PC-98.dat",
   "dat/Nintendo - GameCube.dat",
@@ -101,7 +98,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Nintendo - Super Nintendo Entertainment System.dat",
   "dat/Nintendo - Wii U.dat",
   "dat/Nintendo - Wii.dat",
-  "dat/PICO-8.dat",
   "dat/PuzzleScript.dat",
   "dat/Quake II.dat",
   "dat/Quake III.dat",
@@ -109,19 +105,16 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/RPG Maker.dat",
   "dat/Rick Dangerous.dat",
   "dat/SNK - Neo Geo.dat",
-  "dat/ScummVM.dat",
   "dat/Sega - Saturn.dat",
   "dat/Sinclair - ZX 81.dat",
   "dat/Sinclair - ZX Spectrum.dat",
   "dat/Sony - PlayStation 3.dat",
   "dat/Sony - PlayStation Minis.dat",
   "dat/System.dat",
-  "dat/TIC-80.dat",
   "dat/Tomb Raider.dat",
   "dat/Uzebox.dat",
   "dat/Videoton - TV-Computer.dat",
   "dat/Vircon32.dat",
-  "dat/WASM-4.dat",
   "dat/Wolfenstein 3D.dat",
   "metadat/no-intro/Arduboy Inc - Arduboy.dat",
   "metadat/no-intro/Atari - 2600.dat",
@@ -161,8 +154,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "metadat/no-intro/Microsoft - XBOX 360 (Title Updates).dat",
   "metadat/no-intro/Microsoft - Xbox 360 (Digital).dat",
   "metadat/no-intro/Microsoft - Xbox 360.dat",
-  "metadat/no-intro/Mobile - Palm OS.dat",
-  "metadat/no-intro/Mobile - Symbian.dat",
   "metadat/no-intro/Mobile - Zeebo.dat",
   "metadat/no-intro/NEC - PC Engine - TurboGrafx 16.dat",
   "metadat/no-intro/NEC - PC Engine SuperGrafx.dat",
@@ -334,7 +325,6 @@ export const OPENGOOD_ONLY_PLATFORMS = Object.freeze({
   "SNK - Neo Geo Pocket Color": ["OpenNGPx.NGC.dat"],
   "Tangerine - Oric": ["OpenOric.dat"],
   "NEC - PC Engine and TurboGrafx-16": ["OpenPCE.dat"],
-  "Commodore - PSID": ["OpenPSID.dat"],
   "Sega - Pico": ["OpenPico.dat"],
   "SAM Coupé": ["OpenSAMC.dat"],
   "Sega - Master System": ["OpenSMS.dat"],
@@ -514,15 +504,14 @@ export const DEFAULT_PACK_PLATFORMS = Object.freeze([
 
 const DEFAULT_PACK_SET = new Set(DEFAULT_PACK_PLATFORMS);
 const COMPUTER_PACK_PATTERN =
-  /^(?:Amstrad|Commodore|DOS$|Enterprise|Memotech|Microsoft - MSX|SAM Coupé|Sharp|Sinclair|Tandy|Tangerine|Thomson|Videoton)|^Atari - (?:8-bit Family|ST$)/u;
+  /^(?:Amstrad|Commodore|Enterprise|Memotech|Microsoft - MSX|SAM Coupé|Sharp|Sinclair|Tandy|Tangerine|Thomson|Videoton)|^Atari - (?:8-bit Family|ST$)/u;
 export const packGroupFor = (platform) => {
   if (DEFAULT_PACK_SET.has(platform)) return "default";
   if (COMPUTER_PACK_PATTERN.test(platform)) return "optional-computers";
-  if (/^(?:LowRes NX|MicroW8|PICO-8|TIC-80|WASM-4)$/u.test(platform)) return "optional-fantasy";
-  if (/Mobile|Palm OS|Symbian|Zeebo/u.test(platform)) return "optional-mobile";
+  if (/Mobile|Zeebo/u.test(platform)) return "optional-mobile";
   if (/HBMAME|Atomiswave|Naomi|Arcade|Neo Geo$/u.test(platform)) return "optional-arcade";
   if (
-    /DOOM|Quake|ScummVM|Cave Story|Cannonball|Dinothawr|Flashback|Lutro|MrBoom|PuzzleScript|RPG Maker|Rick Dangerous|Tomb Raider|Wolfenstein/u.test(
+    /DOOM|Quake|Cave Story|Cannonball|Dinothawr|Flashback|Lutro|MrBoom|PuzzleScript|RPG Maker|Rick Dangerous|Tomb Raider|Wolfenstein/u.test(
       platform,
     )
   )
@@ -2396,9 +2385,7 @@ function sampleTitles(titles) {
 }
 
 // Every distinct searchable base title in a pack. Regional variants collapse
-// into one. A name that is punctuation alone (ScummVM ships a game called `!`)
-// normalizes to nothing and can never be matched, so it is dropped here rather
-// than shipped as a row no query can reach.
+// into one. Names that normalize to nothing MUST be omitted because no query can match them.
 function collectTitles(games) {
   const titles = new Set();
   for (const game of games) {
@@ -2761,7 +2748,6 @@ export async function main(argv = process.argv.slice(2)) {
       { id: "optional-arcade", label: "Arcade", default: false },
       { id: "optional-computers", label: "Computers", default: false },
       { id: "optional-engines", label: "Game engines", default: false },
-      { id: "optional-fantasy", label: "Fantasy consoles", default: false },
       { id: "optional-mobile", label: "Mobile", default: false },
       { id: "optional-extended", label: "Extended systems", default: false },
     ].map((group) => ({
