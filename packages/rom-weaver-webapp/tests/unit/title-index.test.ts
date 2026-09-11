@@ -25,7 +25,7 @@ describe("normalizeTitle", () => {
 describe("baseTitle", () => {
   it("drops the first tag group and everything after it", () => {
     expect(baseTitle("Legend of Zelda, The - A Link to the Past (USA) [!]")).toBe(
-      "Legend of Zelda, The - A Link to the Past",
+      "The Legend of Zelda - A Link to the Past",
     );
     expect(baseTitle("Sonic [b1] (Europe)")).toBe("Sonic");
     expect(baseTitle("Plain Title")).toBe("Plain Title");
@@ -35,9 +35,44 @@ describe("baseTitle", () => {
     expect(baseTitle("(Unknown) Thing")).toBe("(Unknown) Thing");
     expect(baseTitle("[BIOS] Boot ROM")).toBe("[BIOS] Boot ROM");
   });
+
+  it("moves only comma-delimited English articles before the title", () => {
+    expect(baseTitle("Legend of Zelda, The (USA)")).toBe("The Legend of Zelda");
+    expect(baseTitle("Adventure, An [!]")).toBe("An Adventure");
+    expect(baseTitle("Train, A: New World")).toBe("A Train: New World");
+    expect(baseTitle("Legend of Zelda, THE")).toBe("The Legend of Zelda");
+    expect(baseTitle("The Legend of Zelda")).toBe("The Legend of Zelda");
+    expect(baseTitle("Zelda, The Adventure of Link")).toBe("Zelda, The Adventure of Link");
+    expect(baseTitle("Game, Another")).toBe("Game, Another");
+  });
 });
 
 describe("encodeTitleIndex", () => {
+  it("groups leading and trailing articles across packs and release variants", () => {
+    const entries = [
+      { name: "The Legend of Zelda", slugs: ["nes"] },
+      { name: "Legend of Zelda, The", slugs: ["fds"] },
+      { name: "Legend of Zelda, The (USA) [!]", slugs: ["nes"] },
+      { name: "Legend of Zelda, The - A Link to the Past", slugs: ["snes"] },
+      { name: "The Legend of Zelda - A Link to the Past", slugs: ["gba"] },
+    ];
+    const encoded = encodeTitleIndex(entries);
+    const index = parseTitleIndex(encoded);
+    expect(index.titles).toEqual([
+      { name: "The Legend of Zelda", normalized: "the legend of zelda", packs: [0, 2] },
+      {
+        name: "The Legend of Zelda - A Link to the Past",
+        normalized: "the legend of zelda a link to the past",
+        packs: [1, 3],
+      },
+    ]);
+    expect(encodeTitleIndex([...entries].reverse())).toBe(encoded);
+    for (const entry of entries) {
+      const title = index.titles.find((row) => row.normalized === normalizeTitle(baseTitle(entry.name)));
+      expect(title?.packs.map((pack) => index.packs[pack])).toEqual(expect.arrayContaining(entry.slugs));
+    }
+  });
+
   it("merges packs per normalized title and is deterministic", () => {
     const json = encodeTitleIndex([
       { name: "Sonic the Hedgehog", slugs: ["sega-32x"] },
