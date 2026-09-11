@@ -22,7 +22,7 @@ import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
-import { FindPalette } from "./find-palette.tsx";
+import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -1185,12 +1185,16 @@ const Masthead = ({
     else if (action.type === "changelog") onSelectTab("whats-new");
     else if (action.type === "external") openExternalFromFind(action.href, confirmExternalNavigation);
   };
-  // ⌘K / Ctrl+K from anywhere; the trigger that owns focus return is the one
-  // the current layout shows, which the dock threshold decides.
+  // `/` from anywhere outside a text field, plus ⌘K / Ctrl+K as the command-
+  // palette alias; the trigger that owns focus return is the one the current
+  // layout shows, which the dock threshold decides.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey || event.key.toLowerCase() !== "k") return;
-      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.altKey) return;
+      const modified = event.metaKey || event.ctrlKey;
+      const chord = modified && !event.shiftKey && event.key.toLowerCase() === "k";
+      const slash = !modified && event.key === "/" && !isTextEntryTarget(event.target);
+      if (!(chord || slash)) return;
       // A modal dialog makes the shell inert; the shortcut must not open a
       // palette nobody can reach behind its backdrop.
       if (document.querySelector("dialog[open]")) return;
@@ -1342,20 +1346,6 @@ const Masthead = ({
           tabs={tabs}
           trailing={
             <>
-              <span className="desktop-find">
-                <button
-                  aria-controls="find-palette"
-                  aria-expanded={findOpen && findPlacement === "desktop"}
-                  aria-haspopup="dialog"
-                  className="mode-more mode-find"
-                  onClick={() => toggleFind("desktop")}
-                  ref={desktopFindRef}
-                  type="button"
-                >
-                  <Search aria-hidden="true" />
-                  <span className="tool-text">{findLabel}</span>
-                </button>
-              </span>
               <MoreMenu
                 autoFocusFirst={utilityViaKeyboard}
                 buttonClassName="mode-more"
@@ -1387,6 +1377,27 @@ const Masthead = ({
           }
         />
         <div className="masthead-tools" ref={toolsRef}>
+          {/* Desktop Find is a glyph like its neighbours, with its key beside
+              the icon; the name lives in the tooltip and the accessible label. */}
+          <span className="desktop-find">
+            <button
+              aria-controls="find-palette"
+              aria-expanded={findOpen && findPlacement === "desktop"}
+              aria-haspopup="dialog"
+              aria-keyshortcuts="/ Control+K Meta+K"
+              aria-label={findLabel}
+              className="tool find-trigger"
+              onClick={() => toggleFind("desktop")}
+              ref={desktopFindRef}
+              title={`${findLabel} (${FIND_SHORTCUT_HINT})`}
+              type="button"
+            >
+              <Search aria-hidden="true" />
+              <span aria-hidden="true" className="find-trigger-key">
+                {FIND_SHORTCUT_HINT}
+              </span>
+            </button>
+          </span>
           <button
             aria-haspopup="dialog"
             aria-label={runtimeTitle}
@@ -1505,6 +1516,15 @@ const Masthead = ({
 };
 
 const localizerFindLabel = (localizer: Localizer) => localizer.message("ui.find.label");
+
+/** `/` MUST keep typing into a field; only a bare `/` on the page opens Find. */
+const isTextEntryTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return (
+    target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement
+  );
+};
 
 /** Find's external rows open like the footer links: guarded when a job is running. */
 const openExternalFromFind = (href: string, confirmExternalNavigation?: (href: string) => Promise<boolean>) => {
