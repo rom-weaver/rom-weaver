@@ -67,7 +67,7 @@
   border-radius: 8px;
 }
 .rw-app .brand-mark-accent {
-  fill: var(--thread-text);
+  fill: var(--thread);
 }
 .rw-app .brand-copy {
   display: block;

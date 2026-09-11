@@ -1284,8 +1284,8 @@ const Masthead = ({
             <span className="brand-word-row">
               <a className="brand-word-link" href={homeHref}>
                 <BrandHeading className="brand-word">
-                  <b>rom</b>
-                  <span className="brand-hy">-</span>weaver
+                  rom<span className="brand-hy">-</span>
+                  <b>weaver</b>
                 </BrandHeading>
               </a>
             </span>
