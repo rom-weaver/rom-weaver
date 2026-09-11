@@ -163,8 +163,8 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(romInput).toBeInTheDocument();
 
   await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: "Apply Patch" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: "Create Patch" })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Apply" })).toBeInTheDocument();
+  await expect.element(page.getByRole("tab", { name: "Create" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
   await page.getByRole("button", { name: "More" }).click();
@@ -202,7 +202,7 @@ test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
         .filter((tab) => getComputedStyle(tab).display !== "none")
         .map((tab) => tab.textContent),
     )
-    .toEqual(["Apply Patch", "Create Patch", "Test ROM"]);
+    .toEqual(["Apply", "Create", "Test"]);
   await page.getByRole("button", { name: "More" }).click();
   await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).not.toBeInTheDocument();
