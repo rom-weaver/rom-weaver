@@ -61,7 +61,7 @@ describe("IdentifyDrawer", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("Pokemon - Emerald Version (UE) [!]"));
   });
 
-  it("lists a name supplied by another database", () => {
+  it("unifies article display in names supplied by each database", () => {
     const { container } = render(
       <IdentifyDrawer
         identification={{
@@ -78,8 +78,8 @@ describe("IdentifyDrawer", () => {
 
     const names = [...container.querySelectorAll('button[aria-label^="Copy name "]')];
     expect(names.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Legend of Zelda, The (USA)"),
-      expect.stringContaining("Legend of Zelda, The (U) (PRG0) [!]"),
+      expect.stringContaining("The Legend of Zelda (USA)"),
+      expect.stringContaining("The Legend of Zelda (U) (PRG0) [!]"),
     ]);
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("PRG0: Program revision 0");
   });
