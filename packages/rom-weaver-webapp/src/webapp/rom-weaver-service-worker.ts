@@ -13,6 +13,8 @@ import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
+import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
+import { createOfflineDownloadClient } from "./pwa/offline-download-client.ts";
 import { keepResourceTimingsRecording, withMeasuredEncodedSize } from "./pwa/response-encoded-size.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
@@ -25,9 +27,14 @@ declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
   required?: boolean;
 }>;
 
-declare let self: ServiceWorkerGlobalScope & {
-  __WB_MANIFEST: Array<string | { revision?: string | null; url: string }>;
+type OfflinePrecacheEntry = {
+  revision?: string | null;
+  url: string;
+  install?: boolean;
+  sizeBytes?: number;
+  downloadManifest?: boolean;
 };
+declare let self: ServiceWorkerGlobalScope;
 
 const PRECACHE_ID = "rom-weaver";
 const COI_COEP_CREDENTIALLESS_ACTION = "set-coep-credentialless";
@@ -60,7 +67,10 @@ const MANAGED_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-`;
 const EMULATORJS_CACHE_PREFIX = `${MANAGED_CACHE_PREFIX}emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
 const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
+const DEFERRED_CACHE_NAME = `${MANAGED_CACHE_PREFIX}app-deferred`;
+const DOWNLOAD_CACHE_NAME = `${MANAGED_CACHE_PREFIX}download-chunks`;
 const CACHE_POLICY = createServiceWorkerCachePolicy({
+  additionalCacheNames: [DEFERRED_CACHE_NAME, DOWNLOAD_CACHE_NAME],
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsCachePrefix: EMULATORJS_CACHE_PREFIX,
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
@@ -262,7 +272,12 @@ const withCrossOriginIsolationHeaders = (
 
 // Broadcast combined precache and warm-up progress on first install; update installs stay silent.
 // Vite injects the manifest once, so other consumers MUST use this binding.
-const PRECACHE_MANIFEST = self.__WB_MANIFEST;
+const PRECACHE_MANIFEST = self.__WB_MANIFEST as Array<string | OfflinePrecacheEntry>;
+const INITIAL_MANIFEST = PRECACHE_MANIFEST.filter((entry) => typeof entry === "string" || entry.install !== false);
+const DEFERRED_MANIFEST = PRECACHE_MANIFEST.filter(
+  (entry): entry is OfflinePrecacheEntry => typeof entry !== "string" && entry.install === false,
+);
+const DOWNLOAD_MANIFEST = PRECACHE_MANIFEST.find((entry) => typeof entry !== "string" && entry.downloadManifest);
 
 const PRECACHE_PROGRESS_THROTTLE_MS = 200;
 // Written beside the bundle by the build's manifestTransform, because workbox
@@ -305,31 +320,47 @@ const loadPrecacheSizes = (): Promise<Map<string, number>> => {
  * filling the cache and again once it is complete.
  */
 const precacheState = async () => {
-  const [sizes, cache] = await Promise.all([loadPrecacheSizes(), caches.open(PRECACHE_NAME)]);
-  const cachedPaths = new Set((await cache.keys()).map((request) => new URL(request.url).pathname));
+  const [sizes, cache, deferred] = await Promise.all([
+    loadPrecacheSizes(),
+    caches.open(PRECACHE_NAME),
+    deferredPrecache.state(),
+  ]);
+  const cachedKeys = new Set((await cache.keys()).map((request) => request.url));
   let cachedBytes = 0;
   let cachedFiles = 0;
   let totalBytes = 0;
-  for (const entry of PRECACHE_MANIFEST) {
+  for (const entry of INITIAL_MANIFEST) {
     const path = precacheEntryPath(typeof entry === "string" ? entry : entry.url);
-    const size = sizes.get(path) ?? 0;
+    const size = (typeof entry === "string" ? undefined : entry.sizeBytes) ?? sizes.get(path) ?? 0;
     totalBytes += size;
-    if (cachedPaths.has(path)) {
+    const key = new URL(typeof entry === "string" ? entry : entry.url, self.registration.scope);
+    if (typeof entry !== "string" && entry.revision) key.searchParams.set("__WB_REVISION__", entry.revision);
+    if (cachedKeys.has(key.href)) {
       cachedBytes += size;
       cachedFiles += 1;
     }
   }
-  return { cachedBytes, cachedFiles, totalBytes, totalFiles: PRECACHE_MANIFEST.length };
+  return {
+    cachedBytes: cachedBytes + deferred.cachedBytes,
+    cachedFiles: cachedFiles + deferred.cachedFiles,
+    totalBytes: totalBytes + deferred.totalBytes,
+    totalFiles: INITIAL_MANIFEST.length + deferred.totalFiles,
+  };
 };
 
 let firstInstallInProgress = false;
 let precacheInstalledCount = 0;
 let lastPrecacheBroadcast = 0;
+const precacheIncomingBytes = new Map<string, number>();
 
 // The install-time readout runs the same combined totals the warm-up reports
 // later, so one percentage covers both stages instead of each filling its own.
 const broadcastPrecacheProgress = async () => {
   const state = await offlineWarmup.getReadyState();
+  state.cachedBytes = Math.min(
+    state.totalBytes,
+    state.cachedBytes + [...precacheIncomingBytes.values()].reduce((sum, value) => sum + value, 0),
+  );
   const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
   const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
   for (const client of clients) client.postMessage(message);
@@ -342,11 +373,35 @@ const precachePlugin: WorkboxPlugin = {
   async handlerDidComplete({ event }) {
     if (event.type !== "install" || !firstInstallInProgress) return;
     precacheInstalledCount += 1;
-    const done = precacheInstalledCount >= PRECACHE_MANIFEST.length;
+    const done = precacheInstalledCount >= INITIAL_MANIFEST.length;
     const now = Date.now();
     if (!done && now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
     lastPrecacheBroadcast = now;
     await broadcastPrecacheProgress();
+  },
+  async fetchDidSucceed({ event, request, response }) {
+    if (event.type !== "install" || !firstInstallInProgress || !response.body || !response.ok) return response;
+    precacheIncomingBytes.set(request.url, 0);
+    const body = response.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          precacheIncomingBytes.set(request.url, (precacheIncomingBytes.get(request.url) ?? 0) + chunk.byteLength);
+          controller.enqueue(chunk);
+          const now = Date.now();
+          if (now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
+          lastPrecacheBroadcast = now;
+          void broadcastPrecacheProgress().catch((error) =>
+            logServiceWorker("precache progress failed", { error: formatError(error) }),
+          );
+        },
+      }),
+    );
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  },
+  async cacheDidUpdate({ request }) {
+    const url = new URL(request.url);
+    url.searchParams.delete("__WB_REVISION__");
+    precacheIncomingBytes.delete(url.href);
   },
   async cacheWillUpdate({ request, response }) {
     // Workbox drops its own defaultPrecacheCacheabilityPlugin as soon as any
@@ -387,7 +442,7 @@ const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
 
 const matchRouteDocument = async (url: URL) => {
   for (const candidate of routeDocumentCandidates(url.pathname)) {
-    const response = await matchPrecache(candidate);
+    const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
     if (response) return response;
   }
   return undefined;
@@ -438,8 +493,15 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
     return withCrossOriginIsolationHeaders(cachedResponse, credentialless) || cachedResponse;
   }
 
-  const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request, credentialless));
-  if (fetchedResponse.ok) await cache.put(request, await withMeasuredEncodedSize(request.url, fetchedResponse.clone()));
+  const fetchedResponse = await offlineDownloads.download(
+    toCredentiallessNoCorsRequest(request, credentialless),
+    undefined,
+    fetchForInteractive,
+  );
+  if (fetchedResponse.ok) {
+    await cache.put(request, await withMeasuredEncodedSize(request.url, fetchedResponse.clone()));
+    await offlineDownloads.release(request);
+  }
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
@@ -459,20 +521,82 @@ const isIdentifyPackRequest = (url: URL) =>
 // Use a low-priority fetch hint for background traffic; the browser decides whether to honor it.
 const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
   fetch(input, { ...init, priority: "low" } as RequestInit);
+const fetchForInteractive = (input: Request | string, init?: RequestInit) => fetch(input, init);
+
+const offlineDownloads = createOfflineDownloadClient({
+  cacheName: DOWNLOAD_CACHE_NAME,
+  manifestUrl: typeof DOWNLOAD_MANIFEST === "object" ? DOWNLOAD_MANIFEST.url : undefined,
+  scope: self.registration.scope,
+  fetcher: fetchForWarmup,
+  matchManifest: matchPrecache,
+  log: logServiceWorker,
+});
+
+const deferredPrecache = createDeferredPrecache({
+  entries: DEFERRED_MANIFEST,
+  cacheName: DEFERRED_CACHE_NAME,
+  scope: self.registration.scope,
+  download: offlineDownloads.download,
+  release: offlineDownloads.release,
+});
+
+registerRoute(
+  ({ request, url }) => request.method === "GET" && deferredPrecache.has(url.href),
+  async ({ url }) => {
+    const credentialless = await ensureCoepModeHydrated();
+    const response = await deferredPrecache.serve(url.href);
+    return withCrossOriginIsolationHeaders(response, credentialless) || response;
+  },
+);
 
 const offlineWarmup = createOfflineWarmup({
+  downloadFile: offlineDownloads.download,
+  releaseFile: offlineDownloads.release,
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsVersion: __EMULATORJS_VERSION__,
   fetchForWarmup,
   // On-demand pack serves and settings-triggered installs block a waiting
   // user, so they fetch without the low-priority hint.
-  fetchForInteractive: (input, init) => fetch(input, init),
+  fetchForInteractive,
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
   identifyOptionalGroups: __IDENTIFY_OPTIONAL_PACK_GROUPS__,
   log: logServiceWorker,
   precacheState,
   scope: self.registration.scope,
 });
+
+let appPumpChain: Promise<unknown> = Promise.resolve();
+const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
+  const process = async () => {
+    const baseline = await offlineWarmup.getReadyState();
+    let received = 0;
+    let lastEmit = 0;
+    const downloaded = await deferredPrecache.runNextBatch((delta) => {
+      received += delta;
+      const now = Date.now();
+      if (now - lastEmit < PRECACHE_PROGRESS_THROTTLE_MS) return;
+      lastEmit = now;
+      onInterim({
+        ...baseline,
+        cachedBytes: Math.min(baseline.totalBytes, baseline.cachedBytes + received),
+        ready: false,
+        phase: "precache",
+      });
+    });
+    if (!downloaded) return offlineWarmup.runNextUnit(onInterim);
+    return {
+      ...(await offlineWarmup.getReadyState()),
+      detail: null,
+      unit: "app-files",
+      unitLoadedBytes: null,
+      unitTotalBytes: null,
+      phase: "precache",
+    };
+  };
+  const pump = appPumpChain.then(process, process);
+  appPumpChain = pump.catch(() => undefined);
+  return pump;
+};
 
 // Packs are no longer precached, but a build installed before that change may
 // still hold them there, so the precache is still consulted first.
@@ -521,10 +645,12 @@ crypto.subtle
 
 keepResourceTimingsRecording(self);
 addPlugins([precachePlugin]);
-precacheAndRoute(PRECACHE_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
+precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
+  // Existing complete entries MUST move before Workbox removes them on activation.
+  event.waitUntil(deferredPrecache.migrate(PRECACHE_NAME));
   // First install (no active worker yet): take control immediately so the page can gain
   // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
   // must WAIT - registerType is "prompt", so activation happens only when the client sends
@@ -558,10 +684,14 @@ self.addEventListener("activate", (event) => {
         return Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName)));
       })
       .then(() => self.clients.claim())
+      .then(() => deferredPrecache.cleanup())
+      .then(() => offlineDownloads.cleanup())
       // Restore the persisted COEP mode so a respawned worker keeps serving require-corp if a prior
       // session already degraded to it, instead of resetting to the credentialless default.
       .then(() => ensureCoepModeHydrated())
       .then(() => {
+        firstInstallInProgress = false;
+        precacheIncomingBytes.clear();
         logServiceWorker("activate event; clients claimed", {
           coepCredentialless,
           precacheName: PRECACHE_NAME,
@@ -598,8 +728,9 @@ self.addEventListener("message", (event) => {
   if (event.data.action === "offline-warmup-pump") {
     // Interim byte-level events stream over the same reply port while the
     // unit downloads; the final "offline-warmup-progress" message ends the pump.
-    const pump = offlineWarmup
-      .runNextUnit((interim) => replyTo({ action: "offline-warmup-interim", ...interim }))
+    const pump = pumpOfflineFiles((interim) =>
+      replyTo({ action: "offline-warmup-interim", ...(interim as Record<string, unknown>) }),
+    )
       .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
       .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));
     event.waitUntil(pump.then(replyTo));
