@@ -162,11 +162,11 @@ function parsePack(bytes) {
   return members;
 }
 
-test("the Libretro manifest contains all pinned root and metadata DAT files", () => {
-  assert.equal(LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("dat/")).length, 52);
+test("the Libretro manifest contains the selected pinned DAT files", () => {
+  assert.equal(LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("dat/")).length, 51);
   assert.equal(
     LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("metadat/no-intro/")).length,
-    92,
+    91,
   );
   assert.equal(
     LIBRETRO_DAT_PATHS.filter((value) => value.startsWith("metadat/redump/")).length,
@@ -784,4 +784,10 @@ test("extractArchiveDirectory writes every .cht file below one archive directory
   assert.throws(() => readFileSync(join(sourceRoot, "cht/Nintendo - Game Boy/README.md")));
   assert.throws(() => readFileSync(join(sourceRoot, "cht/Nintendo - Game Boy Color/Other.cht")));
   assert.throws(() => readFileSync(join(sourceRoot, "dats/a.dat")));
+});
+
+test("J2ME is absent from the catalog and cannot be selected", async () => {
+  assert.equal(LIBRETRO_PLATFORM_PATHS["Mobile - J2ME"], undefined);
+  assert.ok(LIBRETRO_DAT_PATHS.every((name) => !name.includes("J2ME")));
+  await assert.rejects(main(["--only", "Mobile - J2ME"]), /Platform\(s\) are not configured/u);
 });

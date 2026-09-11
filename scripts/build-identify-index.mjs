@@ -70,8 +70,7 @@ export const LIBRETRO_LICENSE = "CC-BY-SA-4.0";
 // terms to travel with the adapted DAT and cheat data.
 export const LIBRETRO_LICENSE_FILE = "libretro-database-LICENSE";
 export const IDENTIFY_GENERATION_DATE = "2026-08-27";
-// This is the complete pinned source manifest: the 52 root DATs, 92 No-Intro
-// DATs, and 22 Redump DATs. Do not replace it with a live directory listing.
+// The source manifest MUST stay pinned rather than follow a live directory listing.
 export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/Amstrad - CPC.dat",
   "dat/Arduboy Inc - Arduboy.dat",
@@ -95,7 +94,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "dat/LowRes NX.dat",
   "dat/Lutro.dat",
   "dat/MicroW8.dat",
-  "dat/Mobile - J2ME.dat",
   "dat/MrBoom.dat",
   "dat/NEC - PC-98.dat",
   "dat/Nintendo - GameCube.dat",
@@ -163,7 +161,6 @@ export const LIBRETRO_DAT_PATHS = Object.freeze([
   "metadat/no-intro/Microsoft - XBOX 360 (Title Updates).dat",
   "metadat/no-intro/Microsoft - Xbox 360 (Digital).dat",
   "metadat/no-intro/Microsoft - Xbox 360.dat",
-  "metadat/no-intro/Mobile - J2ME.dat",
   "metadat/no-intro/Mobile - Palm OS.dat",
   "metadat/no-intro/Mobile - Symbian.dat",
   "metadat/no-intro/Mobile - Zeebo.dat",
@@ -522,7 +519,7 @@ export const packGroupFor = (platform) => {
   if (DEFAULT_PACK_SET.has(platform)) return "default";
   if (COMPUTER_PACK_PATTERN.test(platform)) return "optional-computers";
   if (/^(?:LowRes NX|MicroW8|PICO-8|TIC-80|WASM-4)$/u.test(platform)) return "optional-fantasy";
-  if (/Mobile|Palm OS|J2ME|Symbian|Zeebo/u.test(platform)) return "optional-mobile";
+  if (/Mobile|Palm OS|Symbian|Zeebo/u.test(platform)) return "optional-mobile";
   if (/HBMAME|Atomiswave|Naomi|Arcade|Neo Geo$/u.test(platform)) return "optional-arcade";
   if (
     /DOOM|Quake|ScummVM|Cave Story|Cannonball|Dinothawr|Flashback|Lutro|MrBoom|PuzzleScript|RPG Maker|Rick Dangerous|Tomb Raider|Wolfenstein/u.test(
