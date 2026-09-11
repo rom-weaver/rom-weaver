@@ -65,6 +65,7 @@
   aspect-ratio: 1;
   color: var(--ink);
   border-radius: 8px;
+  stroke: none;
 }
 .rw-app .brand-mark-accent {
   fill: var(--thread);
