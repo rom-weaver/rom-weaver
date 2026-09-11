@@ -256,12 +256,16 @@ impl CliApp {
             .as_ref()
             .map(|path| path.display().to_string())
             .unwrap_or_else(|| "default identify database directory".to_string());
+        let downloads = match &args.from {
+            Some(_) => Vec::new(),
+            None => vec!["identify database release assets".to_string()],
+        };
         self.plan_succeeded_with_downloads(
             "setup",
             OperationFamily::Command,
             "dry run: would install the identify database; nothing written or downloaded",
             vec![output],
-            vec!["identify database release assets".to_string()],
+            downloads,
             vec!["installed database state is not inspected during dry run".to_string()],
         )
     }

@@ -217,9 +217,13 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             </ul>
             <div className="home-install">
               <span className="k">{localizer.message("ui.home.open")}</span>
-              <pre>
-                <b>https://</b>rom-weaver.com/apply
-              </pre>
+              <textarea
+                aria-label={localizer.message("ui.home.open")}
+                className="home-install-code"
+                defaultValue="https://rom-weaver.com/apply"
+                readOnly
+                rows={1}
+              />
             </div>
             <p className="foot">{localizer.message("ui.home.webappFoot")}</p>
             <div className="home-actions">
@@ -238,10 +242,16 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             </ul>
             <div className="home-install">
               <span className="k">{localizer.message("ui.home.installWith")}</span>
-              <pre>{`brew install rom-weaver/tap/rom-weaver
+              <textarea
+                aria-label={localizer.message("ui.home.installWith")}
+                className="home-install-code"
+                defaultValue={`brew install rom-weaver/tap/rom-weaver
 npm install --global rom-weaver
-cargo install rom-weaver-cli
-docker run ghcr.io/rom-weaver/rom-weaver-cli`}</pre>
+cargo install rom-weaver-cli && rom-weaver setup
+docker run ghcr.io/rom-weaver/rom-weaver-cli`}
+                readOnly
+                rows={4}
+              />
             </div>
             <p className="foot">{localizer.message("ui.home.cliFoot")}</p>
             <div className="home-actions">

@@ -864,90 +864,39 @@ fn copy_directory(source: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Largest identify archive accepted from a download or a local file.
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn install_group(
-    database_dir: &Path,
-    group: &str,
-    from: Option<&Path>,
-) -> Result<usize> {
-    use std::io::Read;
-    const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
-    validate_group_id(group)?;
-    let bytes = if let Some(path) = from {
-        let size = fs::metadata(path)
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to inspect identify group archive `{}`: {error}",
-                    path.display()
-                ))
-            })?
-            .len();
-        if size > MAX_ARCHIVE_BYTES {
-            return Err(RomWeaverError::Validation(format!(
-                "identify group archive `{}` exceeds the {} byte limit",
-                path.display(),
-                MAX_ARCHIVE_BYTES
-            )));
-        }
-        fs::read(path).map_err(|error| {
+const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
+
+/// Read a local identify archive. `what` names the archive in error messages.
+#[cfg(not(target_arch = "wasm32"))]
+fn local_archive_bytes(path: &Path, what: &str) -> Result<Vec<u8>> {
+    let size = fs::metadata(path)
+        .map_err(|error| {
             RomWeaverError::Validation(format!(
-                "failed to read identify group archive `{}`: {error}",
+                "failed to inspect {what} `{}`: {error}",
                 path.display()
             ))
         })?
-    } else {
-        let version = env!("CARGO_PKG_VERSION");
-        let url = format!(
-            "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data-{group}.tar.br"
-        );
-        tracing::debug!(
-            url,
-            version,
-            group,
-            "downloading identify pack group archive"
-        );
-        let mut response = ureq::get(&url).call().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "identify data download failed for `{url}`: {error}"
-            ))
-        })?;
-        let mut bytes = Vec::new();
-        response
-            .body_mut()
-            .with_config()
-            .limit(MAX_ARCHIVE_BYTES)
-            .reader()
-            .read_to_end(&mut bytes)
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "identify data download failed for `{url}`: {error}"
-                ))
-            })?;
-        bytes
-    };
-    install_group_archive(database_dir, group, &bytes)
-}
-
-/// Whether a user install of the full database already sits in `database_dir`.
-/// Data shipped beside the executable does not count: `setup` exists to fill
-/// the gap when no such data was installed.
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn user_database_packs(database_dir: &Path) -> Option<usize> {
-    let packs = database_dir.join(USER_FULL_DATA_DIR).join("packs");
-    let count = fs::read_dir(packs).ok()?.count();
-    (count > 0).then_some(count)
+        .len();
+    if size > MAX_ARCHIVE_BYTES {
+        return Err(RomWeaverError::Validation(format!(
+            "{what} `{}` exceeds the {MAX_ARCHIVE_BYTES} byte limit",
+            path.display()
+        )));
+    }
+    fs::read(path).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "failed to read {what} `{}`: {error}",
+            path.display()
+        ))
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn install_all(database_dir: &Path) -> Result<usize> {
+fn download_archive_bytes(url: &str) -> Result<Vec<u8>> {
     use std::io::Read;
-    const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
-    let version = env!("CARGO_PKG_VERSION");
-    let url = format!(
-        "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data.tar.br"
-    );
-    tracing::debug!(url, version, "downloading full identify data archive");
-    let mut response = ureq::get(&url).call().map_err(|error| {
+    let mut response = ureq::get(url).call().map_err(|error| {
         RomWeaverError::Validation(format!(
             "identify data download failed for `{url}`: {error}"
         ))
@@ -964,6 +913,59 @@ pub(super) fn install_all(database_dir: &Path) -> Result<usize> {
                 "identify data download failed for `{url}`: {error}"
             ))
         })?;
+    Ok(bytes)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn install_group(
+    database_dir: &Path,
+    group: &str,
+    from: Option<&Path>,
+) -> Result<usize> {
+    validate_group_id(group)?;
+    let bytes = if let Some(path) = from {
+        local_archive_bytes(path, "identify group archive")?
+    } else {
+        let version = env!("CARGO_PKG_VERSION");
+        let url = format!(
+            "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data-{group}.tar.br"
+        );
+        tracing::debug!(
+            url,
+            version,
+            group,
+            "downloading identify pack group archive"
+        );
+        download_archive_bytes(&url)?
+    };
+    install_group_archive(database_dir, group, &bytes)
+}
+
+/// Whether a user install of the full database already sits in `database_dir`.
+/// Data shipped beside the executable does not count: `setup` exists to fill
+/// the gap when no such data was installed.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn user_database_packs(database_dir: &Path) -> Option<usize> {
+    let packs = database_dir.join(USER_FULL_DATA_DIR).join("packs");
+    let count = fs::read_dir(packs).ok()?.count();
+    (count > 0).then_some(count)
+}
+
+/// Install the full identify database. `from` reads a local
+/// `rom-weaver-identify-data.tar.br`; without it the archive for this version
+/// is downloaded from the matching GitHub release.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn install_all(database_dir: &Path, from: Option<&Path>) -> Result<usize> {
+    let bytes = if let Some(path) = from {
+        local_archive_bytes(path, "identify data archive")?
+    } else {
+        let version = env!("CARGO_PKG_VERSION");
+        let url = format!(
+            "https://github.com/rom-weaver/rom-weaver/releases/download/v{version}/rom-weaver-identify-data.tar.br"
+        );
+        tracing::debug!(url, version, "downloading full identify data archive");
+        download_archive_bytes(&url)?
+    };
     let parent = database_dir.parent().unwrap_or(database_dir);
     fs::create_dir_all(parent)?;
     let stage = parent.join(format!(".identify-full-v1-{}.part", std::process::id()));

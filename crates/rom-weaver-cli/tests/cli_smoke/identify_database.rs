@@ -426,6 +426,202 @@ fn identify_reports_database_required_for_an_uninstalled_platform() {
     assert!(hint.contains("this install shipped no identify database"));
 }
 
+/// A valid `rom-weaver-identify-data.tar.br`: the release tree under
+/// `share/rom-weaver/identify/v1` wrapped in a Brotli-compressed tar. The
+/// reader verifies every pack's size and SHA-256 against `index.json`, so the
+/// fixture builds real RWFP1 packs and records their real digests.
+fn identify_data_archive(platforms: &[(&str, &str)]) -> Vec<u8> {
+    let sha256 = |bytes: &[u8]| {
+        let mut checksum = rom_weaver_checksum::StreamingChecksum::new(&["sha256".to_string()])
+            .expect("sha256 setup")
+            .expect("sha256 support");
+        checksum.update(bytes).expect("sha256 update");
+        checksum
+            .finalize()
+            .expect("sha256 finalize")
+            .remove("sha256")
+            .expect("sha256 result")
+    };
+
+    let mut systems = Vec::new();
+    let mut catalog_entries = Vec::new();
+    let mut packs = Vec::new();
+    for (platform, slug) in platforms {
+        let pack = pack_v1(platform, "nointro-single-image-v1", &[]);
+        let mut compressed = Vec::new();
+        {
+            let mut encoder = brotli::CompressorWriter::new(&mut compressed, 4096, 5, 22);
+            std::io::Write::write_all(&mut encoder, &pack).expect("brotli pack");
+        }
+        systems.push(serde_json::json!({
+            "slug": slug,
+            "file": format!("packs/{slug}.pack"),
+            "rawBytes": pack.len(),
+            "sha256": sha256(&pack),
+            "brotliFile": format!("packs/{slug}.pack.br"),
+            "brotliBytes": compressed.len(),
+            "brotliSha256": sha256(&compressed),
+        }));
+        catalog_entries.push(serde_json::json!({
+            "canonicalPlatform": platform,
+            "aliases": [*slug],
+            "source": "libretro",
+            "mediaProfiles": ["nointro-single-image-v1"],
+            "packSlug": slug,
+            "packFormat": "RWFP1",
+            "canonicalizationVersion": 1,
+        }));
+        packs.push((format!("packs/{slug}.pack.br"), compressed));
+    }
+
+    let mut files = vec![
+        (
+            "index.json".to_string(),
+            serde_json::json!({ "systems": systems })
+                .to_string()
+                .into_bytes(),
+        ),
+        (
+            "catalog.json".to_string(),
+            serde_json::json!({
+                "format": "rom-weaver-identify-catalog-v1",
+                "platforms": catalog_entries,
+            })
+            .to_string()
+            .into_bytes(),
+        ),
+    ];
+    files.extend(packs);
+
+    let mut tarball = Vec::new();
+    {
+        let mut builder = tar::Builder::new(&mut tarball);
+        for (name, body) in &files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(body.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(
+                    &mut header,
+                    format!("share/rom-weaver/identify/v1/{name}"),
+                    body.as_slice(),
+                )
+                .expect("archive entry");
+        }
+        builder.finish().expect("archive");
+    }
+    let mut compressed = Vec::new();
+    {
+        let mut encoder = brotli::CompressorWriter::new(&mut compressed, 4096, 5, 22);
+        std::io::Write::write_all(&mut encoder, &tarball).expect("brotli archive");
+    }
+    compressed
+}
+
+/// `setup --from` is the offline path: it installs a local archive and reaches
+/// no network, so an air-gapped machine can be set up from a copied file.
+#[test]
+fn setup_installs_the_database_from_a_local_archive() {
+    let temp = setup_temp_dir();
+    let database_dir = temp.child("identify");
+    let archive = temp.child("rom-weaver-identify-data.tar.br");
+    fs::write(
+        archive.path(),
+        identify_data_archive(&[
+            ("Nintendo Game Boy Advance", "nintendo-game-boy-advance"),
+            ("Sony PlayStation", "sony-playstation"),
+        ]),
+    )
+    .expect("archive fixture");
+
+    let output = command_stdout(
+        &[
+            "setup",
+            "--database-dir",
+            database_dir.path().to_str().expect("dir path"),
+            "--from",
+            archive.path().to_str().expect("archive path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["packs"], 2);
+    assert_eq!(json["details"]["downloaded"], false);
+    assert!(
+        database_dir
+            .path()
+            .join("full-v1")
+            .join("packs")
+            .join("sony-playstation.pack.br")
+            .exists()
+    );
+}
+
+/// `--from` states the intent to install that archive, so it replaces an
+/// existing database instead of reporting it as already installed.
+#[test]
+fn setup_from_a_local_archive_replaces_an_installed_database() {
+    let temp = setup_temp_dir();
+    let database_dir = temp.child("identify");
+    let packs = database_dir.path().join("full-v1").join("packs");
+    fs::create_dir_all(&packs).expect("packs dir");
+    fs::write(packs.join("stale.pack.br"), b"pack").expect("pack fixture");
+    let archive = temp.child("rom-weaver-identify-data.tar.br");
+    fs::write(
+        archive.path(),
+        identify_data_archive(&[("Nintendo Game Boy Advance", "nintendo-game-boy-advance")]),
+    )
+    .expect("archive fixture");
+
+    let output = command_stdout(
+        &[
+            "setup",
+            "--database-dir",
+            database_dir.path().to_str().expect("dir path"),
+            "--from",
+            archive.path().to_str().expect("archive path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["packs"], 1);
+    assert!(!packs.join("stale.pack.br").exists());
+}
+
+/// A missing `--from` archive fails before any network call, and the message
+/// names the path the user passed.
+#[test]
+fn setup_rejects_a_missing_local_archive() {
+    let temp = setup_temp_dir();
+    let database_dir = temp.child("identify");
+    let missing = temp.child("absent.tar.br");
+
+    let output = command_stdout(
+        &[
+            "setup",
+            "--database-dir",
+            database_dir.path().to_str().expect("dir path"),
+            "--from",
+            missing.path().to_str().expect("archive path"),
+            "--json",
+        ],
+        1,
+    );
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("identify data archive"));
+    assert!(label.contains("absent.tar.br"));
+}
+
 /// `setup` is idempotent and must not reach the network when the database is
 /// already in place, which is what makes it safe to put in install docs and
 /// run twice.

@@ -117,6 +117,11 @@ describe("HomePage", () => {
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
     expect(container.querySelectorAll(".home-flow")).toHaveLength(4);
     expect(container.textContent).toContain("All on your device.");
+    expect(
+      Array.from(container.querySelectorAll(".home-install-code")).every(
+        (code) => code instanceof HTMLTextAreaElement && code.readOnly,
+      ),
+    ).toBe(true);
   });
 
   it("falls back to root-relative routes when the base URL is invalid", () => {

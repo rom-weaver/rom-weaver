@@ -14,6 +14,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
   - [cargo-binstall](#cargo-binstall)
   - [mise](#mise)
 - [Source install](#source-install)
+  - [Install the data without a network](#install-the-data-without-a-network)
 - [Run in Docker](#run-in-docker)
 - [Install shell completions](#install-shell-completions)
 - [Development checkout](#development-checkout)
@@ -24,6 +25,20 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 ## Prebuilt install
 
 Every method here installs a binary built for the release: macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
+
+Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify`, `probe --identify`, and cheat baking read that data; every other command works without it.
+
+| Method | Manpages | Identify and cheat data |
+| --- | --- | --- |
+| Homebrew | included | included |
+| Scoop | included | included |
+| Install script (macOS, Linux) | included | included |
+| Install script (Windows) | included | included |
+| npm | included | included |
+| Docker | included | included |
+| cargo-binstall | `rom-weaver man --install` | `rom-weaver setup` |
+| mise | `rom-weaver man --install` | `rom-weaver setup` |
+| `cargo install` (source) | `rom-weaver man --install` | `rom-weaver setup` |
 
 Homebrew, the macOS/Linux install script, and global npm installs put the generated CLI manpages in a Unix manpath. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. The Docker image stores the pages under `/usr/local/share/man/man1`, but it has no `man(1)` program. See [Install shell completions](#install-shell-completions) for completion files, and [man pages](../reference/cli.md#man-pages) for the page commands.
 
@@ -84,14 +99,14 @@ Fetches the released binary instead of compiling from source, which `cargo insta
 cargo binstall rom-weaver-cli
 ```
 
-`cargo-binstall` installs only the executable, so no manpages or identify database sit beside it. Install them after:
+`cargo-binstall` installs only the executable, so no manpages, identify database, or cheat shards sit beside it. Install them after:
 
 ```bash
 rom-weaver man --install
 rom-weaver setup
 ```
 
-`rom-weaver setup` downloads this version's database into the per-user data directory. Running it again reports what is installed instead of downloading again; `--force` refreshes it. The Homebrew, scoop, npm, and install-script packages already carry the database, so `setup` only reports on those.
+`rom-weaver setup` downloads this version's identify packs and cheat shards from its GitHub release into the per-user data directory. Running it again reports what is installed instead of downloading again; `--force` refreshes it. The Homebrew, scoop, npm, install-script, and Docker packages already carry that data, so `setup` only reports on those.
 
 ### mise
 
@@ -101,7 +116,7 @@ Manages the CLI per project in `mise.toml` and verifies the release's GitHub art
 mise use 'github:rom-weaver/rom-weaver[minimum_release_age=0s]'
 ```
 
-The generic GitHub backend installs only one release asset. Install the generated manpages and the identify database after it finishes:
+The generic GitHub backend installs only one release asset. Install the generated manpages and the identify and cheat databases after it finishes:
 
 ```bash
 rom-weaver man --install
@@ -125,11 +140,23 @@ Cargo installs the executable only. Install the generated manpages after it fini
 rom-weaver man --install
 ```
 
-Install the identify database:
+Install the identify and cheat databases:
 
 ```bash
 rom-weaver setup
 ```
+
+`setup` downloads them from the matching GitHub release, so a source build of an unreleased commit has no data to fetch. Build the data locally in that case with `node scripts/ensure-identify-data.mjs`; see [Identify data](../development/identify-data.md).
+
+### Install the data without a network
+
+On a machine that cannot reach GitHub, download `rom-weaver-identify-data.tar.br` from the [release page](https://github.com/rom-weaver/rom-weaver/releases) on a machine that can, copy it across, and point `setup` at it:
+
+```bash
+rom-weaver setup --from rom-weaver-identify-data.tar.br
+```
+
+One archive serves as many machines as you like. Use the archive built for the version you installed; `setup` verifies every pack against the index inside it and fails rather than install a mismatched database.
 
 ## Run in Docker
 

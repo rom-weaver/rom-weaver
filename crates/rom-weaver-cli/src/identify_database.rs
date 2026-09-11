@@ -1068,7 +1068,7 @@ impl CliApp {
             }
             IdentifyDatabaseCommands::InstallAll(args) => {
                 let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let count = super::identify_builtin::install_all(provider.database_dir())?;
+                let count = super::identify_builtin::install_all(provider.database_dir(), None)?;
                 let mut report = OperationReport::succeeded(
                     OperationFamily::Command,
                     Some("identify-database".to_string()),
@@ -1335,20 +1335,24 @@ impl CliApp {
     fn run_setup_inner(&self, command: SetupCommand) -> Result<OperationReport> {
         let SetupCommand {
             database_dir,
+            from,
             force,
         } = command;
         let provider = IdentifyPackProvider::new(database_dir)?;
         let database_dir = provider.database_dir().to_path_buf();
         let installed = super::identify_builtin::user_database_packs(&database_dir);
 
-        let (packs, label, downloaded) = match installed {
-            Some(packs) if !force => (
+        // An explicit `--from` states the intent to install that archive, so it
+        // replaces an existing database the way `--force` does.
+        let reinstall = force || from.is_some();
+        let (packs, label, installed_now) = match installed {
+            Some(packs) if !reinstall => (
                 packs,
                 format!("identify database already installed ({packs} pack(s))"),
                 false,
             ),
             _ => {
-                let packs = super::identify_builtin::install_all(&database_dir)?;
+                let packs = super::identify_builtin::install_all(&database_dir, from.as_deref())?;
                 (packs, format!("installed {packs} identify pack(s)"), true)
             }
         };
@@ -1364,7 +1368,7 @@ impl CliApp {
         report.details = Some(json!({
             "database_dir": database_dir.to_string_lossy(),
             "packs": packs,
-            "downloaded": downloaded,
+            "downloaded": installed_now && from.is_none(),
             "version": env!("CARGO_PKG_VERSION"),
         }));
         Ok(report)

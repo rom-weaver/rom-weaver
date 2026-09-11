@@ -81,6 +81,8 @@ Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. The install script cov
 
 Windows, Scoop, PowerShell, cargo-binstall, mise, Docker, shell completions, and building from source are all in [Install the CLI](./docs/how-to/install-cli.md).
 
+All three methods above carry the identify and cheat databases, so they need no extra step. Methods that install only the executable - `cargo install`, `cargo binstall`, and `mise` - need `rom-weaver setup` afterwards to download that data, which `identify`, `probe --identify`, and cheat baking read.
+
 Hitting `Permission denied`? See [File permissions](./docs/reference/cli.md#file-permissions).
 
 The [development guide](./docs/development/development.md) covers the full toolchain setup, webapp builds, and tests.

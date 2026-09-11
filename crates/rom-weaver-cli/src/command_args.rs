@@ -3389,6 +3389,17 @@ pub struct SetupCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "from",
+            value_name = "ARCHIVE",
+            help = "Local rom-weaver-identify-data.tar.br; omit to download the archive for this version"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub from: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             help = "Download the database again even when it is already installed"
         )
