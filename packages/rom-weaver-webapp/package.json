@@ -106,7 +106,7 @@
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.6.0",
-    "lucide-react": "1.41.0",
+    "lucide-react": "1.42.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -118,7 +118,7 @@
     "@lingui/format-po": "6.6.0",
     "@mdn/browser-compat-data": "8.1.0",
     "@testing-library/react": "16.3.3",
-    "@types/node": "26.4.1",
+    "@types/node": "26.5.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
@@ -132,7 +132,7 @@
     "jscpd": "5.1.2",
     "knip": "6.34.0",
     "lighthouse": "13.4.1",
-    "marked": "18.0.11",
+    "marked": "18.0.12",
     "npm-run-all2": "9.0.3",
     "oxfmt": "0.67.0",
     "oxlint": "1.82.0",
