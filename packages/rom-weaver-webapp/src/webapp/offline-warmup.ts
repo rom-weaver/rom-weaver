@@ -77,6 +77,12 @@ type EmulatorJsManifest = {
 type WarmupFetcher = (request: Request | string, init?: RequestInit) => Promise<Response>;
 
 type OfflineWarmupOptions = {
+  downloadFile?: (
+    request: Request,
+    onBytes: ((delta: number) => void) | undefined,
+    fetcher: WarmupFetcher,
+  ) => Promise<Response>;
+  releaseFile?: (request: Request) => Promise<void>;
   emulatorJsCacheName: string;
   emulatorJsVersion: string;
   /** Low-priority fetch for background warm-up units. */
@@ -198,13 +204,14 @@ const fetchVerifiedPack = async (
   scope: string,
   fetcher: WarmupFetcher,
   onBytes?: (delta: number) => void,
+  downloadFile?: OfflineWarmupOptions["downloadFile"],
 ) => {
   const request = new Request(new URL(pack.url, scope));
-  const response = await fetcher(request);
+  const response = downloadFile ? await downloadFile(request, onBytes, fetcher) : await fetcher(request);
   if (!response.ok) {
     throw new Error(`ROM identify pack download failed with HTTP ${response.status}: ${pack.url}`);
   }
-  const buffer = await readWithByteProgress(response, onBytes);
+  const buffer = await readWithByteProgress(response, downloadFile ? undefined : onBytes);
   const actualSha256 = await sha256HexOf(buffer);
   // The digests go in the message because this error is only ever seen through
   // a caller's log line: expected != actual means this worker's baked pack
@@ -244,6 +251,8 @@ const parseEmulatorJsManifest = (value: unknown): EmulatorJsManifest => {
 };
 
 const createOfflineWarmup = ({
+  downloadFile,
+  releaseFile,
   emulatorJsCacheName,
   emulatorJsVersion,
   fetchForWarmup,
@@ -269,9 +278,19 @@ const createOfflineWarmup = ({
   const loadEmulatorJsManifest = (): Promise<EmulatorJsManifest> => {
     if (!manifestPromise) {
       manifestPromise = (async () => {
+        const cache = await caches.open(emulatorJsCacheName);
+        const stored = await cache.match(emulatorJsManifestUrl);
+        if (stored) {
+          const manifest = parseEmulatorJsManifest(await stored.json());
+          if (manifest.version === emulatorJsVersion) return manifest;
+        }
         const response = await fetchForWarmup(emulatorJsManifestUrl);
         if (!response.ok) throw new Error(`EmulatorJS manifest request failed with HTTP ${response.status}`);
-        return parseEmulatorJsManifest(await response.json());
+        const manifest = parseEmulatorJsManifest(await response.json());
+        if (manifest.version !== emulatorJsVersion)
+          throw new Error("EmulatorJS manifest version does not match this worker");
+        await cache.put(emulatorJsManifestUrl, Response.json(manifest));
+        return manifest;
       })().catch((error) => {
         manifestPromise = null;
         throw error;
@@ -435,7 +454,9 @@ const createOfflineWarmup = ({
         cachedBytes += precache.cachedBytes;
         totalFiles += precache.totalFiles;
         cachedFiles += precache.cachedFiles;
+        pendingUnits += Math.max(0, precache.totalFiles - precache.cachedFiles);
       } catch (error) {
+        pendingUnits += 1;
         // The app's own bytes drop out of the totals; the warm-up share still reports.
         log("precache state unavailable for ready state", {
           error: error instanceof Error ? error.message : String(error),
@@ -521,8 +542,9 @@ const createOfflineWarmup = ({
         onBytes?.(pack.sizeBytes || 0);
         continue;
       }
-      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes);
+      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, downloadFile);
       await cache.put(request, response);
+      await releaseFile?.(request);
     }
     await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
     if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === group.id));
@@ -591,10 +613,13 @@ const createOfflineWarmup = ({
       onBytes?.(unit.sizeBytes);
       return;
     }
-    const response = await fetchForWarmup(url);
+    const response = downloadFile
+      ? await downloadFile(new Request(url), onBytes, fetchForWarmup)
+      : await fetchForWarmup(url);
     if (!response.ok) throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
-    const buffer = await readWithByteProgress(response, onBytes);
+    const buffer = await readWithByteProgress(response, downloadFile ? undefined : onBytes);
     await cache.put(url, bufferedResponse(response, buffer, encodedSizeOf(url)));
+    await releaseFile?.(new Request(url));
   };
 
   /** Write the completion marker once no emulatorjs file unit remains. */
@@ -772,8 +797,15 @@ const createOfflineWarmup = ({
       url: requestUrl.pathname,
     });
     // An identify run MAY fetch one pack before group installation. Keep the group marker absent and use interactive priority.
-    const { request: packRequest, response } = await fetchVerifiedPack(pack, scope, fetchForInteractive);
+    const { request: packRequest, response } = await fetchVerifiedPack(
+      pack,
+      scope,
+      fetchForInteractive,
+      undefined,
+      downloadFile,
+    );
     await cache.put(packRequest, response.clone());
+    await releaseFile?.(packRequest);
     return response;
   };
 

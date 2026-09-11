@@ -20,6 +20,7 @@ import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { generatedChannelAssetPath, generatedSocialPreviewPath } from "./scripts/generated-icon-assets.mjs";
 import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
+import { initialPrecacheUrls, writeOfflineDownloads } from "./scripts/offline-downloads.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
 import { DOC_SOURCES, readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
@@ -884,6 +885,27 @@ const writePrecacheSizes =
     return { manifest: manifestEntries };
   };
 
+const prepareIncrementalPrecache = () => (entries) => {
+  const distDir = path.resolve(rootDir, "dist");
+  const initial = initialPrecacheUrls(distDir);
+  const emulator = JSON.parse(fs.readFileSync(path.join(distDir, "emulatorjs/manifest.json"), "utf8"));
+  const downloads = writeOfflineDownloads(distDir, [
+    ...entries,
+    ...emulator.files.map((file) => `emulatorjs/data/${file.path}`),
+    ...identifyOptionalPackGroups.flatMap((group) => group.packs),
+  ]);
+  const manifest = entries.map((entry) => ({ ...entry, install: initial.has(entry.url), sizeBytes: entry.size }));
+  manifest.push({
+    url: downloads.url,
+    revision: downloads.revision,
+    install: true,
+    downloadManifest: true,
+    size: fs.statSync(path.join(distDir, downloads.url)).size,
+    sizeBytes: fs.statSync(path.join(distDir, downloads.url)).size,
+  });
+  return { manifest };
+};
+
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
@@ -1363,6 +1385,7 @@ export default defineConfig(({ command, mode }) => {
     base: "./",
     build: {
       assetsInlineLimit: 0,
+      manifest: true,
       cssMinify: "lightningcss",
       emptyOutDir: true,
       outDir: "dist",
@@ -1457,7 +1480,7 @@ export default defineConfig(({ command, mode }) => {
         injectManifest: {
           // Manifest revisions track precached shell assets; identify packs load
           // through background warm-up or on demand, outside the precache.
-          manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
+          manifestTransforms: [revisionUnhashedAssets(), prepareIncrementalPrecache(), writePrecacheSizes()],
           // The checksum router and the title index are warm-up data like the
           // packs, so neither the raw files nor their brotli sidecars join the
           // precache.
@@ -1492,7 +1515,8 @@ export default defineConfig(({ command, mode }) => {
             "icon-maskable-192.png",
             "icon-maskable-512.png",
           ],
-          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+          // Large WASM entries MUST remain in the deferred manifest so the chunk downloader can install them.
+          maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
         },
         injectRegister: null,
         integration: {
