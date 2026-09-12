@@ -3,7 +3,12 @@
  * Progress comes from cached files and unit markers so completed downloads survive worker restarts.
  */
 
-import { bufferedResponse, ENCODED_SIZE_HEADER, encodedSizeOf } from "./pwa/response-encoded-size.ts";
+import {
+  bufferedResponse,
+  ENCODED_SIZE_HEADER,
+  encodedSizeOf,
+  readWithByteProgress,
+} from "./pwa/response-encoded-size.ts";
 
 type IdentifyOptionalPack = { sha256: string; sizeBytes?: number; url: string };
 
@@ -136,34 +141,6 @@ const sha256HexOf = async (bytes: ArrayBuffer) => {
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 };
 
-/** Read the whole body into memory, reporting per-chunk byte counts as they arrive. */
-const readWithByteProgress = async (response: Response, onBytes?: (delta: number) => void): Promise<ArrayBuffer> => {
-  if (!(response.body && onBytes)) {
-    const buffer = await response.arrayBuffer();
-    onBytes?.(buffer.byteLength);
-    return buffer;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalLength = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      totalLength += value.byteLength;
-      onBytes(value.byteLength);
-    }
-  }
-  const buffer = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    buffer.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return buffer.buffer;
-};
-
 /** Header value as a byte count, or null when it is absent or not a size. */
 const headerBytes = (response: Response, header: string): number | null => {
   if (!response.headers.has(header)) return null;
@@ -269,9 +246,19 @@ const createOfflineWarmup = ({
   const loadEmulatorJsManifest = (): Promise<EmulatorJsManifest> => {
     if (!manifestPromise) {
       manifestPromise = (async () => {
+        const cache = await caches.open(emulatorJsCacheName);
+        const stored = await cache.match(emulatorJsManifestUrl);
+        if (stored) {
+          const manifest = parseEmulatorJsManifest(await stored.json());
+          if (manifest.version === emulatorJsVersion) return manifest;
+        }
         const response = await fetchForWarmup(emulatorJsManifestUrl);
         if (!response.ok) throw new Error(`EmulatorJS manifest request failed with HTTP ${response.status}`);
-        return parseEmulatorJsManifest(await response.json());
+        const manifest = parseEmulatorJsManifest(await response.json());
+        if (manifest.version !== emulatorJsVersion)
+          throw new Error("EmulatorJS manifest version does not match this worker");
+        await cache.put(emulatorJsManifestUrl, Response.json(manifest));
+        return manifest;
       })().catch((error) => {
         manifestPromise = null;
         throw error;
@@ -435,7 +422,9 @@ const createOfflineWarmup = ({
         cachedBytes += precache.cachedBytes;
         totalFiles += precache.totalFiles;
         cachedFiles += precache.cachedFiles;
+        pendingUnits += Math.max(0, precache.totalFiles - precache.cachedFiles);
       } catch (error) {
+        pendingUnits += 1;
         // The app's own bytes drop out of the totals; the warm-up share still reports.
         log("precache state unavailable for ready state", {
           error: error instanceof Error ? error.message : String(error),

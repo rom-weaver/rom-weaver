@@ -20,6 +20,7 @@ import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
 import { generatedChannelAssetPath, generatedSocialPreviewPath } from "./scripts/generated-icon-assets.mjs";
 import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
+import { initialPrecacheUrls } from "./scripts/offline-downloads.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
 import { DOC_SOURCES, readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
@@ -884,6 +885,17 @@ const writePrecacheSizes =
     return { manifest: manifestEntries };
   };
 
+const preparePrecacheEntries = () => (entries) => {
+  const distDir = path.resolve(rootDir, "dist");
+  const initial = initialPrecacheUrls(distDir);
+  const manifest = entries.map((entry) => ({
+    ...entry,
+    install: initial.has(entry.url),
+    sizeBytes: entry.size,
+  }));
+  return { manifest };
+};
+
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
 // where q11 saves at least 2%. Cloudflare's Pages Function uses _routes.json
 // to serve those exact URLs; Docker and self-hosters can serve the same static
@@ -1363,6 +1375,7 @@ export default defineConfig(({ command, mode }) => {
     base: "./",
     build: {
       assetsInlineLimit: 0,
+      manifest: true,
       cssMinify: "lightningcss",
       emptyOutDir: true,
       outDir: "dist",
@@ -1457,7 +1470,7 @@ export default defineConfig(({ command, mode }) => {
         injectManifest: {
           // Manifest revisions track precached shell assets; identify packs load
           // through background warm-up or on demand, outside the precache.
-          manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
+          manifestTransforms: [revisionUnhashedAssets(), preparePrecacheEntries(), writePrecacheSizes()],
           // The checksum router and the title index are warm-up data like the
           // packs, so neither the raw files nor their brotli sidecars join the
           // precache.
@@ -1492,7 +1505,8 @@ export default defineConfig(({ command, mode }) => {
             "icon-maskable-192.png",
             "icon-maskable-512.png",
           ],
-          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+          // Large WASM entries MUST remain in the deferred manifest for the offline installer.
+          maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
         },
         injectRegister: null,
         integration: {

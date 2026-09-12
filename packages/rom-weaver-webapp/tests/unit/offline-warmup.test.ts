@@ -218,6 +218,22 @@ describe("offline warm-up (service worker side)", () => {
     expect(state.cachedFiles).toBe(2);
   });
 
+  it("cannot finish offline preparation while app files remain missing", async () => {
+    let appReady = false;
+    const warmup = await createWarmup(createFetcher(), {
+      precacheState: async () => ({
+        cachedBytes: appReady ? 10 : 0,
+        cachedFiles: appReady ? 1 : 0,
+        totalBytes: 10,
+        totalFiles: 1,
+      }),
+    });
+    await warmup.runNextUnit();
+    expect(await warmup.getReadyState()).toMatchObject({ ready: false, pendingUnits: 1 });
+    appReady = true;
+    expect(await warmup.getReadyState()).toMatchObject({ ready: true, pendingUnits: 0 });
+  });
+
   it("leaves the precache out of the totals when its state cannot be read", async () => {
     const warmup = await createWarmupWithOptionalGroup(createFetcher(), {
       precacheState: async () => {
@@ -246,7 +262,7 @@ describe("offline warm-up (service worker side)", () => {
     const emulatorJsCache = cacheStorage.caches.get(EMULATORJS_CACHE);
     const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
     expect(emulatorJsCache?.keysCallCount).toBe(1);
-    expect(emulatorJsCache?.matchCallCount).toBe(1);
+    expect(emulatorJsCache?.matchCallCount).toBe(2);
     expect(identifyCache?.keysCallCount).toBe(1);
     // One marker read per group. The opt-in list is memoised by the ticking
     // above, so a snapshot does not re-read it.
@@ -282,6 +298,18 @@ describe("offline warm-up (service worker side)", () => {
     const state = await second.getReadyState();
     expect(state.ready).toBe(true);
     expect(state.pendingUnits).toBe(0);
+  });
+
+  it("keeps download totals after an offline worker restart", async () => {
+    const first = await createWarmup();
+    await first.runNextUnit();
+    const before = await first.getReadyState();
+    const offline = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    const restarted = await createWarmup(offline);
+    expect(await restarted.getReadyState()).toEqual(before);
+    expect(offline).not.toHaveBeenCalled();
   });
 
   it("reports a transfer size for every entry a header or the encoding can settle", async () => {
@@ -336,8 +364,14 @@ describe("offline warm-up (service worker side)", () => {
         sizeBytes: 16,
         url: "https://example.test/emulatorjs/data/loader.js",
       },
+      {
+        cache: EMULATORJS_CACHE,
+        compressedBytes: new TextEncoder().encode(JSON.stringify(manifest)).byteLength,
+        sizeBytes: new TextEncoder().encode(JSON.stringify(manifest)).byteLength,
+        url: "https://example.test/emulatorjs/manifest.json",
+      },
     ]);
-    expect(measured).toHaveLength(2);
+    expect(measured).toHaveLength(3);
   });
 
   it("treats a new emulatorjs version as not ready", async () => {
@@ -512,6 +546,20 @@ describe("offline warm-up (service worker side)", () => {
     const groups = await buildGroups();
     const packUrl = new URL(groups[0].packs[0].url, SCOPE).href;
     await expect(warmup.serveOptionalIdentifyPack(new Request(packUrl))).rejects.toThrow(/checksum/);
+  });
+
+  it("retries an original pack after the origin recovers from corrupt bytes", async () => {
+    let attempts = 0;
+    const fetcher = vi.fn(async () => {
+      attempts += 1;
+      return new Response(attempts === 1 ? "tampered-bytes" : PACK_BODY);
+    });
+    const warmup = await createWarmup(fetcher);
+    const groups = await buildGroups();
+    const request = new Request(new URL(groups[0].packs[0].url, SCOPE));
+    await expect(warmup.serveOptionalIdentifyPack(request)).rejects.toThrow(/checksum/);
+    expect(await (await warmup.serveOptionalIdentifyPack(request)).text()).toBe(PACK_BODY);
+    expect(attempts).toBe(2);
   });
 
   it("installIdentifyGroup writes the group marker with the pack revision", async () => {

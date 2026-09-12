@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-type PrecacheManifestEntry = string | { revision?: string | null; url: string };
+type PrecacheManifestEntry = string | { revision?: string | null; url: string; install?: boolean; sizeBytes?: number };
 
 type CapturedRoute = {
   handler: (options: { event?: { type: string }; request: Request; url: URL }) => Promise<Response>;
@@ -8,6 +8,8 @@ type CapturedRoute = {
 };
 
 type CapturedPlugin = {
+  fetchDidSucceed?: (options: { event: { type: string }; request: Request; response: Response }) => Promise<Response>;
+  cacheDidUpdate?: (options: { request: Request }) => Promise<void>;
   cacheWillUpdate?: (options: { request: Request; response: Response }) => Promise<Response | null | undefined>;
   handlerDidComplete?: (options: { event: { type: string } }) => Promise<void>;
   handlerWillRespond?: (options: { response: Response }) => Promise<Response>;
@@ -324,7 +326,7 @@ const loadWorker = async (
     cacheStorage,
     emulatorJsRoute: requireRoute(1),
     fetchStub,
-    identifyPackRoute: requireRoute(2),
+    identifyPackRoute: requireRoute(3),
     networkFirstRoute: requireRoute(0),
     plugin,
     scope,
@@ -411,10 +413,33 @@ describe("worker log relay", () => {
 });
 
 describe("service worker bootstrap", () => {
-  it("registers the three runtime routes, the precache plugin and the warm-up", async () => {
+  it("installs only essential entries and includes deferred files in offline totals", async () => {
+    const initial = { install: true, revision: "root", sizeBytes: 10, url: "index.html" };
+    const deferred = { install: false, revision: "docs", sizeBytes: 20, url: "docs/index.html" };
+    const harness = await loadWorker({ manifest: [initial, deferred] });
+    expect(hoisted.precacheAndRoute).toHaveBeenCalledWith([initial], expect.anything());
+    await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
+      cachedBytes: 0,
+      cachedFiles: 0,
+      totalBytes: 30,
+      totalFiles: 2,
+    });
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/index.html`, () => new Response("docs"));
+    await routed(harness, requireRoute(2), new Request(`${APP_ORIGIN}/docs/index.html`));
+    await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
+      cachedBytes: 20,
+      cachedFiles: 1,
+      totalBytes: 30,
+      totalFiles: 2,
+    });
+    harness.fetchStub.handlers.delete(`${APP_ORIGIN}/docs/index.html`);
+    const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/docs`));
+    expect(await response.text()).toBe("docs");
+  });
+  it("registers the runtime and deferred routes, the precache plugin and the warm-up", async () => {
     const harness = await loadWorker();
 
-    expect(hoisted.routes).toHaveLength(3);
+    expect(hoisted.routes).toHaveLength(4);
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith(DEFAULT_MANIFEST, {
       ignoreURLParametersMatching: [/^sha256$/],
     });
@@ -729,6 +754,34 @@ describe("identify pack route", () => {
 });
 
 describe("precache plugin", () => {
+  it("reports incoming bytes before an install response finishes", async () => {
+    const harness = await loadWorker();
+    await dispatch(harness.scope, "install", {});
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const source = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
+        },
+      }),
+    );
+    const response = await harness.plugin.fetchDidSucceed?.({
+      event: { type: "install" },
+      request: new Request(`${APP_ORIGIN}/assets/app.js`),
+      response: source,
+    });
+    const reader = response?.body?.getReader();
+    streamController?.enqueue(new Uint8Array(12));
+    expect((await reader?.read())?.value?.byteLength).toBe(12);
+    await vi.waitFor(() =>
+      expect(harness.scope.clientMessages).toContainEqual(
+        expect.objectContaining({ action: "offline-precache-progress", cachedBytes: 52, ready: false }),
+      ),
+    );
+    streamController?.close();
+    await reader?.read();
+    await harness.plugin.cacheDidUpdate?.({ request: new Request(`${APP_ORIGIN}/assets/app.js`) });
+  });
   it("lowers the fetch priority of install-time requests only", async () => {
     const harness = await loadWorker();
     const request = new Request(`${APP_ORIGIN}/assets/app.js`);
@@ -1068,11 +1121,26 @@ describe("offline warm-up messages", () => {
 });
 
 describe("precache state reported to the warm-up", () => {
+  it("does not count a cached file from a different revision", async () => {
+    const harness = await loadWorker({
+      manifest: [{ url: "index.html", revision: "new", sizeBytes: 10 }],
+      seedCaches: async (storage) => {
+        const cache = await storage.open(PRECACHE_NAME);
+        await cache.put(`${APP_ORIGIN}/index.html?__WB_REVISION__=old`, new Response("old"));
+      },
+    });
+    expect(await harness.warmupConfig.precacheState()).toEqual({
+      cachedBytes: 0,
+      cachedFiles: 0,
+      totalBytes: 10,
+      totalFiles: 1,
+    });
+  });
   it("combines the build's size table with what the precache already holds", async () => {
     const harness = await loadWorker({
       seedCaches: async (cacheStorage) => {
         const cache = await cacheStorage.open(PRECACHE_NAME);
-        await cache.put(new Request(`${APP_ORIGIN}/index.html`), new Response("<html>"));
+        await cache.put(new Request(`${APP_ORIGIN}/index.html?__WB_REVISION__=r1`), new Response("<html>"));
       },
     });
     harness.fetchStub.handlers.set(
