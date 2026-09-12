@@ -928,7 +928,13 @@ fn log_command_options(command: &Commands) {
         if value.as_array().is_some_and(Vec::is_empty) {
             continue;
         }
-        info!(option, value = %value, "using command option");
+        // Render strings bare: `Value`'s Display is JSON, which would quote the
+        // text and double every backslash in a Windows path.
+        let rendered = match value {
+            serde_json::Value::String(text) => text.clone(),
+            other => other.to_string(),
+        };
+        info!(option, value = %rendered, "using command option");
     }
 }
 
