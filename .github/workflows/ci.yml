@@ -1398,7 +1398,7 @@ jobs:
           webapp-deps: "true"
           emulatorjs-cache: "true"
           playwright: "true"
-          playwright-browsers: chromium webkit
+          playwright-browsers: webkit
 
       - uses: ./.github/actions/download-identify-data
 
@@ -1415,6 +1415,8 @@ jobs:
           path: packages/rom-weaver-webapp/src/wasm
 
       - name: Webapp E2E (WebKit)
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: "1"
         run: npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
 
   # Same shape as the `rust` aggregate above: one stable check name (`Webapp`)

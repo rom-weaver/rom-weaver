@@ -267,7 +267,8 @@ try {
     throw new Error(`Expected preview origin to omit COOP/COEP/CORP headers; got ${JSON.stringify(originHeaders)}`);
   }
 
-  browser = await chromium.launch({ args: ["--ignore-certificate-errors"] });
+  const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
+  browser = await chromium.launch({ ...launchOptions, args: ["--ignore-certificate-errors"] });
   const context = await browser.newContext({ ignoreHTTPSErrors: true, serviceWorkers: "allow" });
   const page = await context.newPage();
   const consoleErrors = [];
