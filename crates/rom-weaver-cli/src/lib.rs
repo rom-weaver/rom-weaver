@@ -86,7 +86,7 @@ use rom_weaver_patches::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tracing::{debug, trace, warn};
+use tracing::{debug, info, trace, warn};
 use tracing_subscriber::{filter::Targets, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 #[cfg(feature = "typescript-types")]
 use ts_rs::TS;
@@ -878,13 +878,23 @@ pub fn run_command_outcome(
     prompter: Arc<dyn SelectionPrompter>,
 ) -> AppRunOutcome {
     init_logging(options.log_level, options.dep_trace, options.json);
-    trace!(
+    let command_name = CliApp::command_name(&command);
+    info!(
+        command = command_name,
+        version = env!("CARGO_PKG_VERSION"),
+        dry_run = options.dry_run,
+        interactive = options.interactive_selection_enabled,
+        "starting command"
+    );
+    log_command_options(&command);
+    debug!(
         json = options.json,
         emit_progress_events = options.emit_progress_events,
         log_level = ?options.log_level,
         command = ?command,
         "running rom-weaver command"
     );
+    let reporter = Arc::new(DiagnosticProgressSink { inner: reporter });
     RomWeaverApp::run(
         command,
         AppRunOptions {
@@ -896,6 +906,60 @@ pub fn run_command_outcome(
         reporter,
         prompter,
     )
+}
+
+fn log_command_options(command: &Commands) {
+    if !tracing::enabled!(tracing::Level::INFO) {
+        return;
+    }
+    let Ok(mut args) = serde_json::to_value(command) else {
+        return;
+    };
+    while let Some(nested) = args.get_mut("args") {
+        args = nested.take();
+    }
+    for option in [
+        "input", "inputs", "original", "modified", "patches", "bundle", "output", "format", "algo",
+        "threads",
+    ] {
+        let Some(value) = args.get(option).filter(|value| !value.is_null()) else {
+            continue;
+        };
+        if value.as_array().is_some_and(Vec::is_empty) {
+            continue;
+        }
+        info!(option, value = %value, "using command option");
+    }
+}
+
+struct DiagnosticProgressSink {
+    inner: Arc<dyn ProgressSink>,
+}
+
+impl ProgressSink for DiagnosticProgressSink {
+    fn emit(&self, event: ProgressEvent) {
+        if !matches!(
+            event.status,
+            OperationStatus::Pending | OperationStatus::Running
+        ) {
+            #[cfg(not(target_arch = "wasm32"))]
+            let elapsed = event.elapsed_ms.map(crate::render::format_elapsed_ms);
+            #[cfg(target_arch = "wasm32")]
+            let elapsed: Option<String> = None;
+            info!(
+                command = %event.command,
+                stage = %event.stage,
+                format = event.format.as_deref(),
+                status = ?event.status,
+                effective_threads = event.effective_threads,
+                thread_fallback_reason = event.thread_fallback_reason.as_deref(),
+                elapsed_ms = event.elapsed_ms,
+                elapsed = elapsed.as_deref(),
+                "completed operation"
+            );
+        }
+        self.inner.emit(event);
+    }
 }
 
 const APP_LOG_TARGETS: &str =
@@ -932,34 +996,22 @@ fn log_filter_spec(
     (!directives.is_empty()).then(|| directives.join(","))
 }
 
-/// The env filter in effect plus the variable it came from, so the override
-/// warning can name it.
-fn configured_trace_filter_source() -> Option<(&'static str, String)> {
+fn configured_trace_filter() -> Option<String> {
     std::env::var("ROM_WEAVER_LOG")
         .ok()
         .and_then(trim_non_empty)
-        .map(|filter| ("ROM_WEAVER_LOG", filter))
-        .or_else(|| {
-            std::env::var("RUST_LOG")
-                .ok()
-                .and_then(trim_non_empty)
-                .map(|filter| ("RUST_LOG", filter))
-        })
+        .or_else(|| std::env::var("RUST_LOG").ok().and_then(trim_non_empty))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, json_mode: bool) {
     static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
     TRACE_LOGGING_INIT.get_or_init(|| {
-        let configured = configured_trace_filter_source();
-        // The flag replaces the env filter outright rather than merging with
-        // it; say so instead of silently dropping what the environment asked
-        // for.
-        if let (Some(_), Some((name, filter))) = (log_level, configured.as_ref()) {
-            eprintln!("warning: --log-level/-v/-q overrides {name}=`{filter}`");
-        }
-        let filter_spec =
-            log_filter_spec(log_level, dep_trace, configured.map(|(_, filter)| filter));
+        let configured = configured_trace_filter();
+        let developer_diagnostics = matches!(log_level, Some(LogLevel::Debug | LogLevel::Trace))
+            || (log_level.is_none() && configured.is_some())
+            || dep_trace;
+        let filter_spec = log_filter_spec(log_level, dep_trace, configured);
 
         let Some(filter_spec) = filter_spec else {
             return;
@@ -968,7 +1020,19 @@ fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, json_mode: bool) {
         let filter = match filter_spec.parse::<Targets>() {
             Ok(filter) => filter,
             Err(error) => {
-                eprintln!("warning: invalid log filter `{filter_spec}` ({error}); using off");
+                let message = format!("invalid log filter `{filter_spec}` ({error}); using off");
+                if json_mode {
+                    crate::render::write_stderr(format_args!(
+                        "{}\n",
+                        json!({
+                            "level": "WARN",
+                            "target": "rom_weaver_app",
+                            "fields": { "message": message },
+                        })
+                    ));
+                } else {
+                    crate::render::write_stderr(format_args!("warning: {message}\n"));
+                }
                 Targets::default()
             }
         };
@@ -976,15 +1040,32 @@ fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, json_mode: bool) {
         if json_mode {
             let _ = tracing_subscriber::registry()
                 .with(filter)
-                .with(fmt::layer().json().with_ansi(false).with_writer(io::stderr))
+                .with(
+                    fmt::layer()
+                        .json()
+                        .with_ansi(false)
+                        .with_writer(|| NativeLogWriter),
+                )
+                .try_init();
+        } else if developer_diagnostics {
+            let _ = tracing_subscriber::registry()
+                .with(filter)
+                .with(
+                    fmt::layer()
+                        .with_ansi(false)
+                        .with_writer(|| NativeLogWriter)
+                        .compact(),
+                )
                 .try_init();
         } else {
             let _ = tracing_subscriber::registry()
                 .with(filter)
                 .with(
                     fmt::layer()
+                        .without_time()
+                        .with_target(false)
                         .with_ansi(false)
-                        .with_writer(io::stderr)
+                        .with_writer(|| NativeLogWriter)
                         .compact(),
                 )
                 .try_init();
@@ -992,15 +1073,26 @@ fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, json_mode: bool) {
     });
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+struct NativeLogWriter;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Write for NativeLogWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        crate::render::with_progress_suspended(|| io::stderr().write(buffer))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        io::stderr().flush()
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, _json_mode: bool) {
     static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
     TRACE_LOGGING_INIT.get_or_init(|| {
-        let Some(filter_spec) = log_filter_spec(
-            log_level,
-            dep_trace,
-            configured_trace_filter_source().map(|(_, filter)| filter),
-        ) else {
+        let Some(filter_spec) = log_filter_spec(log_level, dep_trace, configured_trace_filter())
+        else {
             return;
         };
         let filter = match filter_spec.parse::<Targets>() {
@@ -1048,7 +1140,14 @@ impl ProgressSink for JsonProgressSink {
                     let _ = io::Write::flush(&mut io::stdout());
                 }
             }
-            Err(error) => eprintln!("failed to serialize progress event: {error}"),
+            Err(error) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                crate::render::write_stderr(format_args!(
+                    "failed to serialize progress event: {error}\n"
+                ));
+                #[cfg(target_arch = "wasm32")]
+                eprintln!("failed to serialize progress event: {error}");
+            }
         }
     }
 }

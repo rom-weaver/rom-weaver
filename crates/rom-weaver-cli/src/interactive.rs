@@ -23,11 +23,11 @@ pub fn run_bundle_tui(apply: &PatchApplyCommand) -> Result<BundleCreateCommand, 
         );
     }
 
-    eprintln!(
-        "Authoring rom-weaver-bundle.json for {} patch(es) applied to {}",
+    crate::render::write_stderr(format_args!(
+        "Authoring rom-weaver-bundle.json for {} patch(es) applied to {}\n",
         apply.patches.len(),
-        apply.input.display()
-    );
+        crate::render::display_text(&apply.input.to_string_lossy())
+    ));
 
     let total = apply.patches.len();
     let mut patch_specs = Vec::with_capacity(total);
@@ -40,7 +40,12 @@ pub fn run_bundle_tui(apply: &PatchApplyCommand) -> Result<BundleCreateCommand, 
             .file_stem()
             .and_then(|name| name.to_str())
             .unwrap_or(file);
-        eprintln!("\nPatch {}/{}  {file}", index + 1, total);
+        crate::render::write_stderr(format_args!(
+            "\nPatch {}/{}  {}\n",
+            index + 1,
+            total,
+            crate::render::display_text(file)
+        ));
         let name: String = Input::new()
             .with_prompt("  name")
             .default(stem.to_owned())

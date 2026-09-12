@@ -92,7 +92,10 @@ pub(crate) fn run(
     stdin_name: Option<&str>,
 ) -> ExitCode {
     if let Err(error) = validate(&command, &options, stdin_name) {
-        eprintln!("error: {error}");
+        crate::render::write_stderr(format_args!(
+            "error: {}\n",
+            crate::render::display_text(&error.to_string())
+        ));
         return ExitCode::from(2);
     }
     crate::init_logging(options.log_level, options.dep_trace, options.json);
@@ -105,7 +108,10 @@ pub(crate) fn run(
     ) {
         Ok(status) => status,
         Err(error) => {
-            eprintln!("error: {error}");
+            crate::render::write_stderr(format_args!(
+                "error: {}\n",
+                crate::render::display_text(&error.to_string())
+            ));
             ExitCode::FAILURE
         }
     }
