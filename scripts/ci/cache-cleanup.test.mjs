@@ -67,6 +67,23 @@ test("keeps the newest cache in each compatible restore scope", () => {
   );
 });
 
+test("sccache cleanup preserves separate jobs, runners, refs, and cache versions", () => {
+  const old = cache({
+    key: "sccache-wasm-Linux-X64-aabbccdd",
+    created_at: "2026-09-09T12:00:00Z",
+  });
+  const current = cache({ id: 2, key: "sccache-wasm-Linux-X64-ddeeff00" });
+  const separateScopes = [
+    cache({ id: 3, key: "sccache-native-Linux-X64-aabbccdd" }),
+    cache({ id: 4, key: "sccache-wasm-macOS-X64-aabbccdd" }),
+    cache({ id: 5, key: "sccache-wasm-Linux-ARM64-aabbccdd" }),
+    { ...current, id: 6, ref: "refs/pull/7/merge" },
+    { ...current, id: 7, version: "other-version" },
+    cache({ id: 8, key: "sccache-wasm-Linux-X64-no-hash" }),
+  ];
+  assert.deepEqual(supersededCaches([old, current, ...separateScopes]), [old]);
+});
+
 test("reads every cache page and retains the current cache for an open pull request", async () => {
   const calls = [];
   const firstPage = cache({ id: 1, ref: "refs/pull/7/merge", key: "ccache-build-Linux-aabbccdd" });

@@ -93,7 +93,8 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 # churn across worktrees.
 RUSTC_WRAPPER = "{{ exec(command='command -v sccache || true') | trim }}"
 CARGO_INCREMENTAL = "{{ exec(command='test -n \"$CI\" || command -v sccache >/dev/null 2>&1 && echo 0 || echo 1') | trim }}"
-SCCACHE_CACHE_SIZE = "35G"
+# Read the process value so parent worktree defaults cannot replace the limit.
+SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='35G') }}"
 
 # cc-rs falls back to RUSTC_WRAPPER above, so without CC below every cc-built C
 # dep would go through sccache - and miss across target directories for the same

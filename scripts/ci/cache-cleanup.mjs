@@ -20,6 +20,7 @@ const cacheFamily = (key) => {
   // These Actions cache steps explicitly restore from the same prefix.
   if (
     key.startsWith("ccache-") ||
+    key.startsWith("sccache-") ||
     key.startsWith("semver-checks-") ||
     key.startsWith("identify-brotli-")
   ) {
