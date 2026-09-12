@@ -2,7 +2,7 @@
 
 This is the release *decision* and its one-time setup. For the pipeline that executes it - workflows, jobs, caching, and the publish fan-out - see [`docs/development/ci.md`](../docs/development/ci.md).
 
-Start `release.yml` manually to open or refresh the Release Please pull request after CI succeeds for the exact `main` commit. Conventional `feat`, `fix`, and breaking-change commits update that pull request and `CHANGELOG.md`. Merging it creates a **draft** GitHub Release and starts the publish fan-out. The final job publishes the draft, which creates the `vX.Y.Z` tag and then triggers the crates.io publication. The fan-out publishes:
+Start `release.yml` manually to open or refresh the Release Please pull request after CI succeeds for the exact `main` commit. Conventional `feat`, `fix`, and breaking-change commits update that pull request and `CHANGELOG.md`. Merging it creates a **draft** GitHub Release and starts the publish fan-out. The final job publishes the draft, which creates the `vX.Y.Z` tag and then triggers the crates.io publication. The release process publishes:
 
 - the Cargo workspace to crates.io;
 - 11 npm packages: `@rom-weaver/cli`, its nine `@rom-weaver/<platform>` binaries, and the unscoped `rom-weaver` alias that depends on the launcher;
@@ -118,7 +118,7 @@ The optional **Version to release as** input forces a specific version - the dis
 
 Merging the release pull request creates a **draft** GitHub Release and runs every asset-producing publisher against that draft. The `publish-release` job publishes it, which is what creates the `vX.Y.Z` tag and in turn triggers the crates.io publish. The Homebrew and Scoop pushes run after that, because the manifests they write point at release download URLs that do not resolve while the release is a draft. Follow progress under GitHub's **Actions → Release** page.
 
-> **Never publish a draft release by hand, and never re-cut a version whose release was published.** Immutable releases are enabled, so publishing is a one-way door: the release accepts no further assets *and permanently reserves its tag name*, even if the release is later deleted. v0.6.0 was lost exactly that way - it published before its assets were uploaded, every upload came back `HTTP 422`, and the version could never be re-cut. A failed fan-out leaves a draft. Follow [Retry a failed publication](#retry-a-failed-publication) to resume the original run.
+> **Never publish a draft release by hand, and never re-cut a version whose release was published.** Immutable releases are enabled, so publication cannot be undone: the release accepts no further assets *and permanently reserves its tag name*, even if the release is later deleted. v0.6.0 was lost exactly that way - it published before its assets were uploaded, every upload came back `HTTP 422`, and the version could never be re-cut. A failed fan-out leaves a draft. Follow [Retry a failed publication](#retry-a-failed-publication) to resume the original run.
 
 ### How a prerelease differs
 
@@ -126,9 +126,9 @@ Every publisher keys off one thing: whether the version contains a hyphen (`0.6.
 
 | Target | Release `0.6.0` | Prerelease `0.6.0-alpha.1` |
 | --- | --- | --- |
-| Webapp | `rom-weaver.com` | `beta.rom-weaver.com` |
+| Webapp | production, beta, and nightly | beta and nightly |
 | npm dist-tag | `latest` | `beta` |
-| Docker tags | `0.6.0`, `0.6`, `latest` | `0.6.0-alpha.1`, `beta` |
+| Docker tags | `0.6.0`, `0.6`, `latest`, `beta`, `nightly` | `0.6.0-alpha.1`, `beta`, `nightly` |
 | crates.io | published | published |
 
 Docker also publishes a major series tag (`1`, `2`, ...), but **only from `1.0.0` on**. Pre-1.0 it is suppressed: a `0` tag would float across `0.5` -> `0.6`, and semver treats a pre-1.0 minor bump as breaking, so the tag would promise compatibility it cannot keep. It starts publishing itself once the first `1.0.0` ships. Before v1.0, Release Please treats breaking changes as minor bumps because `bump-minor-pre-major` is enabled.

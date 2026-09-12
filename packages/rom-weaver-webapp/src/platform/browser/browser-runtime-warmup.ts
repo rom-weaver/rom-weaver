@@ -2,9 +2,7 @@ import { createLogger } from "../../lib/logging.ts";
 import { markWarmupDone, markWarmupEnd, markWarmupStart } from "../../lib/perf/op-perf-marks.ts";
 import { recycleWarmRomWeaverRunner } from "../../workers/rom-weaver/runner-control.ts";
 
-// Checksums the real first ROM-load op computes inline during ingest. The warmup requests them too so
-// the inline StreamingChecksum decode path is warm; measured on a prod build, that path is ~25ms of the
-// first op and is NOT warmed by an extract without checksums.
+// Include the ingest checksums so warmup exercises hashing as well as archive decoding.
 const WARMUP_CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1"];
 
 // Tiny embedded ZIP for a silent page-load ingest. Unlike a CHD fixture, it
@@ -82,11 +80,8 @@ const warmupBrowserRuntimeExtraction = async (): Promise<void> => {
   markWarmupEnd();
 };
 
-// Defers the warmup extraction to browser idle time so it never competes with initial render or the
-// runner init it follows. Falls back to a macrotask when requestIdleCallback is unavailable. Note: the
-// warmup is chained off preload completion (wasm compile + runner warm), by which point the main thread
-// is already idle, so the timeout below is a backstop, not the binding constraint - a measured sweep of
-// 50/250/2000ms showed no effect on when warmup starts.
+// Schedule warmup at idle after preload, with a timeout so it can still run on a busy page.
+// Browsers without requestIdleCallback use a timer.
 const scheduleBrowserRuntimeWarmupExtraction = (): void => {
   if (warmupExtractionStarted) return;
   const run = () => {

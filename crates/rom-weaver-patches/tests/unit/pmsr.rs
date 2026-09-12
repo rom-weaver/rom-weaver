@@ -211,7 +211,7 @@ fn apply_uses_parallel_threads_for_non_overlapping_records() {
         .expect("apply");
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
-    // apply streams by default; non-overlapping records parallelize (matches the name)
+    // The test context forces streaming apply; non-overlapping records parallelize (matches the name)
     assert!(execution.used_parallelism);
     assert!(execution.effective_threads > 1);
     assert!(!execution.thread_fallback);

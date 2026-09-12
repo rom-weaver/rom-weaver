@@ -1,19 +1,7 @@
 name: Dependabot auto-merge
 
-# Turn Dependabot's weekly, grouped dependency PRs into no-touch merges: enable
-# GitHub's native auto-merge so each one lands on its own the moment every
-# required check passes (Rust, WASM, webapp, and the `PR Title Lint` and
-# `CLA Signed` statuses from `pull-request.yml`). Nothing merges before CI
-# is green - auto-merge only arms the merge.
-#
-# Only patch and minor bumps auto-merge. Majors (e.g. bincode 1.x -> 2.x) can
-# carry breaking API or byte-parity changes, so they stay open for a human to
-# review and migrate deliberately - the same philosophy as the exact-pinning in
-# dependabot.yml.
-#
-# This runs on `synchronize` too, so a `@dependabot rebase` on an already-open
-# PR re-arms auto-merge - which is how the currently-open backlog gets picked up
-# once this lands.
+# Enable auto-merge for Dependabot patch and minor updates after required checks pass.
+# Major updates need a separate compatibility review.
 on:
   pull_request:
     types: [opened, reopened, synchronize]

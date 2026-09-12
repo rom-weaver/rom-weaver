@@ -39,7 +39,7 @@ An output extension matching the selected ROM leaf writes a plain ROM, so `trans
 
 For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Bundle applies keep their bundle-provided output name; a bundle without one still requires `--output`.
 
-Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops before anything is written - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
+Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops the run - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
 
 ## Pipe the patched ROM to another program
 
@@ -99,7 +99,7 @@ rom-weaver patch apply \
 
 ## Apply a patch made for a headerless ROM
 
-Headers are worked out automatically: `--patch-header auto` matches each patch to the headered or headerless form of your ROM, and `--output-header auto` keeps the header only when emulators need it. Override them when a patch author tells you to, and repair internal checksums the patch left stale:
+`--patch-header auto` uses available checksums and first-patch inference to choose between headered and headerless input. When the evidence is inconclusive, it keeps the existing form. `--output-header auto` keeps required format headers and recognized NSRT dump metadata. Override the defaults when the patch author specifies a layout. Add `--repair-checksum` only when the output needs internal checksum repair:
 
 ```bash
 rom-weaver patch apply \
@@ -113,15 +113,17 @@ rom-weaver patch apply \
 
 ## Apply an N64 patch regardless of byte order
 
-N64 ROMs circulate in three interleavings, and a patch only applies to the one it was made against. The default `--n64-byte-order auto` matches your ROM to the patch's source CRC32 and writes the output back in the order the input arrived in, so usually there is nothing to do. An IPS patch carries no checksum; auto then reads the shape of its changes, and says so in the report when that settles it. Force a specific order when auto reports nothing and the result looks wrong:
+N64 ROMs circulate in three interleavings, and a patch only applies to the one it was made against. The default `--n64-byte-order auto` matches your ROM to the patch's source CRC32 and writes the output back in the order the input arrived in, so usually there is nothing to do. An IPS patch carries no checksum; auto then reads the shape of its changes, and says so in the report when that settles it. Set a specific patch-input order only when the author documents it:
 
 ```bash
 rom-weaver patch apply \
   --input game.n64 \
   --patch fix.bps \
-  --output fixed.z64 \
+  --output fixed.n64 \
   --n64-byte-order big-endian
 ```
+
+The output keeps the input's byte order. The `.n64` extension above reflects that; `--n64-byte-order big-endian` selects the patch input, not the output format.
 
 <a id="check-patches-without-writing-anything"></a>
 

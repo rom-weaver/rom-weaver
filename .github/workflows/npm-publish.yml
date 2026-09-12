@@ -324,22 +324,16 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ matrix.bootstrap && secrets.NPM_BOOTSTRAP_TOKEN || '' }}
         run: |
-          # ponytail: Set bootstrap: true only for an unpublished package, then
-          # remove it after configuring that package's trusted publisher.
+          # Set bootstrap: true only for a new package's first publication.
+          # Remove it after configuring the package's trusted publisher.
           if [[ "${{ matrix.bootstrap }}" == true && -z "$NODE_AUTH_TOKEN" ]]; then
             echo "::error::NPM_BOOTSTRAP_TOKEN is required for first publication"
             exit 1
           fi
           node scripts/ci/npm-publish-package.mjs packages/rom-weaver-cli-platforms/${{ matrix.package }}
 
-      # After the npm publish, not before: npm is the irreversible half, so a
-      # release-asset failure must not be able to skip it.
-      #
-      # The asset is a tar.gz holding the single executable, not the loose
-      # binary it used to be: cargo-binstall needs an archive layout to resolve,
-      # and the compression roughly halves every installer's download. The
-      # archive is what gets attested, so consumers verify the exact bytes they
-      # fetched.
+      # Registry publication precedes release-asset upload so an upload failure can be retried separately.
+      # cargo-binstall and the installers consume the attested tar.gz archive.
       - name: Upload platform archive to GitHub release
         id: asset
         shell: bash

@@ -1,11 +1,6 @@
 /**
- * On-device format DIAGNOSTIC harness - not part of the core wasm runtime.
- *
- * Stands up fixtures and runs every compress/extract/patch round-trip through
- * the browser OPFS/wasm stack, asserting pass/fail patterns. Reachable only
- * from the standalone `mobile-safari-matrix.html` page (via
- * `src/webapp/mobile-safari-matrix.ts`) to verify formats on real iOS Safari /
- * WebKit. The app itself never imports this module.
+ * On-device format checks reached through mobile-safari-matrix.html.
+ * The harness verifies compression and patch round trips through the browser OPFS/WASM runtime.
  */
 import { resolveAppleMobileSharedMemoryMaximumPages } from "../lib/runtime/op-memory-estimate.ts";
 import {

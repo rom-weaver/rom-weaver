@@ -430,11 +430,8 @@ const getSelectedPatchInputs = (
     };
   });
 
-// An explicit user choice wins. Otherwise every position sends `auto`, matching
-// the CLI default: when staging proved a headerless basis it has already sent
-// `removeHeader`, and when it proved nothing the engine's own inference is
-// strictly better informed than this side is. Defaulting the first patch to
-// `keep` here used to discard that inference before it ran.
+// Explicit header choices win; all other positions send Auto so the engine can infer the patch basis.
+// A proven headerless basis reaches the command through removeHeader.
 const getPatchHeaderModes = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
   patchIndices.map((patchIndex) => {
     const header = patchOptions?.[patchIndex]?.header;
@@ -442,10 +439,7 @@ const getPatchHeaderModes = (patchIndices: number[], patchOptions: PatchInput["p
     return "auto" as const;
   });
 
-// Same rule as the header above, for the same reason. `resolvedN64ByteOrder` is
-// only set when a checksum proved the order; an unproven one used to arrive here
-// as `keep` for the first patch, which discarded the engine's inference for
-// exactly the checksumless patches that need it.
+// Only a checksum-proven order is resolved during staging; other positions preserve engine Auto inference.
 const getPatchN64ByteOrders = (patchIndices: number[], patchOptions: PatchInput["patchOptions"]) =>
   patchIndices.map((patchIndex) => {
     const patchOption = patchOptions?.[patchIndex];

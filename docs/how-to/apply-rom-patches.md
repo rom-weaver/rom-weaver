@@ -88,7 +88,7 @@ Drag a numbered handle to move a patch. With a keyboard, focus the handle and us
 
 The On or Off switch temporarily skips a patch. This is useful for optional add-ons, but only use combinations the author says are compatible. Turning off a required base patch can make everything below it fail.
 
-After changing an input, the order, or a switch, read each patch's **Checks** summary again. **Input checks** describe what the patch reads. **Output checks** describe what that patch creates.
+After changing an input, the order, or a switch, read each patch's **Checks** summary again. **Input checks** describe the state the patch was authored for. An embedded **Output** check describes that patch's standalone result. It does not verify a combined result when earlier patches changed the same source.
 
 ## Choose the output and apply
 

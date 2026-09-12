@@ -182,8 +182,7 @@ The download comes from this version's GitHub release and lands in the per-user
 data directory; `identify database install-group` adds the optional packs."
         )
     )]
-    // Native-only: the browser build has no filesystem to install into, so the
-    // variant stays out of the generated TypeScript command union.
+    // Database installation uses native data directories; the browser stages packs separately.
     #[cfg_attr(feature = "typescript-types", ts(skip))]
     Setup(SetupCommand),
 
@@ -765,8 +764,7 @@ mod wasm_host_prompt {
         fn rom_weaver_host_select(request_ptr: *const u8, request_len: usize) -> i32;
         /// Multi-select counterpart. The host fills `out_indices` (a caller-owned `u32` buffer of
         /// `out_capacity` slots) with the chosen 0-based indices and returns the count written, or a
-        /// negative value to cancel. Capacity is bounded by the candidate count so the host can
-        /// never overflow the buffer.
+        /// negative value to cancel. The host MUST write no more than `out_capacity` indices.
         fn rom_weaver_host_select_many(
             request_ptr: *const u8,
             request_len: usize,
@@ -1035,7 +1033,7 @@ fn trim_non_empty(value: String) -> Option<String> {
 
 /// Progress sink that serializes each event to a stdout JSON line. Used by the wasm entrypoint
 /// (whose worker parses the JSON stream) and by the native CLI's `--json` mode. Human-readable
-/// rendering lives in the front-end crates, not here.
+/// rendering lives in the native `render` module and the webapp.
 pub struct JsonProgressSink;
 
 impl ProgressSink for JsonProgressSink {
@@ -1250,8 +1248,7 @@ impl TrimInputKind {
 
     const fn default_padding_byte(self) -> u8 {
         match self {
-            // GBA and 3DS carts pad unused trailing space with 0xFF; trimming scans for that fill
-            // and revert restores it so round-tripped ROMs match the original dump.
+            // Without a footer, restore GBA and 3DS padding using the conventional 0xFF fill.
             Self::ThreeDs | Self::Gba => 0xFF,
             Self::NdsFamily | Self::Xiso | Self::RvzScrub => 0x00,
         }

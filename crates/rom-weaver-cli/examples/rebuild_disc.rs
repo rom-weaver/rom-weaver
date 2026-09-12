@@ -1,5 +1,5 @@
 //! Dev tool: apply a `.dcp` and rebuild the data track, then re-read the
-//! rebuilt track to verify patched bytes, verbatim files, and the boot area.
+//! rebuilt track to print sample file fingerprints and compare the boot area.
 //!
 //! Usage: `cargo run --release -p rom-weaver-cli --example rebuild_disc -- <patch.dcp> <track3.bin> [start_lba] [out_track.bin]`
 
@@ -10,9 +10,7 @@ use rom_weaver_app::dcp::rebuild_track_to_writer;
 use rom_weaver_app::gdrom::{BOOT_AREA_SIZE, GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
 
 fn md5_hex(bytes: &[u8]) -> String {
-    // Tiny dependency-free check: reuse the source disc as ground truth via
-    // sizes + a simple FNV digest is enough here, but we want a real compare,
-    // so just return length+first/last bytes fingerprint.
+    // This display fingerprint uses only length and edge bytes; it is not a checksum.
     format!(
         "{}:{:02x}{:02x}..{:02x}{:02x}",
         bytes.len(),
@@ -67,17 +65,17 @@ fn main() {
         out_fs.files().len()
     );
 
-    // Boot area preserved (DCP has no bootsector → must match original).
+    // A patch that replaces IP.BIN can change the boot area.
     let new_boot = out_fs.read_boot_area().expect("read rebuilt boot");
     assert_eq!(new_boot.len(), BOOT_AREA_SIZE);
     println!("boot area preserved: {}", new_boot == original_boot);
 
-    // Patched file survived authoring + mode1 + reread.
+    // Print the sample's patched file when present.
     if let Some(makuma) = out_fs.file("MAKUMA.AFS").cloned() {
         let bytes = out_fs.read_file(&makuma).expect("read makuma");
         println!("MAKUMA.AFS fingerprint: {}", md5_hex(&bytes));
     }
-    // A verbatim new file is present.
+
     println!(
         "R10CAP.BIN present: {}",
         out_fs.file("R10CAP.BIN").is_some()

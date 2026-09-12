@@ -247,9 +247,8 @@ filename_size?: number | null,
  */
 sidecar_order?: number | null,
 /**
- * `true` when a registered patch handler recognized the leaf's format and parsed it (valid patch
- * magic). The host trusts this instead of re-extracting + re-reading the magic. `false` for an
- * unsupported extension or a recognized-but-unparseable file (bad/truncated magic).
+ * `true` when a registered handler accepted the leaf's metadata, so the host
+ * can use it without extracting it again. This is not full action-record validation.
  */
 is_valid_patch: boolean, };
 
@@ -573,7 +572,7 @@ export type BundleRom = {
  */
 name?: string,
 /**
- * Download URL. Exactly one of `url` / `path` must be set.
+ * Optional download URL. At most one of `url` and `path` MAY be set.
  */
 url?: string,
 /**
@@ -620,7 +619,7 @@ optional?: boolean,
  */
 label?: string,
 /**
- * Download URL. Exactly one of `url` / `path` must be set.
+ * Download URL. Exactly one of `url` and `path` MUST be set.
  */
 url?: string,
 /**
@@ -639,9 +638,8 @@ input?: BundlePatchInput,
  */
 target?: BundlePatchInput,
 /**
- * Expected checksums/size of the ROM state this patch applies to, ONLY
- * when it differs from `rom.checks` (a mid-chain step). Absent means the
- * patch relies on the rom's own checks.
+ * Expected checksums and size of the authored input state for this step.
+ * These checks supplement the bundle's ROM checks and embedded patch checks.
  */
 inputChecks?: BundleChecks,
 /**
@@ -650,8 +648,7 @@ inputChecks?: BundleChecks,
  */
 inputChecksRef?: string,
 /**
- * Expected checksums/size immediately after this patch is applied, ONLY
- * when it differs from the bundle's final `output.checks`.
+ * Expected checksums and size after the authored chain prefix ends at this step.
  */
 outputChecks?: BundleChecks,
 /**
@@ -664,14 +661,10 @@ outputChecksRef?: string,
  */
 header?: PatchApplyHeaderMode,
 /**
- * What this patch's input checks were authored against: `base` (the
- * bundle's rom - verified once up front; its embedded checks are skipped
- * when the patch runs mid-chain) or `previous` (the previous selected
- * patch's output - the default). Omitted means previous/inferred.
- * `basis: "base"` with omitted `inputChecks` is the canonical compact
- * form - the entry relies on `rom.checks`; declaring it WITH
- * `inputChecks` pins a specific variant. The escape hatch for
- * checksumless formats (IPS) whose basis cannot be inferred.
+ * Per-step override of the shared `patchBasis` setting: `base` names the
+ * original ROM; `previous` names the preceding selected step's output.
+ * Base checks run before the chain; mid-chain base steps retain patch-file
+ * integrity checks but skip checks against the cumulative input and output.
  */
 basis?: PatchInputBasis, };
 

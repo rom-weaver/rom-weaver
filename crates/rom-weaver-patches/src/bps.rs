@@ -79,10 +79,8 @@ impl PatchHandler for BpsPatchHandler {
         patch_path: &Path,
         _context: &OperationContext,
     ) -> Result<OperationReport> {
-        // The ingest "describe" path only needs the embedded requirements (sizes + checksums), which
-        // BPS stores in its fixed header + 12-byte footer - so skip decoding the (often million-plus)
-        // action stream. The patch-checksum footer is still verified, so a structurally-broken patch
-        // is rejected exactly as a full `parse` would reject it.
+        // Ingest needs the embedded sizes and checksums, so this path avoids
+        // decoding actions; their structure is checked by parse or apply.
         let metadata = parse_bps_metadata(patch_path)?;
         Ok(byuu_metadata_report(
             self.descriptor,
@@ -372,10 +370,9 @@ struct BpsMetadata {
     patch_checksum: u32,
 }
 
-/// Read a BPS patch's embedded metadata (header sizes + footer checksums) WITHOUT decoding the action
-/// stream. The patch-checksum footer is verified (a single sequential read), so a corrupt/truncated
-/// patch is rejected with the same verdict a full [`parse_bps_file`] would reach - only the per-action
-/// decode + buffering is skipped.
+/// Read the header sizes and footer checksums, then verify the patch CRC32.
+/// Metadata and action structure remain unchecked; use [`parse_bps_file`] for
+/// full structural validation.
 fn parse_bps_metadata(path: &Path) -> Result<BpsMetadata> {
     let file_len = fs::metadata(path)?.len();
     let minimum_len = (BPS_MAGIC.len() + BPS_FOOTER_SIZE) as u64;

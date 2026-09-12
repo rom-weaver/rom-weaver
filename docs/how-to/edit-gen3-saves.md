@@ -1,6 +1,6 @@
 # Edit a Generation III save
 
-Use the Save Editor to inspect and change an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save. The first version changes the trainer name, gender, money, and badges. It does not change inventory or Pokémon data.
+Use the Save Editor to inspect and change an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save. The editor changes the trainer name, gender, money, and badges. It does not change inventory or Pokémon data.
 
 The [Save Editor development guide](../development/save-editor.md) describes the handler design and contributor flow.
 
@@ -20,13 +20,13 @@ The [Save Editor development guide](../development/save-editor.md) describes the
 
 ## Check the input file
 
-Use a game save file, not an emulator save state. A game save is the SRAM file that the game writes to its cartridge save memory. The supported Generation III layout is 128 KiB.
+Use a game save file, not an emulator save state. A game save contains the persistent data that the game writes to cartridge save memory. These Generation III games use 128 KiB Flash saves, not SRAM.
 
 An emulator save state stores CPU, memory, and emulator state. It is not a game save and the Save Editor rejects it. Export the game's SRAM or battery save from the emulator instead.
 
-GameShark SP exports also work. The Save Editor reads a SharkPortSave file (`.sps`, `.xps`) and a GameShark SP snapshot (`.gsv`). It edits the game save inside the wrapper. The output keeps the wrapper with its title and notes and recomputes its checksum, so the edited file loads in the same tools as the original. [Save containers](../reference/save-editor.md#save-containers) lists every wrapper the editor removes.
+GameShark SP exports also work. The Save Editor reads a SharkPortSave file (`.sps`, `.xps`) and a GameShark SP snapshot (`.gsv`). It edits the game save inside the wrapper. The output keeps the wrapper metadata and recomputes the SharkPortSave checksum. The `.gsv` wrapper has no checksum. [Save containers](../reference/save-editor.md#save-containers) lists every wrapper the editor removes.
 
-The first version supports only these English retail layouts:
+For Generation III, the editor supports these English retail layouts:
 
 - Pokémon Ruby;
 - Pokémon Sapphire;
@@ -50,47 +50,7 @@ The browser keeps the input file unchanged. It downloads an edited copy after th
 
 ## Use the CLI
 
-Identify a save without changing it:
-
-```bash
-rom-weaver save identify game.sav --game pokemon-emerald
-```
-
-Show the active slot, section checks, and supported fields:
-
-```bash
-rom-weaver save inspect game.sav --game pokemon-emerald
-```
-
-Read one field:
-
-```bash
-rom-weaver save get game.sav trainer.money --game pokemon-emerald
-```
-
-Preview a change without writing a file:
-
-```bash
-rom-weaver save set game.sav trainer.money=999999 \
-  --game pokemon-emerald --dry-run
-```
-
-Write an edited copy to a new path:
-
-```bash
-rom-weaver save set game.sav trainer.money=999999 \
-  --game pokemon-emerald --output edited.sav
-```
-
-Print the generic field schema:
-
-```bash
-rom-weaver save export-schema game.sav --game pokemon-emerald
-```
-
-Use `pokemon-ruby`, `pokemon-sapphire`, `pokemon-emerald`, `pokemon-firered`, or `pokemon-leafgreen` as the game ID. Ruby and Sapphire share a save layout. FireRed and LeafGreen share a save layout. The first version does not infer either pair from a ROM identity.
-
-Pass `--force` only when the output path is an explicit path that you want to replace. The input path is never an output path by default.
+[Edit a game save from the CLI](cli-save.md) covers identification, field inspection, previews, and writing an edited copy.
 
 ## Read the recognition result
 
@@ -98,10 +58,11 @@ The editor reports one of these outcomes:
 
 - **Recognized:** the selected game matches the save layout and all 14 sections in the active slot pass their checksums.
 - **Recognized with a game choice:** the bytes fit a paired layout, but the editor needs your choice of Ruby or Sapphire, or FireRed or LeafGreen.
-- **Partially recoverable:** one slot passes and the other slot is empty or damaged. The editor shows the valid slot but does not allow edits.
+- **Valid with a warning:** one slot passes and the other is empty. The editor permits edits and preserves the empty slot.
+- **Partially recoverable:** one slot passes and the other is damaged. The editor shows the valid slot but does not allow edits.
 - **Corrupt or unsupported:** no complete valid slot exists, or the file does not match a supported English retail layout.
 
-Emerald can identify itself from its save checksum layout. Ruby/Sapphire and FireRed/LeafGreen need a manual game choice when the editor has no ROM identity.
+Emerald can identify itself from its save checksum layout. Ruby/Sapphire and FireRed/LeafGreen need a manual game choice. These handlers do not use a ROM SHA-1 to distinguish the paired games.
 
 ## Understand the safety checks
 
@@ -115,7 +76,7 @@ The editor does not repair a damaged section. Keep the original and restore it f
 
 ## Supported and unsupported data
 
-The first editable fields are:
+The editable fields are:
 
 - trainer name, in the game's original character encoding;
 - trainer gender;
@@ -128,7 +89,7 @@ These fields are read-only:
 - play time;
 - the Emerald or FireRed/LeafGreen security key.
 
-The first version does not edit inventory, item quantities, item IDs, party Pokémon, boxed Pokémon, or other save sections. It also does not edit emulator save states, regional layouts, or partially corrupt saves.
+The editor does not edit inventory, item quantities, item IDs, party Pokémon, boxed Pokémon, or other save sections. It also does not edit emulator save states, regional layouts, or partially corrupt saves.
 
 ## Keep the original file
 

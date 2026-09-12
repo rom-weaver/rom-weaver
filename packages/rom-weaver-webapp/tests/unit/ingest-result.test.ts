@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseIngestResult } from "../../src/lib/runtime/ingest-result.ts";
 
 /**
- * `parseIngestResult` coerces the `details.ingest` wire payload (snake_case, the verbatim
- * `IngestResult` serialization) into the camelCase, `number`-based shape the apply workflow consumes.
- * These cases lock the coercion so the generated-type binding stays a pure type-safety tightening.
+ * Check conversion from the snake_case IngestResult wire payload to the camelCase numeric workflow model.
  */
 
 describe("parseIngestResult", () => {

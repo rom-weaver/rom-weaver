@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import { createBrowserRuntimeVfsIo } from "../../src/platform/browser/browser-runtime-vfs.ts";
 import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
 
-// Overlapping probe/list/extract passes for one Blob must share one staged name.
-// Duplicate staging once produced phantom `name-2.ext` codec outputs.
+// Overlapping probe, list, and extract passes for one Blob must share one registered virtual path.
 const stubVfs = /** @type {never} */ ({
   hostKind: "browser-opfs",
   remove: async () => undefined,
@@ -32,7 +31,7 @@ test("concurrent stages of the same source coalesce onto one bare-named copy (no
   const [first, second] = await Promise.all([io.stageSource(stageRequest(file)), io.stageSource(stageRequest(file))]);
 
   try {
-    // Both passes share the single staged copy at the bare name; neither climbs to game-2.bin.
+    // Both passes retain the same registered path without claiming a suffixed name.
     expect(first.filePath).toBe("/work/game.bin");
     expect(second.filePath).toBe("/work/game.bin");
     // Coalesced, not double-staged: exactly one virtual file is registered for the source.
@@ -72,9 +71,7 @@ test("distinct Files with identical metadata keep their own staged bytes", async
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
 
-// Guards 7d3e95f8: several passes waking from the SAME failed in-flight stage must coalesce onto the one
-// retry the first waker starts, not each spawn a duplicate stage (game-2/-3/-4.bin). Reverting the
-// coalesce `while` loop to a single check silently reintroduces the `-2` phantom under 3+ waiters.
+// Waiters on a failed staging attempt MUST coalesce onto one retry rather than register duplicate paths.
 test("a failed first stage coalesces its waiters onto one retry (no -2)", async () => {
   const io = createBrowserRuntimeVfsIo({ mountPoint: "/work", vfs: stubVfs });
   let getFileCalls = 0;
@@ -113,9 +110,7 @@ test("a failed first stage coalesces its waiters onto one retry (no -2)", async 
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
 
-// Guards finding 1(a): a release that lands while a stage is still in flight (not yet cached) must not
-// clean the fresh copy out from under the live consumer that requested it. The staged path stays
-// registered until that consumer releases its own ref.
+// A release during an in-flight stage MUST preserve the registered path until its live consumer releases it.
 test("a release during an in-flight stage defers to the staging consumer (path stays registered)", async () => {
   const io = createBrowserRuntimeVfsIo({ mountPoint: "/work", vfs: stubVfs });
   let openGate = () => undefined;
@@ -160,8 +155,7 @@ test("a release with a live cached reader defers cleanup until the reader releas
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
 
-// Guards finding 1(b): a stale releaseSources from an earlier drop must not force-clean an idle cached
-// copy that a concurrent cross-drop re-stage just picked up as a live reader.
+// A stale session release MUST preserve a cached registration that a new consumer has retained.
 test("releaseSources defers to a concurrent cross-drop re-stage (no clobber under a live reader)", async () => {
   const io = createBrowserRuntimeVfsIo({ mountPoint: "/work", vfs: stubVfs });
   const file = gameFile();

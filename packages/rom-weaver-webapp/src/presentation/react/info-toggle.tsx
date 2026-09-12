@@ -86,7 +86,7 @@ function InfoToggle({
       className={cx("info-pop", panelClassName)}
       id={panelId}
       ref={panelRef}
-      // Portaled out of the trigger: render fixed, above the modal stacking context (z-60/70).
+      // Portal into the app root so fixed positioning and the popover z-index apply outside the trigger.
       style={portalPanel ? { display: "block", position: "fixed", zIndex: 80, ...panelStyle } : { display: "block" }}
     >
       {children}

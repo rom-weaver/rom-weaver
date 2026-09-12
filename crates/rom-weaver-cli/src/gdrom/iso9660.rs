@@ -1,6 +1,6 @@
 //! Minimal ISO9660 (ECMA-119) primary-descriptor parsing.
 //!
-//! Reads the Primary Volume Descriptor and 8.3 directory tree used by `.dcp`;
+//! Reads the Primary Volume Descriptor and primary directory tree used by `.dcp`;
 //! Joliet and path tables are out of scope. Both-endian fields use their
 //! little-endian copy. GD-ROM extent LBAs remain absolute for callers to unbias.
 

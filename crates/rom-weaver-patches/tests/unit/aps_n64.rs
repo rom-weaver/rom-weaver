@@ -129,7 +129,7 @@ fn apply_supports_simple_and_rle_records() {
         )
         .expect("apply");
     let execution = report.thread_execution.expect("thread execution");
-    // apply streams by default; this multi-record patch parallelizes
+    // The test context forces streaming apply; this multi-record patch parallelizes
     assert!(execution.used_parallelism);
     assert!(execution.effective_threads > 1);
 
@@ -242,7 +242,7 @@ fn create_and_apply_round_trip_for_n64_source() {
         )
         .expect("apply");
     let execution = report.thread_execution.expect("thread execution");
-    // apply streams by default; this multi-record patch parallelizes
+    // The test context forces streaming apply; this multi-record patch parallelizes
     assert!(execution.used_parallelism);
     assert!(execution.effective_threads > 1);
 

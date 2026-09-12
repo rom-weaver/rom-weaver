@@ -75,10 +75,7 @@ const { api, paginate } = createGitHubApi({
   name: "cla-gate",
 });
 
-// `*` and `?` are wildcards; every other character is literal. Escaping the
-// rest matters most for brackets: every GitHub App login ends in the four
-// characters `[bot]`, and treating those as a character class would match a
-// trailing b, o or t instead - the bug the shell version of this shipped with.
+// Only * and ? are wildcards; brackets in bot logins MUST stay literal.
 function globToRegExp(pattern) {
   const escaped = pattern.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^${escaped.replaceAll("\\*", ".*").replaceAll("\\?", ".")}$`);
@@ -107,8 +104,7 @@ async function readSignatures() {
     { allow404: true },
   );
   if (!file) return { sha: null, signatures: [] };
-  // Buffer ignores the newlines the contents API wraps its base64 with, which
-  // jq's @base64d did not - the second bug the shell version shipped with.
+  // The contents API wraps base64 across lines; Buffer accepts those newlines.
   return {
     sha: file.sha,
     signatures: JSON.parse(Buffer.from(file.content, "base64").toString("utf8")),
@@ -149,17 +145,8 @@ const nearMiss =
   !signedByComment &&
   COMMENT_BODY.split("\n").some((line) => normalize(line.replace(/^[\s>]+/, "")).includes(wanted));
 
-// `COMMENT_AUTHOR` is `github.event.comment.user.login`, which GitHub sets from
-// the authenticated session that posted the comment - not content the commenter
-// controls. Requiring it to be one of this pull request's authors is what stops
-// anyone appending themselves to the file from an unrelated thread.
-//
-// The gate runs on an edited comment too, because the near-miss note asks for a
-// correction and editing the offending comment is the obvious way to make one.
-// That is also why the sender has to be the author: anyone with write access can
-// edit somebody else's comment, and without this a maintainer could type the
-// phrase into a contributor's comment and record a signature that contributor
-// never gave. `sender` is the editor, so signing needs the two to agree.
+// Signatures MUST come from a pull request author editing their own comment.
+// The event sender identifies the editor, who can differ from the comment author.
 const selfAuthored = !COMMENT_SENDER || COMMENT_SENDER === COMMENT_AUTHOR;
 if (
   signedByComment &&
@@ -255,10 +242,6 @@ Edit a comment or post another to retry.${
 
 console.error(`${STATUS_CONTEXT} failure on ${headSha}; unsigned: ${unsigned.join(" ")}`);
 
-// Exit 0 on an unsigned verdict, deliberately. The `CLA Signed` status is the
-// single signal for CLA compliance and the one the ruleset can require; a red
-// job on top of it says the same thing twice. Keeping the job green here means
-// a red `CLA Check` job says something the status cannot: the gate itself broke - a
-// failed API call, an unparseable signature file - rather than someone simply
-// not having signed. Every other failure path throws.
+// Unsigned contributors fail the CLA Signed status; the job fails only when the
+// gate cannot evaluate signatures, such as an API or parsing error.
 process.exit(0);

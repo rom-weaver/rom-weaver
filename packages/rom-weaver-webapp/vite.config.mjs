@@ -335,9 +335,8 @@ const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
     }
     const generatedSampleAsset = getGeneratedSampleAsset(requestPath);
     const sourcePath = rootStaticAssetSources[requestPath] ?? generatedLicenseAssetSources[requestPath];
-    // The identify packs exist only as `.br` sidecars (the deployed Pages assets
-    // function decodes them); dev and preview have no function, so decode here
-    // to answer the same `/assets/identify-*.pack` URLs the app fetches.
+    // Pages serves the .br sidecars with Content-Encoding: br for browser decoding.
+    // Dev decodes them here to answer the same logical identify-asset URLs.
     const sidecarSourcePath = sourcePath ? undefined : rootStaticAssetSources[`${requestPath}.br`];
     if (!(generatedSampleAsset || sourcePath || sidecarSourcePath)) {
       next();
@@ -820,10 +819,8 @@ const minifyDocumentInlineScripts = () => {
   };
 };
 
-// Cloudflare Pages serves dist/_headers on every response, so deployed pages are cross-origin
-// isolated from the first network load instead of round-tripping through the service worker's
-// COEP-injection reload. Hosts without header control still use the service-worker fallback.
-// Emitted at the dist root, which keeps it out of the SW precache globs.
+// Emit isolation headers for Pages' static responses; Functions set their own.
+// Hosts without header control use the service worker's isolation fallback.
 const writeCloudflareHeadersAsset = (channel) => {
   let outDir = "dist";
   return {
@@ -894,11 +891,8 @@ const writePrecacheSizes =
 // savings bar and stay on the ordinary static path. Mutable root files (such
 // as index.html, the service worker, and changelog.json) stay off this path.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
-// _routes.json rejects more than 100 combined include/exclude entries, so this
-// is the hard ceiling rather than an early warning. The 17 identify packs ate
-// the slack the old 90-entry warning left (90 of 100 in use as of this commit).
-// If the budget ever runs out, move the packs to a path of their own and cover
-// them with a single trailing-wildcard include instead of one entry per pack.
+// Pages limits _routes.json to 100 include/exclude entries; identify assets
+// share one wildcard route to stay within that limit.
 const PAGES_ROUTES_MAX_INCLUDES = 100;
 
 const writeBrotliSidecars = () => {
@@ -1125,9 +1119,8 @@ const prerenderWebappShell = (prerenderedShells) => ({
 // therefore carries modulepreload links for its own route chunks, so they
 // download alongside the entry instead of after it.
 //
-// The links live between markers so writeWebappStaticAssets can swap the
-// patcher set baked into index.html for the set belonging to the route page it
-// is deriving.
+// Markers let writeWebappStaticAssets replace the landing page's preload set
+// with the set for each derived route document.
 const ROUTE_PRELOAD_MARKER_START = "<!--rw-route-preload-->";
 const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 
@@ -1235,10 +1228,8 @@ const shareWorkerRuntimeChunks = () => {
   };
 };
 
-// True when every import path that reaches this module starts at a worker entry.
-// Grouping by path instead would sweep up the wasm modules the document entry
-// also uses (the OPFS proxy client, the command builders), which would drag the
-// whole worker runtime onto the first-paint critical path.
+// Classify worker reachability and whether document code can also reach a module.
+// Directory names alone cannot distinguish shared helpers from worker-only code.
 const classifyWorkerModule = (moduleId, ctx) => {
   const cached = workerModuleKinds.get(moduleId);
   if (cached) return cached;
@@ -1286,9 +1277,10 @@ const isWorkerReachableModule = (moduleId, ctx) => {
  * pulls the whole document chunk - React and all - into every worker realm. */
 const nameWorkerSharedGroup = (moduleId, ctx) => (isWorkerReachableModule(moduleId, ctx) ? "worker-shared" : null);
 
-/** Captures the worker-only runtime into one `wasm-runtime` chunk; everything else falls through
- * to the `shared` group below it. `includeDependenciesRecursively` has to stay off, or the group
- * also swallows the app-facing wasm modules its members depend on. */
+/**
+ * Group worker-only modules before the worker-shared and general shared groups.
+ * includeDependenciesRecursively MUST stay off to keep app-facing dependencies separate.
+ */
 const nameWorkerRuntimeGroup = (moduleId, ctx) => (isWorkerOnlyModule(moduleId, ctx) ? "wasm-runtime" : null);
 
 const preloadWorkflowRouteChunks = (routePreloadLinks) => ({
@@ -1355,8 +1347,7 @@ export default defineConfig(({ command, mode }) => {
   const gitBranch = process.env.ROM_WEAVER_GIT_BRANCH ?? buildInfo.gitBranch ?? "";
   const versionIsTagged = (buildInfo.isVersionTag ?? false) && !dirtyHash;
   const versionBranch = getVersionBranch(gitBranch, versionIsTagged);
-  // CI's deploy job already resolves which origin this bundle is headed for;
-  // an unset channel means a local build or dev server, never production.
+  // An unset channel builds as production; dev and preview set their own default.
   const appChannel = resolveAppChannel(process.env.ROM_WEAVER_CHANNEL);
   const appChannelLabel = process.env.ROM_WEAVER_CHANNEL_LABEL || appChannel;
   const releaseVersion = appChannel === "prod" || appChannel === "beta" || appChannel === "nightly" ? appVersion : "";
@@ -1464,8 +1455,8 @@ export default defineConfig(({ command, mode }) => {
         },
         filename: "rom-weaver-service-worker.ts",
         injectManifest: {
-          // Logical default-pack URLs resolve to Brotli sidecars at install time.
-          // Optional groups enter a separate local cache only after an explicit install.
+          // Manifest revisions track precached shell assets; identify packs load
+          // through background warm-up or on demand, outside the precache.
           manifestTransforms: [revisionUnhashedAssets(), writePrecacheSizes()],
           // The checksum router and the title index are warm-up data like the
           // packs, so neither the raw files nor their brotli sidecars join the

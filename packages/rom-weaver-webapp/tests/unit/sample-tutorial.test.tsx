@@ -215,7 +215,7 @@ describe("sample tutorial", () => {
     // The card commits the new step when its exit animation settles, so the
     // text lands a frame later than the click.
     await waitFor(() => expect(region?.textContent).toContain("Second section"));
-    // Same node, new content - a region inserted alongside its content never announces.
+    // Update the existing live region so assistive technology can announce the changed content.
     expect(document.querySelector("[aria-live]")).toBe(region);
   });
 

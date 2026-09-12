@@ -11,15 +11,8 @@ const MOBILE_CEILING_PAGES = 16384;
 const originalMemory = globalThis.WebAssembly.Memory;
 
 /**
- * Stand in for the engine: grant any `maximum` at or below `grantedMaximum`, refuse anything larger,
- * and refuse outright once `reservationLimit` reservations have been constructed.
- *
- * Must be a real class. `vi.fn()` with an arrow implementation is not a constructor, so every
- * `new WebAssembly.Memory(...)` throws, `tryReserve` swallows it, and the probe silently sees "no
- * maximum granted" - which makes the disagreement assertions pass for the wrong reason.
- *
- * The limit counts constructions, not live objects: JS cannot force the ladder's reservation to be
- * collected, so the coexistence expectations below account for the one it consumes.
+ * This constructible double enforces a maximum size and a total construction limit.
+ * The limit counts constructions, not live objects, so the ladder's accepted reservation counts toward coexistence.
  */
 const stubEngine = ({
   grantedMaximum,
@@ -51,40 +44,41 @@ afterEach(() => {
 const runProbe = () => runBrowserSharedMemoryProbe({ onStep: () => undefined });
 
 describe("runBrowserSharedMemoryProbe", () => {
-  it("agrees with policy when an Apple mobile engine refuses the full maximum", async () => {
+  it("reports matching cap and refusal states for an Apple mobile engine", async () => {
     setUserAgent(IOS_SAFARI);
     stubEngine({ grantedMaximum: MOBILE_CEILING_PAGES });
 
     const summary = await runProbe();
     const verdict = summary.steps.at(-1);
 
-    // Steps down AND is capped: the two agree, so the probe reports no disagreement.
-    expect(verdict?.name).toContain("policy matches");
+    // The configured pre-cap agrees with this engine's refusal of the full maximum.
+    expect(verdict?.name).toContain("cap setting matches full-maximum refusal");
     expect(verdict?.status).toBe("succeeded");
   });
 
-  it("flags the disagreement when a non-Apple engine also refuses the full maximum", async () => {
+  it("reports a refused full maximum without a configured pre-cap", async () => {
     setUserAgent(ANDROID_CHROME);
     stubEngine({ grantedMaximum: MOBILE_CEILING_PAGES });
 
     const summary = await runProbe();
     const verdict = summary.steps.at(-1);
 
-    // The case the probe exists to catch: Android laddering down while receiving no cap would mean
-    // the Apple-only split no longer describes reality.
-    expect(verdict?.name).toContain("POLICY DISAGREES");
-    expect(verdict?.error).toBe("engine refuses the full maximum but receives no cap");
+    // Report the difference between full-maximum refusal and the absence of a pre-cap without judging later growth limits.
+    expect(verdict?.name).toContain("cap setting differs from full-maximum refusal");
+    expect(verdict?.error).toBe(
+      "the engine refused the full maximum and no pre-cap is configured; the runtime can fall back",
+    );
     expect(summary.failedSteps).toBeGreaterThan(0);
   });
 
-  it("reports no disagreement when a non-Apple engine grants the full maximum", async () => {
+  it("reports an accepted full maximum without a configured pre-cap", async () => {
     setUserAgent(ANDROID_CHROME);
     stubEngine({ grantedMaximum: FULL_MAXIMUM_PAGES });
 
     const summary = await runProbe();
     const verdict = summary.steps.at(-1);
 
-    expect(verdict?.name).toContain("policy matches");
+    expect(verdict?.name).toContain("cap setting matches full-maximum refusal");
     expect(verdict?.command).toContain(`granted=${FULL_MAXIMUM_PAGES}`);
     expect(verdict?.command).toContain("laddered=false");
   });
@@ -109,8 +103,7 @@ describe("runBrowserSharedMemoryProbe", () => {
     const report = (globalThis as { ROM_WEAVER_SHARED_MEMORY_PROBE?: { coexistingAtMobileCeiling: number } })
       .ROM_WEAVER_SHARED_MEMORY_PROBE;
 
-    // Without a bound this would loop until the engine gave out, which on a phone means killing the
-    // tab the probe is reporting from.
+    // Keep the number of attempted concurrent reservations bounded even when the double accepts all of them.
     expect(report?.coexistingAtMobileCeiling).toBe(8);
     expect(summary.steps.find((step) => step.name.includes("coexisting"))?.command).toContain("8/8");
   });

@@ -71,24 +71,18 @@ mise run build-wasm        # fast development build
 mise run build-wasm-prod   # optimized release build with wasm-opt and Brotli
 ```
 
-Then start the HTTPS development server:
-
-```bash
-npm run dev
-```
-
-The server prints its local URL. Choose an unused port for each worktree and export it before starting the server:
+Choose an unused port for each worktree, then start the HTTPS development server. This example uses port 5174; use another port if it is occupied:
 
 ```bash
 export PORT=5174
 npm run dev
 ```
 
-The local certificate may need a one-time browser exception. HTTPS and the server's COOP/COEP headers are required to exercise the same `SharedArrayBuffer` runtime used in production.
+Open the URL that the server prints. The local certificate may need a browser exception or trust setup. The server supplies HTTPS and the COOP/COEP headers needed for the production `SharedArrayBuffer` runtime.
 
-`npm run dev` checks the WASM artifact and rebuilds it when the Rust sources are newer. Run `mise run build-wasm` directly when changing the WASM toolchain or when you need to see the complete build output.
+`npm run dev` rebuilds WASM when the artifact is missing or its recorded source fingerprint differs from the current inputs. Run `mise run build-wasm` directly after changing the installed WASM toolchain or when you need the complete build output.
 
-By default, build artifacts are written to `packages/rom-weaver-webapp/src/wasm/`, which is gitignored. To keep a separate artifact directory:
+By default, build artifacts are written to `packages/rom-weaver-webapp/src/wasm/`. The binary and attribution outputs are gitignored; runtime source and generated TypeScript remain tracked. To keep a separate artifact directory:
 
 ```bash
 ROM_WEAVER_WASM_OUT_DIR=/path/to/artifacts mise run build-wasm

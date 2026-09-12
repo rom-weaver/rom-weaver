@@ -43,7 +43,6 @@ import {
 } from "./webapp-root-types.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 
-// Webapp controller invariants now live across `settings-state` and `webapp-controller`:
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
 // SETTINGS_VALID_CHD_CREATECD_CODECS = ['cdzs', 'cdlz', 'cdzl', 'cdfl']
 // validCodecs.indexOf(codec) === -1

@@ -163,8 +163,7 @@ describe("CreateCheatCodesPanel", () => {
     expect(onValueChange).toHaveBeenCalledWith("SXIOPO");
   });
 
-  // Regression: membership was tested against the row's whole rawCode, so a
-  // multi-code row could be added again and again and never showed Remove.
+  // Check membership per decoded code so a multi-code row cannot be added repeatedly.
   it("adds every code a multi-code row carries, then offers Remove", async () => {
     const { onValueChange, view } = renderPanel("");
     fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));
@@ -195,8 +194,7 @@ describe("CreateCheatCodesPanel", () => {
     expect(onValueChange).toHaveBeenCalledWith("SXIOPO");
   });
 
-  // Regression: the description lookup compared the row's whole rawCode, so a
-  // code from a multi-code row never picked up a name for the patch.
+  // Look up each decoded code so all members of a multi-code row inherit its description.
   it("names a code that came from a multi-code database row", async () => {
     const { onEntriesChange } = renderPanel("01060FC6");
     await waitFor(() => {

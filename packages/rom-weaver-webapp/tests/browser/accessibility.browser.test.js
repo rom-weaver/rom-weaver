@@ -39,9 +39,7 @@ import "../../src/webapp/design-system/deferred.css";
 const axe = axeModule.default ?? axeModule;
 const THEMES = ["light", "dark"];
 
-// One viewport inside each layout regime (seams in design-system/responsive.css:
-// 720/860/1100px; the rest rides fluid tokens or container queries), plus a
-// short-height case for `(max-width: 860px) and (max-height: 520px)`.
+// Cover phone, tablet, desktop, and short landscape layouts; restore the default viewport after each test.
 const VIEWPORTS = [
   { height: 740, name: "360w smallest phone", width: 360 },
   { height: 860, name: "400w phone", width: 400 },
@@ -199,16 +197,13 @@ describe("design-system accessibility", () => {
   test("light: opened checksum drawer stays a distinct recessed well", async () => {
     await renderSample("light");
 
-    // The opened drawer must keep the solid well fill it has when collapsed -
-    // the bug was the open state diluting to a near-transparent tint that read
-    // as the card behind it.
+    // An open drawer needs a solid fill that stays distinct from its containing card.
     expect(bgString(".cks.is-open")).toBe(bgString(".cks:not(.is-open)"));
 
     const openBg = parseColor(bgString(".cks.is-open"));
     expect(openBg.a).toBe(1);
 
-    // …and perceptibly separated from the card: the washed-out tint measured
-    // ~1.01:1 (≈invisible); the solid well clears a small but real margin.
+    // Require a measurable contrast margin between the drawer and the card.
     const ratio = contrastRatio(openBg, parseColor(bgString(".card")));
     expect(ratio).toBeGreaterThan(1.05);
   });
@@ -614,9 +609,7 @@ const densePatchItems = () => [
 
 const denseRom = () => ({ ...createEmptyPatcherUiState(), romInputs: [richRomRow("Final Fantasy VII (Disc 1).bin")] });
 
-// This one page subsumes the old staged, verdict, and all-enabled dense fixtures:
-// it has a staged ROM, enabled valid + invalid patches, and a disabled patch.
-// The per-patch On/Off controls also add a distinct dimmed card surface.
+// This fixture covers staged, enabled, disabled, and invalid patch cards on the same page.
 const disabledPatchApplyPage = () =>
   applyPage(denseRom(), densePatchItems(), {
     patchEnablement: { disabledIds: new Set(["p1"]), getPatchIds: () => ["p0", "p1", "p2"], onToggle: noop },
@@ -813,10 +806,10 @@ const DIALOGS = {
       open: true,
       title: "Reload and lose changes?",
     }),
-  // The changelog is its own route now, not a dialog tab.
+  // The changelog route uses the same full-page accessibility checks.
   "whats new": () => createElement(WhatsNewPage, { active: true, onReload: noop, updateReady: true }),
   log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
-  // Settings is the unified dialog's first tab now, not a Modal of its own.
+  // Check Settings within the shared dialog.
   settings: () =>
     createElement(LogDialog, {
       initialTab: "settings",
@@ -1009,17 +1002,8 @@ describe("webapp keyboard navigation", () => {
   });
 });
 
-// ── Accent dye lots ──────────────────────────────────────────────────────────
-// The accent axis re-dyes --thread / --thread-ink / --thread-text, which ~114
-// declarations across 16 design-system files consume: primary buttons, the
-// selected mode thumb, focus rings, meter fills, drawer seams, the channel
-// badge. Every accent must therefore clear contrast on every surface, in both
-// themes - a hue that only works on the default palette is a real regression.
-//
-// Accent tokens carry no layout, so contrast does not vary with width the way
-// it does across the 8-viewport matrix above; this sweep runs one phone and one
-// desktop width (the two that select different thread-bearing CSS, phone-dock
-// vs. the default rules) against every accent instead.
+// Every accent needs readable text and controls on each tested surface in both themes.
+// Phone and desktop widths cover the two sets of accent-bearing navigation styles.
 const ACCENT_VIEWPORTS = [
   VIEWPORTS[0], // 360w smallest phone -> phone-dock.css thread rules
   VIEWPORTS[6], // 1280w desktop

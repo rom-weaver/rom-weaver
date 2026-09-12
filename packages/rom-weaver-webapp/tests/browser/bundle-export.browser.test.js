@@ -199,8 +199,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // Patch entries carry no file hashes - the format has no integrity field.
   expect(patchEntry.integrity).toBeUndefined();
 
-  // The action re-renders as its Download form once the auto-download settles
-  // (a progress button carries the in-flight state in between).
+  // Wait for the completed export to restore the Download action after its progress state.
   const downloadButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");
     return button instanceof HTMLButtonElement && !button.disabled ? button : null;
@@ -230,11 +229,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   saveAs.mockRestore();
 });
 
-// The docs screenshot capture (scripts/capture-design-screenshots.mjs) opens
-// this drawer by locator to reach the archive-type field. Playwright runs its
-// locators in strict mode, so a selector matching a second drawer in the same
-// row fails the release run rather than picking one. Adding a drawer beside
-// this one is fine; leaving the capture's selector ambiguous is not.
+// The screenshot capture opens this drawer with a strict locator, so the selector MUST identify exactly one head.
 test("the bundle drawer is addressable by a single selector inside the output row", async () => {
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));

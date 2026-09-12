@@ -23,12 +23,8 @@ const RESOLVED_PREFIX = "\0";
 const VIRTUAL_ID_FILTER = /^virtual:rom-weaver-docs(?:$|-search$|-page\/)/;
 const RESOLVED_ID_FILTER = new RegExp(`^${RESOLVED_PREFIX}virtual:rom-weaver-docs(?:$|-search$|-page/)`);
 
-// Route data is interpolated into the module source generated below.
-// `JSON.stringify` alone is not a code-injection barrier: it leaves `<` and the
-// two Unicode line separators intact, so its output can still close a `<script>`
-// tag or break a string literal. Every value written into generated code goes
-// through this instead (js/bad-code-sanitization). The other escapes the rule
-// names - \b \f \n \r \t \0 - `JSON.stringify` already handles.
+// Escape HTML delimiters and Unicode line separators in generated JavaScript.
+// This also keeps the serialized values safe if a caller later embeds them in HTML.
 const UNSAFE_IN_CODE = { "<": "\\u003C", ">": "\\u003E", "\u2028": "\\u2028", "\u2029": "\\u2029" };
 
 /** @param {unknown} value */

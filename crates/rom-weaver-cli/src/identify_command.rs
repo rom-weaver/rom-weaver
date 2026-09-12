@@ -230,9 +230,6 @@ pub struct IdentifyResult {
     pub hint: Option<String>,
 }
 
-/// Parsed identify packs shared by one command invocation (ingest and patch
-/// hints). Packs are parsed once, then reused for every ROM asset and patch
-/// descriptor produced by that invocation.
 /// Read a pack named by `--database`, decompressing it when it is a Brotli
 /// pack. The packaged data ships `.pack.br`, so a path copied out of it MUST
 /// work here without a manual decompression step.
@@ -1650,7 +1647,7 @@ impl CliApp {
     }
 }
 
-/// Match accumulator shared by the V1 and V2 lookup paths of one identify run.
+/// Combine matches and evidence across the packs queried by one identify run.
 #[derive(Default)]
 struct MergedMatches {
     seen: BTreeSet<(String, String)>,

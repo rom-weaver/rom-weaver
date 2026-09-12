@@ -24,8 +24,7 @@ const createController = (storage = createStorage()) =>
     storage,
   });
 
-// Exercises the controller through the hand-rolled store that replaced zustand: the public
-// getState/subscribe/mutation surface must round-trip exactly as before.
+// Exercise settings through the public store read, subscribe, and mutation methods.
 beforeEach(() => {
   window.history.replaceState({}, "", "/");
 });

@@ -45,7 +45,7 @@ Procedures for specific tasks.
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
-- [Edit a Generation III save](how-to/edit-gen3-saves.md): inspect and safely edit an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save in the browser or CLI.
+- [Edit a Generation III save](how-to/edit-gen3-saves.md): inspect and safely edit an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save in the browser.
 
 ### From the terminal
 
@@ -56,6 +56,7 @@ Procedures for specific tasks.
 - [Bundles from the CLI](how-to/cli-bundles.md)
 - [Identify and hash files](how-to/identify-and-hash-files.md)
 - [Bake cheat codes into a ROM](how-to/bake-cheat-codes.md)
+- [Edit a game save from the CLI](how-to/cli-save.md)
 - [Trim a ROM from the CLI](how-to/cli-trim.md)
 - [Extract, convert, and compress archives](how-to/work-with-archives.md)
 - [Fix a permission error](how-to/fix-permission-errors.md)
@@ -84,7 +85,7 @@ Facts to look up. No advice, no steps.
 Background on the engine, formats, and design decisions.
 
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
-- [ROM cheats](explanation/rom-cheats.md): why ROMWeaver bakes cheats into the ROM instead of running them at emulation time.
+- [ROM cheats](explanation/rom-cheats.md): why rom-weaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
 - [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.

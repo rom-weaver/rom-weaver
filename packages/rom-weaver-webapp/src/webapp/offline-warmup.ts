@@ -1,11 +1,6 @@
 /**
- * Background offline warm-up for the service worker: downloads every
- * EmulatorJS asset and every optional identify pack group into their caches,
- * one batch per "pump" message, so the page controls pacing and a killed
- * worker loses at most the bytes still in flight - every completed file is
- * cached individually. Completion is derived from cache contents alone
- * (per-file entries plus per-unit markers), never from memory, so it survives
- * worker restarts and browser sessions.
+ * The service worker caches EmulatorJS assets and required or selected identify groups in page-paced batches.
+ * Progress comes from cached files and unit markers so completed downloads survive worker restarts.
  */
 
 import { bufferedResponse, ENCODED_SIZE_HEADER, encodedSizeOf } from "./pwa/response-encoded-size.ts";

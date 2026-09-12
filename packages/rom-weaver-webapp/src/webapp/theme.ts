@@ -2,10 +2,8 @@ import { useSyncExternalStore } from "react";
 import { createLogger } from "../lib/logging.ts";
 
 /**
- * Theme store for the redesigned UI. Persists the user's explicit choice to
- * localStorage and otherwise follows the OS `prefers-color-scheme`. The active
- * theme is reflected on `<html data-theme>` so the `:root[data-theme]` token
- * blocks in design-system/tokens.css resolve. Framework-agnostic core + a React hook.
+ * Persist an explicit theme or follow the OS preference, and reflect it on html[data-theme].
+ * The store can be used directly or through its React hook.
  */
 
 type Theme = "dark" | "light";

@@ -1,6 +1,6 @@
 # Your first apply in the terminal
 
-Run a complete patch job in the terminal with the same tiny homebrew ROMs the webapp uses, then practice creating a patch and packaging it as a shareable bundle. Nothing here needs a real ROM; every asset is downloadable and safe.
+Run a complete patch job in the terminal with the same tiny homebrew ROMs the webapp uses, then practice creating a patch and packaging it as a shareable bundle. The practice ROMs are homebrew files supplied by this project.
 
 Install first if you have not: [Install the CLI](../how-to/install-cli.md).
 
@@ -63,7 +63,7 @@ rom-weaver checksum --input rebuilt.nes --algo sha256
 
 The final SHA-256 should be `00639b0b8586e10c67d6d15217478786cebed6e2cd6495ed94b6a338c0de0afd`. That match proves the patch rebuilt Modified byte for byte.
 
-Now package that tested patch as a public-safe bundle. `--no-bundle-rom` keeps the Original out of the ZIP while recording its checksums:
+Now package that tested patch as a patch-only bundle. `--no-bundle-rom` keeps the Original out of the ZIP while recording its checksums:
 
 ```bash
 rom-weaver bundle create \
@@ -98,7 +98,7 @@ This sequence uses the same generated assets as the browser tours, so both inter
 
 ## What you learned
 
-You applied a patch chain, created and tested a patch of your own, and packaged it as a bundle - the three jobs the CLI exists for. A real release differs only in which files you point at.
+You applied a patch chain, created and checked a patch, and packaged it as a bundle. For your own release, repeat those checks with the documented Original and each supported patch combination.
 
 ## Next
 

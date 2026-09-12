@@ -19,7 +19,7 @@ A rom-weaver bundle records a patch recipe so another user can repeat it.
 
 ## The problem it solves
 
-A multi-patch release asks a lot of its users. They have to obtain the right ROM, keep the patch files apart, run them in the right order, know which ones are optional, and check a set of checksums copied out of a forum post. Every one of those is a place to get it wrong, and getting it wrong produces a file that looks fine until it does not.
+A multi-patch release needs the right ROM, the patch order, the optional choices, and the expected checksums. If that information is spread across filenames and release notes, users must reconstruct the workflow themselves. A missed step can produce an incorrect ROM even when patching finishes.
 
 A bundle moves that knowledge out of the release notes and into a file the tool can read.
 

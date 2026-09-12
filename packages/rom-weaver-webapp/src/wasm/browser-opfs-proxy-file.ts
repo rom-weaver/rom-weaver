@@ -179,12 +179,8 @@ export class BrowserProxyRandomAccessFile implements RandomAccessFileLike {
   }
 
   /**
-   * Re-arm a closed adapter so its inode can serve another `path_open`.
-   *
-   * Without this, `closeOnLastFdClose` could not be used on proxy-backed files at all: the first
-   * `fd_close` would permanently poison the adapter and the next open would fail with EBADF. With it,
-   * a per-entry output file releases its OPFS handle (and its 8 MiB of coalescing buffers) the moment
-   * the guest closes the fd, and a later re-open - checksum pass, workflow chaining - just works.
+   * Allow a later `path_open` to reuse an adapter closed by idle-pool eviction or fd cleanup.
+   * The next access opens a new proxy handle; read and write buffers are allocated as needed.
    */
   reopen(): void {
     this.closed = false;

@@ -1,8 +1,7 @@
 import { afterEach, expect, test } from "vitest";
 
-// Exercises the directory-handle cache added to opfs-path.ts: handles must stay correct across a
-// delete/recreate of a cached bucket directory, and a stale cached handle (external removal) must
-// fall back to a fresh root resolution rather than returning a detached subtree.
+// Cached directory handles must resolve to the current subtree after deletion and recreation.
+// An externally removed directory requires a fresh lookup from the root.
 
 const createdRoots = new Set();
 

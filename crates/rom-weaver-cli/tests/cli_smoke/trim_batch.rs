@@ -1262,8 +1262,6 @@ fn trim_without_revert_marker_writes_no_footer() {
     assert_eq!(fs::read(trimmed.path()).expect("trimmed gba").len(), 0x3456);
 }
 
-// ---- relocated from shared.rs (single-module helpers) ----
-
 fn trim_fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/trim")

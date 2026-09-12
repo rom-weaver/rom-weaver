@@ -1,14 +1,6 @@
 /**
- * The hero loom's drawing and intro loop, shared by two owners of the same
- * canvas: the inline shell script that starts it while the parser is still in
- * the prerendered document (home-loom-shell.ts), and the React component that
- * adopts that running loop on mount (components/home-loom.tsx). Both go through
- * createLoom, so the weave the shell draws and the weave React keeps drawing are
- * the same pixels and no frame is restarted at the handoff.
- *
- * This module MUST stay free of imports: the shell entry is bundled as a
- * standalone classic script that the document carries inline, and anything
- * imported here ships inside it.
+ * The inline shell and React share this animation so hydration can adopt the running canvas without restarting it.
+ * This module MUST stay free of imports because its code ships in the inline shell script.
  */
 
 const WARP_COLUMNS = 22;

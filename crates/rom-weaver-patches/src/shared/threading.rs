@@ -52,8 +52,8 @@ pub(crate) fn parallel_chunked_capability(len: u64, chunk_bytes: u64) -> ThreadC
     ThreadCapability::parallel(Some(chunk_count_for_len(len, chunk_bytes).max(1)))
 }
 
-/// Run with a fresh pool when capability and caller permit parallelism;
-/// otherwise use the planned serial path.
+/// Use the operation's shared pool when capability and caller permit
+/// parallelism; otherwise use the planned serial path.
 ///
 /// Pool construction may re-plan and fall back. `allow_parallel` carries
 /// format-specific shape gates.
@@ -64,9 +64,6 @@ pub(crate) fn run_with_optional_pool<T>(
     parallel: impl FnOnce(&SharedThreadPool) -> Result<T>,
     serial: impl FnOnce() -> Result<T>,
 ) -> Result<(ThreadExecution, T)> {
-    // NOTE: deliberately no extra logging here - `plan_threads`/`build_pool`
-    // already trace the negotiation, and the migrated call sites must emit a
-    // byte-identical trace stream to the pre-refactor per-format code.
     let planned = context.plan_threads(capability.clone());
     if planned.used_parallelism && allow_parallel {
         let (execution, pool) = context.build_pool(capability)?;
@@ -85,7 +82,7 @@ pub(crate) struct PreparedWrite {
 }
 
 /// Seeks and writes each prepared write into `output`, skipping empty
-/// payloads. Identical to the per-format loops it replaces.
+/// payloads.
 pub(crate) fn apply_prepared_writes(output: &mut File, writes: &[PreparedWrite]) -> Result<()> {
     for write in writes {
         if write.data.is_empty() {
@@ -98,8 +95,7 @@ pub(crate) fn apply_prepared_writes(output: &mut File, writes: &[PreparedWrite])
 }
 
 /// Maps `items` to results on `pool` with rayon, failing fast on the first
-/// error. Cancellation checks are deliberately NOT built in; callers keep
-/// `context.cancel().check()?` inside `map` exactly where each format had it.
+/// error. Callers MUST check cancellation inside `map` when required.
 pub(crate) fn pool_map<I: Sync, T: Send>(
     pool: &SharedThreadPool,
     items: &[I],

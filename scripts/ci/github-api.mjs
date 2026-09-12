@@ -1,9 +1,5 @@
-//
-// GitHub REST plumbing shared by the CLA gate and deployment-status scripts.
-//
-// The CLA gate uses a pull request, a commit status, and one marker comment;
-// deployments only need statuses. Every unexpected response throws instead of
-// returning a falsy value a caller could mistake for a verdict.
+// Unexpected API responses MUST throw so a gate cannot mistake a request failure
+// for a verdict.
 
 export function createGitHubApi({ token, apiUrl, name }) {
   const headers = {
@@ -13,8 +9,6 @@ export function createGitHubApi({ token, apiUrl, name }) {
   };
 
   async function api(path, { method = "GET", body, allow404 = false } = {}) {
-    // The key has to be absent rather than undefined on a GET: fetch rejects
-    // the combination, and oxlint flags it statically.
     const init = { method, headers: { ...headers, "content-type": "application/json" } };
     if (body !== undefined) init.body = JSON.stringify(body);
 
@@ -64,15 +58,8 @@ export function createStatusPoster({ api, repo, sha, context }) {
     });
 }
 
-// One comment per pull request per marker, edited in place, so a rebase or a
-// retitle does not bury the thread under duplicates.
-//
-// The author is checked as well as the marker. The marker is an HTML comment,
-// so it is invisible once rendered and nothing stops a contributor pasting one
-// - and the token here is repo-scoped, so it would happily edit or delete
-// somebody else's comment on the strength of a string they chose. Only a
-// comment this workflow could have written is a candidate; anything else is
-// left alone and a fresh one is posted alongside it.
+// Only bot-authored comments with the marker MAY be replaced or removed.
+// The check accepts any bot account, so markers MUST be unique to each gate.
 export function createMarkerComment({ api, paginate, repo, prNumber, marker }) {
   const find = async () =>
     (await paginate(`/repos/${repo}/issues/${prNumber}/comments`)).find(

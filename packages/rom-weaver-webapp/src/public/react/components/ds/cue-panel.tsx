@@ -3,13 +3,7 @@ import { join } from "./cx.ts";
 import { Drawer } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
 
-/**
- * Read-only collapsible section showing the CUE/GDI sheet(s) that describe a
- * bin/track ROM, rendered as the loom code block with a copy button over a
- * monospace listing on a recessed surface. The sheets are never
- * patched or checksummed, so they ride alongside the ROM rather than appearing
- * as their own input.
- */
+/** Show CUE/GDI metadata beside its disc tracks, with a copy control for each sheet. */
 
 /** A single sheet's copy control over the listing. When
  * a disc carries both a cue and a gdi, each renders as one of these sub-blocks

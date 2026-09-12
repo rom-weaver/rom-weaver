@@ -1,8 +1,5 @@
-/// Minimum normalized Damerau-Levenshtein similarity for a candidate to count
-/// as a likely typo: strictly more than half of the characters MUST match once
-/// transpositions are counted as one edit. Jaro-Winkler, which clap uses, is
-/// blind to a swapped pair inside a three-letter name such as `cdh`/`chd`,
-/// and most registered format names are that short.
+/// A suggestion MUST have a normalized Damerau-Levenshtein score above this
+/// threshold; counting a transposition as one edit admits `cdh` for `chd`.
 const SUGGESTION_THRESHOLD: f64 = 0.5;
 
 /// The registered name that most closely resembles `requested`, if any is

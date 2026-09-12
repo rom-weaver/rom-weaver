@@ -1,8 +1,6 @@
 # References
 
-This file collects patch/container/compression references used by `rom-weaver`.
-
-It is intentionally a living document. Some patch families do not have stable formal specs; in those cases, canonical behavior is documented through widely used implementations.
+This page lists format specifications and implementations used to check rom-weaver. Where a format has no stable specification, the linked implementation and compatibility tests define the behavior rom-weaver follows.
 
 <!-- START doctoc -->
 ## Table of contents

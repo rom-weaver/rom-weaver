@@ -23,10 +23,7 @@ const makeAsset = (id: string, kind: InputAsset["kind"], file: PatchFileInstance
   size: file.fileSize,
 });
 
-// archive-output-service.ts does real archive-byte assembly (7z/zip encoders) - irrelevant to
-// output-build-service's own decision logic (naming, format selection, entry construction, error
-// propagation), so it is faked the same way staged-rom-source-session-cleanup.test.ts fakes a sibling
-// service module.
+// Fake archive assembly to isolate output naming, entry construction, format selection, and error handling.
 vi.mock("../../src/lib/output/archive-output-service.ts", async () => {
   const actual = await vi.importActual<typeof import("../../src/lib/output/archive-output-service.ts")>(
     "../../src/lib/output/archive-output-service.ts",

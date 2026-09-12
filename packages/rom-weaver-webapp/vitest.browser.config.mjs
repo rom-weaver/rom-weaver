@@ -10,9 +10,8 @@ import { generatedChannelAssetPath } from "./scripts/generated-icon-assets.mjs";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
-// In a git worktree, node_modules entries are symlinks into the main checkout
-// (scripts/setup-worktree.mjs); vite checks real paths against fs.allow and
-// 403s them, silently hanging browser tests, unless the main root is allowed.
+// Allow linked files that resolve into the main checkout as well as this worktree.
+// setup-worktree installs local node_modules; it does not create dependency symlinks.
 const GIT_COMMON_ROOT = (() => {
   try {
     const commonDir = execSync("git rev-parse --path-format=absolute --git-common-dir", {

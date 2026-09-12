@@ -58,6 +58,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "how-to/cli-create.md", label: "Create patches (CLI)", slug: "docs/cli-create" }),
   Object.freeze({ file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
   Object.freeze({ file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
+  Object.freeze({ file: "how-to/cli-save.md", label: "Edit a game save (CLI)", slug: "docs/cli-save" }),
   Object.freeze({
     file: "how-to/identify-and-hash-files.md",
     label: "Identify and hash ROMs (CLI)",

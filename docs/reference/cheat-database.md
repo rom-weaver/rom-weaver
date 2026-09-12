@@ -29,7 +29,7 @@
 | Game Boy Color | Game Genie, GameShark |
 | Game Boy Advance | Xploder ROM-patch codes |
 
-ROMWeaver does not offer database systems outside this table.
+rom-weaver does not offer database systems outside this table.
 
 ## Delivery classes
 
@@ -47,7 +47,7 @@ An unsupported row shows its reason and cannot be selected. Reasons include: the
 | Exact | A known checksum matched a canonical release record and its cheat set. |
 | Title | A normalized title matched, but the ROM checksum did not match. |
 | Manual | The user selected a game record. |
-| None | ROMWeaver found no automatic game match. |
+| None | rom-weaver found no automatic game match. |
 
 Title and manual matches can target another region or revision.
 
@@ -59,13 +59,13 @@ Source [libretro/libretro-database](https://github.com/libretro/libretro-databas
 
 License CC-BY-SA-4.0
 
-The generated shards are an adapted database under CC-BY-SA-4.0. ROMWeaver's code license does not replace that data license. ShareAlike applies to redistributed adaptations of this database.
+The generated shards are an adapted database under CC-BY-SA-4.0. rom-weaver's code license does not replace that data license. ShareAlike applies to redistributed adaptations of this database.
 
 The distribution includes the full license text and the source revision in the third-party notices.
 
 Game titles and release checksums come from the same Libretro DAT files that build the platform's identify pack, so a cheat match and an identify match agree on the ROM.
 
-The build drops, before packaging, every record that can never bake: structured RetroArch entries, placeholder codes, and codes whose literal address is provably runtime memory for that system.
+Before packaging, the build removes structured RetroArch entries, empty or placeholder codes, and entries whose every subcode has a known runtime-memory address. Mixed entries remain for the ROM-dependent decoder to classify; an entry remains unsupported if any subcode cannot bake.
 
 ## CLI database directory
 
@@ -90,11 +90,7 @@ The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABAS
 
 `rom-weaver setup` installs the shards there along with the identify packs; they travel in the same archive. A missing shard is an error naming the file it looked for and the command that installs it.
 
-Regenerating them from a libretro checkout works too:
-
-```bash
-node scripts/import-libretro-cheats.mjs --output-dir ~/.local/share/rom-weaver/identify/cheats
-```
+[ROM identify data](../development/identify-data.md) documents how to build the identify packs and cheat shards from their pinned sources.
 
 ## Storage and network behavior
 
@@ -133,7 +129,7 @@ Record IDs do not depend on the file layout, so a bundle written against an earl
 
 Each imported record keeps the original code, every `cheatN_*` value, unknown fields, source file, source index, and source revision. A source record without a `cheatN_enable` line reads as `enable = false`.
 
-ROMWeaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
+rom-weaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 
 ## Bundles
 

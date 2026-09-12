@@ -1,9 +1,5 @@
-// Regression guard for the many-small-files extract fan-out.
-//
-// Extracting an archive with thousands of entries must not hold one OPFS SyncAccessHandle (plus its
-// multi-MiB coalescing buffers) per entry: iOS WebKit kills the tab long before the run finishes.
-// The proxy's peak live-handle gauge is the measurable proxy for that resource, so these tests assert
-// it stays bounded by concurrency instead of tracking the entry count.
+// Extracting many entries MUST keep live OPFS handles and adapter buffers bounded instead of retaining them per file.
+// The proxy metrics let these tests check resource use without relying on a browser crash.
 
 import { describe, expect, it } from "vitest";
 import { resolveBrowserThreadPoolSizeFromCount } from "../../src/wasm/browser-wasi-thread-sizing.ts";
@@ -113,10 +109,7 @@ describe("many-entry archive extract", () => {
     expect(large.adapterBufferBytes).toBeLessThanOrEqual(64 * 1024 * 1024);
   });
 
-  // The iOS stress corpus's real command shape: threaded fan-out with per-entry checksums. Spawned
-  // WASI threads build their own mounts, and each entry used to get a brand-new dedicated Worker
-  // (a ~7 MB wasm instantiation plus an OPFS mount rebuild apiece). Verify the full output while
-  // bounding both resources in the same run.
+  // Exercise threaded extraction with per-entry checksums and verify every output while bounding workers and OPFS handles.
   it("validates a threaded 2048-entry extract with bounded resources", async () => {
     const measured = await measureManyEntryExtract({
       entryCount: 2048,

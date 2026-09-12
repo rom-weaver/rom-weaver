@@ -60,32 +60,15 @@ elif [ "$download_status" != 200 ]; then
   exit 1
 fi
 
-# Hash what actually arrived. This is the lookup key for the provenance check,
-# and it is also why there is no separate checksum step: a truncated, corrupted,
-# or substituted download hashes to something no attestation covers, so the
-# check below refuses it. A published `.sha256` sidecar would add nothing on top
-# of that - it ships from the same place as the binary, so whatever can replace
-# one can replace the other.
+# The downloaded file's SHA-256 is the key for the repository attestation lookup.
 if command -v sha256sum >/dev/null 2>&1; then
   digest=$(sha256sum "$tmp_dir/$asset" | cut -d ' ' -f 1)
 else
   digest=$(shasum --algorithm 256 "$tmp_dir/$asset" | cut -d ' ' -f 1)
 fi
 
-# Build provenance says which workflow produced this file, so an asset uploaded
-# by a stolen token or from a maintainer's laptop is refused here.
-#
-# A definite answer is fatal, an absent one is not. Those are different facts and
-# conflating them gets the default wrong in one direction or the other: treating
-# "cannot reach the API" as failure strands anyone behind a proxy, and treating
-# "this binary has no provenance" as a warning buries the finding that matters in
-# output nobody reads.
-#
-#   attestation says another repository built this, or none did  -> refuse
-#   the check could not run at all (offline, rate-limited, 5xx)  -> warn
-#
-# ROM_WEAVER_SKIP_ATTESTATION=1 skips the check; ROM_WEAVER_REQUIRE_ATTESTATION=1
-# promotes the warning to a refusal too.
+# A missing attestation MUST stop installation; an unavailable API warns unless
+# ROM_WEAVER_REQUIRE_ATTESTATION=1. ROM_WEAVER_SKIP_ATTESTATION=1 bypasses this check.
 skip_attestation="${ROM_WEAVER_SKIP_ATTESTATION:-0}"
 require_attestation="${ROM_WEAVER_REQUIRE_ATTESTATION:-0}"
 
@@ -109,39 +92,14 @@ attestation_unknown() {
 if [ "$skip_attestation" = 1 ]; then
   echo "rom-weaver: skipping the build provenance check (ROM_WEAVER_SKIP_ATTESTATION=1)" >&2
 else
-  # The endpoint is scoped to this repository *and* to the bytes just downloaded:
-  # asking `/repos/$repo/attestations/sha256:$digest` returns only attestations
-  # this repository published for exactly that digest. So a non-empty answer is
-  # the whole finding - "$repo attested this file" - and nothing has to be read
-  # out of the response to establish it.
+  # Trust GitHub's API over TLS to find SLSA provenance for this repository and digest.
+  # This lookup does not verify signatures or require a particular build workflow.
   #
-  # That is why no bundle is decoded here. Checking the signed statement's own
-  # `repository` field would look more rigorous, but without verifying the
-  # signature that field is exactly as trustworthy as the envelope around it:
-  # both arrive in the same response from the same API. Decoding it would buy
-  # appearance, not assurance. The trust placed here is GitHub's API over TLS,
-  # which is already the trust the download itself rests on.
+  # The predicate filter MUST exclude release-membership attestations, which do not
+  # prove that a workflow built the asset. See docs/how-to/verify-downloads.md.
   #
-  # What that does catch, and it is the point of the feature, is an asset no
-  # workflow run ever produced - one uploaded by a stolen token or by hand.
-  # Verifying the Sigstore signature instead would need `gh` or `cosign`, and
-  # neither belongs in a curl-to-shell installer's dependency list; the manual
-  # command is in docs/how-to/verify-downloads.md for anyone who wants it.
-  #
-  # This leaves curl and grep as the only tools involved.
-  #
-  # The status code is read rather than leaning on `--fail`, because 404 and 403
-  # have to be told apart: 404 is GitHub answering "nothing attested these bytes"
-  # and is fatal, while a 403 is the unauthenticated rate limit and means the
-  # question went unanswered. `|| status=000` covers a network-level failure,
-  # where curl exits non-zero and no code was ever received.
-  # `predicate_type` is load-bearing, not tidiness. Immutable releases make
-  # GitHub attest every release automatically, and that attestation lists each
-  # asset's digest - so an unfiltered query returns a hit for any file in any
-  # release and this check would pass on it. That attestation says only "this
-  # was in release X"; an asset uploaded to the draft by a stolen token is in it
-  # too. Filtering to SLSA provenance is what makes the answer mean "the release
-  # workflow built this", which is the claim being made here.
+  # Read the status explicitly: 404 means no match; transport errors and other
+  # HTTP failures leave the check unresolved.
   status=$(curl --silent --location --proto '=https' --tlsv1.2 \
     --output "$tmp_dir/attestations.json" \
     --write-out '%{http_code}' \

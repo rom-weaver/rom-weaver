@@ -25,8 +25,8 @@ const listFiles = (directory) =>
 // itself. See the "Workers share one runtime chunk" bullet in docs/development/ARCHITECTURE.md.
 const RUNTIME_CHUNK_PATTERN = /^wasm-runtime-[\w-]+\.js$/;
 const WORKER_ENTRY_CHUNK_PATTERNS = [/^browser-runner-worker-[\w-]+\.js$/, /^browser-wasi-thread-worker-[\w-]+\.js$/];
-// Static ESM imports only, at a statement boundary. `import("./x.js")` (dynamic) and the plain
-// strings inside Vite's `__vite__mapDeps` array must not match - neither costs a first-paint fetch.
+// Count static ESM dependencies only; dynamic imports and __vite__mapDeps strings
+// do not establish a static dependency by themselves.
 const STATIC_IMPORT_PATTERN = /(?:^|[;}\n])import\s*(?:[\w$*{},\s]+?\s*from\s*)?"([^"]+)"/g;
 const GUARD_REFERENCE =
   'the "Workers share one runtime chunk" bullet in docs/development/ARCHITECTURE.md, and the ' +
@@ -42,8 +42,7 @@ const staticImportsOf = (assetsDir, fileName) => {
   return imported;
 };
 
-/** Every chunk the document pulls in before paint: its entry script, its modulepreloads, and their
- * static import closure. Dynamic route imports are deliberately excluded - they are not first paint. */
+/** Follow document script/preload references and static imports; runtime fetches are outside this check. */
 const documentChunkClosure = (distDir, assetsDir, chunkNames) => {
   const html = fs.readFileSync(path.join(distDir, "index.html"), "utf8");
   const roots = [...html.matchAll(/(?:src|href)="\.\/assets\/([^"]+\.js)"/g)].map((match) => match[1]);

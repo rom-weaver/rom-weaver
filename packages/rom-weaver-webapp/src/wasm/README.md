@@ -1,6 +1,6 @@
 # Browser WASM runtime
 
-JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution, consumed within `@rom-weaver/webapp` through relative imports.
+The browser runtime runs `rom-weaver` in dedicated workers. The webapp imports its TypeScript modules through relative paths.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -21,7 +21,7 @@ JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution, consu
 - Dedicated browser worker client (`createBrowserWorkerClient`)
 - First-party TypeScript declarations
 
-Node.js, Electron, and Capacitor filesystem backends are intentionally omitted from this directory. Use the native `rom-weaver` CLI directly for Node workflows.
+The native `rom-weaver` CLI provides filesystem access for Node workflows.
 
 ## Import paths
 
@@ -70,12 +70,11 @@ await runner.dispose();
 
 Runtime behavior:
 
-- WASI sees a single mounted directory: `/work`.
+- This example mounts the OPFS root at `/work`. `runtimeMounts` and `mountHandles` can configure additional mounts.
 - The browser worker runtime requires `SharedArrayBuffer` plus `crossOriginIsolated` and loads `rom-weaver-app.wasm`.
 - `runner.threaded` and `runner.wasmUrl` report the loaded runtime.
 - Pass browser picker `File` or `Blob` inputs through `virtualFiles`; paths already produced in OPFS can be reused without copying.
-- Known typed-command output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
-- Dynamic files created during a run are flushed back to OPFS after `_start()` returns.
+- Guest file creation and writes go through the dedicated OPFS proxy during the run. The runner waits for spawned threads and flushes pending write buffers before it returns.
 - WASI argv0 is fixed to `rom-weaver`; constructor-level `program`, `argv0`, and `env` configuration is not supported.
 - Use the second argument to `run()` or `runJson()` for per-run `env` values when a command needs a supported runtime knob.
 
@@ -103,13 +102,14 @@ await runner.runJson({
 
 ## Dedicated browser worker client example
 
+This client can run on the main thread. Its worker opens the default OPFS root, so the caller does not need to access OPFS.
+
 ```js
 import { createBrowserWorkerClient } from './workers/browser-worker-client.ts';
 
 const worker = createBrowserWorkerClient();
 await worker.init({
   wasmUrl: '/wasm/rom-weaver-app.wasm',
-  opfsHandle: await navigator.storage.getDirectory(),
   workGuestPath: '/work',
 });
 const game = await fetch('/game.bin').then((response) => response.blob());

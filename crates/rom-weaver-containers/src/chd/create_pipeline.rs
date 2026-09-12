@@ -589,10 +589,9 @@ impl ChdContainerHandler {
             digest.copy_from_slice(&raw_sha1.finalize());
             digest
         } else {
-            // Bounded streaming compression pipeline: source reads and ordered output appends
-            // stay on the coordinator thread, so browser workers never open OPFS paths. Worker
-            // threads only hash + compress in-memory hunks, while the shared helper bounds
-            // inflight work and drains producers on error before the scoped threads join.
+            // The coordinator reads hunks and writes results in order while
+            // workers hash and compress; the pipeline bounds buffered work and
+            // drains producers on error before joining their threads.
             trace!(
                 hunk_count,
                 effective_threads, "chd compressed create streaming pipeline path"

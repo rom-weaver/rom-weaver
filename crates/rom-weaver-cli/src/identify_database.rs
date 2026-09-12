@@ -91,7 +91,7 @@ const REDUMP_SYSTEMS: &[(&str, &str)] = &[
     ),
 ];
 
-/// A parsed identify pack of either generation, tagged with its display name.
+/// A parsed identify pack and its display name.
 pub(super) struct LoadedPack {
     pub(super) name: String,
     pub(super) file: IdentifyPackFile,

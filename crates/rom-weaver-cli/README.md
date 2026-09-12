@@ -13,7 +13,7 @@
   <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
 
-> **Beta software.** The `rom-weaver` command is the supported interface, and the one to install. The four library crates it is built from (`rom-weaver-core`, `-checksum`, `-containers`, `-patches`) are published only so this one can be; using them directly is unsupported.
+> **Beta software.** The `rom-weaver` command is the supported interface. Its four library dependencies (`rom-weaver-core`, `-checksum`, `-containers`, and `-patches`) expose internal Rust APIs; direct use is unsupported.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -30,13 +30,13 @@
 
 ## What does this crate do?
 
-The installable end of rom-weaver. It ships the `rom-weaver` binary and the `rom_weaver_app` command library that both frontends share. The native CLI and the `wasm32-wasip1-threads` build that powers the [rom-weaver.com](https://rom-weaver.com/) webapp run the exact same orchestration code.
+This crate ships the `rom-weaver` binary and the shared `rom_weaver_app` command library. The native CLI and the `wasm32-wasip1-threads` build used by the [webapp](https://rom-weaver.com/) share command orchestration.
 
-- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered multi-patch chains, strict checksum validation, and cheat-code baking. Three of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
+- **Apply and create patches.** Supported formats include IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered multi-patch chains, strict checksum validation, and cheat-code baking. Three of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
 - **Inspect and extract archives, disc images, and compressed ROMs.** ZIP, 7z, RAR, tar, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
 - **Create compressed output.** ZIP, 7z, CHD, RVZ, and Z3DS. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
-- **Checksum and verify.** CRC-32, MD5, SHA-1, SHA-256, BLAKE3, and friends, with copier-header detection and header-aware checksum variants.
-- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS can be reverted, with an opt-in footer that restores the original byte-for-byte.
+- **Checksum and verify.** CRC-32, CRC-32C, CRC-16, Adler-32, MD5, SHA-1, SHA-256, and BLAKE3, with copier-header detection and header-aware checksum variants.
+- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS support padding restoration. An opt-in footer stores the original size and a fill byte; it does not store removed data.
 - **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
 - **Scriptable.** Operation commands can emit line-delimited JSON; schema and completion generators keep their native output formats.
 
@@ -107,7 +107,7 @@ The [CLI reference](https://rom-weaver.com/docs/cli) covers commands, shared fla
 
 ## Stability
 
-rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in minor releases. Patching, compressing, extracting, and bundling are tested extensively; the flags and JSON shapes around them may still change on the way to v1.0. The `rom_weaver_app` library this crate also exposes is an internal seam between the native and wasm frontends, not a supported API.
+Before v1.0, breaking changes increase the minor version. CLI flags and JSON output can change between minor releases. The `rom_weaver_app` library is an internal API shared by the native and WASM frontends.
 
 ## Documentation
 

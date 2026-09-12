@@ -24,7 +24,7 @@ What differs is the interface, and that difference is deliberate.
 
 ## What the browser is good at
 
-The browser is the better tool when the answer matters more than the repetition:
+The browser presents file details and workflow choices together:
 
 - **It explains what it found.** Cards show checksums, expected names, header state, and archive contents before you commit to anything.
 - **It needs no install.** Open a URL and work.

@@ -186,10 +186,8 @@ export const evaluateReports = (route, reports, config) => {
   const rows = [];
   let failures = 0;
 
-  // An audit that errors, or a category Lighthouse could not score, yields
-  // undefined/null. Comparing that against a threshold is always false, so
-  // without this it would read as a pass and a metric that stopped being
-  // collected would silently stop being budgeted.
+  // Reject absent or non-finite measurements explicitly; threshold comparisons
+  // alone can misclassify null or undefined as an acceptable result.
   const record = (id, values, threshold, higherIsBetter, format) => {
     const label = `${route.name} ${id}`;
     if (values.some((value) => !Number.isFinite(value))) {

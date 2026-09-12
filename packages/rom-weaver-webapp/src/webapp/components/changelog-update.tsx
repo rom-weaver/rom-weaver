@@ -11,21 +11,8 @@ import {
 } from "./changelog-source.tsx";
 
 /**
- * The "what you're about to get" half of the Changelog tab, shown only while a
- * pending deploy is waiting. It reads the same `changelog.json` the tab already
- * fetched - the asset is loaded with cache: "no-store", so it describes the
- * INCOMING deploy, not the stale copy the running bundle shipped with - and
- * slices it to what is newer than the running build. Release builds replace
- * that commit list with their embedded release notes.
- *
- * Both views render the same CHANGELOG.md shape - a header, then `### type`
- * groups of `**scope:** summary #ref` lines - so a nightly update and a release
- * update read alike. The only difference is where the entries come from: a
- * release parses them at build time out of CHANGELOG.md, a nightly parses the
- * raw commit subjects here.
- *
- * The rest of the tab, below this, answers the other question - what has
- * already shipped - and lives in `changelog-panel.tsx`.
+ * The pending-update section shows changelog entries newer than the running build.
+ * It receives the latest changelog.json fetched by ChangelogPanel and uses embedded release notes when present.
  */
 
 const DEFAULT_BRANCH = "main";

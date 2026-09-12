@@ -5,13 +5,10 @@
  * cap live here rather than in either caller.
  */
 
-/** Characters no common file system accepts in a name. */
+/** Exclude path separators and characters forbidden in Windows file names. */
 const UNSAFE_FILE_NAME_CHARACTERS = /[/\\:*?"<>|]/gu;
 
-/**
- * Past this many characters the descriptions stop identifying the patch and
- * start breaking name columns and archive members, so the suffix is cut short.
- */
+/** Limit long cheat descriptions so the filename remains readable in the UI. */
 const MAX_DESCRIPTION_SUFFIX_LENGTH = 80;
 
 /** Replace characters a file name cannot carry, keeping the text readable. */

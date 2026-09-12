@@ -73,7 +73,7 @@ Every write starts from a copy. The handler reparses the result before it return
 
 ## Save containers
 
-The editor removes these wrappers before recognition and puts them back on output. The wrapper bytes survive unchanged; only the raw save inside changes.
+The editor removes these wrappers before recognition and puts them back on output. The wrapper metadata survives unchanged. If the container has a checksum, the editor updates it to match the changed save.
 
 | Container | Extensions | Layout | Checksum |
 | --- | --- | --- | --- |

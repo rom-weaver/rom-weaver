@@ -7,20 +7,8 @@
     <meta name="theme-color" content="#0c0f13" />
     <meta name="color-scheme" content="dark light" />
     <style>
-      /*
-       * Pre-paint background bridge. The themed canvas color (--chassis) is only defined under
-       * :root[data-theme] in tokens.css, and data-theme is set by theme.ts *after* the bundle loads,
-       * so a service-worker reload would otherwise paint the browser default (white) for one frame.
-       * These rules paint the correct background from the first frame, matching theme.ts's no-stored-
-       * preference fallback exactly: prefers-color-scheme, dark as the ultimate default. Colors are
-       * hardcoded copies of --chassis (dark/light) because inline HTML can't read CSS custom properties
-       * that live in the not-yet-loaded bundle; keep them in sync with tokens.css. Both rules are gated
-       * on :not([data-theme]) so they stop applying the instant theme.ts sets the attribute — after that
-       * the design system owns the background and there is zero interference. (A user who toggled to the
-       * theme opposite their OS still sees one frame of their OS color before their stored choice applies.)
-       * These comments live inside <style> so lightningcss (cssMinify) strips them from the build; an
-       * HTML <!-- --> comment would ship to production unstripped.
-       */
+      /* Match the token backgrounds until the parser-time script sets data-theme.
+       * These fallback colors MUST stay in sync with tokens.css. */
       html:not([data-theme]) {
         background: #0c0f13;
       }
@@ -48,10 +36,8 @@
           document.documentElement.setAttribute("data-theme", preferred || system);
           const settings = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           const common = settings && settings.common ? settings.common : null;
-          // No version gate on these reads: a stale pinned version (v5 while
-          // storage writes v6) silently disabled them, and the boot loader
-          // wipes payloads it cannot map anyway. Each read checks its field's
-          // type and falls open to the boot default on anything unexpected.
+          // Read these fields without a schema-version gate so compatible saved
+          // preferences apply before boot; each read checks the field's type.
           document.documentElement.dataset.betaToolsEnabled =
             common && common.betaToolsEnabled === true ? "true" : "false";
           document.documentElement.dataset.onboardingEnabled =
@@ -246,13 +232,9 @@
           statusText.textContent = wording[state];
         };
 
-        // A controller means this page came out of the cache; without
-        // MessageChannel the client cannot ask it anything, which is the same
-        // "cached, not answering" the app calls ready. The offline copy also
-        // needs the background warm-up (EmulatorJS + identify packs); the
-        // warm-up client persists completion under "rom-weaver-offline-ready"
-        // and `readResolvedServiceWorkerStatus` in shell.tsx reads the same
-        // key - keep the two resolvers in step.
+        // A controller means a service worker controls this page; it does not
+        // prove this navigation used the cache. Keep this readiness fallback in
+        // sync with shell.tsx and the warm-up client's persisted completion flag.
         let warmupReady = false;
         try {
           warmupReady = localStorage.getItem("rom-weaver-offline-ready") === "true";

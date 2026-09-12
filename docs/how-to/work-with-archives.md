@@ -22,7 +22,7 @@ Extract files, convert an archive, or create a ZIP or 7z from the terminal. To p
 rom-weaver extract --input patches.7z --output extracted-patches
 ```
 
-Gzip, Bzip2, XZ, and Zstandard inputs are single compressed streams, so they extract to their one payload file rather than a directory.
+Gzip, Bzip2, XZ, and Zstandard inputs each contain one compressed stream. rom-weaver writes the decoded file inside the output directory. If that file is an archive, nested extraction continues unless you pass `--no-nested-extract`.
 
 ## Convert one archive format to another
 

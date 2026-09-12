@@ -6,7 +6,7 @@
 //! wasm/browser runs (see AGENTS.md), so a pipeline that stops emitting a stage
 //! is a real regression.
 //!
-//! Included from several test modules with `#[path]`; each gets its own copy.
+//! Included once by the crate root and shared by its test modules.
 
 use std::sync::{Arc, Mutex};
 

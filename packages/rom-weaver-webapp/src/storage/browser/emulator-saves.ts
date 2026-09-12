@@ -1,35 +1,8 @@
 import { createLogger } from "../../lib/logging.ts";
 
 /**
- * EmulatorJS 4.2.3 storage findings:
- *
- * - `data/src/storage.js` implements `EJS_STORAGE` with one object store per
- *   database. Browser save states use database `EmulatorJS-states`, store
- *   `states`, and keys such as `<getBaseFileName()>.state`; `?EJS_KEYS!` is a
- *   bookkeeping array. The state value is the raw `Uint8Array`.
- * - `GameManager.mountFileSystems()` mounts Emscripten IDBFS at
- *   `/data/saves` with `autoPersist: true`. Emscripten stores that mount in
- *   `EM_FS_<window.location.pathname>`, version 20, object store `FILE_DATA`.
- *   `saveSaveFiles()` asks the core to write SRAM, emits `saveSaveFiles`, and
- *   is called on exit. The optional `save-save-interval` setting calls it on a
- *   timer; SRAM is not saved once per frame by this JavaScript layer.
- * - `EJS_disableLocalStorage` only gates EmulatorJS settings in
- *   `saveSettings`, `preGetSetting`, `getCoreSettings`, and `loadSettings`. It
- *   does not disable the IndexedDB state store or IDBFS. EmulatorJS local
- *   storage keys are `ejs-settings` and `ejs-<gameId>-<core>-<gameName>-settings`,
- *   which cannot collide with the app's `rom-weaver-*` keys.
- * - `EJS_gameID` participates in settings and netplay identity, but state keys
- *   use `getBaseFileName()`, which prefers `EJS_gameName`. We therefore pass a
- *   checksum- or filename/size-derived game name and numeric game ID, so the
- *   keys EmulatorJS writes never contain the ROM's name.
- * - `EJS_onSaveState` receives `{ screenshot, format, state }`, and
- *   `EJS_onLoadState` receives no arguments. `EJS_onSaveSave` receives
- *   `{ screenshot, format, save }`, and `EJS_onLoadSave` receives no arguments.
- *   Registering these callbacks intercepts EmulatorJS's default picker and
- *   browser-state handling, so this bridge stores and loads the bytes itself.
- * - `EJS_emulator.pause()` and `.play()` are public methods. The document
- *   bridge uses visibility-specific commands and only resumes an emulator it
- *   paused itself.
+ * The EmulatorJS document bridge sends state and SRAM bytes to this store through save/load callbacks.
+ * The store also retains display labels and accepts supported older save exports.
  */
 
 const logger = createLogger("emulator-saves");
@@ -298,9 +271,7 @@ const writeRecord = async (record: EmulatorSaveRecord): Promise<void> => {
 };
 
 /**
- * Retry the upgrade's cleanup for any record it could not rewrite. The upgrade
- * swallows its errors and never runs again, so without this a record that
- * failed to migrate would keep the ROM's name until that game is played again.
+ * Read and normalize a saved record without changing the stored bytes or metadata.
  */
 const readEmulatorSave = async (gameId: string): Promise<EmulatorSaveRecord | undefined> => {
   const result = await readTransaction<unknown>((store) => store.get(gameId));
@@ -462,8 +433,7 @@ const parseSerializedEmulatorSave = (serialized: string): EmulatorSaveRecord => 
   const state = value.state === undefined ? undefined : base64ToBytes(value.state, "save-state");
   const sram = value.sram === undefined ? undefined : base64ToBytes(value.sram, "SRAM");
   if (!(state || sram)) throw new Error("The EmulatorJS save file contains no save-state or SRAM data.");
-  // A file written before this format dropped `label` still carries the ROM
-  // name; ignoring it here keeps that name out of the database.
+  // Preserve an imported display label when present; otherwise use its game identity as the label.
   return {
     gameId: value.gameId,
     gameName: value.gameName,

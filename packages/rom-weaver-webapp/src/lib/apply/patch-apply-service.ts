@@ -19,8 +19,9 @@ type PatchSourceValidator = {
 };
 
 type PatchProbeRequirements = {
-  /** Required input crc32 parsed from the patch file name's `[crc32:..]` token (fallback
-   * requirement source when the format embeds no source checksum). */
+  /**
+   * Required input CRC32 parsed from the patch filename token [crc32:...].
+   */
   filenameCrc32?: string;
   format?: string;
   minimumSourceSize?: number;

@@ -138,7 +138,7 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 
 `--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO and RVZ scrub cannot be reverted. It also answers to `--untrim` and `--restore`.
 
-`--revert-marker` (also `--reversible`) embeds a small footer so a later revert reproduces the original padding exactly rather than guessing at it; see the [footer format](../development/trim-revert-footer.md).
+`--revert-marker` (also `--reversible`) records the original length and one padding byte in a footer. Exact restoration needs a separate output file and uniformly padded removed bytes. In-place trimming can record the wrong padding byte. See the [footer format and limits](../development/trim-revert-footer.md).
 
 ## Header detection and repair
 
@@ -170,7 +170,7 @@ The Test page supports these platforms:
 - Sony PlayStation
 - Sony PSP
 
-The Test page passes a `.chd` file to the emulator core unchanged when that core reads CHD: PlayStation, Saturn, and Mega Drive / Sega CD. rom-weaver reads the payload SHA-1 from the CHD header and the platform from the disc data, without extracting the file. Every other CHD is extracted first, as is a CHD inside a ZIP or 7z archive.
+The Test page passes recognized PlayStation and Saturn `.chd` files to the emulator core without extraction. rom-weaver reads the payload SHA-1 from the CHD header and the platform from the disc data, without extracting the file. Every other CHD is extracted first, as is a CHD inside a ZIP or 7z archive.
 
 rom-weaver does not bundle EmulatorJS cores for these platforms:
 

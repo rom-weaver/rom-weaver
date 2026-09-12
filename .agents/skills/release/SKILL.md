@@ -24,7 +24,7 @@ For every `feat`, `fix`, `perf`, or breaking (`!`) commit, read the pull request
 gh pr view <number> --json title,body --jq '.title + "\n\n" + .body'
 ```
 
-Skip `chore`, `build`, `ci`, `test`, `docs`, `style`, and `refactor` commits; they land in the collapsed `All changes` list automatically.
+Skip non-breaking `chore`, `build`, `ci`, `test`, `docs`, `style`, and `refactor` commits; they land in the collapsed `All changes` list automatically.
 
 ## 2. Draft the highlights
 
@@ -62,4 +62,4 @@ Delete `/tmp/release-highlights.md` afterwards.
 
 ## What the workflow does with the input
 
-`scripts/aggregate-release-changelog.mjs` writes the section as `### Highlights` followed by every generated entry inside a collapsed `All changes` block, commits it to the release pull request branch, copies it into the pull request body, and stores the highlights in a marked comment on the pull request. Release Please copies the pull request body into the GitHub release on merge. Release Please rewrites the branch and the body on every dispatch, so a re-dispatch with a blank `highlights` input restores them from that comment; a dispatch with new ones replaces them. To change the highlights after the pull request exists, run this skill again.
+`scripts/aggregate-release-changelog.mjs` writes `### Highlights`, keeps the generated breaking-change group visible, and puts the other generated entries inside a collapsed `All changes` block. It commits the section to the release pull request branch, copies it into the pull request body, and stores the highlights in a marked comment on the pull request. Release Please uses the pull request body for the GitHub release. Each dispatch rewrites the branch and body: a blank `highlights` input restores the stored highlights, and a non-empty input replaces them. To change the highlights after the pull request exists, run this skill again.

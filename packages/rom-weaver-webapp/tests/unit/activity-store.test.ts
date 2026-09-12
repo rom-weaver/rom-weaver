@@ -36,8 +36,7 @@ describe("activity store", () => {
   });
 
   it("keeps a live run published when another workflow settles to idle", () => {
-    // The last-writer-wins bug: mounting/settling a sibling form must not clobber
-    // a concurrently running workflow (which would release the wake lock).
+    // An idle sibling MUST NOT clear a running workflow's activity or release its wake lock.
     setWorkbenchActivity("apply", { state: "idle" });
     setWorkbenchActivity("trim", { state: "idle" });
     setWorkbenchActivity("trim", { stage: "Trim", state: "running" });

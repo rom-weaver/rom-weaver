@@ -280,20 +280,8 @@ abstract class BaseWorkflowController<
   }
 
   /**
-   * Wait for in-flight operations to stop running. Call after {@link abort} and
-   * before releasing anything the workflow owns.
-   *
-   * The disposal check runs once, as an operation starts. Everything after that
-   * - including staging its inputs - happens inside the callback, so aborting
-   * does not unwind an operation that is already past the check. Releasing
-   * while one is still going leaves whatever it stages afterwards with no owner
-   * to release it, and a staged input holds its visible name: the next input of
-   * the same name is quietly renamed to `name-2.ext`, and anything referring to
-   * the original name stops resolving.
-   *
-   * Bounded, because a wedged operation must not hang teardown behind it. On
-   * expiry the caller proceeds and the stale copies are left to time out, which
-   * is the old behaviour rather than a new failure.
+   * Wait after abort before releasing sources, so an active operation can finish registering its cleanup.
+   * The wait is bounded; expiry lets disposal continue even if an operation has stopped responding.
    */
   protected async settleMutations(graceMs = MUTATION_SETTLE_GRACE_MS): Promise<void> {
     const deadline = Date.now() + graceMs;

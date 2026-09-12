@@ -26,8 +26,8 @@ pub enum HumanStyle {
 }
 
 /// A styled output target. Renders headings, key/value blocks, and aligned columns according to
-/// [`HumanStyle`], and carries whether color is enabled (Rich + no `NO_COLOR`). Layout is identical
-/// in both styles; only color and the progress bar differ.
+/// [`HumanStyle`], with a separate color setting. Both styles use the same
+/// summary layout; only Rich has an in-place progress bar.
 pub struct Surface {
     style: HumanStyle,
     color: bool,
@@ -63,7 +63,7 @@ impl Surface {
         crate::stdout_output::write(format_args!("{text}\n"));
     }
 
-    /// An error line (red in Rich), written to stderr.
+    /// An error line on stderr, red when color is enabled.
     pub fn error(&self, text: &str) {
         if self.color {
             eprintln!("{}", text.red().bold());
@@ -72,7 +72,7 @@ impl Surface {
         eprintln!("{text}");
     }
 
-    /// A warning line (yellow in Rich), written to stderr.
+    /// A warning line on stderr, yellow when color is enabled.
     pub fn warn(&self, text: &str) {
         if self.color {
             eprintln!("{}", text.yellow());
@@ -81,7 +81,7 @@ impl Surface {
         eprintln!("{text}");
     }
 
-    /// A cancellation line (dimmed in Rich), written to stderr.
+    /// A cancellation line on stderr, dimmed when color is enabled.
     pub fn cancelled(&self, text: &str) {
         if self.color {
             eprintln!("{}", text.dimmed());
@@ -90,8 +90,8 @@ impl Surface {
         eprintln!("{text}");
     }
 
-    /// Render aligned `label  value` lines. The label is accented (cyan) in Rich; padding is
-    /// computed from the plain label width so color codes never skew alignment.
+    /// Render aligned `label  value` lines with an orange label when color is enabled.
+    /// Padding uses plain label widths so color codes do not change alignment.
     pub fn key_values(&self, pairs: &[(String, String)]) {
         if pairs.is_empty() {
             return;

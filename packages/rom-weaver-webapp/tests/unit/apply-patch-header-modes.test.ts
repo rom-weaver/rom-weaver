@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getPatchHeaderModes } from "../../src/lib/apply/workflow.ts";
 
 /**
- * What the engine is told about each patch's header. An explicit user choice
- * wins; everything else is `auto` so the engine's own basis inference runs.
- *
- * The first patch used to default to `keep`, which silently discarded that
- * inference for exactly the patches that need it: the checksumless ones (IPS),
- * where nothing on this side can work the basis out.
+ * Explicit header choices reach the engine unchanged; all other patches use Auto so engine inference can run.
  */
 describe("getPatchHeaderModes", () => {
   it("sends auto for a first patch the user did not choose for", () => {

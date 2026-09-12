@@ -1,6 +1,5 @@
-// Cloudflare Pages applies `dist/_headers` to every response it serves. The preview
-// server is what the Lighthouse gate audits, so without this it measures a document that
-// never carries the `Content-Signal` or cross-origin isolation headers production sends.
+// Apply static-response _headers rules in preview so audits see the deployment headers.
+// Pages Functions set their own headers: https://developers.cloudflare.com/pages/configuration/headers/
 //
 // Only the subset of the `_headers` syntax the build emits is supported: a path pattern
 // line at column zero, then indented `Name: value` lines. `*` matches any run of

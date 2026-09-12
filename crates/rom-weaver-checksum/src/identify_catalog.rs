@@ -260,7 +260,6 @@ pub fn normalize_platform_name(name: &str) -> String {
     out
 }
 
-/// The OpenGood platforms (`OPENGOOD_PLATFORMS` in
 /// The compiled OpenGood platforms with curated aliases.
 fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
     fn entry(canonical: &str, aliases: &[&str], slug: &str) -> IdentifyPlatformCatalogEntry {

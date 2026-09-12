@@ -31,7 +31,7 @@ This guide is for people publishing a patch.
 
 Every format on this page records the same thing: which bytes changed. What separates them is how much they know about the file you are supposed to start from.
 
-Some store a checksum of the original inside the patch. When a user feeds in the wrong file, the patcher stops and says so. Some store nothing, so the patcher happily applies your changes to the wrong game and hands back a broken file that looks fine until it is not.
+Some store a checksum of the original inside the patch. When a user feeds in the wrong file, the patcher stops and says so. Others have no source checks, so the patcher can apply changes to the wrong ROM without detecting the mistake.
 
 That difference decides most of your choice. For cartridge-sized files, size and speed usually matter less than whether users can detect a mistake. Disc-sized files make patch size and tool support more important.
 
@@ -45,7 +45,7 @@ That makes it a strong default for cartridge games when your audience has a BPS-
 
 ## IPS and IPS32
 
-IPS is one of the oldest and most widely supported patch formats. It is a plain list of "at this offset, write these bytes." Nothing else. In particular, it stores no checksum of the original, so an IPS patcher cannot confirm it was handed the right starting file. rom-weaver reads the record layout for hints (see [How rom-weaver picks a patch's bytes](#how-rom-weaver-picks-a-patchs-bytes)), but hints are not proof.
+IPS is widely supported by older patchers. Its records write bytes at fixed offsets, and it can also specify a final file size. It stores no checksum of the original, so an IPS patcher cannot confirm it was handed the right starting file. rom-weaver reads the record layout for hints (see [How rom-weaver picks a patch's bytes](#how-rom-weaver-picks-a-patchs-bytes)), but hints are not proof.
 
 Pick IPS when reaching old tools matters more than catching user error, and always publish the expected checksums beside the download.
 
@@ -105,4 +105,4 @@ rom-weaver therefore does not offer a headerless form behind an `.smd` header. I
 - **Publishing for a disc or a very large file:** xdelta/VCDIFF or PPF, or whatever that platform's community already uses.
 - **Publishing several patches at once:** any of the above, plus a rom-weaver bundle to record the order, the optional pieces, and the checksums.
 
-Picked one? [Create a patch](../how-to/create-rom-patches.md) walks through making it and, more importantly, testing it. Back to the [guide index](../README.md).
+[Create a patch](../how-to/create-rom-patches.md) covers creation and reconstruction checks.

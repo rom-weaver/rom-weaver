@@ -25,7 +25,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
-A PlayStation, Saturn, or Mega Drive / Sega CD disc image in CHD opens without extraction. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform is extracted first.
+A PlayStation or Saturn disc image in CHD opens without extraction. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform is extracted first.
 
 [Browser emulator support](../reference/formats.md#browser-emulator-support) lists the platforms with bundled cores.
 
@@ -109,4 +109,4 @@ Use the **Delete** action in **Storage** to remove one game. Use your browser's 
 - **An imported save does not load:** confirm that its SHA-1 matches the ROM shown in Storage.
 - **The player has no sound on iPhone or iPad:** start the game inside the player. Safari requires that direct tap before it enables audio.
 
-The emulator and its selected cores download from rom-weaver's own origin. Open the Test page once while online before you depend on the installed app offline.
+The emulator and its selected cores download from rom-weaver's own origin. Load a game for each system you plan to use while online, so its emulator core is cached before you go offline.

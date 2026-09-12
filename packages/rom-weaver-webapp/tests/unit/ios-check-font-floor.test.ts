@@ -3,22 +3,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 /**
- * iOS Safari zooms the page in when a text field under 16px takes focus, so
- * webapp-modals.css floors every field at 16px from a later cascade layer. The checks
- * drawer cannot live with that floor - a 40-character SHA-1 needs ~415px at 16px and no
- * phone has it - and it escapes in two different ways, both asserted here:
- *
- * - the self-sizing dropdown families (`.meta-target-select`, `.ck-add-select`) are
- *   skipped by class, so every one of them keeps the size of the line it rides in. A
- *   <select> opens a native picker rather than a keyboard, so this costs no zoom.
- * - the check values are not fields at rest. `EditableCheckRow` renders the value as a
- *   button and only mounts the input on tap, already at the floor, before focus lands.
- *   The input must therefore NOT be exempt: 16px while editing is what stops the zoom.
- *
- * Nothing in CI can catch a regression here. The rule is gated on
- * `@supports (-webkit-touch-callout: none)`, which only real Safari matches - the
- * Chromium and desktop-WebKit suites both resolve it to false - so the arrangement is
- * asserted against the source text instead.
+ * Keep editable checksum inputs at the font-size floor while exempting compact select controls.
+ * This source check covers the WebKit feature-gated rule even when the test browser does not apply it.
  */
 
 const read = (relativePath: string) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");

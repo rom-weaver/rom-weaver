@@ -1,19 +1,8 @@
 #!/usr/bin/env node
-// Cascade-layer audit.
-//
-// Layer order beats specificity outright: across a layer boundary a bare `.card`
-// in a later layer wins over a `.card.is-disabled .rb` in an earlier one, with no
-// warning from anything. Every rule in design-system/ was written expecting the
-// opposite - specificity first, import order only to break ties - so any pair that
-// crosses a boundary the wrong way is a silent behaviour change.
-//
-// This finds them: rule pairs where an earlier layer holds the HIGHER-specificity
-// rule, the selectors can match the same element, and both set the same property.
-// Genuine cases (the override is meant to lose) go in EXEMPT with a reason.
-//
-// The fix is almost never a specificity bump - it cannot work across layers. Move
-// the override into the file that owns the component it modifies, so the pair
-// shares a layer and specificity decides again.
+// Find likely layer conflicts where an earlier, more specific rule loses to a
+// later rule that sets the same property. EXEMPT records intended overrides.
+// Specificity cannot override normal layer order; component overrides belong
+// in the same layer as the component.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -120,7 +109,7 @@ const declaredProperties = (body) =>
       .filter((name) => name && !name.startsWith("--") && !name.includes("{")),
   );
 
-/** (id, class, type) specificity for one complex selector. */
+/** Approximate (id, class, type) specificity; functional pseudo-classes are not fully modeled. */
 const specificity = (selector) => {
   let rest = selector.replace(/::[\w-]+/g, " ");
   const ids = (rest.match(/#[\w-]+/g) || []).length;
@@ -138,8 +127,8 @@ const specificity = (selector) => {
 const outranks = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 
 /**
- * Classes the selector requires of its own subject. Those inside :not() are
- * negations; those inside :has() describe a descendant, not the matched element.
+ * Extract positive class requirements, excluding :not() and :has() arguments.
+ * Those arguments constrain excluded classes or related elements.
  */
 const subjectClasses = (selector) => {
   const positive = selector.replace(/:not\([^)]*\)/g, " ").replace(/:has\([^)]*\)/g, " ");
@@ -159,7 +148,7 @@ const keyCompound = (selector) =>
     .pop() || "";
 const pseudoElement = (selector) => (selector.match(/::[\w-]+/g) || []).join("");
 
-/** Can the weaker, more general selector match everything the stronger one does? */
+/** Estimate selector overlap from class requirements and exclusions. */
 const generalizes = (strong, weak) => {
   if (pseudoElement(strong) !== pseudoElement(weak)) return false;
   const weakKey = subjectClasses(keyCompound(weak));
@@ -238,10 +227,7 @@ export const findLayerViolations = (rules, exempt) => {
   return { failures, usedExemptions };
 };
 
-/**
- * Full cascade-layer audit over `{ layer, layerIndex, file, css }` sources.
- * The pure entry point tests exercise directly.
- */
+/** Check likely cascade-layer conflicts in supplied CSS sources. */
 export const checkCssLayers = (layeredSources, exempt = EXEMPT) => {
   const rules = buildLayerRules(layeredSources);
   const { failures } = findLayerViolations(rules, exempt);

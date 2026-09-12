@@ -161,8 +161,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             className="select"
             id="emulator-save-import-kind"
             onChange={(event) => {
-              // React pools the event: `currentTarget` is null by the time the
-              // lazy updater runs, so the value MUST be read during dispatch.
+              // Read the value during dispatch because currentTarget is cleared before a deferred state updater runs.
               const kind = event.currentTarget.value as "combined" | "sram" | "state";
               setPendingImport((current) => (current ? { ...current, kind } : current));
             }}

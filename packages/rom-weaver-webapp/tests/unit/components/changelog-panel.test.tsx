@@ -7,9 +7,7 @@ import { APP_VERSION } from "../../../src/webapp/build-version.ts";
 import { ChangelogPanel } from "../../../src/webapp/components/changelog-panel.tsx";
 
 /**
- * The pending-update half of the Changelog tab - what the waiting deploy would
- * bring. Every query is scoped to that section, because the shipped list below
- * it renders the same `changelog.json` asked the other question.
+ * Scope update assertions to the pending-deploy section because the changelog history can repeat the same entries.
  */
 
 const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";

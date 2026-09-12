@@ -62,7 +62,7 @@ Use these checks from cheapest to most faithful:
 
 6. Real iPhone or iPad Safari for final verification.
 
-The exhaustive valid codec/level/thread interaction matrix runs nightly and can also be started locally with:
+The exhaustive valid codec/level/thread interaction matrix runs through the manually dispatched `e2e-nightly.yml` workflow. To run it locally:
 
 ```bash
 mise run test-e2e-nightly

@@ -100,10 +100,7 @@ fn json_trace_compress_logs_archive_write_bytes_to_stderr() {
     let trace_events = parse_json_lines(&output.stderr);
     assert!(
         trace_events.iter().any(|event| {
-            // The emitting code lives in the `libarchive_support` submodule, so its tracing target
-            // is the full module path (`rom_weaver_containers::libarchive_support`). Match the crate
-            // prefix rather than the bare crate name, which only held while the code was inlined in
-            // the crate root.
+            // Trace targets include the submodule path, so match the owning crate prefix.
             event["target"]
                 .as_str()
                 .is_some_and(|target| target.starts_with("rom_weaver_containers"))

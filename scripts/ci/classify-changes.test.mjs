@@ -177,11 +177,8 @@ test("an absent or unknown event keeps the full selection", () => {
   }
 });
 
-// A second architecture is a second full release compile of the same source. It
-// can only fail for a reason the first one did not when the failure is
-// architecture-specific, and everything that is - the SDK pins, the exporter,
-// the per-arch cache ref - lives in the image definition and the shared build
-// action, not in a lock file.
+// Ordinary pull requests limit arm64 builds to image-definition changes;
+// full runs also check architecture-specific source and dependency failures.
 test("a pull request builds arm64 only for image definition changes", () => {
   for (const [path, cliArm64, webappArm64] of [
     ["Dockerfile", "true", "false"],
@@ -191,7 +188,7 @@ test("a pull request builds arm64 only for image definition changes", () => {
     // A CI or toolchain change fails open all the way down - it can break one
     // architecture and not the other.
     [".github/workflows/ci.yml", "true", "true"],
-    // Compile inputs and arch-neutral runtime config: amd64 proves them.
+    // Other compile inputs use amd64 coverage on ordinary pull requests.
     ["Cargo.lock", "false", "false"],
     ["Cargo.toml", "false", "false"],
     ["packages/rom-weaver-webapp/sws.toml", "false", "false"],

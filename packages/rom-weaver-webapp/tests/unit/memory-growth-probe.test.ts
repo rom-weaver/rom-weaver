@@ -12,11 +12,7 @@ const STORAGE_KEY = "rom-weaver.memory-growth-probe";
 const originalMemory = globalThis.WebAssembly.Memory;
 
 /**
- * Stand in for the engine: grow freely up to `commitCeilingMib`, then refuse.
- *
- * A real class, not `vi.fn()` with an arrow - the latter is not a constructor, so every
- * `new WebAssembly.Memory(...)` would throw and the probe would report a reserve failure instead of
- * measuring growth.
+ * Provide a constructible memory double that accepts growth up to commitCeilingMib, then refuses it.
  */
 const stubEngine = (commitCeilingMib: number) => {
   globalThis.WebAssembly.Memory = class {
@@ -41,8 +37,9 @@ const setLocation = (search: string) => {
   vi.stubGlobal("location", { search });
 };
 
-/** The unit environment is plain node, which has no localStorage; the probe's durability is the
- * behaviour under test, so it needs a real (in-memory) one rather than the null-storage fallback. */
+/**
+ * Use an in-memory Storage implementation to check saved records independently of the test environment.
+ */
 const createMemoryStorage = () => {
   const entries = new Map<string, string>();
   return {
@@ -75,14 +72,14 @@ afterEach(() => {
 const runProbe = () => runBrowserMemoryGrowthProbe({ onStep: () => undefined });
 
 describe("runBrowserMemoryGrowthProbe", () => {
-  it("reports the committed ceiling when the engine refuses further growth", async () => {
+  it("reports completed growth when the engine refuses the next step", async () => {
     setLocation("?growthTargetMib=512&growthStepMib=64");
     stubEngine(192);
 
     const summary = await runProbe();
     const verdict = summary.steps.at(-1);
 
-    expect(verdict?.name).toBe("verdict: device ceiling is 192 MiB of committed shared memory");
+    expect(verdict?.name).toBe("result: growth stopped after 192 MiB in this run");
     expect(summary.steps.some((step) => step.name === "engine refused further growth")).toBe(true);
   });
 
@@ -93,24 +90,23 @@ describe("runBrowserMemoryGrowthProbe", () => {
     const summary = await runProbe();
     const verdict = summary.steps.at(-1);
 
-    expect(verdict?.name).toBe("verdict: committed the full 128 MiB without refusal");
+    expect(verdict?.name).toBe("result: reached 128 MiB and touched each WASM page");
     expect(summary.failedSteps).toBe(0);
   });
 
-  it("persists progress before each step so a kill leaves the last good value", async () => {
+  it("saves the last completed step when further growth is refused", async () => {
     setLocation("?growthTargetMib=256&growthStepMib=64");
     stubEngine(128);
 
     await runProbe();
 
-    // The record has to survive the run, not be written only at the end - that is what makes a
-    // device kill recoverable.
+    // The saved record includes the last completed step and the refused status.
     const stored = JSON.parse(storage.getItem(STORAGE_KEY) ?? "{}");
     expect(stored.committedMib).toBe(128);
     expect(stored.status).toBe("refused");
   });
 
-  it("surfaces a record left running by a previous load as a device kill", async () => {
+  it("surfaces a record left running by a previous load as interrupted", async () => {
     storage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -128,13 +124,13 @@ describe("runBrowserMemoryGrowthProbe", () => {
     const summary = await runProbe();
     const previous = summary.steps[0];
 
-    // The whole point: the run that killed the tab never got to report, so the next run reports it.
-    expect(previous?.name).toBe("previous run: DEVICE DIED mid-probe");
+    // A saved running record is reported as interrupted when another run starts.
+    expect(previous?.name).toBe("previous run: interrupted before completion");
     expect(previous?.error).toContain("768 MiB");
     expect(previous?.status).toBe("failed");
   });
 
-  it("exposes a killed run at page load without needing another run", async () => {
+  it("exposes an interrupted run at page load without another allocation", async () => {
     storage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -147,15 +143,14 @@ describe("runBrowserMemoryGrowthProbe", () => {
       }),
     );
 
-    // The bug this covers: reporting only from inside the probe meant a killed run showed nothing on
-    // reload, and starting another run to see it wiped the log and risked another kill.
+    // Reading the prior result MUST NOT require another allocation run.
     const step = getInterruptedMemoryGrowthRun();
 
-    expect(step?.name).toBe("previous run: DEVICE DIED mid-probe");
+    expect(step?.name).toBe("previous run: interrupted before completion");
     expect(step?.error).toContain("832 MiB");
   });
 
-  it("keeps a killed run readable across repeated reloads", () => {
+  it("keeps an interrupted run readable across repeated reloads", () => {
     storage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -168,13 +163,12 @@ describe("runBrowserMemoryGrowthProbe", () => {
       }),
     );
 
-    // Non-destructive read: the archive-stress equivalent clears on read, which would make the
-    // result vanish if the page reloaded twice.
+    // Repeated reads MUST preserve the saved result.
     expect(getInterruptedMemoryGrowthRun()?.error).toContain("512 MiB");
     expect(getInterruptedMemoryGrowthRun()?.error).toContain("512 MiB");
   });
 
-  it("returns nothing at load when no run was interrupted", () => {
+  it("returns nothing at load when no record exists", () => {
     expect(getInterruptedMemoryGrowthRun()).toBeNull();
   });
 
@@ -185,7 +179,7 @@ describe("runBrowserMemoryGrowthProbe", () => {
     const summary = await runProbe();
     const start = summary.steps.find((step) => step.name === "growth probe start");
 
-    // A step larger than the cap could take the device out before the previous value is durable.
+    // Query parameters cannot bypass the maximum step size.
     expect(start?.command).toContain("step=128 MiB");
   });
 });

@@ -366,9 +366,8 @@ function WebappRoot({
     if (notFound) return;
     syncWorkflowSeoMetadata(state.currentView);
   }, [notFound, state.currentView]);
-  // Warm-up readiness gates the "Offline ready" chip: null means unknown or
-  // incomplete, so the chip stays "installing" until the full offline set
-  // (app + identify packs + EmulatorJS) is cached.
+  // Offline readiness requires the app, EmulatorJS, and required or selected identify groups to be cached.
+  // Unknown or incomplete progress keeps the status at installing.
   const [offlineProgress, setOfflineProgress] = useState<OfflineWarmupDisplayProgress | null>(() =>
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );

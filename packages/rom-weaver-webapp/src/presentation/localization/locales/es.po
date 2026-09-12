@@ -2701,7 +2701,7 @@ msgstr "Inicio de rom-weaver"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
-msgstr "rom-weaver está en la caché de este navegador. La próxima visita cargará desde esa copia, con o sin red."
+msgstr "rom-weaver está en la caché de este navegador para usarlo sin conexión. Si tienes conexión, puede descargar contenido más reciente."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3201,7 +3201,7 @@ msgstr "El service worker está desactivado, así que rom-weaver necesita la red
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.activeDesc"
-msgstr "El service worker sirvió esta página desde la caché, así que rom-weaver funciona sin red."
+msgstr "El service worker está activo y la copia sin conexión está lista. Puede haber solicitudes de red mientras tengas conexión."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -5,12 +5,11 @@
 // CLI scope: every non-workspace Cargo package reachable from the workspace
 // members over normal + build dependency edges, plus the source trees that are
 // deliberately inlined into rom-weaver-containers.
-// Webapp scope: CLI scope plus the webapp package's production dependency graph.
+// Webapp scope: production npm dependencies and shared identify-data attribution.
+// Combined scope: CLI and webapp inventories.
 //
-// Uses ONLY Node built-ins + `cargo metadata`. No npm or cargo plugins, no
-// network. npm's lockfile supplies the resolved webapp graph; npm install is
-// still required when license text files need to be copied. Output is fully
-// deterministic (sorted, no timestamps).
+// Cargo metadata can fetch missing manifests; npm license texts need installed packages.
+// Output uses stable ordering and omits timestamps.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -41,8 +40,7 @@ const PROJECT_NOTICE = [
 ].join("\n");
 const WEBAPP_NOTICES_PAGE = `# Notices
 
-rom-weaver is free and open-source, and it is built from other people's
-open-source work. This page says where to find the license for both.
+This page links to the rom-weaver license and the licenses of its bundled components.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -62,8 +60,7 @@ The source code, the full history, the build setup, and the released files all
 live in the
 [rom-weaver repository](https://github.com/rom-weaver/rom-weaver).
 
-The license text is what actually governs your rights and obligations. This
-page is a signpost to it and changes nothing about it.
+The license text governs your rights and obligations.
 
 ## Other people's code
 
@@ -75,15 +72,11 @@ license and copyright notice.
 The Test page uses a self-hosted EmulatorJS build and selected emulator cores.
 Read its [license](/emulatorjs/LICENSE) and [core notice](/emulatorjs/NOTICE).
 
-Those notices are generated from the dependencies that actually go into a
-build, rather than typed up by hand. A hand-kept list drifts out of date the
-first time somebody adds a dependency and forgets. A generated one cannot.
+The build generates the inventories from the resolved dependency graphs and the recorded vendored sources. Report missing or incorrect entries through the link below.
 
 ## The full lists
 
-The [webapp notice file](/WEBAPP_NOTICE) lists everything shipped in this
-browser build. The [combined notice file](/NOTICE) adds the components used by
-the command-line tool and the shared engine underneath both.
+The [webapp notice file](/WEBAPP_NOTICE) lists the production npm dependencies and shared identify-data attribution. The [combined notice file](/NOTICE) also lists the Rust engine's dependencies, build dependencies, and vendored components.
 
 Each entry names the component, its version, its license, where the project
 lives, and the license or notice files that came with it. They are plain text,
@@ -404,8 +397,7 @@ function loadWebappRows() {
 function licenseSearchDirs(pkg) {
   const manifestDir = path.dirname(pkg.manifest_path);
   const dirs = [manifestDir];
-  // Path/local crates (vendored submodules) sometimes keep their license one
-  // level up from the crate manifest (e.g. a sub-crate inside a vendored repo).
+  // Local path dependencies can keep their license above the crate manifest.
   if (!pkg.source) {
     dirs.push(path.dirname(manifestDir));
   }
@@ -414,7 +406,7 @@ function licenseSearchDirs(pkg) {
 
 /**
  * Find license text files for a package. Returns a sorted, de-duplicated list
- * of absolute file paths (first matching directory wins per file name).
+ * of absolute file paths from the first directory with matching files.
  */
 function findLicenseFiles(row) {
   const seenNames = new Set();

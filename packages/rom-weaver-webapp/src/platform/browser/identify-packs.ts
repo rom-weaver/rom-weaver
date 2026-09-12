@@ -1,13 +1,6 @@
 /**
- * Fetches the per-system identify packs the browser stages for the wasm ingest
- * command. Three properties matter here:
- *
- * 1. A pack that cannot be fetched, sized, or hashed is an UNAVAILABLE database,
- *    never a silent "no match". Callers get {@link IdentifyDataUnavailableError}
- *    so the UI can say so and offer a retry.
- * 2. The service worker installs every pack before use. This module reads only
- *    the packs a ROM could plausibly match into memory.
- * 3. Libretro and OpenGood data ships with the app and uses same-origin URLs.
+ * Fetch and validate the same-origin identify packs selected for a lookup.
+ * A failed pack fetch or validation MUST report unavailable data, not a ROM with no match.
  */
 import {
   algorithmForHex,

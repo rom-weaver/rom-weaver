@@ -191,7 +191,7 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
       if ((oflags & wasiShim.wasi.OFLAGS_CREAT) !== wasiShim.wasi.OFLAGS_CREAT) {
         if (this.tracedMissingOpens < MAX_TRACED_MISSING_OPENS) {
           this.tracedMissingOpens += 1;
-          // `entries=0` is the signature of a mount that resolved to the wrong OPFS directory.
+          // An empty mount can indicate that a worker resolved the wrong OPFS directory.
           this.mount.trace?.(
             `[browser-opfs] path open missing mount=${this.mount.mountPath} path=${basenameForTrace(pathStr)} entries=${this.mount.contents.size}`,
           );
@@ -328,11 +328,8 @@ function createInMemoryEntry(
     writable: true,
   });
   mount.trackOwnedFile(proxyFile);
-  // Release the OPFS handle (and the adapter's coalescing buffers) as soon as the guest closes the
-  // fd. Extracting a many-entry archive creates one of these per entry; holding them until finishRun
-  // made both live handles and retained buffers scale with the entry count, which exhausts the proxy
-  // handle table and kills the tab on iOS. BrowserProxyRandomAccessFile.reopen() re-arms the adapter,
-  // so a later checksum pass or workflow chaining re-opens the path transparently.
+  // Closing the last fd parks its adapter in the bounded idle pool; eviction releases its handle and buffers.
+  // A later checksum pass can reopen it without keeping every archive entry open for the whole run.
   parent.entries.set(
     parent.name,
     new WasiRandomAccessFileInode(proxyFile, { closeOnLastFdClose: true, idlePool: mount.idleFilePool }),

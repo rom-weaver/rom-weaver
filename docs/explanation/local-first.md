@@ -40,7 +40,7 @@ The webapp targets the last two major versions of Chrome, Edge, Firefox, Safari,
 
 - **Memory and storage are the browser's, not the machine's.** A browser tab can run out of room on a large disc image long before your computer would.
 - **Capabilities vary by browser.** Threaded WebAssembly, large-file storage, and installable app support are not uniform. The site reports what it found in the masthead - see [Webapp runtime status](../hosting/webapp-runtime-status.md).
-- **Nothing is shared between devices.** There is no account, so there is no sync. That is the point, but it is still a limitation.
+- **Nothing is shared between devices.** There is no account or built-in synchronization.
 
 When a browser cannot finish a large job, the CLI is the same engine without the browser's limits. [Browser and CLI](browser-and-cli.md) covers the choice.
 

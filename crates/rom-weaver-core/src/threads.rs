@@ -296,9 +296,6 @@ impl ThreadCapability {
                 }
             }
         };
-        // One line carries the full negotiated plan; `used_parallelism` already says whether threads
-        // are on, so the separate enabled/disabled trace (and the duplicate `threads_enabled` field)
-        // was pure repetition on a path that runs on every plan_threads call.
         trace!(
             capability = ?self,
             budget = %budget,

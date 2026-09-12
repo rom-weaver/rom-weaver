@@ -178,7 +178,7 @@ if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home pag
 assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply-patch"', "home Apply card");
 assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/supported-formats"', "home formats reference link");
-// The landing page is the one route with no workflow form, so no tab is current.
+// The landing page has no current workflow tab.
 if (homeHtml.includes('aria-selected="true" class="mode"')) {
   throw new Error("the home page marks a workflow tab as selected");
 }
@@ -306,8 +306,7 @@ for (const route of DOC_ROUTES) {
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
     assertIncludes(docsHtml, 'href="/docs/self-hosting"', `${route.slug} self-hosting link`);
   }
-  // The hub is an index with no headings of its own, so it has neither in-page
-  // anchors nor an outline to rail. Every other page must have both.
+  // Pages with section headings MUST expose section links and an outline.
   if (route.sections.length > 0) {
     assertIncludes(docsHtml, `href="/${route.slug}#`, `${route.slug} in-page links`);
     assertIncludes(docsHtml, 'aria-label="On this page"', `${route.slug} section rail`);
@@ -328,12 +327,7 @@ for (const route of DOC_ROUTES) {
   const guide = ["docs/tutorials/", "docs/how-to/", "docs/explanation/"].some((folder) =>
     route.source.startsWith(folder),
   );
-  // The hub is an index of links, not a guide, but it still has to say enough
-  // to stand on its own as the published documentation landing page.
-  // The guide bar reads low because it is a stub gate, not a length target: it
-  // catches a page published with a heading and two sentences. It was 500 while
-  // inline script source inflated every count; against prose alone the same
-  // corpus measures 344 words on its shortest how-to.
+  // These minimums catch accidentally empty pages; they are not writing targets.
   let minimumWords = guide ? 300 : 150;
   if (route.slug === "docs") minimumWords = 250;
   const wordCount = countVisibleWords(docsHtml);

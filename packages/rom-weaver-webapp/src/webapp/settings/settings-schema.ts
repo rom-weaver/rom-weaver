@@ -39,15 +39,8 @@ import {
 const logger = createLogger("settings");
 
 const SETTINGS_STORAGE_VERSION = 9;
-// Versions whose payload loads under the current schema, so stored settings
-// survive the upgrade; the next save rewrites the payload at the current
-// version. A version bump must keep its predecessors loadable - list the old
-// version here (additive changes load as-is because the loader defaults every
-// missing field) or reshape the payload before the field reads. Wiping is a
-// last resort for payloads that cannot be mapped. v9 removes hidden automatic
-// actions and always shows Download. v8 separates Download and Test behavior.
-// v7 combined them. v5 and v6 stored the automatic action and Test-button
-// visibility separately. v4 and older never shipped.
+// Accept older settings payloads and save them in the current format on the next write.
+// New schema versions MUST preserve compatible fields through defaults or migrate them before reading.
 const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6, 7, 8]);
 
 type GroupedStoredSettings = {

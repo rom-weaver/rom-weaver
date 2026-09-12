@@ -40,7 +40,7 @@ That has one consequence worth stating plainly: vendoring someone else's crate a
 | Code | Form | Packaged as | Reason |
 | --- | --- | --- | --- |
 | `crates/rom-weaver-containers/libarchive/vendor/libarchive` | Inlined C sources | part of `rom-weaver-containers` | Built by `crates/rom-weaver-containers/libarchive/build.rs`; carries local patches upstream has not taken |
-| `crates/rom-weaver-containers/lzma-sdk/vendor/C` | Inlined C sources | part of `rom-weaver-containers` | 7-Zip's own LZMA1/LZMA2 coders, so the 7z paths match `7zz` speed instead of liblzma's |
+| `crates/rom-weaver-containers/lzma-sdk/vendor/C` | Inlined C sources | part of `rom-weaver-containers` | 7-Zip's LZMA1/LZMA2 coders, used by the 7z reader and native writer |
 | `crates/rom-weaver-containers/src/nod` | Inlined module | part of `rom-weaver-containers` | GameCube/Wii disc support without publishing a renamed `rom-weaver-nod` crate |
 | `crates/rom-weaver-containers/src/xdvdfs` | Inlined module | part of `rom-weaver-containers` | Upstream's published `write` feature forces `wax` |
 
@@ -79,7 +79,7 @@ There is no version of this that ends in a crates.io dependency - libarchive is 
 
 7-Zip's own LZMA SDK (public domain) supplies the LZMA1/LZMA2 coders the 7z reader and writer use. The C sources live at `crates/rom-weaver-containers/lzma-sdk/vendor/C/`, upstream's `lzma-sdk.txt` sits beside them, and `libarchive/build.rs` compiles them with `cc` into a `lzma_sdk` static library that links after `libarchive.a`.
 
-Why it is here at all: liblzma is a *format* library first, and its LZMA2 encoder/decoder are measurably slower than 7-Zip's, which is what `7zz` itself runs. Matching 7zz's wall time on 7z create/extract is not reachable through liblzma, and the SDK is public domain so vendoring it costs nothing in license surface.
+The SDK supplies the same codec implementation as `7zz`, with local decoder patches described below. This lets rom-weaver compare output and performance against `7zz`; it does not guarantee equal speed on every input.
 
 The exact upstream drop is pinned in `crates/rom-weaver-containers/lzma-sdk/LZMA_SDK_VERSION` (version, source URL, and the SHA-256 of the published `.7z`). Refresh it with:
 
@@ -112,19 +112,16 @@ The assembly version was measured end-to-end on native ARM64 over ten runs per c
 | Read LZMA1/LZMA2 without a liblzma-executed filter chain | all | 7-Zip SDK decoder | One decoder API everywhere; its implementation is assembly where supported and portable C otherwise |
 | Read LZMA filter chains | all | liblzma | liblzma already owns delta and architecture-filter execution |
 | Write LZMA1 | all | liblzma | The SDK integration adds no LZMA1 encoder |
-| Write LZMA2 | native | 7-Zip SDK encoder by default; liblzma fallback/override | Matches `7zz` speed while retaining a safe fallback |
-| Write LZMA2 | WebAssembly | liblzma | The browser worker pool cannot support the SDK encoder's nested threads |
+| Write LZMA2 | native | 7-Zip SDK encoder by default; liblzma fallback/override | Uses the SDK encoder with a fallback if its bridge thread cannot start |
+| Write LZMA2 | WebAssembly | liblzma | The SDK encoder bridge is disabled for WASM targets |
 
 The SDK decoder's assembly and C loops are implementations of the same `rw_lzma_dec_*` interface, not separate backends. Build flags name the two actual capabilities independently: `ROM_WEAVER_7Z_SDK_DECODER` and `ROM_WEAVER_7Z_SDK_LZMA2_ENCODER`.
 
 ### The SDK encoder is native-only
 
-The SDK's LZMA2 encoder is a blocking one-shot over stream callbacks, so `glue/rom_weaver_lzma_sdk.c` drives it from a thread of its own and rendezvouses with libarchive's push-shaped `la_zstream`. The SDK then spawns its own match-finder and block threads **from that thread**, and those nested spawns do not survive the browser's WASI thread pool:
+The SDK's LZMA2 encoder consumes stream callbacks in one blocking call. `glue/rom_weaver_lzma_sdk.c` runs that call on a bridge thread to work with libarchive's incremental writes. The encoder can then create match-finder and block threads.
 
-- A run that asks for one thread gets a *zero-sized* pool (`resolveBrowserThreadPoolSizeFromCount` returns 0 for `<= 1`), so even the bridge thread fails with `EAGAIN` and no 7z archive can be written at all.
-- With a large pool the bridge thread starts, but the SDK's nested spawn from it never gets its start ack and comes back `SZ_ERROR_THREAD` carrying errno 6.
-
-liblzma's encoder spawns its workers from the main thread, which the pool handles, and it is genuinely parallel there - so wasm keeps it. Forcing the SDK encoder single-threaded to fit would have made every `effective_threads > 1` the browser reports a lie.
+The browser uses liblzma for encoding. Its single-thread command configuration reserves no WASI pool workers, so an encoder that requires a bridge thread cannot run in that configuration. The browser also supports nested dedicated workers; the disabled SDK encoder has not been validated against that path. The restriction here belongs to this encoder integration, not to nested workers in general.
 
 `lzma_sdk_lzma2_encoder_available()` in `libarchive/build.rs` is the single switch: false for wasm, which drops `Z7_ST`-guarded code from the SDK build and leaves `ROM_WEAVER_7Z_SDK_LZMA2_ENCODER` undefined so the writer never reaches for it. The planner in `handlers/sevenz.rs` mirrors the split with `cfg(target_family = "wasm")` so its worker-memory and parallelism model describes the backend that actually runs.
 

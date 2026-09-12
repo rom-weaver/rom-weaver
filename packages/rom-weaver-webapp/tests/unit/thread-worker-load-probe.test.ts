@@ -7,9 +7,8 @@ import {
 } from "../../src/wasm/browser-wasi-thread-load-probe.ts";
 
 /**
- * A thread worker that fails to load arrives as an empty event, so these probes are the only
- * evidence of *why*. They hang off an already-failing path, so the contract is: report once, never
- * throw, never block.
+ * Worker error events may omit their cause, so fetch diagnostics provide extra context on the failure path.
+ * The probe MUST report at most once and keep failures from escaping to its caller.
  */
 
 const WORKER_URL = "https://rom-weaver.test/assets/browser-wasi-thread-worker-Test1234.js";

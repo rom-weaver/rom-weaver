@@ -23,9 +23,8 @@ const isLikelyDiscImageSize = (size: number | null | undefined): boolean => {
 };
 
 /**
- * Whether a source with the given `extension` and `size` is a disc image rather than a bare ROM dump.
- * Non-ambiguous extensions are always disc images; an ambiguous extension is a disc image only when
- * its size is sector-aligned (or its size is unknown).
+ * Apply the size gate for ambiguous disc extensions; other extensions pass through unchecked.
+ * Callers MUST first establish that the source is a candidate disc image.
  */
 const isLikelyDiscImageSource = (extension: string | null | undefined, size: number | null | undefined): boolean => {
   if (!isAmbiguousDiscImageExtension(extension)) return true;

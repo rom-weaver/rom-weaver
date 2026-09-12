@@ -82,7 +82,7 @@ const getArchiveProgressReporter =
       label: createCompressionProgressLabel({
         formatLabel,
         label: outputName ? `Compressing ${outputName} to ${formatLabel}` : `Compressing to ${formatLabel}`,
-        // actual threads the runtime reported using (not the requested budget)
+        // Negotiated effective thread count from the runtime report.
         threads: getProgressEventThreadCount(progress),
       }),
       percent: getProgressEventPercent(progress),

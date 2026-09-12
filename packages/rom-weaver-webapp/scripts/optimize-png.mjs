@@ -1,16 +1,11 @@
 #!/usr/bin/env node
 /**
- * Losslessly re-encode a PNG: strip non-rendering chunks, then search filter
- * strategies × deflate strategies for the smallest IDAT.
+ * Re-encode PNG scanlines with different filters and deflate strategies.
+ * The output retains image samples, palette, and transparency, but discards
+ * other metadata, including color profiles and animation chunks.
  *
- * Headless Chrome (the icon rasterizer) writes PNGs at libpng's default filter
- * and a middling zlib level, which leaves ~20-25% on the table. `oxipng -o max`
- * recovers ~27%, but the extra few percent comes from a zopfli-class deflate
- * and would cost a native binary in the build and in CI. Node's zlib gets close
- * enough to not be worth a dependency; see the PR that added this file.
- *
- * Pixels are never touched - `--verify` re-decodes both sides and asserts the
- * unfiltered scanlines are byte-identical.
+ * `--verify` compares IHDR and unfiltered scanlines. It does not verify color
+ * management, palette interpretation, or animation.
  *
  *   node scripts/optimize-png.mjs [--verify] <file-or-directory...>
  *
@@ -29,8 +24,8 @@ import zlib from "node:zlib";
 export const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 // PNG colour type -> bytes per pixel at 8-bit depth.
 const BYTES_PER_PIXEL = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
-// Everything else (gAMA, pHYs, sRGB, tEXt, eXIf, ...) is metadata a browser
-// does not need to render the icon identically.
+// Keep the header, palette, and transparency; stripping other chunks can change
+// color-managed rendering: https://www.w3.org/TR/png-3/#6Colour-values
 const RENDERING_CHUNKS = new Set(["IHDR", "PLTE", "tRNS"]);
 const FILTER_TYPES = [0, 1, 2, 3, 4];
 const ADAPTIVE = "adaptive";
@@ -212,8 +207,8 @@ export const decodeRgba = (buffer) => {
 };
 
 /**
- * Return a smaller, pixel-identical PNG, or the input unchanged when the format
- * is unsupported or nothing beat what was already there.
+ * Return a smaller PNG with the same scanline samples, or the original input
+ * when its format is unsupported or no smaller encoding is found.
  */
 export const optimizePng = (buffer) => {
   const image = decode(buffer);
@@ -237,7 +232,7 @@ export const optimizePng = (buffer) => {
   return optimized.length < buffer.length ? optimized : buffer;
 };
 
-/** Throw unless `optimized` decodes to exactly the pixels of `source`. */
+/** Compare IHDR and unfiltered scanlines; ancillary chunks and palettes are not compared. */
 export const assertSamePixels = (source, optimized, label) => {
   const before = decode(source);
   const after = decode(optimized);

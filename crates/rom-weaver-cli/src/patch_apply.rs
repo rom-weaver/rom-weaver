@@ -4742,15 +4742,6 @@ impl CliApp {
         Ok(steps)
     }
 
-    /// Compress output for both plain apply and `.dcp` disc rebuilds, returning
-    /// the create report and codec label.
-    ///
-    /// Caller-specific labels and report metadata stay outside. A missing
-    /// handler preserves the validation error expected by callers, though the
-    /// compression plan should already have validated it.
-    /// Resolve the plan `--dry-run` reports. Only the dry run resolves the
-    /// compression plan up front; doing it on the normal path would surface its
-    /// errors ahead of the patch checks that run first today.
     /// Resolve the compression plan and re-check the resolved output path: the
     /// early guard checked the path the user named, and an appended container
     /// extension makes the real output a different file.

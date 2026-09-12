@@ -2,7 +2,7 @@
 
 Match a ROM to an exact dump name with `rom-weaver identify`.
 
-Use `probe` to inspect the file type. Use `checksum` to prove which bytes it holds.
+Use `probe` to inspect the file type. Use `checksum` to calculate fingerprints that you can compare with expected values.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -140,7 +140,13 @@ This is the checksum a patch author usually means: the ROM's bytes, not the arch
 
 ## Hash part of a file
 
-Skip a copier header, or hash only the region a patch touches, with a byte range. `rom-weaver checksum --help` lists the range flags for your version.
+Use `--start` and `--length` to hash a byte range. For example, hash 1,024 bytes after a 512-byte copier header:
+
+```bash
+rom-weaver checksum game.smc --start 512 --length 1024 --algo sha256
+```
+
+Use the same range when comparing with an expected checksum. A range checksum does not describe the whole file.
 
 ## Read from a pipeline
 

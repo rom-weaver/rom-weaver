@@ -9,17 +9,8 @@ import type { WhatsNewPageProps } from "./whats-new-page.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
- * Workflow forms are the bulk of the route-exclusive bundle weight, and a
- * visitor only ever lands on one of them. Each one is its own chunk here so a
- * first load parses the tab it opened rather than all four.
- *
- * The catch is the prerendered landing shell (rom-weaver-prerender-shell): the
- * markup index.html paints already contains the landing tab's fully rendered
- * form, so a Suspense fallback on the first client render would blank the shell
- * the browser just painted. `preloadWorkflowRoute` therefore resolves the
- * landing route BEFORE the first mount (and before renderToString on the build
- * side); a preloaded route renders its real component synchronously and never
- * suspends. Suspense only ever engages for a tab the visitor switches to.
+ * Each workflow loads in a separate chunk so the entry bundle does not include every form.
+ * Client boot and prerender MUST preload the initial route to avoid replacing its rendered shell with a Suspense fallback.
  */
 
 const logger = createLogger("workflow-routes");

@@ -155,10 +155,8 @@ const invokeRomWeaverCompressionCreateWorker = async (
     }
     const codecs = normalizedChdCodecs.codecs;
     const levelProfile = normalizeCompressionLevelProfile(input.levelProfile);
-    // The zip+zstd browser memory thread cap is enforced authoritatively in Rust
-    // (zip.rs create_thread_capability -> plan_threads negotiates the requested
-    // count down to achievable.min(memory_cap)); forward the requested budget and
-    // let the engine cap it. See docs/ts-rust-unification-plan.md (Task C).
+    // Rust zip create_thread_capability applies the codec memory cap when planning threads.
+    // Forward the requested budget so the engine owns that limit.
     const threadArg = toThreadBudget(input.threads);
     const command = createRomWeaverCommand("compress", {
       codec: codecs,

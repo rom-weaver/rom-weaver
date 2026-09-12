@@ -1570,8 +1570,6 @@ fn extract_nested_scan_ignores_existing_output_archives() {
     assert!(!out_dir.child("stale/stale.bin").path().exists());
 }
 
-// ---- relocated from shared.rs (single-module helpers) ----
-
 fn assert_running_event(events: &[Value], command: &str, format: &str) {
     assert!(
         events.iter().any(|event| {

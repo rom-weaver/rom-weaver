@@ -6,10 +6,10 @@ pub(super) const REVERT_FOOTER_MAGIC: &[u8; 4] = b"RWT\x01";
 /// Total on-disk size of the revert footer: magic+version(4) + pad_byte(1) + pad_len(5, 40-bit LE)
 /// + crc32(4).
 pub(super) const REVERT_FOOTER_LEN: u64 = 14;
-/// Maximum padding length the 40-bit `pad_len` field can encode (1 TiB, far beyond any cartridge).
+/// Maximum padding length the 40-bit `pad_len` field can encode: 1 TiB minus one byte.
 pub(super) const REVERT_FOOTER_MAX_PAD_LEN: u64 = (1 << 40) - 1;
 
-/// Metadata recovered from a revert footer: enough to reconstruct the original file byte-for-byte.
+/// Stored restoration size and fill byte; the footer does not store removed bytes.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RevertFooter {
     original_size: u64,
@@ -17,8 +17,7 @@ pub(super) struct RevertFooter {
 }
 
 impl CliApp {
-    /// Reconstruct the original file from a trimmed file that carries a revert footer: drop the
-    /// footer, then pad back to the recorded original size with the recorded padding byte.
+    /// Remove the footer and extend the remaining data to its recorded size with its fill byte.
     pub(super) fn revert_with_footer(
         source: &Path,
         destination: &Path,
@@ -109,8 +108,8 @@ impl CliApp {
         !crc
     }
 
-    /// Append a revert footer recording the padding length and byte so a later `--revert` can
-    /// reconstruct the original file exactly. `path` must already hold the trimmed data only.
+    /// Append the size difference and supplied fill byte for a later `--revert`.
+    /// `path` MUST already contain only the trimmed data; removed bytes are not checked here.
     pub(super) fn write_revert_footer(path: &Path, original_size: u64, pad_byte: u8) -> Result<()> {
         let data_size = fs::metadata(path)?.len();
         let pad_len = original_size.saturating_sub(data_size);
@@ -172,9 +171,8 @@ impl CliApp {
         }))
     }
 
-    /// Inspect the final byte of a ROM to decide which padding convention it uses. Returns the pad
-    /// byte (`0x00` or `0xFF`) when the file ends in one, or `None` when the trailing byte is real
-    /// data and there is no padding to remove.
+    /// Return a trailing `0x00` or `0xFF` as a padding candidate.
+    /// The final byte alone does not establish whether it is unused space.
     pub(super) fn detect_trailing_pad_byte(path: &Path) -> Result<Option<u8>> {
         let mut input = File::open(path)?;
         let file_size = input.metadata()?.len();

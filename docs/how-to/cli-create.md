@@ -63,7 +63,7 @@ rom-weaver checksum -i rebuilt.gba --algo sha256
 rom-weaver checksum -i modified.gba --algo sha256
 ```
 
-The SHA-256 values must match. Test the rebuilt file in the emulator or hardware you support. `patch validate` alone cannot compare against your intended Modified file unless you supply that expected result check.
+The SHA-256 values must match. Test the rebuilt file in the emulator or hardware you support. `patch validate` checks the values stored in the patch. It cannot compare with a separate Modified file, so keep the reconstruction check above.
 
 ## Where next
 

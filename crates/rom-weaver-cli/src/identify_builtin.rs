@@ -770,8 +770,7 @@ fn install_group_archive(database_dir: &Path, group: &str, archive: &[u8]) -> Re
             decompress(&stage.join(&entry.brotli_file)).map(|bytes| (entry.slug.as_str(), bytes))
         })
         .collect::<Result<Vec<_>>>()?;
-    // Shards stay Brotli-compressed on disk: nothing native reads them yet, and
-    // the digest was checked while staging.
+    // Keep shards Brotli-compressed for the cheat reader; staging checked their digests.
     let cheats = entries
         .cheats
         .iter()

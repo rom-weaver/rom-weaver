@@ -20,9 +20,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The nightly suite uses a dev wasm module (no wasm-opt/brotli), so it
-      # cannot consume CI's production artifact. Cache the exact dev build
-      # separately; unchanged scheduled runs skip its ~6.5 minute compile.
+      # The exhaustive suite uses a development module with its own cache key.
+      # It cannot reuse CI's optimized production module.
       - name: Restore development WASM module
         id: wasm-cache
         uses: ./.github/actions/wasm-cache

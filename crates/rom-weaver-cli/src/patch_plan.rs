@@ -2,7 +2,7 @@
 // variant checksums and everything known about each enabled patch (embedded
 // endpoints, filename/bundle/user expectations, declared basis); the planner
 // resolves each patch's input basis, diagnoses chain order, and decides which
-// output expectations are enforceable. `patch-validate --plan` and the apply
+// output expectations are enforceable. `patch validate --plan` and the apply
 // pipeline share it.
 
 use super::*;
@@ -66,9 +66,8 @@ pub enum PatchInputMatch {
     None,
 }
 
-/// Static input verdict. `ChainDeferred` means the state is only provable by
-/// applying the chain (mid-chain previous-basis patches) - it replaces the
-/// false "invalid" such patches earn from independent dry-runs today.
+/// Static input verdict. `ChainDeferred` means the expected intermediate
+/// state can only be checked after applying the preceding chain steps.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(rename_all = "snake_case")]
@@ -121,7 +120,7 @@ pub struct OutputEnforceableEntry {
     pub standdown_reason: Option<String>,
 }
 
-/// The typed `details.patch_validation` payload of `patch-validate --plan`.
+/// The typed `details.patch_validation` payload of `patch validate --plan`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct PatchValidationPlan {
@@ -292,8 +291,8 @@ pub(crate) struct BaseEndpointMatch {
     pub representation: BaseRepresentation,
 }
 
-/// Per-step verification spec threaded into the apply chain loop. An empty
-/// slice (or all-default entries) reproduces today's behavior exactly.
+/// Per-step verification settings for the apply loop. Empty or default entries
+/// add no declared checks or basis overrides.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PatchStepVerification {
     /// Resolved basis for this step; `None` behaves as previous (default).

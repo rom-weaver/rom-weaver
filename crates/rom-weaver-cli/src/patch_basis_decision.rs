@@ -4,9 +4,8 @@
 //! any: [`CliApp::checksum_basis_proof`] compares every whole-file check the
 //! patch embeds - under whatever algorithm it uses (BPS/UPS/PMSR crc32, RUP and
 //! Solid md5) - plus anything the user, bundle or filename declared, against
-//! the raw and the headerless bytes. IPS embeds nothing, and before this path
-//! the ambiguity ended the decision - the header was kept, which is wrong
-//! whenever the author worked from headerless bytes.
+//! the raw and the headerless bytes. Formats such as IPS provide no embedded
+//! checksums, so they can need structural evidence.
 //!
 //! Two fallbacks run in order, both reached only after checksum proof turns out
 //! to be unavailable:
@@ -22,8 +21,8 @@
 //!    console ROM the input was. A wrongly based patch scatters records across
 //!    the internal ROM header and the platform stops recognising its own ROM.
 //!
-//! Nothing here guesses. When every rule is unconvinced the caller keeps its
-//! existing conservative behaviour.
+//! When the evidence does not distinguish the candidates, the caller keeps
+//! the existing header state and reports any inferred decision.
 
 use super::*;
 
@@ -44,9 +43,7 @@ pub(super) enum ChecksumBasisProof {
     NoEvidence,
 }
 
-/// Input size above which the tiebreaker's two speculative applies stop being
-/// worth their wall-clock. Plain IPS cannot address past 16 MiB at all; this
-/// only bounds a pathological IPS32.
+/// Cap input size to limit work from two speculative applies, regardless of format.
 const MAX_TIEBREAK_INPUT_BYTES: u64 = 64 * 1024 * 1024;
 
 impl CliApp {
@@ -505,24 +502,8 @@ impl CliApp {
             patches: vec![patch.to_path_buf()],
             output: output.clone(),
         };
-        // The format's own source and target checks stay ON: they are what
-        // separates the two candidates. A source check reads the bytes the
-        // patch was authored against (APS GBA's exact source size and per-block
-        // CRC16s, PPF's file id); a target check catches the same mistake from
-        // the other end, because a patch decoded against the wrong source
-        // cannot reproduce the output it promised (VCDIFF's per-window
-        // checksum). Whichever candidate fails one was not the author's.
-        //
-        // The patch file's own integrity checksum stays off: it is the same
-        // number for both candidates, so it can only fail both. So does
-        // progress - this is a probe, not the user's operation.
-        //
-        // `--ignore-checksum-validation` turns the source and target checks off
-        // here too. A rejection the user told the real apply to ignore is not
-        // evidence about the bytes, and leaving the checks on would reject both
-        // candidates whenever the patch's own checksums are damaged - ending
-        // the tiebreaker before the structural comparison, which reads the ROM
-        // header and needs no checksum at all.
+        // Source and target checks can distinguish the candidates unless the user disabled them.
+        // Disable patch integrity and progress: neither supplies evidence about the input basis.
         let checks_are_evidence = context.strict_patch_checksums();
         let probe_context = context
             .clone()

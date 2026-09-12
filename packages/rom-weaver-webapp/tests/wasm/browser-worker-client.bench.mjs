@@ -52,14 +52,9 @@ const EXPECTED_COMPRESS_SKIPS = {
 };
 const EXPECTED_PATCH_CREATE_SKIPS = COMMAND_PATHS_DEFAULTS.expected_patch_create_skips;
 const WASM_PATCH_CREATE_SKIPS = {
-  // dldi create needs a real DLDI-format input; the random source/modified bench
-  // fixtures have no patchable DLDI slot (this is a fixture limitation, not the
-  // os-error-44 worker-read bug, which is fixed).
+  // The random source fixtures contain no patchable DLDI slot, so DLDI creation needs a separate fixture.
   dldi: "wasm benchmark limitation: dldi patch-create needs a DLDI-format fixture",
 };
-// apsgba/dps/mod/pat/ppf apply and aps/bdf create previously failed with os error 44
-// (worker threads opening OPFS source). Those reads are now gated to the main thread
-// in wasm, and all are browser-verified, so they no longer need skipping.
 const WASM_PATCH_APPLY_SKIPS = {};
 const WASM_RUNTIME_DEFAULT = "default";
 const DISC_COMPRESS_INPUT_FORMATS = new Set(COMMAND_PATHS_DEFAULTS.disc_compress_input_formats);

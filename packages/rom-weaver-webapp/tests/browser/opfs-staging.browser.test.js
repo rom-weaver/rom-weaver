@@ -3,10 +3,8 @@ import { createBrowserOpfsSourceRef } from "../../src/workers/protocol/browser-o
 import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
 import { getManagedOpfsFileHandle } from "../../src/workers/protocol/opfs-path.ts";
 
-// Input staging into OPFS is retired: every browser input (a File handle, a wrapped handle, or a plain
-// Blob) is registered as a read-only, Blob-backed virtual file served by guest path - never copied into
-// OPFS. So a staged ref is `virtual: true`, exposes no real OPFS handle, and appears in
-// getActiveBrowserVirtualFiles() until its cleanup unregisters it.
+// Register browser sources as read-only virtual files without creating OPFS copies.
+// The staged reference stays in the virtual-file registry until its cleanup unregisters it.
 
 const activeVirtualPaths = () => getActiveBrowserVirtualFiles().map((file) => file.path);
 

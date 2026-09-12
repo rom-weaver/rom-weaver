@@ -1217,7 +1217,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.runtime.active": msg({ id: "ui.runtime.active", message: "Offline active" }),
   "ui.runtime.activeDesc": msg({
     id: "ui.runtime.activeDesc",
-    message: "The service worker served this page from the cache, so rom-weaver is running with no network.",
+    message:
+      "The service worker is active and the offline copy is ready. Network requests can still occur while you are online.",
   }),
   "ui.runtime.disabled": msg({ id: "ui.runtime.disabled", message: "Offline support off" }),
   "ui.runtime.disabledDesc": msg({
@@ -1258,7 +1259,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.runtime.ready": msg({ id: "ui.runtime.ready", message: "Offline ready" }),
   "ui.runtime.readyDesc": msg({
     id: "ui.runtime.readyDesc",
-    message: "rom-weaver is cached in this browser. The next visit loads from that copy, with or without a network.",
+    message: "rom-weaver is cached in this browser for offline use. When you are online, it can fetch newer content.",
   }),
   "ui.runtime.update": msg({ id: "ui.runtime.update", message: "Update available" }),
   "ui.runtime.updateDesc": msg({

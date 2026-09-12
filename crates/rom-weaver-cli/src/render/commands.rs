@@ -488,10 +488,8 @@ fn render_cheat_list(surface: &Surface, event: &ProgressEvent) {
     surface.line(text("attribution"));
 }
 
-/// Fallback: render a recognized `details` object as flattened key/values, else the plain label.
 /// Identify: all names first, then the rest of the identify object.
-/// The generic renderer drops arrays of objects, so without this the one field
-/// the user asked for - the game's name - never reaches the terminal.
+/// Keep game names together before the remaining metadata for easier scanning.
 fn render_identify(surface: &Surface, event: &ProgressEvent) {
     let Some(identify) = event
         .details

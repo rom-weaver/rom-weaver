@@ -13,13 +13,8 @@ import {
 import { getFileInputAcceptAttributes } from "../../src/public/react/file-input-accept.ts";
 
 /**
- * Pins WebKit/Safari behavior against the pre-centralization predicates below.
- *
- * Call sites intentionally classify some UAs differently. Expected values come
- * from these original predicates, keeping the table independent:
- *   site 1 - isMobileSafariLike (browser-runtime-diagnostics.ts)
- *   site 2 - isMobileSafari (file-input-accept.ts)
- *   site 3 - isWebKitInputRuntime (browser-opfs-source-ref.ts)
+ * Compare the shared UA predicates with independent reference predicates for diagnostics, file inputs, and OPFS sources.
+ * The call sites intentionally classify some user agents differently.
  */
 
 const SAFARI_TOKEN = /Safari/;
@@ -44,9 +39,7 @@ const originalIsWebKitInputRuntime = (ua: string, platform: string, maxTouchPoin
   return isAppleMobile || isDesktopSafari;
 };
 
-// How each site is composed from the shared primitives now. These must mirror
-// the production call sites; the assertions below prove they equal the
-// originals for every UA in the matrix.
+// Compose the shared primitives as each production caller does, then compare them with the reference predicates.
 const composedSite1 = (environment: WebKitRuntimeEnvironment) =>
   isSafariBrowser(environment) && (hasMobileToken(environment) || isAppleTouchDesktop(environment));
 
@@ -79,8 +72,7 @@ type RuntimeCase = {
   site3: boolean;
 };
 
-// Representative UA matrix. `site1`/`site2`/`site3` and every primitive value
-// below were derived from the original logic above (not from the new module).
+// The expected matrix values come from the independent reference predicates above.
 const CASES: RuntimeCase[] = [
   {
     env: {

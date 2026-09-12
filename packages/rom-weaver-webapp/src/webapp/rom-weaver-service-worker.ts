@@ -238,10 +238,8 @@ const shouldUseNetworkFirst = (request: Request, url: URL) => {
 
 const getCrossOriginIsolationHeaders = (sourceHeaders: HeadersInit = {}, credentialless = coepCredentialless) => {
   const headers = new Headers(sourceHeaders);
-  // A response that already names a COEP came from a host that serves the isolation trio itself
-  // (the deployed _headers file, or a self-host configured per docs/hosting/self-hosting.md). Pass it
-  // through untouched: rewriting a served require-corp to credentialless would un-isolate the page
-  // in browsers that cannot parse credentialless and send them into the reload dance for nothing.
+  // Preserve an explicit server COEP policy, including require-corp on hosts that do not use credentialless.
+  // Replacing that policy can change whether the page becomes isolated.
   if (headers.has(COI_HEADER_COEP)) return headers;
   headers.set(COI_HEADER_COOP, "same-origin");
   headers.set(COI_HEADER_COEP, credentialless ? "credentialless" : "require-corp");
@@ -262,14 +260,8 @@ const withCrossOriginIsolationHeaders = (
   });
 };
 
-// First-install precache progress, broadcast to the (still uncontrolled)
-// pages so the "installing" chip shows a percent instead of a bare spinner
-// through the largest download of the offline set. Only file counts are known
-// at this stage - the workbox manifest carries no sizes. Broadcasts are
-// throttled; the final count always goes out. Update installs stay silent:
-// the page there is already offline-ready and shows no install progress.
-// vite-plugin-pwa injects the manifest at the single `self.__WB_MANIFEST`
-// occurrence, so every other use MUST go through this binding.
+// Broadcast combined precache and warm-up progress on first install; update installs stay silent.
+// Vite injects the manifest once, so other consumers MUST use this binding.
 const PRECACHE_MANIFEST = self.__WB_MANIFEST;
 
 const PRECACHE_PROGRESS_THROTTLE_MS = 200;
@@ -464,8 +456,7 @@ const isIdentifyPackRequest = (url: URL) =>
   url.origin === self.location.origin &&
   /\/assets\/identify-(?:.*\.(?:pack|bin)|cheats-.*\.json|title-index\.json)$/u.test(url.pathname);
 
-// `priority: "low"` is a fetch priority hint (Chromium); other engines ignore
-// the field. It keeps warm-up traffic behind interactive requests.
+// Use a low-priority fetch hint for background traffic; the browser decides whether to honor it.
 const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
   fetch(input, { ...init, priority: "low" } as RequestInit);
 

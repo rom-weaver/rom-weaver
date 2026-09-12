@@ -7,8 +7,8 @@ import type { RomWeaverCommand } from "../../wasm/index.ts";
 // for the medium-operation overlap case. We only restrict concurrency when there is positive evidence
 // of a large working set - an operation of unknown size is treated as small so it still overlaps.
 
-// Fixed per-operation overhead (wasm runtime, buffers, OPFS staging) charged on top of the input-scaled
-// estimate. Also the value returned when the input size is unknown, so unknown ops never trip the gate.
+// Charge a fixed runtime and buffer allowance in addition to the input-scaled estimate.
+// Unknown input sizes use this allowance alone.
 const BASE_BYTES = 16 * 1024 * 1024;
 
 // Working-set multipliers over the input size, keyed by what the operation does with the bytes.
@@ -59,21 +59,16 @@ export function estimateOpWorkingSetBytes(command: RomWeaverCommand, inputBytes:
   return BASE_BYTES + Math.floor(inputBytes * operationMultiplier(command));
 }
 
-// Commands request "auto" threads (the whole budget) by default, but most do not actually use every
-// core - a BPS/UPS apply runs a single-threaded codec, a trim just truncates, and small extracts are
-// I/O-bound. The scheduler must gate on the cores an operation will REALISTICALLY use, otherwise one
-// light operation reserves the whole machine and nothing runs beside it. Compress is the exception: it
-// is genuinely CPU-parallel down to small chunk sizes, so it uses the whole budget (see below).
+// Reserve fewer threads for light work so small non-I/O operations can overlap.
+// This is an admission estimate, not a measurement of actual worker creation.
 const LIGHT_BYTES_PER_THREAD = 64 * 1024 * 1024;
 
 const isSequentialPatch = (command: RomWeaverCommand): boolean =>
   command.type === "patch" && (command.args.type === "apply" || command.args.type === "validate");
 
 /**
- * Estimate how many worker threads an operation will actually use, given its requested count and input
- * size. Sequential operations (patch apply/validate, trim) reserve a single thread; compress scales
- * with size (so large compresses still run alone); other operations reserve little so many can overlap.
- * `requestedThreads` of 0 (thread-less probe/list) yields 0.
+ * Estimate the scheduler reservation: one thread for patch apply/validate or trim, the full request for compress.
+ * Other commands scale with input size; a zero requested budget remains zero.
  */
 export function estimateScheduledThreads(
   command: RomWeaverCommand,
@@ -82,10 +77,8 @@ export function estimateScheduledThreads(
 ): number {
   if (requestedThreads <= 0) return 0;
   if (command.type === "trim" || isSequentialPatch(command)) return 1;
-  // Compress is genuinely CPU-parallel down to small chunk sizes (CHD hunks ~19 KiB, RVZ chunks
-  // 128 KiB-2 MiB), so it uses every configured thread regardless of input size - size-scaling here
-  // would force small ROMs onto a single thread (this estimate is forced back onto the dispatched
-  // command). The scheduler's memory gate still prevents two heavy ops from overlapping.
+  // Preserve the requested compression budget because this estimate is also passed to the engine.
+  // A size-based reduction would restrict formats that can parallelize small inputs.
   if (command.type === "compress") return requestedThreads;
   // Note: extract/ingest/checksum no longer rely on this estimate - they are admitted by the Rust batch
   // planner (`plan-extract-batch`), which owns their thread split via `fair_thread_allotment`. This
@@ -131,10 +124,8 @@ const isMobileWebRuntime = (navigatorLike: DeviceMemoryNavigator | undefined): b
 };
 
 /**
- * Resolve the ceiling on combined estimated working set for concurrent operations. Derived from
- * `navigator.deviceMemory` when available (a coarse GiB figure), clamped to a safe range; falls back to
- * a fixed ceiling when the engine does not expose it (Firefox/Safari). Mobile runtimes are additionally
- * capped at {@link MOBILE_MEMORY_CEILING_BYTES} so a phone/tablet never overlaps work that would OOM it.
+ * Limit combined estimated working sets using reported device memory or a fixed fallback.
+ * Mobile heuristics lower the ceiling; the estimate cannot guarantee that an allocation will succeed.
  */
 export function resolveMemoryCeilingBytes(root: DeviceMemoryRoot | null = globalThis as DeviceMemoryRoot): number {
   const deviceMemoryGib = Number(root?.navigator?.deviceMemory);

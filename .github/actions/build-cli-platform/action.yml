@@ -133,14 +133,8 @@ runs:
         APT_PACKAGES: cmake ninja-build pkg-config
       run: node scripts/ci/install-system-dependencies.mjs
 
-    # The vendored LZMA SDK's x86-64 decode loop is MASM assembly with no distro
-    # package to install it from, and without an assembler build.rs falls back to
-    # the portable C loop - which is no faster than liblzma and gives up the 7z
-    # extract parity with 7zz. Native x86-64 only: arm64 assembles its own loop
-    # with clang, and the `cross` legs build inside cross-rs' container, which
-    # Cross.toml handles instead. Windows x86-64 gets MASM's own ml64 from the
-    # VsDevCmd step below. build.rs never fails over a missing assembler, so this
-    # step is an optimisation, not a gate.
+    # Native Linux x86-64 needs a MASM-compatible assembler for the SDK decode loop.
+    # Cross-rs containers keep the portable loop; Windows gets ml64 from VsDevCmd.
     - name: Install the x86-64 LZMA assembler
       if: runner.os == 'Linux' && inputs.build != 'cross' && startsWith(inputs.target, 'x86_64-')
       shell: bash

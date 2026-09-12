@@ -16,7 +16,7 @@
 /docs/man/
 /docs/completions/
 
-# Generated ROM identify data (fetched from the pinned OpenGood revision)
+# Generated ROM identify data from pinned Libretro and OpenGood revisions
 /crates/rom-weaver-cli/data/identify/v1/*.pack
 /crates/rom-weaver-cli/data/identify/v1/*.pack.br
 /crates/rom-weaver-cli/data/identify/v1/catalog.json
@@ -45,6 +45,5 @@
 /packages/rom-weaver-webapp/src/wasm/rom-weaver-app-threaded.wasm.br
 /packages/rom-weaver-webapp/tests/wasm/__screenshots__/
 
-# Prebuilt artifacts staged for a `--build-arg BINARY=prebuilt` / `DIST=prebuilt`
-# container build. CI writes this in the runner checkout; see docs/ci.md.
+# Prebuilt inputs for container builds; see docs/development/ci.md.
 /prebuilt/

@@ -280,8 +280,9 @@
     flex: 1 1 0;
     min-height: 44px;
   }
-  /* Two rows: the level (or refresh) and the copy/download pair share the
-     first, the view toggle and the filter each take one of their own. */
+  /**
+   * The level or refresh control shares a row with copy/download; the view toggle and filter each span a separate row.
+   */
   .rw-app .log-dlg .dlg-subhead .log-controls {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;

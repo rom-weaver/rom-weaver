@@ -9,7 +9,7 @@ Use the committed harnesses to test the real CLI and webapp. Run all commands fr
 
 ## Set up a clean checkout
 
-The pinned versions are Node.js 24.18 and Rust 1.95. Install the system tools, including WASI SDK, from the [development guide](../../../docs/development/development.md#prerequisites). Then install dependencies and build the browser WASM artifact:
+Use the Node.js and Rust versions pinned in [`.config/mise.toml`](../../../.config/mise.toml). Install the system tools, including WASI SDK, from the [development guide](../../../docs/development/development.md#prerequisites). Then install dependencies and build the browser WASM artifact:
 
 ```bash
 mise trust

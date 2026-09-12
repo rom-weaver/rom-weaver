@@ -7,9 +7,10 @@ import type { InputAsset } from "../input/input-assets.ts";
  * output-header setting (auto keeps emulator-required headers, drops copier junk). */
 type ApplyHeaderMode = "keep" | "strip";
 
-/** The header decision for a (patch, target ROM) pair. `decided` is true when the patch's
- * required input checksum proves the mode; false means ambiguous (default keep, let the
- * user override). Absent entirely when the ROM has no strippable header. */
+/**
+ * A checksum-proven header decision for one patch and target ROM.
+ * When decided is false, mode is only a preflight fallback; apply still passes Auto to the engine.
+ */
 type ApplyHeaderResolution = {
   mode: ApplyHeaderMode;
   decided: boolean;
@@ -110,15 +111,10 @@ const getVariantExtension = (
   return typeof extension === "string" && extension.startsWith(".") ? extension : undefined;
 };
 
-/** Decide the default header handling for a patch against its target ROM, mirroring the
- * checksum half of the CLI's `--patch-header auto` rule: the ROM's checksum variants
- * (already computed at staging) are matched against the patch's required input crc32
- * (embedded UPS/BPS source crc32, else the filename `[crc32:..]` token). Returns undefined
- * when the ROM has no strippable header - there is nothing header-related to decide or show.
- *
- * `decided: false` means only that the page cannot predict the outcome. The engine still
- * receives `auto` and decides from the patch's record layout, so callers must not present
- * the returned `mode` as what will happen. */
+/**
+ * Compare staged raw and headerless CRC32 values with the embedded requirement, then the filename fallback.
+ * An undecided result MUST remain Auto during apply; the engine has additional evidence.
+ */
 const resolveApplyHeaderMode = (
   requirements: HeaderRequirements | undefined,
   target: Pick<InputAsset, "checksums" | "checksumVariants">,

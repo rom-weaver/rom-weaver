@@ -414,8 +414,8 @@ impl SaveGameRegistry {
     }
 }
 
-/// Peel a recognized wrapper (GameShark SP `.sps`/`.gsv`) off the input so
-/// handlers always see raw save bytes. Output bytes are re-wrapped in `apply`.
+/// Remove a recognized save container so handlers receive raw save bytes.
+/// `apply` restores the original wrapper around the edited bytes.
 fn normalize_container_input(
     input: &SaveDetectionInput,
 ) -> (Option<SaveContainer>, Cow<'_, SaveDetectionInput>) {

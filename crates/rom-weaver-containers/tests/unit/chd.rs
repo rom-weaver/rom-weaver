@@ -157,7 +157,7 @@ fn canonical_huffman_codes_assigns_sequential_codes() {
 
 #[test]
 fn canonical_huffman_codes_rejects_unbalanced_distribution() {
-    // A single symbol with a 2-bit length leaves the code space oversubscribed.
+    // A single symbol with a 2-bit length leaves the code space incomplete.
     let mut lengths = [0_u8; 16];
     lengths[0] = 2;
     assert!(ChdContainerHandler::canonical_huffman_codes(&lengths).is_err());
@@ -586,7 +586,7 @@ fn canonical_codes_from_lengths_assigns_and_validates() {
 
     // A length beyond the 32-bit code ceiling is rejected.
     assert!(handler.canonical_codes_from_lengths(&[33]).is_err());
-    // A single 2-bit symbol leaves the code space oversubscribed.
+    // A single 2-bit symbol leaves the code space incomplete.
     assert!(handler.canonical_codes_from_lengths(&[2]).is_err());
 }
 

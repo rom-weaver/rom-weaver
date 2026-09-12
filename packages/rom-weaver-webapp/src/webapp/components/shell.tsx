@@ -813,10 +813,8 @@ const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | und
 };
 
 /**
- * Runtime health the brand's status control paints, and the status dialog
- * explains. `active` and `ready` are the two halves of a working cache: active
- * means this very page came out of it, ready means the copy is there and the
- * next load will. The order below is the order the legend lists them in.
+ * The runtime status control and its dialog share these states in display order.
+ * A controlling worker or a ready cache does not prove that this document was served from cache.
  */
 type RuntimeState = "active" | "ready" | "update" | "installing" | "disabled";
 
@@ -838,9 +836,7 @@ type OfflineWarmupDisplayProgress = {
   /** Human description of the unit the progress event is about. */
   detail?: { kind: string; name: string } | null;
   /**
-   * Which install stage the numbers describe. The two stages count different
-   * things (precache entries, then warm-up bytes), so each is named for itself
-   * rather than restarting one label's percentage.
+   * The install stage that emitted these combined precache and warm-up totals.
    */
   phase?: "precache" | "warmup";
   ready: boolean;
@@ -896,9 +892,8 @@ const describeWarmupUnit = (
 };
 
 /**
- * An update outranks everything: it is the only state that asks for an action.
- * A working cache without a finished warm-up (EmulatorJS + all identify packs)
- * is still "installing" - the offline copy is not complete yet.
+ * A pending update takes priority over cache readiness.
+ * Offline readiness also requires EmulatorJS and the required or selected identify groups to finish caching.
  */
 const resolveRuntimeState = (
   status: ServiceWorkerStatus | null | undefined,

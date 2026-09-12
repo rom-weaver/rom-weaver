@@ -2,7 +2,7 @@
 //!
 //! Deterministically authors cooked 2048-byte ISO9660 sectors with stable
 //! ordering, a fixed timestamp, and configurable GD-ROM LBA bias. Scope is one
-//! Primary Volume Descriptor, 8.3 names, directories, and L/M path tables; no
+//! Primary Volume Descriptor, primary names, directories, and L/M path tables; no
 //! Joliet, El Torito, or extended attributes.
 
 use std::collections::BTreeMap;

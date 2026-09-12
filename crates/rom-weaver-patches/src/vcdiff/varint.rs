@@ -1,12 +1,9 @@
 //! Shared base-128 (VCDIFF) varint codec.
 //!
 //! The VCDIFF/xdelta byte stream encodes integers as big-endian base-128
-//! groups with the high bit marking continuation. The decode (overflow-checked
-//! `*128 + (b & 0x7F)`, capped at 10 bytes) and encode (`% 128` / `/= 128` digit
-//! stack emitted MSB-first with the continuation bit) loops were duplicated
-//! across the `Read`/slice readers and the `Write`/`Vec` writers. They are
-//! unified here behind byte-source/byte-sink closures so the four call sites
-//! stay thin adapters while emitting and accepting identical bytes.
+//! groups with the high bit marking continuation. Decoding checks overflow and
+//! permits at most ten groups for a `u64`; byte-source and byte-sink closures
+//! let streaming and in-memory callers share the codec.
 
 use rom_weaver_core::{Result, RomWeaverError};
 

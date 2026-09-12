@@ -52,8 +52,7 @@ describe("splitCheatCodes", () => {
     expect(splitCheatCodes("  \n + , ")).toEqual([]);
   });
 
-  // Regression: whitespace splitting alone tore an Xploder code in half, so
-  // "800B4CD4 0063" reached the classifier as two unusable codes.
+  // An Xploder address/value pair MUST remain one code when splitting input text.
   it("keeps an 8+4 Xploder pair together for PlayStation", () => {
     expect(splitCheatCodes("800B4CD4 0063", "playstation")).toEqual(["800B4CD40063"]);
   });
@@ -127,7 +126,7 @@ describe("getCheatCodesPatchName", () => {
     expect(getCheatCodesPatchName("Zelda (USA).nes", [entry()], "ips")).toBe("Zelda (USA) - Infinite lives.ips");
   });
 
-  // Regression: only the apply-side name builder sanitized these characters.
+  // Created patch names need the same filename sanitization as applied outputs.
   it("replaces characters a file name cannot carry", () => {
     expect(getCheatCodesPatchName("Zelda.nes", [entry({ description: "Lives: 9/9 <max>" })], "ips")).toBe(
       "Zelda - Lives- 9-9 -max-.ips",

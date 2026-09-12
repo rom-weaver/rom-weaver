@@ -1,18 +1,6 @@
 /**
- * On-device probe for the assumption behind the Apple-only shared-memory cap.
- *
- * `createSharedThreadMemory` asks for the module's link-time 4 GiB maximum and steps down a ladder
- * when the engine refuses, because WebKit reserves a shared memory's whole `maximum` address range
- * up front. `resolveAppleMobileSharedMemoryMaximumPages` pre-caps that request, but only for Apple
- * mobile - every other runtime, Android included, asks for the full 4 GiB.
- *
- * That split is a claim about engine behaviour, and it has never been measured on a real Android
- * device. This probe measures it: what maximum does *this* engine actually grant, and how many such
- * reservations can coexist? Load `mobile-safari-matrix.html?profile=memory` on a phone and read the
- * answer off the page.
- *
- * Reservation only - it never grows a memory or writes a byte, so it measures address-space
- * reservation (the Apple-specific behaviour in question) without committing physical pages.
+ * This diagnostic checks shared-memory reservations without the Apple mobile cap.
+ * It does not grow or write memory, so acceptance does not establish how much a workload can use.
  */
 
 import { hasMobileToken, isAppleMobileWebKit } from "../platform/shared/webkit-runtime.ts";
@@ -78,8 +66,8 @@ const describeRuntime = (): SharedMemoryProbeReport["runtime"] => {
 };
 
 /**
- * Walk the ladder from the full 4 GiB down, ignoring the Apple pre-cap, and report the first rung the
- * engine grants. A runtime that grants 65536 needs no cap; one that steps down does.
+ * Report the largest accepted reservation in the fallback ladder, without the Apple mobile cap.
+ * Acceptance says nothing about whether later growth can complete.
  */
 const probeGrantedMaximum = (addStep: (step: BrowserFormatMatrixStep) => void): number | null => {
   for (const pages of LADDER_PAGES) {
@@ -100,9 +88,8 @@ const probeGrantedMaximum = (addStep: (step: BrowserFormatMatrixStep) => void): 
 };
 
 /**
- * How many mobile-ceiling reservations can coexist. Every warm idle runner holds one, so this is the
- * direct evidence for capping the warm-runner count. Each memory is dropped as soon as the count is
- * known.
+ * Count up to COEXIST_LIMIT concurrent reservations at the mobile ceiling.
+ * Releasing references allows garbage collection; it does not force immediate memory release.
  */
 const probeCoexistence = (addStep: (step: BrowserFormatMatrixStep) => void): number => {
   const held: WebAssembly.Memory[] = [];
@@ -114,7 +101,7 @@ const probeCoexistence = (addStep: (step: BrowserFormatMatrixStep) => void): num
   }
   const durationMs = performance.now() - startedAt;
   const count = held.length;
-  // Drop every reference before reporting so the probe does not leave the page holding reservations.
+  // Release the retained array entries so these memories can be garbage-collected.
   held.length = 0;
   addStep({
     command: `${count}/${COEXIST_LIMIT} reservations of ${pagesToGib(COEXIST_PAGES)} GiB coexisted`,
@@ -161,24 +148,24 @@ export function runBrowserSharedMemoryProbe(callbacks: {
   const laddered = grantedMaximumPages !== null && grantedMaximumPages < FULL_MAXIMUM_PAGES;
   const coexistingAtMobileCeiling = probeCoexistence(addStep);
 
-  // The verdict the probe exists to produce. A runtime that steps down but gets no cap is asking for
-  // a reservation the engine will refuse; one that grants the full range but is capped is being
-  // limited for no reason.
+  // This comparison covers reservation acceptance only; it cannot validate limits on committed memory.
   const capNeeded = laddered || grantedMaximumPages === null;
   const capApplied = policyCapPages !== undefined;
   addStep({
-    command: `granted=${grantedMaximumPages ?? "none"} laddered=${laddered} capApplied=${capApplied} capNeeded=${capNeeded} coexisting=${coexistingAtMobileCeiling}`,
+    command: `granted=${grantedMaximumPages ?? "none"} laddered=${laddered} capApplied=${capApplied} fullMaximumRefused=${capNeeded} coexisting=${coexistingAtMobileCeiling}`,
     durationMs: 0,
     name:
-      capNeeded === capApplied ? "verdict: policy matches this engine" : "verdict: POLICY DISAGREES WITH THIS ENGINE",
+      capNeeded === capApplied
+        ? "reservation check: cap setting matches full-maximum refusal"
+        : "reservation check: cap setting differs from full-maximum refusal",
     status: capNeeded === capApplied ? "succeeded" : "failed",
     timestamp: new Date().toISOString(),
     ...(capNeeded === capApplied
       ? {}
       : {
           error: capNeeded
-            ? "engine refuses the full maximum but receives no cap"
-            : "engine grants the full maximum but is capped anyway",
+            ? "the engine refused the full maximum and no pre-cap is configured; the runtime can fall back"
+            : "the engine accepted the full maximum despite the configured pre-cap; growth limits remain untested",
         }),
   });
 

@@ -1,19 +1,8 @@
 import { createLogger } from "../lib/logging.ts";
 
 /**
- * Click replay across the first mount.
- *
- * The prerendered landing shell paints long before the bundle executes, so it
- * looks fully interactive while carrying no React handlers at all - a click in
- * that window is swallowed with no error and no feedback. The shell is not made
- * inert to close the gap, because looking instantly ready is the entire point of
- * prerendering it.
- *
- * So a tiny inline script in index.html (the earliest hook there is - the bundle
- * is a module and only runs after the HTML is parsed) buffers those clicks, and
- * this module drains the buffer just before hydration, then re-issues each one
- * against the same DOM node once React's handlers are attached. Capture stops at
- * that drain, so a real post-mount click is never double-fired.
+ * Buffer clicks on the prerendered shell until hydration attaches React handlers.
+ * Capture stops before hydration, and replay excludes actions that require trusted user activation.
  */
 
 const logger = createLogger("shell-click-replay");
@@ -37,11 +26,7 @@ const INTERACTIVE_SELECTOR = [
   '[role="tab"]',
 ].join(", ");
 
-// Transient activation cannot be handed over: a script-dispatched click is not
-// user-activated, so every gesture-gated action would be blocked by the browser
-// anyway. File pickers are the one that matters here - the hero drop zone is a
-// <label> wrapping #rom-weaver-input-file-unified - alongside new windows and
-// downloads. These keep the pre-fix behaviour: the click is simply dropped.
+// Replayed clicks have no trusted user activation, so omit file pickers, new windows, and downloads.
 const GESTURE_GATED_SELECTOR = 'input[type="file"], a[download], a[target="_blank"]';
 
 type ShellClickBuffer = { clicks: { target: EventTarget | null; time: number }[]; stop: () => void };

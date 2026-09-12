@@ -1,20 +1,14 @@
 #!/usr/bin/env node
-// rom-weaver webapp driver - launches a headless Chromium against the running
-// dev/preview server, drives the Apply workflow end-to-end (upload ROM + patch,
-// click "Apply & download", capture the produced file), and screenshots.
+// Runs the Apply workflow against an existing dev or preview server.
+// Install the webapp dependencies and Playwright Chromium before use.
 //
-// Playwright + chromium are ALREADY installed as deps of this package, so this
-// script MUST be run from packages/rom-weaver-webapp (node resolves "playwright"
-// from there). The dev server uses a self-signed cert → ignoreHTTPSErrors.
+// From the repository root:
+//   node .agents/skills/run-rom-weaver/webapp-driver.mjs load
+//   node .agents/skills/run-rom-weaver/webapp-driver.mjs apply
 //
-// Usage (from packages/rom-weaver-webapp):
-//   node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs load        # just boot + screenshot
-//   node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs apply       # full apply flow + screenshot
-//
-// Env:
-//   RW_URL   server URL (default https://localhost:5191/)
-//   RW_OUT   screenshot/output dir (default /tmp/rw-driver)
-//   RW_HEAD  set to 1 for a headed browser
+// RW_URL selects the server (default https://localhost:5191/).
+// RW_OUT selects the output directory (default /tmp/rw-driver).
+// RW_HEAD=1 opens a visible browser.
 
 import fs from "node:fs";
 import { createRequire } from "node:module";

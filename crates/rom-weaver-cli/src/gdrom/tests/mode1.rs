@@ -3,8 +3,8 @@
 //! The committed tests are self-contained: they encode synthetic user data and
 //! verify the sector's structural fields (sync pattern, BCD address, mode byte,
 //! user data, and a recomputed EDC) without depending on any external file. A
-//! separate `#[ignore]`d test reproduces a real Dreamcast GD-ROM data track
-//! sector-for-sector for anyone who has the disc image locally.
+//! separate ignored test compares selected sectors from a local Dreamcast
+//! GD-ROM track against their re-encoded bytes.
 
 use super::mode1::{RAW_SECTOR_SIZE, USER_DATA_SIZE, encode_mode1_sector};
 

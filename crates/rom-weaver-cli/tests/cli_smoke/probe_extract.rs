@@ -1850,8 +1850,6 @@ fn extract_rar_reports_thread_fallback_in_json() {
     );
 }
 
-// ---- relocated from shared.rs (single-module helpers) ----
-
 fn rar_fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/rar")

@@ -191,14 +191,13 @@ export interface RomWeaverBrowserOpfsOptions {
   /** URL for the wasm artifact. Defaults to the package artifact URL. */
   wasmUrl?: string;
   threadWorkerUrl?: string | URL;
-  /** URL for the bundled OPFS proxy worker. Defaults to the package artifact URL. Required in a
-   * production build, where the `new URL(...)` dev fallback would resolve to an unbundled source file. */
+  /** Override the OPFS proxy worker URL. Defaults to the worker URL emitted by Vite. */
   opfsProxyWorkerUrl?: string | URL;
   sharedMemoryInitialPages?: number;
-  /** Exact shared-memory maximum. Omit to allow the browser runtime's default fallback ladder. */
+  /** Shared-memory ceiling in 64 KiB pages; allocation failures try lower fallback limits. */
   sharedMemoryMaximumPages?: number;
   opfsHandle?: FileSystemDirectoryHandleLike;
-  /** Guest path for the single staged OPFS mount. Defaults to `/work`. */
+  /** Guest path for the work mount. Defaults to `/work`. */
   workGuestPath?: string;
   /** @deprecated Use workGuestPath. */
   opfsGuestPath?: string;
@@ -225,10 +224,8 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   mountHandles?: Record<string, FileSystemDirectoryHandleLike>;
   virtualFiles?: RomWeaverBrowserVirtualFile[];
   /**
-   * How long this command's OPFS inputs took to stage (ms), recorded on the main thread by
-   * createBrowserOpfsSourceRef and forwarded so the runner can print it on the [perf] command timings
-   * line. 0 means the input was already on OPFS; omitted when nothing referenced was staged (e.g.
-   * virtual-Blob inputs).
+   * Caller-supplied input staging time in milliseconds, included in the command timing trace.
+   * The browser source adapter records 0 for existing OPFS paths and omits Blob inputs.
    */
   stagingMs?: number;
   /** Extra guest input paths that threaded virtual-only mounts must hydrate before a run. */

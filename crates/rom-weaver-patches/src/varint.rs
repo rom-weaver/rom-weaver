@@ -3,9 +3,8 @@
 //! Both formats encode unsigned integers with the same 7-bit-per-byte scheme from the
 //! beat/byuu specification: the low 7 bits of each byte carry data, the high bit marks the
 //! final byte, and every continuation implicitly adds one to keep the encoding canonical.
-//! The read/write loops were duplicated verbatim across `bps.rs` and `ups.rs` (slice parser,
-//! streaming file parser, and create-side writer); they live here once and take a `label` so
-//! each format keeps its own error-message prefix.
+//! Slice readers, streaming readers, and writers share this implementation;
+//! callers supply the format name used in errors.
 
 use rom_weaver_core::{Result, RomWeaverError};
 

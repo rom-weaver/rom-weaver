@@ -12,8 +12,7 @@ const checksumCommand = (threads: unknown): RomWeaverRunInput =>
 
 describe("resolveBrowserDefaultThreads", () => {
   it("scales the implicit default to the reported core count (floor 4, ceiling 64)", () => {
-    // Regression guard: the UI advertises "auto = browser-reported core count" (settings.threadsHint),
-    // so the engine default must scale with hardwareConcurrency rather than capping every host at 4.
+    // The default follows hardwareConcurrency within the four-to-64-thread bounds.
     expect(resolveBrowserDefaultThreads(rootWithCores(12))).toBe(12);
     expect(resolveBrowserDefaultThreads(rootWithCores(2))).toBe(4);
     expect(resolveBrowserDefaultThreads(rootWithCores(128))).toBe(64);
@@ -23,8 +22,7 @@ describe("resolveBrowserDefaultThreads", () => {
 
 describe("execution-path auto thread resolution", () => {
   it("resolves a command's `auto` threads to the host core count, not a flat 4", () => {
-    // Mirrors browser-opfs-runner.ts: it clamps/parses the request with the options the runner builds
-    // from resolveBrowserDefaultThreads(). Before the fix this collapsed to 4 on every multi-core host.
+    // Use the same request options as browser-opfs-runner so Auto retains the resolved host budget.
     const options = browserThreadRequestOptions(resolveBrowserDefaultThreads(rootWithCores(12)));
     expect(readRomWeaverRequestedThreadCount(checksumCommand("auto"), options)).toBe(12);
   });

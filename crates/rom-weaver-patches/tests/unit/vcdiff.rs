@@ -684,7 +684,7 @@ fn apply_patch_bytes_round_trips_in_memory() {
     let target = crate::xdelta::apply_patch_bytes(input, &patch_bytes).expect("apply in memory");
     assert_eq!(target, expected);
 
-    // A wrong source must not silently produce the target (source checksum).
+    // This fixture uses source bytes, so a wrong source cannot reproduce the target.
     let wrong =
         crate::xdelta::apply_patch_bytes(b"completely different source bytes here", &patch_bytes);
     assert!(wrong.is_err() || wrong.unwrap() != expected);

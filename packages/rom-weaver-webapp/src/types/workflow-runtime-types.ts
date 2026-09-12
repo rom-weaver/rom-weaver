@@ -111,10 +111,14 @@ type PatchApplyUserOptions = {
   validateInputChecksum?: string;
   /** Raw hex checksum to validate the patched output after apply (algorithm auto-detected by length). */
   validateOutputChecksum?: string;
-  /** ROM copier-header handling: `remove` strips the detected header before apply and
-   * re-adds it after. `undefined`/`keep` patches the input bytes as-is. */
+  /**
+   * Per-patch input header override: keep or strip the detected header; undefined selects Auto.
+   * Output header handling is controlled separately.
+   */
   header?: "keep" | "strip";
-  /** N64 byte-order override; undefined means checksum-driven Auto. */
+  /**
+   * N64 byte-order override; undefined lets the engine resolve Auto.
+   */
   n64ByteOrder?: "keep" | "big-endian" | "little-endian" | "byte-swapped";
   /** Staged Auto result used for the first patch, whose input variants are already known. */
   resolvedN64ByteOrder?: "keep" | "big-endian" | "little-endian" | "byte-swapped";

@@ -224,7 +224,7 @@ describe("thread worker pool commands", () => {
       mode: "pool-command",
       wasiArgs: ["rom-weaver"],
     });
-    // Directory handles cannot cross into a nested worker, so the payload asks it to re-derive them.
+    // Nested-worker bootstrap passes paths so the worker can resolve its own directory handles.
     expect(payload?.runtime).toEqual({ cwdMountPath: "/work", resolveMountHandlesInWorker: true });
     expect(trace.some((line) => line.includes("[perf] thread pool command ready id=1 slots=1"))).toBe(true);
   });

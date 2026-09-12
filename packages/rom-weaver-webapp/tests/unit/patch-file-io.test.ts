@@ -115,8 +115,7 @@ describe("PatchFile construction", () => {
   it("rejects a FileList by reading its first entry", () => {
     const input = document.createElement("input");
     input.type = "file";
-    // happy-dom models FileList as an array subclass; there is no other way to
-    // put a File into a real FileList instance from a test.
+    // Use happy-dom's array-backed FileList to supply a real instance to the type guard.
     (input.files as unknown as File[]).push(new File([new Uint8Array([1, 2])], "patch.ips"));
 
     expect(() => new PatchFile(input.files as FileList)).toThrow(/does not accept browser File sources directly/);

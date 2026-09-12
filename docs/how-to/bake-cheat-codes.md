@@ -53,7 +53,7 @@ rom-weaver patch apply \
   --code 00A2-01F5 \
   --code-system genesis \
   --code-kind game-genie \
-  --output game-coded.bin
+  --no-compress --output game-coded.bin
 ```
 
 `--code-system` accepts `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gba`, and `psx`. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, and `xploder`.
@@ -92,7 +92,7 @@ The codes are applied after the last patch. A patch that carries a source checks
 
 ## Share a cheat as a patch
 
-`patch create` accepts the same `--code`, `--code-system`, and `--code-kind` flags in place of `--modified`. The result is an ordinary patch that holds only the cheat's byte writes, so it can be shared without the ROM and applied by any patcher:
+`patch create` accepts the same `--code`, `--code-system`, and `--code-kind` flags in place of `--modified`. The result is an ordinary patch that holds only the cheat's byte writes, so it can be shared without the ROM and applied by a patcher that supports its format:
 
 ```bash
 rom-weaver patch create \
@@ -153,7 +153,7 @@ Two `rom` cheats that write different values to the same byte fail with `cheat_w
 rom-weaver patch create --original game.nes --cheat "Infinite lives" --output cheats.ips
 ```
 
-Only `rom` entries can go in a patch. Without `--cheat` every cheat the matched game holds is used. The report names the entries it skipped in `details.skipped_cheats`.
+Only `rom` entries can go in a patch. Select each entry with `--cheat`; repeat the flag for several entries. The report names selected entries it cannot bake in `details.skipped_cheats`. Without `--cheat`, provide `--modified` or `--code`.
 
 ## Prove what you produced
 
@@ -163,7 +163,7 @@ Hash the result so you can tell the baked ROM apart from the clean one later:
 rom-weaver checksum --input game-coded.nes --algo sha256
 ```
 
-Keep the clean ROM. A patch author's checksum refers to the unbaked file, so a later patch will refuse the baked one.
+Keep the clean ROM. A later patch may expect the unmodified ROM. If it carries that source checksum, it will reject a changed file.
 
 ## Related
 

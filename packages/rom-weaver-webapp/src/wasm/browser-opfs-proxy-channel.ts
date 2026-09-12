@@ -11,7 +11,7 @@ import { OPFS_PROXY_CONTROL_WORD_COUNT, OPFS_PROXY_DATA_BUFFER_BYTES } from "./b
 export const OPFS_PROXY_GLOBAL_DOORBELL_INDEX = 0;
 /** Poison flag: 0 = proxy alive, 1 = proxy is dead/unusable. Consumers fail fast (EIO) when set. */
 export const OPFS_PROXY_GLOBAL_POISONED_INDEX = 1;
-/** Handle-id allocator. The proxy increments this on each successful open to mint a fresh handle id. */
+/** Handle-id allocator, incremented when no released id is available for a new handle. */
 export const OPFS_PROXY_GLOBAL_HANDLE_ALLOC_INDEX = 2;
 /**
  * Live open-handle count. Maintained by the proxy server; every consumer can read it without a
@@ -34,8 +34,7 @@ export const OPFS_PROXY_GLOBAL_THREAD_WORKERS_CREATED_INDEX = 6;
 /** First index of the per-handle version-counter block (bumped on every write/truncate). */
 const OPFS_PROXY_GLOBAL_VERSION_BASE_INDEX = 8;
 /**
- * Number of per-handle version counters. Handle ids are allocated 1..MAX_HANDLES and reused as files
- * close; a ROM workflow opens far fewer than this many files concurrently.
+ * Version-counter capacity. Handle ids range from 1 through MAX_HANDLES - 1 and are reused after close.
  */
 export const OPFS_PROXY_MAX_HANDLES = 1024;
 

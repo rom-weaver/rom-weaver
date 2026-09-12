@@ -71,7 +71,7 @@ Handlers return `OperationReport` (family, format, stage, label, JSON details, p
 
 Registry entries are wrapped in tracing decorators (`traced_container_handler`/`traced_patch_handler`) so every probe/extract/apply gets start/complete `trace!` spans without duplicating that instrumentation in each handler.
 
-Errors are one `thiserror` enum, `RomWeaverError` (`crates/rom-weaver-core/src/error.rs`), with `pub type Result<T>` alias. Validation failures that need machine-readable codes use the structured `ValidationCodeError` variant; do not add per-crate error types.
+Errors use one `thiserror` enum, `RomWeaverError` (`crates/rom-weaver-core/src/error.rs`), with a `pub type Result<T>` alias. Validation failures that need machine-readable codes use the `ValidationCode` variant, which contains a `ValidationCodeError`. Do not add per-crate error types.
 
 ## Threading model
 

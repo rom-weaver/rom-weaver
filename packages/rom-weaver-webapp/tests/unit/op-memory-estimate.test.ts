@@ -107,8 +107,7 @@ describe("isMobileRuntime", () => {
 
   it("covers Android as well as Apple mobile", () => {
     expect(isMobileRuntime({ navigator: { userAgent: iosSafari } })).toBe(true);
-    // The regression this predicate exists for: Android is a phone budget, but the Apple-only
-    // shared-memory probe reports nothing for it, so runner lifecycle policy treated it as desktop.
+    // Runner lifecycle limits MUST recognize mobile budgets independently of the Apple-only shared-memory cap.
     expect(isMobileRuntime({ navigator: { userAgent: androidChrome } })).toBe(true);
     expect(resolveAppleMobileSharedMemoryMaximumPages({ navigator: { userAgent: androidChrome } })).toBeUndefined();
   });

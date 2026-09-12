@@ -144,7 +144,7 @@ fn parse_and_apply_round_trip_for_bps() {
     assert!(handler.capabilities().threaded_output);
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 4);
-    // apply streams by default; this multi-action patch (no TargetCopy) parallelizes
+    // The test context forces streaming apply; this multi-action patch (no TargetCopy) parallelizes
     assert!(execution.used_parallelism);
     assert!(execution.effective_threads > 1);
     assert!(!execution.thread_fallback);

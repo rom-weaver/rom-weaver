@@ -81,7 +81,7 @@ Rather than pass every flag, hand-author a `rom-weaver-bundle.json` spec with lo
 rom-weaver bundle create --from spec.json --output rom-weaver-bundle.json
 ```
 
-`--from -` reads the spec from stdin, in which case paths resolve against the current directory; otherwise they resolve against the spec file. Any flag you also pass overrides what the spec says, and a `$schema` already in the spec is kept. `--from` only accepts entries with a local `path`; url-only and checks-only entries are rejected with an explanation.
+`--from -` reads the spec from stdin, in which case paths resolve against the current directory; otherwise they resolve against the spec file. Any flag you also pass overrides what the spec says, and a `$schema` already in the spec is kept. A ROM entry may use a local `path` or a `url`. A checks-only ROM entry is rejected. Patch entries need local paths unless explicit `--patch` flags replace the spec's patch list.
 
 ## Parse and run a bundle
 

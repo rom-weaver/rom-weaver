@@ -220,10 +220,7 @@ const getLazyBrowserSource = async (
   return { blob, fileHandle, fileName };
 };
 
-// Every dropped input - ROM or patch - becomes a lazy (Blob/handle/path-backed) file that streams
-// its bytes in a worker. There is no main-thread materialization path: that is what produced the iOS
-// jetsam tab-reload on large ROMs. Small synchronous reads (cue/gdi sheet text, header probes) are
-// handled by their own bounded readers, not by materializing the whole input here.
+// Keep Blob-, handle-, and path-backed inputs lazy to avoid materializing an entire ROM on the UI thread.
 const createInputPreparationPatchFile = async (
   source: SourceRef,
   fallbackFileName: string,

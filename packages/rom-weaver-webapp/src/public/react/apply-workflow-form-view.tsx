@@ -89,12 +89,7 @@ import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
-/**
- * The finished apply's companion to the download button: the patched ROM is
- * already in memory, so testing it is one press. Styled as the run button's
- * quieter twin (see `.emulatorjs-test` in result.css) rather than a stray ghost
- * control, and the mono chip names the core that will run it.
- */
+/** Reuse the completed output for Test without requiring another file selection. */
 const EmulatorJsAction = ({
   core,
   fileName,
@@ -522,14 +517,6 @@ const matchPastedInputChecksum = (pasted: string, info: RomInputRowState["info"]
 };
 
 /**
- * ROM verification color: green once a patch verifies it (embedded preflight
- * or user-pasted checksum), red on mismatch, none when nothing verifies it.
- * A mismatch from any signal wins over a match.
- */
-/* A patch's embedded/manifest ROM requirements describe its input like bundle
-   rom.checks - parse them from the card's "in ..." rows so they fold into the
-   same Expected marks on the ROM card. */
-/**
  * One "in <algo>=<value>" row off a patch card, or null when the row is not one.
  * "in min size" (xdelta) is a lower bound rather than an identity, so it never
  * matches here.
@@ -843,20 +830,8 @@ const buildDiscFileEntries = (romInput: RomInputRowState, romBytes: number | und
 };
 
 /**
- * Reserve one skeleton group per planned variant, from Rust's early
- * `probe-variant-plan` event (settled once the header is scanned, before the
- * checksums finish), so the Checks panel starts at its resolved height instead of
- * growing group-by-group as values stream in. Without a plan yet, reserve just the
- * always-present base group. Whether the base group takes a head, and where an
- * "Expected" group slots in, is SourceInfoList's call - it owns the resolved
- * layout these mirror.
- *
- * This replaces the `size % 1024 === 512` copier-header guess: the plan comes from
- * the engine's real header detection, so it covers every strippable header (iNES,
- * PCE, SNES…) and never reserves a "Remove header" group for a ROM that merely
- * happens to be 512 over. Every group reuses the source's byte length - a stripped
- * header cannot change the digit count, since ROM sizes are powers of two and none
- * sit within a header's length below a power of ten.
+ * Reserve the engine's planned checksum groups before their values arrive.
+ * Byte-count placeholders use the source length until each variant resolves.
  */
 const buildPendingChecksumGroups = (
   romInput: RomInputRowState,
@@ -941,17 +916,6 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   const hasDiscSheet = romInput.kind === "track";
   const fileEntries = buildDiscFileEntries(romInput, romBytes, hasDiscSheet);
   const pendingGroups = buildPendingChecksumGroups(romInput, romBytes, localizer);
-  // Reserve one skeleton group per planned variant, from Rust's early `probe-variant-plan` event
-  // (settled once the header is scanned, before the checksums finish), so the Checks panel starts at
-  // its resolved height instead of growing group-by-group as values stream in. Without a plan yet,
-  // reserve just the always-present base group. Whether the base group takes a head, and where an
-  // "Expected" group slots in, is SourceInfoList's call - it owns the resolved layout these mirror.
-  //
-  // This replaces the `size % 1024 === 512` copier-header guess: the plan comes from the engine's
-  // real header detection, so it covers every strippable header (iNES, PCE, SNES…) and never
-  // reserves a "Remove header" group for a ROM that merely happens to be 512 over. Every group
-  // reuses the source's byte length - a stripped header cannot change the digit count, since ROM
-  // sizes are powers of two and none sit within a header's length below a power of ten.
   const expected = buildExpectedChecks(deps);
   return {
     card: {
@@ -1755,8 +1719,8 @@ const renderApplyTimingMeta = (
 
 /**
  * The "ROM header" select only exists when the staged ROM has a strippable copier
- * header (the checksum variants carry the detection). Auto follows the engine's
- * rule: re-add emulator-required headers, drop junk copier headers.
+ * header (the checksum variants carry the detection). Auto uses the engine's
+ * `retainOnOutput` metadata to label whether the header will be kept.
  */
 const resolveOutputHeaderOptions = (romInputs: RomInputRowState[]) => {
   const variant = romInputs

@@ -26,7 +26,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 
 Every method here installs a binary built for the release: macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
 
-Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify`, `probe --identify`, and cheat baking read that data; every other command works without it.
+Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify`, `probe --identify`, and cheat baking read that data; other operations can also use it for title lookup and bundle checks. Raw cheat codes supplied with `--code` do not need the database.
 
 | Method | Manpages | Identify and cheat data |
 | --- | --- | --- |
@@ -156,7 +156,7 @@ On a machine that cannot reach GitHub, download `rom-weaver-identify-data.tar.br
 rom-weaver setup --from rom-weaver-identify-data.tar.br
 ```
 
-One archive serves as many machines as you like. Use the archive built for the version you installed; `setup` verifies every pack against the index inside it and fails rather than install a mismatched database.
+One archive serves as many machines as you like. Use the archive built for the version you installed; `setup` verifies the packs against the archive's own index. It does not compare the archive's release version with the CLI version.
 
 ## Run in Docker
 
@@ -174,7 +174,7 @@ The image's working directory is `/work`; mount the directory holding your ROMs 
 
 `--user "$(id -u):$(id -g)"` is what makes the output usable. Bind-mounted files keep their host ownership. Without that flag, the container runs as the base image's `nonroot` user (uid 65532). The container may refuse permission to read your files, and anything it writes ends up owned by a uid that does not exist on the host. rom-weaver reads no home directory or user config, so an arbitrary uid needs no matching account inside the image.
 
-The image is distroless - it contains the `rom-weaver` binary and its C runtime and nothing else, so there is no shell inside and `--entrypoint sh` will not get you a prompt.
+The image is distroless. It contains the CLI, runtime libraries, databases, and packaged documentation, but no shell. `--entrypoint sh` cannot start a shell in this image.
 
 Mount read-only sources with `:ro` and give writes their own destination:
 

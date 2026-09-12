@@ -340,8 +340,8 @@ impl CliApp {
                 .push_str("; sha1 reused from chd raw_sha1 metadata");
         }
         if !variants_enabled {
-            // The variant engine already detected identity from the streamed prefix
-            // (no extra read); only the range/plain path needs the fallback read.
+            // The variant path detects identity from the streamed prefix;
+            // the range/plain path needs this separate prefix read.
             Self::attach_rom_identity_details(&mut report, &request.source);
         }
         Self::cleanup_temp_paths(&temp_paths);

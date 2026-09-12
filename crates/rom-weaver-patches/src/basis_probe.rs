@@ -1,18 +1,16 @@
 //! Structural evidence for which bytes an offset-only patch was authored
 //! against.
 //!
-//! BPS, UPS, RUP and friends embed a source CRC32, so "which variant did the
-//! author use" is answered exactly by hashing each candidate. IPS embeds
-//! nothing. When the input carries a strippable copier header the patch may
-//! target the raw bytes or the headerless bytes, and the patch itself never
-//! says which. Guessing wrong applies every record 512 bytes off, which usually
-//! still produces a bootable ROM that is quietly corrupt.
+//! BPS and UPS embed source CRC32s; RUP uses MD5. IPS has no source checksum,
+//! so a patch for a ROM with a removable header may address either the raw or
+//! headerless bytes. Choosing the wrong basis shifts every write by the header
+//! length and can corrupt the output.
 //!
 //! This module scores the two candidates from structure alone: where records
 //! land relative to each candidate's end, whether they write into the copier
-//! header, whether the truncate footer matches a candidate's length, and
-//! whether record edges look trimmed. Every rule is one-sided evidence, so the
-//! scorer reports [`BasisDecision::Inconclusive`] rather than guess.
+//! header, and whether record edges look trimmed. An IPS truncate footer gives
+//! the output size, so it cannot identify the source basis; inconclusive
+//! evidence produces [`BasisDecision::Inconclusive`].
 
 use std::path::Path;
 
@@ -24,9 +22,8 @@ use crate::{
     probe_reader::ProbeReader,
 };
 
-/// Records compared for trimmed edges. Every real IPS patch is far under this;
-/// the cap only bounds the seek count on a pathological patch. Exceeding it is
-/// logged, never silent.
+/// Maximum records compared for trimmed edges, limiting scattered reads.
+/// Reaching the cap is logged.
 const MAX_COMPARED_RECORDS: usize = 4096;
 
 /// Comparable records a basis needs before its untrimmed-edge count means

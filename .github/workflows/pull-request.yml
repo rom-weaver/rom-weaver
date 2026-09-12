@@ -1,19 +1,10 @@
 name: PR Gates
 
-# The two gates a contributor - rather than the code - has to clear: the CLA
-# signature and a Conventional Commits pull request title. They share a file
-# because they share the same security boundary. Both post a commit status
-# against the pull request head rather than relying on their own check run,
-# both must work for a pull request from a fork, and both are required by the
-# `main protection` ruleset. The title gate also removes comments left by its
-# retired reporting implementation once a title passes.
+# Both gates post statuses on the pull request head so fork contributions and
+# signing comments can update required checks.
 #
-# `pull_request_target` runs from the base branch with a write token, which is
-# what lets a fork's pull request receive a status. Nothing from
-# the pull request head is ever checked out or executed here: the scripts, the
-# allowlist and the commitlint config all come from the base commit, and the
-# only head-supplied value either job touches is the pull request title, which
-# reaches commitlint through an environment variable.
+# Scripts, allowlists, and commitlint config MUST come from the base commit.
+# Pull request titles, authors, and comments are untrusted data; they MUST NOT be executed.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited]
@@ -26,29 +17,14 @@ permissions:
 jobs:
   cla:
     name: CLA Check
-    # A title edit cannot change who signed, and `issue_comment` fires on plain
-    # issues too, and on every unrelated comment.
-    #
-    # This is a cheap prefilter, NOT the signing rule: it deliberately matches
-    # any comment mentioning the CLA and lets `cla-gate.mjs` decide. Spelling
-    # the exact phrase out here would put it in two places, and the copy that
-    # rots is the one nobody tests - a stale phrase here means the job never
-    # runs and a correct signature is swallowed in silence.
-    #
-    # One keyword is enough, and provably so: the phrase itself ends in "the
-    # CLA", and a near miss is only a near miss because it contains the whole
-    # phrase - so every signing attempt, exact or not, carries this word. A
-    # second keyword for re-running earned nothing that editing a comment does
-    # not already do, and an undocumented one is worse than none.
+    # The CLA keyword only selects comments to check; cla-gate.mjs owns the signing rule.
     if: >-
       (github.event_name == 'pull_request_target' && github.event.action != 'edited') ||
       (github.event.issue.pull_request != null &&
        contains(github.event.comment.body, 'CLA'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    # Two pushes in a row only need the newer verdict; a signing comment must
-    # not be cancelled by one, so the group is per pull request and comments run
-    # to completion.
+    # Signing runs MUST finish so a later event cannot cancel a signature write.
     concurrency:
       group: cla-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: false

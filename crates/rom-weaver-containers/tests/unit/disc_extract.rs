@@ -1,6 +1,5 @@
-//! Unit coverage for CHD disc-extraction track-layout math and mode
-//! dispatch (`src/chd/disc_extract.rs`), which previously had zero direct
-//! coverage -- `tests/unit/chd.rs` only exercises `handler_root.rs`.
+//! Unit coverage for CHD disc-extraction track layouts and mode dispatch
+//! (`src/chd/disc_extract.rs`).
 //!
 //! Focuses on pure helpers: the per-frame track router shared by the CD
 //! single-bin/split-track/GD-ROM writers, sector-mode byte handling, and the

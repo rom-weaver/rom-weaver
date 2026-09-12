@@ -598,9 +598,8 @@ impl CliApp {
         }
     }
 
-    /// Resolve one bundle entry to a local file. Returns `Ok(None)` only for
-    /// an entry with neither url nor path (the caller decides whether that is
-    /// legal). URL entries are not downloadable here yet.
+    /// Resolve one bundle entry to a local file; native builds download URL entries.
+    /// Returns `Ok(None)` when both sources are absent or blank.
     fn resolve_bundle_apply_entry(
         &self,
         inputs: ResolveBundleApplyEntryInputs<'_>,
