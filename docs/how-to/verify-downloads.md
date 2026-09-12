@@ -1,6 +1,6 @@
 # Verify a download
 
-Check that a rom-weaver artifact you downloaded - a release archive, an npm package, or a container image - was built by this repository's release workflow. The install scripts run the first check automatically; use this page to verify a file by hand, to check the full signature, or to change how strict the install scripts are. Why the checks are shaped this way is covered in [Release provenance](../explanation/release-provenance.md).
+Check the build provenance attached to a rom-weaver release archive, npm package, or container image. The install scripts run the first check automatically; use this page to verify a file by hand, to check the full signature, or to change how strict the install scripts are. Why the checks are shaped this way is covered in [Release provenance](../explanation/release-provenance.md).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -13,7 +13,7 @@ Check that a rom-weaver artifact you downloaded - a release archive, an npm pack
 
 ## Verify a file you downloaded by hand
 
-Hash the file and ask GitHub whether this repository's release workflow built exactly those bytes. Nothing needs installing - this is the same check both install scripts run:
+Hash the file and query GitHub for this repository's SLSA build provenance for those bytes. This uses `curl` and a SHA-256 tool. It checks for a provenance record through GitHub's API; it does not validate the signature or restrict the signer to a particular workflow:
 
 ```bash
 file=rom-weaver-linux-x64-gnu.tar.gz
@@ -29,9 +29,9 @@ fi
 if curl -fsS "https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:$digest?predicate_type=https://slsa.dev/provenance/v1" \
   | grep -q '"repository_id"'
 then
-  echo "VERIFIED: built by the rom-weaver release workflow"
+  echo "FOUND: rom-weaver repository build provenance"
 else
-  echo "NOT VERIFIED: no build provenance covers this file" >&2
+  echo "NOT VERIFIED: no matching provenance or the query failed" >&2
 fi
 ```
 
@@ -54,19 +54,19 @@ try {
   }
 } catch { }
 if ($count -gt 0) {
-  Write-Host 'VERIFIED: built by the rom-weaver release workflow'
+  Write-Host 'FOUND: rom-weaver repository build provenance'
 } else {
-  Write-Error 'NOT VERIFIED: no build provenance covers this file'
+  Write-Error 'NOT VERIFIED: no matching provenance or the query failed'
 }
 ```
 
-Keep the `predicate_type` filter: without it the check passes on files the release workflow never built. [Why the predicate type filter is mandatory](../explanation/release-provenance.md#why-the-predicate-type-filter-is-mandatory) explains what the unfiltered query actually matches.
+Keep the `predicate_type` filter: without it, a release-membership attestation can satisfy the query without any build provenance. [Why the predicate type filter is mandatory](../explanation/release-provenance.md#why-the-predicate-type-filter-is-mandatory) explains what the unfiltered query actually matches.
 
 An asset from a release cut before provenance was added correctly reports NOT VERIFIED - there is no attestation to find. See [what build provenance proves](../explanation/release-provenance.md#what-build-provenance-proves).
 
 ## Check the signature
 
-The queries above trust GitHub's API response over TLS. To check the Sigstore signature itself - signature, certificate chain, and transparency-log inclusion - use `gh`, which must be signed in even for a public repository:
+The queries above trust GitHub's API response over TLS. To validate the attestation signature and identity, use `gh` with the repository restriction. Sign in to `gh` before these network lookups:
 
 ```bash
 gh attestation verify rom-weaver-linux-x64-gnu.tar.gz --repo rom-weaver/rom-weaver
@@ -74,7 +74,9 @@ gh attestation verify oci://ghcr.io/rom-weaver/rom-weaver-cli:latest \
   --repo rom-weaver/rom-weaver
 ```
 
-npm packages carry their own provenance, verified with:
+These commands accept SLSA provenance from the named repository. To restrict the signer to a specific workflow, use `--signer-workflow` with the path that built that artifact. See the [GitHub CLI verification reference](https://cli.github.com/manual/gh_attestation_verify).
+
+From a project directory containing the installed npm package, check package signatures and available provenance with:
 
 ```bash
 npm audit signatures

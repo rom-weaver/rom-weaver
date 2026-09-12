@@ -24,13 +24,7 @@ import {
   type WorkflowFormProgressState,
 } from "./workflow-run-hooks.ts";
 
-/**
- * Builds one create-patch source step (the Original / Modified row) view model
- * from its staged state plus the active runtime-notice slice. Extracted verbatim
- * from `CreatePatchForm.renderSourceStep`; it is a pure render-time projection
- * (no hooks) the form invokes once per source. The runtime-notice fields the
- * builder previously closed over are passed in explicitly via `runtimeNotice`.
- */
+/** Build an Original or Modified source row from staged data and runtime notices. */
 
 type CreateSourceStepRuntimeNotice = {
   message: string;

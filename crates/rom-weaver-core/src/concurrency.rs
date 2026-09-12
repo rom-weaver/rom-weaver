@@ -41,7 +41,7 @@ impl ConcurrencyLimits {
     ///
     /// With nothing in flight the candidate always fits (the lone-job rule). Otherwise all three
     /// gates must hold: the concurrency cap, the summed thread budget, and the summed memory
-    /// ceiling. Sums use saturating arithmetic so absurd inputs cannot wrap.
+    /// ceiling. Memory totals and the candidate additions use saturating arithmetic.
     pub fn can_admit(&self, in_flight: &[JobDemand], candidate: &JobDemand) -> bool {
         if in_flight.is_empty() {
             return true;
@@ -123,9 +123,8 @@ pub fn working_set_estimate(input_bytes: u64, multiplier: f64, base: u64) -> u64
     base.saturating_add(scaled)
 }
 
-/// One concurrent group of a [`BatchPlan`]: the original job indices that may run at the same time,
-/// and the worker-thread count each of them should use (an even split of the budget for the group,
-/// so the group's pools sum to the budget instead of each grabbing all of it).
+/// A concurrent group of job indices and their worker-thread allotment.
+/// The allotment divides the budget evenly, rounded down with a minimum of one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BatchWave {
     pub threads_per_job: usize,

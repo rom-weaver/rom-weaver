@@ -113,8 +113,8 @@ impl FromStr for XdeltaSecondaryMode {
     }
 }
 
-/// The patch-only policy knobs of an [`OperationContext`], grouped so the
-/// container/thread plumbing and the patch-specific settings stay visibly separate.
+/// Patch validation, apply settings, and extraction checksum policy shared
+/// through an [`OperationContext`].
 #[derive(Clone)]
 pub struct PatchPolicy {
     /// Checksum algorithms to compute when extracting (drives the extract
@@ -168,10 +168,8 @@ pub struct OperationContext {
     progress: Arc<dyn ProgressSink>,
     cancel: CancellationToken,
     patch_policy: PatchPolicy,
-    /// One operation-scoped worker pool, sized to the full thread budget and reused by every
-    /// extract. A fresh pool per extract stacked worker threads across sequential/nested extracts
-    /// and exhausted the browser's fixed wasi worker pool (30s spawn-timeout stalls); one reused
-    /// pool bounds the live thread count while each serial extract still gets the whole pool.
+    /// Extractions share one pool so nested or sequential operations cannot
+    /// exhaust the browser's fixed WASI worker pool with separate allocations.
     operation_pool: Arc<Mutex<Option<(SharedThreadPool, ThreadExecution)>>>,
     /// Already-known checksums for input paths, keyed `path -> { algorithm -> hex }`. Seeded by the
     /// patch apply/validate commands from the host's `--assume-in` (the input CRC32 the webapp
@@ -234,13 +232,13 @@ impl OperationContext {
             .cloned()
     }
 
-    /// The grouped patch-only policy knobs. Individual fields are also reachable
-    /// through the per-field getters/builders below.
+    /// The patch and extraction checksum policy, also exposed through the
+    /// individual getters and builders.
     pub fn patch_policy(&self) -> &PatchPolicy {
         &self.patch_policy
     }
 
-    /// Replace the whole patch-only policy group in one builder step.
+    /// Replace the patch and extraction checksum policy.
     pub fn with_patch_policy(self, patch_policy: PatchPolicy) -> Self {
         Self {
             patch_policy,
@@ -296,9 +294,8 @@ impl OperationContext {
         self.patch_policy.patch_checksum_validation
     }
 
-    /// Whether patch handlers should enforce stored source/target checksums.
-    /// Equivalent to `patch_checksum_validation() == PatchChecksumValidation::Strict`,
-    /// which every checksum-bearing apply/create handler derived inline.
+    /// Whether the overall policy requires stored source and target checksums.
+    /// Per-step exceptions are available through [`Self::patch_check_scopes`].
     pub fn strict_patch_checksums(&self) -> bool {
         self.patch_checksum_validation() == PatchChecksumValidation::Strict
     }
@@ -391,10 +388,7 @@ impl OperationContext {
         capability.negotiate(self.thread_budget)
     }
 
-    /// Plans a single-threaded execution wrapped in `Some`, for the common
-    /// "report a failure/early-exit that did no parallel work" case. Replaces
-    /// the `Some(context.plan_threads(ThreadCapability::single_threaded()))`
-    /// idiom that the command flows repeated dozens of times.
+    /// A single-threaded execution for reports that performed no parallel work.
     pub fn single_thread_execution(&self) -> Option<ThreadExecution> {
         Some(self.plan_threads(ThreadCapability::single_threaded()))
     }

@@ -17,14 +17,7 @@ import { toApplyWorkflowSettings } from "./settings-context.tsx";
 import { createWorkflowFormError, getReactBinarySourceFileName } from "./workflow-adapters.ts";
 import { formatChecksumTiming } from "./workflow-form-utils.ts";
 
-/**
- * Pure model helpers for the apply-patch staging workflow, extracted from
- * `ApplyPatchForm`. These own the snapshot/settings/output-name derivations, the
- * patch/input "stage info" view-model projections, the readiness validation and
- * the result normalization - none of which touch React state. Keeping them here
- * leaves the form as a thin orchestrator over the workflow runtime and lets the
- * derivations be unit-tested in isolation.
- */
+/** Derive staging snapshots, display models, and result metadata without React state. */
 
 /** Per-patch user options (Options drawer state) that must survive a run
  * re-stage: a filtered run (disabled patches stripped) rebuilds the workflow

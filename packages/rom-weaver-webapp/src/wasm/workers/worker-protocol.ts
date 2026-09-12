@@ -115,7 +115,7 @@ interface RomWeaverWorkerSelectRequestMessage {
  * ```
  *   slot 0                       : readiness flag (PENDING -> READY)
  *   slot 1                       : selected count (>= 0), or SELECT_REQUEST_CANCEL_COUNT (-1) to cancel
- *   slots 2 .. 2 + count         : the chosen 0-based indices (only `count` slots are meaningful)
+ *   slots 2 .. 1 + count         : the chosen 0-based indices (only `count` slots are meaningful)
  * ```
  *
  * The runner initializes PENDING/cancel, the main thread writes payload and

@@ -102,9 +102,10 @@ type InFlightEntry = {
 type Waiter = {
   operation: ScheduledOperation;
   detachAbort: () => void;
-  /** Admit this waiter with `threads` worker threads (the planner's wave allotment for an I/O op, the
-   * op's own reservation otherwise). The count is recorded for cross-lane gating and forwarded to the
-   * run callback so the runner forces exactly that many. */
+  /**
+   * Admit the waiter with its requested thread budget and record that reservation for cross-lane gating.
+   * The runner passes the budget to the engine; actual thread use depends on the command.
+   */
   admit: (threads: number) => void;
 };
 
@@ -167,12 +168,8 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     return false;
   };
 
-  // Claim one pending batch slot so an arriving op replaces, rather than
-  // duplicates, its declared size in the next plan.
-  // ponytail: membership keyed by exact declared size, not a batch id threaded from the drop point; a
-  // coincidental same-size unrelated op can still false-match (perf-only: one drop wave gets the wrong
-  // thread share, never a correctness/data issue). Thread a real batch id through schedule() if that
-  // collision ever matters.
+  // Match one declared input size to avoid counting an arriving job twice.
+  // An unrelated job of the same size can consume this hint and change the later thread allocation.
   const consumePendingBatchSize = (size: number): boolean => {
     const index = pendingIoBatchSizes.indexOf(size);
     if (index < 0) return false;
@@ -261,9 +258,8 @@ export function createOperationScheduler(options: SchedulerOptions): OperationSc
     }
   };
 
-  // Serial fallback when no planner is wired or a planning round-trip fails: admit ONE I/O waiter alone
-  // with the whole budget, but only when the I/O lane is idle (no plan ⇒ no memory fit known, so never
-  // overlap). A later finish re-pumps and re-tries the plan. Matches the pre-planner serial behaviour.
+  // Without a usable plan, admit at most one I/O job with the full thread budget.
+  // This fallback checks I/O idleness, path conflicts, and concurrency; non-I/O jobs can remain active.
   const admitIoFallbackOne = (): void => {
     if (hasIoInFlight()) return;
     if (inFlight.size >= maxConcurrency) return;

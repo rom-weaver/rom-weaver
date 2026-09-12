@@ -50,8 +50,7 @@ const selectCandidateIfPrompted = async (label) => {
   });
   expect(selectionState).not.toBeNull();
   if (selectionState === "selected") return;
-  // An ambiguous multi-entry archive renders as a multi-select checklist: tick the requested entry's
-  // checkbox and confirm. A genuinely single-select prompt renders a clickable tree option instead.
+  // The helper accepts either a checklist with confirmation or a clickable single-select tree.
   const checklistRow = Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree .selcheck")).find(
     (entry) => entry.textContent?.includes(label),
   );
@@ -217,9 +216,9 @@ const dropOnPage = async (fileName) => {
   await new Promise((resolve) => globalThis.setTimeout(resolve, 120));
 };
 
-/* Regression: Identify used to exist twice - once at /identify-rom and once inside
-   the old Tools page - so one page drop reached two forms and both wrote the
-   same activity-store key. PPF undo mounts no IdentifyForm at all. */
+/**
+ * Keep exactly one Identify form mounted so a page drop has one consumer and one activity-store publisher.
+ */
 test("only one Identify workflow ever consumes a page drop", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
@@ -286,10 +285,7 @@ test("enabled PPF undo and Identify stay behind More on desktop and phone", asyn
 });
 
 test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
-  // The masthead thread count must follow the Threads setting. It once called
-  // resolveThreads() with no argument, so it always fell through to
-  // navigator.hardwareConcurrency and a user who dialled threads down to 1
-  // still read the host core count in the header.
+  // The masthead thread count MUST use the saved Threads setting.
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
   await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 Threads");
   await expect

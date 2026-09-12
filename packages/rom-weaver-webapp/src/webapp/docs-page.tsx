@@ -690,9 +690,7 @@ const ArticleEnd = ({ onSelectTab, slug }: { onSelectTab?: (id: string) => void;
     <footer className="docs-footer">
       <nav aria-label="Guide pages" className="docs-onward">
         {previous ? <OnwardLink direction="previous" route={previous} /> : <span className="docs-step-gap" />}
-        {/* A button, not an `#top` anchor: the guide routes are paths, and a hash here
-            would leave a destination in the address bar that is not one. `scrollTo`
-            still picks up the page's own `scroll-behavior`. */}
+        {/* Scroll without changing the URL fragment; scrollTo honors the page scroll behavior. */}
         <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
           <ArrowUpToLine aria-hidden="true" />
           Back to top

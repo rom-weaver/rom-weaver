@@ -191,7 +191,7 @@ Installed packs live in one directory. The default is the per-user data director
 `rom-weaver setup` installs the identify packs and the cheat shards into the directory above, downloading them from this version's GitHub release. It is for installs that ship only the executable - `cargo install`, `cargo binstall`, and `mise`; Homebrew, scoop, npm, the install scripts, and the Docker image place that data beside the binary already, and `setup` only reports on those.
 
 - `--database-dir DIR` installs somewhere other than the per-user data directory.
-- `--from ARCHIVE` installs a local `rom-weaver-identify-data.tar.br` and makes no network request. The archive must be the one built for this version; its packs are verified against the index it carries.
+- `--from ARCHIVE` installs a local `rom-weaver-identify-data.tar.br` and makes no network request. Its packs are verified against the index it carries. This check does not establish that the archive came from the same release as the CLI.
 - `--force` downloads again even when the database is already installed.
 
 Without `--force` an installed database is reported, not re-downloaded, so the command is safe to repeat. `--from` states the intent to install that archive, so it replaces an installed database the way `--force` does. JSON output carries `packs`, `downloaded`, and `database_dir`; `downloaded` is `false` for a `--from` install.
@@ -281,7 +281,7 @@ The shared flags below are also on `patch apply` and `patch create`, under the `
 
 `patch apply --cheat` bakes the selected entries into the output ROM, after the patch chain. Selecting an `unsupported` entry fails the run.
 
-`patch create --cheat` puts the `rom` entries in the patch and names the rest in `details.skipped_cheats`. Without `--cheat` it uses every cheat the matched game holds.
+`patch create --cheat` puts the selected `rom` entries in the patch and names selected entries it cannot bake in `details.skipped_cheats`. Without `--cheat`, it requires `--modified` or `--code`.
 
 The directory layout is in [Cheat database reference](cheat-database.md). The recipes are in [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 
@@ -338,7 +338,7 @@ A named producer must be selected and precede its consumer. Member selection app
 ### Header and byte-order flags
 
 - `--patch-header auto|keep|strip` decides whether each patch applies to the ROM with or without its copier header. Auto compares source checksums per patch. For the first patch only, missing checksum evidence can trigger record, format-validation, and platform-header inference. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
-- `--output-header auto|keep|strip` decides whether the finished ROM keeps its header. Auto keeps the ones emulators need and drops the ones they do not.
+- `--output-header auto|keep|strip` decides whether the finished ROM keeps its header. Auto keeps required format headers and recognized NSRT dump metadata, and removes other supported copier headers.
 - `--repair-checksum` repairs supported internal checksums and compatibility header fields after patching.
 - `--n64-byte-order auto|keep|big-endian|little-endian|byte-swapped` puts an N64 ROM in the interleaving a patch expects. Auto matches the patch's source CRC32; for the first patch, a patch that carries no checksum falls back to the shape of its changes. An order settled that way is named in the report label. The output is written back in the order the input arrived in. See [How rom-weaver picks a patch's bytes](../explanation/patch-formats.md#how-rom-weaver-picks-a-patchs-bytes).
 
@@ -385,7 +385,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec: `--patch` replaces the spec's patch chain and `--cheat` replaces its `cheats` array, in both cases wholesale. |
 | `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the bundle's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
 
-Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. A ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected.
+Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. For `bundle create --from`, a ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected by `--from`, but remain valid in bundles read by `bundle parse` and `patch apply`.
 
 ### Bundle cheats
 

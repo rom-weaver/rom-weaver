@@ -26,15 +26,12 @@ const getCheatPatchCodes = (records: readonly ClassifiedCheatRecord[]): string[]
 /** The patch format the create workflow accepts. */
 type CreatePatchFormat = NonNullable<CreateSettings["format"]>;
 
-/** Preference order for a cheat patch: the smallest, most portable first. */
+/** Prefer IPS, then BPS, among the formats allowed by the shared size policy. */
 const CHEAT_PATCH_FORMAT_PREFERENCE = ["ips", "bps"] as const;
 
 /**
- * IPS by preference, but only among the formats this ROM's size actually
- * allows. The shared create policy is the authority: IPS drops out past its
- * 16 MiB addressing limit, and both IPS and BPS drop out past the legacy
- * 256 MiB limit, where xdelta takes over. Picking a format the policy excludes
- * makes CreateWorkflowController.run throw UNSUPPORTED_FORMAT.
+ * Cheat export MUST use the shared create-size policy because the workflow
+ * rejects excluded formats with UNSUPPORTED_FORMAT.
  */
 const getCheatPatchFormat = (romSize: number | undefined): CreatePatchFormat => {
   const allowed = getCreatePatchFormatsForSizes(romSize);

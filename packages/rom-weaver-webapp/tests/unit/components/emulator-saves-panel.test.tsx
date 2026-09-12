@@ -29,8 +29,7 @@ describe("EmulatorSavesPanel", () => {
     const kind = screen.getByLabelText("File type") as HTMLSelectElement;
     expect(kind.value).toBe("sram");
 
-    // The handler used to read `event.currentTarget` inside the lazy state
-    // updater, which React had already nulled by the time it ran.
+    // The handler MUST read currentTarget before a deferred state updater runs.
     fireEvent.change(kind, { target: { value: "state" } });
 
     expect((screen.getByLabelText("File type") as HTMLSelectElement).value).toBe("state");

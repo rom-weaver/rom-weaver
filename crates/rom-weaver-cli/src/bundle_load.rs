@@ -5,9 +5,7 @@ use super::bundle_parse::{
 };
 use super::*;
 
-/// Hard cap on bundle JSON bytes (plain or decompressed). A bundle is
-/// metadata; anything larger is a mistake, and the cap keeps hostile
-/// compressed inputs from ballooning in memory.
+/// Limit plain and decompressed bundle JSON to bound metadata allocations.
 pub(crate) const BUNDLE_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Container-registry format names that are single-payload stream codecs.

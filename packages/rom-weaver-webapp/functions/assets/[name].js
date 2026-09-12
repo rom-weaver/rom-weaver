@@ -1,12 +1,5 @@
-// Cloudflare Pages Function that serves sidecar-backed assets from their
-// precompressed quality-11 brotli siblings. Pages has no precompressed-sibling
-// convention and recompresses on the fly at a lower quality (~640 KB larger on
-// the wasm, ~50 KB on the main JS bundle, per cold load), so this hands
-// br-capable clients the exact bytes the build produced.
-//
-// The build writes a `_routes.json` scoping invocation to the URLs it staged
-// sidecars for (see writeBrotliSidecars in vite.config.mjs); every other
-// request stays on Pages' unmetered static path and never invokes this.
+// Serve build-produced quality-11 Brotli sidecars to clients that accept br.
+// writeBrotliSidecars in vite.config.mjs scopes this function through _routes.json.
 
 import { sidecarContentType } from "./content-types.js";
 
@@ -25,12 +18,8 @@ const isSpaFallback = (response) => !response.ok || (response.headers.get("Conte
 export const onRequestGet = async ({ request, env, next }) => {
   if (!acceptsBrotli(request.headers.get("Accept-Encoding") ?? "")) return next();
   const url = new URL(request.url);
-  // The type comes from the build-verified table rather than a HEAD probe of the
-  // static asset. The probe was a second subrequest that had to resolve before the
-  // sidecar fetch could even start, which put a serialized round trip in front of
-  // the render-critical CSS and entry module. A missing entry is not an error: the
-  // request falls through to Pages' static path, which serves the asset correctly
-  // and only forfeits the quality-11 sidecar.
+  // The build-checked type table avoids a separate request for the raw asset.
+  // Unknown types fall through to Pages' static response.
   const contentType = sidecarContentType(url.pathname);
   if (!contentType) return next();
   // A missing asset needs no separate check - its sidecar is missing too, and the

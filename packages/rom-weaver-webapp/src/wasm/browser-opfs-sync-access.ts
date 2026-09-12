@@ -1,8 +1,6 @@
 import type { RomWeaverBrowserSyncAccessMode } from "./browser-opfs-runtime-types.ts";
 
-// OPFS FileSystemSyncAccessHandle surface used by the browser runtime. Mirrors the
-// local SyncAccessHandleLike in browser-opfs-io-adapters.ts; duplicated here because
-// the shared runtime types module is owned elsewhere.
+// Structural OPFS handle type shared by the runtime and its test doubles.
 export type SyncAccessHandleLike = {
   close(): void;
   flush(): void;
@@ -70,10 +68,8 @@ export async function openSyncAccessHandle({
   try {
     return await createSyncAccessHandleWithRetry(handle, { mode });
   } catch {
-    // Some WebKit/iOS builds reject the `mode` option - notably "readwrite-unsafe" - with
-    // InvalidStateError, which the proxy would otherwise surface as a fatal EIO and fail the whole
-    // run. The default (no-option) handle is plain read-write: always supported, and strictly safer
-    // than "unsafe". Fall back to it for any requested mode before giving up.
+    // Retry without options for browsers that reject the requested access mode.
+    // If the default read-write handle also fails, its error reaches the caller.
     return createSyncAccessHandleWithRetry(handle, undefined);
   }
 }

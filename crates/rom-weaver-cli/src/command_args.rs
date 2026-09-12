@@ -1057,10 +1057,10 @@ pub struct TrimCommand {
 Pad a trimmed file back to full size. `--untrim` and `--restore` do the same
 thing.
 
-If the file carries a revert footer from an earlier --revert-marker run, the
-original is restored byte for byte. Otherwise the size is worked out from the
-ROM header (NDS and 3DS) or rounded up to the next power of two (GBA), which
-usually matches but is not guaranteed to.
+A revert footer from an earlier --revert-marker run supplies the size and
+padding byte. Without a footer, the size rounds up to the next power of two;
+NDS also keeps the used-data boundary from its header. Restoration does not
+guarantee the original bytes.
 
 XISO and RVZ scrub cannot be reverted."
         )
@@ -1116,7 +1116,7 @@ XISO and RVZ scrub cannot be reverted."
         arg(
             long = "revert-marker",
             visible_alias = "reversible",
-            help = "Add a small footer recording what was cut, so --revert can restore the original exactly"
+            help = "Add a footer with the original size and a fill byte for --revert"
         )
     )]
     #[serde(default)]

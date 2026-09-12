@@ -105,8 +105,8 @@ The CLI and browser share one Rust engine. Browser workers and storage add costs
 - **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
 - **Create format-specific compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with codec-aware compression settings. CHD and RVZ outputs are checked for round-trip compatibility with chdman and dolphin-tool.
 - **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends, with copier-header detection, header repair, and header-aware checksum variants.
-- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS can be reverted, with an opt-in footer that restores the original file byte-for-byte.
-- **Share workflows.** Distributable [`rom-weaver-bundle.json`](./docs/rom-weaver-bundle-v1.schema.json) bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
+- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS can be padded back out. An optional footer records the original length and one padding byte; exact restoration has [limits](docs/how-to/cli-trim.md#make-the-trim-reversible).
+- **Share workflows.** Distributable [`rom-weaver-bundle.json`](./docs/rom-weaver-bundle-v2.schema.json) bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
 - **Local-first and private.** Everything runs on your machine. The webapp is an installable PWA that works offline and never uploads your files.
 - **One engine, two frontends.** The same Rust core powers the terminal CLI and the threaded WASM webapp. CLI operation commands can emit line-delimited JSON for scripting.
 
@@ -120,7 +120,7 @@ rom-weaver is beta software and follows Semantic Versioning, but until v1.0, bre
 
 ### First complete public release
 
-v0.7.2 was the first complete public release. The changelog and the git history go back further, but v0.6.0 through v0.7.1 failed partway through the release pipeline or were only partially published. v0.7.1 completed most of the pipeline, but it still missed the crates.io CLI package, shipped a broken unscoped npm launcher, and built the static webapp archive with mismatched release metadata. Starting with v0.7.2, all public install methods were intended to work together. Install commands below resolve the current release unless you explicitly pin a version.
+v0.7.2 was the first complete public release. The changelog and the git history go back further, but v0.6.0 through v0.7.1 failed partway through the release pipeline or were only partially published. v0.7.1 completed most of the pipeline, but it still missed the crates.io CLI package, shipped a broken unscoped npm launcher, and built the static webapp archive with mismatched release metadata. Starting with v0.7.2, all public install methods were intended to work together. Install commands above resolve the current release unless you explicitly pin a version.
 
 ### LLM-assisted development
 

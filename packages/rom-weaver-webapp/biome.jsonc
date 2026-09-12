@@ -13,10 +13,8 @@
     "enabled": true,
   },
   "files": {
-    // Biome sorts CSS inside `<style>` blocks, but its HTML support is
-    // experimental and the only HTML here is standalone prototype and matrix
-    // pages that ship no styles to the app. An `overrides` entry does not
-    // reach embedded CSS, so the exclusion has to live at this level.
+    // Keep Biome on .css files; oxfmt owns HTML, including the app entry and
+    // diagnostic pages. Exclude HTML here because overrides do not reach embedded CSS.
     "includes": ["**", "!**/*.html"],
     "ignoreUnknown": true,
   },
@@ -54,15 +52,8 @@
       "complexity": {
         "noExcessiveCognitiveComplexity": "warn",
         "noForEach": "error",
-        // CSS. Off because every `!important` in design-system/ is a
-        // deliberate cascade escape with no alternative: the reduced-motion
-        // resets must beat any author animation, the view-transition
-        // suppression must beat an inline `style` attribute, the boot-shell
-        // settle must reverse the layer order that puts phone-dock.css after
-        // base.css, and the sample-tutorial classes are attached by JS to
-        // whatever element the step happens to use, so no selector can be
-        // written to outrank it. The layer hazard this rule would guard
-        // against is already covered by `npm run lint:css-layers`.
+        // Reduced-motion resets, inline styles, and later cascade layers need
+        // targeted !important overrides. Check layer conflicts with lint:css-layers.
         "noImportantStyles": "off",
         "noUselessStringConcat": "error",
         "useSimplifiedLogicExpression": "error",
@@ -79,13 +70,8 @@
       },
       "style": {
         "noCommonJs": "error",
-        // CSS. Off because the rule pairs rules by their rightmost selector
-        // alone, ignoring whether the ancestors can ever agree: every icon
-        // rule ending in `svg` is reported against every other one, which is
-        // 54 of the 72 findings here. Of the rest, the boot-shell overrides
-        // and the `@media (pointer: coarse)` hint swap are deliberate and
-        // documented in place. Ordering that actually decides a cascade
-        // outcome is checked by `npm run lint:css-layers`.
+        // This rule reports unrelated icon selectors that all end in svg.
+        // lint:css-layers checks conflicts across the app's cascade layers.
         "noDescendingSpecificity": "off",
         "noNegationElse": "error",
         "noNestedTernary": "off",
@@ -116,9 +102,7 @@
   },
   "overrides": [
     {
-      // Biome reaches CSS inside `<style>` blocks, but its HTML support is
-      // experimental and these are standalone prototype and matrix pages that
-      // ship no styles to the app. Keep the CSS pass on real .css files.
+      // Keep embedded HTML styles outside Biome's CSS formatting pass.
       "assist": {
         "actions": {
           "source": {

@@ -352,8 +352,7 @@ describe("offline warm-up client", () => {
 
     bumpOfflineWarmupPriority({ kind: "emulatorjs" });
     await flush();
-    // The bump message reorders the worker's queue for the emulator page's own
-    // fetches, but the ~30 MB core set is not pulled on a metered connection.
+    // An EmulatorJS bump may reorder the queue on data saver, but only the player's on-demand requests fetch assets.
     expect(messages).toEqual([{ action: "offline-warmup-bump", target: { kind: "emulatorjs" } }]);
   });
 

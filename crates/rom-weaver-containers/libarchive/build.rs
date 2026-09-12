@@ -33,15 +33,9 @@ const LZMA_SDK_CORE_SOURCES: &[&str] = &[
     "LzmaEnc.c",
 ];
 const LZMA_SDK_THREADED_SOURCES: &[&str] = &["LzFindMt.c", "MtCoder.c", "MtDec.c", "Threads.c"];
-// The hand-written LZMA decode loop. Same bitstream as the C fallback and what
-// 7zz itself runs; measured ~26% off a 1 GiB LZMA1 extract on arm64. Without it
-// the SDK's C decoder is no faster than liblzma's, so this is the whole extract
-// win.
-//
-// arm64 is GNU-as syntax and clang assembles it directly. x86-64 is MASM syntax
-// and needs a MASM-compatible assembler at build time; `lzma_sdk_x86_asm_object`
-// probes for one and the build silently falls back to the C loop when there is
-// none. See docs/development/vendor-code.md for the per-platform matrix.
+// The SDK assembly decoder accepts the same bitstream as the C decoder.
+// ARM64 uses GNU assembler syntax; x86-64 needs a MASM-compatible assembler
+// and falls back to C when none is available (see docs/development/vendor-code.md).
 const VENDORED_LZMA_SDK_ASM: &str = "lzma-sdk/vendor/Asm";
 const LZMA_SDK_ARM64_ASM_SOURCE: &str = "LzmaDecOpt.S";
 const LZMA_SDK_ARM64_ASM_INCLUDE: &str = "7zAsm.S";
@@ -239,9 +233,8 @@ pub fn build() {
     println!("cargo:rerun-if-changed={}", lzma_asm_dir.display());
 
     build_libarchive(&source_dir, &lzma_glue_dir, target_sysroot.as_deref());
-    // After libarchive: the 7z reader/writer objects inside libarchive.a
-    // reference these symbols, and single-pass static linkers only resolve
-    // backwards through the link line.
+    // The SDK archive MUST follow libarchive on the link line so a single-pass
+    // linker can resolve the 7z reader and writer's SDK references.
     build_lzma_sdk(
         &manifest_dir,
         &lzma_sdk_dir,
@@ -252,22 +245,9 @@ pub fn build() {
     generate_bindings(&source_dir, target_sysroot.as_deref());
 }
 
-/// Whether the SDK's thread layer - and with it the multithreaded LZMA2
-/// *encoder* - is compiled in at all.
-///
-/// Off for every wasm target, which is why `rom-weaver-app.wasm` encodes 7z
-/// with liblzma. The SDK encoder is a blocking one-shot, so the glue drives it
-/// from a thread of its own, and the SDK then spawns its match-finder and block
-/// threads *from that thread*. Those nested spawns do not survive the browser's
-/// WASI thread pool: a run that asked for one thread gets a zero-sized pool and
-/// every spawn is EAGAIN, and even with a large pool the nested spawn's start
-/// ack times out (measured: `SZ_ERROR_THREAD` carrying errno 6). liblzma's
-/// encoder spawns its workers from the main thread instead, so it keeps
-/// working, and it is genuinely parallel there - which the SDK encoder would
-/// not be if it were forced single-threaded to fit.
-///
-/// The *decoder* is unaffected and stays on the SDK everywhere: LzmaDec and
-/// Lzma2Dec have no threads.
+/// Enable the SDK's threaded LZMA2 encoder only on native targets.
+/// WASM uses liblzma so encoding also works without a worker pool; the SDK
+/// encoder needs nested workers, while the SDK decoder runs without threads.
 fn lzma_sdk_lzma2_encoder_available() -> bool {
     !is_wasm32_target()
 }

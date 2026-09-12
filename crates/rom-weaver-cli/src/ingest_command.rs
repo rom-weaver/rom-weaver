@@ -188,9 +188,8 @@ pub struct PatchDescriptor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub sidecar_order: Option<u32>,
-    /// `true` when a registered patch handler recognized the leaf's format and parsed it (valid patch
-    /// magic). The host trusts this instead of re-extracting + re-reading the magic. `false` for an
-    /// unsupported extension or a recognized-but-unparseable file (bad/truncated magic).
+    /// `true` when a registered handler accepted the leaf's metadata, so the host
+    /// can use it without extracting it again. This is not full action-record validation.
     pub is_valid_patch: bool,
 }
 
@@ -1067,8 +1066,7 @@ impl CliApp {
         Ok(self.prompt_for_selection(&heading, &candidates)? != Some(0))
     }
 
-    /// Compute the asset's checksums/variants/identity with the shared streaming variant engine
-    /// (the same single-pass engine the `checksum` command uses), filling them into `asset`.
+    /// Fill the asset's checksums, variants, and identity through the shared checksum path.
     fn fill_asset_checksums(
         &self,
         mut asset: IngestRomAsset,
@@ -1183,11 +1181,8 @@ impl CliApp {
             // format so the host can still surface it; no embedded metadata to read, not a valid patch.
             return Ok(descriptor);
         };
-        // A recognized handler that confirms the leaf's metadata confirms the patch magic - the same
-        // fact the host re-derived by re-extracting + re-reading the header. `describe_metadata` reads
-        // just the embedded requirements (skipping a full structural scan where the format allows) and
-        // still rejects a structurally-invalid/truncated file: surface that (with file-name
-        // requirements + format) but mark it not a valid patch rather than failing the whole ingest.
+        // Metadata probing can skip action records, so success is not full patch validation.
+        // Keep metadata failures in the manifest as invalid entries without aborting ingest.
         let report = match handler.describe_metadata(leaf_path, context) {
             Ok(report) => {
                 descriptor.is_valid_patch = true;
@@ -1362,11 +1357,6 @@ impl CliApp {
         });
     }
 
-    /// Identify multi-track discs as a whole. Per-track packs (Redump CD/GD-ROM)
-    /// store one hash per track file, so the single-blob lookup above can never
-    /// match them. Build one fingerprint per disc group from the checksums the
-    /// extract already streamed - no bytes are re-read - and give every asset in
-    /// the group the group's identification when its own lookup found nothing.
     /// Expand a merged bin's `track_checksums` rows into per-track fingerprint
     /// components. A malformed row (no hashes or zero size) is skipped.
     fn track_checksum_components(asset: &IngestRomAsset) -> Vec<FingerprintComponent> {
@@ -1401,6 +1391,8 @@ impl CliApp {
             .collect()
     }
 
+    /// Match disc groups using existing track checksums, without reading files again.
+    /// Fill each asset's missing identification from the group result.
     fn resolve_disc_group_identifications(
         identify_database: &IdentifyDatabaseSet,
         assets: &mut [IngestRomAsset],

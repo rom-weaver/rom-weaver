@@ -18,25 +18,12 @@ const checkKey = (checks: ParsedBundleChecks | undefined): string => {
 };
 
 /**
- * Identify a rom check that has no ROM behind it yet - a bundle's `rom.checks`,
- * or the source requirement a staged patch declares - so the workflow can name
- * the expected title and fill in the checksums the check itself omitted.
- *
- * The lookup loads the FULL identify pack set (a checksum routes to no
- * platform), so it runs off the render path and is abandoned when the check
- * changes. Every failure - an unavailable database included - resolves to
- * `undefined`: a check that cannot be identified is not a check that failed.
- *
- * Callers pass `enabled: false` once the ROM itself is staged: the staged ROM
- * is identified from its own bytes, so starting a second full pack load would
- * buy nothing. A result already found for the same check is kept, so the
- * expectation does not lose its title the moment the ROM lands.
+ * Identify expected checks before a ROM is staged, using checksum-routed packs.
+ * Disable this lookup once the ROM is staged; retain a result for the same checks.
  */
 const useExpectedRomIdentification = (checks: ParsedBundleChecks | undefined, enabled = true) => {
   const key = checkKey(checks);
-  // `key` already carries every digest and the size, so the effect keys on it
-  // and reads the check itself through a ref - depending on the object would
-  // reload the whole pack set on every render.
+  // Equivalent check objects MUST NOT restart the lookup on each render.
   const latestChecks = useLatestRef(checks);
   const [identified, setIdentified] = useState<{ key: string; value: ParsedIdentifyResolution } | undefined>(undefined);
   useEffect(() => {

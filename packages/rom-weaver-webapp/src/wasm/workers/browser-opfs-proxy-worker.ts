@@ -1,10 +1,5 @@
-// Dedicated worker entry for the OPFS async proxy.
-//
-// This worker is the single owner of every OPFS handle for a runner. It boots from a `bootstrap`
-// message carrying the SharedArrayBuffer channel and the mount directory handles, then runs the async
-// servicing loop in browser-opfs-proxy-server.ts until told to stop. It is spawned by the runner
-// (browser-opfs-proxy-runtime.ts); consumers on the main runner thread and spawned WASI threads talk
-// to it only through the shared channel, never via postMessage.
+// This dedicated worker owns the runner's OPFS handles and resolves mount paths from the OPFS root.
+// File I/O uses the shared channel; bootstrap, Blob registration, tracing, and shutdown use postMessage.
 
 import { attachOpfsProxyChannel, type OpfsProxyChannelTransfer } from "../browser-opfs-proxy-channel.ts";
 import {

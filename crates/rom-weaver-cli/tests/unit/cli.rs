@@ -8,11 +8,6 @@ use super::{
     RunCommandOptions,
 };
 
-// `RunCommandOptions::resolve_emit_progress_events` was replaced by
-// `RomWeaverRunOutputOptions::emit_progress_events` (combined with the
-// `--progress`/`--no-progress` -> `Option<bool>` mapping tested in
-// `src/cli.rs`'s own test module). These two tests exercise the same
-// defaulting/override behavior through the current API.
 fn output_options(json: bool, progress: Option<bool>) -> RomWeaverRunOutputOptions {
     RomWeaverRunOutputOptions {
         json,

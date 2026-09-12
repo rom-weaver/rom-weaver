@@ -711,9 +711,8 @@ fn read_partition_info_guesses_the_data_end_for_a_zero_sized_partition() {
 #[test]
 fn read_partition_info_keeps_a_partition_whose_fst_is_unparsable() {
     let mut image = build_wii_iso();
-    // Corrupt the FST root node's length so `Fst::new` reports the string
-    // table as out of bounds, then re-seal the partition data. The value stays
-    // well under `u32::MAX / 12`, which `Fst::new` multiplies without checking.
+    // The declared node count puts the string table beyond the FST buffer;
+    // re-seal partition hashes so only the FST bounds check rejects it.
     let fst_data = wii_fst_bytes();
     let mut content = build_partition_content(&fst_data);
     let root_length = CONTENT_FST_OFFSET as usize + 8;

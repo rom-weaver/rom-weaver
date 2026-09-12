@@ -24,13 +24,12 @@ export const OPFS_PROXY_CONTROL_OFFSET_HIGH_INDEX = 4;
  */
 export const OPFS_PROXY_CONTROL_LENGTH_INDEX = 5;
 /**
- * Auxiliary operand, low 32 bits (both directions). Consumer->proxy: truncate size low, readdir
- * cookie, or open oflags. Proxy->consumer: returned handle id on open.
+ * Consumer operand: the low 32 bits of a truncate size, or open flags including create/write intent.
  */
 export const OPFS_PROXY_CONTROL_AUX_LOW_INDEX = 6;
-/** Auxiliary operand, high 32 bits (both directions). truncate size high, open rights, etc. */
+/** High 32 bits of the truncate size on request, or of the numeric result on response. */
 export const OPFS_PROXY_CONTROL_AUX_HIGH_INDEX = 7;
-/** Result word (proxy -> consumer): bytes read/written, returned handle id, or dirent/entry count. */
+/** Low 32 bits of the numeric result; on failure, the error text's byte length in the data buffer. */
 export const OPFS_PROXY_CONTROL_RESULT_INDEX = 8;
 /** Status word (proxy -> consumer): a raw WASI errno (0 = success). OPFS_PROXY_STATUS_EIO on failure. */
 export const OPFS_PROXY_CONTROL_STATUS_INDEX = 9;
@@ -56,11 +55,11 @@ export const OPFS_PROXY_STATE_PROXY_SERVICING = 4;
 
 // --- Operation codes (values stored at OPFS_PROXY_CONTROL_OPCODE_INDEX) ---------------------------
 
-/** Open (or create) a file by path; returns a handle id in AUX_LOW. data buffer holds the UTF-8 path. */
+/** Open or create the UTF-8 path in the data buffer; returns its handle id in RESULT. */
 export const OPFS_PROXY_OP_OPEN = 1;
 /** Read at OFFSET into the data buffer; returns bytes read in RESULT. */
 export const OPFS_PROXY_OP_READ = 2;
-/** Positional read (same as READ; kept distinct so the proxy can skip cursor bookkeeping). */
+/** Positional read; the server handles it identically to READ, which also uses an explicit offset. */
 export const OPFS_PROXY_OP_PREAD = 3;
 /** Write LENGTH bytes from the data buffer at OFFSET; returns bytes written in RESULT. */
 export const OPFS_PROXY_OP_WRITE = 4;
@@ -75,7 +74,7 @@ export const OPFS_PROXY_OP_UNLINK = 8;
 // 9 retired (was OP_RENAME); not reused so the wire numbering stays stable.
 /** Create a directory by path (data buffer holds the UTF-8 path). */
 export const OPFS_PROXY_OP_MKDIR = 10;
-/** Return the byte size of a handle in RESULT (proxy reads the live SyncAccessHandle size). */
+/** Return the handle's byte size in AUX_HIGH:RESULT, from its OPFS handle or input Blob. */
 export const OPFS_PROXY_OP_SIZE = 11;
 
 // --- Status values (raw WASI errno carried in OPFS_PROXY_CONTROL_STATUS_INDEX) --------------------

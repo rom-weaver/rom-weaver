@@ -83,11 +83,8 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
   const navigatorObject = options.navigatorObject || globalThis.navigator;
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // Per-path read cache. The WASM input read path issues many small reads against the same
-  // staged file; without this every read re-walks the OPFS directory tree (one async handle
-  // lookup per path segment) and re-snapshots the File via getFile(). On Safari those calls
-  // dominate the read cost. A cached File is a point-in-time snapshot, so every local mutation
-  // (write/truncate/remove) MUST invalidate the entry or a later read could serve stale bytes.
+  // Cache app-side OPFS snapshots to avoid repeated directory walks and getFile calls.
+  // Local writes, truncates, and removals MUST invalidate the snapshot so reads cannot serve stale bytes.
   const readCache = new Map<string, { file: File; fileHandle: FileSystemFileHandle }>();
   const invalidateReadCache = (normalizedPath: string) => {
     readCache.delete(normalizedPath);
@@ -137,8 +134,8 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
   };
 
   /**
-   * Remove an entry, waiting out the window where a SyncAccessHandle still holds
-   * it. Any other failure is left ignored, matching the historical cleanup behavior.
+   * Retry removal while a sync access handle holds the entry.
+   * Other removal failures are ignored because callers use this for best-effort cleanup.
    */
   const removeEntryWhenFree = async (directory: FileSystemDirectoryHandle, fileName: string) => {
     for (let attempt = 0; ; attempt += 1) {

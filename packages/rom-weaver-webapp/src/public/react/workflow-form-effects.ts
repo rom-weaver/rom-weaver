@@ -139,9 +139,8 @@ const useWorkbenchActivity = (workflowId: string, { busy, queued, completed }: W
     if (busy || queued) setWorkbenchActivity(workflowId, { state: "running" });
     else if (completed) setWorkbenchActivity(workflowId, { state: "done" });
     else setWorkbenchActivity(workflowId, { state: "idle" });
-    // ponytail: no unmount cleanup - the webapp forms never unmount, and normal
-    // settling already clears the slot to idle. Add a cleanup here if a form can
-    // unmount mid-run (would otherwise leave a stale 'running' pinned).
+    // Activity persists after unmount; callers MUST settle or clear their slot
+    // before removing a form during a run.
   }, [workflowId, busy, queued, completed]);
 };
 

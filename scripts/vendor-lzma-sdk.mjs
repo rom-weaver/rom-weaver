@@ -1,15 +1,10 @@
 #!/usr/bin/env node
 
-// Refreshes crates/rom-weaver-containers/lzma-sdk/vendor/C from an official
-// 7-Zip LZMA SDK drop. Modeled on scripts/vendor-libarchive.mjs, but the SDK
-// ships as a .7z tarball rather than a git repo, so the source of truth is the
-// upstream URL plus its SHA-256 instead of a commit hash.
+// Refresh the vendored C and assembly sources from a pinned LZMA SDK .7z archive.
+// The version file records the source URL and SHA-256.
 //
-//   node scripts/vendor-lzma-sdk.mjs            # refresh the pinned version
-//   node scripts/vendor-lzma-sdk.mjs 26.02      # move the pin
-//
-// Extraction needs a 7z reader on PATH (7zz, 7z, or 7za) - the SDK is only
-// published as a .7z.
+// Usage: node scripts/vendor-lzma-sdk.mjs [version]
+// Requires 7zz, 7z, or 7za on PATH.
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -56,13 +51,8 @@ export const VENDORED_FILES = [
   "Threads.h",
 ];
 
-// The hand-written LZMA decoder inner loop, in both of the SDK's ports. Same
-// bitstream as the C fallback and what 7zz itself runs; the C loop is no faster
-// than liblzma's, so this is where the extract win comes from.
-//
-// arm64 is GNU-as syntax, which clang assembles directly. x86-64 is MASM syntax
-// and needs a MASM-compatible assembler at build time (jwasm/asmc/uasm/ml64) -
-// build.rs probes for one and silently falls back to the C loop without it.
+// ARM64 uses clang's assembler; x86-64 needs a MASM-compatible assembler.
+// Without one, build.rs warns and uses the portable C decoder.
 export const VENDORED_ASM_FILES = [
   "arm64/7zAsm.S",
   "arm64/LzmaDecOpt.S",

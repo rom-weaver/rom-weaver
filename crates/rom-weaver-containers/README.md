@@ -13,7 +13,7 @@
   <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
 
-> **Beta software, published so the CLI can be.** This crate exists to build [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the `rom-weaver` command is the only supported interface. The Rust API is not documented beyond this page, changes without notice between minor releases, and using it in another project is unsupported.
+> **Beta software.** This crate is published as a dependency of [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli). The `rom-weaver` command is the supported interface. The Rust API is internal and can change between minor releases.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -34,17 +34,17 @@ The container registry and one handler per format, each implementing `rom-weaver
 - **General archives.** ZIP, 7z, RAR, and the tar family.
 - **Disc-image containers.** CHD, RVZ, CSO, PBP, GCZ, WIA, WBFS, NFS, TGC, and XISO.
 - **ROM-specific compression.** Z3DS for Nintendo 3DS ROMs.
-- **Creation, not just reading.** ZIP, 7z, CHD, RVZ, and Z3DS can be written with codec-aware compression settings. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
-- **Bounded memory.** Extract and create run as producer/consumer pipelines over bounded channels, so a 60 GiB image does not become a 60 GiB allocation.
-- **Threading that reports itself.** Every operation returns the `ThreadExecution` it actually used, not just what it could have used.
+- **Creation.** ZIP, 7z, CHD, RVZ, and Z3DS can be written with codec-aware compression settings. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
+- **Bounded memory.** Large-image handlers stream data or process bounded batches. Buffer and worker limits keep image size from requiring an equally large allocation.
+- **Thread reporting.** Operation reports carry the negotiated `ThreadExecution`, including fallback to a single thread when a worker pool cannot be built.
 
 ## Usage
 
-Use the [CLI](https://rom-weaver.com/docs/install) for supported command-line operation. This crate is an internal dependency; its role and build features are documented here for contributors.
+Use the [CLI](https://rom-weaver.com/docs/install) to run rom-weaver. This page describes the internal crate for contributors.
 
 This crate links native C libraries: a vendored libarchive plus zlib, bzip2, LZMA, zstd, and LZ4. Building it needs **CMake**, **Clang**, and a working native compiler toolchain. It declares `links = "archive"`, so only one libarchive-linking crate may appear in a dependency graph.
 
-Default features build every compression backend from vendored sources. Notable toggles:
+The default features enable vendored bzip2, LZMA, zlib, and zstd backends, plus threading:
 
 | Feature | Effect |
 | --- | --- |
@@ -63,7 +63,7 @@ Default features build every compression backend from vendored sources. Notable 
 
 ## Stability
 
-rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in minor releases; this crate is the least settled surface in the project. The supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this crate anyway, pin an exact version and expect to do the migration work yourself.
+Before v1.0, breaking changes increase the minor version. Direct use of this crate is unsupported; an exact version pin prevents an update from changing its API unexpectedly.
 
 ## Documentation
 

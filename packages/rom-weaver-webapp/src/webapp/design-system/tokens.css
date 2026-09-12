@@ -101,15 +101,10 @@
   color-scheme: light;
 }
 
-/* ── canvas-readable dyes ──
-   home-loom-runtime.ts paints these on a <canvas>, and canvas needs a real colour. An
-   unregistered custom property computes to its own text, so a color-mix() would
-   reach fillStyle unparsed and paint nothing. Registering them as <color> makes
-   the browser compute the mix, so getComputedStyle hands back a colour.
-
-   Registration also makes them follow the --thread crossfade in accents.css
-   instead of snapping: their computed values are substituted from --thread and
-   --thread-hi, which are themselves registered and interpolated. */
+/**
+ * Register canvas palette properties as colors so getComputedStyle resolves their color expressions.
+ * They also follow the interpolated accent colors during a theme transition.
+ */
 @property --shuttle {
   syntax: "<color>";
   inherits: true;

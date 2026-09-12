@@ -7,9 +7,7 @@ import { runInNewContext } from "node:vm";
 
 const ACTIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".github", "actions");
 
-// Two composite actions run the identify build independently, with different
-// cache keys. Fixing one and not the other is exactly how the node-tar switch
-// kept failing, so every action that runs the build is checked, not a named one.
+// Every action that can build identify data MUST install the build dependencies.
 const actionsRunningTheBuild = () =>
   readdirSync(ACTIONS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -50,10 +48,7 @@ test("the identify build install is gated on a cache miss", () => {
   }
 });
 
-// The composite actions are only half the surface: a workflow job can also
-// reach the identify build through `mise run test-rust`, which bypasses the
-// actions entirely. `rust-macos` did exactly that and broke on the node-tar
-// switch, so the jobs are checked too.
+// Rust test jobs can request identify data without calling a composite action.
 const WORKFLOW = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",

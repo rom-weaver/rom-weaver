@@ -85,7 +85,7 @@ fn create_and_apply_round_trip() {
         )
         .expect("apply");
     let apply_execution = apply_report.thread_execution.expect("thread execution");
-    // apply streams by default; this multi-record patch parallelizes
+    // The test context forces streaming apply; this multi-record patch parallelizes
     assert!(apply_execution.used_parallelism);
     assert!(apply_execution.effective_threads > 1);
 

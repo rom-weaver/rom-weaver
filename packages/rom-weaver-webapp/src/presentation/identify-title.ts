@@ -80,10 +80,8 @@ const formatIdentifyTitle = (name: string): string => {
 };
 
 /**
- * The identified title as a filename stem: control characters and the
- * characters no filesystem accepts are removed, and the extension is left to
- * the caller's format selector. Brackets stay - a GoodTools tag like `[T+Eng]`
- * is part of the name a reader recognizes.
+ * Filename stem with control characters and reserved cross-platform filename characters removed.
+ * Dump tags remain part of the title; the format selector adds the extension.
  */
 const identifyOutputBaseName = (name: string): string =>
   Array.from(formatIdentifyTitle(name))

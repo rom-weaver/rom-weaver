@@ -1,6 +1,6 @@
 # Create a ROM patch in the browser
 
-Give rom-weaver a clean ROM and your edited version. It downloads a patch that contains the differences, not a copy of the game.
+Give rom-weaver a clean ROM and your edited version. It creates a patch that describes the changes needed to reproduce your edited version.
 
 <!-- START doctoc -->
 ## Table of contents

@@ -254,9 +254,3 @@
     padding-inline: 10px;
   }
 }
-
-/* Settings is full-screen on phones alongside the status/log inspector; both
-   are in webapp-modals.css, which owns those surfaces. Every masthead layout
-   rule that used to live here is gone: the ladder is now three fixed
-   breakpoints in masthead.css and the primary nav moves to the bottom dock
-   below 1000px, so there is nothing left for this file to override. */

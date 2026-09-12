@@ -1,8 +1,8 @@
 //! Apply a `.dcp` patch against a GD-ROM data track's filesystem.
 //!
 //! Produces delta-applied files, verbatim additions, and replacement IP.BIN
-//! bytes through a caller-supplied sink. It performs no filesystem I/O, keeping
-//! native and browser behavior shared; full-disc reassembly is separate.
+//! bytes through a caller-supplied sink. Input readers and output sinks work
+//! in native and browser builds; full-disc reassembly is separate.
 
 use std::io::{Read, Seek};
 
@@ -45,8 +45,8 @@ pub struct DcpApplySummary {
 /// once per produced output (in manifest order).
 ///
 /// Delta operations read their source file from `fs` (matching the target path
-/// case-insensitively) and apply the VCDIFF delta in memory; the clean decode
-/// validates that the source matched. A missing source file is an error.
+/// case-insensitively) and apply the VCDIFF delta in memory. Decoding checks
+/// target-window checksums when present; a missing source file is an error.
 pub fn apply_dcp<D, T, F>(dcp: &mut D, fs: &mut GdRomFs<T>, mut emit: F) -> Result<DcpApplySummary>
 where
     D: Read + Seek,

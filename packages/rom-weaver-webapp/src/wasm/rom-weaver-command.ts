@@ -328,11 +328,8 @@ export function clampRomWeaverBrowserThreadRequest(
 }
 
 /**
- * Force a thread-supporting command to use exactly `threads` worker threads, returning the input
- * unchanged for thread-less commands (probe/list) or when it already requests that count. Used to
- * hand each concurrently-dispatched operation its fair slice of the shared thread budget so K
- * operations running at once never collectively oversubscribe the WASI thread-worker pool (which
- * surfaces as `EAGAIN`/`os error 6` and a silent single-thread fallback).
+ * Set a supported command's requested thread budget to its share of the concurrent-work limit.
+ * The format and input size still determine how many threads the command uses.
  */
 export function withRomWeaverForcedThreads(input: RomWeaverRunInput, threads: number): RomWeaverRunInput {
   const command = readRomWeaverRunInputCommand(input);

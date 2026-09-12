@@ -36,12 +36,8 @@ const EXTENSION_CORES: Readonly<Record<string, string>> = {
 };
 
 /**
- * Display aspect ratio per core, as a CSS `aspect-ratio` value. The player box
- * is sized from this so the video fills it; without it the box keeps its own
- * shape and the core letterboxes into the top, leaving the touch controls
- * floating in dead space. These are display ratios, not framebuffer ratios -
- * the NES stores 256x240 but was always shown at 4:3. The DS is the odd one:
- * its two screens stack, so it is the only portrait core here.
+ * Size the player to the display ratio so touch controls stay near the video.
+ * Ratios can differ from framebuffer dimensions; the DS stacks its two screens.
  */
 const CORE_ASPECT_RATIOS: Readonly<Record<string, string>> = {
   gb: "10 / 9",

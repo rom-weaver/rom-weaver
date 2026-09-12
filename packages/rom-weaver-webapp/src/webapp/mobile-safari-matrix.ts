@@ -323,8 +323,7 @@ const runMatrix = async (profile: MobileSafariMatrixProfile = "fast") => {
           step.terminalStatus && step.terminalStatus !== step.status
             ? `${step.status}/${step.terminalStatus}`
             : step.status;
-        // `command` carries the per-step detail the harness measured (for the
-        // thread sweep, the actual thread counts), so it has to reach the log.
+        // Include harness details such as the thread sweep's negotiated thread budgets in the exported log.
         const detail = [step.command, step.error].filter(Boolean).join(" ");
         appendLog(`${status} ${step.name} ${formatDuration(step.durationMs)}${detail ? ` ${detail}` : ""}`);
       },
@@ -414,9 +413,8 @@ if (interrupted) {
   renderSummary();
 }
 
-// Surface a growth run the device killed. This has to happen on load: the run that gets killed is
-// the run that never reports, and it stays visible across reloads because the record is only cleared
-// when the next growth run starts.
+// Show the previous growth result on load, including a run interrupted before it wrote a final status.
+// The record remains visible until the next growth run clears it.
 const interruptedGrowth = getInterruptedMemoryGrowthRun();
 if (interruptedGrowth) {
   state.profile = "growth";

@@ -290,8 +290,8 @@ impl CliApp {
     /// Look for `.bin`/`.img`/`.iso` files in the sheet's directory that the
     /// sheet does not reference. Interactively confirm proceeding (ignoring
     /// them); non-interactively, proceed and return a warning note. Only
-    /// sheet-referenced files are ever staged, so compressed output stays
-    /// byte-identical to the original disc except for the patched track.
+    /// sheet-referenced files are staged; untouched tracks retain their bytes
+    /// when the disc is rebuilt.
     fn confirm_disc_grouping(
         &self,
         input: &Path,

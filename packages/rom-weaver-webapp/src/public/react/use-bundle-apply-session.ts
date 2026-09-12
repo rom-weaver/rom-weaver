@@ -26,7 +26,7 @@ type BundlePatchMeta = {
   description?: string;
   inputChecks?: ParsedBundleChecks;
   outputChecks?: ParsedBundleChecks;
-  /** Declared input basis (`base` = authored against the ROM; absent = previous/inferred). */
+  /** Per-patch authored input basis; absent leaves the workflow default or inference in control. */
   basis?: "base" | "previous";
 };
 

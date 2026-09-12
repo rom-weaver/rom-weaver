@@ -1,8 +1,5 @@
 /**
- * The theme toggle's view-transition gate. iOS WebKit is excluded from the
- * flat/mode crossfades because named elements misbehave mid-capture, but the
- * theme wipe names nothing (`html.vt-theme` clears every name), so it must
- * still run the wipe there - that exclusion is what left iOS with no animation.
+ * The theme wipe clears view-transition names, so the iOS gate for named-element crossfades must not disable it.
  */
 
 import { createElement } from "react";

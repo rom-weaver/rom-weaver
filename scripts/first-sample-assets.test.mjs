@@ -116,9 +116,8 @@ test("generated first-create and first-weave archives contain a runnable NES pat
 
 test("the sample digest the guides publish still matches the generated sample", () => {
   const assets = createFirstSampleAssets();
-  // What `rom-weaver weave --input first-weave.zip --no-compress` writes: the
-  // The bundle's two base-authored IPS patches apply in either order, which
-  // the round-trip test above pins to `wovenRom`.
+  // Both sample IPS patches target the base ROM and apply in either order.
+  // The round-trip test above checks this output.
   const digest = createHash("sha256").update(assets.wovenRom).digest("hex");
 
   assert.equal(digest, DOCUMENTED_WEAVE_SHA256);

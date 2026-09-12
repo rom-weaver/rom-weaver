@@ -16,7 +16,7 @@ Cut the padding off a ROM with `rom-weaver trim`, check the saving before you co
 
 ## See what would change
 
-`-n`/`--dry-run` reports the result without writing anything:
+`-n`/`--dry-run` reports the planned size change without writing a trimmed output:
 
 ```bash
 rom-weaver trim --input game.nds --dry-run
@@ -38,11 +38,13 @@ rom-weaver trim --input game.nds --extension trimmed.nds
 
 ## Make the trim reversible
 
-`--revert-marker` writes a small footer that records the exact padding:
+Write a separate copy with `--revert-marker` to record the original length and padding byte:
 
 ```bash
 rom-weaver trim --input game.gba --output game-trimmed.gba --revert-marker
 ```
+
+The footer stores one repeated byte, not a copy of the removed data. Exact restoration requires uniform removed padding. Keep the source when trimming NDS files whose removed area may contain other bytes. Do not combine this option with `--in-place` when exact restoration matters: in-place trimming can record the wrong padding byte.
 
 ## Put the padding back
 

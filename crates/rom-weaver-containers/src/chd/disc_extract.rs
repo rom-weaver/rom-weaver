@@ -1145,7 +1145,7 @@ impl ChdContainerHandler {
     /// Write the planned CD outputs: open the cue writer (when selected), dispatch
     /// to the single-bin or split-track writer, then flush the cue. Returns
     /// `(omitted_subcode, produced_outputs, wrote_single_bin_output,
-    /// output_checksums)` in the same order the inline closure did.
+    /// output_checksums)`.
     fn build_cd_extract_result(
         &self,
         inputs: &CdExtractInputs<'_>,

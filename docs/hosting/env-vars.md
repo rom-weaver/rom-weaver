@@ -24,6 +24,7 @@ The browser OPFS runner likewise has no constructor-level `program`, `argv0`, or
 | Variable | Type | Default | Read at | Purpose |
 | --- | --- | --- | --- | --- |
 | `ROM_WEAVER_LOG` | filter string | unset | `crates/rom-weaver-cli/src/lib.rs` | Tracing filter spec (e.g. `rom_weaver_app=trace`); also honored via `RUST_LOG` when no explicit CLI log level is selected. |
+| `ROM_WEAVER_DATA_DIR` | directory path | platform data directory + `rom-weaver` | `crates/rom-weaver-cli/src/identify_database.rs` | Parent of the native identify database's `identify` directory. `--database-dir` overrides the full database path. |
 | `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-patches/src/lib.rs` | Cap below which patch apply/create buffers in memory; above it the streaming path is used. `0` forces streaming. |
 | `ROM_WEAVER_DISC_TRACK_IN_MEMORY_LIMIT` | u64 (bytes) | 256 MiB | `crates/rom-weaver-cli/src/patch_apply_disc.rs` | Cap for buffering a single freshly produced disc track in memory during compression instead of a temp file (only ever bounds one track, never the whole disc). `0` forces temporary-file storage. |
 | `ROM_WEAVER_ZIP_ZSTD_MEM_BUDGET_MB` | u64 (MiB) | physical RAM / 2 (1-2 GiB fallback) | `crates/rom-weaver-containers/src/handlers/zip.rs` | Memory budget that caps zstd multi-thread job count for zip create. |

@@ -180,9 +180,8 @@ const traceRunTimings = (
   const computeMs = setupDoneAtMs === null || computeDoneAtMs === null ? null : computeDoneAtMs - setupDoneAtMs;
   const teardownMs = computeDoneAtMs === null ? null : runEndedAtMs - computeDoneAtMs;
   const fmt = (value: number | null): string => (value === null ? "n/a" : value.toFixed(1));
-  // `threads` is the requested budget (>1 = thread pool engaged, which is what setupMs mostly
-  // measures on a cold runner). stagingMs = OPFS input copy-in time (recorded on the main
-  // thread); 0 = already on OPFS, n/a = nothing staged (e.g. virtual-Blob input).
+  // The trace reports requested threads, not observed worker use.
+  // Staging time is supplied by the caller; existing OPFS inputs record zero.
   const stagingMsFmt = typeof input.stagingMs === "number" ? input.stagingMs.toFixed(1) : "n/a";
   trace(
     `[perf] command timings command=${formatCommandForTrace(input.command)}` +
@@ -328,9 +327,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           threadWorkerUrl: options.threadWorkerUrl,
         })
       : null;
-  // The wasi thread pool pre-warms itself to `initialSize` after a short idle delay (see
-  // browser-wasi-thread-pool.ts). Runner init does not wait on it: warmup and small non-threaded ops
-  // never need the shells, and threaded runs grow the pool on demand.
+  // Pool prewarming starts in a microtask without delaying runner initialization.
+  // Threaded runs await the shells they need; unthreaded work can start while the pool warms.
 
   const runner = {
     async dispose() {
@@ -389,10 +387,8 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
 
       const closeables: { close(): unknown }[] = [];
       let runSucceeded = false;
-      // Phase timings for the per-op latency breakdown (logged in the finally below). `setup` is the
-      // "before the operation starts" cost - mount/fd build, wasm instantiate, and any thread-pool
-      // pre-warm wait up to wasi.start; `compute` is wasi.start itself; `teardown` is the
-      // drain/flush/cleanup after it returns ("after finish"). performance.now() is available in workers.
+      // Setup timing includes mounts, instantiation, and the wait for thread workers.
+      // Compute ends when wasi.start returns; teardown includes worker drain and buffer flushes.
       const nowMs = (): number => (typeof performance === "undefined" ? 0 : performance.now());
       const runStartedAtMs = nowMs();
       const threadWorkersAtRunStart = readThreadWorkerCensus() ?? 0;
@@ -511,8 +507,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         traceFlushOpenWasiFileDescriptors(trace, wasi.fds, "[browser-opfs] flush fd write buffers");
         traceDirectWasiFileIoStats(trace, wasi, "[perf] direct file io");
         traceRandomAccessFileIoStats(trace, fds, "[perf] random access file io");
-        // Output files are real OPFS files written through the proxy during the run, so there is no
-        // end-of-run materialization step: the bytes are already persisted by the time wasi.start returns.
+        // Outputs are already OPFS-backed; the flush above commits the remaining buffered writes.
         runSucceeded = true;
         return { command, exitCode, ok: exitCode === 0, request, ...flushStreams() };
       } catch (error) {

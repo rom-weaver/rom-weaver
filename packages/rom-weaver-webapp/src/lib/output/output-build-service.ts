@@ -220,7 +220,7 @@ const createRuntimeRomSpecificOutputFiles = async (
         label: createCompressionProgressLabel({
           formatLabel,
           label: `Compressing ${inputFileName} to ${formatLabel}`,
-          // actual threads the runtime reported using (not the requested budget)
+          // Negotiated effective thread count from the runtime report.
           threads: getProgressEventThreadCount(progress),
         }),
       }),
@@ -545,7 +545,7 @@ const buildSessionOutputFiles = async (
             label: createCompressionProgressLabel({
               formatLabel: "CHD",
               label: `Compressing ${cueOutput.asset.fileName} to CHD`,
-              // actual threads the runtime reported using (not the requested budget)
+              // Negotiated effective thread count from the runtime report.
               threads: getProgressEventThreadCount(progress),
             }),
             percent: getProgressEventPercent(progress),

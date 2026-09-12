@@ -1714,8 +1714,6 @@ fn checksum_stdin_respects_start_and_length() {
     );
 }
 
-// ---- relocated from shared.rs (single-module helpers) ----
-
 fn write_gzip_fixture(source_path: &Path, gzip_path: &Path) {
     let source = fs::read(source_path).expect("read gzip source");
     let output = File::create(gzip_path).expect("create gzip fixture");

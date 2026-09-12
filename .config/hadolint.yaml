@@ -3,8 +3,6 @@
 # Suppressions carry a written reason, same as .config/deny.toml advisory ignores and
 # the cargo-machete false positives.
 ignored:
-  # DL3008 wants `apt-get install pkg=<version>`. Debian expires superseded
-  # point versions from the bookworm repos, so a pin turns every upstream
-  # security update into a broken build instead of a reproducible one. The
-  # base image tag is what actually pins these packages.
+  # Debian repositories remove superseded package versions, which breaks exact pins.
+  # The base image selects the distribution; apt packages still receive updates.
   - DL3008

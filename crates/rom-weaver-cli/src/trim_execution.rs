@@ -8,8 +8,7 @@ pub(super) struct TrimRequest {
     pub(super) dry_run: bool,
     pub(super) operation: TrimOperation,
     pub(super) kind: TrimInputKind,
-    /// When set on a trim, append a small revert footer recording the original size and padding
-    /// byte so the file can later be reverted to a byte-identical original.
+    /// Append the original size and detected fill byte for a later padding restore.
     pub(super) revert_marker: bool,
 }
 
@@ -29,8 +28,7 @@ impl CliApp {
             revert_marker,
         } = request;
 
-        // A revert footer, when present, fully describes the original file, so it takes precedence
-        // over the per-format revert heuristics and reconstructs the original byte-for-byte.
+        // Stored size and fill take precedence over format-specific restoration heuristics.
         if operation == TrimOperation::Revert
             && let Some(footer) = Self::read_revert_footer(source)?
         {
@@ -57,8 +55,7 @@ impl CliApp {
             }
         }?;
 
-        // Embed the revert footer only when an actual trim happened, so a clean ROM is never grown
-        // pointlessly and the footer always carries a real original size to restore.
+        // Unchanged files need no restoration metadata.
         if operation == TrimOperation::Trim
             && revert_marker
             && !dry_run
@@ -108,8 +105,7 @@ impl CliApp {
                 if revert_size < plan.trimmed_size {
                     revert_size = plan.trimmed_size;
                 }
-                // NDS carts pad unused trailing space with 0xFF, so revert must restore 0xFF to
-                // reproduce the original dump (and match No-Intro checksums).
+                // Without a footer, use conventional 0xFF padding; the original fill is unknown.
                 (revert_size, original_size == revert_size, 0xFF_u8)
             }
         };

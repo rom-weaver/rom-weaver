@@ -521,8 +521,7 @@ impl NameQuery {
     /// The game's score, or `None` when any query token matches none of the
     /// game's name, alternate names or dump tags. Every token MUST match.
     /// Among games with equal edit distance and token kinds, good dumps rank first.
-    /// Each candidate string is normalized once, so the cost per game stays
-    /// proportional to its own text and not to the query length.
+    /// Normalize each candidate string once and reuse it across query tokens.
     pub(super) fn score(&self, game: &PackGame, scratch: &mut SearchScratch) -> Option<i64> {
         scratch.best.clear();
         scratch.best.resize(self.tokens.len(), None);

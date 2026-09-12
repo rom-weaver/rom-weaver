@@ -13,7 +13,7 @@
   <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
 
-> **Beta software, published so the CLI can be.** This crate exists to build [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the `rom-weaver` command is the only supported interface. The Rust API is not documented beyond this page, changes without notice between minor releases, and using it in another project is unsupported.
+> **Beta software.** This crate is published as a dependency of [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli). The `rom-weaver` command is the supported interface. The Rust API is internal and can change between minor releases.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -29,19 +29,18 @@
 
 ## What does this crate do?
 
-Every checksum rom-weaver computes comes from here, whether it is verifying a patch's expected input, fingerprinting an extracted ROM, or answering a plain `rom-weaver checksum` run.
+This crate provides the checksum engine used by the `checksum` command, extracted-ROM hashing, and patch input checks. Format handlers also compute checksums required by their own formats.
 
 - **Algorithms.** CRC-32, CRC-32C, CRC-16, Adler-32, MD5, SHA-1, SHA-256, and BLAKE3. One engine, `NativeChecksumEngine`, computes any of them over a whole file or a byte range.
-- **One streaming pass.** The variant engine reads the input once and feeds every requested algorithm from the same buffered stream, so hashing a multi-gigabyte disc image with six algorithms costs one read, not six.
-- **Header-aware variants.** ROM copier headers (SNES/SMC, NES, and friends) are detected so a file can report both the raw checksum and the headerless checksum databases actually index by.
-- **N64 byte orders.** The three interleavings (`.z64` big-endian, `.v64` byte-swapped, `.n64` little-endian) are detected from the boot magic, and the same pass reports what the file would hash to in each of the other two.
-- **Checksum repair.** Internal header checksums that a patch invalidates can be recomputed in the same streaming pass: the N64 boot-code CRC pair, the Genesis word sum, and the GBA header complement.
+- **One streaming pass.** The variant engine feeds all requested algorithms from the same buffered stream. Header removal and N64 byte-order variants share that pass; some checksum-repair variants need a second read.
+- **Header-aware variants.** Header detection lets a file report checksums for both its raw bytes and its headerless bytes, so callers can match databases that use either form.
+- **N64 byte orders.** The three interleavings (`.z64` big-endian, `.v64` byte-swapped, `.n64` little-endian) are detected from the boot magic, and the same pass reports checksums for all three orders.
+- **Checksum repair.** Repair variants cover the N64 boot checksum pair for CIC-6101/6102, the Genesis word sum, and the GBA header complement. Genesis always needs a second read to hash the repaired bytes. N64 boot code that matches another known CIC is excluded; unknown boot code uses the CIC-6101/6102 calculation.
 - **ROM identity.** Platform detection and header parsing used to label a file with its platform and medium.
 
 ## Usage
 
-Use the [CLI](https://rom-weaver.com/docs/install) for supported command-line operation. This crate is an internal dependency; its role and build features are documented here for contributors.
-
+Use the [CLI](https://rom-weaver.com/docs/install) to run rom-weaver. This page describes the internal crate for contributors.
 
 ## Related crates
 
@@ -54,7 +53,7 @@ Use the [CLI](https://rom-weaver.com/docs/install) for supported command-line op
 
 ## Stability
 
-rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in minor releases; this crate is the least settled surface in the project. The supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this crate anyway, pin an exact version and expect to do the migration work yourself.
+Before v1.0, breaking changes increase the minor version. Direct use of this crate is unsupported; an exact version pin prevents an update from changing its API unexpectedly.
 
 ## Documentation
 

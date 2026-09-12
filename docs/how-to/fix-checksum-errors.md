@@ -48,8 +48,6 @@ Change one thing at a time:
 7. Put patches back into the documented order.
 8. Retry only after you can name what changed.
 
-Most problems are found in the first four steps.
-
 ## Wrong region or revision
 
 USA, Japanese, and European releases of the same title are different files. Text, code, timing, and data may sit at different offsets. A patch built for one release will not safely apply to another.
@@ -86,9 +84,9 @@ An extension is still only a clue. Use the checksum in the ROM card to identify 
 
 ## Wrong patch order
 
-With several patches, each one runs on the previous patch's result. A later patch may expect the translation output, not the clean game.
+By default, several patches modify one accumulated result. Each patch can be authored for the clean ROM or for an earlier patch's output. A bundle can also select a particular track or an earlier result.
 
-In **0x03 Patches**, drag the numbered handles into the author's order. Open **Checks** on each card. The expected input for one step should match the actual output state from the step above it.
+In **0x03 Patches**, put the patches in the author's order. Check each patch's authored input setting and **Checks**. A dependent patch must follow the result it expects. A patch authored for **Original ROM** checks the original state even when it modifies an accumulated result.
 
 Do not turn off a required base patch to get past a warning. Optional switches are safe only for combinations the release author tested.
 

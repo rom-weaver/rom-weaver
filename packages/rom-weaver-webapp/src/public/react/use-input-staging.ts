@@ -296,9 +296,8 @@ const useInputStaging = (context: InputStagingContext) => {
       });
     };
 
-    // Run the deep dry-run patch validation that was deferred out of staging (so the card could show
-    // its info + cheap preflight verdict instantly) and merge the refreshed verdicts back onto the
-    // already-visible patch rows, showing a "Validating…" indicator per row while it runs.
+    // Defer the dry-run until the cards can show their parsed patch information.
+    // Each affected row shows "Verifying…" until its verdict arrives.
     const validatePatchesDeferred = (snapshot: ApplyWorkflowStageSnapshot, generationArg?: number) => {
       const { machines, report, rows, session, stage } = contextRef.current;
       const patchStageGenerationRef = machines.patchStageMachine.stageGenerationRef;
@@ -328,11 +327,8 @@ const useInputStaging = (context: InputStagingContext) => {
           return next;
         });
       };
-      // Run silently: the card already shows its info + preflight and reads as settled, so the deep
-      // dry-run must NOT re-emit staging progress (that would drop the row back into the shimmer and
-      // make the patch look like it is hanging again - the whole point of the deferral). The card
-      // shows "Verifying…" (pre-validation infos, target resolved + verdict pending) while it runs;
-      // only the verdict is merged when it lands.
+      // Dry-run validation MUST NOT emit staging progress, which would hide the
+      // parsed card behind placeholders again; merge verification updates instead.
       void validatePatches(snapshot, mergeInfos)
         .then(mergeInfos)
         .catch((error) => {

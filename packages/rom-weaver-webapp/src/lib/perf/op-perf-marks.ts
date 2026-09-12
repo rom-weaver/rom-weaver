@@ -1,11 +1,5 @@
-// Main-thread User Timing measures for perceived operation latency:
-//
-//   warmup: page-load warmup extraction
-//   before-start: drop/selection to first WASM progress
-//   after-finish: final WASM event to result paint
-//
-// Correlation is time-ordered because workflows run one user operation at a
-// time. Multi-step operations use the first progress and final completion.
+// Page-wide timing markers cover warmup, drop-to-first-progress, and final-progress-to-next-frame latency.
+// Correlation uses event order, so overlapping operations do not receive separate attribution.
 
 const perf =
   typeof performance !== "undefined" &&
@@ -90,10 +84,8 @@ export const markWasmFinished = (): void => {
 };
 
 /**
- * Called from the always-mounted status strip on the terminal "done" render - the commit that shows the
- * result. Schedules the measure on the next animation frame so it captures the paint, then disarms until
- * the next wasm finish. Intermediate (still-running) renders of a multi-step action do not call this, so
- * the measure spans the LAST wasm finish → the paint that reveals the result.
+ * Approximate result display latency at the next animation-frame callback after a terminal render.
+ * The callback runs before paint and is not a measurement of completed screen rendering.
  */
 export const markResultPaintedAfterFinish = (): void => {
   if (!(perf && afterFinishArmed)) return;

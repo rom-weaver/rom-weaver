@@ -48,17 +48,14 @@ pub fn insert_thread_execution_details(
     }
 }
 
-/// Attach the handler's complete output set so callers never scan a shared
-/// directory and capture sibling-operation files. Call after checksum details;
-/// existing paths are preserved and missing paths gain name and size.
-/// Normalize an emitted-file path into the single shape every comparison uses.
-/// Windows callers seed `emitted_files` with backslash separators while this
-/// module stores forward slashes, so the two MUST be folded together before
-/// they are compared or a seeded entry is duplicated.
+/// Emitted paths MUST use the same separators during comparison so seeded
+/// Windows paths and stored forward-slash paths do not produce duplicate rows.
 fn emitted_path_key(path: &str) -> String {
     path.replace('\\', "/")
 }
 
+/// Attach known output files without scanning a shared output directory.
+/// Callers SHOULD attach checksum details first so existing rows retain them.
 pub fn attach_emitted_file_paths<P: AsRef<Path>>(
     mut report: OperationReport,
     paths: &[P],

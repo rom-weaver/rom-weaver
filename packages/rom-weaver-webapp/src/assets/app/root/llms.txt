@@ -24,10 +24,11 @@
 - [Comparison with similar tools](https://rom-weaver.com/docs/comparisons): Workflow trade-offs between rom-weaver, RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool.
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
-- [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the release workflow's build provenance.
+- [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the repository's build provenance.
 - [Your first apply in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Bundle in the terminal with the same test assets.
 - [Identify and hash ROMs (CLI)](https://rom-weaver.com/docs/identify-and-hash-files): Match an exact dump name, inspect a file, or compute checksums.
 - [Bake cheat codes (CLI)](https://rom-weaver.com/docs/bake-cheat-codes): Write Game Genie, GameShark/Pro Action Replay, or supported Xploder codes permanently into a ROM.
+- [Edit a game save (CLI)](https://rom-weaver.com/docs/cli-save): Inspect a supported save, preview changes, and write an edited copy.
 - [Trim a ROM (CLI)](https://rom-weaver.com/docs/cli-trim): Trim, preview, and revert ROM padding from the command line.
 - [Work with archives](https://rom-weaver.com/docs/work-with-archives): Extract, convert, and create ZIP and 7z archives from the command line.
 - [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, patching flag, JSON output, exit codes, and man pages.
@@ -36,7 +37,7 @@
 - [Save Editor support](https://rom-weaver.com/docs/game-save-support): Supported games, editable fields, recognition rules, and integrity checks.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
-- [Edit Generation III saves](https://rom-weaver.com/docs/edit-gen3-saves): Inspect and safely edit supported English retail Pokémon Ruby, Sapphire, Emerald, FireRed, and LeafGreen game saves in the browser or CLI.
+- [Edit Generation III saves](https://rom-weaver.com/docs/edit-gen3-saves): Inspect and safely edit supported English retail Pokémon Ruby, Sapphire, Emerald, FireRed, and LeafGreen game saves in the browser.
 - [Save Editor development](https://rom-weaver.com/docs/game-save-development): Shared save handler architecture, integrity boundary, and contributor flow.
 
 ## Documentation
@@ -49,7 +50,7 @@
 - [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
 - [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
 - [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.
-- [Edit Generation III saves](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/edit-gen3-saves.md): Supported English retail layouts, recognition outcomes, editable fields, and safe browser and CLI workflows.
+- [Edit Generation III saves](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/edit-gen3-saves.md): Supported English retail layouts, recognition outcomes, editable fields, and safe browser workflows.
 - [Save Editor development](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/save-editor.md): Handler architecture, integrity rules, and the eight-step contributor flow.
 - [Release guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md): Release automation, publishing channels, and retry procedures.
 

@@ -163,8 +163,7 @@ const buildVersionString = (baseVersion, gitMetadata) => {
 // so newline-per-record splitting is safe.
 const CHANGELOG_FIELD_SEP = "\x1f";
 const REPOSITORY_URL = "https://github.com/rom-weaver/rom-weaver";
-// Never 404s. The tag link does, briefly: nightly deploys on the release PR's
-// merge commit, but `vX.Y.Z` only exists once the fan-out publishes the draft.
+// Link to main because a nightly build can precede publication of its release tag.
 const CHANGELOG_URL = `${REPOSITORY_URL}/blob/main/CHANGELOG.md`;
 // A client a few releases behind gets every section it missed, not just the
 // newest. Capped like the commit list is: the dialog re-fetches this asset
@@ -259,9 +258,7 @@ const readReleaseNotes = (version, sourcePath = changelogPath) => {
   };
 };
 
-// Recent commit log for the in-app "What's new" dialog. Capped so the emitted
-// asset stays flat-sized forever - anyone more than `limit` builds behind falls
-// off the tail, which the dialog covers with an "earlier" note.
+// Limit the commit count in the What's new asset; older history stays on GitHub.
 const readGitLog = (limit) =>
   runGit(`git log -n ${limit} --pretty=format:%h${CHANGELOG_FIELD_SEP}%s${CHANGELOG_FIELD_SEP}%cI`);
 

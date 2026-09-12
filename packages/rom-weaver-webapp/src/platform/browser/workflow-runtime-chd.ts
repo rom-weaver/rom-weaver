@@ -125,10 +125,8 @@ const resolveCueSidecarPath = (cuePath: string, referencedName: string): string 
   return joinPath(getPathDirectory(cuePath), getPathBaseName(normalizedName, normalizedName));
 };
 
-// A cue describes a disc layout that references sibling track files (.bin) by name. The browser WASI
-// runtime only hydrates OPFS files it is told about up front (command inputs + knownInputPaths); worker
-// threads cannot open OPFS handles on demand. Enumerate the cue's referenced tracks so they are hydrated
-// alongside the cue, otherwise the disc-layout read fails with "No such file or directory (os error 44)".
+// The guest inode tree MUST include the cue's referenced tracks before WASI starts.
+// knownInputPaths makes them visible to spawned threads, which open their bytes through the OPFS proxy.
 const collectCueSidecarPaths = async (cuePath: string): Promise<string[]> => {
   const normalizedCuePath = String(cuePath || "").trim();
   if (!(normalizedCuePath && /\.cue$/i.test(normalizedCuePath))) return [];

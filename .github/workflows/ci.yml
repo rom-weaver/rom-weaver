@@ -13,8 +13,7 @@ on:
   push:
     branches:
       - main
-    # Release tags deploy the webapp; the test jobs below skip them, since the
-    # commit being tagged already passed this same gate on main.
+    # Release tags deploy the webapp; tests run on pull requests and branch pushes.
     tags: ["v*"]
 
 # Least privilege: most of this workflow only reads the repo. The deploy job
@@ -78,16 +77,8 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/classify-workflow.mjs
 
-      # The image table lives here rather than in the `docker` job below because
-      # a matrix can only be fed by an upstream job's output, and an unselected
-      # leg has to be absent from the matrix rather than started and skipped -
-      # that is the whole saving. `[]` means neither image is selected; the job
-      # guards on it, since an empty matrix is a hard error.
-      #
-      # The `_arm64` flags select each image's second architecture separately: a
-      # pull request that changed only compile inputs builds amd64 alone, since
-      # the arm64 leg is another full release compile that cannot fail for a
-      # reason amd64 did not. Editing an image definition still builds both.
+      # Unselected Docker legs MUST be absent: GitHub rejects an empty matrix at job startup.
+      # Pull requests build arm64 for image-definition changes; full runs build both architectures.
       - name: Plan the Docker image matrix
         id: docker-matrix
         env:
@@ -201,10 +192,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  # Static analysis of the repository's own plumbing - workflows, Node.js
-  # scripts, Dockerfiles, and Markdown. Compiles nothing and installs no
-  # language toolchain, so it finishes in well under a minute and reports
-  # independently of the build jobs instead of hiding behind them.
+  # Repository lint runs independently of compiled jobs and needs only Node.js and lint tools.
   repo-lint:
     name: Lint workflows + scripts + Dockerfiles + Markdown
     runs-on: ubuntu-24.04
@@ -247,32 +235,8 @@ jobs:
       - name: Markdown
         run: mise run docs-lint
 
-  # Images were previously built only by the release fan-out, so a Dockerfile
-  # that no longer builds surfaced at the moment it blocked a publish. hadolint
-  # above reads the Dockerfile; it does not run it.
-  #
-  # This job builds the images from source, and each leg is gated on its actual
-  # inputs rather than running for unrelated changes. CLI source changes select
-  # it after merge for the nightly image; pull requests select it only when the
-  # image, Cargo manifests, or toolchain plumbing changed. The webapp's source
-  # build remains image-plumbing only because its release path is exercised by
-  # the prebuilt smoke below.
-  #
-  # `DIST=prebuilt` is not the way to lift the webapp cost here: it skips the whole
-  # builder stage - rustup, the WASI SDK pins, binaryen - which is precisely the
-  # fragile half this job exists to test. That path is covered instead,
-  # unconditionally and for free, by the webapp prebuilt smoke below. What the
-  # webapp leg does reuse is the wasm module itself, through `WASM=prebuilt` on
-  # a cache hit; see the restore step. The CLI image still compiles its binary,
-  # but reuses the architecture-independent identify tree that a separate job
-  # packages and validates.
-  #
-  # Both architectures build here, each on a runner of its own architecture.
-  # arm64 is not a formality: the webapp Dockerfile pins an arm64 WASI SDK and
-  # binaryen by sha256 that no amd64 build ever checks, so an unbuilt arm64
-  # source path ships broken to self-hosters. Under QEMU that coverage cost 81
-  # minutes for the CLI image and just over two hours for the webapp's, which is
-  # why these are native.
+  # Build selected images on native runners to check the source-build paths without emulation.
+  # The shared identify tree and optional cached WASM module avoid duplicate builds.
   docker:
     name: Docker build (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -335,22 +299,8 @@ jobs:
           mkdir -p target/identify-data
           cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1
 
-      # The webapp image compiles the wasm module the `wasm` job has already
-      # built in this same run - ~390s spent reproducing a module the cache can
-      # hand over. Restored here, the Dockerfile takes it
-      # from the context instead (`WASM=prebuilt`); on a miss it compiles as
-      # before, so this only ever removes duplicated work.
-      #
-      # Read-only, because this job never builds the module: claiming the
-      # source-exact key on a miss would deny it to the `wasm` job that does,
-      # permanently.
-      #
-      # amd64 only. The arm64 leg keeps compiling from source so every run still
-      # exercises the full Dockerfile path - the WASI SDK and binaryen pins
-      # included - rather than leaving it to whoever next edits the image. No
-      # `needs: wasm` edge for the same reason the fast preview path has none:
-      # it would make the CLI legs, which want nothing from wasm, queue behind a
-      # six-minute build.
+      # Restore WASM read-only on amd64; a cache miss uses the Dockerfile's source build.
+      # Selected arm64 legs compile WASM to check their toolchain, without delaying CLI legs.
       - name: Restore the built wasm module
         id: wasm
         if: matrix.name == 'webapp' && matrix.arch == 'amd64'
@@ -993,14 +943,8 @@ jobs:
       - name: Rust tests
         run: mise run test-rust
 
-  # Windows cannot reuse the mise path: the wasm toolchain's compiler shims
-  # are Node.js scripts a native cargo cannot exec, and mise's [env] templates
-  # assume a POSIX shell. The npm platform publish already proves the
-  # dtolnay + rustup route on this exact image, so the tests ride that instead.
-  # The toolchain pin is read from .config/mise.toml so this leg can never drift from
-  # the version the other jobs test with. No wasm leg here - building the wasm
-  # module on Windows is unsupported until those shims have a native
-  # counterpart.
+  # mise's environment templates and WASM compiler wrappers require a POSIX shell.
+  # Native Windows tests use rustup with the same pinned Rust version.
   rust-windows:
     name: Rust (Windows)
     runs-on: windows-2025
@@ -1460,21 +1404,8 @@ jobs:
           '${{ needs.changes.outputs.wasm_runtime }}'
           'webapp-wasm-browser=${{ needs.webapp-wasm-browser.result }}'
 
-  # Preview fast path. `deploy` below has to wait for the `wasm` job because it
-  # takes the module from that job's artifact - a runner start, checkout,
-  # verify and upload/download that a preview does not have to sit through when
-  # the module is already cached. On a hit (every pull request that leaves the
-  # module inputs unchanged) this restores it directly and the preview URL
-  # lands ~13s sooner.
-  #
-  # On a miss it deploys nothing and `deploy` publishes the preview as before.
-  # It must never build the module itself: that would duplicate the ~6.5 min
-  # build the `wasm` job is already running for the same commit.
-  #
-  # Not re-running `verify-wasm-artifact` here is deliberate. The module was
-  # verified when it was built and cached, and the parallel `wasm` job verifies
-  # this same restore, so a corrupt cache still fails the build - just not
-  # ahead of a preview upload.
+  # Publish a preview from cached WASM while compiled checks run independently.
+  # On a miss, deploy owns the fallback; this job MUST NOT build a duplicate module.
   deploy-preview-fast:
     name: Webapp deploy (preview, cached wasm)
     runs-on: ubuntu-24.04

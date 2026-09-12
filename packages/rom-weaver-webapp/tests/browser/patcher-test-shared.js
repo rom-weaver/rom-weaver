@@ -236,9 +236,8 @@ export const clickCandidateSelectionOption = async (label) => {
   expect(state?.kind, state && "errorText" in state ? state.errorText : "").not.toBe("error");
   if (state?.kind === "selected") return;
   if (!getCandidateSelectionList()) return;
-  // An ambiguous multi-entry archive (e.g. multiple distinct ROM payloads) renders as a
-  // multi-select checklist. Pick the single requested entry by ticking its checkbox and confirming;
-  // the result is still one chosen input. A genuinely single-select prompt renders the tree instead.
+  // The helper accepts both multi-select checklists and single-select trees.
+  // For a checklist, select only the requested entry and confirm it.
   const checklistRow = Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree .selcheck")).find(
     (entry) => entry.textContent?.includes(label),
   );

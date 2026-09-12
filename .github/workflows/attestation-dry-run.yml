@@ -77,9 +77,8 @@ jobs:
       id-token: write
     uses: ./.github/workflows/attestation-dry-run-called.yml
 
-  # The install scripts' own check, against the attestation `direct` just
-  # published. Windows runs install.ps1's PowerShell path, which has no other
-  # coverage anywhere.
+  # Exercise the installers' API checks against live provenance on Linux, macOS,
+  # and Windows; the local installer tests use fixtures.
   verify:
     name: Verify as an installer would (${{ matrix.os }})
     needs: direct
@@ -96,11 +95,8 @@ jobs:
         with:
           name: attestation-subject
 
-      # The installers deliberately do not depend on gh, so this is the one place
-      # the Sigstore signature, certificate chain, and transparency-log
-      # inclusion are actually checked rather than taken from the API's word.
-      # That makes it the reason to keep this workflow: it is stronger than
-      # anything the install path can do for itself.
+      # Unlike the installers' API lookup, gh also verifies the signature and its
+      # certificate chain and transparency-log inclusion.
       - name: Verify the signature with gh
         env:
           GH_TOKEN: ${{ github.token }}

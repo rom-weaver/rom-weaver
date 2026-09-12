@@ -1,6 +1,6 @@
 #Requires -Version 5.1
-# Windows counterpart to install.sh. Downloads the released rom-weaver binary,
-# verifies its GitHub build attestation, and drops it in a per-user directory.
+# Download the Windows CLI and check for repository build provenance through
+# GitHub's API; see install.sh for the trust and failure rules.
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -74,14 +74,11 @@ try {
     $ProgressPreference = $previousProgress
   }
 
-  # Hash what actually arrived - the lookup key for the provenance check, and the
-  # reason there is no separate checksum step. See install.sh for the full note.
+  # The downloaded file's SHA-256 is the key for the repository attestation lookup.
   $actual = (Get-FileHash -Path $downloadPath -Algorithm SHA256).Hash
 
-  # Build provenance says which workflow produced this file. The endpoint is
-  # scoped to this repository and to these exact bytes, so a non-empty answer is
-  # the whole finding and nothing has to be read out of it - see install.sh for
-  # why decoding the signed bundle would buy appearance rather than assurance.
+  # This API lookup does not verify signatures or restrict the build workflow.
+  # See docs/how-to/verify-downloads.md for manual signature verification.
   $skipAttestation = $env:ROM_WEAVER_SKIP_ATTESTATION -eq '1'
   $requireAttestation = $env:ROM_WEAVER_REQUIRE_ATTESTATION -eq '1'
 
@@ -98,16 +95,12 @@ try {
     $attestations = @()
     $answered = $false
     try {
-      # predicate_type is load-bearing - see install.sh. Without it, GitHub's
-      # automatic immutable-release attestation answers for any release asset.
+      # The predicate filter MUST exclude release-membership attestations.
+      # See install.sh for the query contract.
       $response = Invoke-RestMethod -UseBasicParsing `
         -Uri "https://api.github.com/repos/$repo/attestations/sha256:$($actual.ToLower())?predicate_type=https://slsa.dev/provenance/v1"
-      # A 200 carrying anything other than the expected shape - a proxy's login
-      # page, say - is still an answer, and the answer is that nothing attested
-      # these bytes. Reading the property blind would instead throw under
-      # `Set-StrictMode` and land in the catch below, turning a refusal into a
-      # warn-and-install. install.sh refuses the same case, by finding no
-      # `repository_id` in the body.
+      # An unexpected response shape MUST count as a missing attestation.
+      # An unchecked property access could throw and enter the warn-and-install path.
       if ($null -ne $response -and $response.PSObject.Properties['attestations']) {
         $attestations = @($response.attestations)
       }
@@ -145,9 +138,7 @@ try {
   New-Item -ItemType Directory -Path $installDir -Force | Out-Null
   $target = Join-Path $installDir 'rom-weaver.exe'
   if ($asset.EndsWith('.tar.gz')) {
-    # tar.exe (bsdtar) ships with Windows 10 1803+, which is older than the
-    # PowerShell 5.1 floor above - checked anyway so an older machine gets a
-    # sentence instead of a CommandNotFoundException.
+    # PowerShell 5.1 does not guarantee that tar is installed.
     if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
       throw "tar is required to extract $asset and ships with Windows 10 1803+; install tar and re-run"
     }

@@ -11,9 +11,8 @@ impl ChdContainerHandler {
     pub(super) const FLAC_SAMPLE_RATE_HZ: usize = 44_100;
     pub(super) const CD_SECTOR_DATA_BYTES: usize = crate::chd::CD_SECTOR_SIZES[0] as usize;
     pub(super) const CD_SUBCODE_BYTES: usize = 96;
-    // A WAVE `fmt ` chunk is at most 40 bytes (WAVE_FORMAT_EXTENSIBLE). Track
-    // files are untrusted, so reject a larger declared length before allocating
-    // a read buffer rather than honoring a multi-gigabyte chunk size.
+    // Supported WAVE formats need at most the 40-byte WAVE_FORMAT_EXTENSIBLE
+    // layout; cap untrusted chunk lengths before allocating a read buffer.
     pub(super) const MAX_WAVE_FMT_CHUNK_BYTES: u64 = 40;
     // MAME's CHD CD format pads every track's hunk-stream frame count up to a
     // multiple of this many frames; the per-track metadata keeps the unpadded

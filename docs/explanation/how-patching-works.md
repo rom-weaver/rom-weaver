@@ -26,7 +26,7 @@ A patch usually avoids distributing the complete original ROM. It can still cont
 
 ## Why the exact starting file matters
 
-A USA release and a Japanese release may look like the same game, but their bytes differ. The same is true for revisions, for cartridge headers, and for Nintendo 64 byte order. A patch written for one will usually reject the others, and the ones that do not reject it will produce a broken file.
+A USA release and a Japanese release may look like the same game, but their bytes differ. The same is true for revisions, for cartridge headers, and for Nintendo 64 byte order. A patch with source checks can reject a different release. Without those checks, the patch can apply to the wrong bytes and produce a broken file.
 
 The patch author picked one file. Your job is to start from that same file. rom-weaver compares the available checks against that starting file.
 

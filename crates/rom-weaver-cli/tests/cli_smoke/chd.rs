@@ -2170,8 +2170,6 @@ fn wia_extract_supports_single_output_selection() {
     );
 }
 
-// ---- relocated from shared.rs (single-module helpers) ----
-
 fn run_chd_round_trip(input_name: &str, source: &[u8], codec: &str, expected_extract_name: &str) {
     run_chd_round_trip_with_format("chd", input_name, source, codec, expected_extract_name);
 }

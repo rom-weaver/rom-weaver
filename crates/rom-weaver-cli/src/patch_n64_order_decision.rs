@@ -1,11 +1,8 @@
 //! Choosing which N64 byte order a checksumless patch was authored against.
 //!
-//! `--n64-byte-order auto` normally decides on checksum proof: BPS, UPS and RUP
-//! embed a source CRC32, so the CLI hashes all three interleavings of the input
-//! and takes the match. IPS embeds nothing, and before this path the ambiguity
-//! ended the decision - the ROM was left in the order it arrived in, which is
-//! wrong whenever the author worked from a different one. Every change then
-//! lands scrambled inside its own 4-byte word.
+//! `--n64-byte-order auto` can match BPS and UPS source CRC32 values against
+//! all three byte orders. Checksumless formats such as IPS need other evidence
+//! to distinguish an author's byte order from the input's current order.
 //!
 //! Two fallbacks run in order, both reached only after checksum proof turns out
 //! to be unavailable:
@@ -14,12 +11,11 @@
 //!    (`rom_weaver_patches::n64_order_probe`). No apply, no hashing.
 //! 2. [`CliApp::n64_order_tiebreak_by_internal_checksum`] applies the patch in
 //!    all three orders and asks which result leaves the ROM's own boot checksum
-//!    correct. Only the order the author used can, because the checksum covers a
-//!    megabyte of boot code that every other order scrambles.
+//!    correct. A unique passing candidate selects the order; zero or multiple
+//!    passing candidates leave it unresolved.
 //!
-//! Neither fallback guesses. When both are unconvinced the caller keeps the
-//! order the input already has, and a decision that came from evidence rather
-//! than proof is always reported in the operation label.
+//! When neither fallback distinguishes an order, the caller keeps the input's
+//! order. An inferred decision is reported in the operation label.
 
 use super::*;
 
@@ -38,9 +34,7 @@ const N64_ORDERS: [N64ByteOrder; N64_ORDER_CANDIDATES] = [
     N64ByteOrder::ByteSwapped,
 ];
 
-/// Input size above which the tiebreaker's three speculative applies stop being
-/// worth their wall-clock. Retail N64 ROMs run to 64 MiB, and plain IPS cannot
-/// address past 16 MiB of one anyway.
+/// Cap input size to limit work from three speculative applies.
 const MAX_N64_TIEBREAK_INPUT_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Shortest file [`CliApp::repair_n64_checksum_file`] will look at: the boot

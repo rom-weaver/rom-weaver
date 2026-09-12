@@ -1,31 +1,14 @@
 #!/usr/bin/env node
-// Publish one package idempotently, choosing its dist-tag from its version.
-//
-// The release publishes eleven packages (nine platform binaries, the launcher,
-// and the unscoped alias) through three jobs that all need the same three
-// rules, and a copy of them that drifts either double-publishes or tags a
-// prerelease as `latest`:
-//
-//   1. Never fail because the version is already on the registry. A release
-//      job can be re-run, and a publish is irreversible.
-//   2. Route prereleases to the `beta` dist-tag, matching the beta web
-//      channel and the beta docker tag.
-//   3. Treat "publish failed, but the version is now present" as success -
-//      that is a concurrent run winning the race, not an error.
-//
-// Rule 2 keys off the *version*, never the package spec: platform package
-// names contain hyphens (@rom-weaver/cli-darwin-arm64), so matching the spec
-// would tag every platform package as a prerelease.
+// Publication retries MUST accept an existing version, including a concurrent
+// publication; prerelease routing MUST use the version, since package names contain hyphens.
 //
 // Usage: npm-publish-package.mjs [--dry-run] [package-dir]   (default: repository root)
 import { chmodSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// npm packs whatever mode a file has on disk, and a binary that reaches the
-// publish job through an Actions artifact has lost its executable bit - that is
-// what shipped 0.6.7's platform packages 0644 and made every `npx` and
-// `npm i -g` fail with EACCES. Windows has no executable bit to restore.
+// Actions artifacts lose executable permissions, which npm preserves when packing.
+// Non-Windows executables MUST regain those permissions before publication.
 const restoreExecutableMode = (dir, manifest) => {
   const targets =
     typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});

@@ -647,8 +647,6 @@ fn z3ds_extract_rejects_invalid_header() {
     );
 }
 
-// ---- relocated from shared.rs (single-module helpers) ----
-
 fn write_rvz_fixture_from_iso(iso_path: &std::path::Path, rvz_path: &std::path::Path) {
     let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
     let options = NodFormatOptions {

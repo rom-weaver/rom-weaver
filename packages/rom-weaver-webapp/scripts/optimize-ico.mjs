@@ -1,16 +1,11 @@
 #!/usr/bin/env node
 /**
- * Repack an .ico so each image is stored as a PNG instead of a raw BMP.
+ * Replace supported 32bpp BMP icon entries with smaller PNG encodings.
+ * Existing PNG entries use optimizePng; unsupported BMP entries stay unchanged.
  *
- * An ICONDIRENTRY may hold either, and every browser has read the PNG form
- * since IE11. The committed favicon stored all four sizes (16/32/48/64) as
- * uncompressed 32bpp BMP, which is why a favicon cost 32 KB - the 64x64 entry
- * alone was 16 KB of literal BGRA.
- *
- * Pixels are preserved exactly: the BMP is decoded, re-emitted as an RGBA PNG,
- * and `optimizePng` picks the smallest lossless encoding. Entries already in
- * PNG form are re-optimized in place. Alpha comes from the 32bpp BGRA data, so
- * the 1bpp AND mask that follows it is redundant and is dropped.
+ * Transparency comes only from each BGRA pixel's alpha byte. The AND mask is
+ * discarded, so callers MUST use images whose alpha bytes carry transparency.
+ * PNG entries inherit optimizePng's metadata-stripping limits.
  *
  *   node scripts/optimize-ico.mjs <file.ico...>
  */

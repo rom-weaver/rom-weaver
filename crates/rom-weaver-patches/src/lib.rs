@@ -86,7 +86,7 @@ pub(crate) fn can_apply_in_memory(a: u64, b: u64) -> bool {
 }
 
 /// Select the in-memory path when the source and target fit the configured cap.
-/// A value of `0` selects the streaming path.
+/// A cap of `0` selects streaming unless both lengths are zero.
 pub(crate) fn can_apply_in_memory_on_apply(context: &OperationContext, a: u64, b: u64) -> bool {
     let limit = context
         .patch_apply_in_memory_limit()

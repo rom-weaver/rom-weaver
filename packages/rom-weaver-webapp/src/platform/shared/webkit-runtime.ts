@@ -18,7 +18,7 @@ type WebKitRuntimeEnvironment = {
 // Also appears in Chrome/Edge/Opera UAs; insufficient alone to identify Safari.
 const SAFARI_TOKEN_REGEX = /Safari/;
 
-// `Chromium` contains `Chrome`, so this matches both.
+// Matches the Chrome token only; Chromium is listed separately in the exclusion sets below.
 const CHROME_TOKEN_REGEX = /Chrome/;
 
 // Modern desktop-mode iPadOS omits these and needs the MacIntel+touch heuristic.
@@ -46,7 +46,9 @@ const getMaxTouchPoints = (environment: WebKitRuntimeEnvironment) =>
 /** UA carries the bare `Safari` token (true for Chrome/Edge/Opera too). */
 const hasSafariToken = (environment: WebKitRuntimeEnvironment) => SAFARI_TOKEN_REGEX.test(getUserAgent(environment));
 
-/** UA carries the `Chrome` token (also matches `Chromium`). */
+/**
+ * UA contains the Chrome token; a Chromium-only token does not match.
+ */
 const hasChromeToken = (environment: WebKitRuntimeEnvironment) => CHROME_TOKEN_REGEX.test(getUserAgent(environment));
 
 /** UA carries an iPhone/iPad/iPod device marker. */
@@ -65,27 +67,22 @@ const isAppleTouchDesktop = (environment: WebKitRuntimeEnvironment) =>
   getPlatform(environment) === "MacIntel" && getMaxTouchPoints(environment) > 1;
 
 /**
- * "Real Safari" per site 1's definition: the `Safari` token without any of the
- * Chrome/Chromium/CriOS/FxiOS/EdgiOS engines. Used by the mobile-Safari
- * diagnostic and the file-input accept fallback's mobile branch.
+ * Safari heuristic used by mobile diagnostics and the file-input fallback.
+ * The exclusion set also filters branded iOS browsers.
  */
 const isSafariBrowser = (environment: WebKitRuntimeEnvironment) =>
   hasSafariToken(environment) && !SAFARI_LIKE_NON_SAFARI_REGEX.test(getUserAgent(environment));
 
 /**
- * Site 3's desktop-Safari branch: the `Safari` token without
- * Chrome/Chromium/Edg/OPR/SamsungBrowser. Distinct from {@link isSafariBrowser}
- * (different exclusion set) by design - keep them separate so neither site's
- * classification shifts.
+ * Desktop Safari heuristic used by the OPFS input strategy.
+ * Its exclusion set differs from the diagnostic predicate.
  */
 const isWebKitDesktopSafari = (environment: WebKitRuntimeEnvironment) =>
   hasSafariToken(environment) && !WEBKIT_DESKTOP_NON_SAFARI_REGEX.test(getUserAgent(environment));
 
 /**
- * Any Apple mobile WebKit runtime (every iOS/iPadOS browser shares the same
- * WebKit file layer): an iPhone/iPad/iPod UA, or iPadOS desktop mode detected
- * via {@link isAppleTouchDesktop}. Note this is engine-level, so it is true for
- * CriOS/FxiOS/EdgiOS as well.
+ * Apple-mobile heuristic based on device tokens or desktop-mode iPad detection.
+ * It includes branded iOS user agents such as CriOS, FxiOS, and EdgiOS.
  */
 const isAppleMobileWebKit = (environment: WebKitRuntimeEnvironment) =>
   hasIosDeviceToken(environment) || isAppleTouchDesktop(environment);

@@ -46,12 +46,8 @@ import type { OfflineWarmupDisplayProgress, RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
- * The masthead Log dialog: a native <dialog> trace inspector over the
- * in-app log store, with a capture-level selector, text search, copy-all, and
- * click-to-copy lines - the loom prototype's inspector wired to the real
- * logger sink. The level selector drives the persisted `logLevel` setting (the
- * same source `configureLogger` and every workflow run read), so raising it to
- * debug/trace here makes the next run capture detailed logs for a bug report.
+ * The shared native dialog contains settings, runtime status, logs, and storage views.
+ * The log level control updates the persisted setting used by the logger and subsequent workflow runs.
  */
 
 const logger = createLogger("log-dialog");
@@ -64,10 +60,8 @@ const formatTimestamp = (iso: string) => {
   return timePart.replace("Z", "").slice(0, 12);
 };
 
-// Detail objects are untyped (Record<string, unknown>); a single oversized
-// payload would otherwise be stringified on render, on every filter keystroke,
-// and on copy-all, which can spike memory enough to OOM-crash the tab. Cap the
-// serialized length well past anything useful to read inline.
+// Limit rendered detail text so a large log entry does not fill the view.
+// The JSON serialization itself still processes the whole detail object.
 const MAX_DETAILS_CHARS = 4096;
 
 // Keep the scroll range for every matching line while mounting only the rows near the viewport.
@@ -1051,8 +1045,7 @@ const LogDialog = ({
   const [cachedFiles, setCachedFiles] = useState<OfflineCachedFile[]>([]);
   const [cachedFilesLoading, setCachedFilesLoading] = useState(false);
   const [cachedFilesError, setCachedFilesError] = useState<string | null>(null);
-  // Previous session's entries (promoted from localStorage at boot); the "previous" view shows a run that
-  // OOM-reloaded the tab. Stable for the session, so read once.
+  // The previous-session snapshot is fixed at boot and remains available after any reload.
   const previousEntries = useMemo(() => getLastSessionEntries(), []);
   const hasPrevious = previousEntries.length > 0;
   const showingPrevious = view === "previous" && hasPrevious;

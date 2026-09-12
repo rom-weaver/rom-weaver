@@ -9,9 +9,7 @@ type WhatsNewPageProps = {
 };
 
 /**
- * The What's new route: the changelog the diagnostics dialog's Changelog tab
- * used to hold, promoted to its own page so the update banner, the version
- * chip, and the More menu can each link straight to it instead of a modal tab.
+ * The update banner, version chip, and More menu share this changelog route.
  */
 const WhatsNewPage = ({ active, onReload, updateReady = false }: WhatsNewPageProps) => {
   const localizer = useUiLocalizer();

@@ -25,13 +25,12 @@ let installed = false;
 let flushScheduled = false;
 const listeners = new Set<() => void>();
 
-// Persist the structured full-session log on each coalesced flush so an OOM
-// reload remains diagnosable. Boot promotes `currentLog` to `lastLog` before
-// the new session starts overwriting it.
+// Persist a bounded session log on coalesced flushes so it can be inspected after a reload.
+// Boot moves currentLog to lastLog before the new session starts.
 const CURRENT_LOG_STORAGE_KEY = "currentLog";
 const LAST_LOG_STORAGE_KEY = "lastLog";
-// Cap the persisted session so its JSON stays well under the ~5 MB localStorage quota; oldest entries
-// drop first (the crash window is the most recent). The on-screen viewer keeps its own MAX_LOG_LINES cap.
+// Bound the number of persisted entries, dropping the oldest first.
+// Entry sizes vary, so this count does not guarantee that the JSON fits the storage quota.
 const PERSIST_MAX_ENTRIES = 20000;
 
 const readLocalStorage = (key: string): string | null => {
@@ -68,9 +67,8 @@ const parseStoredEntries = (raw: string | null): LogStoreEntry[] => {
   }
 };
 
-// Promote the previous session's live log to `lastLog`, then start this session clean. Runs once at
-// module load, ahead of any push/persist, so the crashed run's `currentLog` is preserved before this
-// session begins streaming over it. `lastSessionEntries` is what the Log panel's "previous" view shows.
+// Preserve the previous session before this session starts writing logs.
+// The Log panel reads these entries in its previous-session view.
 const promoteCurrentLogToLast = (): LogStoreEntry[] => {
   const previous = readLocalStorage(CURRENT_LOG_STORAGE_KEY);
   if (previous !== null) {
@@ -86,8 +84,7 @@ const lastSessionEntries = promoteCurrentLogToLast();
  * panel's "previous" view so a run that reloaded the tab can still be inspected/downloaded. */
 const getLastSessionEntries = (): readonly LogStoreEntry[] => lastSessionEntries;
 
-// Full-session entries mirrored to localStorage as JSON on each flush. Separate from `buffer` (the viewer
-// ring, capped at MAX_LOG_LINES) so the saved log keeps the whole run; oldest trimmed past the cap.
+// Persist a larger bounded history than the on-screen ring buffer so saved logs can cover longer runs.
 const persistEntries: LogStoreEntry[] = [];
 
 const persistCurrentLog = () => {
@@ -194,8 +191,8 @@ const installLogStore = () => {
     const entry = toConsoleEntry(record);
     if (entry) push(entry);
   });
-  // Final synchronous flush on a graceful unload so the tail past the last throttled write is saved.
-  // An OOM tab-reload won't fire this, but the ~250 ms throttle already captures nearly all of it.
+  // Flush the latest entries on pagehide when the browser delivers it.
+  // An abrupt termination can lose entries since the last completed storage write.
   if (typeof window !== "undefined") window.addEventListener("pagehide", persistCurrentLog);
   logger.trace("Log store sink installed", { maxLines: MAX_LOG_LINES });
 };

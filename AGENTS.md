@@ -7,7 +7,8 @@ changes directly in the primary checkout; use `.worktrees/<name>` for the
 working tree.
 
 This repository has no Git submodules; every vendored source is committed
-in-tree, so a linked worktree is complete as soon as it is created.
+in-tree, so a linked worktree contains all source files when it is created.
+Install dependencies and copy generated assets with the setup helper below.
 
 Before cleanup, verify the worktree has no real changes, then use the repository
 helper:
@@ -142,16 +143,17 @@ instructions do **not** apply here.
 - **Never hand-edit a version.** `release-please-config.json` owns every bump:
   the root/webapp package files and locks, the alias and all 9 platform
   `package.json`s, the `optionalDependencies` pins,
-  `workspace.package.version`, and the path-dependency pins across `crates/*`,
-  `vendor/*`, and `Cargo.lock`.
-- **Flow:** merge conventional commits to `main` (nothing happens - there is no
-  `push` trigger) → when you want a release, **run the `Release` workflow
+  `workspace.package.version`, the path-dependency pins across `crates/*`,
+  and `Cargo.lock`.
+- **Flow:** merge conventional commits to `main` (CI runs, but the release
+  workflow has no `push` trigger) → when you want a release, **run the `Release` workflow
   manually** from the Actions tab, which opens/refreshes the
   `chore(main): release X.Y.Z` PR and captures its screenshots → merging that PR
   creates a **draft** GitHub release and sets `release_created=true`, which
-  unlocks the npm/docker/homebrew publish jobs. Each attaches its assets to the
-  draft; the final `publish-release` job publishes it, which creates the
+  unlocks the npm and Docker publish jobs. Release assets attach to the
+  draft; `publish-release` publishes it, which creates the
   `vX.Y.Z` tag, stamps the release immutable, and triggers `cargo-publish.yml`.
+  Homebrew and Scoop update after release publication.
   Merging the release PR is the release decision; nothing publishes before it.
 - **Dispatch after main's CI is green.** The screenshots reuse the `wasm-prod`
   artifact from that commit's CI run; without it the job rebuilds WASM from

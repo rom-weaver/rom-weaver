@@ -283,9 +283,8 @@ pub(crate) fn create_extract_checksum(
     StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
 }
 
-/// Timing for an inline extract checksum from [`ExtractHasher::finish_timed`]. `threaded`/`workers`
-/// describe a worker-backed [`StreamingChecksum`]; the synchronous variant engine hashes inline on
-/// the extract thread and reports the default (not threaded, zero busy).
+/// Timing from [`ExtractHasher::finish_timed`] for the plain checksum or the
+/// raw variant; synchronous hashing reports zero worker busy time.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ExtractChecksumTiming {
     pub(crate) threaded: bool,
@@ -298,9 +297,8 @@ fn detect_emitted_identity(identity: &IdentityPrefix, output_path: &Path) -> Rom
     identity.detect(output_extension(output_path).as_deref())
 }
 
-/// Inline extract hasher folding output bytes into a plain checksum or the full streaming variant
-/// engine (when the total length is known), so archive extracts emit the same `checksum_variants`
-/// as the `checksum` command without a second read of the output.
+/// Hash decoded bytes during extraction, with variants when the length is
+/// known; deferred repair variants need one extra read after output is flushed.
 pub(crate) enum ExtractHasher {
     None,
     Plain {
@@ -358,13 +356,8 @@ impl ExtractHasher {
             });
         };
         let name_hint = output_path.file_name().and_then(|name| name.to_str());
-        // Split the op's hash budget across the leaves decoding concurrently. A parallel extract
-        // builds one hasher per in-flight leaf, so giving each the FULL budget multiplied real
-        // threads by the decode width (`--threads 4` over 4 leaves spawned 12 hashers) and
-        // exhausted the browser's fixed wasi worker pool - every spawn past it burned a 30s
-        // timeout. Negotiation is pure, but its result is spawned once per caller, so the divisor
-        // has to come from the caller. Aggregate hashing throughput is unchanged: the same threads
-        // stay busy, just claimed once instead of per leaf.
+        // Concurrent leaves MUST share the hash budget so their separate
+        // hashers cannot exhaust the browser's fixed WASI worker pool.
         let hash_thread_budget = context
             .variant_hash_execution()
             .effective_threads
@@ -444,16 +437,14 @@ impl ExtractHasher {
         }
     }
 
-    /// Finalize, returning the per-file checksum entry (and variants). A deferred
-    /// `fix-header` (repair dependency over the in-memory cap) is completed with
-    /// one extra read of the just-written output.
+    /// Return per-file checksums and variants, completing deferred repairs with
+    /// one extra read; callers MUST flush `output_path` before finalizing.
     pub(crate) fn finish(self, output_path: &Path) -> Result<Option<ExtractedFileChecksum>> {
         Ok(self.finish_timed(output_path)?.0)
     }
 
-    /// Like [`finish`](Self::finish) but also returns hashing timing. The worker-backed plain
-    /// checksum reports its parallel hashing wall; the inline variant engine reports the default
-    /// (its cost is the caller's own per-chunk feed timing).
+    /// Like [`finish`](Self::finish), with worker timing for the plain checksum
+    /// or raw variant; synchronous hashing is measured by the caller's feed time.
     pub(crate) fn finish_timed(
         self,
         output_path: &Path,

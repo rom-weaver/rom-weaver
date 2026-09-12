@@ -19,8 +19,7 @@ const applyResult = (): ApplyWorkflowResult =>
     sizeSummary: undefined,
   }) as unknown as ApplyWorkflowResult;
 
-// Drives the real orchestration hook (no staging stubs) so the consolidation rewrite is
-// pinned against the externally observable controller contract, not internal structure.
+// Drive the real orchestration hook without staging stubs to check its observable controller contract.
 const renderSession = (overrides: Partial<LocalApplyPatchFormSessionOptions> = {}) => {
   const applyPatches = vi.fn(async () => applyResult());
   const downloadOutput = vi.fn();

@@ -70,8 +70,7 @@ const NON_ASCII_CHARS_REGEX = /[^\x20-\x7e]+/g;
 const RESERVED_FILE_CHARS_REGEX = /[:*?"<>|]+/g;
 const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
-// Visible names currently handed out to live (not-yet-cleaned-up) staged sources. A name is added on
-// allocate and removed in the source ref's `cleanup`, so membership means "still in use right now".
+// Virtual input names remain reserved until their source references are cleaned up.
 const allocatedVirtualInputPaths = new Set<string>();
 const getBrowserSourceTraceKind = (source: unknown) => getBinarySourceTraceKind(source, "path-string");
 
@@ -90,11 +89,8 @@ const emitBrowserSourceRefTrace = (
     details || {},
   );
 
-// Main-thread ledger of how long each input took to stage into OPFS, keyed by its staged OPFS path.
-// Staging runs on the main thread (the runtime adapter calls stageSource before dispatching the
-// command), so the main-thread command dispatcher (rom-weaver-runner) can read it back to surface
-// stagingMs on the [perf] command timings line. Already-on-OPFS inputs record 0 (no copy needed);
-// inputs left on the virtual-Blob path are never recorded (no staging happened).
+// One-use timing records consumed by the command trace on the page thread.
+// Existing OPFS paths record zero; Blob inputs are read directly and have no staging record.
 const stagedInputMsByPath = new Map<string, number>();
 const recordStagedInputMs = (filePath: string, ms: number) => {
   if (filePath) stagedInputMsByPath.set(filePath, Math.max(0, Math.round(ms)));
@@ -196,8 +192,7 @@ const PROXY_HANDLE_INPUT_MIN_BYTES = 64 * 1024 * 1024;
 // desktop Safari, so it is composed from isWebKitDesktopSafari, not isSafariBrowser.
 const isWebKitInputRuntime = () => {
   const nav = typeof navigator === "object" ? navigator : null;
-  // An empty UA must classify as non-WebKit even when platform/touch would
-  // otherwise match (preserves the original early return).
+  // An empty user agent selects the non-WebKit path even if platform and touch detection match.
   if (!nav?.userAgent) return false;
   const environment = { maxTouchPoints: nav.maxTouchPoints, platform: nav.platform, userAgent: nav.userAgent };
   return isAppleMobileWebKit(environment) || isWebKitDesktopSafari(environment);

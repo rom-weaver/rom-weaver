@@ -241,11 +241,10 @@ test("two freshly added checks hand off focus once each instead of trading it fo
   document.querySelector("#rom-weaver-list-patch-stack .cks-head")?.click();
   const addCheck = await waitForState(() => document.getElementById("rom-weaver-patch-input-add-check-0"));
 
-  /* Each added row focuses itself through a ref callback, and a ref callback is
-     re-invoked on every render. Count the focus() calls rather than the renders:
-     two empty rows re-focusing would blur each other, and each blur commits and
-     renders again. The cap keeps a regression a failed assertion instead of a
-     hung browser. */
+  /**
+   * Count focus calls because repeated focus between editable rows can trigger an unbounded blur/commit cycle.
+   * The cap turns that cycle into a failed assertion instead of a hung test.
+   */
   const FOCUS_CAP = 25;
   // The saved method is called with each element as its receiver.
   // oxlint-disable-next-line typescript/unbound-method

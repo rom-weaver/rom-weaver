@@ -46,11 +46,9 @@ fn in_progress_outputs() -> &'static Mutex<Vec<std::path::PathBuf>> {
     PATHS.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-/// Record an output path this run is about to create. Callers register only
-/// paths that did not already exist (see `ensure_output_available`), so cleanup
-/// can never delete a file the user already had. The browser build never
-/// cancels through this registry, so registration is a native-only no-op there
-/// to avoid growing the static list for a worker's lifetime.
+/// Register a new output for cleanup if the native run is cancelled.
+/// Callers MUST register only paths that did not exist before the run; this is
+/// a no-op on WASM, where the browser manages output cleanup.
 pub fn register_in_progress_output(path: &std::path::Path) {
     if cfg!(target_arch = "wasm32") {
         return;

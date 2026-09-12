@@ -36,8 +36,7 @@ import { type OpfsProxyServerHandle, startOpfsProxyServer } from "../../src/wasm
 // mock SyncAccessHandle mirrors FileSystemSyncAccessHandle's synchronous read/write/truncate API.
 class MockFile {
   bytes = new Uint8Array(0);
-  // Live SyncAccessHandle count for this file. WebKit/Safari allow at most one at a time, so the proxy
-  // must never let this exceed 1 (the unlink-then-reopen-before-close case is the one that used to).
+  // Model an exclusive sync-access handle so reopening cannot create a second live handle for the same file.
   liveHandles = 0;
   // Cumulative SyncAccessHandles ever created for this file, to prove a reopen reattached instead of
   // minting a fresh handle.
@@ -90,7 +89,7 @@ class MockFileHandle {
   kind = "file";
   constructor(readonly file: MockFile) {}
   async createSyncAccessHandle(): Promise<MockSyncAccessHandle> {
-    // Mirror WebKit/Safari: only one SyncAccessHandle may be live per file at a time.
+    // This mock enforces one live sync-access handle per file.
     if (this.file.liveHandles > 0) throw namedError("NoModificationAllowedError");
     return new MockSyncAccessHandle(this.file);
   }

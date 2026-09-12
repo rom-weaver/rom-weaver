@@ -1,19 +1,5 @@
-# Native Linux CLI image. Mount input/output directories and pass normal
-# rom-weaver arguments after the image name.
-#
-# Bind-mounted files keep their host ownership, so anything the container writes
-# must run as an id the host directory accepts. Pass `--user "$(id -u):$(id -g)"`
-# for that; the image needs no passwd entry for it because rom-weaver reads no
-# home directory or user config. See docs/how-to/install-cli.md ("Run in Docker").
-#
-# `--build-arg BINARY=prebuilt` skips the compile and takes the target
-# architecture's `prebuilt/<arch>/rom-weaver` out of the build context instead.
-# The release fan-out uses it to reuse the glibc x64 and static musl arm64
-# binaries npm-publish already built from the same commit; a plain
-# `docker build` still compiles from source, which is what self-hosters and the
-# CI image job do. BuildKit builds only the stages the selected one depends on,
-# so the unused half costs nothing - and the `prebuilt/` directory only has to
-# exist for the build that asks for it.
+# Run as a UID accepted by bind-mounted directories; see docs/how-to/install-cli.md.
+# BINARY=prebuilt reuses release binaries from prebuilt/<arch>/rom-weaver.
 ARG BINARY=source
 ARG IDENTIFY_DATA=source
 ARG DOCS=source
@@ -48,11 +34,7 @@ RUN apt-get update \
 
 COPY . .
 
-# The vendored LZMA SDK's x86-64 decode loop is MASM assembly, and no Debian
-# package assembles it. Building JWasm here is what makes the amd64 image's 7z
-# extract match 7zz instead of falling back to the portable C loop (~30% slower).
-# arm64 needs nothing: its loop is GNU-as syntax that clang already assembles.
-# The build succeeds either way, so this never gates the image.
+# JWasm enables the x86-64 SDK decode loop; arm64 uses clang's assembler.
 RUN if [ "${TARGETARCH}" = "amd64" ]; then scripts/install-jwasm.sh; fi
 # Cache mounts carry the registry and compiled dependencies across local
 # rebuilds; `COPY . .` above still invalidates this layer on any source change,

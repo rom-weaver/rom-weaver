@@ -2701,7 +2701,7 @@ msgstr "rom-weaver home"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
-msgstr "rom-weaver is cached in this browser. The next visit loads from that copy, with or without a network."
+msgstr "rom-weaver is cached in this browser for offline use. When you are online, it can fetch newer content."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3201,7 +3201,7 @@ msgstr "The service worker is off, so rom-weaver needs the network each visit. P
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.activeDesc"
-msgstr "The service worker served this page from the cache, so rom-weaver is running with no network."
+msgstr "The service worker is active and the offline copy is ready. Network requests can still occur while you are online."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

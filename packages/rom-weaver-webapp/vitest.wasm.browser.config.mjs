@@ -6,9 +6,8 @@ import { defineConfig } from "vitest/config";
 import { coverageBase } from "./vitest.config.base.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
-// In a git worktree, node_modules entries are symlinks into the main checkout
-// (scripts/setup-worktree.mjs); vite resolves their real paths, which fall
-// outside the worktree's REPO_ROOT and get 403'd unless also allowed.
+// Allow linked files that resolve into the main checkout as well as this worktree.
+// setup-worktree installs local node_modules; it does not create dependency symlinks.
 const GIT_COMMON_ROOT = (() => {
   try {
     const commonDir = execSync("git rev-parse --path-format=absolute --git-common-dir", {
@@ -35,9 +34,7 @@ const stressLaunchArgs = STRESS_1GB || BENCH_MODE ? ["--unlimited-storage"] : []
 const systemChromeLaunchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : undefined;
 
 export default defineConfig({
-  // The webapp package root contains index.html, so Vite's default SPA fallback would answer any
-  // missing path (including absent wasm artifacts) with 200 text/html. The standalone wasm package
-  // had no index.html and returned 404s; "mpa" restores that behavior for these tests.
+  // Missing WASM assets MUST return 404, not the HTML shell from Vite's SPA fallback.
   appType: "mpa",
   benchmark: {
     include: ["tests/wasm/*.bench.mjs"],

@@ -71,7 +71,7 @@ typedef struct rw_lzma2_enc rw_lzma2_enc;
  * threads   total encoder threads; the SDK splits them into block threads x
  *           per-block match-finder threads exactly as 7zz does.
  * dict_size 0 to take the SDK's per-level default, otherwise an explicit
- *           dictionary size (the wasm dictionary cap uses this).
+ *           dictionary size.
  * size_hint uncompressed size when known, 0 when not; the SDK reduces the
  *           dictionary and the block count to fit it.
  *

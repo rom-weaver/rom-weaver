@@ -11,28 +11,8 @@ const PRE_BLOCK = /<pre\b[^>]*>[\s\S]*?<\/pre>/g;
 const SAMPLE_URL = new RegExp(`${SITE_ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/([A-Za-z0-9._-]+)`, "g");
 
 /**
- * Point a guide's `curl` samples at the deployment serving the page.
- *
- * The guides name the production site, which is what makes the Markdown read
- * correctly on GitHub and keeps the prerendered HTML - what a crawler or a
- * reader without JavaScript gets - pointing at a host that exists. But a reader
- * on beta, nightly, or a PR preview should download that deployment's sample
- * files: they are generated from the same commit as the page, and the digest
- * printed beside them is that commit's, so mixing the two is how somebody ends
- * up chasing a checksum that was never going to match.
- *
- * Links solve this by rewriting to a root-relative path at build time. Shell
- * samples cannot: `curl` needs an absolute URL, and the preview origin is not
- * knowable at build time anyway, since Cloudflare resolves it only once the
- * built bundle has been uploaded.
- *
- * Each sample name goes back through `resolveAssetUrl`, so a guide and the
- * button beside it resolve the same asset the same way, base semantics
- * included.
- *
- * Returns HTML rather than editing the DOM, because `dangerouslySetInnerHTML`
- * reasserts itself on later renders and silently undoes any patch applied
- * behind React's back.
+ * Use the current deployment for sample commands so downloaded files match the guide's build.
+ * Return rewritten HTML for React to render; each asset uses the same base resolution as its download link.
  */
 const retargetSampleUrls = (html: string, assetBaseUrl: string | undefined): string => {
   const base = assetBaseUrl?.trim();

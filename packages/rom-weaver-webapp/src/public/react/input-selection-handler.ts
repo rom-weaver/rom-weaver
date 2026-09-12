@@ -61,7 +61,7 @@ const resolveActiveSelectFile = (): SelectCandidateFile | undefined => {
     const active = selectionHandlers.get(activeSelectionFormId);
     if (active) return active;
   }
-  // ponytail: fallback to the last-registered handler (Map preserves insertion
+  // Fall back to the last-registered handler (Map preserves insertion
   // order) for single-form embeds that never call setActiveSelectionForm.
   let fallback: SelectCandidateFile | undefined;
   for (const handler of selectionHandlers.values()) fallback = handler;

@@ -5,19 +5,14 @@ import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 
-// Denylist, not an allowlist: the attribution bundle ships ~435 files named
-// `LICENSE-APACHE`, `COPYING`, `NOTICE` and friends, none of which carry an
-// extension an allowlist could match, so they used to ship as 2.1 MB of raw
-// text with no `.br` sibling at all. Listing what is already compressed is both
-// shorter and self-maintaining - anything new is compressed by default, and
-// `writeIfSmaller` discards the result when brotli cannot beat the source.
+// Compress unknown extensions so extensionless license files also get sidecars.
+// writeIfSmaller discards output that does not beat the source size.
 const SKIP_COMPRESSION_EXTENSIONS = new Set([
   ".avif",
   ".br",
   ".gif",
   ".gz",
-  // scripts/optimize-ico.mjs stores every favicon frame as PNG, so brotli
-  // recovers ~100 bytes for the cost of a second 15 KB file in the image.
+  // Favicon frames already use compressed PNG payloads.
   ".ico",
   ".jpeg",
   ".jpg",
@@ -40,13 +35,8 @@ const writeIfSmaller = (filePath, compressed, source) => {
   else fs.rmSync(filePath, { force: true });
 };
 
-// Brotli only. A `.gz` sibling set costs ~2.8 MB in the image and only ever
-// serves clients without brotli, which browsers have all shipped since 2016.
-// static-web-server's on-demand compression (`compression`, on by default)
-// gzips for those; measured at 0.13s for the 6.5 MB wasm, which is affordable
-// precisely because almost nothing takes that path. Baking brotli stays
-// worthwhile for the opposite reason: quality 11 on that same wasm takes 13.7s,
-// far too slow to serve on demand, and sws caches no compressed response.
+// Build Brotli sidecars once; static-web-server can compress on demand for
+// clients that need another encoding.
 const compressFile = (filePath) => {
   const source = fs.readFileSync(filePath);
   const outputPath = `${filePath}.br`;

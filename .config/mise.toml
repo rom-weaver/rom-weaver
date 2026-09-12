@@ -1,44 +1,14 @@
-# WASI / WebAssembly toolchain, build environment, and tasks.
-#
-# WASM orchestration lives in the testable Node.js tooling under scripts/wasm.
-# Three scripts there stay shell. The two compiler wrappers, because cargo execs
-# them once per translation unit, so a Node process per file is real build time,
-# and `exec` keeps the compiler's own signal handling and exit status intact.
-# And detect-wasi-sdk.sh, because [env] below runs it before mise installs the
-# Node.js it pins - see that script's header.
-# The static threaded rustflags live in .cargo/config.toml; the SDK-relative
-# toolchain wiring lives in [env] below; orchestration lives in [tasks.*].
-#
-# Run `mise tasks` to list, `mise run build-wasm` for dev, `mise run build-wasm-prod` for CI/release.
+# WASM builds use scripts/wasm/build-app.mjs and the target flags in .cargo/config.toml.
+# Compiler wrappers and SDK discovery MUST work before mise installs Node.js.
 
 [tools]
-# Pinned toolchain. mise installs these on activation (and in CI via mise-action),
-# so dev and CI share exact versions.
-#
-# Deliberately not pinned here:
-#   - WASI SDK: its clang shadows the host and breaks libarchive-sys bindgen on
-#     macOS. scripts/wasm/detect-wasi-sdk.sh locates it without changing PATH.
-#   - ccache and sccache: install via OS package (brew install ccache sccache /
-#     apt install ccache sccache). [env] resolves both with `command -v`, which
-#     runs before mise puts its own shims on PATH, so a mise-managed install
-#     would be invisible there.
+# WASI SDK stays off PATH so its clang cannot replace the native compiler.
+# Install ccache and sccache as system tools so [env] can find them before mise activation.
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "24.18.0"
-# rustfmt and clippy are not in the toolchain mise installs by default, and the
-# `fmt` and `clippy` tasks below - which `mise run ci` depends on - are dead
-# without them. Requesting them here means a fresh clone can run the gate after
-# `mise install` alone. Masked on a workstation that already has a rustup
-# `default` profile toolchain, and in CI, which adds them explicitly (see
-# .github/actions/setup-build-env/action.yml).
+# Fresh toolchains need these components for formatting and Clippy checks.
 rust = { version = "1.97.1", components = "rustfmt,clippy" }
-# provides wasm-opt. ubi rather than aqua because aqua's registry entry covers
-# only darwin and linux/amd64, so `mise install` hard-fails on linux/arm64 with
-# `unsupported env: linux/arm64` - and mise retries that install on every later
-# command, which takes the whole repo down on that host, not just wasm builds.
-# Upstream does publish binaryen-version_129-aarch64-linux.tar.gz; the github
-# backend resolves release assets directly and picks it up. The version is the
-# release tag. (`ubi:` reaches the same assets but mise deprecated it - it warns
-# on every install and is slated for removal in 2027.1.0.)
+# The GitHub backend includes Binaryen's Linux arm64 release assets.
 "github:WebAssembly/binaryen" = { version = "version_129", exe = "wasm-opt" }
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "ubi:bnjbvr/cargo-machete" = "0.9.1"
@@ -50,14 +20,8 @@ rust = { version = "1.97.1", components = "rustfmt,clippy" }
 "aqua:hadolint/hadolint" = "2.14.0"             # Dockerfile linting
 
 [env]
-# WASI SDK discovery. detect-wasi-sdk.sh prints the SDK root, preferring an
-# explicit $WASI_SDK_PATH, then legacy install locations. When no SDK is present
-# these resolve to broken paths and the build tasks fail with a clear toolchain
-# error - harmless for non-wasm commands.
-#
-# It must not need anything mise installs. This block is rendered before [tools]
-# are installed, against a PATH that excludes them, so a `node` here breaks the
-# whole repo on a machine that has no system Node.js - `mise install` included.
+# SDK discovery MUST use system tools because [env] renders before tool installation.
+# An absent SDK leaves native tasks usable; WASM build tasks report the missing toolchain.
 WASI_SDK_PATH = "{{ exec(command='sh ' ~ config_root ~ '/scripts/wasm/detect-wasi-sdk.sh') }}"
 WASI_SYSROOT = "{{ env.WASI_SDK_PATH }}/share/wasi-sysroot"
 WASI_CLANG = "{{ env.WASI_SDK_PATH }}/bin/clang"
@@ -96,73 +60,18 @@ CARGO_INCREMENTAL = "{{ exec(command='test -n \"$CI\" || command -v sccache >/de
 # Read the process value so parent worktree defaults cannot replace the limit.
 SCCACHE_CACHE_SIZE = "{{ get_env(name='SCCACHE_CACHE_SIZE', default='35G') }}"
 
-# cc-rs falls back to RUSTC_WRAPPER above, so without CC below every cc-built C
-# dep would go through sccache - and miss across target directories for the same
-# reason as cmake (absolute OUT_DIR paths in every compile line). Routing cc-rs
-# through ccache instead replays 1627/1630 of those ~1600 compiles into a fresh
-# target directory; the 3 recurring misses are structural (openssl-sys passes
-# target-dir paths as -D macro *values* on the command line, and the staged
-# lzma-sdk portable decoder is generated inside OUT_DIR, so its own source path
-# differs per target directory) and no ccache setting can collapse them.
-#
-# Empty when ccache is absent: cc-rs treats an empty or whitespace CC as unset
-# (env_tool in cc-rs), so hosts without ccache keep today's behavior, including
-# the sccache fallback via RUSTC_WRAPPER. In CI the C-compiling jobs opt into
-# ccache through `.github/actions/setup-build-env`, which installs it before
-# any mise step so this resolves; every other job leaves it empty. The wasm targets
-# are unaffected either way: their CC_wasm32_* variables above take precedence.
-#
-# A bare CC also wins for every other cross target (cc-rs checks CC_<target>
-# first, then CC), so with ccache installed a non-wasm cross build in this repo
-# gets `cc` instead of cc-rs's derived cross compiler - export CC_<target>
-# for that target if you ever need one. It also replaces cc-rs's platform
-# defaults, which are not `cc` everywhere (MSVC autodetect, gcc on illumos).
-# CI's release platform builds bypass mise entirely and are unaffected.
+# cc-rs can inherit RUSTC_WRAPPER, but ccache reuses C objects across worktree paths.
+# Cross builds MUST set CC_<target>/CXX_<target> when the host compiler is unsuitable.
 CC = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache cc || true') | trim }}"
 CXX = "{{ exec(command='command -v ccache >/dev/null 2>&1 && echo ccache c++ || true') | trim }}"
 
-# libarchive does not go through cc-rs: it is built by cmake::Config
-# (crates/rom-weaver-containers/libarchive/build.rs), and cmake-rs forwards no
-# wrapper, so its C translation units are the one part of the build sccache
-# never sees. CMake initializes the cache variable from this environment
-# variable (since 3.4), so no build.rs change is needed.
+# CMake needs its own compiler launcher; it does not inherit cc-rs's wrapper.
+# ccache rewrites paths below the main checkout so worktrees can share compiled C objects.
 #
-# ccache first, sccache only as a fallback. cmake-rs puts both the build tree
-# and the patched libarchive sources under OUT_DIR, so every -I and every source
-# path in the compile line carries the absolute target path. sccache hashes that
-# command line verbatim and misses on all ~360 C compiles whenever the target
-# directory changes. ccache's base_dir rewrites absolute paths under it - in the
-# command line and in the recorded include paths - to paths relative to the
-# compiler's working directory, which is itself under OUT_DIR, so the hash comes
-# out identical from any target directory or worktree.
+# CCACHE_BASEDIR MUST be absolute or empty, including outside a Git checkout.
+# CCACHE_NOHASHDIR allows reuse but debug paths can name an earlier build's staged sources.
 #
-# Two things base_dir does not cover, measured on a clean containers build
-# replayed into a second target directory:
-#   - CCACHE_NOHASHDIR is required. The dev profile compiles with -g, so ccache
-#     hashes the working directory to keep debug info correct; that directory is
-#     the per-target OUT_DIR. Without it the replay hits 225/313; with it,
-#     313/313. The cost is that debug info in these libarchive objects points at
-#     the OUT_DIR of whichever build populated the cache - already a throwaway
-#     path, since the staged source tree is deleted with the target directory.
-#   - CCACHE_SLOPPINESS is not required. build.rs stages the sources with
-#     fs::copy, giving every header a fresh mtime, but cmake's configure step
-#     runs long enough that no header is still "too new" by the time the
-#     compiles start. The replay above reaches 100% with default strictness, so
-#     include_file_ctime/include_file_mtime stay off.
-#
-# base_dir is the main checkout, not config_root, so a target directory in a
-# sibling worktree under .worktrees/ still falls inside it. A worktree created
-# outside the main checkout silently loses the path rewriting and drops back to
-# per-directory miss rates. When git cannot resolve the checkout (no .git, an
-# exported tarball), the value MUST be empty, never a relative path: ccache
-# hard-fails every compile on a non-absolute CCACHE_BASEDIR, while empty just
-# disables rewriting.
-#
-# Resolved dynamically like RUSTC_WRAPPER: empty is a no-op for CMake, which
-# keeps hosts without either cache - and every CI job that does not opt into
-# `ccache: "true"` in .github/actions/setup-build-env - on the plain compiler.
-# The launcher bakes into CMakeCache.txt at configure
-# time, so an existing OUT_DIR keeps building unwrapped until it is cleaned.
+# CMake records the launcher at configure time, so existing build trees retain their setting.
 CMAKE_C_COMPILER_LAUNCHER = "{{ exec(command='command -v ccache || command -v sccache || true') | trim }}"
 CCACHE_BASEDIR = "{{ exec(command='d=$(git -C \\'' ~ config_root ~ '\\' rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && dirname \"$d\" || true') | trim }}"
 CCACHE_NOHASHDIR = "1"
@@ -280,10 +189,8 @@ run = """cargo-machete --skip-target-dir \
 [tasks.semver-checks]
 description = "Check published crates for accidental breaking API changes"
 depends = ["identify-data"]
-# No-op until the first crates.io publish - cargo-semver-checks diffs against
-# the released baseline, so unpublished crates have nothing to compare to. The
-# release workflow runs this per-crate and skips ones with no baseline; run it
-# by hand here when you want the whole workspace at once.
+# Unpublished crates have no baseline; the release workflow checks and skips them.
+# This local task compares the whole workspace without that per-crate guard.
 run = "cargo semver-checks check-release --workspace"
 
 [tasks.test-rust]

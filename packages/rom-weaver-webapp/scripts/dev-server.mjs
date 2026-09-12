@@ -717,11 +717,8 @@ const readPreviewBrotliFile = (resolvedPath, sourceData, callback) => {
   });
 };
 
-// A preview session serves a `dist` that cannot change under it, so each asset
-// is resolved, read and brotli-encoded once and then held in memory. Disk I/O
-// on a 7 MB wasm otherwise lands in the response time the performance budgets
-// measure, which would make the gate a benchmark of this server rather than of
-// the bundle.
+// Treat dist as immutable for a preview session so repeated asset reads do not
+// add disk I/O and compression time to the performance measurements.
 const readPreviewAsset = (cache, filePath, fallbackPath, allowFallback, callback) => {
   const cacheKey = `${allowFallback ? "1" : "0"}:${filePath}`;
   const cached = cache.get(cacheKey);
@@ -820,8 +817,7 @@ const startPreviewServer = async (options) => {
   const certificate = ensureCertificate(lanAddresses);
   const securityOptions = { crossOriginIsolation: !options.noCoopCoep };
   const cache = new Map();
-  // Read once: `dist` cannot change under a preview session, and the Lighthouse gate must
-  // not measure this server re-reading a file on every document request.
+  // Read headers once; restart preview after rebuilding dist.
   const headersPath = path.join(distDir, "_headers");
   const pagesRules = fs.existsSync(headersPath) ? parsePagesHeaders(fs.readFileSync(headersPath, "utf8")) : [];
   // HTTP/2, because the bundle is many hashed chunks and HTTP/1.1 caps a client

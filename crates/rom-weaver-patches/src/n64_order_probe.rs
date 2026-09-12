@@ -3,9 +3,9 @@
 //!
 //! N64 dumps circulate in three interleavings - big-endian `.z64`, little-endian
 //! `.n64` and byte-swapped `.v64` - and a patch only fits the one its author
-//! worked from. BPS, UPS and RUP embed a source CRC32, so hashing each variant
-//! answers it exactly. IPS embeds nothing, and applying its records to the wrong
-//! interleaving scatters every change inside its own 4-byte word.
+//! worked from. BPS and UPS embed source CRC32s; RUP uses MD5. IPS has no
+//! source checksum, and the wrong interleaving moves each changed byte within
+//! its 4-byte word.
 //!
 //! All three orders are permutations *within* each aligned 4-byte word, so a
 //! candidate's byte at any offset is a byte of the same word in the file the
@@ -16,16 +16,14 @@
 //! Two rules live here, both one-sided - each can rule a candidate out, neither
 //! can vote for one on its own:
 //!
-//! 1. **Magic.** A record writing into the first four bytes decides the order
-//!    outright: the finished ROM has to start with the N64 magic, and each order
-//!    spells that magic differently.
+//! 1. **Magic.** Writes to the first four bytes decide the order only when one
+//!    candidate leaves a valid N64 magic value.
 //! 2. **Untrimmed edges.** A differ trims unchanged bytes off both ends of every
 //!    record, so at the right order a record's edge bytes differ from the bytes
 //!    underneath. At a wrong order the edge lands on a different byte of the same
 //!    word and matches often enough to show up.
 //!
-//! Three rules from the copier-header probe ([`crate::basis_probe`])
-//! deliberately do not appear:
+//! These properties cannot distinguish N64 byte orders:
 //!
 //! - **Records past the end.** Byte order never changes a file's length, so
 //!   every candidate has identical geometry and no candidate can be ruled out.
@@ -54,9 +52,8 @@ use crate::{
 /// How many byte orders an N64 dump can be in.
 pub const N64_ORDER_CANDIDATES: usize = 3;
 
-/// Records compared for trimmed edges. Every real IPS patch is far under this;
-/// the cap only bounds the seek count on a pathological patch. Exceeding it is
-/// logged, never silent.
+/// Maximum records compared for trimmed edges, limiting scattered reads.
+/// Reaching the cap is logged.
 const MAX_COMPARED_RECORDS: usize = 4096;
 
 /// Comparable records a candidate needs before its untrimmed-edge count means
@@ -359,9 +356,8 @@ pub fn decide_n64_order(probe: &N64OrderProbe) -> N64OrderDecision {
     decide_by_edges(probe)
 }
 
-/// Strongest rule: the finished ROM has to start with the N64 magic, and each
-/// order spells it differently. A patch writing into the first word therefore
-/// names its own order.
+/// Select an order only when exactly one candidate leaves valid N64 magic
+/// after the patch writes to the first word.
 fn decide_by_magic(probe: &N64OrderProbe) -> Option<N64OrderDecision> {
     let matched = probe
         .evidence

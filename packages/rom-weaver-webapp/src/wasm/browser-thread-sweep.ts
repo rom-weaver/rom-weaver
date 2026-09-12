@@ -1,79 +1,6 @@
 /**
- * On-device thread-scaling DIAGNOSTIC harness - not part of the core wasm runtime.
- *
- * Sweeps every explicit `--threads` value from 1 to 16 across the container
- * formats that can be created (`zip`, `7z`, `chd`, `z3ds`, `rvz`), running
- * compress and then ingest at each combination. Records the thread telemetry
- * the CLI reports back and verifies the round trip stays byte-exact. The point
- * is to find where a device stops honouring the request or starts corrupting
- * output - Mobile Safari resolves `auto` to a small number, so the interesting
- * counts are the ones above it.
- *
- * Archive formats carry TWO entry sizes that straddle the point where ingest
- * starts splitting entries across threads, measured on desktop Chromium as
- * somewhere in (256 KiB, 512 KiB]: at 256 KiB `extract-step` reads 1 at every
- * thread count, and at 512 KiB it tracks the request exactly, 1..16. Single-payload
- * formats already split at 4 MiB, so a second size there would only cost
- * runtime. Sizes above 512 KiB (1 MiB, 2 MiB) were measured and split
- * identically, so they buy nothing the 512 KiB tier does not already show.
- *
- * Codecs are never passed: each format runs on its own default (`zip`/deflate,
- * `7z`/lzma2, `z3ds`/zstd, `rvz`/zstd, `chd`/medium-dependent).
- *
- * Thread counts are recorded PER STAGE, because no single number is the answer
- * and every attempt to pick one has been wrong:
- *   - The terminal event is not it. `compress` finishes on a summary stage and
- *     `ingest` on its orchestration stage, both of which report 1 while the
- *     real work ran threaded. Reading it makes 7z look pinned at 1 and every
- *     ingest cell look single-threaded.
- *   - The peak across stages is not it either. `extract:N` echoes the requested
- *     budget in every cell measured, so a peak always equals the request and
- *     could never show a collapse.
- *   - No stage number is a MEASUREMENT. Every one of them is the negotiated
- *     `ThreadExecution`, i.e. what the budget allowed, not what got spawned.
- *     Counting real `wasi_thread_spawn` calls at `--threads 4` found zip
- *     compress spawning ZERO threads and 7z spawning 2, both while reporting
- *     `create:4`; only chd/z3ds/rvz actually spawned 4. So this harness cannot
- *     see a compress-side threading collapse at all - to measure that, count
- *     the spawner's `thread spawn requested` trace lines instead.
- * `stageThreads` therefore carries the whole breakdown (e.g.
- * `ingest:1 extract:16 extract-step:1`) and the reader decides - as NEGOTIATED
- * budgets, subject to the caveat above. On desktop Chromium `create` reports the
- * request for all five formats (true only as a budget - see above), while
- * `extract-step` is the one that varies: 1 for 256 KiB zip/7z entries, tracking
- * the request for 512 KiB entries and for chd and rvz, and pinned at 4 from
- * five threads up for z3ds.
- *
- * Input shape is per format: archive formats get 16 entries, and the
- * single-payload formats (chd, z3ds, rvz) get one file because that is the only
- * shape they accept.
- *
- * RUNTIME, desktop Chromium: ~28 min for the full 112-cell matrix, and that is
- * almost entirely SIX cells. Nearly every cell runs in about a second, but
- * `zip`/`7z` at 512 KiB collapse at low-but-not-1 thread counts: measured
- * 1 thread 1s, 2 threads 61-181s, 4 threads 241s (twice, to the second - that
- * is a timeout being hit, not slow compute), 16 threads 1s. Non-monotonic, so
- * it is not "threading is slower". Do NOT "fix" the runtime by dropping the
- * 512 KiB tier: those cells are the finding. See [[rvz-wasm-threads-2-and-3-fail]]
- * - rvz fails outright at threads 2 and 3, so two symptoms sit in the same
- * narrow band and may share a root cause in the wasm thread pool.
- *
- * KNOWN FAILURE, desktop Chromium: `rvz` compress fails at exactly `--threads 2`
- * and `--threads 3` with "Failed to process block 1", deterministically and in
- * under a second, while 1 and 4-16 succeed. It is not the fixture (4 MiB and
- * 16 MiB behave identically) and not core nod (the native CLI passes at 1-4 on
- * the same bytes), so it is specific to the wasm/browser path. The real cause is
- * hidden: nod's `Error::Io(String, #[source] io::Error)` displays only its
- * context string, so the underlying io error never reaches the label. A failing
- * cell is recorded and the sweep continues, so one run still reports every cell.
- *
- * `rvz` create rejects arbitrary bytes; it needs a GameCube disc header. The
- * synthesised image mirrors `build_test_gamecube_iso` in
- * `crates/rom-weaver-cli/tests/cli_smoke/shared.rs` - the GCN magic at 0x1C is
- * the only structure nod requires to open it.
- *
- * Reachable from `mobile-safari-matrix.html` (profile `threads`). The app
- * itself never imports it.
+ * This diagnostic checks compression/ingest round trips across thread budgets and records each failed cell.
+ * Stage telemetry reports negotiated budgets; actual worker creation is recorded in thread-spawn traces.
  */
 import { resolveAppleMobileSharedMemoryMaximumPages } from "../lib/runtime/op-memory-estimate.ts";
 import type { BrowserFormatMatrixStep, BrowserFormatMatrixSummary } from "./browser-format-matrix.ts";
@@ -126,11 +53,8 @@ const MIB = 1024 * 1024;
 const formatSize = (byteLength: number) =>
   byteLength % MIB === 0 ? `${byteLength / MIB}m` : `${Math.round(byteLength / KIB)}k`;
 
-// Archive formats carry two sizes that straddle the point where ingest starts
-// splitting entries across threads, so the sweep covers the read side on both
-// sides of that boundary; the threshold is measured, see the header. Disc
-// formats already split at 4 MiB, so one size is enough and a second would only
-// cost runtime. 16 entries keeps the highest thread count fed.
+// The two archive entry sizes exercise different per-entry thread plans.
+// Sixteen entries provide work for every requested thread; disc formats use one larger payload.
 const THREAD_SWEEP_FORMATS: readonly ThreadSweepFormat[] = [
   {
     entryCount: 16,

@@ -4,9 +4,7 @@ import {
   localPatcherSessionStateReducer,
 } from "../../src/public/react/apply-session-state.ts";
 
-// Characterizes the source-of-truth reducer that the consolidation will replace with a
-// store. The identity-preservation contract (return the SAME object when a patch changes
-// nothing) is what keeps the derived view-model memos from churning, so it is pinned here.
+// An unchanged session update MUST retain object identity so derived view models can reuse their memoized values.
 describe("localPatcherSessionStateReducer", () => {
   it("seeds a fully-defaulted idle state", () => {
     const state = createLocalPatcherSessionState();

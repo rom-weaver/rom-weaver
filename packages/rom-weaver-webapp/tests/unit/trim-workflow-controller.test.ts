@@ -178,8 +178,7 @@ const identifiedAsset = (fileName: string) => ({
 });
 
 /**
- * The trim workflow ran no checksum pass at all until the ROM identification
- * work, so its input card could never show checksums or a title.
+ * Trim input metadata includes checksums and identity for the source card.
  */
 describe("TrimWorkflowController checksum and identify pass", () => {
   const ingestResult = {

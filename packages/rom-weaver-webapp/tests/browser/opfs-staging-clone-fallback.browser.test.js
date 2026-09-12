@@ -60,8 +60,7 @@ test("browser OPFS source refs register CHD blobs as virtual WASI inputs", async
     mountPoint: "/work",
     pathPrefix: "direct-input",
   });
-  // OPFS input staging is retired: inputs (including CHD) are served as in-memory virtual WASI files,
-  // never copied to an OPFS path.
+  // Inputs, including CHD, use registered Blob-backed virtual files without copying bytes to OPFS.
   expect(stagedBlob.virtual).toBe(true);
   expect(stagedBlob.filePath).toBe("/work/input.chd");
   expect(stagedBlob.size).toBe(requestFile.size);

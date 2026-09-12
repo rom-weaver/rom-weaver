@@ -286,8 +286,9 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
     };
   }
 
-  /** Mirror the preconditions enforced by {@link run}: both sources ready+selected and an output
-   * name resolved. */
+  /**
+   * Require a selected original, a resolved output name, and either cheat codes or a selected modified source.
+   */
   private computeReady(): boolean {
     const original = this.getSelectedSourceOwner(this.originalSession);
     const modified = this.getSelectedSourceOwner(this.modifiedSession);

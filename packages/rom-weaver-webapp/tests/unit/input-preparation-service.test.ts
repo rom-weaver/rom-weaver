@@ -60,12 +60,8 @@ describe("prepareMultipleDirectInputAssets", () => {
     expect(assets?.some((asset) => asset.kind === "rom")).toBe(false);
     const gdiAsset = assets?.find((asset) => asset.fileName === "game.gdi");
     expect(gdiAsset).toBeDefined();
-    // NOTE: the archive-extraction merge path (input-preparation-archive.ts) tags the sibling GDI
-    // asset with kind "gdi" via makeGdiAsset, but this direct multi-file-drop path tags it "cue" via
-    // makeCueAsset instead (input-preparation-service.ts line ~543). That looks like an inconsistency/bug -
-    // a directly-dropped CUE+GDI+track set would render in the UI's CUE panel instead of the GDI panel,
-    // unlike the same disc supplied inside an archive. Asserting today's actual behavior here so a fix
-    // shows up as an intentional test change rather than a silent regression.
+    // The direct-drop path tags this sibling GDI as cue through makeCueAsset.
+    // The archive path uses makeGdiAsset, so the same descriptor receives a different kind there.
     expect(gdiAsset?.kind).toBe("cue");
   });
 
@@ -125,19 +121,8 @@ describe("prepareInputAssets", () => {
     expect(assets[0]?.preparation?.wasDecompressed).toBe(false);
   });
 
-  // A CUE source is always forced onto the path-backed (lazy/OPFS) branch of
-  // createInputPreparationPatchFile - getLazyBrowserSource explicitly refuses to hand back an
-  // in-memory blob for a `.cue` name (see "cue-input" rejection in input-preparation-service.ts).
-  // But the resulting lazy-external PatchFile's bytes can only be read from a worker
-  // (getPatchFileBytes throws "Browser-backed file cannot be read synchronously" for it), and
-  // resolveCueInputAssets calls decodeUtf8(getPatchFileBytes(cueFile)) synchronously right away.
-  // That means a *directly dropped* top-level `.cue` source can never reach the sidecar-track
-  // resolution logic this function otherwise implements - it always fails here first, before any
-  // `runtime.sidecars.read` call happens. This is a known bug in prepareInputAssets's single-source
-  // CUE path, not intended behavior; prepareMultipleDirectInputAssets (tested above) is the one path
-  // that actually reaches CUE+track grouping. This test deliberately pins the current (buggy)
-  // behavior - when the bug is fixed, it must be updated to assert the real sidecar-track resolution
-  // instead of this early throw.
+  // The path-backed CUE reaches a synchronous byte read before sidecar resolution, which the browser source cannot provide.
+  // This case records that failure; the multi-file path above handles CUE and track grouping.
   it("throws when handed a path-backed CUE source directly, before any sidecar resolution runs", async () => {
     const cueSource = { fileName: "game.cue", source: "/vfs/staged/game.cue" } as unknown as SourceRef;
     const sidecarRead = vi.fn(async () => makeFile("track-bytes", "track01.bin") as unknown as SourceRef);

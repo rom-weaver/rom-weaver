@@ -593,17 +593,8 @@ const SampleTutorial = ({
     };
   }, [bodyId, live, step, stepIndex, steps.length]);
 
-  // Pins the ring and the card to the row in *document* coordinates, so the
-  // page scrolls all three together on the compositor and this runs no code
-  // per scroll frame at all.
-  //
-  // Tracking the scroll instead - measure on the event, write a fixed-position
-  // box - is what made the ring shake. A scroll is composited without waiting
-  // for the main thread, so the row is already painted at its new offset while
-  // any JS-driven box still holds the previous one; the highlight rides a frame
-  // or more behind the row for the whole gesture and only lines back up once
-  // the page stops. No amount of measuring earlier fixes that. Nothing here may
-  // re-place on scroll.
+  // Use document coordinates so the ring and anchored card scroll with the row.
+  // Placement MUST NOT run on scroll: main-thread updates can lag composited scrolling.
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     const ring = ringRef.current;
@@ -744,9 +735,8 @@ const SampleTutorial = ({
   const layer = (
     <div className="sample-tutorial-layer">
       <div aria-hidden="true" className="sample-tutorial-scrim" />
-      {/* Position, and the glide/anchor flags that go with it, are owned by the
-          placement effect - it writes them to the DOM directly so scroll
-          tracking is not a render behind the page. */}
+      {/* The placement effect owns coordinates and anchor flags so React renders
+          do not overwrite the measured position. */}
       {targetEl ? <div aria-hidden="true" className="sample-tutorial-ring" ref={ringRef} /> : null}
       <div
         aria-busy={!live}

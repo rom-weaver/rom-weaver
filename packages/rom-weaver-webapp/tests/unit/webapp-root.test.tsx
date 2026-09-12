@@ -29,7 +29,7 @@ vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", async (importOriginal) 
   };
 });
 
-// The changelog tab fetches release notes over the network; the dialog only needs it to mount.
+// Stub the network-backed changelog so this suite can focus on route and dialog state.
 vi.mock("../../src/webapp/components/changelog-panel.tsx", () => ({ ChangelogPanel: () => null }));
 
 const noop = () => undefined;

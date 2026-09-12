@@ -571,8 +571,8 @@ impl PatchHandler for VcdiffPatchHandler {
             if let Some(parent) = request.output.parent() {
                 fs::create_dir_all(parent)?;
             }
-            // The winner is already a fully written temp file: move it into place; only a
-            // cross-mount move falls back to a full copy.
+            // Reuse the completed candidate file; `move_or_copy_file` handles
+            // native rename failures and WASM's required copy.
             let finalize_start = SystemTime::now();
             move_or_copy_file(&selected.path, &request.output)?;
             create_progress.emit_overall(CREATE_FINALIZE_PERCENT);
@@ -1145,9 +1145,9 @@ pub(super) fn apply_windows_with_target_sources(
 ///
 /// Byte-slice counterpart to [`VcdiffPatchHandler::apply`] for callers (e.g. the
 /// `.dcp` pipeline) that patch many small files in memory. Supports the shapes
-/// stock xdelta3 emits with `flags=0`; LZMA secondary sections and custom code
-/// tables are rejected and must go through the file-based handler.
-/// Source-window checksums are always validated.
+/// stock xdelta3 emits with `flags=0`; LZMA secondary sections require the
+/// file-based handler, and custom code tables are unsupported by both paths.
+/// Target-window checksums are validated when present.
 pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
     let patch = parse_patch(&mut std::io::Cursor::new(patch_bytes))?;
     if patch.custom_code_table.is_some() {

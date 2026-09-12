@@ -6,14 +6,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
- * How far into the document the reader is, and the shape of the document they
- * are moving through.
- *
- * `weights` is what makes the warp honest: one tick per section, each as wide
- * as that section is long. Because the ticks are proportional to real section
- * heights, a single continuous scroll fraction lands inside the correct tick on
- * its own - no second calculation, and no tick that claims a long section and a
- * two-line one are the same distance.
+ * Section weights and scroll progress use the same measured article span so the marker aligns with section boundaries.
  */
 type ReadingProgress = {
   /** Index of the section being read, or -1 before the first heading. */

@@ -14,17 +14,8 @@ import {
 import { ChangelogUpdate } from "./changelog-update.tsx";
 
 /**
- * The Changelog tab: what has shipped, newest first, from `changelog.json`.
- * When a deploy is waiting, {@link ChangelogUpdate} leads the tab with the
- * other question the same file answers - "what am I about to get" - so the
- * update notification and the version chip both land here rather than on a
- * dialog of their own. This half never slices against the running build.
- *
- * Releases are collapsed sections with the newest open, because the reason to
- * open this tab is almost always the newest one. Ahead of the last release
- * comes "Unreleased", carrying the commits the build tag's `+N` counts. Builds
- * with no release payload at all - nightly, PR previews, local - have only
- * those commits, so Unreleased is the whole tab and stays open.
+ * The changelog page shows releases and unreleased commits from changelog.json, newest first.
+ * A waiting deploy adds a ChangelogUpdate section above that history.
  */
 
 const logger = createLogger("changelog-panel");

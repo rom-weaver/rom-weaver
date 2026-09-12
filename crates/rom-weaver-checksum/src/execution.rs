@@ -469,10 +469,8 @@ where
         chunk_size, batch_chunks, "streaming checksum range as batched parallel chunk partials"
     );
 
-    // Single reader on the calling thread - Safari/OPFS forbids parallel same-file reads -
-    // filling a batch of up to `batch_chunks` owned buffers, then hashing the batch
-    // concurrently on the pool workers. Peak memory stays bounded to batch_chunks *
-    // chunk_size regardless of range length, and the ordered partials combine identically.
+    // A single reader feeds bounded batches to the hash workers, avoiding
+    // competing reads of one source; partial digests stay in file order.
     while remaining > 0 {
         cancel.check()?;
         let mut batch: Vec<Vec<u8>> = Vec::with_capacity(batch_chunks);

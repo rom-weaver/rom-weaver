@@ -3,11 +3,9 @@ use super::*;
 const CHECKSUM_VARIANT_CHUNK_SIZE: usize = 1024 * 1024;
 
 impl CliApp {
-    /// Compute every applicable checksum variant (raw, remove-header, fix-header,
-    /// n64 byte order) in a single streaming pass via the shared engine in
-    /// `rom-weaver-checksum`, emitting per-byte progress. `command` names the invoking
-    /// command (`checksum`/`ingest`) so every event this pass emits carries the same
-    /// command/format pair as the caller's own progress ticks.
+    /// Stream applicable checksum variants through `rom-weaver-checksum`, then
+    /// finish deferred header repairs with an extra read when needed.
+    /// Progress events use the invoking command's name and format.
     pub(super) fn run_checksum_variants_with_progress<F>(
         &self,
         request: &ChecksumRequest,
@@ -95,8 +93,7 @@ impl CliApp {
             deferred_fix_header,
             ..
         } = engine.finalize()?;
-        // The repair dependency may have exceeded the in-memory prefix cap; the file is on disk, so
-        // finish any deferred fix-header in one extra read (shared with the extract write path).
+        // Genesis repairs and repairs beyond the prefix cap need another file read.
         finish_deferred_fix_header(&mut rows, deferred_fix_header, &algorithms, &request.source)?;
         let extension = request
             .source

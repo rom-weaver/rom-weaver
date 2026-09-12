@@ -455,11 +455,9 @@ pub trait PatchHandler: Send + Sync {
         ProbeConfidence::Extension
     }
     fn parse(&self, patch_path: &Path, context: &OperationContext) -> Result<OperationReport>;
-    /// Lightweight metadata probe for the `ingest` "describe" path: returns the same report shape as
-    /// [`parse`] (format + embedded source/target size/checksums under `details.patch`) but a handler
-    /// MAY override it to skip a full structural scan when the requirements live in a fixed
-    /// header/footer. The default falls back to `parse`, so formats with no cheaper path keep
-    /// identical behavior. Like `parse`, returning `Ok` confirms the patch is structurally valid.
+    /// Read embedded source and target requirements for the `ingest` describe path.
+    /// The default calls [`Self::parse`]; overrides MAY omit the action scan and
+    /// record count, so success does not guarantee full structural validation.
     fn describe_metadata(
         &self,
         patch_path: &Path,

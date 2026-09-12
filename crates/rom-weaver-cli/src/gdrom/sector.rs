@@ -54,12 +54,9 @@ impl SectorFormat {
     };
 
     /// Detect the sector format of a track from its leading bytes and total
-    /// length. `head` must hold at least the first 16 bytes of the track;
-    /// `track_len` is the track file's total size in bytes.
-    ///
-    /// Raw (`/2352`) tracks are recognized by their sync pattern, then split by
-    /// the mode byte. Tracks without a sync pattern are taken to be cooked 2048
-    /// sectors when the length divides evenly, else `MODE2/2336`.
+    /// length. A 16-byte prefix enables sync and mode detection.
+    /// Without a recognized sync pattern, use the first aligned size in this
+    /// order: cooked 2048, MODE2/2336, MODE1/2352; reject other lengths.
     pub fn detect(head: &[u8], track_len: u64) -> Result<SectorFormat> {
         if head.len() >= 16 && head[..12] == SYNC_PATTERN {
             let mode = head[15];

@@ -35,7 +35,7 @@ rom-weaver reads GCZ, WIA, WBFS, and CSO but does not create them. [Extract, con
 
 ## 3DS ROM compression: Z3DS
 
-**Z3DS** is a zstd-based, ROM-specific compression format for Nintendo 3DS payloads (`.3ds`, `.cci`, `.cxi`, `.cia`, and `.3dsx`). Its compressed forms (`.z3ds` and friends) are supported by [Azahar 2123 and later](https://azahar-emu.org/blog/compressed-backups/); it is not a disc image format.
+**Z3DS** is a zstd-based, ROM-specific compression format for Nintendo 3DS payloads (`.3ds`, `.cci`, `.cxi`, `.cia`, and `.3dsx`). Its compressed forms (`.z3ds` and friends) are supported by [Azahar 2123 and later](https://github.com/azahar-emu/azahar/discussions/1302); it is not a disc image format.
 
 ## General archives: ZIP and 7z
 
@@ -45,7 +45,7 @@ Avoid double-wrapping: a CHD inside a 7z usually gains little, and most setups m
 
 ## Trim, compress, or both
 
-Some cartridge and disc formats carry padding rather than data. Trimming cuts it off instead of squeezing it. rom-weaver trims NDS, GBA, and 3DS ROMs, Xbox XISO images, and RVZ scrub candidates. NDS, GBA, and 3DS trims can be restored; `--revert-marker` lets those formats return byte for byte instead of guessing the original padding. XISO and RVZ scrub trims cannot be reverted, so keep the source. For flashcarts and tight storage, a trimmed cartridge ROM needs no decompression. The [trim support](../reference/formats.md#trim-support) list has the details.
+Some cartridge and disc formats carry padding rather than data. Trimming cuts it off instead of squeezing it. rom-weaver trims NDS, GBA, and 3DS ROMs, Xbox XISO images, and RVZ scrub candidates. NDS, GBA, and 3DS can be padded back out. Their optional revert footer stores the original length and one padding byte. It can restore uniformly padded bytes exactly when trimming to a separate output; in-place trims and mixed padding do not have that guarantee. XISO and RVZ scrub trims cannot be reverted, so keep the source. For flashcarts and tight storage, a trimmed cartridge ROM needs no decompression. The [trim support](../reference/formats.md#trim-support) list has the details.
 
 ## Compression changes your checksums
 

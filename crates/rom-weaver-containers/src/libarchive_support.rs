@@ -2046,12 +2046,8 @@ pub(crate) fn extract_regular_archive_with_libarchive(
             achievable_threads,
             "libarchive extract parallel unit plan"
         );
-        // Only stand up the shared worker pool when this extract will actually parallelize. A small
-        // archive (under the MT floor, or a single file) negotiates serial, and building the
-        // budget-sized operation pool for it would spawn a worker per budget thread that the serial
-        // decode never uses (the dominant cost on wasm). Skipping it keeps the operation pool lazy so
-        // a later parallel extract - e.g. a large nested container - still builds and reuses it.
-        // Mirrors 7z create, which skips its pool below the MT floor.
+        // Keep the shared pool lazy for serial extracts; a later parallel
+        // extract in the same operation can still build and reuse it.
         let mut execution =
             context.plan_threads(ThreadCapability::parallel(Some(achievable_threads)));
         let pool = if execution.used_parallelism {

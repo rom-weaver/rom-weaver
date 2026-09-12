@@ -793,11 +793,6 @@ const EditableCheckRow = ({
   );
 };
 
-/**
- * Patch-card checks: embedded requirements, editable user expectations, header
- * handling, and dry-run status. User checks export with bundles and gate live
- * chain endpoints.
- */
 /** The chain chip: one plain-language line for what this patch's input was matched against.
  * Positions in the verdict are 0-based ENABLED-chain positions; `enabledIndexes` maps them to
  * the list numbering the drag handles use. Quiet by design: single-patch stacks show only the
@@ -1618,13 +1613,8 @@ const PatchCard = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const editing = metaEditing && !!onMetaChange;
   const description = meta?.description || "";
-  // Mirrors the ROM card: the resolved card structure (collapsed Extract +
-  // Checks drawers) stays mounted through staging - a determinate bar on the
-  // top edge + a "Reading…" status in the meta line carry progress - so the
-  // stack doesn't jump when the result lands.
-  // The bar stays full once finished. Staging a patch is extract
-  // (if archived) + parse - the patch is never hashed - so this reads "Reading",
-  // not "Checksumming" (a ROM-only phase) or "Validating" (the deferred dry-run).
+  // Keep the Extract and Checks drawers mounted to limit layout shifts.
+  // The Reading status covers patch extraction and parsing; verification follows.
   const staging = !!item.progress;
   const stagingProps = staging ? toWorkflowFileProgressProps(item.progress) : null;
   const percent = stagePercent(stagingProps);

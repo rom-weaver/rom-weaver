@@ -1,8 +1,8 @@
 # Trim revert footer (`RWT\x01`)
 
-`rom-weaver trim --revert-marker` (alias `--reversible`) appends a small, self-describing footer to the trimmed ROM so that a later `rom-weaver trim --revert` can reconstruct the original file **byte-for-byte**, regardless of whether the original padding was `0x00` or `0xFF`. The footer is **opt-in**: a plain `trim` produces a clean truncation with no footer.
+`rom-weaver trim --revert-marker` (alias `--reversible`) records the removed padding length and one fill byte in a footer. `rom-weaver trim --revert` uses those values to restore the file length and padding. Exact reconstruction requires unchanged ROM data and removed bytes that all match the recorded fill byte. Use a separate output file when exact restoration matters: the current in-place path reads the fill byte after truncating the source, so it can record a different byte. A plain `trim` writes no footer.
 
-The trimmed file is `[trimmed ROM data][footer]`. The footer sits where padding used to be - past the ROM header's used-size - so emulators and flashcarts that read up to the used-size ignore it, and playability is unaffected.
+The trimmed file is `[trimmed ROM data][footer]`. Readers that ignore bytes beyond the ROM's used data can ignore the footer. The footer format does not guarantee compatibility with every emulator or flashcart.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -21,8 +21,8 @@ All multi-byte integers are **little-endian**.
 | Offset | Size | Field        | Description                                                        |
 |-------:|-----:|--------------|--------------------------------------------------------------------|
 | 0      | 4    | `magic`      | ASCII `R`, `W`, `T`, then a version byte. Current version = `0x01`. |
-| 4      | 1    | `pad_byte`   | The padding byte to restore (`0x00` or `0xFF`).                     |
-| 5      | 5    | `pad_len`    | Number of padding bytes removed by the trim (40-bit LE, ≤ 1 TiB).  |
+| 4      | 1    | `pad_byte`   | The padding byte to restore. The reader accepts any byte; normal trim detection uses `0x00` or `0xFF`. |
+| 5      | 5    | `pad_len`    | Number of padding bytes removed by the trim (40-bit LE, at most 1 TiB minus 1 byte). |
 | 10     | 4    | `crc32`      | CRC-32/IEEE over bytes `0..10` (magic + pad_byte + pad_len).        |
 
 `pad_len` stores the **padding length**, not the absolute original size, so the value stays small. The original size is derived on revert as `original_size = data_size + pad_len`, where `data_size = file_size - 14`.
@@ -39,9 +39,9 @@ On `--revert`, before any format-specific logic, rom-weaver reads the final 14 b
 2. Strip the footer.
 3. Pad from `data_size` up to `data_size + pad_len` with `pad_byte`.
 
-The result is byte-identical to the pre-trim original.
+The CRC covers the footer, not the ROM data. It cannot detect changes to the retained ROM bytes or prove that the recorded fill matches all removed bytes.
 
-When no valid footer is present (a clean trim or a file trimmed by another tool), revert falls back to the per-format heuristic. NDS/3DS restore to the cartridge size implied by the header, while GBA restores to the next power of two and fills with `0xFF`.
+When no valid footer is present, revert uses the format's size heuristic. GBA and 3DS grow to the next power of two. NDS/DSi also use the next power of two, with the parsed used-data size as a lower bound. These paths fill with `0xFF`; they do not recover an arbitrary original dump size or padding pattern.
 
 ## Notes and invariants
 
@@ -50,4 +50,4 @@ When no valid footer is present (a clean trim or a file trimmed by another tool)
 - **Self-contained.** No sidecar file; the trimmed ROM carries everything needed to revert.
 - **Only helps ROMs trimmed by rom-weaver with the flag.** Other tools' trims have no footer and use the fallback path above.
 - **Versioned.** The 4th magic byte is a format version; readers must reject unknown versions (a future version may change the field layout).
-- **Re-trimming drops the footer.** Trimming a footered file again truncates the 14 footer bytes along with any re-detected padding, discarding the revert metadata.
+- **Re-trimming is format-dependent.** The trim path does not remove or preserve existing footer metadata explicitly. An NDS/DSi trim can truncate it; a GBA/3DS padding scan can leave it in place. Revert before trimming again to recover the recorded size and fill.

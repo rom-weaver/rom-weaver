@@ -1006,12 +1006,9 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         };
         let mut totals = Z3dsCreateTotals::default();
 
-        // Build the archive by streaming: write the header + metadata, then append each compressed
-        // frame to the output (and log it in the seek table) the instant it is produced, in order.
-        // Buffering every frame until the end held the whole compressed file (hundreds of MiB) in
-        // memory at once, which on top of the concurrent zstd contexts overflowed the browser's
-        // 1 GiB wasm linear-memory cap on large high-level jobs. Streaming bounds peak memory to the
-        // read-ahead window plus the worker contexts. On any error the partial output is removed.
+        // Write frames in order as they finish so peak memory depends on the
+        // read-ahead window and worker contexts, not the compressed image size;
+        // the output guard removes a partial file on error.
         let build: Result<()> = (|| {
             if let Some(parent) = request.output.parent() {
                 fs::create_dir_all(parent)?;

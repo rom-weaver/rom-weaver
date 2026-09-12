@@ -122,7 +122,9 @@
   color: var(--thread-text);
 }
 
-/* EmulatorJS test bench. Its assets are fetched only after a game is loaded. */
+/**
+ * The EmulatorJS host shares the result panel layout.
+ */
 .rw-app .emulator-test-view {
   display: grid;
   gap: var(--sp-l);
@@ -163,10 +165,8 @@
   width: 15px;
   height: 15px;
 }
-/*
- * Sized from the core's display shape, never from the viewport. A fixed height
- * gave a portrait box on phones: the core letterboxed its picture into the top
- * and left the touch controls floating in the black below it.
+/**
+ * The core aspect ratio determines player width at the bounded viewport-relative height.
  */
 .rw-app .emulator-player-frame {
   position: relative;
@@ -199,10 +199,9 @@
   aspect-ratio: auto;
   padding-block-end: 0;
 }
-/*
- * iOS WebKit offers the Fullscreen API on <video> only, so the player fills the
- * viewport itself there. Fixed rather than :fullscreen, and it carries its own
- * exit button because the header control ends up behind it.
+/**
+ * The dialog provides a viewport-filling fallback when native element fullscreen is unavailable.
+ * It includes an exit control because the normal header sits behind it.
  */
 .rw-app .emulator-fullscreen-dialog {
   display: contents;

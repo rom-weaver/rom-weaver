@@ -225,11 +225,8 @@ jobs:
         id: screenshot-ci
         env:
           GH_TOKEN: ${{ github.token }}
-          # The commit this run was dispatched from, i.e. the tip of main - NOT
-          # the checked-out HEAD, which by now is the release pull request branch
-          # checked out above. Only main's commits have a CI run carrying a
-          # `wasm-prod` artifact; asking for the release branch's sha would find
-          # nothing and silently fall through to a ~6.5 min rebuild every time.
+          # Resolve the artifact from the dispatch commit's successful CI run.
+          # The checkout now points at the release branch, which can have a different SHA.
           TARGET_SHA: ${{ github.sha }}
         run: node scripts/ci/resolve-wasm-run.mjs
 
@@ -567,12 +564,8 @@ jobs:
             rom-weaver-webapp.tar.gz \
             --repo "$GITHUB_REPOSITORY" --clobber
 
-      # This is the only integrity and origin check the tarball carries - it
-      # replaced a `.sha256` sidecar, which proved neither, being written by this
-      # same job. The attestation ties the bytes to this run and commit, and it
-      # lands in the repository's attestation store rather than the release's
-      # asset list, so it neither touches the draft nor conflicts with
-      # immutability.
+      # Build provenance binds the tarball digest to this workflow run and source commit.
+      # Attestations use the repository store, so they do not modify immutable release assets.
       - name: Attest the static webapp tarball
         uses: ./.github/actions/attest-retry
         with:

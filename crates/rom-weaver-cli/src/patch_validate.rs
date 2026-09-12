@@ -974,7 +974,7 @@ impl CliApp {
         }
     }
 
-    /// `patch-validate --plan`: resolve every patch's input basis and chain
+    /// `patch validate --plan`: resolve every patch's input basis and chain
     /// order statically via the verification planner, dry-run only the
     /// patches that consume the original input (chain position 0 and
     /// base-basis patches - mid-chain previous-basis patches are

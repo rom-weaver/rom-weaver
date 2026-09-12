@@ -42,18 +42,11 @@ const EMPTY = {
   security: false,
   docker_cli: false,
   docker_webapp: false,
-  // "Also build this image's arm64 leg." A pull request that changed only an
-  // image's compile inputs - a lock bump, an arch-neutral runtime config - gets
-  // the amd64 leg alone, because the second architecture is a second full
-  // release compile and cannot fail for a reason the first one did not.
-  // Whatever an architecture can break on its own lives in the image
-  // definition, so editing one still builds both. Every non-pull-request event
-  // builds both regardless; see the tail of `classifyChanges`.
+  // Ordinary pull requests limit arm64 builds to image-definition changes to reduce
+  // compile cost; full runs also check architecture-specific source and dependency failures.
   docker_cli_arm64: false,
   docker_webapp_arm64: false,
-  // The webapp prebuilt smoke: it wraps whatever bundle `webapp-static` built,
-  // so on a pull request it can only fail for an image reason. Derived at the
-  // tail of `classifyChanges` rather than per path.
+  // The prebuilt image uses the wasm job's webapp bundle and skips the builder stage.
   docker_prebuilt: false,
   repo_lint: false,
   full: false,
@@ -256,12 +249,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
     result.docker_webapp_arm64 = result.docker_webapp;
   }
 
-  // The prebuilt smoke needs a bundle, so it can never outrun the webapp stack.
-  // On a pull request it additionally needs an image-side reason: it copies
-  // `webapp-static`'s artifact into the image and runs no builder stage, so
-  // which bundle it copied cannot change the outcome. On main it is also the
-  // only publisher of the webapp `nightly` image, so the webapp stack alone
-  // selects it there.
+  // The prebuilt smoke requires a webapp bundle and an image change on ordinary
+  // pull requests; other events also select it for webapp changes to publish nightly.
   result.docker_prebuilt =
     result.webapp && (eventName !== "pull_request" || result.docker_webapp);
   return result;

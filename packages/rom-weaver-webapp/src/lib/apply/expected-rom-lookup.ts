@@ -7,14 +7,8 @@ type ExpectedRomLookupOptions = {
 };
 
 /**
- * The apply workflow's one door to the checksum lookup, so the ROM steps hold a
- * static import of this module and reach `browser-api` only through the dynamic
- * import inside it. Tests replace this module whole; mocking `browser-api`
- * itself would have them stub the same module the apply workflow runs on.
- *
- * Resolves to `undefined` for every answer that is not one or more titles: an
- * unavailable database and an unknown checksum are both "nothing to show", not
- * a failed check.
+ * Load the browser checksum lookup lazily so the apply shell does not import its runtime eagerly.
+ * Return titles or an unavailable-data result; return undefined for a lookup with no matches.
  */
 const lookupExpectedRom = async (
   checks: ParsedBundleChecks,

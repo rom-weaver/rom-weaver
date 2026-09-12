@@ -199,9 +199,7 @@ const prepareValidation = <TSource>(
   };
 };
 
-// Group runnable validations that share one input mount + option set (target + header decision +
-// worker threads), so each group runs as a single independent-mode batched worker call instead of
-// one cold-boot per patch.
+// Group validations with the same input and options so one plan-mode call can reuse their mount.
 const groupKeyFor = <TSource>(prepared: PreparedValidation<TSource>, settings: Partial<ApplySettings>): string =>
   JSON.stringify({
     headerRemoved: prepared.headerRemoved,
@@ -408,9 +406,8 @@ const validatePreparedGroup = async <TSource>(
   }
 };
 
-// Validate a batch of staged patches. Entries sharing an input mount + option set run as ONE
-// independent-mode worker call (one runner, one input mount); distinct groups run concurrently. A
-// single failing patch never fails the others - the engine reports a per-patch verdict.
+// Validate each group in one plan-mode call while independent groups run concurrently.
+// The plan reports each patch separately and defers checks that need a preceding patch output.
 const validateApplyPatchTargets = async <TSource>(
   entries: PatchTargetValidationEntry<TSource>[],
   adapters: PatchTargetValidationAdapters,

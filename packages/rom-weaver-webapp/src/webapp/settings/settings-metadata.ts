@@ -428,8 +428,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     key: "language",
     kind: "select",
     label: getSettingsLabel("language"),
-    // One option per shipped catalog. The list used to name 14 languages, 11 of
-    // which had no catalog and silently rendered English.
+    // Only shipped catalogs appear in the language picker.
     options: LOCALE_OPTIONS.map((locale) => ({ label: locale.label, value: locale.value })),
     validationLabel: "Language",
   },

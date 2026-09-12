@@ -10,8 +10,7 @@ use super::*;
 
 const DOWNLOAD_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const DOWNLOAD_MAX_REDIRECTS: u32 = 5;
-/// Ceiling on one downloaded file - a sanity guard against endless streams,
-/// far above any real ROM.
+/// Limit each download so a response cannot stream indefinitely.
 const DOWNLOAD_MAX_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const DOWNLOAD_READ_CHUNK: usize = 64 * 1024;
 /// Emit a progress event at most every this many downloaded bytes.

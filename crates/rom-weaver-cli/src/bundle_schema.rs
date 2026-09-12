@@ -103,7 +103,7 @@ pub struct BundleRom {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub name: Option<String>,
-    /// Download URL. Exactly one of `url` / `path` must be set.
+    /// Optional download URL. At most one of `url` and `path` MAY be set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub url: Option<String>,
@@ -189,7 +189,7 @@ pub struct BundlePatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub label: Option<String>,
-    /// Download URL. Exactly one of `url` / `path` must be set.
+    /// Download URL. Exactly one of `url` and `path` MUST be set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub url: Option<String>,
@@ -208,9 +208,8 @@ pub struct BundlePatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub target: Option<BundlePatchInput>,
-    /// Expected checksums/size of the ROM state this patch applies to, ONLY
-    /// when it differs from `rom.checks` (a mid-chain step). Absent means the
-    /// patch relies on the rom's own checks.
+    /// Expected checksums and size of the authored input state for this step.
+    /// These checks supplement the bundle's ROM checks and embedded patch checks.
     #[serde(
         default,
         rename = "inputChecks",
@@ -227,8 +226,7 @@ pub struct BundlePatchEntry {
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub input_checks_ref: Option<String>,
-    /// Expected checksums/size immediately after this patch is applied, ONLY
-    /// when it differs from the bundle's final `output.checks`.
+    /// Expected checksums and size after the authored chain prefix ends at this step.
     #[serde(
         default,
         rename = "outputChecks",
@@ -249,14 +247,10 @@ pub struct BundlePatchEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub header: Option<PatchApplyHeaderMode>,
-    /// What this patch's input checks were authored against: `base` (the
-    /// bundle's rom - verified once up front; its embedded checks are skipped
-    /// when the patch runs mid-chain) or `previous` (the previous selected
-    /// patch's output - the default). Omitted means previous/inferred.
-    /// `basis: "base"` with omitted `inputChecks` is the canonical compact
-    /// form - the entry relies on `rom.checks`; declaring it WITH
-    /// `inputChecks` pins a specific variant. The escape hatch for
-    /// checksumless formats (IPS) whose basis cannot be inferred.
+    /// Per-step override of the shared `patchBasis` setting: `base` names the
+    /// original ROM; `previous` names the preceding selected step's output.
+    /// Base checks run before the chain; mid-chain base steps retain patch-file
+    /// integrity checks but skip checks against the cumulative input and output.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub basis: Option<PatchInputBasis>,

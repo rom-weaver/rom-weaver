@@ -9102,8 +9102,6 @@ fn patch_apply_validates_size_requirement_from_patch_name() {
     );
 }
 
-// ---- relocated from shared.rs (single-module helpers) ----
-
 fn read_single_file_bytes(dir: &std::path::Path) -> Vec<u8> {
     let mut files = fs::read_dir(dir)
         .expect("read dir")

@@ -226,8 +226,7 @@ Fixture description.
     // The panel clips its corners, so a table wider than the column is
     // unreachable unless something around it scrolls.
     expect(route.html).toContain('<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0"><table>');
-    // The table itself must stay a table: `display: block` is what makes an
-    // element scrollable, and it drops the table out of the a11y tree.
+    // The wrapper owns scrolling so the table can keep its native layout and semantics.
     expect(route.html).not.toContain("<table tabindex");
   });
 
@@ -679,8 +678,7 @@ Fixture description.
   });
 
   it("gives the index and the guide it points at their own descriptions", () => {
-    // Both pages opened on the same sentence at first, which would have shipped
-    // one meta description on two routes.
+    // Distinct pages need distinct descriptions in their metadata.
     const descriptions = DOC_ROUTES.map((route) => route.description);
     expect(new Set(descriptions).size).toBe(descriptions.length);
   });

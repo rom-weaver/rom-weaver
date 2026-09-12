@@ -1,9 +1,6 @@
 /**
- * Page-side driver for the service worker's offline warm-up. The page pumps
- * the worker one unit at a time. The first low-priority unit starts as soon as
- * the worker controls the page, then later units wait for browser idle time.
- * On data-saver connections the automatic loop stays off; explicit priority
- * bumps (an identify run, the emulator test view) still download what they name.
+ * The page starts offline warm-up when a worker takes control, then waits for idle time between units.
+ * Data saver disables automatic warm-up; explicit identify-group requests still run, while EmulatorJS fetches needed files on demand.
  */
 import { createLogger } from "../../lib/logging.ts";
 import type { LogDetails } from "../../types/logging.ts";
@@ -20,7 +17,9 @@ const workerLogger = createLogger("rom-weaver-service-worker");
 
 type OfflineWarmupProgress = WarmupProgress;
 
-/** First-install precache progress: entry counts, before any byte total is known. */
+/**
+ * First-install progress uses combined precache and warm-up totals, with file counts as a fallback.
+ */
 type OfflinePrecacheProgress = OfflineReadyState & { phase: "precache" };
 
 type ServiceWorkerContainerLike = {

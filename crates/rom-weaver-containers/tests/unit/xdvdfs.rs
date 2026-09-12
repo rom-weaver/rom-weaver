@@ -1,7 +1,5 @@
 //! Unit coverage for the vendored xdvdfs write/read path
-//! (`src/xdvdfs/{layout.rs,read.rs,write/dirtab.rs,write/img.rs}`), which
-//! previously had zero direct coverage (only `util.rs` and `write/avl.rs`
-//! had tests).
+//! (`src/xdvdfs/{layout.rs,read.rs,write/dirtab.rs,write/img.rs}`).
 //!
 //! Round-trips a small synthetic directory tree through
 //! `write::img::create_xdvdfs_image` and back through

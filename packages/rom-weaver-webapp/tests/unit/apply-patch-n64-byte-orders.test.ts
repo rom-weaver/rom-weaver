@@ -2,13 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getPatchN64ByteOrders } from "../../src/lib/apply/workflow.ts";
 
 /**
- * What the engine is told about each patch's N64 interleaving. An explicit user
- * choice wins, then a checksum-proven order, and everything else is `auto` so
- * the engine's own inference runs.
- *
- * The first patch used to default to `keep`, which silently discarded that
- * inference for exactly the patches that need it: the checksumless ones (IPS),
- * where nothing on this side can work the order out.
+ * Use an explicit N64 byte order first, then a checksum-proven order; otherwise leave the engine on Auto.
  */
 describe("getPatchN64ByteOrders", () => {
   it("sends auto for a first patch nothing decided", () => {

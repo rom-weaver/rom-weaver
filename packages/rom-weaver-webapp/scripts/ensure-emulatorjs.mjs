@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
 // Materializes vendor/emulatorjs/data from the pinned EmulatorJS CDN drop.
-// The tree is ~14 MB of prebuilt cores, so it is fetched rather than committed;
-// vendor/emulatorjs.lock.json is the source of truth for the version and for a
-// SHA-256 of every file, so a build is reproducible and a tampered or truncated
-// download fails loudly instead of shipping.
+// vendor/emulatorjs.lock.json pins the version and each file's SHA-256;
+// missing or stale files are fetched, and a digest mismatch fails the build.
 //
 //   node scripts/ensure-emulatorjs.mjs           # fetch anything missing/stale
 //   node scripts/ensure-emulatorjs.mjs --force   # re-fetch every file
@@ -54,8 +52,8 @@ const removeUnlistedFiles = (directory, lockedPaths, relativeDirectory = "") => 
   }
 };
 
-// The CDN intermittently answers 5xx (a 520 broke a CI deploy); a short
-// backoff rides those out. A hash mismatch is not transient and fails at once.
+// Retry transport errors and temporary HTTP failures with backoff.
+// A hash mismatch fails immediately.
 const FETCH_ATTEMPTS = 4;
 const RETRYABLE_STATUSES = new Set([408, 425, 429]);
 const fetchOnce = async (url, expectedHash) => {

@@ -1,11 +1,8 @@
 import { ROM_WEAVER_PATCH_FORMATS } from "../wasm/generated/rom-weaver-format-metadata.ts";
 import { getFileNameParts } from "./path-utils.ts";
 
-// Patch families whose browser apply path gets special thread routing. The
-// canonical Rust handler-descriptor names anchor the policy here (which family a
-// format belongs to is a browser-perf decision); the matching extensions and
-// format aliases are derived from the Rust-owned patch-format registry so they
-// can never drift from the handlers. See [[patch-run-resolution]].
+// Browser thread routing groups canonical Rust patch names; aliases and extensions come from generated metadata.
+// lib/runtime/patch-run-resolution.ts applies this policy.
 const XDELTA_FAMILY_FORMAT_NAMES = ["xdelta", "vcdiff"];
 const BPS_FAMILY_FORMAT_NAMES = ["bps"];
 

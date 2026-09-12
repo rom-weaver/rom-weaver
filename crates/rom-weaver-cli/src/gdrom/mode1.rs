@@ -1,6 +1,6 @@
-//! Re-encode a cooked 2048-byte ISO9660 logical sector back into a raw
-//! `MODE1/2352` physical sector - the exact inverse of the cooking that
-//! [`crate::sector`] performs when reading.
+//! Encode a cooked 2048-byte ISO9660 logical sector as a raw `MODE1/2352`
+//! physical sector. Framing is regenerated, so damaged EDC/ECC bytes from an
+//! input read through [`super::sector`] are not preserved.
 //!
 //! Regenerates sync, BCD address, mode, EDC, and P/Q ECC around 2048 user bytes.
 //! EDC/ECC follows the ECMA-130 algorithm used by Neill Corlett's ECM and
@@ -80,14 +80,9 @@ fn edc_compute(tables: &EccTables, data: &[u8]) -> u32 {
     edc
 }
 
-/// Compute one set of P or Q ECC parity bytes into `out[..2]` for the
-/// interleave described by `major_count`, `minor_count`, `major_mult`,
-/// `minor_inc`. This is Neill Corlett's `ecc_computeblock` generalized over the
-/// 2-byte parity output, walking `sector` (bytes 12..2076, the header through
-/// the intermediate field) as the protected region.
-///
-/// `dest` is the parity output buffer (the ECC region of the sector); parity is
-/// written at `dest[major * 2]` and `dest[major * 2 + 1]`.
+/// Compute P or Q parity over `major_count * minor_count` bytes from sector
+/// offset 12; Q includes the P parity already written.
+/// Each major writes to `dest[major]` and `dest[major + major_count]`.
 fn ecc_compute(
     tables: &EccTables,
     sector: &[u8; RAW_SECTOR_SIZE],

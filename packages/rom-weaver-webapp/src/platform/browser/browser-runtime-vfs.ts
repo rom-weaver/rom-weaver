@@ -26,8 +26,8 @@ type CachedStagedSource = {
   staged: StagedBrowserSource;
 };
 
-// Retain staged input briefly between probe/list/extract passes to avoid
-// re-copying it into OPFS. Explicit session release still cleans immediately.
+// Retain source registrations briefly between probe/list/extract passes so their guest paths stay stable.
+// Explicit release cleans an idle registration immediately and waits for active readers to finish.
 const STAGED_SOURCE_RETENTION_MS = 3000;
 
 const emitBrowserRuntimeVfsTrace = (
@@ -70,8 +70,7 @@ const getObjectIdentityKey = (candidate: object): string => {
   return created;
 };
 const cleanupCachedStagedSource = async (key: string, cached: CachedStagedSource) => {
-  // Releasing twice must not double-release the underlying staged copy: the source-ref cleanup
-  // decrements a content-keyed registry, and a second call could hit a NEW same-key entry.
+  // Cleanup MUST run once per cached source so a stale release cannot affect a reused registration.
   if (cached.cleanedUp) return;
   cached.cleanedUp = true;
   if (cached.cleanupTimer) {
@@ -92,8 +91,7 @@ const releaseCachedStagedSource = (key: string, cached: CachedStagedSource) => {
     void cleanupCachedStagedSource(key, cached);
     return;
   }
-  // Defer cleanup so the next pass of the same input reuses this staged copy instead of re-staging the
-  // whole compressed file. A re-stage within the window clears this timer and re-references it.
+  // Defer cleanup so the next pass can reuse this registration and its guest path.
   cached.cleanupTimer = setTimeout(() => {
     cached.cleanupTimer = undefined;
     void cleanupCachedStagedSource(key, cached);
@@ -246,7 +244,7 @@ const createBrowserRuntimeVfsIo = ({
     };
     const cached = cacheKey ? stagedSourceCache.get(cacheKey) : undefined;
     if (cacheKey && cached) return reuseCachedEntry(cacheKey, cached);
-    // Coalesce in-flight stages so one source cannot acquire a duplicate `name-2.ext` OPFS path.
+    // Coalesce in-flight preparation so one source does not receive duplicate guest paths.
     if (cacheKey) {
       // Recheck after failures because another waiter may already have published a replacement stage.
       let inFlight = pendingStages.get(cacheKey);
@@ -258,9 +256,8 @@ const createBrowserRuntimeVfsIo = ({
         inFlight = pendingStages.get(cacheKey);
       }
     }
-    // Cache every staged source (in-memory virtual *and* real OPFS-staged path copies) keyed on the
-    // underlying File/handle, so the list/probe/extract passes of a single input reuse one staged copy
-    // instead of re-copying the whole compressed file into OPFS for each pass.
+    // Cache virtual input registrations and existing OPFS references under the source identity.
+    // Probe, list, and extract passes can then share the same guest path and cleanup lifetime.
     const cacheStagedSource = (resolved: StagedBrowserSource): StagedBrowserSource => {
       if (!cacheKey) return resolved;
       const entry: CachedStagedSource = {
@@ -412,10 +409,8 @@ const createBrowserRuntimeVfsIo = ({
     },
     stageSource,
     stageSources: async (requests) => {
-      // allSettled, not Promise.all: if one stage rejects, the siblings that already staged must be
-      // cleaned up before rethrowing. Promise.all would drop those fulfilled wrappers on the floor, so
-      // their cleanup never runs - the staged OPFS copies and their bare visible names stay pinned (a
-      // later same-named stage then climbs to a phantom `-2`).
+      // Wait for every preparation result so fulfilled source references can be cleaned up if a sibling fails.
+      // Rejecting before all results arrive would leave their registrations and names reserved.
       const settled = await Promise.allSettled(requests.map((request) => stageSource(request)));
       const staged: RuntimeWorkerPathSource[] = [];
       let firstRejection: PromiseRejectedResult | undefined;

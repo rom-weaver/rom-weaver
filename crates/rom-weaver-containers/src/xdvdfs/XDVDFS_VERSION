@@ -17,7 +17,7 @@ outright. So the content here is 0.8.3 plus the outcome of that commit with
 remap off, not plain 0.8.3.
 
 crates.io is still on 0.8.3 as of 2026-07-25 and its `write` feature still lists
-`wax`, so the de-vendoring described in docs/vendor-code.md remains blocked on
+`wax`, so the de-vendoring described in docs/development/vendor-code.md remains blocked on
 upstream cutting a release that contains 6b05af7. Re-check with:
 `curl -s https://crates.io/api/v1/crates/xdvdfs | jq '.versions[0] | {num, features}'`
 

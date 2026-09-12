@@ -3,7 +3,7 @@
 Use the Apply page to bake cheats into a ROM.
 
 1. Add the original ROM to the Apply page.
-2. Open the Cheats section after ROMWeaver identifies the system.
+2. Open the Cheats section after rom-weaver identifies the system.
 3. Check the game title, region, revision, and match label.
 4. Search the list.
 5. Select the cheats that you want.
@@ -12,11 +12,11 @@ Use the Apply page to bake cheats into a ROM.
 
 An exact match means a known ROM checksum matched a known release record. A title match does not prove the ROM revision.
 
-ROM cheats show **ROM cheat · Baked into output**. ROMWeaver applies them after earlier patch steps.
+ROM cheats show **ROM cheat · Baked into output**. rom-weaver applies them after earlier patch steps.
 
-Unsupported cheats show **Unsupported** and their reason. ROMWeaver cannot select them.
+Unsupported cheats show **Unsupported** and their reason. rom-weaver cannot select them.
 
-Resolve a reported ROM-write conflict before Apply. ROMWeaver does not let the last selected cheat overwrite another selected cheat without a warning.
+Resolve a reported ROM-write conflict before Apply. rom-weaver does not let the last selected cheat overwrite another selected cheat without a warning.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -36,7 +36,7 @@ Resolve a reported ROM-write conflict before Apply. ROMWeaver does not let the l
 4. Review the detected system, code type, and delivery result.
 5. Add the code when the result is correct.
 
-A code with `?` or `X` placeholders needs a value that ROMWeaver cannot supply, so it shows as unsupported.
+A code with `?` or `X` placeholders needs a value that rom-weaver cannot supply, so it shows as unsupported.
 
 ## Save the selected ROM cheats as a patch
 
@@ -44,7 +44,7 @@ A code with `?` or `X` placeholders needs a value that ROMWeaver cannot supply, 
 2. Select **Save as patch**.
 3. Save the downloaded patch file.
 
-ROMWeaver picks the patch format the ROM's size allows: IPS below IPS's 16 MiB addressing limit, BPS above it, and xdelta for a ROM past 256 MiB, which neither IPS nor BPS covers. The status line names the created file and counts the baked cheats.
+rom-weaver selects IPS for ROMs smaller than 16 MiB, BPS from 16 MiB through 256 MiB, and xdelta above 256 MiB. The 256 MiB cutoff is rom-weaver's creation policy, not a limit of the BPS format. The status line names the created file and counts the baked cheats.
 
 ## Create a patch from cheat codes
 
@@ -62,7 +62,7 @@ ROMWeaver picks the patch format the ROM's size allows: IPS below IPS's 16 MiB a
 
 Cheat shards install with the built-in identify packs. Leave the app open while online until the offline warm-up in Settings reports the built-in systems as installed.
 
-Opening a system's cheat list once while online also caches that shard. ROMWeaver does not contact Libretro or another third-party server at runtime.
+Opening a system's cheat list once while online also caches that shard. rom-weaver does not contact Libretro or another third-party server at runtime.
 
 For the baking model, see [ROM cheats](../explanation/rom-cheats.md).
 

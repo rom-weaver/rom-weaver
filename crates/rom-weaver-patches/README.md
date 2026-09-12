@@ -13,7 +13,7 @@
   <a href="https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
 
-> **Beta software, published so the CLI can be.** This crate exists to build [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli), and the `rom-weaver` command is the only supported interface. The Rust API is not documented beyond this page, changes without notice between minor releases, and using it in another project is unsupported.
+> **Beta software.** This crate is published as a dependency of [`rom-weaver-cli`](https://crates.io/crates/rom-weaver-cli). The `rom-weaver` command is the supported interface. The Rust API is internal and can change between minor releases.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -29,18 +29,17 @@
 
 ## What does this crate do?
 
-One file per patch format, each implementing `rom-weaver-core`'s `PatchHandler` trait, plus the registry that probes an unknown patch file down to a format.
+Patch handlers implement `rom-weaver-core`'s `PatchHandler` trait. The registry selects a handler from a patch's signature or file extension.
 
 - **Formats.** IPS, IPS32, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS (N64 and GBA), SOLID, MOD/PMSR, DPS, DLDI, GDIFF, HDiffPatch, BSP, PAT, EBP, and other registered formats. NINJA1 is recognized on probe but cannot be applied.
 - **Apply and create.** Most formats round-trip: generate a distributable patch from an original and a modified file, then apply it back. BSP and HDiffPatch can only be applied, not created.
-- **Validation before writing.** `validate` applies to a temporary path to check a patch without keeping an output ROM.
+- **Validation without a saved ROM.** Most handlers check the patch and source directly. BSP and VCDIFF/xdelta apply to a temporary output because validation needs to execute the patch.
 - **Checksum discipline.** Formats that carry expected input/output checksums are enforced against `rom-weaver-checksum`. Formats that carry none, such as IPS, cannot prove that the chosen base is correct on their own; the CLI can add that check with `--expect-in`.
 - **Parallel VCDIFF.** The xdelta encoder splits window encoding across threads, and `apply_patch_bytes` exposes in-memory VCDIFF apply for callers that patch individual files inside a container.
 
 ## Usage
 
-Use the [CLI](https://rom-weaver.com/docs/install) for supported command-line operation. This crate is an internal dependency; its role and build features are documented here for contributors.
-
+Use the [CLI](https://rom-weaver.com/docs/install) to run rom-weaver. This page describes the internal crate for contributors.
 
 ## Related crates
 
@@ -53,7 +52,7 @@ Use the [CLI](https://rom-weaver.com/docs/install) for supported command-line op
 
 ## Stability
 
-rom-weaver follows Semantic Versioning, but until v1.0 breaking changes land in minor releases; this crate is the least settled surface in the project. The supported way to use rom-weaver is the `rom-weaver` CLI; if you depend on this crate anyway, pin an exact version and expect to do the migration work yourself.
+Before v1.0, breaking changes increase the minor version. Direct use of this crate is unsupported; an exact version pin prevents an update from changing its API unexpectedly.
 
 ## Documentation
 

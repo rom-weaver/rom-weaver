@@ -7,10 +7,8 @@ import {
 } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
-// Stage 1 parallel-operation support: with the runner pool + scheduler, distinct operations can run on
-// separate pooled runners at the same time. The scheduler's admission logic (thread budget, concurrency
-// cap, path exclusivity) is unit-tested in runner-scheduler.test.ts; these tests close the integration
-// gap by proving two *real* wasm runners (two workers, two wasm memories, two OPFS handle sets) coexist.
+// These integration tests run two real WASM runners with separate memories and OPFS mounts.
+// The scheduler unit tests cover admission rules; these cases check that admitted runs can overlap.
 
 const encoder = new TextEncoder();
 

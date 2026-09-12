@@ -28,10 +28,7 @@ import {
 import type { ValidationState } from "./webapp-state-types.ts";
 
 /**
- * Settings panel rendered in the dark-pro grouped layout (`.setgroup` /
- * `.setrow` / `.setchecks` / `.srange`). All field metadata, value resolution,
- * change handling, and validation wiring are preserved from the original
- * field-driven implementation; only the surrounding markup changed.
+ * The settings panel uses shared field metadata to render grouped controls and validation feedback.
  */
 
 type SettingsFieldShared = {
@@ -161,10 +158,8 @@ const renderFieldInfo = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraf
 };
 
 /**
- * Accent picker. A native <select> can't render its options' colours (Safari
- * ignores option styling entirely), and the colour IS the choice here - so the
- * six dye lots show as swatches, all visible at once instead of behind a popup.
- * The first radio carries the field id so the row's <label> targets it.
+ * Radio swatches show every accent color without depending on native select-option styling.
+ * The first radio carries the field ID so the row label targets it.
  */
 const AccentPicker = ({ fieldKey, draftSettings, uiState, onDraftChange }: FieldRenderProps) => {
   const field = SETTINGS_FIELD_METADATA[fieldKey];

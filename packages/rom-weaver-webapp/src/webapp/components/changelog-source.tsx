@@ -1,17 +1,8 @@
 import { GITHUB_URL } from "../project-links.ts";
 
 /**
- * The deploy-root `changelog.json` and the pieces every view of it shares.
- *
- * The asset is emitted by the build (vite.config.mjs → scripts/version.mjs) as
- * the newest commits, newest first, with the release notes parsed out of
- * CHANGELOG.md riding on the first entry. Release builds carry those notes;
- * nightly, PR and local builds carry commits alone, which is why both shapes
- * render through the same `ReleaseGroup` structure - a nightly's subjects are
- * parsed into the groups a release would have written.
- *
- * Two views consume it: the update dialog, which answers "what am I about to
- * get", and the Changelog tab, which answers "what has shipped".
+ * Shared rendering for the build-generated changelog.json, which contains recent commits and optional release notes.
+ * The changelog page and its pending-update section use the same release groups.
  */
 
 const REPOSITORY_URL = GITHUB_URL.replace(/\/$/, "");
