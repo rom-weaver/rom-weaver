@@ -36,6 +36,8 @@ pre-commit:
       glob:
         - "packages/rom-weaver-webapp/src/assets/app/root/logo.svg"
         - "packages/rom-weaver-webapp/design/icon-masters/*"
+        - "packages/rom-weaver-webapp/design/social-preview.svg"
+        - "packages/rom-weaver-webapp/scripts/social-preview-encoders.mjs"
         - "packages/rom-weaver-webapp/src/webapp/accent-palette.mjs"
         - "packages/rom-weaver-webapp/src/webapp/brand-mark-assets.mjs"
         - "packages/rom-weaver-webapp/scripts/generate-channel-icons.mjs"

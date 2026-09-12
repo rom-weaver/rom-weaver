@@ -192,6 +192,26 @@ const decode = (buffer) => {
 };
 
 /**
+ * Decode a PNG to a tightly packed RGBA buffer, opaque where the source had no
+ * alpha channel. Callers MUST pass an 8-bit, non-interlaced RGB or RGBA PNG.
+ */
+export const decodeRgba = (buffer) => {
+  const image = decode(buffer);
+  if (image === null) throw new Error("decodeRgba: unsupported PNG (needs 8-bit, non-interlaced)");
+  const width = image.stride / image.bpp;
+  if (image.bpp === 4) return { data: new Uint8ClampedArray(image.pixels), height: image.height, width };
+  if (image.bpp !== 3) throw new Error(`decodeRgba: unsupported channel count ${image.bpp}`);
+  const data = new Uint8ClampedArray(width * image.height * 4);
+  for (let pixel = 0; pixel < width * image.height; pixel += 1) {
+    data[pixel * 4] = image.pixels[pixel * 3];
+    data[pixel * 4 + 1] = image.pixels[pixel * 3 + 1];
+    data[pixel * 4 + 2] = image.pixels[pixel * 3 + 2];
+    data[pixel * 4 + 3] = 0xff;
+  }
+  return { data, height: image.height, width };
+};
+
+/**
  * Return a smaller, pixel-identical PNG, or the input unchanged when the format
  * is unsupported or nothing beat what was already there.
  */

@@ -25,12 +25,14 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
 import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
-import { assertSamePixels, optimizePng } from "./optimize-png.mjs";
+import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
+import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(rootDir, "..", "..");
 const assetRoot = path.join(rootDir, "src", "assets", "app", "root");
-const masterRoot = path.join(rootDir, "design", "icon-masters");
+const designRoot = path.join(rootDir, "design");
+const masterRoot = path.join(designRoot, "icon-masters");
 
 const usage = () => {
   throw new Error("Usage: node scripts/generate-channel-icons.mjs --output-dir <directory> [--check]");
@@ -69,20 +71,30 @@ const RASTER_TARGETS = [
   { master: "apple-touch-icon.svg", output: "apple-touch-icon.png", size: 180 },
 ];
 
+// The social card renders at 2x its 1280x640 master so it matches the
+// dimensions index.html advertises to crawlers. It is one image for every
+// channel, as the deployed og:image URL is the same on all of them.
+const SOCIAL_PREVIEW = { height: 1280, master: "social-preview.svg", width: 2560 };
+
 const digest = (buffer) => createHash("sha256").update(buffer).digest("hex").slice(0, 12);
 
 /**
- * Screenshot an SVG at an exact pixel size. The SVG is handed over as a data
- * URI inside a bare page so nothing else can contribute pixels.
+ * Lay an SVG out at an exact pixel size. It is handed over as a data URI inside
+ * a bare page so nothing else can contribute pixels.
  */
-const rasterize = async (page, svg, size) => {
+const showSvg = async (page, svg, width, height) => {
   const dataUri = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
-  await page.setViewportSize({ height: size, width: size });
+  await page.setViewportSize({ height, width });
   await page.setContent(
-    `<!doctype html><style>html,body{margin:0;background:transparent}img{display:block;width:${size}px;height:${size}px}</style><img src="${dataUri}">`,
+    `<!doctype html><style>html,body{margin:0;background:transparent}img{display:block;width:${width}px;height:${height}px}</style><img src="${dataUri}">`,
   );
   await page.locator("img").waitFor({ state: "visible" });
   await page.locator("img").evaluate((img) => img.decode());
+};
+
+/** Screenshot a square master as an optimized PNG. */
+const rasterize = async (page, svg, size) => {
+  await showSvg(page, svg, size, size);
   const shot = await page.screenshot({ omitBackground: true, type: "png" });
   // Chrome writes a conservatively-filtered, middling-deflate PNG. Squeeze it
   // here rather than as a later pass so the bytes `--check` compares against
@@ -90,6 +102,23 @@ const rasterize = async (page, svg, size) => {
   const optimized = optimizePng(shot);
   assertSamePixels(shot, optimized, `rasterized ${size}px icon`);
   return optimized;
+};
+
+/**
+ * Render the social card once and return it in all three formats crawlers are
+ * offered. WebP and AVIF encode from the PNG's own pixels, so the three can
+ * never drift apart.
+ */
+const renderSocialPreview = async (page, svg) => {
+  const { height, width } = SOCIAL_PREVIEW;
+  await showSvg(page, svg, width, height);
+  // The master paints a full-bleed background, so the card is opaque; keep it
+  // that way rather than handing crawlers an alpha channel they ignore.
+  const shot = await page.screenshot({ type: "png" });
+  const png = optimizePng(shot);
+  assertSamePixels(shot, png, "rasterized social preview");
+  const pixels = decodeRgba(png);
+  return { avif: await encodeAvif(pixels), png, webp: await encodeWebp(pixels) };
 };
 
 // ICO directory offsets MUST address the PNG payloads from the start of the file.
@@ -158,6 +187,13 @@ const main = async () => {
         images.push({ size, png: await rasterize(page, favicon, size) });
       }
       emit(path.join(channelDir, "favicon.ico"), encodeFavicon(images));
+    }
+
+    console.log("social preview");
+    const socialMaster = fs.readFileSync(path.join(designRoot, SOCIAL_PREVIEW.master), "utf8");
+    const social = await renderSocialPreview(page, socialMaster);
+    for (const [format, buffer] of Object.entries(social)) {
+      emit(path.join(outputDir, `social-preview.${format}`), buffer);
     }
 
     const logo = fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8");
