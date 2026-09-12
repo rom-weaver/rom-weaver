@@ -27,7 +27,15 @@ pub fn success_is_write_summary(command: &str) -> bool {
 }
 
 pub(super) fn quiet_suppresses_success(quiet: bool, event: &ProgressEvent) -> bool {
-    quiet && success_is_write_summary(&event.command) && !is_dry_run(event)
+    quiet
+        && success_is_write_summary(&event.command)
+        && !is_dry_run(event)
+        && !is_save_preview(event)
+        && event
+            .details
+            .as_ref()
+            .and_then(|details| details.get("patch_create_format_candidates"))
+            .is_none()
 }
 
 /// Render the summary for a succeeded command, dispatching on the command name.
@@ -61,7 +69,6 @@ pub fn render_success(surface: &Surface, event: &ProgressEvent) {
             _ => render_details_or_label(surface, event),
         }
     }
-    render_elapsed(surface, event);
 }
 
 fn save_editor_details(event: &ProgressEvent) -> Option<&Value> {
@@ -106,7 +113,9 @@ fn render_save_identify(surface: &Surface, event: &ProgressEvent) {
     }
     let recognition = save.get("recognition").unwrap_or(&Value::Null);
     let outcome = recognition.get("outcome").unwrap_or(&Value::Null);
-    let recognition_label = if outcome.get("ambiguous").is_some() {
+    let recognition_label = if outcome.get("recognized").is_some() {
+        "Recognized"
+    } else if outcome.get("ambiguous").is_some() {
         "Ambiguous"
     } else {
         "Unsupported"
@@ -120,6 +129,34 @@ fn render_save_identify(surface: &Surface, event: &ProgressEvent) {
             string_field(save, "potential_format"),
         ),
     ]);
+    if let Some(candidate) = outcome
+        .get("recognized")
+        .and_then(|recognized| recognized.get("candidate"))
+    {
+        render_save_candidate(surface, candidate);
+    }
+    if let Some(candidates) = outcome
+        .get("ambiguous")
+        .and_then(|ambiguous| ambiguous.get("candidates"))
+        .and_then(Value::as_array)
+    {
+        for candidate in candidates {
+            render_save_candidate(surface, candidate);
+        }
+    }
+}
+
+fn render_save_candidate(surface: &Surface, candidate: &Value) {
+    if let Some(identity) = candidate.get("identity") {
+        surface.key_values(&[
+            ("Game".to_string(), string_field(identity, "name")),
+            ("Game ID".to_string(), string_field(identity, "id")),
+            (
+                "Confidence".to_string(),
+                string_field(candidate, "confidence"),
+            ),
+        ]);
+    }
 }
 
 fn container_field(save: &Value) -> String {
@@ -185,8 +222,26 @@ fn render_save_result(surface: &Surface, event: &ProgressEvent) {
     } else if let Some(schema) = save.get("schema") {
         render_object(surface, schema);
     } else {
+        return label_line(surface, event);
+    }
+    if is_save_preview(event) {
+        label_line(surface, event);
+        surface.note("no files written");
+    } else if event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("emitted_files"))
+        .and_then(Value::as_array)
+        .is_some()
+    {
+        render_emitted_files(surface, event);
+    } else {
         label_line(surface, event);
     }
+}
+
+fn is_save_preview(event: &ProgressEvent) -> bool {
+    event.command == "save-set" && event.stage == "preview"
 }
 
 fn render_save_schema(surface: &Surface, event: &ProgressEvent) {
@@ -273,12 +328,35 @@ fn render_container_or_patch(surface: &Surface, event: &ProgressEvent) {
 }
 
 fn render_container(surface: &Surface, event: &ProgressEvent, container: &Value) {
-    // `list` carries a compress recommendation in its JSON, but nothing consumes it and it is noise
-    // here, so the human view shows just the entries (it remains available via --json).
+    if let Some(format) = &event.format {
+        surface.key_values(&[("Format".to_string(), format.clone())]);
+    }
+    if let Some(details) = event.details.as_ref().and_then(Value::as_object) {
+        let mut pairs = Vec::new();
+        for (key, value) in details {
+            if key != "container" {
+                collect_value(key, value, &mut pairs);
+            }
+        }
+        surface.key_values(&pairs);
+    }
+    if let Some(container) = container.as_object() {
+        let mut pairs = Vec::new();
+        for (key, value) in container {
+            if !matches!(key.as_str(), "entries" | "entry_records") {
+                collect_value(key, value, &mut pairs);
+            }
+        }
+        surface.key_values(&pairs);
+    }
     let Some(entries) = container.get("entry_records").and_then(Value::as_array) else {
         label_line(surface, event);
         return;
     };
+    if entries.is_empty() {
+        surface.line("No entries found");
+        return;
+    }
     let rows = entries
         .iter()
         .map(|entry| {
@@ -304,7 +382,8 @@ fn render_emitted_files(surface: &Surface, event: &ProgressEvent) {
     };
     let rows = files.iter().map(emitted_file_row).collect::<Vec<_>>();
     surface.rows(&rows);
-    surface.note(&format!("{} file(s) written", files.len()));
+    let noun = if files.len() == 1 { "file" } else { "files" };
+    surface.note(&format!("{} {noun} written", files.len()));
     label_line(surface, event);
 }
 
@@ -386,26 +465,49 @@ fn append_plan_targets(label: &str, value: Option<&Value>, pairs: &mut Vec<(Stri
     }
 }
 
-/// Checksum: digests parsed out of the space-joined `key=value` label, with range/cache as notes.
+/// Structured digests MUST take precedence over labels, which can contain contextual suffixes.
 fn render_checksum(surface: &Surface, event: &ProgressEvent) {
-    let mut digests = Vec::new();
-    let mut notes = Vec::new();
-    for token in event.label.split_whitespace() {
-        let Some((key, value)) = token.split_once('=') else {
-            continue;
-        };
-        match key {
-            "range" | "cache" => notes.push((key.to_string(), value.to_string())),
-            _ => digests.push((key.to_uppercase(), value.to_string())),
-        }
-    }
+    let digests = checksum_pairs(event);
     if digests.is_empty() {
         return render_details_or_label(surface, event);
     }
     surface.key_values(&digests);
-    for (key, value) in notes {
-        surface.note(&format!("{key}: {value}"));
+    for token in checksum_label(event).split_whitespace() {
+        let Some((key, value)) = token.split_once('=') else {
+            continue;
+        };
+        if key == "range" {
+            surface.key_values(&[("Range".to_string(), value.to_string())]);
+        }
     }
+}
+
+fn checksum_label(event: &ProgressEvent) -> &str {
+    event.label.split(';').next().unwrap_or(&event.label)
+}
+
+fn checksum_pairs(event: &ProgressEvent) -> Vec<(String, String)> {
+    if let Some(checksums) = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("checksums"))
+        .and_then(Value::as_object)
+    {
+        return checksums
+            .iter()
+            .filter_map(|(algorithm, value)| {
+                value
+                    .as_str()
+                    .map(|value| (algorithm.to_uppercase(), value.to_string()))
+            })
+            .collect();
+    }
+    checksum_label(event)
+        .split_whitespace()
+        .filter_map(|token| token.split_once('='))
+        .filter(|(key, _)| !matches!(*key, "range" | "cache"))
+        .map(|(key, value)| (key.to_uppercase(), value.to_string()))
+        .collect()
 }
 
 /// Patch create planning: the ranked formats with the default marked.
@@ -428,7 +530,7 @@ fn render_candidates(surface: &Surface, event: &ProgressEvent) {
             .filter_map(Value::as_str)
             .map(|format| {
                 if Some(format) == default {
-                    vec![format.to_string(), "← default".to_string()]
+                    vec![format.to_string(), "(default)".to_string()]
                 } else {
                     vec![format.to_string()]
                 }
@@ -613,20 +715,13 @@ fn identify_names(identify: &Map<String, Value>) -> Vec<String> {
 }
 
 fn render_details_or_label(surface: &Surface, event: &ProgressEvent) {
-    match event.details.as_ref() {
-        Some(details) if details.is_object() && render_object(surface, details) => {}
-        _ => label_line(surface, event),
+    label_line(surface, event);
+    if let Some(details) = event.details.as_ref() {
+        render_object(surface, details);
     }
 }
 
-fn render_elapsed(surface: &Surface, event: &ProgressEvent) {
-    let Some(elapsed_ms) = event.elapsed_ms else {
-        return;
-    };
-    surface.note(&format!("elapsed: {}", format_elapsed_ms(elapsed_ms)));
-}
-
-fn format_elapsed_ms(elapsed_ms: u32) -> String {
+pub(crate) fn format_elapsed_ms(elapsed_ms: u32) -> String {
     if elapsed_ms < 1_000 {
         return format!("{elapsed_ms}ms");
     }
@@ -672,8 +767,19 @@ fn collect_pairs(prefix: &str, object: &Map<String, Value>, pairs: &mut Vec<(Str
 }
 
 fn collect_value(key: &str, value: &Value, pairs: &mut Vec<(String, String)>) {
+    if is_execution_detail(key) {
+        return;
+    }
     match value {
+        Value::Object(nested) if nested.is_empty() => {
+            pairs.push((humanize_key(key), "none".to_string()));
+        }
         Value::Object(nested) => collect_pairs(key, nested, pairs),
+        Value::Array(items) if items.iter().any(|item| item.is_object() || item.is_array()) => {
+            for (index, item) in items.iter().enumerate() {
+                collect_value(&format!("{key}[{}]", index + 1), item, pairs);
+            }
+        }
         Value::Array(_) => pairs.push((humanize_key(key), display_value(value))),
         _ => {
             if let Some(text) = scalar_for_key(key, value) {
@@ -681,6 +787,22 @@ fn collect_value(key: &str, value: &Value, pairs: &mut Vec<(String, String)>) {
             }
         }
     }
+}
+
+fn is_execution_detail(key: &str) -> bool {
+    let Some((parent, field)) = key.rsplit_once('.') else {
+        return false;
+    };
+    matches!(parent, "compression" | "extraction")
+        && matches!(
+            field,
+            "requested_threads"
+                | "effective_threads"
+                | "thread_mode"
+                | "used_parallelism"
+                | "thread_fallback"
+                | "thread_fallback_reason"
+        )
 }
 
 fn display_value(value: &Value) -> String {
@@ -749,15 +871,12 @@ fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
 }
 
-/// `repaired_files` -> `Repaired files`; the last dotted segment is title-cased.
+/// Parent labels MUST remain visible so source and target values do not share the same heading.
 fn humanize_key(key: &str) -> String {
-    let last = key.rsplit('.').next().unwrap_or(key);
-    let spaced = last.replace('_', " ");
-    let mut chars = spaced.chars();
-    match chars.next() {
-        Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-        None => spaced,
-    }
+    key.split('.')
+        .map(|part| title_case(&part.replace('_', " ")))
+        .collect::<Vec<_>>()
+        .join(" / ")
 }
 
 #[cfg(test)]

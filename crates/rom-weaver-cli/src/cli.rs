@@ -128,7 +128,7 @@ struct Cli {
             long,
             global = true,
             value_enum,
-            conflicts_with_all = ["verbose", "quiet"],
+            conflicts_with_all = ["verbose", "debug", "quiet"],
             help_heading = GLOBAL_HELP_HEADING,
             help = "How much rom-weaver logs to stderr. Separate from the normal output [default: off]"
         )
@@ -141,19 +141,30 @@ struct Cli {
             long,
             global = true,
             action = ArgAction::Count,
-            conflicts_with_all = ["log_level", "quiet"],
+            conflicts_with_all = ["log_level", "debug", "quiet"],
             help_heading = GLOBAL_HELP_HEADING,
-            help = "Log more: -v for info, -vv for debug, -vvv for trace"
+            help = "Show user diagnostics on stderr; repeat for developer detail (-vv debug, -vvv trace)"
         )
     )]
     verbose: u8,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long,
+            global = true,
+            conflicts_with_all = ["log_level", "verbose", "quiet"],
+            help_heading = GLOBAL_HELP_HEADING,
+            help = "Show developer diagnostics and trace events on stderr (same as -vvv)"
+        )
+    )]
+    debug: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             short = 'q',
             long,
             global = true,
-            conflicts_with_all = ["log_level", "verbose"],
+            conflicts_with_all = ["log_level", "verbose", "debug"],
             help_heading = GLOBAL_HELP_HEADING,
             help = "Hide write summaries and log errors only; keep query results and dry-run plans"
         )
@@ -298,7 +309,7 @@ impl Cli {
         RomWeaverRunOutputOptions {
             json: self.json,
             progress: progress_override(self.progress, self.no_progress),
-            log_level: log_level_override(self.log_level, self.verbose, self.quiet),
+            log_level: log_level_override(self.log_level, self.verbose, self.debug, self.quiet),
             dep_trace: self.dep_trace,
             interactive_selection_enabled: interactive,
             assume_yes: self.yes,
@@ -307,12 +318,20 @@ impl Cli {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn log_level_override(log_level: Option<LogLevel>, verbose: u8, quiet: bool) -> Option<LogLevel> {
+fn log_level_override(
+    log_level: Option<LogLevel>,
+    verbose: u8,
+    debug: bool,
+    quiet: bool,
+) -> Option<LogLevel> {
     if log_level.is_some() {
         return log_level;
     }
     if quiet {
         return Some(LogLevel::Error);
+    }
+    if debug {
+        return Some(LogLevel::Trace);
     }
     match verbose {
         0 => None,
@@ -353,11 +372,37 @@ pub fn main_entry() -> ExitCode {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn argument_color(args: &[std::ffi::OsString]) -> clap::ColorChoice {
+    // Help and parse errors exit before output options are available.
+    // Their colors MUST obey the same explicit flags as command results.
+    if let Some(color) = args
+        .iter()
+        .skip(1)
+        .take_while(|arg| *arg != "--")
+        .filter_map(|arg| match arg.to_str() {
+            Some("--color") => Some(clap::ColorChoice::Always),
+            Some("--no-color") => Some(clap::ColorChoice::Never),
+            _ => None,
+        })
+        .last()
+    {
+        return color;
+    }
+    if std::env::var_os("TERM").is_some_and(|term| term == "dumb") {
+        return clap::ColorChoice::Never;
+    }
+    clap::ColorChoice::Auto
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn run_cli() -> ExitCode {
-    // Two-step parse (matches + derive) instead of `Cli::parse()`: positional
-    // `--patch-header` occurrences bind to the preceding `--patch`, and only the
-    // raw `ArgMatches` argv indices preserve that interleave order.
-    let matches = cli_command().get_matches();
+    // Patch header options bind by argument index, so parsing MUST preserve
+    // the raw matches as well as the derived command.
+    let args: Vec<_> = std::env::args_os().collect();
+    let mut parser = cli_command().color(argument_color(&args));
+    let matches = parser
+        .try_get_matches_from_mut(args)
+        .unwrap_or_else(|error| error.exit());
     let mut cli = match Cli::from_arg_matches(&matches) {
         Ok(cli) => cli,
         Err(error) => error.exit(),
@@ -365,13 +410,13 @@ fn run_cli() -> ExitCode {
     if let CliCommand::App(command) = &mut cli.command
         && let Err(error) = crate::cli_inputs::resolve(command, &matches)
     {
-        error.format(&mut cli_command()).exit();
+        error.format(&mut parser).exit();
     }
     let digest = matches
         .subcommand_matches("checksum")
         .is_some_and(|matches| matches.get_flag("digest"));
     if digest && (cli.json || cli.dry_run) {
-        cli_command()
+        parser
             .error(
                 clap::error::ErrorKind::ArgumentConflict,
                 "--digest cannot be used with --json or --dry-run",
@@ -382,12 +427,30 @@ fn run_cli() -> ExitCode {
         && let CliCommand::App(Commands::Checksum(command)) = &cli.command
         && command.algo.len() != 1
     {
-        cli_command()
+        parser
             .error(
                 clap::error::ErrorKind::ArgumentConflict,
                 "--digest requires exactly one algorithm; use --algo ALGO",
             )
             .exit();
+    }
+    let native_command = match &cli.command {
+        CliCommand::Completions { .. } => Some("completions"),
+        CliCommand::Man { .. } => Some("man"),
+        CliCommand::Formats => Some("formats"),
+        CliCommand::App(Commands::Bundle(BundleCommands::Schema)) => Some("bundle-schema"),
+        _ => None,
+    };
+    if let Some(command) = native_command {
+        let output = cli.output_options(false);
+        crate::init_logging(output.log_level, output.dep_trace, output.json);
+        tracing::info!(
+            command,
+            version = env!("CARGO_PKG_VERSION"),
+            dry_run = cli.dry_run,
+            "running command"
+        );
+        tracing::debug!(options = ?cli, "native command options");
     }
     // `completions` is a native-only concern: emit the script and exit before
     // any command runs. `cli_command()` rebuilds the same clap tree the parse
@@ -409,7 +472,14 @@ fn run_cli() -> ExitCode {
         man_dir,
     } = &cli.command
     {
-        return run_man_command(command, *install, man_dir.as_deref(), cli.dry_run, cli.json);
+        return run_man_command(
+            command,
+            *install,
+            man_dir.as_deref(),
+            cli.dry_run,
+            cli.json,
+            cli.quiet,
+        );
     }
     if let CliCommand::Formats = &cli.command {
         if cli.dry_run {
@@ -462,14 +532,15 @@ fn run_cli() -> ExitCode {
     // Interactive prompting needs a terminal on both stdin (to read) and stderr (to draw), and is
     // meaningless when emitting JSON.
     let interactive = !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
-    let options = RunCommandOptions::from_output(cli.output_options(interactive), stdout_is_tty);
+    let options = RunCommandOptions::from_output(
+        cli.output_options(interactive),
+        crate::render::terminal_supports_progress(),
+    );
     let options = RunCommandOptions {
         dry_run: cli.dry_run,
         ..options
     };
 
-    // `--json` passes the event stream straight through; otherwise render for humans - richly when
-    // stdout is a terminal, plainly when piped.
     let color = color_override(cli.color, cli.no_color);
     let reporter: Arc<dyn ProgressSink> = if cli.json {
         Arc::new(JsonProgressSink)
@@ -494,9 +565,9 @@ fn run_cli() -> ExitCode {
         matches!(&command, Commands::Patch(PatchCommands::Apply(apply)) if apply.tui);
     if is_apply_tui && !options.dry_run && !crate::streams::handles(&command, None) {
         if !interactive {
-            eprintln!(
-                "--tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs"
-            );
+            crate::render::write_stderr(format_args!(
+                "error: --tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs\n"
+            ));
             return ExitCode::from(2);
         }
         install_cancel_handler();
@@ -530,14 +601,15 @@ fn run_man_command(
     man_dir: Option<&std::path::Path>,
     dry_run: bool,
     json: bool,
+    quiet: bool,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
     let selected = rom_weaver_app::manpages::page_name(topics);
     if !pages.contains_key(&selected) {
-        eprintln!(
-            "unknown man page `{}`; pass a command path such as `patch apply`",
-            topics.join(" ")
-        );
+        crate::render::write_stderr(format_args!(
+            "error: unknown man page `{}`; pass a command path such as `patch apply`\n",
+            crate::render::display_text(&topics.join(" "))
+        ));
         return ExitCode::from(2);
     }
 
@@ -582,16 +654,19 @@ fn run_man_command(
                         "{}\n",
                         serde_json::json!(report.into_event("man"))
                     ));
-                } else {
-                    crate::stdout_output::write(format_args!("{label}\n"));
+                } else if !quiet {
+                    crate::stdout_output::write(format_args!(
+                        "{}\n",
+                        crate::render::display_text(&label)
+                    ));
                 }
                 ExitCode::SUCCESS
             }
             Err(error) => {
-                eprintln!(
-                    "failed to install man pages in {}: {error}",
-                    output_dir.display()
-                );
+                crate::render::write_stderr(format_args!(
+                    "error: failed to install man pages in {}: {error}\n",
+                    crate::render::display_text(&output_dir.to_string_lossy())
+                ));
                 ExitCode::from(1)
             }
         }
@@ -634,14 +709,19 @@ fn print_native_dry_run_plan(command: &str, writes: Vec<String>, json: bool) -> 
         match serde_json::to_string(&report.into_event(command)) {
             Ok(event) => crate::stdout_output::write(format_args!("{event}\n")),
             Err(error) => {
-                eprintln!("failed to serialize dry-run plan: {error}");
+                crate::render::write_stderr(format_args!(
+                    "error: failed to serialize dry-run plan: {error}\n"
+                ));
                 return ExitCode::from(1);
             }
         }
     } else {
         crate::stdout_output::write(format_args!("{label}\n"));
         if !read_only {
-            crate::stdout_output::write(format_args!("writes: {writes_label}\n"));
+            crate::stdout_output::write(format_args!(
+                "writes: {}\n",
+                crate::render::display_text(&writes_label)
+            ));
         }
     }
     ExitCode::SUCCESS
@@ -659,15 +739,21 @@ fn install_cancel_handler() {
     let result = ctrlc::set_handler(move || {
         if SIGNALLED.swap(true, Ordering::SeqCst) {
             remove_in_progress_outputs();
-            eprintln!("cancelled");
+            crate::render::clear_progress();
+            crate::render::write_stderr(format_args!("cancelled\n"));
             std::process::exit(130);
         }
         token.cancel();
-        eprintln!("cancelling; press Ctrl-C again to stop immediately");
+        crate::render::clear_progress();
+        crate::render::write_stderr(format_args!(
+            "cancelling; press Ctrl-C again to stop immediately\n"
+        ));
     });
     if let Err(error) = result {
         // Not fatal: without a handler Ctrl-C keeps its default behaviour.
-        eprintln!("warning: could not install the Ctrl-C handler ({error})");
+        crate::render::write_stderr(format_args!(
+            "warning: could not install the Ctrl-C handler ({error})\n"
+        ));
     }
 }
 
@@ -697,7 +783,10 @@ fn run_apply_tui(
     let bundle_command = match crate::interactive::run_bundle_tui(&apply) {
         Ok(command) => command,
         Err(message) => {
-            eprintln!("{message}");
+            crate::render::write_stderr(format_args!(
+                "{}\n",
+                crate::render::display_text(&message)
+            ));
             return ExitCode::from(2);
         }
     };
@@ -1003,6 +1092,8 @@ mod tests {
     fn verbosity_short_flags_map_to_log_levels() {
         for (args, expected) in [
             (vec!["-v"], Some(LogLevel::Info)),
+            (vec!["--verbose"], Some(LogLevel::Info)),
+            (vec!["--debug"], Some(LogLevel::Trace)),
             (vec!["-vv"], Some(LogLevel::Debug)),
             (vec!["-vvv"], Some(LogLevel::Trace)),
             (vec!["--quiet"], Some(LogLevel::Error)),
