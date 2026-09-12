@@ -18,7 +18,7 @@ import { readDocLastmod, writeDocsMarkdown } from "./scripts/docs-discovery.mjs"
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { DOCS_SCREENSHOT_NAMES } from "./scripts/docs-screenshot-manifest.mjs";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
-import { generatedChannelAssetPath } from "./scripts/generated-icon-assets.mjs";
+import { generatedChannelAssetPath, generatedSocialPreviewPath } from "./scripts/generated-icon-assets.mjs";
 import { minifyInlineScripts } from "./scripts/minify-inline-scripts.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
@@ -130,9 +130,9 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": generatedChannelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
-  "/social-preview.avif": path.join(repoRoot, "design", "social-preview.avif"),
-  "/social-preview.png": path.join(repoRoot, "design", "social-preview.png"),
-  "/social-preview.webp": path.join(repoRoot, "design", "social-preview.webp"),
+  "/social-preview.avif": generatedSocialPreviewPath("social-preview.avif"),
+  "/social-preview.png": generatedSocialPreviewPath("social-preview.png"),
+  "/social-preview.webp": generatedSocialPreviewPath("social-preview.webp"),
   ...identifyDataSources,
   ...docsScreenshotSources,
 });
