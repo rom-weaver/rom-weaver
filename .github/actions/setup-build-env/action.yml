@@ -38,6 +38,9 @@ inputs:
       measures 60-120 MB, so the default leaves room for a few toolchain
       generations without crowding the 10 GiB Actions budget.
     default: 300M
+  sccache:
+    description: Install sccache and persist up to 1 GiB of Rust compiler results.
+    default: "false"
   cache-save:
     description: Save restored caches. Set to false for workflow_run jobs, which are restore-only.
     default: "true"
@@ -141,6 +144,53 @@ runs:
       shell: bash
       run: ccache --zero-stats
 
+    # sccache MUST be installed before mise resolves RUSTC_WRAPPER.
+    - name: Install sccache
+      if: inputs.sccache == 'true'
+      shell: bash
+      env:
+        APT_PACKAGES: sccache
+      run: |
+        set -euo pipefail
+        if command -v sccache >/dev/null 2>&1; then
+          echo "sccache already on PATH"
+        elif [ "$RUNNER_OS" = "Linux" ]; then
+          node scripts/ci/install-system-dependencies.mjs
+        elif [ "$RUNNER_OS" = "macOS" ]; then
+          brew install sccache
+        else
+          echo "::error::no sccache wiring for $RUNNER_OS"
+          exit 1
+        fi
+        {
+          echo "SCCACHE_DIR=$RUNNER_TEMP/sccache"
+          echo "SCCACHE_CACHE_SIZE=1G"
+        } >> "$GITHUB_ENV"
+
+    # Compiler results are content-addressed, so older generations can be restored safely.
+    - name: Cache sccache objects
+      if: inputs.sccache == 'true' && inputs.cache-save == 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+        restore-keys: |
+          sccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Restore sccache objects
+      if: inputs.sccache == 'true' && !(inputs.cache-save == 'true' && github.ref == 'refs/heads/main')
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/sccache
+        key: sccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+        restore-keys: |
+          sccache-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Zero sccache statistics
+      if: inputs.sccache == 'true'
+      shell: bash
+      run: sccache --zero-stats
+
     # GITHUB_ENV gives every later `mise run` step the selected-tool restriction.
     - name: Select mise tools
       if: inputs.tools != ''
@@ -165,8 +215,7 @@ runs:
       shell: bash
       run: mise exec -- rustup target add ${{ inputs.rust-targets }}
 
-    # Do not install sccache: this action does not persist its object store.
-    # rust-cache persists Rust artifacts and ccache covers vendored C compilation.
+    # Cargo artifacts avoid dependency builds; sccache can also reuse unchanged workspace crates.
     - name: Cache cargo artifacts
       if: inputs.cargo-cache == 'true'
       uses: Swatinem/rust-cache@v2

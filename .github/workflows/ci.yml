@@ -613,6 +613,7 @@ jobs:
           rust-targets: wasm32-wasip1-threads
           wasi-sdk: "true"
           ccache: "true"
+          sccache: "true"
           webapp-deps: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
 
@@ -622,8 +623,13 @@ jobs:
       # of extending them, silently dropping shared-memory, LTO, and exports.
       # The separate non-linking Rust check denies warnings.
       - name: Build production WASM
+        id: wasm-build
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
+
+      - name: Rust compiler cache statistics
+        if: always() && (steps.wasm-build.outcome == 'success' || steps.wasm-build.outcome == 'failure')
+        run: sccache --show-stats
 
       - name: Generate webapp attribution
         run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
