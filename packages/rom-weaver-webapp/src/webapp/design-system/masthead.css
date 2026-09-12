@@ -617,6 +617,7 @@ html.vt-theme .mode-rail .mode {
 }
 .rw-app .shared-more-menu {
   inset-block-start: calc(100% + var(--sp-xs));
+  animation-name: fade-in;
 }
 .rw-app .more-menu[hidden] {
   display: none;
