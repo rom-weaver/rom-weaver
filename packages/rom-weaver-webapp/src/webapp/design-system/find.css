@@ -163,7 +163,8 @@
     inset-inline: max(var(--sp-s), var(--safe-l)) max(var(--sp-s), var(--safe-r));
     flex-direction: column-reverse;
     inline-size: auto;
-    max-block-size: min(60vh, 28rem);
+    block-size: calc(100dvh - var(--dock-h) - var(--sp-xs) - max(var(--sp-s), var(--safe-t)));
+    max-block-size: none;
     transform: none;
   }
   .rw-app .find-box {
@@ -174,8 +175,14 @@
     display: none;
   }
   .rw-app .find-results {
+    flex: 1;
     flex-direction: column-reverse;
+    min-block-size: 0;
     padding: 0 0 var(--sp-xs);
+    overscroll-behavior-y: contain;
+  }
+  .rw-app .find-option {
+    flex-shrink: 0;
   }
   /* the dock keeps the tablist's DOM order; only the paint order changes so
      Find lands dead center in the thumb zone */
