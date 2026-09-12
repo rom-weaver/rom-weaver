@@ -627,9 +627,11 @@ jobs:
         if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: mise run build-wasm-prod
 
-      - name: Rust compiler cache statistics
+      - name: Compiler cache statistics
         if: always() && (steps.wasm-build.outcome == 'success' || steps.wasm-build.outcome == 'failure')
-        run: sccache --show-stats
+        run: |
+          ccache --show-stats --verbose
+          sccache --show-stats
 
       - name: Generate webapp attribution
         run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
