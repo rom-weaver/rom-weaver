@@ -16,11 +16,15 @@ pub(crate) fn run(
     prompter: Arc<dyn SelectionPrompter>,
 ) -> ExitCode {
     let Some(algorithm) = command.algo.first().map(|value| value.to_ascii_lowercase()) else {
-        eprintln!("error: --digest requires exactly one --algo value");
+        crate::render::write_stderr(format_args!(
+            "error: --digest requires exactly one --algo value\n"
+        ));
         return ExitCode::from(2);
     };
     if command.algo.len() != 1 {
-        eprintln!("error: --digest requires exactly one --algo value");
+        crate::render::write_stderr(format_args!(
+            "error: --digest requires exactly one --algo value\n"
+        ));
         return ExitCode::from(2);
     }
 
@@ -42,7 +46,9 @@ pub(crate) fn run(
         .and_then(|checksums| checksums.get(&algorithm))
         .and_then(serde_json::Value::as_str);
     let Some(digest) = digest else {
-        eprintln!("error: checksum succeeded but did not return `{algorithm}`");
+        crate::render::write_stderr(format_args!(
+            "error: checksum succeeded but did not return `{algorithm}`\n"
+        ));
         return ExitCode::FAILURE;
     };
 

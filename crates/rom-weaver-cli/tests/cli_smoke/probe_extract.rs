@@ -1857,7 +1857,7 @@ fn rar_fixture_path(name: &str) -> PathBuf {
 }
 
 #[test]
-fn extract_progress_text_reports_elapsed_and_files() {
+fn extract_progress_text_keeps_diagnostics_separate_from_files() {
     let temp = setup_temp_dir();
     let input = temp.child("sample.bin");
     let archive = temp.child("sample.zip");
@@ -1906,12 +1906,12 @@ fn extract_progress_text_reports_elapsed_and_files() {
         "expected extracted file in summary, got: {stdout}"
     );
     assert!(
-        stdout.contains("1 file(s) written"),
+        stdout.contains("1 file written"),
         "expected file count in summary, got: {stdout}"
     );
     assert!(
-        stdout.contains("elapsed: "),
-        "expected elapsed timing in summary, got: {stdout}"
+        !stdout.contains("elapsed:"),
+        "elapsed timing belongs in diagnostic logs, got: {stdout}"
     );
 }
 

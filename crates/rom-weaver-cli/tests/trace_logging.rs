@@ -35,7 +35,7 @@ fn run_checksum_json(source: &Path, trace_mode: TraceMode) -> std::process::Outp
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");
     command.env_remove("ROM_WEAVER_LOG").env_remove("RUST_LOG");
     if matches!(trace_mode, TraceMode::Env) {
-        command.env("ROM_WEAVER_LOG", "rom_weaver_cli=trace");
+        command.env("ROM_WEAVER_LOG", "rom_weaver_app=trace");
     }
 
     let mut args = vec!["--json"];
@@ -161,10 +161,10 @@ fn rom_weaver_log_env_enables_trace_without_explicit_log_level() {
             .any(|event| event["status"].as_str() == Some("succeeded")),
         "expected a succeeded terminal progress event"
     );
-    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    let stderr_events = parse_json_lines(&output.stderr);
     assert!(
-        stderr.trim().is_empty(),
-        "expected stderr to remain empty without an explicit log level"
+        stderr_events.iter().any(|event| event["level"] == "TRACE"),
+        "expected ROM_WEAVER_LOG to enable application trace events"
     );
 }
 
@@ -176,4 +176,123 @@ fn json_mode_without_trace_keeps_stderr_clean() {
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.trim().is_empty(), "expected stderr to remain empty");
+}
+
+fn run_checksum_with_options(
+    source: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> std::process::Output {
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    command.env_remove("ROM_WEAVER_LOG").env_remove("RUST_LOG");
+    command.envs(env.iter().copied());
+    command.args(args).args([
+        "checksum",
+        "--input",
+        source.to_str().expect("path"),
+        "--algo",
+        "crc32",
+        "--no-extract",
+    ]);
+    command.assert().code(0).get_output().clone()
+}
+
+#[test]
+fn verbose_reports_user_diagnostics_without_developer_trace() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = write_fixture_file(&temp, "input.bin", b"verbose diagnostics");
+    let output = run_checksum_with_options(&source, &["--verbose", "--json"], &[]);
+    let stdout = parse_json_lines(&output.stdout);
+    assert!(stdout.iter().any(|event| event["status"] == "succeeded"));
+    let diagnostics = parse_json_lines(&output.stderr);
+    assert!(diagnostics.iter().all(|event| event["level"] == "INFO"));
+    assert!(diagnostics.iter().any(|event| {
+        event["fields"]["message"] == "starting command"
+            && event["fields"]["command"] == "checksum"
+            && event["fields"]["version"] == env!("CARGO_PKG_VERSION")
+    }));
+    assert!(diagnostics.iter().any(|event| {
+        event["fields"]["option"] == "input"
+            && event["fields"]["value"]
+                .as_str()
+                .is_some_and(|value| value.contains(source.to_str().expect("path")))
+    }));
+    assert!(diagnostics.iter().any(|event| {
+        event["fields"]["message"] == "completed operation"
+            && event["fields"]["status"] == "Succeeded"
+            && event["fields"]["elapsed_ms"].as_u64().is_some()
+    }));
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|event| { event["fields"]["message"] == "running rom-weaver command" })
+    );
+}
+
+#[test]
+fn debug_reports_developer_configuration_and_trace_on_stderr() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = write_fixture_file(&temp, "input.bin", b"developer diagnostics");
+    let output = run_checksum_with_options(&source, &["--debug", "--json"], &[]);
+    let stdout = parse_json_lines(&output.stdout);
+    assert!(stdout.iter().any(|event| event["status"] == "succeeded"));
+    let diagnostics = parse_json_lines(&output.stderr);
+    assert!(diagnostics.iter().any(|event| event["level"] == "TRACE"));
+    assert!(diagnostics.iter().any(|event| {
+        event["level"] == "DEBUG"
+            && event["fields"]["message"] == "running rom-weaver command"
+            && event["fields"]["command"]
+                .as_str()
+                .is_some_and(|value| value.contains("Checksum") && value.contains("input.bin"))
+    }));
+}
+
+#[test]
+fn verbose_plain_stderr_is_readable_without_terminal_controls() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = write_fixture_file(&temp, "input.bin", b"plain verbose diagnostics");
+    let output = run_checksum_with_options(&source, &["--verbose"], &[]);
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(stderr.contains("INFO starting command"));
+    assert!(stderr.contains("completed operation"));
+    assert!(!stderr.contains("rom_weaver_app::"));
+    assert!(!stderr.contains('\x1b'));
+    assert!(!stderr.contains('\r'));
+}
+
+#[test]
+fn quiet_overrides_environment_logging_without_warning_noise() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = write_fixture_file(&temp, "input.bin", b"quiet diagnostics");
+    let output = run_checksum_with_options(
+        &source,
+        &["--quiet", "--json"],
+        &[("ROM_WEAVER_LOG", "rom_weaver_app=trace")],
+    );
+    assert!(output.stderr.is_empty());
+    assert!(
+        parse_json_lines(&output.stdout)
+            .iter()
+            .any(|event| event["status"] == "succeeded")
+    );
+}
+
+#[test]
+fn invalid_environment_filter_keeps_json_diagnostics_parseable() {
+    let temp = TempDir::new().expect("temp dir");
+    let source = write_fixture_file(&temp, "input.bin", b"invalid filter diagnostics");
+    let output = run_checksum_with_options(
+        &source,
+        &["--json"],
+        &[("ROM_WEAVER_LOG", "rom_weaver_app=invalid")],
+    );
+    let diagnostics = parse_json_lines(&output.stderr);
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0]["level"], "WARN");
+    assert!(
+        diagnostics[0]["fields"]["message"]
+            .as_str()
+            .expect("warning message")
+            .contains("invalid log filter")
+    );
 }
