@@ -97,12 +97,17 @@ Codecs are stricter. Each format accepts only the codec names in its own row of 
 Every command accepts these global flags, listed under `Global options` in its help:
 
 - `--json` prints operation reports as one JSON object per line instead of human-readable output. Asset generators such as `bundle schema`, `completions`, and `man` without `--install` keep their native output. `man --install --json` reports the installed page count and output directory as a JSON event.
-- `--progress` and `--no-progress` override the automatic choice, which is to show progress on a terminal and hide it when output is piped.
+- `--progress` and `--no-progress` override the automatic choice. Human progress uses stderr: it appears automatically when stderr is a terminal and `TERM` is not `dumb`. Redirected stderr stays silent unless `--progress` is set; forced progress uses plain, throttled lines. JSON progress remains enabled by default.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. Logging is off unless you ask for it, and it is separate from the normal output.
-- `-v`, `-vv`, and `-vvv` are shorthand for info, debug, and trace.
-- `-q`/`--quiet` logs errors only and hides successful write summaries. Query results and dry-run plans remain visible. Progress is controlled separately by `--progress` and `--no-progress`.
+- `-v`/`--verbose` logs user diagnostics to stderr: the command, input and output options, format, thread use, result, and elapsed time. `-vv` and `-vvv` retain their debug and trace levels.
+- `--debug` logs developer diagnostics, including command configuration and internal trace events. It is equivalent to `--log-level trace`. It conflicts with `--verbose`, `--quiet`, and `--log-level`.
+- `-q`/`--quiet` logs errors only and hides successful write summaries and human progress, including forced `--progress`. Query results, format candidate plans, and dry-run previews remain visible. JSON reports retain their status and progress events.
 - `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
-- `--color` and `--no-color` override colored output. The flag wins over the `NO_COLOR` environment variable, which wins over the terminal-vs-piped default. `--color` keeps color even when piped, though the live progress bar stays terminal-only.
+- `--color` and `--no-color` override colored output, including help and argument errors. The flag wins over the `NO_COLOR` environment variable and the `TERM=dumb` setting. Otherwise, stdout and stderr each use their own terminal status to select colors. `--color` keeps color even when piped; live progress stays terminal-only.
+
+Human stdout contains command results. Progress, errors, and diagnostic logs use stderr. Elapsed time appears in verbose logs and JSON reports. Human output escapes terminal control characters in filenames and other values; JSON retains the original values through JSON escaping.
+
+Explicit logging flags override `ROM_WEAVER_LOG` and `RUST_LOG` without an extra warning. An invalid environment log filter produces a warning on stderr; that warning is a JSON object in JSON mode.
 
 Most commands also accept `-j`/`--threads auto|N`. `auto` uses the available core count as its ceiling; a number sets a lower ceiling, and format or memory limits may still use fewer.
 
