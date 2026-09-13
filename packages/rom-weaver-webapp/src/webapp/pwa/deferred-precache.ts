@@ -22,7 +22,12 @@ const createDeferredPrecache = ({
     return { ...entry, key: key.href, url: url.href };
   });
   const byUrl = new Map(files.map((file) => [file.url, file]));
-  const inFlight = new Map<string, Promise<Response>>();
+  // One download per file. Every caller that joins it gets the same byte
+  // progress, so a pump that arrives after the app requested the file itself
+  // still reports that download as it happens instead of crediting the whole
+  // file when it lands.
+  type InFlight = { listeners: Set<(delta: number) => void>; loadedBytes: number; promise: Promise<Response> };
+  const inFlight = new Map<string, InFlight>();
 
   const find = (input: string) => {
     const url = new URL(input, scope);
@@ -57,28 +62,46 @@ const createDeferredPrecache = ({
     const cached = await cache.match(file.key);
     if (cached) return cached;
     let pending = inFlight.get(file.key);
-    if (!pending) {
-      pending = (async () => {
-        const response = await download(new Request(file.url, { cache: file.revision ? "reload" : "default" }));
-        if (!response.ok) throw new Error(`Offline app download failed with HTTP ${response.status}: ${file.url}`);
-        const buffer = await readWithByteProgress(response, onBytes);
-        const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
-        await cache.put(file.key, complete.clone());
-        return complete;
-      })();
+    if (pending) {
+      // Credit what already arrived so the joiner's progress starts where the download is.
+      if (onBytes) {
+        pending.listeners.add(onBytes);
+        if (pending.loadedBytes > 0) onBytes(pending.loadedBytes);
+      }
+    } else {
+      const entry: InFlight = {
+        listeners: new Set(onBytes ? [onBytes] : []),
+        loadedBytes: 0,
+        promise: (async () => {
+          const response = await download(new Request(file.url, { cache: file.revision ? "reload" : "default" }));
+          if (!response.ok) throw new Error(`Offline app download failed with HTTP ${response.status}: ${file.url}`);
+          const buffer = await readWithByteProgress(response, (delta) => {
+            entry.loadedBytes += delta;
+            for (const listener of entry.listeners) listener(delta);
+          });
+          const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
+          await cache.put(file.key, complete.clone());
+          return complete;
+        })(),
+      };
+      pending = entry;
       inFlight.set(file.key, pending);
     }
     try {
-      return (await pending).clone();
+      return (await pending.promise).clone();
     } finally {
       if (inFlight.get(file.key) === pending) inFlight.delete(file.key);
     }
   };
 
+  // Files the app is already downloading come first: joining them is free and
+  // reports bytes that would otherwise land on the readout all at once.
   const runNextBatch = async (onBytes?: (delta: number) => void) => {
     const cache = await caches.open(cacheName);
     const keys = new Set((await cache.keys()).map((request) => request.url));
-    const batch = files.filter((file) => !keys.has(file.key)).slice(0, 4);
+    const missing = files.filter((file) => !keys.has(file.key));
+    const started = missing.filter((file) => inFlight.has(file.key));
+    const batch = [...started, ...missing.filter((file) => !inFlight.has(file.key))].slice(0, 4);
     const results = await Promise.allSettled(batch.map((file) => serve(file.url, onBytes)));
     for (const result of results) {
       if (result.status === "rejected") throw result.reason;

@@ -201,6 +201,42 @@ describe("deferred precache", () => {
     expect(await queue.match("assets/two.js")).toBeUndefined();
   });
 
+  it("streams a download the app already started to a pump that joins it, and serves that file first", async () => {
+    const chunk = new Uint8Array(4);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      download: async (request) => {
+        if (!request.url.endsWith("/assets/two.js")) return new Response("one");
+        const stream = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            controller.enqueue(chunk);
+            await gate;
+            controller.enqueue(chunk);
+            controller.close();
+          },
+        });
+        return new Response(stream);
+      },
+      entries,
+      scope: SCOPE,
+    });
+    const interactive = queue.serve("assets/two.js");
+    // Let the first chunk arrive before the pump joins.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const deltas: number[] = [];
+    const pump = queue.runNextBatch((delta) => deltas.push(delta));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(deltas).toContain(4);
+    release();
+    await Promise.all([interactive, pump]);
+    expect(deltas.reduce((sum, delta) => sum + delta, 0)).toBe(8 + 3);
+    expect(await queue.state()).toMatchObject({ cachedFiles: 2 });
+  });
+
   it("deduplicates interactive fetches and completes state only after every batch file is stored", async () => {
     const many = Array.from({ length: 5 }, (_, index) => ({
       revision: `r${index}`,
