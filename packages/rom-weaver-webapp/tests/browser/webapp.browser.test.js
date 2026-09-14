@@ -602,3 +602,43 @@ test("mobile More carries app utilities plus the external links, and the footer 
 
   await page.viewport(1280, 900);
 });
+
+test("mobile More stays in view on a short screen", async () => {
+  await page.viewport(320, 480);
+  mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
+
+  await page.getByRole("button", { name: "More" }).click();
+  const menu = document.querySelector(".shared-more-menu");
+  expect(menu).not.toBeNull();
+  expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
+  expect(getComputedStyle(menu).animationName).toBe("none");
+  expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
+
+  await page.getByRole("menuitem", { name: "Logs" }).click();
+  await expect.element(page.getByRole("dialog")).toBeInTheDocument();
+  await page.viewport(1280, 900);
+});
+
+test("mobile More keeps its row spacing after opening", async () => {
+  await page.viewport(390, 664);
+  mountWebappRoot();
+
+  await page.getByRole("button", { name: "More" }).click();
+  const menu = document.querySelector(".shared-more-menu");
+  const project = menu?.querySelectorAll(".more-group")[1];
+  expect(project).not.toBeNull();
+  const start = {
+    menuHeight: menu.getBoundingClientRect().height,
+    projectTop: project.getBoundingClientRect().top,
+    projectOffset: project.getBoundingClientRect().top - menu.getBoundingClientRect().top,
+  };
+
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  expect(menu.getBoundingClientRect().height).toBeCloseTo(start.menuHeight, 1);
+  expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
+  await page.viewport(390, 600);
+  expect(project.getBoundingClientRect().top - menu.getBoundingClientRect().top).toBeCloseTo(start.projectOffset, 1);
+  await page.viewport(1280, 900);
+});

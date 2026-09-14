@@ -617,6 +617,7 @@ html.vt-theme .mode-rail .mode {
 }
 .rw-app .shared-more-menu {
   inset-block-start: calc(100% + var(--sp-xs));
+  animation: none;
 }
 .rw-app .more-menu[hidden] {
   display: none;
@@ -694,9 +695,7 @@ html.vt-theme .mode-rail .mode {
   fill: currentcolor;
 }
 /* The head row: the app's own surfaces as four equal tiles, one tap from More
-   on both layouts. Tiles stack icon over label, unlike the rows below. The
-   fieldset chrome is reset here and on the groups; the legend is the group's
-   accessible name and, for the groups, the visible heading. */
+   on both layouts. Tiles stack icon over label, unlike the rows below. */
 .rw-app .more-head,
 .rw-app .more-group {
   min-inline-size: 0;
@@ -724,8 +723,7 @@ html.vt-theme .mode-rail .mode {
   background: var(--well);
 }
 .rw-app .more-group {
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 .rw-app .more-group + .more-group {
   padding-block-start: var(--sp-xs);
@@ -733,7 +731,6 @@ html.vt-theme .mode-rail .mode {
   border-block-start: 1px solid var(--seam);
 }
 .rw-app .more-group-label {
-  float: left;
   inline-size: 100%;
   padding: 4px 10px 2px;
   font-size: 0.62rem;
@@ -1040,6 +1037,12 @@ html.vt-theme .mode-rail .mode {
     inset-block-start: auto;
     inset-block-end: calc(var(--dock-h) + var(--sp-xs));
     inset-inline-end: max(var(--sp-s), var(--safe-r));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: max-content;
+    align-content: start;
+    max-block-size: calc(100svh - var(--dock-h) - 2 * var(--sp-xs));
+    overflow-y: auto;
   }
 }
 

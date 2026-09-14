@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -204,6 +204,9 @@ describe("More menu on the phone layout", () => {
     );
 
     const menu = openMobileMore(container);
+    expect(within(menu).getByRole("group", { name: "App" })).not.toBeNull();
+    expect(within(menu).getByRole("group", { name: "Tools" })).not.toBeNull();
+    expect(within(menu).getByRole("group", { name: "Project" })).not.toBeNull();
     const labels = menuItems(menu).map((item) => item.textContent);
     expect(labels[0]).toContain("Settings");
     expect(labels.some((label) => label?.includes("Theme"))).toBe(true);
