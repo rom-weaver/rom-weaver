@@ -486,6 +486,9 @@ test("create active output cancel button aborts the workflow without an error no
   createButton.click();
   await expect.poll(() => workflowMockState.runCalls).toBe(1);
 
+  await expect
+    .poll(() => document.querySelector("button[aria-label='Cancel patch creation']"))
+    .toBeInstanceOf(HTMLButtonElement);
   const cancelButton = document.querySelector("button[aria-label='Cancel patch creation']");
   expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
   cancelButton.click();
