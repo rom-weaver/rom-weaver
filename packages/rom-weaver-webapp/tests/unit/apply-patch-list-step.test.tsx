@@ -168,12 +168,14 @@ describe("ApplyPatchListStep", () => {
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Include folder/first" }));
     expect(onTogglePatch).toHaveBeenCalledWith(0);
-    fireEvent.click(container.querySelector("#rom-weaver-patch-replace-0") as HTMLButtonElement);
+    fireEvent.click(container.querySelector("#rom-weaver-patch-menu-0") as HTMLButtonElement);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Replace patch" }));
     const replacement = new File(["patch"], "replacement.ips", { type: "application/octet-stream" });
     fireEvent.change(container.querySelector("#rom-weaver-patch-replace-input-0") as HTMLInputElement, {
       target: { files: [replacement] },
     });
     expect(patchStack.replaceItem).toHaveBeenCalledWith(0, replacement);
+    expect(screen.queryByRole("menu")).toBeNull();
 
     fireEvent.click(container.querySelector("#rom-weaver-patch-menu-1") as HTMLButtonElement);
     fireEvent.click(container.querySelector("#rom-weaver-patch-menu-remove-1") as HTMLButtonElement);
@@ -202,20 +204,31 @@ describe("ApplyPatchListStep", () => {
     await waitFor(() => expect(container.querySelector("#rom-weaver-patch-input-md5-0")).toBeNull());
   });
 
-  it("keeps common patch actions visible and disables impossible or busy moves", () => {
+  it("keeps patch actions in the menu and disables impossible or busy moves", () => {
     const patchStack = stack();
     const { container, rerender } = renderList({ patchStack });
 
-    expect(screen.getAllByRole("button", { name: "Move up" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Move down" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Replace patch" })).toHaveLength(2);
+    expect(screen.queryByRole("menuitem", { name: "Move up" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Move down" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Replace patch" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Move up" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Move down" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Replace patch" })).toBeNull();
+    fireEvent.click(container.querySelector("#rom-weaver-patch-menu-0") as HTMLButtonElement);
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Replace patch" })).toBeTruthy();
     expect(container.querySelector("#rom-weaver-patch-move-up-0")?.hasAttribute("disabled")).toBe(true);
     expect(container.querySelector("#rom-weaver-patch-move-down-0")?.hasAttribute("disabled")).toBe(false);
     expect(container.querySelector("#rom-weaver-patch-move-up-1")?.hasAttribute("disabled")).toBe(false);
     expect(container.querySelector("#rom-weaver-patch-move-down-1")?.hasAttribute("disabled")).toBe(true);
 
-    fireEvent.click(container.querySelector("#rom-weaver-patch-move-down-0") as HTMLButtonElement);
-    fireEvent.click(container.querySelector("#rom-weaver-patch-move-up-1") as HTMLButtonElement);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move down" }));
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(container.querySelector("#rom-weaver-patch-menu-0"));
+    fireEvent.click(container.querySelector("#rom-weaver-patch-menu-1") as HTMLButtonElement);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move up" }));
+    expect(screen.queryByRole("menu")).toBeNull();
     expect(patchStack.reorder).toHaveBeenNthCalledWith(1, 0, 1);
     expect(patchStack.reorder).toHaveBeenNthCalledWith(2, 1, 0);
 

@@ -125,6 +125,30 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; sha
   expect(Array.from(bundleFormat.options, (option) => option.value)).toEqual(["zip", "7z"]);
 });
 
+test("the open patch menu stays reachable above the next card", async () => {
+  const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
+  const secondPatch = new File([await patchFile.arrayBuffer()], "second.ips", {
+    type: "application/octet-stream",
+  });
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile, secondPatch], id: 1 } }));
+  await waitForApplyButtonEnabled();
+  const menuButton = document.getElementById("rom-weaver-patch-menu-0");
+  menuButton.scrollIntoView({ block: "center" });
+  menuButton.click();
+
+  await expect
+    .poll(() => {
+      const remove = document.getElementById("rom-weaver-patch-menu-remove-0");
+      const rect = remove.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return remove.contains(hit);
+    })
+    .toBe(true);
+  document.getElementById("rom-weaver-patch-menu-remove-0").click();
+  await expect.poll(() => document.querySelectorAll("#rom-weaver-list-patch-stack > .card").length).toBe(1);
+  expect(document.querySelector("#rom-weaver-list-patch-stack .nm").textContent).toContain("second");
+});
+
 test("bundle-renamed patch keeps its source file in the Files drawer", async () => {
   const [romFile, bundleArchive] = await Promise.all([
     loadFixtureFile(RAW_ROM),

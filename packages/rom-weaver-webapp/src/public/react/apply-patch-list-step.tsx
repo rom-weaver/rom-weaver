@@ -8,6 +8,7 @@ import {
   GitBranch,
   Pencil,
   Plus,
+  RefreshCw,
   Scissors,
   Tag,
   Trash2,
@@ -1387,15 +1388,24 @@ const PatchMetaDoneButton = ({ index, onToggle }: { index: number; onToggle: () 
   );
 };
 
-/** Three-dot menu for infrequent metadata and removal actions. */
 const PatchActionsMenu = ({
+  canMoveDown,
+  canMoveUp,
   index,
+  onMoveDown,
+  onMoveUp,
+  onReplace,
   onOpenChange,
   onEdit,
   onRemove,
   open,
 }: {
+  canMoveDown: boolean;
+  canMoveUp: boolean;
   index: number;
+  onMoveDown: () => void;
+  onMoveUp: () => void;
+  onReplace: (file: File) => void;
   onOpenChange: (open: boolean) => void;
   /** Absent while the details form cannot be edited (no bundle meta channel). */
   onEdit?: () => void;
@@ -1403,6 +1413,12 @@ const PatchActionsMenu = ({
   open: boolean;
 }) => {
   const localizer = useUiLocalizer();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const close = () => {
+    onOpenChange(false);
+    buttonRef.current?.focus();
+  };
   const rootRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return undefined;
@@ -1422,8 +1438,9 @@ const PatchActionsMenu = ({
         id={`rom-weaver-patch-menu-${index}`}
         onClick={() => onOpenChange(!open)}
         onKeyDown={(event) => {
-          if (event.key === "Escape") onOpenChange(false);
+          if (event.key === "Escape") close();
         }}
+        ref={buttonRef}
         title={localizer.message("ui.patch.actions")}
         type="button"
       >
@@ -1434,10 +1451,49 @@ const PatchActionsMenu = ({
         className="patch-menu-list"
         hidden={!open}
         onKeyDown={(event) => {
-          if (event.key === "Escape") onOpenChange(false);
+          if (event.key === "Escape") close();
         }}
         role="menu"
       >
+        <button
+          className="patch-menu-item"
+          disabled={!canMoveUp}
+          id={`rom-weaver-patch-move-up-${index}`}
+          onClick={() => {
+            close();
+            onMoveUp();
+          }}
+          role="menuitem"
+          type="button"
+        >
+          <ArrowUp aria-hidden="true" />
+          {localizer.message("ui.patch.moveUp")}
+        </button>
+        <button
+          className="patch-menu-item"
+          disabled={!canMoveDown}
+          id={`rom-weaver-patch-move-down-${index}`}
+          onClick={() => {
+            close();
+            onMoveDown();
+          }}
+          role="menuitem"
+          type="button"
+        >
+          <ArrowDown aria-hidden="true" />
+          {localizer.message("ui.patch.moveDown")}
+        </button>
+        <button
+          className="patch-menu-item"
+          id={`rom-weaver-patch-replace-${index}`}
+          onClick={() => fileRef.current?.click()}
+          title={localizer.message("ui.patch.replaceHelp")}
+          role="menuitem"
+          type="button"
+        >
+          <RefreshCw aria-hidden="true" />
+          {localizer.message("ui.patch.replace")}
+        </button>
         {onEdit ? (
           <button
             className="patch-menu-item"
@@ -1468,59 +1524,6 @@ const PatchActionsMenu = ({
           {localizer.message("ui.patch.remove")}
         </button>
       </div>
-    </div>
-  );
-};
-
-/** The replacement input MUST keep its stable id for browser automation. */
-const PatchCardActions = ({
-  canMoveDown,
-  canMoveUp,
-  index,
-  onMoveDown,
-  onMoveUp,
-  onReplace,
-}: {
-  canMoveDown: boolean;
-  canMoveUp: boolean;
-  index: number;
-  onMoveDown: () => void;
-  onMoveUp: () => void;
-  onReplace: (file: File) => void;
-}) => {
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const localizer = useUiLocalizer();
-  return (
-    <div className="patch-card-actions">
-      <button
-        className="btn ghost slim"
-        disabled={!canMoveUp}
-        id={`rom-weaver-patch-move-up-${index}`}
-        onClick={onMoveUp}
-        type="button"
-      >
-        <ArrowUp aria-hidden="true" />
-        {localizer.message("ui.patch.moveUp")}
-      </button>
-      <button
-        className="btn ghost slim"
-        disabled={!canMoveDown}
-        id={`rom-weaver-patch-move-down-${index}`}
-        onClick={onMoveDown}
-        type="button"
-      >
-        <ArrowDown aria-hidden="true" />
-        {localizer.message("ui.patch.moveDown")}
-      </button>
-      <button
-        className="btn ghost slim"
-        id={`rom-weaver-patch-replace-${index}`}
-        onClick={() => fileRef.current?.click()}
-        title={localizer.message("ui.patch.replaceHelp")}
-        type="button"
-      >
-        {localizer.message("ui.patch.replace")}
-      </button>
       <input
         accept={getFileInputAcceptAttributes().patchReplace}
         aria-label={localizer.message("ui.patch.replacementInput")}
@@ -1529,6 +1532,7 @@ const PatchCardActions = ({
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
+          close();
           if (file) onReplace(file);
         }}
         ref={fileRef}
@@ -1747,23 +1751,18 @@ const PatchCard = ({
         editing ? (
           <PatchMetaDoneButton index={index} onToggle={() => setMetaEditing(false)} />
         ) : (
-          <>
-            <PatchCardActions
-              canMoveDown={canReorder && index < total - 1 && !!item.canMoveDown}
-              canMoveUp={canReorder && index > 0 && !!item.canMoveUp}
-              index={index}
-              onMoveDown={() => onReorder(index, index + 1)}
-              onMoveUp={() => onReorder(index, index - 1)}
-              onReplace={(file) => patchStack.replaceItem(index, file)}
-            />
-            <PatchActionsMenu
-              index={index}
-              onEdit={onMetaChange ? () => setMetaEditing(true) : undefined}
-              onOpenChange={setMenuOpen}
-              onRemove={() => patchStack.removeItem(index)}
-              open={menuOpen}
-            />
-          </>
+          <PatchActionsMenu
+            canMoveDown={canReorder && index < total - 1 && !!item.canMoveDown}
+            canMoveUp={canReorder && index > 0 && !!item.canMoveUp}
+            index={index}
+            onEdit={onMetaChange ? () => setMetaEditing(true) : undefined}
+            onMoveDown={() => onReorder(index, index + 1)}
+            onMoveUp={() => onReorder(index, index - 1)}
+            onOpenChange={setMenuOpen}
+            onRemove={() => patchStack.removeItem(index)}
+            onReplace={(file) => patchStack.replaceItem(index, file)}
+            open={menuOpen}
+          />
         )
       }
       patch
