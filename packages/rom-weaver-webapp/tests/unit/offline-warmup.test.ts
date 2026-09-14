@@ -437,6 +437,46 @@ describe("offline warm-up (service worker side)", () => {
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
   });
 
+  it("reports chunks from a download that finishes within 200 ms", async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const fetcher = createFetcher();
+    const fallback = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/loader.js")) {
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(stream) {
+              controller = stream;
+            },
+          }),
+        );
+      }
+      if (!fallback) throw new Error("Missing fallback fetcher");
+      return fallback(input);
+    });
+    const warmup = await createSerialWarmup(fetcher);
+    const interims: number[] = [];
+    let now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const pump = warmup.runNextUnit((progress) => interims.push(progress.unitLoadedBytes ?? 0));
+    try {
+      await vi.waitFor(() => expect(controller).toBeDefined());
+      controller?.enqueue(new Uint8Array(1));
+      await vi.waitFor(() => expect(interims).toContain(1));
+      now += 50;
+      controller?.enqueue(new Uint8Array(1));
+      await vi.waitFor(() => expect(interims).toContain(2));
+      controller?.enqueue(new Uint8Array(1));
+      controller?.close();
+      expect(await pump).toMatchObject({ cachedFiles: 1 });
+    } finally {
+      controller?.error(new Error("test stream cleanup"));
+      await pump.catch(() => undefined);
+      clock.mockRestore();
+    }
+  });
+
   it("streams interim byte progress with the in-flight unit's name and size", async () => {
     const warmup = await createSerialWarmup();
     await warmup.setIdentifyGroupWanted("optional-computers", true);

@@ -2,6 +2,7 @@
  * The service worker caches EmulatorJS assets and required or selected identify groups in page-paced batches.
  * Progress comes from cached files and unit markers so completed downloads survive worker restarts.
  */
+import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.ts";
 
 import {
   bufferedResponse,
@@ -123,10 +124,6 @@ type OfflineWarmup = {
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
   setIdentifyGroupWanted: (groupId: string, wanted: boolean) => Promise<IdentifyGroupState[]>;
 };
-
-// Interim progress messages are throttled to this interval so a fast download
-// does not flood the message channel.
-const INTERIM_PROGRESS_MS = 200;
 
 // Download small EmulatorJS files in one pump. Identify groups stay sequential
 // because their installer limits itself to one pack connection at a time.
@@ -709,7 +706,7 @@ const createOfflineWarmup = ({
     const batchHead = batch[0] ?? unit;
     // Add in-flight bytes to one batch baseline so progress rises during the download.
     let onBytes: ((delta: number) => void) | undefined;
-    let interimUpdates = Promise.resolve();
+    let flushInterims = () => Promise.resolve();
     if (onInterim) {
       const [baseline, batchCachedBytes] = await Promise.all([getReadyState(), cachedUnitBytes(batch)]);
       const detail = unitDetail(batchHead, batch.length);
@@ -718,39 +715,35 @@ const createOfflineWarmup = ({
       // onBytes credits the batch's cached share again. Remove it from the baseline so cachedBytes stays monotonic.
       const baseCachedBytes = Math.max(0, baseline.cachedBytes - batchCachedBytes);
       let loadedBytes = 0;
-      let lastEmit = 0;
-      const emit = () => {
-        const unitLoadedBytes = Math.min(loadedBytes, unitTotalBytes || loadedBytes);
-        const progress = {
-          ...baseline,
-          cachedBytes: Math.min(baseCachedBytes + unitLoadedBytes, baseline.totalBytes || Number.MAX_SAFE_INTEGER),
-          detail,
-          ready: false,
-          unit: label,
-          unitLoadedBytes,
-          unitTotalBytes,
-        };
-        interimUpdates = interimUpdates.then(async () => {
+      const progress = createOfflineProgressReporter(
+        async () => {
           const state = await getReadyState().catch((error) => {
             log("transfer progress unavailable", { error: error instanceof Error ? error.message : String(error) });
             return null;
           });
-          onInterim({
-            ...progress,
-            transferredBytes: state?.transferredBytes ?? progress.transferredBytes,
+          const unitLoadedBytes = Math.min(loadedBytes, unitTotalBytes || loadedBytes);
+          return {
+            ...baseline,
+            cachedBytes: Math.min(baseCachedBytes + unitLoadedBytes, baseline.totalBytes || Number.MAX_SAFE_INTEGER),
+            detail,
+            ready: false,
+            unit: label,
+            unitLoadedBytes,
+            unitTotalBytes,
+            transferredBytes: state?.transferredBytes ?? baseline.transferredBytes,
             transferBytesIncomplete: state?.transferBytesIncomplete ?? true,
-          });
-        });
-      };
+          };
+        },
+        onInterim,
+        (error) => log("offline progress failed", { error: error instanceof Error ? error.message : String(error) }),
+      );
+      flushInterims = progress.flush;
       onBytes = (delta) => {
         loadedBytes += delta;
-        const now = Date.now();
-        if (now - lastEmit < INTERIM_PROGRESS_MS) return;
-        lastEmit = now;
-        emit();
+        void progress.update();
       };
-      // Emit immediately so progress names the unit that started.
-      emit();
+      // The first update MUST name the unit even before its percentage changes.
+      void progress.update();
     }
     // Remove completed files by identity because a priority bump can replace or reorder the live queue.
     try {
@@ -765,7 +758,7 @@ const createOfflineWarmup = ({
         }),
       );
     } finally {
-      await interimUpdates;
+      await flushInterims();
     }
     if (batch.some((batchUnit) => batchUnit.kind === "emulatorjs-file")) await finishEmulatorJsIfComplete();
     return batchHead;

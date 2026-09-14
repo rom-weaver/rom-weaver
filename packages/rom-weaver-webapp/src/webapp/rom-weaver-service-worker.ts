@@ -12,6 +12,7 @@ import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } fr
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
+import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
 import { cacheWithDownloadLog, fetchWithDownloadLog, observeDownloadTimings } from "./pwa/offline-download-log.ts";
@@ -296,7 +297,6 @@ const DEFERRED_MANIFEST = PRECACHE_MANIFEST.filter(
   (entry): entry is OfflinePrecacheEntry => typeof entry !== "string" && entry.install === false,
 );
 
-const PRECACHE_PROGRESS_THROTTLE_MS = 200;
 // Written beside the bundle by the build's manifestTransform, because workbox
 // strips per-entry sizes before injecting the manifest. Absent in dev and on a
 // host serving an older bundle; the warm-up then falls back to entry counts.
@@ -383,21 +383,26 @@ let firstInstallInProgress = false;
 let precacheInstalledCount = 0;
 let installStartedAt = 0;
 let precacheInstallFailed = false;
-let lastPrecacheBroadcast = 0;
 const precacheIncomingBytes = new Map<string, number>();
 
 // The install-time readout runs the same combined totals the warm-up reports
 // later, so one percentage covers both stages instead of each filling its own.
-const broadcastPrecacheProgress = async () => {
-  const state = await offlineWarmup.getReadyState();
-  state.cachedBytes = Math.min(
-    state.totalBytes,
-    state.cachedBytes + [...precacheIncomingBytes.values()].reduce((sum, value) => sum + value, 0),
-  );
-  const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
-  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
-  for (const client of clients) client.postMessage(message);
-};
+const precacheProgress = createOfflineProgressReporter(
+  async () => {
+    const state = await offlineWarmup.getReadyState();
+    state.cachedBytes = Math.min(
+      state.totalBytes,
+      state.cachedBytes + [...precacheIncomingBytes.values()].reduce((sum, value) => sum + value, 0),
+    );
+    return state;
+  },
+  async (state) => {
+    const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
+    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+    for (const client of clients) client.postMessage(message);
+  },
+  (error) => logServiceWorker("precache progress failed", { error: formatError(error) }),
+);
 
 const precachePlugin: WorkboxPlugin = {
   async requestWillFetch({ event, request }) {
@@ -424,10 +429,7 @@ const precachePlugin: WorkboxPlugin = {
       });
     }
     if (!firstInstallInProgress) return;
-    const now = Date.now();
-    if (!done && now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
-    lastPrecacheBroadcast = now;
-    await broadcastPrecacheProgress();
+    await precacheProgress.update(done);
   },
   async fetchDidSucceed({ event, request, response }) {
     if (event.type !== "install" || !firstInstallInProgress || !response.body || !response.ok) return response;
@@ -437,12 +439,7 @@ const precachePlugin: WorkboxPlugin = {
         transform(chunk, controller) {
           precacheIncomingBytes.set(request.url, (precacheIncomingBytes.get(request.url) ?? 0) + chunk.byteLength);
           controller.enqueue(chunk);
-          const now = Date.now();
-          if (now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
-          lastPrecacheBroadcast = now;
-          void broadcastPrecacheProgress().catch((error) =>
-            logServiceWorker("precache progress failed", { error: formatError(error) }),
-          );
+          void precacheProgress.update();
         },
       }),
     );
@@ -619,27 +616,19 @@ const offlineWarmup = createOfflineWarmup({
 let appPumpChain: Promise<unknown> = Promise.resolve();
 const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
   const process = async () => {
-    let lastEmit = 0;
-    let progress = Promise.resolve();
+    const progress = createOfflineProgressReporter(
+      async () => ({ ...(await offlineWarmup.getReadyState()), ready: false, phase: "precache" }),
+      onInterim,
+      (error) => logServiceWorker("offline progress failed", { error: formatError(error) }),
+    );
     let downloaded: boolean;
     try {
       downloaded = await deferredPrecache.runNextBatch(() => {
-        const now = Date.now();
-        if (now - lastEmit < PRECACHE_PROGRESS_THROTTLE_MS) return;
-        lastEmit = now;
-        progress = progress
-          .then(async () => {
-            onInterim({
-              ...(await offlineWarmup.getReadyState()),
-              ready: false,
-              phase: "precache",
-            });
-          })
-          .catch((error) => logServiceWorker("offline progress failed", { error: formatError(error) }));
+        void progress.update();
       });
     } finally {
       // Interim messages MUST finish before the final reply closes the page's subscription.
-      await progress;
+      await progress.flush();
     }
     if (!downloaded) return offlineWarmup.runNextUnit(onInterim);
     return {

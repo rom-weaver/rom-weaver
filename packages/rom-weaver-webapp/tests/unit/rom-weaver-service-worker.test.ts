@@ -445,13 +445,13 @@ describe("service worker bootstrap", () => {
         ports: [{ postMessage: (reply) => replies.push(reply as (typeof replies)[number]) }],
       });
       await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 3, ready: false }));
-      now += 200;
+      now += 50;
       await writer.write(new Uint8Array(4));
       await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 7, ready: false }));
       await writer.write(new Uint8Array(3));
       await writer.close();
       await Promise.all([interactive, pump]);
-      expect(replies.map((reply) => reply.cachedBytes)).toEqual([3, 7, 10]);
+      expect(replies.map((reply) => reply.cachedBytes)).toEqual([3, 7, 10, 10]);
       expect(replies.at(-1)).toMatchObject({ action: "offline-warmup-progress", ready: true });
     } finally {
       await writer.abort(new Error("test stream cleanup"));
@@ -955,9 +955,7 @@ describe("precache plugin", () => {
   const precacheMessages = (scope: { clientMessages: unknown[] }) =>
     scope.clientMessages.filter((message) => (message as { action?: string }).action === "offline-precache-progress");
 
-  it("broadcasts throttled install progress to uncontrolled pages", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
+  it("suppresses unchanged percentages but always broadcasts install completion to uncontrolled pages", async () => {
     const harness = await loadWorker();
     await dispatch(harness.scope, "install");
 
@@ -973,7 +971,6 @@ describe("precache plugin", () => {
     });
     expect(precacheMessages(harness.scope)).toHaveLength(1);
 
-    vi.setSystemTime(1_000_500);
     await harness.plugin.handlerDidComplete?.({
       event: { type: "install" },
       request: new Request(APP_SCOPE),
