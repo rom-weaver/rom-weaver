@@ -63,9 +63,11 @@ let cancel: (() => void) | undefined;
 
 afterEach(async () => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   cancel?.();
   cancel = undefined;
   await flush();
+  configureLogger({ level: "warn", sink: null });
 });
 
 describe("offline warm-up client", () => {
@@ -303,6 +305,8 @@ describe("offline warm-up client", () => {
       progressReply({ ready: true, unit: null }),
     ]);
     const { serviceWorker } = createServiceWorker(controller);
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
 
     pauseOfflineWarmup();
     cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
@@ -312,6 +316,11 @@ describe("offline warm-up client", () => {
     resumeOfflineWarmup();
     await flush();
     expect(messages.length).toBeGreaterThan(0);
+    const resumeLog = sink.mock.calls
+      .map(([record]) => record)
+      .find(({ message }) => message === "offline warm-up interactive wait ended");
+    expect(resumeLog?.details).toMatchObject({ aborted: false, pauseCount: 0 });
+    expect(resumeLog?.details?.durationMs).toBeGreaterThanOrEqual(10);
   });
 
   it("posts an identify-group bump and pumps immediately, even on data saver", async () => {
@@ -379,6 +388,91 @@ describe("offline warm-up client", () => {
     // Two interim events plus the final progress reply, in order.
     expect(onProgress.mock.calls.map(([progress]) => progress.cachedBytes)).toEqual([1, 2, 4]);
     expect(messages.filter((message) => message.action === "offline-warmup-pump")).toHaveLength(1);
+  });
+
+  it("logs measured pump and idle waits with decoded progress totals", async () => {
+    vi.stubGlobal("requestIdleCallback", undefined);
+    const replies = [
+      progressReply({ cachedFiles: 1, totalFiles: 2 }),
+      progressReply({ cachedBytes: 2, cachedFiles: 2, pendingUnits: 0, ready: true, totalFiles: 2 }),
+    ];
+    const messages: Reply[] = [];
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        messages.push(message);
+        const port = transfer?.[0] as MessagePort | undefined;
+        if (port) setTimeout(() => port.postMessage(replies.shift()), 12);
+      },
+    } as unknown as ServiceWorker;
+    const { serviceWorker } = createServiceWorker(controller);
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
+
+    cancel = scheduleOfflineWarmup({
+      delayMs: 0,
+      idleDelayMs: 20,
+      navigator: { connection: { downlink: 3, effectiveType: "3g", rtt: 300 }, serviceWorker },
+    });
+    await flush(90);
+
+    const logs = sink.mock.calls.map(([record]) => record);
+    expect(logs.find(({ message }) => message === "offline warm-up scheduler started")?.details).toMatchObject({
+      delayMs: 0,
+      downlinkMbpsHint: 3,
+      effectiveType: "3g",
+      idleDelayMs: 20,
+      idleMechanism: "timer",
+      rttMsHint: 300,
+    });
+    const requests = logs.filter(({ message }) => message === "offline warm-up pump requested");
+    const completions = logs.filter(({ message }) => message === "offline warm-up pump completed");
+    expect(messages).toHaveLength(2);
+    expect(requests).toHaveLength(2);
+    expect(completions).toHaveLength(2);
+    expect(completions[0]?.details).toMatchObject({
+      cachedFiles: 1,
+      decodedCachedByteCount: 1,
+      decodedTotalByteCount: 2,
+      pendingUnits: 1,
+      pumpNumber: 1,
+      totalFiles: 2,
+      unit: "emulatorjs:loader.js",
+    });
+    expect(completions[0]?.details?.durationMs).toBeGreaterThanOrEqual(10);
+    expect(
+      logs.find(({ message }) => message === "offline warm-up idle wait ended")?.details?.durationMs,
+    ).toBeGreaterThanOrEqual(15);
+    expect(requests[1]?.details?.sincePreviousPumpMs).toBeGreaterThanOrEqual(15);
+    expect(completions[0]?.details).not.toHaveProperty("networkMbps");
+  });
+
+  it("logs an aborted interactive wait without starting a pump", async () => {
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
+
+    pauseOfflineWarmup();
+    try {
+      cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      cancel();
+      cancel = undefined;
+      resumeOfflineWarmup();
+      await flush(5);
+
+      const logs = sink.mock.calls.map(([record]) => record);
+      expect(logs.some(({ message }) => message === "offline warm-up waiting for interactive work")).toBe(true);
+      expect(logs.find(({ message }) => message === "offline warm-up interactive wait ended")?.details).toMatchObject({
+        aborted: true,
+      });
+      expect(
+        logs.find(({ message }) => message === "offline warm-up interactive wait ended")?.details?.durationMs,
+      ).toBeGreaterThanOrEqual(15);
+      expect(messages).toHaveLength(0);
+    } finally {
+      resumeOfflineWarmup();
+    }
   });
 
   it("stops pumping after cancel", async () => {

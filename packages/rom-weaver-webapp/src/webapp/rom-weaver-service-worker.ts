@@ -14,6 +14,7 @@ import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.t
 import { createOfflineWarmup } from "./offline-warmup.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
+import { cacheWithDownloadLog, fetchWithDownloadLog, observeDownloadTimings } from "./pwa/offline-download-log.ts";
 import { keepResourceTimingsRecording, withMeasuredEncodedSize } from "./pwa/response-encoded-size.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
@@ -154,6 +155,22 @@ const logServiceWorker = (message: string, details?: Record<string, unknown>) =>
 const formatError = (error: unknown) => {
   if (error instanceof Error) return `${error.name}: ${error.message}`;
   return String(error);
+};
+
+const runServiceWorkerPhase = async (phase: string, run: () => Promise<unknown>) => {
+  const startedAt = performance.now();
+  logServiceWorker("service worker phase started", { phase });
+  try {
+    await run();
+    logServiceWorker("service worker phase complete", { phase, elapsedMs: Math.round(performance.now() - startedAt) });
+  } catch (error) {
+    logServiceWorker("service worker phase failed", {
+      phase,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      error: formatError(error),
+    });
+    throw error;
+  }
 };
 
 // Lazily load the persisted COEP mode into the in-memory flag. Only the first call after a (re)spawn
@@ -346,6 +363,8 @@ const precacheState = async () => {
 
 let firstInstallInProgress = false;
 let precacheInstalledCount = 0;
+let installStartedAt = 0;
+let precacheInstallFailed = false;
 let lastPrecacheBroadcast = 0;
 const precacheIncomingBytes = new Map<string, number>();
 
@@ -364,12 +383,29 @@ const broadcastPrecacheProgress = async () => {
 
 const precachePlugin: WorkboxPlugin = {
   async requestWillFetch({ event, request }) {
+    if (event.type === "install") logServiceWorker("precache download started", { url: new URL(request.url).pathname });
     return prioritizePrecacheInstallRequest(request, event);
   },
-  async handlerDidComplete({ event }) {
-    if (event.type !== "install" || !firstInstallInProgress) return;
+  async handlerDidComplete({ event, error, response, request }) {
+    if (event.type !== "install") return;
     precacheInstalledCount += 1;
+    if (error || !response) {
+      precacheInstallFailed = true;
+      logServiceWorker("precache install failed", {
+        url: new URL(request.url).pathname,
+        files: precacheInstalledCount,
+        elapsedMs: Math.round(performance.now() - installStartedAt),
+        error: error ? formatError(error) : "No precache response",
+      });
+    }
     const done = precacheInstalledCount >= INITIAL_MANIFEST.length;
+    if (done && !precacheInstallFailed) {
+      logServiceWorker("precache install complete", {
+        files: precacheInstalledCount,
+        elapsedMs: Math.round(performance.now() - installStartedAt),
+      });
+    }
+    if (!firstInstallInProgress) return;
     const now = Date.now();
     if (!done && now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
     lastPrecacheBroadcast = now;
@@ -398,6 +434,7 @@ const precachePlugin: WorkboxPlugin = {
     const url = new URL(request.url);
     url.searchParams.delete("__WB_REVISION__");
     precacheIncomingBytes.delete(url.href);
+    logServiceWorker("precache entry stored", { url: url.pathname });
   },
   async cacheWillUpdate({ request, response }) {
     // Workbox drops its own defaultPrecacheCacheabilityPlugin as soon as any
@@ -424,14 +461,23 @@ const toCredentiallessNoCorsRequest = (request: Request, credentialless = coepCr
 
 const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
   const credentialless = await ensureCoepModeHydrated();
-  const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request, credentialless));
+  const fetchedResponse = await fetchWithDownloadLog(
+    toCredentiallessNoCorsRequest(request, credentialless),
+    undefined,
+    logServiceWorker,
+  );
   // Cache the network response without its isolation headers: the stored entry then carries the
   // server's true headers, so a later COEP-mode flip re-stamps it correctly at serve time instead
   // of replaying a stale injected mode. The download size is the one header added, and it says
   // nothing about isolation.
   if (fetchedResponse.ok) {
     const cache = await caches.open(RUNTIME_CACHE_NAME);
-    await cache.put(request, await withMeasuredEncodedSize(request.url, fetchedResponse.clone()));
+    await cacheWithDownloadLog(
+      cache,
+      request,
+      await withMeasuredEncodedSize(request.url, fetchedResponse.clone()),
+      logServiceWorker,
+    );
   }
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
@@ -491,7 +537,12 @@ const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
 
   const fetchedResponse = await fetchForInteractive(toCredentiallessNoCorsRequest(request, credentialless));
   if (fetchedResponse.ok) {
-    await cache.put(request, await withMeasuredEncodedSize(request.url, fetchedResponse.clone()));
+    await cacheWithDownloadLog(
+      cache,
+      request,
+      await withMeasuredEncodedSize(request.url, fetchedResponse.clone()),
+      logServiceWorker,
+    );
   }
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
@@ -511,14 +562,16 @@ const isIdentifyPackRequest = (url: URL) =>
 
 // Use a low-priority fetch hint for background traffic; the browser decides whether to honor it.
 const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
-  fetch(input, { ...init, priority: "low" } as RequestInit);
-const fetchForInteractive = (input: Request | string, init?: RequestInit) => fetch(input, init);
+  fetchWithDownloadLog(input, { ...init, priority: "low" } as RequestInit, logServiceWorker);
+const fetchForInteractive = (input: Request | string, init?: RequestInit) =>
+  fetchWithDownloadLog(input, init, logServiceWorker);
 
 const deferredPrecache = createDeferredPrecache({
   entries: DEFERRED_MANIFEST,
   cacheName: DEFERRED_CACHE_NAME,
   scope: self.registration.scope,
   download: fetchForWarmup,
+  log: logServiceWorker,
 });
 
 registerRoute(
@@ -630,13 +683,17 @@ crypto.subtle
   .catch((error: unknown) => logServiceWorker("identify pack table digest failed", { error: formatError(error) }));
 
 keepResourceTimingsRecording(self);
+observeDownloadTimings(logServiceWorker);
 addPlugins([precachePlugin]);
 precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
 self.addEventListener("install", (event) => {
+  installStartedAt = performance.now();
+  precacheInstalledCount = 0;
+  precacheInstallFailed = false;
   // Existing complete entries MUST move before Workbox removes them on activation.
-  event.waitUntil(deferredPrecache.migrate(PRECACHE_NAME));
+  event.waitUntil(runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)));
   // First install (no active worker yet): take control immediately so the page can gain
   // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
   // must WAIT - registerType is "prompt", so activation happens only when the client sends
@@ -651,38 +708,44 @@ self.addEventListener("install", (event) => {
     precacheEntries: PRECACHE_MANIFEST.length,
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,
+    initialEntries: INITIAL_MANIFEST.length,
+    deferredEntries: DEFERRED_MANIFEST.length,
   });
   if (isFirstInstall) void self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((cacheNames) => findStaleServiceWorkerCaches(cacheNames, CACHE_POLICY))
-      .then((cachesToDelete) => {
-        logServiceWorker("activate event; deleting stale caches", {
-          cachesToDelete,
-          count: cachesToDelete.length,
-          emulatorJsCacheName: EMULATORJS_CACHE_NAME,
-          precacheVersion: PRECACHE_VERSION,
-        });
-        return Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName)));
-      })
-      .then(() => self.clients.claim())
-      .then(() => deferredPrecache.cleanup())
-      // Restore the persisted COEP mode so a respawned worker keeps serving require-corp if a prior
-      // session already degraded to it, instead of resetting to the credentialless default.
-      .then(() => ensureCoepModeHydrated())
-      .then(() => {
-        firstInstallInProgress = false;
-        precacheIncomingBytes.clear();
-        logServiceWorker("activate event; clients claimed", {
-          coepCredentialless,
-          precacheName: PRECACHE_NAME,
-          runtimeCacheName: RUNTIME_CACHE_NAME,
-        });
-      }),
+    runServiceWorkerPhase("activate", () =>
+      caches
+        .keys()
+        .then((cacheNames) => findStaleServiceWorkerCaches(cacheNames, CACHE_POLICY))
+        .then((cachesToDelete) => {
+          logServiceWorker("activate event; deleting stale caches", {
+            cachesToDelete,
+            count: cachesToDelete.length,
+            emulatorJsCacheName: EMULATORJS_CACHE_NAME,
+            precacheVersion: PRECACHE_VERSION,
+          });
+          return runServiceWorkerPhase("delete stale caches", () =>
+            Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName))),
+          );
+        })
+        .then(() => runServiceWorkerPhase("claim clients", () => self.clients.claim()))
+        .then(() => runServiceWorkerPhase("clean deferred cache", () => deferredPrecache.cleanup()))
+        // Restore the persisted COEP mode so a respawned worker keeps serving require-corp if a prior
+        // session already degraded to it, instead of resetting to the credentialless default.
+        .then(() => runServiceWorkerPhase("restore isolation mode", () => ensureCoepModeHydrated()))
+        .then(() => {
+          firstInstallInProgress = false;
+          precacheIncomingBytes.clear();
+          logServiceWorker("activate event; clients claimed", {
+            coepCredentialless,
+            precacheName: PRECACHE_NAME,
+            runtimeCacheName: RUNTIME_CACHE_NAME,
+          });
+        }),
+    ),
   );
 });
 

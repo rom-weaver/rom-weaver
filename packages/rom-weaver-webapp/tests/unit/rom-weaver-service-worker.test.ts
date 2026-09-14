@@ -11,7 +11,12 @@ type CapturedPlugin = {
   fetchDidSucceed?: (options: { event: { type: string }; request: Request; response: Response }) => Promise<Response>;
   cacheDidUpdate?: (options: { request: Request }) => Promise<void>;
   cacheWillUpdate?: (options: { request: Request; response: Response }) => Promise<Response | null | undefined>;
-  handlerDidComplete?: (options: { event: { type: string } }) => Promise<void>;
+  handlerDidComplete?: (options: {
+    event: { type: string };
+    request: Request;
+    response?: Response;
+    error?: Error;
+  }) => Promise<void>;
   handlerWillRespond?: (options: { response: Response }) => Promise<Response>;
   requestWillFetch?: (options: { event: { type: string }; request: Request }) => Promise<Request>;
 };
@@ -796,6 +801,82 @@ describe("identify pack route", () => {
 });
 
 describe("precache plugin", () => {
+  it("logs install completion and activation stages when updating an existing worker", async () => {
+    const harness = await loadWorker({ hasActiveWorker: true, manifest: ["index.html"] });
+    let now = 100;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    await dispatch(harness.scope, "install");
+    now = 350;
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        action: "service-worker-log",
+        message: "precache install complete",
+        details: { files: 1, elapsedMs: 250 },
+      }),
+    );
+    harness.scope.clients.claim.mockImplementation(async () => {
+      now += 75;
+    });
+    await dispatch(harness.scope, "activate");
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        message: "service worker phase complete",
+        details: { phase: "claim clients", elapsedMs: 75 },
+      }),
+    );
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        message: "service worker phase complete",
+        details: { phase: "activate", elapsedMs: 75 },
+      }),
+    );
+  });
+
+  it("logs an install failure without labeling it complete", async () => {
+    const harness = await loadWorker({ manifest: ["index.html"] });
+    await dispatch(harness.scope, "install");
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      error: new Error("cache write failed"),
+    });
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({ message: "precache install failed" }),
+    );
+    expect(harness.scope.clientMessages).not.toContainEqual(
+      expect.objectContaining({ message: "precache install complete" }),
+    );
+  });
+
+  it("logs a rejected Workbox response before the remaining install entries run", async () => {
+    const harness = await loadWorker();
+    await dispatch(harness.scope, "install");
+    vi.stubGlobal("FetchEvent", Event);
+    vi.stubGlobal("ExtendableEvent", Event);
+    vi.stubGlobal("location", harness.scope.location);
+    harness.fetchStub.stub.mockRejectedValue(new Error("network lost"));
+    const { PrecacheStrategy } = await import("workbox-precaching/PrecacheStrategy.js");
+    const strategy = new PrecacheStrategy({ plugins: [{ handlerDidComplete: harness.plugin.handlerDidComplete }] });
+    const event = Object.assign(new Event("install"), { waitUntil: vi.fn() });
+    const [response, done] = strategy.handleAll({ event, request: new Request(APP_SCOPE) });
+    await expect(response).rejects.toThrow();
+    await done;
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        message: "precache install failed",
+        details: expect.objectContaining({ files: 1, error: "No precache response" }),
+      }),
+    );
+    expect(harness.scope.clientMessages).not.toContainEqual(
+      expect.objectContaining({ message: "precache install complete" }),
+    );
+  });
+
   it("reports incoming bytes before an install response finishes", async () => {
     const harness = await loadWorker();
     await dispatch(harness.scope, "install", {});
@@ -876,12 +957,24 @@ describe("precache plugin", () => {
     const harness = await loadWorker();
     await dispatch(harness.scope, "install");
 
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
     expect(precacheMessages(harness.scope)).toHaveLength(1);
 
     vi.setSystemTime(1_000_500);
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
 
     expect(precacheMessages(harness.scope)).toHaveLength(2);
     expect(precacheMessages(harness.scope)[0]).toMatchObject({
@@ -897,8 +990,16 @@ describe("precache plugin", () => {
     const harness = await loadWorker({ hasActiveWorker: true });
     await dispatch(harness.scope, "install");
 
-    await harness.plugin.handlerDidComplete?.({ event: { type: "fetch" } });
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "fetch" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
 
     expect(precacheMessages(harness.scope)).toEqual([]);
   });

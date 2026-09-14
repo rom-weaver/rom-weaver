@@ -37,7 +37,7 @@ type ServiceWorkerContainerLike = {
 type NavigatorLike = {
   serviceWorker?: ServiceWorkerContainerLike;
   onLine?: boolean;
-  connection?: { saveData?: boolean };
+  connection?: { downlink?: number; effectiveType?: string; rtt?: number; saveData?: boolean };
 };
 
 type ScheduleOfflineWarmupOptions = {
@@ -185,13 +185,27 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   const abortController = new AbortController();
   const signal = abortController.signal;
   const idleDelayMs = options.idleDelayMs ?? IDLE_DELAY_MS;
+  const delayMs = options.delayMs ?? 0;
+  const idleMechanism = typeof requestIdleCallback === "function" ? "requestIdleCallback" : "timer";
   const saveData = nav?.connection?.saveData === true;
+  logger.debug("offline warm-up scheduler started", {
+    delayMs,
+    idleDelayMs,
+    idleMechanism,
+    onLine: nav?.onLine,
+    saveData,
+    effectiveType: nav?.connection?.effectiveType,
+    downlinkMbpsHint: nav?.connection?.downlink,
+    rttMsHint: nav?.connection?.rtt,
+  });
   // On data-saver, the loop runs only while a bump target is still pending.
   const activeBumps: WarmupBumpTarget[] = [];
   let loopRunning = false;
   let started = false;
   let resumeWaiters: (() => void)[] = [];
   let consecutiveFailures = 0;
+  let pumpNumber = 0;
+  let previousPumpCompletedAt: number | null = null;
 
   const notifyResume = () => {
     const waiters = resumeWaiters;
@@ -215,7 +229,16 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     loopRunning = true;
     try {
       while (!signal.aborted) {
-        while (pauseCount > 0 && !signal.aborted) await waitForResume();
+        while (pauseCount > 0 && !signal.aborted) {
+          const waitStartedAt = performance.now();
+          logger.debug("offline warm-up waiting for interactive work", { pauseCount });
+          await waitForResume();
+          logger.debug("offline warm-up interactive wait ended", {
+            aborted: signal.aborted,
+            durationMs: performance.now() - waitStartedAt,
+            pauseCount,
+          });
+        }
         if (signal.aborted) return;
         if (nav?.onLine === false) {
           // Nothing can download offline. The loop exits; the online listener
@@ -225,18 +248,43 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
         }
         const controller = serviceWorker.controller;
         if (!controller) return;
+        const currentPump = ++pumpNumber;
+        const pumpStartedAt = performance.now();
+        logger.debug("offline warm-up pump requested", {
+          pumpNumber: currentPump,
+          sincePreviousPumpMs: previousPumpCompletedAt === null ? null : pumpStartedAt - previousPumpCompletedAt,
+        });
         let reply: Record<string, unknown>;
         try {
           reply = await postPump(controller, "offline-warmup-pump", (interim) => {
             options.onProgress?.(interim as unknown as OfflineWarmupProgress);
           });
         } catch (error) {
+          previousPumpCompletedAt = performance.now();
+          logger.debug("offline warm-up pump completed", {
+            durationMs: previousPumpCompletedAt - pumpStartedAt,
+            outcome: "error",
+            pumpNumber: currentPump,
+          });
           consecutiveFailures += 1;
           const delay = Math.min(MAX_FAILURE_DELAY_MS, 1000 * 2 ** consecutiveFailures);
           logger.warn("offline warm-up pump failed", { delayMs: delay, error: formatError(error) });
           await waitMs(delay, signal);
           continue;
         }
+        previousPumpCompletedAt = performance.now();
+        logger.debug("offline warm-up pump completed", {
+          action: reply.action,
+          cachedFiles: reply.cachedFiles,
+          decodedCachedByteCount: reply.cachedBytes,
+          decodedTotalByteCount: reply.totalBytes,
+          durationMs: previousPumpCompletedAt - pumpStartedAt,
+          pendingUnits: reply.pendingUnits,
+          pumpNumber: currentPump,
+          ready: reply.ready,
+          totalFiles: reply.totalFiles,
+          unit: reply.unit,
+        });
         if (reply.action === "offline-warmup-failed") {
           consecutiveFailures += 1;
           const delay = Math.min(MAX_FAILURE_DELAY_MS, 1000 * 2 ** consecutiveFailures);
@@ -263,7 +311,13 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
           logger.debug("offline warm-up stopped; data saver is on and no bump is pending");
           return;
         }
+        const idleStartedAt = performance.now();
         await waitForIdle(signal, idleDelayMs);
+        logger.debug("offline warm-up idle wait ended", {
+          aborted: signal.aborted,
+          durationMs: performance.now() - idleStartedAt,
+          idleMechanism,
+        });
       }
     } finally {
       loopRunning = false;
@@ -306,7 +360,6 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
       started = true;
       void runLoop();
     };
-    const delayMs = options.delayMs ?? 0;
     if (delayMs <= 0) begin();
     else void waitMs(delayMs, signal).then(begin);
   };

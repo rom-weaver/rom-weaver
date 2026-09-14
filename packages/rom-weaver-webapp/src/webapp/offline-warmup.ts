@@ -9,6 +9,7 @@ import {
   encodedSizeOf,
   readWithByteProgress,
 } from "./pwa/response-encoded-size.ts";
+import { cacheWithDownloadLog } from "./pwa/offline-download-log.ts";
 
 type IdentifyOptionalPack = { sha256: string; sizeBytes?: number; url: string };
 
@@ -175,6 +176,7 @@ const fetchVerifiedPack = async (
   scope: string,
   fetcher: WarmupFetcher,
   onBytes?: (delta: number) => void,
+  log: (message: string, details?: Record<string, unknown>) => void = () => undefined,
 ) => {
   const request = new Request(new URL(pack.url, scope));
   const response = await fetcher(request);
@@ -182,7 +184,14 @@ const fetchVerifiedPack = async (
     throw new Error(`ROM identify pack download failed with HTTP ${response.status}: ${pack.url}`);
   }
   const buffer = await readWithByteProgress(response, onBytes);
+  const verifyStartedAt = performance.now();
   const actualSha256 = await sha256HexOf(buffer);
+  log("identify pack checksum complete", {
+    url: new URL(request.url).pathname,
+    elapsedMs: Math.round(performance.now() - verifyStartedAt),
+    decodedByteCount: buffer.byteLength,
+    matched: actualSha256 === pack.sha256,
+  });
   // The digests go in the message because this error is only ever seen through
   // a caller's log line: expected != actual means this worker's baked pack
   // table is a different data revision than the bytes the origin now serves.
@@ -510,8 +519,8 @@ const createOfflineWarmup = ({
         onBytes?.(pack.sizeBytes || 0);
         continue;
       }
-      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes);
-      await cache.put(request, response);
+      const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
+      await cacheWithDownloadLog(cache, request, response, log);
     }
     await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
     if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === group.id));
@@ -583,7 +592,7 @@ const createOfflineWarmup = ({
     const response = await fetchForWarmup(url);
     if (!response.ok) throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
     const buffer = await readWithByteProgress(response, onBytes);
-    await cache.put(url, bufferedResponse(response, buffer, encodedSizeOf(url)));
+    await cacheWithDownloadLog(cache, url, bufferedResponse(response, buffer, encodedSizeOf(url)), log);
   };
 
   /** Write the completion marker once no emulatorjs file unit remains. */
@@ -761,8 +770,14 @@ const createOfflineWarmup = ({
       url: requestUrl.pathname,
     });
     // An identify run MAY fetch one pack before group installation. Keep the group marker absent and use interactive priority.
-    const { request: packRequest, response } = await fetchVerifiedPack(pack, scope, fetchForInteractive);
-    await cache.put(packRequest, response.clone());
+    const { request: packRequest, response } = await fetchVerifiedPack(
+      pack,
+      scope,
+      fetchForInteractive,
+      undefined,
+      log,
+    );
+    await cacheWithDownloadLog(cache, packRequest, response.clone(), log);
     return response;
   };
 

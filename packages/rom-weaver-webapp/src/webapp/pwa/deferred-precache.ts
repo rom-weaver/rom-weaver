@@ -1,4 +1,5 @@
 import { bufferedResponse, encodedSizeOf, readWithByteProgress } from "./response-encoded-size.ts";
+import { cacheWithDownloadLog } from "./offline-download-log.ts";
 
 type DeferredEntry = { url: string; revision?: string | null; sizeBytes?: number };
 
@@ -9,11 +10,13 @@ const createDeferredPrecache = ({
   cacheName,
   scope,
   download,
+  log = () => undefined,
 }: {
   entries: DeferredEntry[];
   cacheName: string;
   scope: string;
   download: (request: Request) => Promise<Response>;
+  log?: (message: string, details?: Record<string, unknown>) => void;
 }) => {
   const files = entries.map((entry) => {
     const url = new URL(entry.url, scope);
@@ -85,7 +88,7 @@ const createDeferredPrecache = ({
             for (const listener of progressListeners) listener(delta);
           });
           const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
-          await cache.put(file.key, complete.clone());
+          await cacheWithDownloadLog(cache, file.key, complete.clone(), log);
           return complete;
         })(),
       };
