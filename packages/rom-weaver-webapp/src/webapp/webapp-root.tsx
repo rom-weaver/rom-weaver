@@ -46,7 +46,7 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
-import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
+import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import type { OfflineWarmupDisplayProgress, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
@@ -85,6 +85,8 @@ import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 const WORKFLOW_TABS: WorkflowTab[] = [
   // "Apply Patch": the tab both applies patch chains and edits/exports them as bundles.
   {
+    dock: true,
+    group: "patches",
     href: "apply-patch",
     icon: <ApplyBandaidIcon className="apply-tab-icon" />,
     id: "patcher",
@@ -92,61 +94,68 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Apply",
   },
   {
+    dock: true,
+    group: "patches",
     href: "create-patch",
     icon: <GitCompare aria-hidden="true" />,
     id: "creator",
     label: "Create Patch",
     railLabel: "Create",
   },
-  { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM", railLabel: "Test" },
-  // Reference rather than a workflow: a More entry under Project.
-  { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
   {
-    group: "tools",
+    group: "patches",
     href: "apply-patch#bundle",
     icon: <Package aria-hidden="true" />,
     id: "bundle",
     label: "Bundle Patches",
-    placement: "more",
-  },
-  // Beta utility routes. They stay behind the beta-tools setting and show up
-  // under Tools in More once it is on.
-  {
-    beta: true,
-    group: "tools",
-    href: "identify-rom",
-    icon: <ScanSearch aria-hidden="true" />,
-    id: "identify",
-    label: "Identify ROM",
-    placement: "more",
+    railLabel: "Bundle",
   },
   {
     beta: true,
-    group: "tools",
-    href: "trim-rom",
-    icon: <Scissors aria-hidden="true" />,
-    id: "trim",
-    label: "Trim ROM",
-    placement: "more",
-  },
-  {
-    beta: true,
-    group: "tools",
+    group: "patches",
     href: "ppf-undo",
     icon: <RotateCcw aria-hidden="true" />,
     id: "ppf-undo",
     label: "PPF undo",
-    placement: "more",
   },
   {
     beta: true,
-    group: "tools",
+    group: "roms",
+    href: "identify-rom",
+    icon: <ScanSearch aria-hidden="true" />,
+    id: "identify",
+    label: "Identify ROM",
+    railLabel: "Identify",
+  },
+  {
+    beta: true,
+    group: "roms",
+    href: "trim-rom",
+    icon: <Scissors aria-hidden="true" />,
+    id: "trim",
+    label: "Trim ROM",
+    railLabel: "Trim",
+  },
+  {
+    dock: true,
+    group: "roms",
+    href: "test-rom",
+    icon: <Gamepad2 aria-hidden="true" />,
+    id: "test",
+    label: "Test ROM",
+    railLabel: "Test",
+  },
+  {
+    beta: true,
+    group: "roms",
     href: "save-editor",
     icon: <SaveIcon aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
-    placement: "more",
+    railLabel: "Saves",
   },
+  // Reference rather than a workflow, so it sits with the project links.
+  { group: "project", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
 ];
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
@@ -550,8 +559,8 @@ function WebappRoot({
   const handleSelectTab = useCallback(
     (id: string) => {
       if (notFound) {
-        // Not-found's More menu can also reach a tab with no rail entry
-        // (What's new), so it falls back to the id itself as the slug.
+        // The nav can also reach a view with no WorkflowTab entry (What's
+        // new), so it falls back to the id itself as the slug.
         const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
         if (href) window.location.assign(`/${href}`);
         return;
@@ -698,12 +707,13 @@ function WebappRoot({
 
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
+      /* A named section is already a region; it takes its name from the nav
+         row that reaches it, since the sidebar is a nav rather than a tablist. */
       <section
         aria-labelledby={`tab-${view}`}
         className="panel workflow"
         hidden={state.currentView !== view}
         id={`panel-${view}`}
-        role="tabpanel"
       >
         {view === "docs" || view === "whats-new" ? null : (
           <div className="workflow-panel-head">
@@ -766,7 +776,6 @@ function WebappRoot({
             versionTitle={`v${APP_BUILD_VERSION}`}
             onSelectTab={handleSelectTab}
             tabs={mastheadTabs}
-            tabsControlPanels={!notFound}
           />
           <UpdateBanner
             onDismiss={() => {
@@ -888,12 +897,6 @@ function WebappRoot({
               </>
             )}
           </main>
-          <SiteFooter
-            confirmExternalNavigation={actions.onConfirmExternalNavigation}
-            docsHref={notFound ? "/docs" : "docs"}
-            donateHref={DONATE_URL}
-            githubHref={GITHUB_URL}
-          />
           {/* the dock is fixed, so the column reserves its height through the one
               variable masthead.css raises below the dock threshold */}
           <div aria-hidden="true" className="dock-pad" />

@@ -3,14 +3,14 @@ import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
-import { Masthead, Reveal, SiteFooter, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
+import { Masthead, Reveal, UpdateBanner } from "../../../src/webapp/components/shell.tsx";
 import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 
 /**
- * App-shell contract: the masthead tablist and the phone dock (both named
- * "Workflow" - the webapp browser test drives tabs by that role/name), the
- * brand's build/threads/runtime controls, the actions cluster, and the
- * update banner.
+ * App-shell contract: one description of the navigation rendered as the desktop
+ * sidebar and as the phone Menu sheet, the dock's three workflow slots plus
+ * Menu, the identity block's build/threads/runtime controls, the top bar's
+ * appearance and project tiles, and the update banner.
  */
 
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
@@ -21,36 +21,59 @@ const withSettings = (children: ReactNode) => (
 );
 
 const TABS = [
-  { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
-  { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
+  {
+    dock: true,
+    group: "patches",
+    href: "apply",
+    icon: <svg aria-hidden="true" />,
+    id: "patcher",
+    label: "Apply Patch",
+    railLabel: "Apply",
+  },
+  {
+    dock: true,
+    group: "patches",
+    href: "create",
+    icon: <svg aria-hidden="true" />,
+    id: "creator",
+    label: "Create Patch",
+    railLabel: "Create",
+  },
+  {
+    dock: true,
+    group: "roms",
+    href: "test",
+    icon: <svg aria-hidden="true" />,
+    id: "test",
+    label: "Test ROM",
+    railLabel: "Test",
+  },
+  { group: "project", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   {
     beta: true,
-    group: "tools",
+    group: "roms",
     href: "trim",
     icon: <svg aria-hidden="true" />,
     id: "trim",
-    label: "Trim",
-    placement: "more",
+    label: "Trim ROM",
+    railLabel: "Trim",
   },
   {
     beta: true,
-    group: "tools",
+    group: "patches",
     href: "ppf-undo",
     icon: <svg aria-hidden="true" />,
     id: "ppf-undo",
     label: "PPF undo",
-    placement: "more",
   },
   {
     beta: true,
-    group: "tools",
+    group: "roms",
     href: "save-editor",
     icon: <svg aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
-    placement: "more",
+    railLabel: "Saves",
   },
 ] satisfies WorkflowTab[];
 
@@ -70,153 +93,147 @@ const mastheadProps = {
   version: "1.2.3",
 };
 
+/** Labels of the rows one nav actually shows, in order. */
+const rowsOf = (nav: Element | null) =>
+  Array.from(nav?.querySelectorAll<HTMLElement>(".nav-row") ?? [])
+    .filter((row) => !row.hidden)
+    .map((row) => row.querySelector(".nav-row-label")?.textContent ?? "");
+
 describe("Masthead", () => {
-  it("renders the Workflow rail and dock with the selected mode and the tool buttons", () => {
+  it("names every destination in the sidebar, under the group that supplies its noun", () => {
     const onSelectTab = vi.fn();
-    const { container, getAllByRole, getByRole } = render(
-      withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />),
-    );
-    const [rail, dock] = getAllByRole("tablist", { name: "Workflow" });
-    expect(rail?.classList.contains("mode-rail")).toBe(true);
-    expect(dock?.classList.contains("dock-tabs")).toBe(true);
-    expect(rail?.querySelector(".mode-thumb")).toBeTruthy();
-    expect(dock?.querySelector(".dock-thumb")).toBeTruthy();
+    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    const nav = container.querySelector(".side-nav") as HTMLElement;
+    expect(nav.getAttribute("aria-label")).toBe("Workflow");
+    // Nothing is filed under an unnamed overflow: the four headings are the
+    // whole map, and every workflow appears exactly once.
+    expect(Array.from(nav.querySelectorAll(".nav-group-label")).map((h) => h.textContent)).toEqual([
+      "Patches",
+      "ROMs",
+      "This device",
+      "Project",
+    ]);
+    expect(rowsOf(nav)).toEqual([
+      "Apply",
+      "Create",
+      "PPF undo",
+      "Test",
+      "Trim",
+      "Saves",
+      "Status",
+      "Storage",
+      "Logs",
+      "Settings",
+      "Docs",
+      "What\u2019s new",
+      "GitHub",
+      "Support",
+    ]);
+
     // "/" maps to no route, so the brand has to name one or the browser
     // hard-reloads and every staged file goes with it.
     const logoHome = getByRole("link", { name: "rom-weaver home" });
     expect(logoHome.getAttribute("href")).toBe("/apply");
     expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
+    // The identity block is stated once, so the two layouts cannot disagree.
+    expect(container.querySelectorAll("h1").length).toBe(1);
+    expect(container.querySelectorAll(".brand").length).toBe(1);
+    expect(container.querySelectorAll(".masthead-threads").length).toBe(1);
+    expect(container.querySelectorAll(".sub-status").length).toBe(1);
 
-    for (const [list, selectedClass, labels] of [
-      [rail, "mode", ["Apply", "Create", "Test"]],
-      [dock, "dock-tab", ["Apply", "Create", "Test"]],
-    ] as const) {
-      const tabs = Array.from(list?.querySelectorAll('[role="tab"]') ?? []);
-      expect(tabs.map((tab) => tab.textContent)).toEqual(labels);
-      expect(list?.querySelector('[data-mode="docs"]')).toBeNull();
-      expect(list?.querySelector('[data-mode="trim"]')).toBeNull();
-      expect(list?.querySelector('[data-mode="ppf-undo"]')).toBeNull();
-      expect(list?.querySelector('[data-mode="save-editor"]')).toBeNull();
-      expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
-      expect(tabs[0]?.classList.contains(selectedClass)).toBe(true);
-      // roving tabindex: exactly one reachable tab per list
-      expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
-    }
-
-    fireEvent.click(rail?.querySelectorAll('[role="tab"]')[1] as HTMLAnchorElement);
+    const apply = nav.querySelector('[aria-current="page"]') as HTMLAnchorElement;
+    expect(apply.textContent).toBe("Apply");
+    expect(apply.id).toBe("tab-patcher");
+    expect(apply.getAttribute("aria-label")).toBe("Apply Patch");
+    fireEvent.click(rowsOf(nav).length ? (nav.querySelectorAll(".nav-row")[1] as HTMLAnchorElement) : apply);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
-
-    // Find plus the stateful controls (status, theme, accent) - Reset lives in
-    // the workflow panel head, More is nav level, and every destination is in More
-    expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(4);
-    expect(container.querySelector(".masthead-tools .tool.find-trigger")?.getAttribute("aria-label")).toBe("Find");
-    expect(container.querySelector(".masthead-links")).toBeNull();
-    expect(container.querySelector(".actions-sep")).toBeNull();
-    expect(container.querySelector(".tool-support")).toBeNull();
-    expect(container.querySelector(".accent-tool")).toBeTruthy();
-    expect(container.querySelector('[aria-label="Reset"]')).toBeNull();
-    // More shares the visual rail, but it is never a tab in the tablist.
-    expect(container.querySelector(".mode-rail-shell > .desktop-more .mode-more")).toBeTruthy();
-    expect(container.querySelector('.mode-rail [aria-haspopup="menu"]')).toBeNull();
   });
 
-  it("only lands focus on the first menu item when More is opened by keyboard", () => {
+  it("gives the phone Menu the same sections in the same order as the sidebar", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
+    const sheet = container.querySelector(".menu-sheet") as HTMLElement;
+    expect(sheet.getAttribute("aria-label")).toBe("Menu");
+    expect(sheet.hasAttribute("hidden")).toBe(true);
+    // The sheet's rows are the sidebar's rows, so the prerendered shell ships
+    // them once and the sheet fills in the first time Menu is opened.
+    expect(rowsOf(sheet)).toEqual([]);
 
-    // A pointer open parks focus on the menu box, so no row wears a focus ring.
-    fireEvent.pointerDown(more);
-    fireEvent.click(more);
-    const menu = container.querySelector('[role="menu"]') as HTMLElement;
-    expect(menu.getAttribute("tabindex")).toBe("-1");
-    expect(document.activeElement).toBe(menu);
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
 
-    fireEvent.pointerDown(more);
-    fireEvent.click(more);
-
-    // Enter and Space fire click with no preceding pointerdown.
-    fireEvent.click(more);
-    const firstItem = container.querySelector('[role="menu"] [role="menuitem"]');
-    expect(document.activeElement).toBe(firstItem);
+    expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")));
   });
 
-  it("keeps utility destinations behind More on both layouts", () => {
-    const onOpenStorage = vi.fn();
-    const { container, getByRole, queryByRole } = render(
-      withSettings(
-        <Masthead
-          {...mastheadProps}
-          offlineProgress={{ cachedBytes: 1, ready: true, totalBytes: 1 }}
-          onOpenStorage={onOpenStorage}
-          serviceWorkerStatus="active"
-        />,
-      ),
-    );
-    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
-    expect(more.getAttribute("aria-expanded")).toBe("false");
-    expect(container.querySelector('[role="menu"]')).toBeNull();
-
-    fireEvent.click(more);
-    const menu = container.querySelector('[role="menu"]') as HTMLElement;
-    expect(more.getAttribute("aria-expanded")).toBe("true");
-    expect(menu.hidden).toBe(false);
-    const menuStatus = getByRole("menuitem", { name: "Status" });
-    expect(menuStatus.classList.contains("more-status")).toBe(true);
-    expect(menuStatus.getAttribute("data-sw")).toBe("active");
-    expect(menuStatus.querySelector("svg")?.innerHTML).toBe(container.querySelector(".sub-status svg")?.innerHTML);
-    // Every destination lives in More: Docs, GitHub and Support under Project,
-    // Settings in the head row.
-    expect(getByRole("menuitem", { name: "Docs" }).getAttribute("href")).toBe("docs");
-    expect(getByRole("menuitem", { name: "View source on GitHub" })).toBeTruthy();
-    expect(getByRole("menuitem", { name: "Support" })).toBeTruthy();
-    expect(getByRole("menuitem", { name: "Settings" }).classList.contains("more-head-item")).toBe(true);
-    // With the selected workflow in the rail, More is not "you are here".
-    expect(more.classList.contains("is-current")).toBe(false);
-    expect(getByRole("menuitem", { name: "Trim Beta" })).toBeTruthy();
-    expect(getByRole("menuitem", { name: "PPF undo Beta" })).toBeTruthy();
-    expect(getByRole("group", { name: "Tools" })).toBeTruthy();
-    expect(queryByRole("group", { name: "Docs" })).toBeNull();
-    expect(getByRole("group", { name: "Project" })).toBeTruthy();
-    expect(getByRole("menuitem", { name: "What\u2019s new" })).toBeTruthy();
-    // The head row keeps the app's own surfaces one tap away on desktop too.
-    expect(getByRole("menuitem", { name: "Status" }).classList.contains("more-head-item")).toBe(true);
-    fireEvent.click(getByRole("menuitem", { name: "Storage" }));
-    expect(onOpenStorage).toHaveBeenCalledTimes(1);
-    expect(more.getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("keeps the DOM in visual order: brand, rail, then the action group", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const order = Array.from(container.querySelectorAll(".brand, .masthead-tools, .modes")).map(
-      (node) => node.className.split(" ")[0],
-    );
-    expect(order).toEqual(["brand", "modes", "masthead-tools"]);
-  });
-
-  it("marks More current when Docs is selected", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
-    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
-    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
-  });
-
-  it("marks More current when a tool inside it is selected", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="trim" />));
-    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
-    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
-  });
-
-  it("marks More current on What's new, which has no rail tab of its own", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="whats-new" />));
-    expect(container.querySelector(".desktop-more .mode-more.is-current")).not.toBeNull();
-    expect(container.querySelector(".mobile-more .dock-action.is-current")).not.toBeNull();
-  });
-
-  it("keeps the What's new row a real link so a modified click opens it normally", () => {
+  it("docks three workflows plus Menu, and toggles the sheet from the same button", () => {
     const onSelectTab = vi.fn();
-    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-    const row = getByRole("menuitem", { name: "What\u2019s new" }) as HTMLAnchorElement;
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    const dockNav = container.querySelector(".dock") as HTMLElement;
+    const slots = Array.from(dockNav.children);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Menu"]);
+    expect(slots[0]?.getAttribute("aria-current")).toBe("page");
+
+    const menu = container.querySelector(".dock-menu") as HTMLButtonElement;
+    const sheet = container.querySelector(".menu-sheet") as HTMLElement;
+    expect(menu.getAttribute("aria-controls")).toBe(sheet.id);
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(menu);
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+    expect(sheet.hidden).toBe(false);
+    // Clicking Menu again closes it; so does Escape.
+    fireEvent.click(menu);
+    expect(sheet.hidden).toBe(true);
+    fireEvent.click(menu);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(sheet.hidden).toBe(true);
+
+    fireEvent.click(slots[2] as HTMLAnchorElement);
+    expect(onSelectTab).toHaveBeenCalledWith("test");
+  });
+
+  it("closes the Menu sheet when a row inside it routes", () => {
+    const onSelectTab = vi.fn();
+    const onOpenStorage = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} onSelectTab={onSelectTab} />),
+    );
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    const sheet = container.querySelector(".menu-sheet") as HTMLElement;
+    fireEvent.click(within(sheet).getByRole("button", { name: "Storage" }));
+    expect(onOpenStorage).toHaveBeenCalledTimes(1);
+    expect(sheet.hidden).toBe(true);
+  });
+
+  it("hides beta workflows from both layouts while the setting is off", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ betaToolsEnabled: false }}>
+        <Masthead {...mastheadProps} />
+      </RomWeaverSettingsProvider>,
+    );
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    for (const nav of [".side-nav", ".menu-sheet"]) {
+      const labels = rowsOf(container.querySelector(nav));
+      expect(labels).not.toContain("Trim");
+      expect(labels).not.toContain("PPF undo");
+      expect(labels).not.toContain("Saves");
+      expect(labels).toContain("Apply");
+    }
+    // The rows are still in the markup: the setting is client-only, so the
+    // prerendered shell and the first hydration pass must agree on the DOM.
+    expect(container.querySelector('.side-nav .nav-row[href="trim"]')?.hasAttribute("hidden")).toBe(true);
+  });
+
+  it("wears a BETA chip beside the name it qualifies", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const trim = container.querySelector('.side-nav .nav-row[href="trim"]') as HTMLElement;
+    expect(trim.querySelector(".nav-beta")?.textContent).toBe("Beta");
+    // The chip follows the label rather than being pushed to the row's edge.
+    expect(trim.querySelector(".nav-row-label")?.nextElementSibling?.classList.contains("nav-beta")).toBe(true);
+  });
+
+  it("keeps every workflow row a real link so a modified click opens it normally", () => {
+    const onSelectTab = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    const row = container.querySelector('.side-nav .nav-row[href="whats-new"]') as HTMLAnchorElement;
     expect(row.getAttribute("href")).toBe("whats-new");
     fireEvent.click(row, { ctrlKey: true });
     expect(onSelectTab).not.toHaveBeenCalled();
@@ -224,17 +241,78 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("whats-new");
   });
 
-  it("activates a tab with Space as well as Enter", () => {
-    const onSelectTab = vi.fn();
-    const { getAllByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
-    const rail = getAllByRole("tablist", { name: "Workflow" })[0] as HTMLElement;
-    fireEvent.keyDown(rail, { key: " " });
-    expect(onSelectTab).toHaveBeenCalledWith("patcher");
-    fireEvent.keyDown(rail, { key: "ArrowRight" });
-    expect(onSelectTab).toHaveBeenCalledWith("creator");
+  it("marks the current page in the nav, including a view with no dock slot", () => {
+    for (const [view, label] of [
+      ["docs", "Docs"],
+      ["trim", "Trim"],
+      ["whats-new", "What\u2019s new"],
+    ] as const) {
+      const { container, unmount } = render(withSettings(<Masthead {...mastheadProps} currentTab={view} />));
+      const current = container.querySelector('.side-nav [aria-current="page"]') as HTMLElement;
+      expect(current.querySelector(".nav-row-label")?.textContent).toBe(label);
+      // No dock slot claims to be the current page when the view is not docked.
+      expect(container.querySelector('.dock [aria-current="page"]')).toBeNull();
+      unmount();
+    }
   });
 
-  it("carries the build, thread count and runtime state on the brand sub-line", () => {
+  it("puts appearance and the project links in the top bar and the phone header, in one order", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const names = (scope: string) =>
+      Array.from(container.querySelectorAll(`${scope} .tool`)).map((tool) => tool.getAttribute("aria-label"));
+    const expected = ["Theme: Match system", "Accent: Madder", "Docs", "View source on GitHub", "Support"];
+    expect(names(".topbar-tools")).toEqual(expected);
+    expect(names(".shell-head-tools")).toEqual(expected);
+    // Find belongs to the top bar, and no destination is listed twice there.
+    expect(container.querySelector(".topbar .topbar-find")).toBeTruthy();
+    expect(container.querySelector(".topbar .nav-row")).toBeNull();
+  });
+
+  it("offers theme as three named choices rather than a cycle", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const theme = container.querySelector('.topbar-tools .tool[aria-label^="Theme"]') as HTMLButtonElement;
+    expect(theme.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(theme);
+    const items = Array.from(container.querySelectorAll('.topbar-tools [role="menuitemradio"]'));
+    expect(items.map((item) => item.firstChild?.nextSibling?.textContent)).toEqual(["Light", "Dark", "Match system"]);
+    // "Match system" says which theme that currently resolves to.
+    expect(items[2]?.querySelector(".tool-pop-note")?.textContent).toBeTruthy();
+    fireEvent.click(items[0] as HTMLButtonElement);
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(container.querySelector('.topbar-tools [role="menu"]')).toBeNull();
+  });
+
+  it("gives each accent picker its own radio group, so the two copies never join", () => {
+    const onAccentChange = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onAccentChange={onAccentChange} />));
+    const button = container.querySelector(".topbar-tools .accent-tool") as HTMLButtonElement;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector(".accent-tray")).toBeNull();
+    fireEvent.click(button);
+    const swatches = Array.from(container.querySelectorAll<HTMLInputElement>(".topbar-tools .accent-tray input"));
+    expect(swatches.length).toBe(6);
+    // The phone copy is on the page too; one shared name would make the two
+    // pickers one radio group and leave only one of them able to show a choice.
+    const names = new Set(
+      Array.from(container.querySelectorAll<HTMLInputElement>(".accent-tray input")).map((input) => input.name),
+    );
+    expect(names.size).toBe(2);
+    expect(swatches.filter((swatch) => swatch.checked).map((swatch) => swatch.value)).toEqual(["madder"]);
+    fireEvent.click(swatches[1] as HTMLInputElement);
+    expect(onAccentChange).toHaveBeenCalledWith("woad");
+    // stays open so a second lot can be compared without reopening
+    expect(container.querySelector(".accent-tray")).toBeTruthy();
+  });
+
+  it("closes an open picker on Escape", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    fireEvent.click(container.querySelector(".topbar-tools .accent-tool") as HTMLButtonElement);
+    expect(container.querySelector(".accent-tray")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(container.querySelector(".accent-tray")).toBeNull();
+  });
+
+  it("carries the build, thread count and runtime state in one identity block", () => {
     const onOpenWhatsNew = vi.fn();
     const onOpenSettings = vi.fn();
     const onOpenStatus = vi.fn();
@@ -258,7 +336,7 @@ describe("Masthead", () => {
     expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
 
     const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
-    expect(threads.textContent).toBe("8 Threads");
+    expect(threads.textContent).toBe("8 threads");
     expect(threads.getAttribute("aria-label")).toBe("8 threads");
     fireEvent.click(threads);
     // no deep-link handler supplied, so the thread count still just opens settings
@@ -269,6 +347,8 @@ describe("Masthead", () => {
     // that is only standing by for the next load
     expect(status.dataset.sw).toBe("active");
     expect(status.getAttribute("aria-label")).toBe("Offline active");
+    // The state is a word, not a lone glyph.
+    expect(status.querySelector(".sub-status-text")?.textContent).toBe("Offline active");
     fireEvent.click(status);
     expect(onOpenStatus).toHaveBeenCalledTimes(1);
 
@@ -281,8 +361,9 @@ describe("Masthead", () => {
         />,
       ),
     );
-    expect(container.querySelector(".masthead-status-percent")?.textContent).toBe("25%");
-    expect(container.querySelector(".sub-status")?.getAttribute("aria-label")).toBe("Installing offline copy — 25%");
+    expect(container.querySelector(".sub-status-percent")?.textContent).toBe("25%");
+    // Install progress is an overlay on the block's edge, so it moves nothing.
+    expect(container.querySelector(".install-rule")?.parentElement?.classList.contains("shell-head")).toBe(true);
 
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("disabled");
@@ -348,59 +429,11 @@ describe("Masthead", () => {
     expect(dev.textContent).toBe("dev / v1.2.3");
   });
 
-  it("preloads the Log dialog before interaction completes", () => {
+  it("preloads the Log dialog when Menu is about to open", () => {
     const onPreloadLog = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
-    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
-    fireEvent.pointerEnter(more);
-    fireEvent.focus(more);
-    fireEvent.pointerDown(more);
-    expect(onPreloadLog).toHaveBeenCalledTimes(3);
-  });
-
-  it("renders GitHub and Support in the shared footer", () => {
-    const { container } = render(
-      withSettings(
-        <>
-          <Masthead {...mastheadProps} />
-          <SiteFooter docsHref="docs" donateHref="https://example.com/donate" githubHref="https://example.com/repo" />
-        </>,
-      ),
-    );
-    const footer = container.querySelector(".site-footer") as HTMLElement;
-    expect(footer).toBeTruthy();
-    const inFooter = within(footer);
-    expect(inFooter.getByRole("link", { name: "View source on GitHub" }).getAttribute("href")).toBe(
-      "https://example.com/repo",
-    );
-    expect(inFooter.getByRole("link", { name: "Support" }).getAttribute("href")).toBe("https://example.com/donate");
-    // A crawlable path to the guides on every layout, including the phone's.
-    expect(inFooter.getByRole("link", { name: "Docs" }).getAttribute("href")).toBe("docs");
-  });
-
-  it("commits an accent straight from the masthead tray", () => {
-    const onAccentChange = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onAccentChange={onAccentChange} />));
-    const button = container.querySelector(".accent-tool") as HTMLButtonElement;
-    expect(button.getAttribute("aria-expanded")).toBe("false");
-    expect(container.querySelector(".accent-tray")).toBeNull();
-    fireEvent.click(button);
-    expect(button.getAttribute("aria-expanded")).toBe("true");
-    const swatches = Array.from(container.querySelectorAll<HTMLInputElement>(".accent-tray input"));
-    expect(swatches.length).toBe(6);
-    expect(swatches.filter((swatch) => swatch.checked).map((swatch) => swatch.value)).toEqual(["madder"]);
-    fireEvent.click(swatches[1] as HTMLInputElement);
-    expect(onAccentChange).toHaveBeenCalledWith("woad");
-    // stays open so a second lot can be compared without reopening
-    expect(container.querySelector(".accent-tray")).toBeTruthy();
-  });
-
-  it("closes an open picker on Escape", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    fireEvent.click(container.querySelector(".accent-tool") as HTMLButtonElement);
-    expect(container.querySelector(".accent-tray")).toBeTruthy();
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(container.querySelector(".accent-tray")).toBeNull();
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    expect(onPreloadLog).toHaveBeenCalledTimes(1);
   });
 
   it("preloads the settings dialog from the thread chip", () => {

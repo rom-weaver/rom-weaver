@@ -3,12 +3,13 @@
     "brotliQuality": 6,
     "budgets": [
       {
+        "_comment": "Re-baselined when the shell replaced its overflow menu with one named nav. Every destination is now in the prerendered HTML, which is what makes them crawlable and reachable without JavaScript, so ~15 labelled rows and their icons ship in the shell instead of 6.",
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 36500,
-        "maxRawBytes": 37200,
-        "expectedBrotliBytes": 9200,
-        "maxBrotliBytes": 9550
+        "expectedRawBytes": 47250,
+        "maxRawBytes": 48200,
+        "expectedBrotliBytes": 10300,
+        "maxBrotliBytes": 10600
       },
       {
         "name": "JavaScript",

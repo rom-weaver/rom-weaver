@@ -745,6 +745,11 @@ msgstr "Dieses ROM kann nicht mit EmulatorJS getestet werden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.cliFoot"
+msgstr "Cargo, cargo-binstall und mise installieren nur die ausführbare Datei, daher benötigen sie rom-weaver setup, um die Identify- und Cheat-Datenbanken herunterzuladen. Alle Installationsmethoden, mit Prüfsummen und Shell-Vervollständigungen, stehen in der Installationsanleitung."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdCd"
 msgstr "CD"
 
@@ -1290,11 +1295,6 @@ msgstr "Jede Konsolengeneration brachte eigene Formate. Bring sie alle mit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.cliFoot"
-msgstr "Cargo, cargo-binstall und mise installieren nur die ausführbare Datei, daher benötigen sie rom-weaver setup, um die Identify- und Cheat-Datenbanken herunterzuladen. Alle Installationsmethoden, mit Prüfsummen und Shell-Vervollständigungen, stehen in der Installationsanleitung."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsDescription"
 msgstr "Jeder Workflow nimmt Dateien, die du bereits hast, und gibt eine Datei zurück, die du behalten, teilen oder abspielen kannst. Ein Bundle teilt den Workflow selbst."
 
@@ -1835,6 +1835,11 @@ msgstr "Alle optional machen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.theme.matchSystem"
+msgstr "System folgen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyDescription"
 msgstr "Gleiche die Prüfsumme deiner ROM mit der lokalen Datenbank ab, um den genauen Dump-Namen zu finden."
 
@@ -1877,6 +1882,11 @@ msgstr "Medienprofil nicht unterstützt"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMember"
 msgstr "Dateipfad im Container"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.menu"
+msgstr "Menü"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2355,6 +2365,11 @@ msgstr "Gepatcht: {format}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupPatches"
+msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.patches"
 msgstr "Patches"
 
@@ -2707,6 +2722,11 @@ msgstr "rom-weaver ist in diesem Browser für die Offline-Nutzung zwischengespei
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightVerified"
 msgstr "rom-weaver hat diesen Patch gegen die aktuelle Eingabe geprüft."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupRoms"
+msgstr "ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3205,13 +3225,13 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.disabledDesc"
-msgstr "Der Service Worker ist aus — rom-weaver braucht bei jedem Besuch das Netz. Das Patchen läuft trotzdem komplett auf diesem Gerät."
+msgid "ui.runtime.activeDesc"
+msgstr "Der Service Worker ist aktiv und die Offline-Kopie ist bereit. Solange du online bist, sind weiterhin Netzwerkanfragen möglich."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.activeDesc"
-msgstr "Der Service Worker ist aktiv und die Offline-Kopie ist bereit. Solange du online bist, sind weiterhin Netzwerkanfragen möglich."
+msgid "ui.runtime.disabledDesc"
+msgstr "Der Service Worker ist aus — rom-weaver braucht bei jedem Besuch das Netz. Das Patchen läuft trotzdem komplett auf diesem Gerät."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3257,6 +3277,11 @@ msgstr "Diese Patches zielen auf das Original-ROM. Spieler können ihre Reihenfo
 #: src/presentation/localization/messages.ts
 msgid "ui.status.build"
 msgstr "Dieser Build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupDevice"
+msgstr "Dieses Gerät"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

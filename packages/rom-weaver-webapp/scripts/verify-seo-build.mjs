@@ -127,14 +127,12 @@ assertIncludes(notFoundHtml, '<base href="/" />', "404 asset base");
 assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 robots metadata");
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
-assertIncludes(notFoundHtml, '<header class="masthead"', "404 app masthead");
+assertIncludes(notFoundHtml, '<header class="shell-banner"', "404 app chrome");
 assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply-patch"', "404 home action");
 assertIncludes(notFoundHtml, 'class="btn ghost not-found-docs" href="/docs"', "404 docs action");
 assertIncludes(notFoundHtml, "That page is not here.", "404 recovery heading");
-assertIncludes(notFoundHtml, 'aria-selected="false" class="mode" data-mode="patcher"', "404 inactive workflow tab");
-if (notFoundHtml.includes('aria-selected="true" class="mode"')) {
-  throw new Error("404 page marks a workflow tab as selected");
-}
+assertIncludes(notFoundHtml, 'class="nav-row" href="/apply-patch" id="tab-patcher"', "404 inactive workflow row");
+if (notFoundHtml.includes('aria-current="page"')) throw new Error("404 page marks a destination as current");
 if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em dash");
 for (const source of ["/weave", "/weave/", "/weave.html", "/weave/index.html"]) {
   assertIncludes(redirects, `${source} /apply-patch 301`, `${source} compatibility redirect`);
@@ -182,15 +180,15 @@ assertIncludes(homeHtml, 'href="https://rom-weaver.com/"', "home canonical");
 assertIncludes(homeHtml, WORKFLOW_SEO_ROUTES.home.description, "home description");
 assertIncludes(homeHtml, 'id="panel-home"', "home prerendered landing page");
 assertIncludes(homeHtml, "Your ROMs. Your changes.", "home headline");
-// The masthead brand steps down to a span here so the landing headline is the
+// The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
 assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply-patch"', "home Apply card");
 assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/supported-formats"', "home formats reference link");
-// The landing page has no current workflow tab.
-if (homeHtml.includes('aria-selected="true" class="mode"')) {
-  throw new Error("the home page marks a workflow tab as selected");
+// The landing page has no current workflow row.
+if (homeHtml.includes('aria-current="page" class="nav-row"')) {
+  throw new Error("the home page marks a workflow row as the current page");
 }
 assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
 assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
@@ -211,9 +209,17 @@ assertIncludes(
 assertIncludes(testHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.test.slug}"`, "test canonical");
 assertIncludes(testHtml, WORKFLOW_SEO_ROUTES.test.description, "test description");
 assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "static-host test description");
-assertIncludes(applyHtml, 'aria-selected="true" class="mode" data-mode="patcher"', "apply prerendered workflow");
-assertIncludes(createHtml, 'aria-selected="true" class="mode" data-mode="creator"', "create prerendered workflow");
-assertIncludes(identifyHtml, 'id="panel-identify" role="tabpanel"', "identify prerendered workflow");
+assertIncludes(
+  applyHtml,
+  'aria-current="page" aria-label="Apply Patch" class="nav-row" href="apply-patch" id="tab-patcher"',
+  "apply prerendered workflow",
+);
+assertIncludes(
+  createHtml,
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-patch" id="tab-creator"',
+  "create prerendered workflow",
+);
+assertIncludes(identifyHtml, 'id="panel-identify"', "identify prerendered workflow");
 assertHasClass(homeHtml, "build-tag", "preloaded build tag");
 assertHasClass(homeHtml, "masthead-threads-count", "preloaded thread count");
 assertHasClass(homeHtml, "sub-status", "preloaded runtime status control");
@@ -239,7 +245,7 @@ for (const route of [
 }
 assertIncludes(
   read("create/index.html"),
-  'aria-selected="true" class="mode" data-mode="creator"',
+  'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-patch" id="tab-creator"',
   "static-host create prerendered workflow",
 );
 assertIncludes(
@@ -247,10 +253,10 @@ assertIncludes(
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
   "home robots metadata",
 );
-// Docs sits under More, which the static shell does not expand; the footer
-// carries the crawlable link instead.
-assertIncludes(applyHtml, 'class="footer-link footer-docs" href="docs"', "apply guides link");
-assertIncludes(createHtml, 'class="footer-link footer-docs" href="docs"', "create guides link");
+// Docs is a named row in the nav the static shell renders in full, so the
+// crawlable path to the guides no longer depends on expanding a menu.
+assertIncludes(applyHtml, 'class="nav-row" href="docs" id="tab-docs"', "apply guides link");
+assertIncludes(createHtml, 'class="nav-row" href="docs" id="tab-docs"', "create guides link");
 
 for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
@@ -294,10 +300,14 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(docsHtml, 'class="mode-more is-current"', `${route.slug} More marked current for the guides`);
   assertIncludes(
     docsHtml,
-    '<button aria-label="Switch to light theme" class="tool"',
+    'aria-current="page" class="nav-row" href="docs" id="tab-docs"',
+    `${route.slug} Docs marked current in the nav`,
+  );
+  assertIncludes(
+    docsHtml,
+    '<button aria-expanded="false" aria-label="Theme: Match system" class="tool"',
     `${route.slug} React theme control`,
   );
   assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
@@ -384,7 +394,11 @@ for (const [legacy, canonical] of Object.entries({
 // index.html is the landing page, so a host that applies neither the redirect
 // nor this document would serve landing markup to a patcher route.
 for (const weave of ["weave/index.html", "weave.html"]) {
-  assertIncludes(read(weave), 'aria-selected="true" class="mode" data-mode="patcher"', `${weave} patcher shell`);
+  assertIncludes(
+    read(weave),
+    'aria-current="page" aria-label="Apply Patch" class="nav-row" href="apply-patch" id="tab-patcher"',
+    `${weave} patcher shell`,
+  );
   assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply-patch"', `${weave} canonical`);
 }
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.

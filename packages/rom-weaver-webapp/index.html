@@ -147,12 +147,14 @@
       // the prerendered masthead metadata. It resolves both slots before the
       // rest of the shell can paint, and produces the exact text React hydrates.
       window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY = function () {
-        const threadSlot = document.querySelector(".masthead-threads");
-        const threadCount = threadSlot?.querySelector(".masthead-threads-count");
-        const statusSlot = document.querySelector(".sub-status");
-        const statusIcon = statusSlot?.querySelector("svg");
-        const statusText = statusSlot?.querySelector(".sub-status-text");
-        if (!(threadSlot && threadCount && statusSlot && statusIcon && statusText)) return;
+        // The two shells each carry their own copy of the build facts and the
+        // runtime state, and CSS decides which one is on screen. Both must be
+        // resolved: React hydrates against every copy, not just the visible one.
+        const threadSlots = [...document.querySelectorAll(".masthead-threads")];
+        const statusSlots = [...document.querySelectorAll(".sub-status")];
+        if (threadSlots.length === 0 || statusSlots.length === 0) return;
+        if (!threadSlots.every((slot) => slot.querySelector(".masthead-threads-count"))) return;
+        if (!statusSlots.every((slot) => slot.querySelector("svg") && slot.querySelector(".sub-status-text"))) return;
 
         const hardwareConcurrency = navigator.hardwareConcurrency;
         const hardwareThreads =
@@ -185,9 +187,11 @@
           // Fall back to the browser default; the app does the same for bad storage.
         }
 
-        const label = threadSlot.dataset.threadLabel || "threads";
-        threadCount.textContent = String(threads);
-        threadSlot.setAttribute("aria-label", `${threads} ${label}`);
+        for (const slot of threadSlots) {
+          const label = slot.dataset.threadLabel || "threads";
+          slot.querySelector(".masthead-threads-count").textContent = String(threads);
+          slot.setAttribute("aria-label", `${threads} ${label}`);
+        }
 
         // Same glyphs and wording as RuntimeGlyph/RUNTIME_MESSAGES in shell.tsx -
         // React hydrates against exactly what is written here.
@@ -223,13 +227,16 @@
         // early - both are locale-independent.
         const english = (document.documentElement.lang || "en").indexOf("en") === 0;
         const setRuntimeStatus = (state) => {
-          statusSlot.dataset.sw = state;
-          statusIcon.setAttribute("class", `lucide ${iconClasses[state]}`);
-          statusIcon.innerHTML = glyphs[state];
-          if (!english) return;
-          statusSlot.setAttribute("aria-label", wording[state]);
-          statusSlot.setAttribute("title", wording[state]);
-          statusText.textContent = wording[state];
+          for (const slot of statusSlots) {
+            slot.dataset.sw = state;
+            const icon = slot.querySelector("svg");
+            icon.setAttribute("class", `lucide ${iconClasses[state]}`);
+            icon.innerHTML = glyphs[state];
+            if (!english) continue;
+            slot.setAttribute("aria-label", wording[state]);
+            slot.setAttribute("title", wording[state]);
+            slot.querySelector(".sub-status-text").textContent = wording[state];
+          }
         };
 
         // A controller means a service worker controls this page; it does not

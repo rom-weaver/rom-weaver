@@ -10,9 +10,10 @@ import { Masthead } from "../../src/webapp/components/shell.tsx";
 
 const noop = () => undefined;
 const PAGE_TABS = [
-  { href: "/apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
-  { href: "/create-patch", icon: null, id: "creator", label: "Create Patch" },
+  { group: "patches", href: "/apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
+  { group: "patches", href: "/create-patch", icon: null, id: "creator", label: "Create Patch" },
 ];
+const THEME_CHOICE = { auto: 2, dark: 1, light: 0 };
 
 let host;
 let root;
@@ -80,25 +81,38 @@ const renderMasthead = async () => {
       }),
     ),
   );
-  const find = () =>
-    [...host.querySelectorAll("button.tool")].find((button) =>
-      /theme|light|dark/i.test(button.getAttribute("aria-label") ?? ""),
-    );
+  const find = () => host.querySelector('.topbar-tools .tool[aria-label^="Theme"]');
   let toggle = find();
   for (let attempt = 0; !toggle && attempt < 50; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 20));
     toggle = find();
   }
-  if (!toggle) throw new Error("theme toggle never rendered");
+  if (!toggle) throw new Error("theme control never rendered");
   return toggle;
+};
+
+/* Theme is a named menu rather than a cycle, so the wipe runs from the chosen
+   row. The origin it is fed is still the control that opened the menu. */
+const pickTheme = async (toggle, value) => {
+  toggle.click();
+  const anchor = toggle.closest(".tool-anchor");
+  const rows = () => [...anchor.querySelectorAll('[role="menuitemradio"]')];
+  for (let attempt = 0; rows().length === 0 && attempt < 50; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  // The origin is read when the choice commits, and the open menu is part of
+  // the layout at that moment, so the rect has to be taken there too.
+  const rect = toggle.getBoundingClientRect();
+  rows()[THEME_CHOICE[value]].click();
+  return rect;
 };
 
 const clickThemeToggle = async () => {
   const toggle = await renderMasthead();
   // The store owns the current theme; read it rather than assuming a direction.
   const before = document.documentElement.getAttribute("data-theme");
-  toggle.click();
-  return { before, toggle };
+  const rect = await pickTheme(toggle, before === "dark" ? "light" : "dark");
+  return { before, rect, toggle };
 };
 
 describe("theme toggle view-transition gate", () => {
@@ -124,9 +138,8 @@ describe("theme toggle view-transition gate", () => {
 
   test("feeds the wipe its origin from the button", async () => {
     pretendIosWebKit();
-    const { toggle } = await clickThemeToggle();
+    const { rect } = await clickThemeToggle();
 
-    const rect = toggle.getBoundingClientRect();
     const root_ = document.documentElement;
     expect(root_.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
     expect(root_.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
@@ -138,8 +151,8 @@ describe("theme toggle view-transition gate", () => {
     const settlers = stubDeferredViewTransitions();
     const toggle = await renderMasthead();
 
-    toggle.click();
-    toggle.click();
+    await pickTheme(toggle, "light");
+    await pickTheme(toggle, "dark");
     expect(startCalls).toHaveLength(2);
 
     // The first run settles while the second is still animating; its release

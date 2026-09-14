@@ -8,26 +8,45 @@ import { Masthead } from "../../src/webapp/components/shell.tsx";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const tabs = [
-  { href: "apply", icon: createElement("svg", { "aria-hidden": true }), id: "patcher", label: "Apply" },
-  { href: "create", icon: createElement("svg", { "aria-hidden": true }), id: "creator", label: "Create" },
-  { href: "test", icon: createElement("svg", { "aria-hidden": true }), id: "test", label: "Test" },
+  {
+    dock: true,
+    group: "patches",
+    href: "apply",
+    icon: createElement("svg", { "aria-hidden": true }),
+    id: "patcher",
+    label: "Apply",
+  },
+  {
+    dock: true,
+    group: "patches",
+    href: "create",
+    icon: createElement("svg", { "aria-hidden": true }),
+    id: "creator",
+    label: "Create",
+  },
+  {
+    dock: true,
+    group: "roms",
+    href: "test",
+    icon: createElement("svg", { "aria-hidden": true }),
+    id: "test",
+    label: "Test",
+  },
   {
     beta: true,
-    group: "tools",
+    group: "roms",
     href: "trim",
     icon: createElement("svg", { "aria-hidden": true }),
     id: "trim",
     label: "Trim",
-    placement: "more",
   },
   {
     beta: true,
-    group: "tools",
+    group: "patches",
     href: "ppf-undo",
     icon: createElement("svg", { "aria-hidden": true }),
     id: "ppf-undo",
     label: "PPF undo",
-    placement: "more",
   },
 ];
 
@@ -109,10 +128,14 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
     });
   });
 
-  // Every beta workflow (Identify, Trim, PPF undo) and Docs live in More now,
-  // so the rail and dock carry only the three workflow tabs.
-  expect(host.querySelectorAll('.mode-rail [role="tab"]').length).toBe(3);
-  expect(host.querySelectorAll('.dock-tabs [role="tab"]').length).toBe(3);
+  // The nav names every workflow, beta ones included; the dock keeps its three
+  // slots plus Menu, and everything else reaches the phone through that sheet.
+  // The sheet itself is empty until it is first opened, so the shell ships one
+  // copy of the rows rather than two.
+  expect(host.querySelectorAll(".side-nav .nav-row").length).toBeGreaterThan(4);
+  expect(host.querySelectorAll(".menu-sheet .nav-row").length).toBe(0);
+  expect(host.querySelectorAll('.side-nav .nav-row[href="trim"]').length).toBe(1);
+  expect(host.querySelectorAll(".dock .dock-tab").length).toBe(4);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

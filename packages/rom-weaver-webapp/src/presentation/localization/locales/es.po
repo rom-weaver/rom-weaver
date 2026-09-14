@@ -745,6 +745,11 @@ msgstr "No se puede probar esta ROM con EmulatorJS"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.cliFoot"
+msgstr "Cargo, cargo-binstall y mise instalan solo el ejecutable, por lo que necesitan rom-weaver setup para descargar las bases de datos de identify y de cheats. Todos los métodos de instalación, con sumas de verificación y completado de shell, están en la guía de instalación."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdCd"
 msgstr "CD"
 
@@ -1290,11 +1295,6 @@ msgstr "Cada generación de consolas trajo su propio formato. Tráelos todos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.cliFoot"
-msgstr "Cargo, cargo-binstall y mise instalan solo el ejecutable, por lo que necesitan rom-weaver setup para descargar las bases de datos de identify y de cheats. Todos los métodos de instalación, con sumas de verificación y completado de shell, están en la guía de instalación."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsDescription"
 msgstr "Cada flujo de trabajo toma archivos que ya tienes y devuelve un archivo que puedes guardar, compartir o reproducir. Un paquete permite compartir el propio flujo de trabajo."
 
@@ -1835,6 +1835,11 @@ msgstr "Hacer todos opcionales"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.theme.matchSystem"
+msgstr "Seguir el sistema"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyDescription"
 msgstr "Compara la suma de verificación de tu ROM con la base de datos local para encontrar el nombre exacto del volcado."
 
@@ -1877,6 +1882,11 @@ msgstr "Perfil de medio no compatible"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMember"
 msgstr "Ruta del archivo interno"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.menu"
+msgstr "Menú"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2355,6 +2365,11 @@ msgstr "Parcheado: {format}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupPatches"
+msgstr "Parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.patches"
 msgstr "Parches"
 
@@ -2707,6 +2722,11 @@ msgstr "rom-weaver está en la caché de este navegador para usarlo sin conexió
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightVerified"
 msgstr "rom-weaver verificó este parche con la entrada actual."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupRoms"
+msgstr "ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3205,13 +3225,13 @@ msgstr "El tipo de fuente seleccionado no es compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.disabledDesc"
-msgstr "El service worker está desactivado, así que rom-weaver necesita la red en cada visita. El parcheo sigue ejecutándose por completo en este dispositivo."
+msgid "ui.runtime.activeDesc"
+msgstr "El service worker está activo y la copia sin conexión está lista. Puede haber solicitudes de red mientras tengas conexión."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.activeDesc"
-msgstr "El service worker está activo y la copia sin conexión está lista. Puede haber solicitudes de red mientras tengas conexión."
+msgid "ui.runtime.disabledDesc"
+msgstr "El service worker está desactivado, así que rom-weaver necesita la red en cada visita. El parcheo sigue ejecutándose por completo en este dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3257,6 +3277,11 @@ msgstr "Estos parches usan la ROM original, por lo que se puede cambiar su orden
 #: src/presentation/localization/messages.ts
 msgid "ui.status.build"
 msgstr "Esta compilación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupDevice"
+msgstr "Este dispositivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

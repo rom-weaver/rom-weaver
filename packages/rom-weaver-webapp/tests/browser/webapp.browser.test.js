@@ -151,6 +151,18 @@ beforeEach(() => {
   document.body.replaceChildren(rootElement);
 });
 
+/** A nav row by its visible label, from whichever layout the test names. */
+const navRow = (name, scope = ".side-nav") =>
+  [...document.querySelectorAll(`${scope} .nav-row`)].find(
+    (row) => !row.hidden && row.querySelector(".nav-row-label")?.textContent === name,
+  );
+const openMenuSheet = async () => {
+  await expect.poll(() => document.querySelector(".dock-menu")).toBeTruthy();
+  document.querySelector(".dock-menu").click();
+  await expect.poll(() => document.querySelector(".menu-sheet")?.hidden).toBe(false);
+  return document.querySelector(".menu-sheet");
+};
+
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
   // Trim is beta-gated (see `betaToolsEnabled`), so the full-shell assertions
   // below require the flag on - matching the pattern the sibling controller unit tests use.
@@ -161,12 +173,11 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
   await expect.element(romInput).toBeInTheDocument();
 
-  await expect.element(page.getByRole("tablist", { name: "Workflow" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: "Apply" })).toBeInTheDocument();
-  await expect.element(page.getByRole("tab", { name: "Create" })).toBeInTheDocument();
-  await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
-  await page.getByRole("button", { name: "More" }).click();
+  await expect.element(page.getByRole("navigation", { name: "Workflow" }).first()).toBeInTheDocument();
+  await expect.poll(() => navRow("Apply")).toBeTruthy();
+  await expect.poll(() => navRow("Create")).toBeTruthy();
+  // Beta workflows are named in the nav itself, not filed under an overflow.
+  await expect.poll(() => navRow("PPF undo")).toBeTruthy();
 
   await romInput.upload(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
   await selectCandidateIfPrompted("game.bin");
@@ -191,21 +202,16 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot keeps Trim gated and PPF undo behind More", async () => {
+test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The rail holds the three workflows; Docs lives in the More menu (Project),
-  // and the beta tools file under More, hidden while the setting is off.
+  // The dock keeps its three workflow slots plus Menu at every setting.
   await expect
-    .poll(() =>
-      [...document.querySelectorAll('.mode-rail [role="tab"]')]
-        .filter((tab) => getComputedStyle(tab).display !== "none")
-        .map((tab) => tab.textContent),
-    )
-    .toEqual(["Apply", "Create", "Test"]);
-  await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
+    .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
+    .toEqual(["Apply", "Create", "Test", "Menu"]);
+  expect(navRow("PPF undo")).toBeUndefined();
+  expect(navRow("Identify")).toBeUndefined();
+  // Docs is a named row rather than something behind a glyph.
+  expect(navRow("Docs")).toBeTruthy();
 });
 
 const dropOnPage = async (fileName) => {
@@ -227,8 +233,7 @@ test("only one Identify workflow ever consumes a page drop", async () => {
   await dropOnPage("first.gba");
   await expect.poll(() => document.querySelector("#identify-container")?.textContent).toContain("first.gba");
 
-  await page.getByRole("button", { name: "More" }).click();
-  await page.getByRole("menuitem", { name: "PPF undo Beta" }).click();
+  navRow("PPF undo").click();
   await expect.poll(() => document.querySelector("#panel-ppf-undo")?.hidden).toBe(false);
   // The Identify panel stays mounted behind PPF undo, so the count also proves the
   // hidden instance is the SAME one, not a second form.
@@ -239,87 +244,74 @@ test("only one Identify workflow ever consumes a page drop", async () => {
   expect(document.querySelector("#identify-container")?.textContent).toContain("first.gba");
 });
 
-test("enabled PPF undo and Identify stay behind More on desktop and phone", async () => {
+test("enabled PPF undo and Identify are named in the nav on desktop and phone", async () => {
   for (const [width, height] of [
     [1280, 900],
     [390, 844],
   ]) {
     await page.viewport(width, height);
     mountWebappRoot({ initialView: "identify", settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
-    await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
-    await page.getByRole("button", { name: "More" }).click();
-    await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
-    // Identify is one click from More: it has its own route, so it never hid
-    // behind the old Tools page.
-    await expect.element(page.getByRole("menuitem", { name: "Identify ROM Beta" })).toBeInTheDocument();
-    await page.getByRole("menuitem", { name: "PPF undo Beta" }).click();
+    const scope = width >= 1000 ? ".side-nav" : ".menu-sheet";
+    if (width < 1000) await openMenuSheet();
+    await expect.poll(() => navRow("PPF undo", scope)).toBeTruthy();
+    // Each beta tool has its own route and its own named row in both layouts.
+    await expect.poll(() => navRow("Identify", scope)).toBeTruthy();
+    navRow("PPF undo", scope).click();
     // Only ONE Identify form can exist. PPF undo links nowhere near it, so a page
     // drop has exactly one consumer and the two cannot fight over the activity key.
     expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
     expect(document.querySelector("#ppf-undo-identify-input-picker")).toBeNull();
-    await page.getByRole("button", { name: "More" }).click();
-    expect(document.querySelector(`[role="tab"][data-mode="ppf-undo"]`)).toBeNull();
-    expect(document.querySelector(`[role="tab"][data-mode="identify"]`)).toBeNull();
+    // Neither beta tool takes one of the dock's three workflow slots.
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
-    if (width >= 1000) {
-      // More sits in the nav now, so it is named like the tabs beside it rather
-      // than tooltipped like the actions cluster it left. The label is a flex
-      // item inside `.mode-more`, so its computed display blockifies - that it
-      // is not `none` is the assertion, alongside the missing tooltip.
-      const moreLabel = document.querySelector(".desktop-more .mode-more .tool-text");
-      expect(getComputedStyle(moreLabel).display).not.toBe("none");
-      expect(moreLabel.textContent).toBe("More");
-      expect(document.querySelector(".desktop-more .mode-more .tip")).toBeNull();
-      // Every destination lives in More.
-      await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
-      await expect.element(page.getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
-    } else {
-      await expect.element(page.getByRole("menuitem", { name: "Docs" })).toBeInTheDocument();
-      await expect.element(page.getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
+    // Both layouts carry the same destinations under the same headings.
+    if (width < 1000) await openMenuSheet();
+    for (const name of ["Docs", "Settings", "Status", "Storage", "Logs", "Support"]) {
+      expect(navRow(name, scope)).toBeTruthy();
     }
-    await page.getByRole("button", { name: "More" }).click();
   }
   await page.viewport(1280, 900);
 });
 
-test("WebappRoot reports the configured thread count in the masthead, not the core count", async () => {
-  // The masthead thread count MUST use the saved Threads setting.
+test("WebappRoot reports the configured thread count in the chrome, not the core count", async () => {
+  // The chrome's thread count MUST use the saved Threads setting.
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
-  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 Threads");
+  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 threads");
   await expect
     .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
     .toContain("1 threads");
 });
 
-test("the runtime status keeps its glyph everywhere and sheds its words when the line is tight", async () => {
-  // The glyph is the signal that always survives; the words are what yields -
-  // through the compact rail band, on phones, and whenever a channel badge is
-  // present (this build carries one, so the words are gone at every width).
+test("the runtime state reads as a word at every width, beside the build facts", async () => {
+  // A lone cloud glyph was the clearest case of chrome a new user could not
+  // read, so the state keeps its word in both layouts rather than yielding it.
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
-  expect(document.querySelector(".brand-sub-row .sub-status")).toBeNull();
-  expect(document.querySelector(".masthead-tools .sub-status")).toBeTruthy();
-  expect(document.querySelector(".masthead-status-text")).toBeNull();
+  // One copy of the identity block, so the layouts cannot disagree about it.
+  expect(document.querySelectorAll(".sub-status").length).toBe(1);
+  expect(document.querySelectorAll(".masthead-threads").length).toBe(1);
+  expect(document.querySelector(".meta-strip .sub-status")).toBeTruthy();
+
   for (const [width, height] of [
     [1280, 900],
     [1100, 900],
     [390, 844],
   ]) {
     await page.viewport(width, height);
+    const status = document.querySelector(".sub-status");
     await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
-    if (width >= 1160) {
-      const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
-      const subtitleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row")).fontSize);
-      expect(titleSize).toBeGreaterThan(subtitleSize * 1.8);
-      expect(
-        Number.parseFloat(getComputedStyle(document.querySelector(".brand-sub-row .build-tag .sub-chip")).fontSize),
-      ).toBeLessThanOrEqual(subtitleSize);
-      expect(getComputedStyle(document.querySelector(".sub-status svg")).width).toBe("16px");
-      expect(getComputedStyle(document.querySelector(".sub-status")).cursor).toBe("pointer");
-    }
+    const word = status.querySelector(".sub-status-text");
+    expect(word.textContent.trim().length).toBeGreaterThan(0);
+    expect(getComputedStyle(word).display).not.toBe("none");
+    // The word is painted in full rather than clipped to fit the line.
+    expect(word.scrollWidth).toBeLessThanOrEqual(word.getBoundingClientRect().width + 1);
+    expect(getComputedStyle(status).cursor).toBe("pointer");
+    // The wordmark still leads the block it heads.
+    const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
+    const factsSize = Number.parseFloat(getComputedStyle(document.querySelector(".build-facts")).fontSize);
+    expect(titleSize).toBeGreaterThan(factsSize * 1.4);
   }
   await page.viewport(1280, 900);
 });
@@ -359,9 +351,9 @@ test("PWA side insets move dock content without shifting the shell", async () =>
   mountWebappRoot();
   await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const readLayout = () => {
-    const masthead = document.querySelector(".masthead")?.getBoundingClientRect();
+    const masthead = document.querySelector(".shell-head")?.getBoundingClientRect();
     const dock = document.querySelector(".dock")?.getBoundingClientRect();
-    const controls = [...document.querySelectorAll(".dock-tab, .dock-action")].filter(
+    const controls = [...document.querySelectorAll(".dock-tab")].filter(
       (control) => getComputedStyle(control).display !== "none",
     );
     return {
@@ -401,7 +393,7 @@ test("PWA vertical insets keep the dock clear of the home indicator", async () =
   document.head.append(simulatedSafeArea);
   try {
     await expect
-      .poll(() => document.querySelector(".masthead")?.getBoundingClientRect().top ?? -1)
+      .poll(() => document.querySelector(".shell-head")?.getBoundingClientRect().top ?? -1)
       .toBeGreaterThanOrEqual(safeTop);
     await expect
       .poll(() => document.querySelector(".dock")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
@@ -497,12 +489,13 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
   }
 });
 
-test("WebappRoot keeps diagnostics behind More - the Log dialog owns them", async () => {
-  // Settings stays direct; Docs is a top-level route and diagnostics share More.
+test("WebappRoot names diagnostics in the nav - the Log dialog owns them", async () => {
+  // Status, Storage and Logs are each their own row; the dialog they open is
+  // still the one place the detail lives.
   mountWebappRoot();
-  await expect.element(page.getByRole("button", { name: "More" })).toBeInTheDocument();
-  await page.getByRole("button", { name: "More" }).click();
-  await expect.element(page.getByRole("menuitem", { name: "Logs" })).toBeInTheDocument();
+  await expect.poll(() => navRow("Logs")).toBeTruthy();
+  expect(navRow("Status")).toBeTruthy();
+  expect(navRow("Storage")).toBeTruthy();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
@@ -512,8 +505,8 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   await page.viewport(393, height);
   mountWebappRoot();
 
-  await expect.poll(() => document.querySelector(".masthead-status")).toBeTruthy();
-  document.querySelector(".masthead-status")?.click();
+  await expect.poll(() => document.querySelector(".sub-status")).toBeTruthy();
+  document.querySelector(".sub-status")?.click();
   await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
 
   const rail = document.querySelector(".log-dlg .dialog-subrail");
@@ -533,62 +526,48 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   await page.viewport(1280, 900);
 });
 
-test("mobile More carries app utilities plus the external links, and the footer keeps them too", async () => {
+test("the phone header carries appearance and the project links, and Menu carries the rest", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
-  await expect.poll(() => document.querySelector(".masthead-tools")).toBeTruthy();
-  const footer = document.querySelector(".site-footer");
-  expect(footer).not.toBeNull();
+  await expect.poll(() => document.querySelector(".shell-head-tools")).toBeTruthy();
+  // The footer is gone: its three links are named in the header and in Menu.
+  expect(document.querySelector(".site-footer")).toBeNull();
+  const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
+  expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
+    "Theme: Match system",
+    "Accent: Madder",
+    "Docs",
+    "View source on GitHub",
+    "Support",
+  ]);
+  for (const tile of tiles) expect(getComputedStyle(tile).display).not.toBe("none");
   for (const [label, href] of [
     ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
     ["Support", "https://ko-fi.com/brandonocasey"],
   ]) {
-    // The footer carries the external link on the phone.
-    const link = page.getByRole("link", { name: label });
-    await expect.element(link.first()).toBeInTheDocument();
-    expect([...footer.querySelectorAll("a")].some((node) => node.getAttribute("href") === href)).toBe(true);
-  }
-  const mastheadStatus = document.querySelector(".masthead-status");
-  for (const selector of [".masthead-status", ".mobile-utility-theme", ".mobile-utility-accent"]) {
-    const control = document.querySelector(selector);
-    expect(control).not.toBeNull();
-    expect(getComputedStyle(control).display).not.toBe("none");
+    expect(tiles.find((tile) => tile.getAttribute("aria-label") === label).getAttribute("href")).toBe(href);
   }
 
-  await page.getByRole("button", { name: "More" }).click();
-  for (const label of ["Status", "Theme", "Accent"]) {
-    await expect.element(page.getByRole("menuitem", { name: label })).toBeInTheDocument();
+  await openMenuSheet();
+  for (const name of ["Status", "Storage", "Logs", "Settings", "Docs", "GitHub", "Support"]) {
+    expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
-  for (const [label, href] of [
-    ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
-    ["Support", "https://ko-fi.com/brandonocasey"],
-  ]) {
-    const item = page.getByRole("menuitem", { name: label });
-    await expect.element(item).toBeInTheDocument();
-    expect(item.element().getAttribute("href")).toBe(href);
+  expect(navRow("GitHub", ".menu-sheet").getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/");
+  expect(navRow("Support", ".menu-sheet").getAttribute("href")).toBe("https://ko-fi.com/brandonocasey");
+  // Support is the one row that is not neutral; every other row shares one ink.
+  const support = navRow("Support", ".menu-sheet");
+  const neutral = getComputedStyle(navRow("Storage", ".menu-sheet")).color;
+  expect(getComputedStyle(support).color).not.toBe(neutral);
+  expect(getComputedStyle(support.querySelector("svg")).color).toBe(getComputedStyle(support).color);
+  for (const row of document.querySelectorAll(".menu-sheet .nav-row")) {
+    if (row === support || row.hasAttribute("aria-current")) continue;
+    expect(getComputedStyle(row).color).toBe(neutral);
   }
-  expect(document.querySelector('.more-menu [role="menuitem"][data-sw] svg')?.outerHTML).toBe(
-    document.querySelector(".masthead-status svg")?.outerHTML,
-  );
-  const menuStatus = document.querySelector(".more-menu .more-status");
-  expect(menuStatus).not.toBeNull();
-  expect(getComputedStyle(menuStatus).color).toBe(getComputedStyle(mastheadStatus).color);
-  expect(getComputedStyle(menuStatus.querySelector("svg")).color).toBe(getComputedStyle(mastheadStatus).color);
-  const neutralItem = document.querySelector('.more-menu [role="menuitem"]:not(.more-status, .more-support)');
-  const neutralColor = getComputedStyle(neutralItem).color;
-  for (const item of document.querySelectorAll('.more-menu [role="menuitem"]')) {
-    if (item.classList.contains("more-status")) continue;
-    if (item.classList.contains("more-support")) {
-      expect(getComputedStyle(item).color).not.toBe(neutralColor);
-      expect(getComputedStyle(item.querySelector("svg")).color).toBe(getComputedStyle(item).color);
-      continue;
-    }
-    expect(getComputedStyle(item).color).toBe(neutralColor);
-    expect(getComputedStyle(item.querySelector("svg")).color).toBe(neutralColor);
-  }
-  await page.getByRole("menuitem", { name: "Accent" }).click();
-  await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
+
+  // Appearance is a named menu, not a cycling glyph.
+  document.querySelector('.shell-head-tools .tool[aria-label^="Accent"]').click();
+  await expect.element(page.getByRole("radiogroup", { name: "Accent" }).first()).toBeInTheDocument();
 
   const buildTag = document.querySelector(".build-tag");
   expect(buildTag?.textContent).toMatch(/v\d/);
@@ -603,42 +582,42 @@ test("mobile More carries app utilities plus the external links, and the footer 
   await page.viewport(1280, 900);
 });
 
-test("mobile More stays in view on a short screen", async () => {
+test("the Menu sheet stays on screen and scrolls on a short screen", async () => {
   await page.viewport(320, 480);
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
-  await page.getByRole("button", { name: "More" }).click();
-  const menu = document.querySelector(".shared-more-menu");
-  expect(menu).not.toBeNull();
-  expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
-  expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
-  expect(getComputedStyle(menu).animationName).toBe("none");
-  expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
-  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
+  const sheet = await openMenuSheet();
+  expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  expect(sheet.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
+  // The sheet ends at the dock's top edge, and its body is what scrolls.
+  const dock = document.querySelector(".dock").getBoundingClientRect();
+  expect(Math.abs(sheet.getBoundingClientRect().bottom - dock.top)).toBeLessThanOrEqual(1);
+  const body = sheet.querySelector(".menu-sheet-body");
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expect(navRow("PPF undo", ".menu-sheet")).toBeTruthy();
 
-  await page.getByRole("menuitem", { name: "Logs" }).click();
+  navRow("Logs", ".menu-sheet").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
   await page.viewport(1280, 900);
 });
 
-test("mobile More keeps its row spacing after opening", async () => {
+test("the Menu sheet keeps its row spacing after opening", async () => {
   await page.viewport(390, 664);
   mountWebappRoot();
 
-  await page.getByRole("button", { name: "More" }).click();
-  const menu = document.querySelector(".shared-more-menu");
-  const project = menu?.querySelectorAll(".more-group")[1];
+  const sheet = await openMenuSheet();
+  const project = sheet?.querySelectorAll(".nav-group")[3];
   expect(project).not.toBeNull();
   const start = {
-    menuHeight: menu.getBoundingClientRect().height,
+    sheetHeight: sheet.getBoundingClientRect().height,
     projectTop: project.getBoundingClientRect().top,
-    projectOffset: project.getBoundingClientRect().top - menu.getBoundingClientRect().top,
+    projectOffset: project.getBoundingClientRect().top - sheet.getBoundingClientRect().top,
   };
 
   await new Promise((resolve) => setTimeout(resolve, 2500));
-  expect(menu.getBoundingClientRect().height).toBeCloseTo(start.menuHeight, 1);
+  expect(sheet.getBoundingClientRect().height).toBeCloseTo(start.sheetHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
   await page.viewport(390, 600);
-  expect(project.getBoundingClientRect().top - menu.getBoundingClientRect().top).toBeCloseTo(start.projectOffset, 1);
+  expect(project.getBoundingClientRect().top - sheet.getBoundingClientRect().top).toBeCloseTo(start.projectOffset, 1);
   await page.viewport(1280, 900);
 });

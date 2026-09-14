@@ -30,7 +30,6 @@ const EXEMPT = new Map([
   [".rw-app .cks > .cks-head:hover .chev", "chevron affordance; the head's own :active tints the row"],
   [".rw-app .ck:hover .copy", "reveals a button that has its own :active scale"],
   [".rw-app .swap-btn:hover svg", "carries .btn; .btn:active supplies the press transform"],
-  [".rw-app .masthead-tools .masthead-donate:hover", "carries .tool; .tool:active supplies the press tint"],
   [
     ".rw-app .patch-checks-body .verification-row .popt-input:hover",
     "text input - :focus, not :active, is the meaningful press state",

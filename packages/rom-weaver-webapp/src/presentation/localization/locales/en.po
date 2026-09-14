@@ -745,6 +745,11 @@ msgstr "Cannot test this ROM with EmulatorJS"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.cliFoot"
+msgstr "Cargo, cargo-binstall, and mise install the executable alone, so they need rom-weaver setup to download the identify and cheat databases. Every install method, with checksums and shell completions, is in the install guide."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdCd"
 msgstr "CD"
 
@@ -1290,11 +1295,6 @@ msgstr "Every console generation brought its own format. Bring all of them."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.cliFoot"
-msgstr "Cargo, cargo-binstall, and mise install the executable alone, so they need rom-weaver setup to download the identify and cheat databases. Every install method, with checksums and shell completions, is in the install guide."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsDescription"
 msgstr "Every workflow takes files you already have and gives back one file you can keep, share, or play. A bundle is how a workflow itself gets shared."
 
@@ -1835,6 +1835,11 @@ msgstr "Make all optional"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.theme.matchSystem"
+msgstr "Match system"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyDescription"
 msgstr "Match your ROM’s checksum against the local database to find its exact dump name."
 
@@ -1877,6 +1882,11 @@ msgstr "Media profile not supported"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMember"
 msgstr "Member path"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.menu"
+msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2355,6 +2365,11 @@ msgstr "Patched {format}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupPatches"
+msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.patches"
 msgstr "Patches"
 
@@ -2707,6 +2722,11 @@ msgstr "rom-weaver is cached in this browser for offline use. When you are onlin
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightVerified"
 msgstr "rom-weaver verified this patch against the current input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupRoms"
+msgstr "ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3205,13 +3225,13 @@ msgstr "The selected source type is not supported."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.disabledDesc"
-msgstr "The service worker is off, so rom-weaver needs the network each visit. Patching still runs entirely on this device."
+msgid "ui.runtime.activeDesc"
+msgstr "The service worker is active and the offline copy is ready. Network requests can still occur while you are online."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.activeDesc"
-msgstr "The service worker is active and the offline copy is ready. Network requests can still occur while you are online."
+msgid "ui.runtime.disabledDesc"
+msgstr "The service worker is off, so rom-weaver needs the network each visit. Patching still runs entirely on this device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3257,6 +3277,11 @@ msgstr "These patches target the original ROM, so players can change their order
 #: src/presentation/localization/messages.ts
 msgid "ui.status.build"
 msgstr "This build"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupDevice"
+msgstr "This device"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -13,10 +13,24 @@ const withSettings = (children: ReactNode) => (
 );
 
 const TABS = [
-  { href: "apply-patch", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply Patch" },
-  { href: "apply-patch#bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
-  { href: "create-patch", icon: <svg aria-hidden="true" />, id: "creator", label: "Create Patch" },
-  { href: "test-rom", icon: <svg aria-hidden="true" />, id: "test", label: "Test ROM" },
+  {
+    dock: true,
+    group: "patches",
+    href: "apply-patch",
+    icon: <svg aria-hidden="true" />,
+    id: "patcher",
+    label: "Apply Patch",
+  },
+  { group: "patches", href: "apply-patch#bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  {
+    dock: true,
+    group: "patches",
+    href: "create-patch",
+    icon: <svg aria-hidden="true" />,
+    id: "creator",
+    label: "Create Patch",
+  },
+  { dock: true, group: "roms", href: "test-rom", icon: <svg aria-hidden="true" />, id: "test", label: "Test ROM" },
 ] satisfies WorkflowTab[];
 
 const props = {
@@ -40,12 +54,11 @@ describe("Find", () => {
       ...TABS,
       {
         beta: true,
-        group: "tools" as const,
+        group: "roms" as const,
         href: "trim-rom",
         icon: <svg aria-hidden="true" />,
         id: "trim",
         label: "Trim ROM",
-        placement: "more" as const,
       },
     ];
     const { container, getByRole } = render(
@@ -53,7 +66,7 @@ describe("Find", () => {
         <Masthead {...props} tabs={tabs} />
       </RomWeaverSettingsProvider>,
     );
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     const labels = Array.from(getByRole("listbox", { name: "Find" }).querySelectorAll(".find-label")).map(
       (label) => label.textContent,
     );
@@ -68,14 +81,14 @@ describe("Find", () => {
     dialog.remove();
   });
 
-  it("opens from the masthead trigger with the browse list and focus in the box", () => {
+  it("opens from the top bar field with the browse list and focus in the box", () => {
     const { container, getByRole } = render(withSettings(<Masthead {...props} />));
     expect(container.querySelector(".find-palette")).toBeNull();
-    // Find lives in the actions cluster as a search field, never in the tablist.
-    expect(container.querySelector('.mode-rail [aria-haspopup="dialog"]')).toBeNull();
-    expect(container.querySelector(".masthead-tools .desktop-find .find-trigger")).not.toBeNull();
+    // Find is a search field in the top bar, never a destination in the nav.
+    expect(container.querySelector('.side-nav [aria-haspopup="dialog"]')).toBeNull();
+    expect(container.querySelector(".topbar .topbar-find")).not.toBeNull();
 
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
 
     expect(document.activeElement).toBe(findInput(container));
     const options = getByRole("listbox", { name: "Find" }).querySelectorAll('[role="option"]');
@@ -105,21 +118,17 @@ describe("Find", () => {
     fireEvent.keyDown(findInput(container), { key: "Escape" });
 
     expect(container.querySelector(".find-palette")).toBeNull();
-    // Focus returns to whichever Find trigger the layout shows.
-    expect(
-      document.activeElement?.classList.contains("dock-find") ||
-        document.activeElement?.classList.contains("find-trigger"),
-    ).toBe(true);
+    expect(document.activeElement?.classList.contains("topbar-find")).toBe(true);
   });
 
   it("resets the selected result when reopened after a search", () => {
     const onSelectTab = vi.fn();
     const { container } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     fireEvent.change(findInput(container), { target: { value: "threads" } });
     fireEvent.keyDown(findInput(container), { key: "ArrowDown" });
     fireEvent.keyDown(findInput(container), { key: "Escape" });
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     expect(findInput(container).value).toBe("");
     expect(container.querySelector(".find-option.is-active")?.textContent).toContain("Apply Patch");
     fireEvent.keyDown(findInput(container), { key: "Enter" });
@@ -129,7 +138,7 @@ describe("Find", () => {
   it("filters as you type and opens a tool with Enter", () => {
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     fireEvent.change(findInput(container), { target: { value: "crea" } });
 
     const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
@@ -144,7 +153,7 @@ describe("Find", () => {
   it("opens the bundle drawer through Apply Patch", () => {
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     fireEvent.change(findInput(container), { target: { value: "bundle" } });
 
     const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
@@ -157,7 +166,7 @@ describe("Find", () => {
   it("uses the guide link for a CLI-only command", () => {
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     fireEvent.change(findInput(container), { target: { value: "inspect" } });
 
     const guide = getByRole("listbox", { name: "Find" }).querySelector('a[role="option"]') as HTMLAnchorElement;
@@ -172,7 +181,7 @@ describe("Find", () => {
     const { container, getByRole } = render(
       withSettings(<Masthead {...props} onOpenSettingsField={onOpenSettingsField} />),
     );
-    fireEvent.click(container.querySelector(".desktop-find .find-trigger") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     fireEvent.change(findInput(container), { target: { value: "threads" } });
 
     const option = getByRole("listbox", { name: "Find" }).querySelector('button[role="option"]') as HTMLElement;
@@ -182,13 +191,16 @@ describe("Find", () => {
     expect(onOpenSettingsField).toHaveBeenCalledWith("settings-worker-threads");
   });
 
-  it("closes Find when More opens, and exposes a dock trigger for phones", () => {
+  it("swaps with the phone Menu sheet, which reaches Find from its own foot", () => {
     const { container } = render(withSettings(<Masthead {...props} />));
-    fireEvent.click(container.querySelector(".dock-find") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     expect(container.querySelector(".find-palette")).not.toBeNull();
 
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-
+    // Opening Menu closes Find; the sheet's own row opens it again.
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     expect(container.querySelector(".find-palette")).toBeNull();
+    fireEvent.click(container.querySelector(".menu-find") as HTMLButtonElement);
+    expect(container.querySelector(".find-palette")).not.toBeNull();
+    expect(container.querySelector(".menu-sheet")?.hasAttribute("hidden")).toBe(true);
   });
 });
