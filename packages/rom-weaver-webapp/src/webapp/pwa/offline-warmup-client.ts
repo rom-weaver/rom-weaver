@@ -77,6 +77,7 @@ const formatError = (error: unknown) => (error instanceof Error ? error.message 
 // warm-up without holding a reference to the scheduler instance.
 let activeController: {
   bump: (target: WarmupBumpTarget) => void;
+  download: () => void;
   notifyResume: () => void;
   pause: () => void;
 } | null = null;
@@ -101,6 +102,12 @@ const resumeOfflineWarmup = () => {
 const bumpOfflineWarmupPriority = (target: WarmupBumpTarget) => {
   if (activeController) activeController.bump(target);
   else pendingBumps.push(target);
+};
+
+const downloadOfflineCopy = (): boolean => {
+  if (!activeController) return false;
+  activeController.download();
+  return true;
 };
 
 const postPump = (
@@ -199,7 +206,6 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     downlinkMbpsHint: nav?.connection?.downlink,
     rttMsHint: nav?.connection?.rtt,
   });
-  // On data-saver, the loop runs only while a bump target is still pending.
   const activeBumps: WarmupBumpTarget[] = [];
   let loopRunning = false;
   let started = false;
@@ -337,10 +343,9 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     } catch (error) {
       logger.warn("offline warm-up bump failed", { error: formatError(error) });
     }
-    // On data saver, an emulatorjs bump only reorders the queue: pumping it
-    // would download every core, while the emulator page itself fetches
-    // exactly the files it needs through the runtime route. Identify-group
-    // bumps are bounded, so they still pump.
+    // Until a full download starts, EmulatorJS bumps on data saver MUST only
+    // reorder the queue because pumping would download every core; the player
+    // fetches only its required files. Identify-group bumps stay bounded.
     if (saveData && !started && target.kind === "emulatorjs") return;
     activeBumps.push(target);
     void runLoop();
@@ -353,15 +358,21 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
       logger.warn("offline warm-up pause failed", { error: formatError(error) });
     }
   };
-  activeController = { bump, notifyResume, pause };
+  const download = () => {
+    if (signal.aborted) return;
+    logger.debug("offline download requested by user", { saveData });
+    started = true;
+    void runLoop();
+  };
+  activeController = { bump, download, notifyResume, pause };
 
   const startWarmup = () => {
-    if (started || signal.aborted || !serviceWorker.controller) return;
+    if (signal.aborted || !serviceWorker.controller) return;
     serviceWorker.removeEventListener?.("controllerchange", startWarmup);
     const drained = pendingBumps.splice(0);
     for (const target of drained) bump(target);
     const begin = () => {
-      if (signal.aborted) return;
+      if (signal.aborted || started) return;
       if (saveData) {
         logger.debug("offline warm-up auto-start skipped; data saver is on");
         return;
@@ -516,6 +527,7 @@ const queryOfflineCachedFiles = async (nav?: NavigatorLike): Promise<OfflineCach
 export {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
+  downloadOfflineCopy,
   listenForOfflinePrecacheProgress,
   listenForServiceWorkerLog,
   pauseOfflineWarmup,

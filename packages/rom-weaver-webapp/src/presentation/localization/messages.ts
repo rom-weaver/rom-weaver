@@ -1248,6 +1248,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.runtime.offlineSizes",
     message: "{compressed} transferred · {uncompressed} stored",
   }),
+  "ui.runtime.downloadOffline": msg({ id: "ui.runtime.downloadOffline", message: "Download offline copy" }),
+  "ui.runtime.downloadOfflineHint": msg({
+    id: "ui.runtime.downloadOfflineHint",
+    message: "Downloads remaining files, even with data saver on.",
+  }),
+  "ui.runtime.downloadRequested": msg({ id: "ui.runtime.downloadRequested", message: "Download requested" }),
+  "ui.runtime.downloadUnavailable": msg({
+    id: "ui.runtime.downloadUnavailable",
+    message: "Offline downloads are unavailable. Reload and try again.",
+  }),
   "ui.runtime.transferred": msg({ id: "ui.runtime.transferred", message: "Transferred {size}" }),
   "ui.runtime.transferredAtLeast": msg({ id: "ui.runtime.transferredAtLeast", message: "Transferred at least {size}" }),
   "ui.runtime.detailEmulatorFile": msg({

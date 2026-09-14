@@ -27,7 +27,7 @@ import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogE
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
 import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
-import { queryOfflineCachedFiles } from "../pwa/offline-warmup-client.ts";
+import { downloadOfflineCopy, queryOfflineCachedFiles } from "../pwa/offline-warmup-client.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import type { OfflineCachedFile } from "../offline-warmup.ts";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
@@ -233,8 +233,14 @@ const StatusRows = ({
   localizer,
   offlineProgress,
   runtimeState,
+  downloadRequested,
+  downloadUnavailable,
+  onDownload,
 }: {
   localizer: Localizer;
+  downloadRequested: boolean;
+  downloadUnavailable: boolean;
+  onDownload: () => void;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   runtimeState: RuntimeState;
 }) => {
@@ -281,6 +287,20 @@ const StatusRows = ({
           </>
         ) : null}
         {transferDetail ? <span className="sw-progress-detail">{transferDetail}</span> : null}
+        {runtimeState === "installing" ? (
+          <>
+            <button className="btn slim ghost" disabled={downloadRequested} onClick={onDownload} type="button">
+              <Download aria-hidden="true" size={14} />
+              {localizer.message(downloadRequested ? "ui.runtime.downloadRequested" : "ui.runtime.downloadOffline")}
+            </button>
+            <span className="sw-cache-note">{localizer.message("ui.runtime.downloadOfflineHint")}</span>
+            {downloadUnavailable ? (
+              <span className="sw-cache-error" role="alert">
+                {localizer.message("ui.runtime.downloadUnavailable")}
+              </span>
+            ) : null}
+          </>
+        ) : null}
       </span>,
     ],
     [
@@ -1036,6 +1056,13 @@ const LogDialog = ({
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
+  const [downloadRequested, setDownloadRequested] = useState(false);
+  const [downloadUnavailable, setDownloadUnavailable] = useState(false);
+  const requestDownload = () => {
+    const accepted = downloadOfflineCopy();
+    setDownloadRequested(accepted);
+    setDownloadUnavailable(!accepted);
+  };
   const [cachedFiles, setCachedFiles] = useState<OfflineCachedFile[]>([]);
   const [cachedFilesLoading, setCachedFilesLoading] = useState(false);
   const [cachedFilesError, setCachedFilesError] = useState<string | null>(null);
@@ -1205,7 +1232,14 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows localizer={localizer} offlineProgress={offlineProgress} runtimeState={runtimeState} />
+            <StatusRows
+              downloadRequested={downloadRequested}
+              downloadUnavailable={downloadUnavailable}
+              localizer={localizer}
+              offlineProgress={offlineProgress}
+              onDownload={requestDownload}
+              runtimeState={runtimeState}
+            />
             <OfflineCachedFiles
               error={cachedFilesError}
               files={cachedFiles}

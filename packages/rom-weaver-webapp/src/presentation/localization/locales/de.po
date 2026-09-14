@@ -3300,6 +3300,26 @@ msgstr "Übertragen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Offline-Kopie herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Lädt die fehlenden Dateien auch bei aktiviertem Datensparmodus herunter."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Download angefordert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Offline-Downloads sind nicht verfügbar. Lade die Seite neu und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.transferred"
 msgstr "Übertragen {size}"
 

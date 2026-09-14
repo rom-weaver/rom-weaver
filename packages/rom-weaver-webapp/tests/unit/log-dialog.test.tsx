@@ -6,7 +6,7 @@ import { copyToClipboard } from "../../src/lib/clipboard.ts";
 import { triggerBrowserDownload } from "../../src/platform/browser/browser-download.ts";
 import { listBrowserOpfs } from "../../src/storage/browser/browser-opfs-cleanup.ts";
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry } from "../../src/webapp/log-store.ts";
-import { queryOfflineCachedFiles } from "../../src/webapp/pwa/offline-warmup-client.ts";
+import { downloadOfflineCopy, queryOfflineCachedFiles } from "../../src/webapp/pwa/offline-warmup-client.ts";
 import { cachedFileTotals, LogDialog, sortCachedFiles } from "../../src/webapp/components/log-dialog.tsx";
 import type { OfflineCachedFile } from "../../src/webapp/offline-warmup.ts";
 
@@ -14,7 +14,10 @@ vi.mock("../../src/lib/clipboard.ts", () => ({ copyToClipboard: vi.fn(async () =
 vi.mock("../../src/platform/browser/browser-download.ts", () => ({ triggerBrowserDownload: vi.fn() }));
 vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({ listBrowserOpfs: vi.fn(async () => []) }));
 vi.mock("../../src/workers/protocol/browser-virtual-files.ts", () => ({ getActiveBrowserVirtualFiles: () => [] }));
-vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", () => ({ queryOfflineCachedFiles: vi.fn(async () => []) }));
+vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", () => ({
+  downloadOfflineCopy: vi.fn(() => true),
+  queryOfflineCachedFiles: vi.fn(async () => []),
+}));
 vi.mock("../../src/webapp/log-store.ts", () => ({
   getLastSessionEntries: vi.fn(() => []),
   getLogEntries: vi.fn(() => []),
@@ -61,6 +64,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(listBrowserOpfs).mockClear();
   vi.mocked(queryOfflineCachedFiles).mockClear();
+  vi.mocked(downloadOfflineCopy).mockReset().mockReturnValue(true);
   vi.mocked(copyToClipboard).mockClear();
   vi.mocked(getLogEntries).mockReturnValue([]);
   vi.mocked(getLastSessionEntries).mockReturnValue([]);
@@ -312,6 +316,36 @@ describe("OPFS inspector", () => {
     fireEvent.change(container.querySelector(".log-filter") as HTMLInputElement, { target: { value: "no-such-file" } });
 
     expect(container.querySelector(".opfs-empty")?.textContent).toBe("No matching entries");
+  });
+});
+
+describe("manual offline installation", () => {
+  it("requests the remaining files from Status and shows the accepted request", () => {
+    const view = renderDialog({
+      serviceWorkerStatus: "active",
+      offlineProgress: { ready: false, cachedBytes: 1, totalBytes: 10 },
+    });
+    fireEvent.click(view.getByRole("button", { name: "Download offline copy" }));
+    expect(downloadOfflineCopy).toHaveBeenCalledTimes(1);
+    expect(view.getByRole("button", { name: "Download requested" }).getAttribute("disabled")).not.toBeNull();
+    expect(view.getByText("Downloads remaining files, even with data saver on.")).toBeTruthy();
+  });
+
+  it.each(["active", "off"] as const)("does not offer downloads when already ready or disabled (%s)", (status) => {
+    const view = renderDialog({
+      serviceWorkerStatus: status,
+      offlineProgress: { ready: status === "active", cachedBytes: 10, totalBytes: 10 },
+    });
+    expect(view.queryByRole("button", { name: "Download offline copy" })).toBeNull();
+  });
+
+  it("keeps the action available when there is no download scheduler", () => {
+    vi.mocked(downloadOfflineCopy).mockReturnValue(false);
+    const view = renderDialog({ serviceWorkerStatus: "active" });
+    const button = view.getByRole("button", { name: "Download offline copy" });
+    fireEvent.click(button);
+    expect(button.getAttribute("disabled")).toBeNull();
+    expect(view.getByRole("alert").textContent).toBe("Offline downloads are unavailable. Reload and try again.");
   });
 });
 

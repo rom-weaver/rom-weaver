@@ -3300,6 +3300,26 @@ msgstr "Transferred"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Download offline copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Downloads remaining files, even with data saver on."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Download requested"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Offline downloads are unavailable. Reload and try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.transferred"
 msgstr "Transferred {size}"
 

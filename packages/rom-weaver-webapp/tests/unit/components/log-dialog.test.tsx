@@ -16,6 +16,7 @@ vi.mock("../../../src/workers/protocol/browser-virtual-files.ts", () => ({
 }));
 
 vi.mock("../../../src/webapp/pwa/offline-warmup-client.ts", () => ({
+  downloadOfflineCopy: vi.fn(() => true),
   queryOfflineCachedFiles: vi.fn(() => Promise.resolve([])),
 }));
 

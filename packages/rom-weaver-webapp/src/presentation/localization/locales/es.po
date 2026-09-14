@@ -3300,6 +3300,26 @@ msgstr "Transferido"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Descargar copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Descarga los archivos restantes, incluso con el ahorro de datos activado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Descarga solicitada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Las descargas sin conexión no están disponibles. Recarga la página e inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.transferred"
 msgstr "Transferido {size}"
 
