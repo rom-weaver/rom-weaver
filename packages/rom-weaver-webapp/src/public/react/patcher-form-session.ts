@@ -854,7 +854,7 @@ const useLocalApplyPatchFormSession = ({
       setPatchStaging,
       setRomInputs,
     },
-    stage: { stageInput, stagePatches, validatePatches },
+    stage: { getCurrentSnapshot: createStageSnapshot, stageInput, stagePatches, validatePatches },
   });
 
   const invalidatePatchDependentOutput = useCallback(
@@ -922,13 +922,13 @@ const useLocalApplyPatchFormSession = ({
     patchChangePendingRef.current = true;
     setPatchChangePending(true);
     invalidatePatchDependentOutput("patch input rule changed", { defaultPatchBasis, previous });
-    const generation = patchStageMachine.invalidateStage();
+    const generation = patchStageMachine.currentStageGeneration();
     emitSessionTrace("patch input rule changed; re-planning chain validation", {
       defaultPatchBasis,
       generation,
       previous,
     });
-    validatePatchesDeferred(createStageSnapshot(), generation);
+    validatePatchesDeferred(createStageSnapshot());
   }, [
     activePatches.length,
     createStageSnapshot,
@@ -949,13 +949,13 @@ const useLocalApplyPatchFormSession = ({
     if (!previous) return;
     if (!(validatePatches && activePatches.length)) return;
     if (sameStringSet(previous, current)) return;
-    const generation = patchStageMachine.invalidateStage();
+    const generation = patchStageMachine.currentStageGeneration();
     emitSessionTrace("patch enablement changed; running deferred validation", {
       disabledPatchCount: current.size,
       generation,
       previousDisabledPatchCount: previous.size,
     });
-    validatePatchesDeferred(createStageSnapshot(), generation);
+    validatePatchesDeferred(createStageSnapshot());
   }, [
     activePatches,
     createStageSnapshot,
@@ -980,7 +980,7 @@ const useLocalApplyPatchFormSession = ({
       currentPatchCount: activePatches.length,
       previousPatchCount: previous.split("|").length,
     });
-    const generation = patchStageMachine.invalidateStage();
+    const generation = patchStageMachine.currentStageGeneration();
     if (!(validatePatches && activePatches.length)) return;
     const previousIds = previous.split("|");
     const currentIds = order.split("|");
@@ -995,7 +995,7 @@ const useLocalApplyPatchFormSession = ({
       previousPatchCount: previousIds.length,
       reason,
     });
-    validatePatchesDeferred(createStageSnapshot(), generation);
+    validatePatchesDeferred(createStageSnapshot());
   }, [
     activePatches,
     createStageSnapshot,
@@ -1109,6 +1109,7 @@ const useLocalApplyPatchFormSession = ({
         patchStageMachine.invalidateStage();
         setPatchStaging(false);
         setPatchProgress(null);
+        setPatchProgressByKey({});
         return;
       }
 
@@ -1175,6 +1176,7 @@ const useLocalApplyPatchFormSession = ({
     syncRomInput,
     setInputStaging,
     setPatchProgress,
+    setPatchProgressByKey,
     setPatchStaging,
     setRomInputs,
   ]);

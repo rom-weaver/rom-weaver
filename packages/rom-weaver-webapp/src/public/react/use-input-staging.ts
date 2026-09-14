@@ -268,6 +268,7 @@ interface InputStagingContext {
     setPatchValidationPending?: (pending: boolean) => void;
   };
   stage: {
+    getCurrentSnapshot?: () => ApplyWorkflowStageSnapshot;
     stageInput?: LocalApplyPatchFormSessionOptions["stageInput"];
     stagePatches?: LocalApplyPatchFormSessionOptions["stagePatches"];
     validatePatches?: LocalApplyPatchFormSessionOptions["validatePatches"];
@@ -317,7 +318,7 @@ const useInputStaging = (context: InputStagingContext) => {
         patchCount: snapshot.patches.length,
       });
       const mergeInfos = (infos: Array<StagedInputInfo | null | undefined>) => {
-        if (patchStageGenerationRef.current !== generation) return;
+        if (patchStageGenerationRef.current !== generation || validationRunRef.current !== validationRun) return;
         setPatchInfoByKey((current) => {
           const next = { ...current };
           snapshot.patches.forEach((patch, index) => {
@@ -332,7 +333,7 @@ const useInputStaging = (context: InputStagingContext) => {
       void validatePatches(snapshot, mergeInfos)
         .then(mergeInfos)
         .catch((error) => {
-          if (patchStageGenerationRef.current !== generation) return;
+          if (patchStageGenerationRef.current !== generation || validationRunRef.current !== validationRun) return;
           const normalized = toError(error);
           if (isWorkflowDisposedError(normalized)) return;
           failVerifyingPatches(snapshot, normalized);
@@ -367,6 +368,35 @@ const useInputStaging = (context: InputStagingContext) => {
       const { setSectionErrorMessage, onError } = report;
       const { stagePatches } = stage;
       const generation = patchStageMachine.nextStageGeneration();
+      validationRunRef.current += 1;
+      session.setPatchValidationPending?.(false);
+      const stagedPatchKeys = snapshot.patches.map((patch) => getPatchKey(patch, snapshot.patches));
+      const getCurrentPatchList = () => {
+        const currentSnapshot = contextRef.current.stage.getCurrentSnapshot?.() ?? snapshot;
+        const getCurrentKey = contextRef.current.rows.getPatchKey;
+        const currentKeys = currentSnapshot.patches.map((patch) => getCurrentKey(patch, currentSnapshot.patches));
+        const changed =
+          currentKeys.length !== stagedPatchKeys.length ||
+          currentKeys.some((key, index) => key !== stagedPatchKeys[index]);
+        return { changed, currentKeys, currentSnapshot };
+      };
+      const restartForChangedPatchList = (reason: string): boolean => {
+        const { changed, currentSnapshot } = getCurrentPatchList();
+        if (!changed) return false;
+        report.emitSessionTrace("patch staging restarted for changed patch list", {
+          currentPatchCount: currentSnapshot.patches.length,
+          generation,
+          reason,
+          stagedPatchCount: snapshot.patches.length,
+        });
+        syncPatchFiles(currentSnapshot);
+        return true;
+      };
+      const getCurrentPatchKey = (order: number): string | null => {
+        const stagedKey = stagedPatchKeys[order];
+        if (!stagedKey) return null;
+        return getCurrentPatchList().currentKeys.includes(stagedKey) ? stagedKey : null;
+      };
       let expandedPatchSources = false;
       if (!(snapshot.patches.length && stagePatches)) {
         setPatchStaging(false);
@@ -408,6 +438,7 @@ const useInputStaging = (context: InputStagingContext) => {
         // to N independent sources so every selected patch shows as its own row (mirrors inputs).
         onImplicitPatches: (patches, infos = []) => {
           if (patchStageGenerationRef.current !== generation) return;
+          if (restartForChangedPatchList("archive expanded")) return;
           expandedPatchSources = true;
           updatePatches(patches);
           setPatchInfoByKey(
@@ -425,9 +456,9 @@ const useInputStaging = (context: InputStagingContext) => {
         // "Verifying…" once the ROM lands.
         onPatchStaged: (info, order) => {
           if (patchStageGenerationRef.current !== generation) return;
-          const patch = snapshot.patches[order];
-          if (!(patch && info)) return;
-          const key = getPatchKey(patch, snapshot.patches);
+          if (!info) return;
+          const key = getCurrentPatchKey(order);
+          if (!key) return;
           setPatchInfoByKey((current) => ({ ...current, [key]: info }));
           if (silent) return;
           setPatchProgressByKey((current) => {
@@ -442,12 +473,12 @@ const useInputStaging = (context: InputStagingContext) => {
           if (patchStageGenerationRef.current !== generation) return;
           const details = getProgressDetails(event);
           const order = typeof details.order === "number" ? details.order : -1;
-          const patch = (order >= 0 ? snapshot.patches[order] : undefined) || snapshot.patches[0] || null;
-          if (!patch) {
+          if (!snapshot.patches.length) {
             setPatchProgress(toInputProgress(event));
             return;
           }
-          const key = getPatchKey(patch, snapshot.patches);
+          const key = getCurrentPatchKey(order >= 0 ? order : 0);
+          if (!key) return;
           setPatchProgressByKey((current) => ({
             ...current,
             [key]: toInputProgress(event),
@@ -456,26 +487,32 @@ const useInputStaging = (context: InputStagingContext) => {
       })
         .then((infos) => {
           if (patchStageGenerationRef.current !== generation) return;
+          if (expandedPatchSources) return;
+          const currentSnapshot = contextRef.current.stage.getCurrentSnapshot?.() ?? snapshot;
+          const getCurrentKey = contextRef.current.rows.getPatchKey;
           setPatchInfoByKey(
             Object.fromEntries(
-              snapshot.patches.map((patch, index) => [
-                getPatchKey(patch, snapshot.patches),
-                infos[index] || { fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`) },
-              ]),
+              currentSnapshot.patches.flatMap((patch, index) => {
+                const key = getCurrentKey(patch, currentSnapshot.patches);
+                const stagedIndex = stagedPatchKeys.indexOf(key);
+                if (stagedIndex < 0) return [];
+                return [
+                  [key, infos[stagedIndex] || { fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`) }],
+                ];
+              }),
             ),
           );
           // The card now shows info + cheap preflight; run the deferred deep validation silently in
           // the background so it no longer makes the patch look like it is hanging.
-          if (!expandedPatchSources) {
-            contextRef.current.report.emitSessionTrace("patch staging complete; deferred validation dispatched", {
-              generation,
-              patchCount: snapshot.patches.length,
-            });
-            validatePatchesDeferred(snapshot, generation);
-          }
+          contextRef.current.report.emitSessionTrace("patch staging complete; deferred validation dispatched", {
+            generation,
+            patchCount: currentSnapshot.patches.length,
+          });
+          validatePatchesDeferred(currentSnapshot, generation);
         })
         .catch((error) => {
           if (patchStageGenerationRef.current !== generation) return;
+          if (restartForChangedPatchList("stage failed")) return;
           const normalizedError = toError(error);
           if (isWorkflowDisposedError(normalizedError)) return;
           failVerifyingPatches(snapshot, normalizedError);
@@ -693,8 +730,9 @@ const useInputStaging = (context: InputStagingContext) => {
           // ROM: the card flips to "Verifying…" the moment the ROM lands, then shows the verdict.
           // A same-tick patch staging run owns validation for the shared snapshot. Without this guard,
           // ROM and patch completion each queued the same silent validation (and re-extracted archives).
-          if (snapshot.patches.length && patchStageMachine.stageGenerationRef.current === patchStageGeneration) {
-            validatePatchesDeferred(snapshot);
+          const currentSnapshot = contextRef.current.stage.getCurrentSnapshot?.() ?? snapshot;
+          if (currentSnapshot.patches.length && patchStageMachine.stageGenerationRef.current === patchStageGeneration) {
+            validatePatchesDeferred(currentSnapshot);
           }
         })
         .catch((error) => {

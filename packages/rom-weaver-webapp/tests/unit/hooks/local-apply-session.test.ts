@@ -204,6 +204,86 @@ describe("useLocalApplyPatchFormSession apply flow", () => {
     expect(validatePatches.mock.calls[0]?.[0].patches).toEqual(leaves);
   });
 
+  it("finishes patch staging after an optional patch changes enablement", async () => {
+    const patches = [source("a.ips"), source("b.ips")];
+    let finishStage: (infos: Array<{ fileName: string }>) => void = () => undefined;
+    const stagePatches = vi.fn(
+      (_snapshot, handlers: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stagePatches"]>>[1]) =>
+        new Promise<Array<{ fileName: string }>>((resolve) => {
+          handlers.onProgress({ details: { order: 0 }, label: "Reading a.ips", stage: "input" });
+          handlers.onProgress({ details: { order: 1 }, label: "Reading b.ips", stage: "input" });
+          finishStage = resolve;
+        }),
+    );
+    const validatePatches = vi.fn(async () => patches.map((patch) => ({ fileName: patch.name })));
+    const { options, rerender, result } = renderSession({ patches, stagePatches, validatePatches });
+
+    await waitFor(() => expect(stagePatches).toHaveBeenCalledTimes(1));
+    expect(result.current.localStackController.getState().items.every((item) => !!item.progress)).toBe(true);
+    await act(async () => {
+      rerender({ ...options, disabledPatchIds: new Set([getBinarySourceListStableIds(patches)[1]]) });
+    });
+    await act(async () => finishStage(patches.map((patch) => ({ fileName: patch.name }))));
+
+    await waitFor(() => {
+      expect(result.current.localStackController.getState().items.every((item) => item.progress === null)).toBe(true);
+      expect(result.current.localOutputController.getState().applyButton.disabled).toBe(false);
+    });
+    expect(stagePatches).toHaveBeenCalledTimes(1);
+    expect(validatePatches).toHaveBeenCalled();
+  });
+
+  it("finishes pending patch staging after the patch order changes", async () => {
+    const patches = [source("a.ips"), source("b.ips")];
+    let finishStage: (infos: Array<{ fileName: string }>) => void = () => undefined;
+    const stagePatches = vi.fn(
+      () =>
+        new Promise<Array<{ fileName: string }>>((resolve) => {
+          finishStage = resolve;
+        }),
+    );
+    const validatePatches = vi.fn(async (snapshot) => snapshot.patches.map((patch) => ({ fileName: patch.name })));
+    const { options, rerender, result } = renderSession({ patches, stagePatches, validatePatches });
+
+    await waitFor(() => expect(stagePatches).toHaveBeenCalledTimes(1));
+    await act(async () => rerender({ ...options, patches: [...patches].reverse() }));
+    await act(async () => finishStage(patches.map((patch) => ({ fileName: patch.name }))));
+
+    await waitFor(() => {
+      const items = result.current.localStackController.getState().items;
+      expect(items.map((item) => item.fileName)).toEqual(["b.ips", "a.ips"]);
+      expect(items.every((item) => item.progress === null)).toBe(true);
+      expect(result.current.localOutputController.getState().applyButton.disabled).toBe(false);
+    });
+    expect(stagePatches).toHaveBeenCalledTimes(1);
+    expect(validatePatches.mock.calls.at(-1)?.[0].patches).toEqual([...patches].reverse());
+  });
+
+  it("does not restore a removed patch when pending staging finishes", async () => {
+    const patches = [source("a.ips"), source("b.ips")];
+    let finishStage: (infos: Array<{ fileName: string }>) => void = () => undefined;
+    const stagePatches = vi.fn(
+      () =>
+        new Promise<Array<{ fileName: string }>>((resolve) => {
+          finishStage = resolve;
+        }),
+    );
+    const validatePatches = vi.fn(async (snapshot) => snapshot.patches.map((patch) => ({ fileName: patch.name })));
+    const { options, rerender, result } = renderSession({ patches, stagePatches, validatePatches });
+
+    await waitFor(() => expect(stagePatches).toHaveBeenCalledTimes(1));
+    await act(async () => rerender({ ...options, patches: [patches[1]] }));
+    await act(async () => finishStage(patches.map((patch) => ({ fileName: patch.name }))));
+
+    await waitFor(() => {
+      expect(result.current.localStackController.getState().items.map((item) => item.fileName)).toEqual(["b.ips"]);
+      expect(result.current.localStackController.getState().items[0]?.progress).toBeNull();
+      expect(result.current.localOutputController.getState().applyButton.disabled).toBe(false);
+    });
+    expect(stagePatches).toHaveBeenCalledTimes(1);
+    expect(validatePatches.mock.calls.at(-1)?.[0].patches).toEqual([patches[1]]);
+  });
+
   it("runs the workflow, then arms a pending download", async () => {
     const { result, applyPatches, downloadOutput } = renderSession();
     await act(async () => {
