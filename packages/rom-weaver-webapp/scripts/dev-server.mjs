@@ -794,7 +794,7 @@ const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRu
     const isDocument = path.extname(asset.resolvedPath) === ".html";
     send(
       res,
-      asset.resolvedPath === fallbackPath ? 404 : 200,
+      asset.resolvedPath === fallbackPath && filePath !== fallbackPath ? 404 : 200,
       {
         "Cache-Control": isDocument ? "no-cache" : "public, max-age=31536000, immutable",
         "Content-Type": getContentType(asset.resolvedPath),

@@ -2845,6 +2845,16 @@ msgstr "Mostrar los consejos de inicio rápido («New here?»)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyEnabled"
+msgstr "Mantener una copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyHelp"
+msgstr "Descarga la aplicación automáticamente para usarla sin conexión, salvo si el ahorro de datos está activado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Saltar al contenido principal"
 
@@ -3297,6 +3307,66 @@ msgstr "TOTAL"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Transferido"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Descargar copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Descarga los archivos restantes, incluso con el ahorro de datos activado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Descarga solicitada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Las descargas sin conexión no están disponibles. Recarga la página e inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOffline"
+msgstr "Eliminar copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removingOffline"
+msgstr "Eliminando copia sin conexión…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabled"
+msgstr "Copia sin conexión desactivada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabledDetail"
+msgstr "Las descargas automáticas sin conexión están desactivadas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOfflineHint"
+msgstr "Elimina los archivos descargados de la aplicación. Tus archivos, partidas guardadas y ajustes permanecen en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeUnavailable"
+msgstr "No se pudo eliminar la copia sin conexión. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.transferred"
+msgstr "Transferido {size}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.transferredAtLeast"
+msgstr "Se transfirió al menos {size}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

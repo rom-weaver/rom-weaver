@@ -15,6 +15,13 @@ const acceptsBrotli = (value) =>
 // keep the HTML check for hosts that still apply an SPA fallback.
 const isSpaFallback = (response) => !response.ok || (response.headers.get("Content-Type") ?? "").includes("text/html");
 
+const sidecarEncodedSize = (response) => {
+  const value = response.headers.get("Content-Length");
+  if (!(value && /^\d+$/u.test(value))) return null;
+  const size = Number(value);
+  return Number.isSafeInteger(size) ? value : null;
+};
+
 export const onRequestGet = async ({ request, env, next }) => {
   if (!acceptsBrotli(request.headers.get("Accept-Encoding") ?? "")) return next();
   const url = new URL(request.url);
@@ -27,9 +34,11 @@ export const onRequestGet = async ({ request, env, next }) => {
   const sidecar = await env.ASSETS.fetch(new URL(`${url.pathname}.br`, url));
   if (isSpaFallback(sidecar)) return next();
   const headers = new Headers(sidecar.headers);
+  const encodedSize = sidecarEncodedSize(sidecar);
   headers.set("Content-Type", contentType);
   headers.set("Content-Encoding", "br");
   headers.set("Vary", "Accept-Encoding");
+  if (encodedSize !== null) headers.set("x-rom-weaver-encoded-size", encodedSize);
   // Function responses bypass the deployed _headers file, so the /assets/*
   // cache rule and the cross-origin-isolation headers are restated. COEP is
   // load-bearing: dedicated-worker scripts on a cross-origin-isolated page

@@ -3,15 +3,35 @@ import { configureLogger } from "../../src/lib/logging.ts";
 import {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
+  downloadOfflineCopy,
+  getOfflineCopyState,
   listenForOfflinePrecacheProgress,
   listenForServiceWorkerLog,
   pauseOfflineWarmup,
   queryOfflineCachedFiles,
   resumeOfflineWarmup,
   scheduleOfflineWarmup,
+  setOfflineWarmupEnabled,
 } from "../../src/webapp/pwa/offline-warmup-client.ts";
 
 type Reply = Record<string, unknown>;
+
+const acknowledgePolicy = (message: Reply, transfer?: Transferable[]) => {
+  if (message.action !== "set-offline-copy-enabled") return false;
+  const port = transfer?.[0] as MessagePort;
+  setTimeout(
+    () =>
+      port.postMessage({
+        action: "offline-copy-state",
+        enabled: message.enabled,
+        cachedBytes: 0,
+        ready: false,
+        totalBytes: 2,
+      }),
+    0,
+  );
+  return true;
+};
 
 /**
  * Fake service worker controller: records every posted message, and answers
@@ -19,8 +39,13 @@ type Reply = Record<string, unknown>;
  */
 const createFakeController = (replies: Reply[]) => {
   const messages: Reply[] = [];
+  const policyMessages: Reply[] = [];
   const controller = {
     postMessage: (message: Reply, transfer?: Transferable[]) => {
+      if (acknowledgePolicy(message, transfer)) {
+        policyMessages.push(message);
+        return;
+      }
       messages.push(message);
       const port = transfer?.[0] as MessagePort | undefined;
       if (!port) return;
@@ -29,7 +54,7 @@ const createFakeController = (replies: Reply[]) => {
       setTimeout(() => port.postMessage(reply), 0);
     },
   } as unknown as ServiceWorker;
-  return { controller, messages };
+  return { controller, messages, policyMessages };
 };
 
 const createServiceWorker = (controller: ServiceWorker | null) => {
@@ -63,12 +88,137 @@ let cancel: (() => void) | undefined;
 
 afterEach(async () => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   cancel?.();
   cancel = undefined;
+  setOfflineWarmupEnabled(true);
   await flush();
+  configureLogger({ level: "warn", sink: null });
 });
 
 describe("offline warm-up client", () => {
+  it("applies policy to a replacement worker without waiting for the old worker to reply", async () => {
+    const postMessage = vi.fn();
+    const oldWorker = { postMessage } as unknown as ServiceWorker;
+    const { controller, messages, policyMessages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker, notifyControllerChange } = createServiceWorker(oldWorker);
+    const onProgress = vi.fn();
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker }, onProgress });
+    await flush();
+    expect(postMessage).toHaveBeenCalledWith({ action: "set-offline-copy-enabled", enabled: true }, expect.any(Array));
+    serviceWorker.controller = controller;
+    notifyControllerChange();
+    await flush();
+    expect(policyMessages).toEqual([{ action: "set-offline-copy-enabled", enabled: true }]);
+    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
+  });
+
+  it("applies the disabled preference before startup and ignores bumps and reconnects", async () => {
+    setOfflineWarmupEnabled(false);
+    const { controller, messages, policyMessages } = createFakeController([]);
+    const { serviceWorker, notifyControllerChange } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
+    await flush();
+    bumpOfflineWarmupPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
+    notifyControllerChange();
+    await flush();
+    expect(policyMessages).toEqual([{ action: "set-offline-copy-enabled", enabled: false }]);
+    expect(messages).toEqual([]);
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false, error: null });
+  });
+
+  it("enables automatic downloading except on data saver, where a manual download overrides it", async () => {
+    setOfflineWarmupEnabled(false);
+    const { controller, messages, policyMessages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker } });
+    await flush();
+    setOfflineWarmupEnabled(true);
+    await flush();
+    expect(messages).toEqual([]);
+    expect(policyMessages.map(({ enabled }) => enabled)).toEqual([false, true]);
+    expect(downloadOfflineCopy()).toBe(true);
+    await flush();
+    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
+  });
+
+  it("starts a manual download from disabled and resumes automatic download after removal without data saver", async () => {
+    setOfflineWarmupEnabled(false);
+    const { controller, messages, policyMessages } = createFakeController([
+      progressReply({ ready: true }),
+      progressReply({ ready: true }),
+    ]);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
+    await flush();
+    expect(downloadOfflineCopy()).toBe(true);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: true, downloadRequested: true });
+    setOfflineWarmupEnabled(false);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, downloadRequested: false });
+    setOfflineWarmupEnabled(true);
+    await flush();
+    expect(policyMessages.map(({ enabled }) => enabled)).toEqual([false, true, false, true]);
+    expect(messages.filter(({ action }) => action === "offline-warmup-pump")).toHaveLength(2);
+  });
+
+  it("ignores progress from the active pump once removal starts and allows a fresh download", async () => {
+    let pumpPort: MessagePort | undefined;
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        if (acknowledgePolicy(message, transfer)) return;
+        if (message.action === "offline-warmup-pump") pumpPort = transfer?.[0] as MessagePort;
+      },
+    } as unknown as ServiceWorker;
+    const { serviceWorker } = createServiceWorker(controller);
+    const onProgress = vi.fn();
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker }, onProgress });
+    await flush();
+    const oldPort = pumpPort;
+    expect(oldPort).toBeDefined();
+    setOfflineWarmupEnabled(false);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false });
+    setOfflineWarmupEnabled(true);
+    oldPort?.postMessage(progressReply({ ready: true, cachedBytes: 999 }));
+    await flush();
+    expect(onProgress.mock.calls.some(([progress]) => progress.cachedBytes === 999)).toBe(false);
+    expect(pumpPort).not.toBe(oldPort);
+    pumpPort?.postMessage(progressReply({ ready: true }));
+    await flush();
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
+  });
+
+  it("reports a removal failure and retries without starting a pump", async () => {
+    let fail = true;
+    const messages: Reply[] = [];
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        messages.push(message);
+        if (message.action !== "set-offline-copy-enabled") return;
+        if (!fail) {
+          acknowledgePolicy(message, transfer);
+          return;
+        }
+        const port = transfer?.[0] as MessagePort;
+        setTimeout(() => port.postMessage({ action: "offline-copy-state-failed", error: "cache is unavailable" }), 0);
+      },
+    } as unknown as ServiceWorker;
+    setOfflineWarmupEnabled(false);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false, error: "cache is unavailable" });
+    fail = false;
+    setOfflineWarmupEnabled(false);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false, error: null });
+    expect(messages.filter(({ action }) => action === "set-offline-copy-enabled")).toHaveLength(2);
+    expect(messages.some(({ action }) => action === "offline-warmup-pump")).toBe(false);
+  });
+
   it("ignores an initial snapshot that arrives after live progress", () => {
     const onProgress = vi.fn();
     const gate = createOfflineWarmupProgressGate(onProgress);
@@ -202,6 +352,8 @@ describe("offline warm-up client", () => {
       pendingUnits: 5,
       totalBytes: 1200,
       totalFiles: 40,
+      transferredBytes: 200,
+      transferBytesIncomplete: true,
     });
     expect(onProgress).toHaveBeenLastCalledWith({
       cachedBytes: 300,
@@ -211,16 +363,36 @@ describe("offline warm-up client", () => {
       ready: false,
       totalBytes: 1200,
       totalFiles: 40,
+      transferredBytes: 200,
+      transferBytesIncomplete: true,
     });
 
-    post({ action: "offline-precache-progress", cachedBytes: "junk", cachedFiles: "junk", totalFiles: -1 });
-    expect(onProgress).toHaveBeenLastCalledWith(
-      expect.objectContaining({ cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: 0 }),
-    );
+    for (const transferredBytes of [-1, Infinity, NaN, "200"]) {
+      post({
+        action: "offline-precache-progress",
+        cachedBytes: "junk",
+        cachedFiles: "junk",
+        totalFiles: -1,
+        transferredBytes,
+        transferBytesIncomplete: "yes",
+      });
+      expect(onProgress).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: 0 }),
+      );
+      expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferredBytes");
+      expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferBytesIncomplete");
+    }
+
+    post({ action: "offline-precache-progress", transferredBytes: 0, transferBytesIncomplete: false });
+    expect(onProgress.mock.lastCall?.[0]).toMatchObject({ transferredBytes: 0, transferBytesIncomplete: false });
+
+    post({ action: "offline-precache-progress" });
+    expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferredBytes");
+    expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferBytesIncomplete");
 
     stop();
     post({ action: "offline-precache-progress", cachedFiles: 13, totalFiles: 40 });
-    expect(onProgress).toHaveBeenCalledTimes(2);
+    expect(onProgress).toHaveBeenCalledTimes(7);
   });
 
   it("queries the service worker for cached files", async () => {
@@ -277,10 +449,55 @@ describe("offline warm-up client", () => {
     const { controller, messages } = createFakeController([progressReply({ ready: true })]);
     const { serviceWorker } = createServiceWorker(controller);
 
-    cancel = scheduleOfflineWarmup({ idleDelayMs: 0, navigator: { serviceWorker } });
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
     await flush();
 
     expect(messages.map((message) => message.action)).toEqual(["offline-warmup-pump"]);
+  });
+
+  it("yields between default fallback pumps without a 250 ms wait", async () => {
+    vi.stubGlobal("requestIdleCallback", undefined);
+    const { controller, messages } = createFakeController([progressReply(), progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const observedPumpCounts: number[] = [];
+
+    cancel = scheduleOfflineWarmup({
+      navigator: { serviceWorker },
+      onProgress: (progress) => {
+        if (!progress.ready) setTimeout(() => observedPumpCounts.push(messages.length), 0);
+      },
+    });
+    await flush();
+
+    expect(messages).toHaveLength(2);
+    expect(observedPumpCounts).toEqual([1]);
+  });
+
+  it("honors a pause between default fallback pumps", async () => {
+    vi.stubGlobal("requestIdleCallback", undefined);
+    const { controller, messages } = createFakeController([progressReply(), progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+
+    cancel = scheduleOfflineWarmup({
+      navigator: { serviceWorker },
+      onProgress: (progress) => {
+        if (!progress.ready) pauseOfflineWarmup();
+      },
+    });
+    try {
+      await flush(8);
+      expect(messages.map(({ action }) => action)).toEqual(["offline-warmup-pump", "offline-warmup-pause"]);
+
+      resumeOfflineWarmup();
+      await flush(8);
+      expect(messages.map(({ action }) => action)).toEqual([
+        "offline-warmup-pump",
+        "offline-warmup-pause",
+        "offline-warmup-pump",
+      ]);
+    } finally {
+      resumeOfflineWarmup();
+    }
   });
 
   it("does not pump before the delay elapses or without a controller", async () => {
@@ -303,6 +520,8 @@ describe("offline warm-up client", () => {
       progressReply({ ready: true, unit: null }),
     ]);
     const { serviceWorker } = createServiceWorker(controller);
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
 
     pauseOfflineWarmup();
     cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
@@ -312,6 +531,102 @@ describe("offline warm-up client", () => {
     resumeOfflineWarmup();
     await flush();
     expect(messages.length).toBeGreaterThan(0);
+    const resumeLog = sink.mock.calls
+      .map(([record]) => record)
+      .find(({ message }) => message === "offline warm-up interactive wait ended");
+    expect(resumeLog?.details).toMatchObject({ aborted: false, pauseCount: 0 });
+    expect(resumeLog?.details?.durationMs).toBeGreaterThanOrEqual(10);
+  });
+
+  it("downloads every unit on data saver after an explicit request without starting duplicate pumps", async () => {
+    const { controller, messages } = createFakeController([
+      progressReply({ unit: "app-files" }),
+      progressReply({ unit: "emulatorjs:loader.js" }),
+      progressReply({ unit: "identify-group:default", ready: true }),
+    ]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const onProgress = vi.fn();
+    cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker }, onProgress });
+    await flush();
+    expect(messages).toHaveLength(0);
+    expect(downloadOfflineCopy()).toBe(true);
+    expect(downloadOfflineCopy()).toBe(true);
+    await flush();
+    expect(messages.map(({ action }) => action)).toEqual(Array(3).fill("offline-warmup-pump"));
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
+  });
+
+  it("keeps a manual request until a service worker controls the page", async () => {
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker, notifyControllerChange } = createServiceWorker(null);
+    cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker } });
+    expect(downloadOfflineCopy()).toBe(true);
+    await flush();
+    expect(messages).toHaveLength(0);
+    serviceWorker.controller = controller;
+    notifyControllerChange();
+    await flush();
+    expect(messages.map(({ action }) => action)).toEqual(["offline-warmup-pump"]);
+  });
+
+  it("still waits for interactive work before starting an explicit download", async () => {
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    pauseOfflineWarmup();
+    try {
+      cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker } });
+      expect(downloadOfflineCopy()).toBe(true);
+      await flush();
+      expect(messages).toHaveLength(0);
+      resumeOfflineWarmup();
+      await flush();
+      expect(messages.map(({ action }) => action)).toEqual(["offline-warmup-pump"]);
+    } finally {
+      resumeOfflineWarmup();
+    }
+  });
+
+  it("does not preserve a manual override after the scheduler is cancelled", async () => {
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const navigator = { connection: { saveData: true }, serviceWorker };
+    cancel = scheduleOfflineWarmup({ navigator });
+    downloadOfflineCopy();
+    await flush();
+    cancel();
+    expect(downloadOfflineCopy()).toBe(false);
+    cancel = scheduleOfflineWarmup({ navigator });
+    await flush();
+    expect(messages).toHaveLength(1);
+  });
+
+  it("starts a requested download when the browser comes back online", async () => {
+    const listeners = new EventTarget();
+    vi.stubGlobal("addEventListener", listeners.addEventListener.bind(listeners));
+    vi.stubGlobal("removeEventListener", listeners.removeEventListener.bind(listeners));
+    const { controller, messages } = createFakeController([progressReply(), progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const navigator = { connection: { saveData: true }, onLine: false, serviceWorker };
+    cancel = scheduleOfflineWarmup({ navigator });
+    expect(downloadOfflineCopy()).toBe(true);
+    await flush();
+    expect(messages).toHaveLength(0);
+    navigator.onLine = true;
+    listeners.dispatchEvent(new Event("online"));
+    await flush();
+    expect(messages.map(({ action }) => action)).toEqual(Array(2).fill("offline-warmup-pump"));
+  });
+
+  it("does not restart a completed manual download when the automatic start delay ends", async () => {
+    vi.useFakeTimers();
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const onProgress = vi.fn();
+    cancel = scheduleOfflineWarmup({ delayMs: 1000, navigator: { serviceWorker }, onProgress });
+    expect(downloadOfflineCopy()).toBe(true);
+    await vi.waitFor(() => expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ ready: true })));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(messages.map(({ action }) => action)).toEqual(["offline-warmup-pump"]);
   });
 
   it("posts an identify-group bump and pumps immediately, even on data saver", async () => {
@@ -361,6 +676,7 @@ describe("offline warm-up client", () => {
     const messages: Reply[] = [];
     const controller = {
       postMessage: (message: Reply, transfer?: Transferable[]) => {
+        if (acknowledgePolicy(message, transfer)) return;
         messages.push(message);
         const port = transfer?.[0] as MessagePort | undefined;
         if (!port) return;
@@ -381,12 +697,99 @@ describe("offline warm-up client", () => {
     expect(messages.filter((message) => message.action === "offline-warmup-pump")).toHaveLength(1);
   });
 
+  it("logs measured pump and idle waits with decoded progress totals", async () => {
+    vi.stubGlobal("requestIdleCallback", undefined);
+    const replies = [
+      progressReply({ cachedFiles: 1, totalFiles: 2, transferredBytes: 123 }),
+      progressReply({ cachedBytes: 2, cachedFiles: 2, pendingUnits: 0, ready: true, totalFiles: 2 }),
+    ];
+    const messages: Reply[] = [];
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        if (acknowledgePolicy(message, transfer)) return;
+        messages.push(message);
+        const port = transfer?.[0] as MessagePort | undefined;
+        if (port) setTimeout(() => port.postMessage(replies.shift()), 12);
+      },
+    } as unknown as ServiceWorker;
+    const { serviceWorker } = createServiceWorker(controller);
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
+
+    cancel = scheduleOfflineWarmup({
+      delayMs: 0,
+      idleDelayMs: 20,
+      navigator: { connection: { downlink: 3, effectiveType: "3g", rtt: 300 }, serviceWorker },
+    });
+    await flush(90);
+
+    const logs = sink.mock.calls.map(([record]) => record);
+    expect(logs.find(({ message }) => message === "offline warm-up scheduler started")?.details).toMatchObject({
+      delayMs: 0,
+      downlinkMbpsHint: 3,
+      effectiveType: "3g",
+      idleDelayMs: 20,
+      idleMechanism: "timer",
+      rttMsHint: 300,
+    });
+    const requests = logs.filter(({ message }) => message === "offline warm-up pump requested");
+    const completions = logs.filter(({ message }) => message === "offline warm-up pump completed");
+    expect(messages).toHaveLength(2);
+    expect(requests).toHaveLength(2);
+    expect(completions).toHaveLength(2);
+    expect(completions[0]?.details).toMatchObject({
+      cachedFiles: 1,
+      decodedCachedByteCount: 1,
+      decodedTotalByteCount: 2,
+      transferredByteCount: 123,
+      pendingUnits: 1,
+      pumpNumber: 1,
+      totalFiles: 2,
+      unit: "emulatorjs:loader.js",
+    });
+    expect(completions[0]?.details?.durationMs).toBeGreaterThanOrEqual(10);
+    expect(
+      logs.find(({ message }) => message === "offline warm-up idle wait ended")?.details?.durationMs,
+    ).toBeGreaterThanOrEqual(15);
+    expect(requests[1]?.details?.sincePreviousPumpMs).toBeGreaterThanOrEqual(15);
+    expect(completions[0]?.details).not.toHaveProperty("networkMbps");
+  });
+
+  it("logs an aborted interactive wait without starting a pump", async () => {
+    const { controller, messages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const sink = vi.fn();
+    configureLogger({ level: "debug", sink });
+
+    pauseOfflineWarmup();
+    try {
+      cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      cancel();
+      cancel = undefined;
+      resumeOfflineWarmup();
+      await flush(5);
+
+      const logs = sink.mock.calls.map(([record]) => record);
+      expect(logs.some(({ message }) => message === "offline warm-up waiting for interactive work")).toBe(true);
+      expect(logs.find(({ message }) => message === "offline warm-up interactive wait ended")?.details).toMatchObject({
+        aborted: true,
+      });
+      expect(
+        logs.find(({ message }) => message === "offline warm-up interactive wait ended")?.details?.durationMs,
+      ).toBeGreaterThanOrEqual(15);
+      expect(messages).toHaveLength(0);
+    } finally {
+      resumeOfflineWarmup();
+    }
+  });
+
   it("stops pumping after cancel", async () => {
     const replies = Array.from({ length: 50 }, () => progressReply());
     const { controller, messages } = createFakeController(replies);
     const { serviceWorker } = createServiceWorker(controller);
 
-    cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
+    cancel = scheduleOfflineWarmup({ delayMs: 0, navigator: { serviceWorker } });
     await flush(4);
     cancel();
     cancel = undefined;

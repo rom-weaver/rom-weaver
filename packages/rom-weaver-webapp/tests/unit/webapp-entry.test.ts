@@ -6,6 +6,7 @@ import type { ServiceWorkerCacheState } from "../../src/webapp/pwa/service-worke
 import {
   getDefaultSettings,
   LOCAL_STORAGE_SETTINGS_ID,
+  serializeSettingsForStorage,
   SETTINGS_FIELD_METADATA,
 } from "../../src/webapp/settings/settings-state.ts";
 import type { WebappRootProps } from "../../src/webapp/webapp-root-types.ts";
@@ -248,6 +249,17 @@ describe("boot", () => {
     await loadWebapp({ prerendered: true, url: "/trim-rom" });
 
     expect(mocks.renders[0]?.state.currentView).toBe("patcher");
+  });
+
+  it("hydrates in the document language before applying the saved language", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["de-DE"]);
+    const stored = serializeSettingsForStorage({ ...getDefaultSettings(), language: "es" });
+    if (!stored) throw new Error("the saved language must produce settings to persist");
+    localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, stored);
+    await loadWebapp({ prerendered: true });
+
+    await vi.waitFor(() => expect(mocks.renders.at(-1)?.state.settings.language).toBe("es"));
+    expect(mocks.renders[0]?.state.settings.language).toBe("en");
   });
 
   it("flushes a render that was queued while hydration was still open", async () => {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-type PrecacheManifestEntry = string | { revision?: string | null; url: string };
+type PrecacheManifestEntry = string | { revision?: string | null; url: string; install?: boolean; sizeBytes?: number };
 
 type CapturedRoute = {
   handler: (options: { event?: { type: string }; request: Request; url: URL }) => Promise<Response>;
@@ -8,8 +8,19 @@ type CapturedRoute = {
 };
 
 type CapturedPlugin = {
-  cacheWillUpdate?: (options: { request: Request; response: Response }) => Promise<Response | null | undefined>;
-  handlerDidComplete?: (options: { event: { type: string } }) => Promise<void>;
+  fetchDidSucceed?: (options: { event: { type: string }; request: Request; response: Response }) => Promise<Response>;
+  cacheDidUpdate?: (options: { request: Request }) => Promise<void>;
+  cacheWillUpdate?: (options: {
+    event?: { type: string };
+    request: Request;
+    response: Response;
+  }) => Promise<Response | null | undefined>;
+  handlerDidComplete?: (options: {
+    event: { type: string };
+    request: Request;
+    response?: Response;
+    error?: Error;
+  }) => Promise<void>;
   handlerWillRespond?: (options: { response: Response }) => Promise<Response>;
   requestWillFetch?: (options: { event: { type: string }; request: Request }) => Promise<Request>;
 };
@@ -30,6 +41,7 @@ type WarmupStub = {
   getReadyState: () => Promise<ReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: boolean }>;
   runNextUnit: (onInterim?: (interim: { bytes: number }) => void) => Promise<{ bytes: number; files: number }>;
+  reset: () => void;
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
   setIdentifyGroupWanted: (groupId: string, wanted: boolean) => Promise<Array<{ id: string }>>;
 };
@@ -225,6 +237,7 @@ const createWarmupStub = (): WarmupStub => ({
   })),
   installIdentifyGroup: vi.fn(async (groupId: string) => ({ id: groupId, installed: true })),
   runNextUnit: vi.fn(async () => ({ bytes: 12, files: 1 })),
+  reset: vi.fn(),
   serveOptionalIdentifyPack: vi.fn(async () => new Response("pack-bytes")),
   setIdentifyGroupWanted: vi.fn(async () => [{ id: "computers" }]),
 });
@@ -324,7 +337,7 @@ const loadWorker = async (
     cacheStorage,
     emulatorJsRoute: requireRoute(1),
     fetchStub,
-    identifyPackRoute: requireRoute(2),
+    identifyPackRoute: requireRoute(3),
     networkFirstRoute: requireRoute(0),
     plugin,
     scope,
@@ -411,10 +424,178 @@ describe("worker log relay", () => {
 });
 
 describe("service worker bootstrap", () => {
-  it("registers the three runtime routes, the precache plugin and the warm-up", async () => {
+  it("honors a pause received while the pump is waiting for its initial cache state", async () => {
+    const urls = Array.from({ length: 6 }, (_, index) => `${APP_ORIGIN}/assets/${index}.bin`);
+    const harness = await loadWorker({ manifest: urls.map((url) => ({ url, install: false, sizeBytes: 1 })) });
+    for (const url of urls) harness.fetchStub.handlers.set(url, () => new Response("x"));
+    const state = await harness.warmup.getReadyState();
+    let release: () => void = () => undefined;
+    const gate = new Promise<ReadyState>((resolve) => {
+      release = () => resolve(state);
+    });
+    const readState = vi
+      .mocked(harness.warmup.getReadyState)
+      .mockClear()
+      .mockImplementationOnce(() => gate);
+    const pump = dispatch(harness.scope, "message", { data: { action: "offline-warmup-pump" } });
+    try {
+      await vi.waitFor(() => expect(readState).toHaveBeenCalledTimes(1));
+      await dispatch(harness.scope, "message", { data: { action: "offline-warmup-pause" } });
+      release();
+      await pump;
+      expect(harness.fetchStub.calls.filter(({ url }) => urls.includes(url))).toHaveLength(0);
+      expect(harness.warmup.runNextUnit).not.toHaveBeenCalled();
+      await dispatch(harness.scope, "message", { data: { action: "offline-warmup-pump" } });
+      expect(harness.fetchStub.calls.filter(({ url }) => urls.includes(url))).toHaveLength(6);
+    } finally {
+      release();
+      await pump;
+    }
+  });
+
+  it("updates transferred sizes when a file is cached while another batch file is still downloading", async () => {
+    const first = `${APP_ORIGIN}/assets/first.bin`;
+    const second = `${APP_ORIGIN}/assets/second.bin`;
+    const harness = await loadWorker({
+      manifest: [
+        { url: first, install: false, sizeBytes: 3 },
+        { url: second, install: false, sizeBytes: 10 },
+      ],
+    });
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    harness.fetchStub.handlers.set(
+      first,
+      () => new Response("one", { headers: { "content-length": "2", "content-encoding": "br" } }),
+    );
+    harness.fetchStub.handlers.set(
+      second,
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              stream = controller;
+            },
+          }),
+        ),
+    );
+    vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+      const state = await harness.warmupConfig.precacheState();
+      return {
+        ...state,
+        ready: state.cachedFiles === state.totalFiles,
+        pendingUnits: state.totalFiles - state.cachedFiles,
+      };
+    });
+    const replies: unknown[] = [];
+    const pump = dispatch(harness.scope, "message", {
+      data: { action: "offline-warmup-pump" },
+      ports: [{ postMessage: (reply) => replies.push(reply) }],
+    });
+    try {
+      await vi.waitFor(() =>
+        expect(replies).toContainEqual(expect.objectContaining({ cachedFiles: 1, transferredBytes: 2, ready: false })),
+      );
+      stream?.enqueue(new Uint8Array(4));
+      await vi.waitFor(() =>
+        expect(replies.at(-1)).toMatchObject({ cachedBytes: 7, transferredBytes: 2, ready: false }),
+      );
+      stream?.enqueue(new Uint8Array(6));
+      stream?.close();
+      await pump;
+      expect(replies.at(-1)).toMatchObject({ cachedFiles: 2, transferredBytes: 12, ready: true });
+    } finally {
+      stream?.error(new Error("test stream cleanup"));
+      await pump.catch(() => undefined);
+    }
+  });
+
+  it("counts a shared download once and streams progress while cache snapshots are blocked", async () => {
+    const url = `${APP_ORIGIN}/assets/shared.bin`;
+    const harness = await loadWorker({ manifest: [{ url, install: false, sizeBytes: 10 }] });
+    const body = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = body.writable.getWriter();
+    harness.fetchStub.handlers.set(url, () => new Response(body.readable));
+    vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+      const state = await harness.warmupConfig.precacheState();
+      return {
+        ...state,
+        ready: state.cachedFiles === state.totalFiles,
+        pendingUnits: state.totalFiles - state.cachedFiles,
+      };
+    });
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const interactive = routed(harness, requireRoute(2), new Request(url));
+    const replies: Array<{ action: string; cachedBytes: number; ready: boolean }> = [];
+    let releaseSnapshot: () => void = () => undefined;
+    const snapshotGate = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
+    let pump: Promise<void> | undefined;
+    try {
+      await writer.write(new Uint8Array(3));
+      expect(await harness.warmup.getReadyState()).toMatchObject({ cachedBytes: 3, ready: false });
+      pump = dispatch(harness.scope, "message", {
+        data: { action: "offline-warmup-pump" },
+        ports: [{ postMessage: (reply) => replies.push(reply as (typeof replies)[number]) }],
+      });
+      await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 3, ready: false }));
+      const readState = vi.mocked(harness.warmup.getReadyState).getMockImplementation();
+      vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+        await snapshotGate;
+        if (!readState) throw new Error("Missing ready state reader");
+        return readState();
+      });
+      now += 50;
+      await writer.write(new Uint8Array(4));
+      await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 7, ready: false }));
+      releaseSnapshot();
+      await writer.write(new Uint8Array(3));
+      await writer.close();
+      await Promise.all([interactive, pump]);
+      expect(replies.map((reply) => reply.cachedBytes)).toEqual([3, 7, 10, 10, 10]);
+      expect(replies.at(-1)).toMatchObject({ action: "offline-warmup-progress", ready: true });
+    } finally {
+      releaseSnapshot();
+      await writer.abort(new Error("test stream cleanup"));
+      await Promise.allSettled([interactive, pump]);
+      writer.releaseLock();
+    }
+  });
+
+  it("installs only essential entries and includes deferred files in offline totals", async () => {
+    const initial = { install: true, revision: "root", sizeBytes: 10, url: "index.html" };
+    const deferred = { install: false, revision: "docs", sizeBytes: 20, url: "docs/index.html" };
+    const harness = await loadWorker({ manifest: [initial, deferred] });
+    expect(hoisted.precacheAndRoute).toHaveBeenCalledWith([initial], expect.anything());
+    await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
+      cachedBytes: 0,
+      deferredCachedBytes: 0,
+      cachedFiles: 0,
+      totalBytes: 30,
+      totalFiles: 2,
+      transferredBytes: 0,
+      transferBytesIncomplete: false,
+    });
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/`, () => new Response("docs"));
+    await routed(harness, requireRoute(2), new Request(`${APP_ORIGIN}/docs/index.html`));
+    await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
+      cachedBytes: 20,
+      deferredCachedBytes: 20,
+      cachedFiles: 1,
+      totalBytes: 30,
+      totalFiles: 2,
+      transferredBytes: 20,
+      transferBytesIncomplete: false,
+    });
+    harness.fetchStub.handlers.delete(`${APP_ORIGIN}/docs/`);
+    const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/docs`));
+    expect(await response.text()).toBe("docs");
+  });
+  it("registers the runtime and deferred routes, the precache plugin and the warm-up", async () => {
     const harness = await loadWorker();
 
-    expect(hoisted.routes).toHaveLength(3);
+    expect(hoisted.routes).toHaveLength(4);
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith(DEFAULT_MANIFEST, {
       ignoreURLParametersMatching: [/^sha256$/],
     });
@@ -554,7 +735,6 @@ describe("network-first handler", () => {
         await cache.put(new Request(`${APP_ORIGIN}/index.html`), new Response("cached", { status: 200 }));
       },
     });
-
     const response = await routed(harness, harness.networkFirstRoute, new Request(`${APP_ORIGIN}/index.html`));
 
     await expect(response.text()).resolves.toBe("cached");
@@ -729,6 +909,110 @@ describe("identify pack route", () => {
 });
 
 describe("precache plugin", () => {
+  it("logs install completion and activation stages when updating an existing worker", async () => {
+    const harness = await loadWorker({ hasActiveWorker: true, manifest: ["index.html"] });
+    let now = 100;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    await dispatch(harness.scope, "install");
+    now = 350;
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        action: "service-worker-log",
+        message: "precache install complete",
+        details: { files: 1, elapsedMs: 250 },
+      }),
+    );
+    harness.scope.clients.claim.mockImplementation(async () => {
+      now += 75;
+    });
+    await dispatch(harness.scope, "activate");
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        message: "service worker phase complete",
+        details: { phase: "claim clients", elapsedMs: 75 },
+      }),
+    );
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        message: "service worker phase complete",
+        details: { phase: "activate", elapsedMs: 75 },
+      }),
+    );
+  });
+
+  it("logs an install failure without labeling it complete", async () => {
+    const harness = await loadWorker({ manifest: ["index.html"] });
+    await dispatch(harness.scope, "install");
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      error: new Error("cache write failed"),
+    });
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({ message: "precache install failed" }),
+    );
+    expect(harness.scope.clientMessages).not.toContainEqual(
+      expect.objectContaining({ message: "precache install complete" }),
+    );
+  });
+
+  it("logs a rejected Workbox response before the remaining install entries run", async () => {
+    const harness = await loadWorker();
+    await dispatch(harness.scope, "install");
+    vi.stubGlobal("FetchEvent", Event);
+    vi.stubGlobal("ExtendableEvent", Event);
+    vi.stubGlobal("location", harness.scope.location);
+    harness.fetchStub.stub.mockRejectedValue(new Error("network lost"));
+    const { PrecacheStrategy } = await import("workbox-precaching/PrecacheStrategy.js");
+    const strategy = new PrecacheStrategy({ plugins: [{ handlerDidComplete: harness.plugin.handlerDidComplete }] });
+    const event = Object.assign(new Event("install"), { waitUntil: vi.fn() });
+    const [response, done] = strategy.handleAll({ event, request: new Request(APP_SCOPE) });
+    await expect(response).rejects.toThrow();
+    await done;
+    expect(harness.scope.clientMessages).toContainEqual(
+      expect.objectContaining({
+        message: "precache install failed",
+        details: expect.objectContaining({ files: 1, error: "No precache response" }),
+      }),
+    );
+    expect(harness.scope.clientMessages).not.toContainEqual(
+      expect.objectContaining({ message: "precache install complete" }),
+    );
+  });
+
+  it("reports incoming bytes before an install response finishes", async () => {
+    const harness = await loadWorker();
+    await dispatch(harness.scope, "install", {});
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const source = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
+        },
+      }),
+    );
+    const response = await harness.plugin.fetchDidSucceed?.({
+      event: { type: "install" },
+      request: new Request(`${APP_ORIGIN}/assets/app.js`),
+      response: source,
+    });
+    const reader = response?.body?.getReader();
+    streamController?.enqueue(new Uint8Array(12));
+    expect((await reader?.read())?.value?.byteLength).toBe(12);
+    await vi.waitFor(() =>
+      expect(harness.scope.clientMessages).toContainEqual(
+        expect.objectContaining({ action: "offline-precache-progress", cachedBytes: 52, ready: false }),
+      ),
+    );
+    streamController?.close();
+    await reader?.read();
+    await harness.plugin.cacheDidUpdate?.({ request: new Request(`${APP_ORIGIN}/assets/app.js`) });
+  });
   it("lowers the fetch priority of install-time requests only", async () => {
     const harness = await loadWorker();
     const request = new Request(`${APP_ORIGIN}/assets/app.js`);
@@ -775,18 +1059,27 @@ describe("precache plugin", () => {
   const precacheMessages = (scope: { clientMessages: unknown[] }) =>
     scope.clientMessages.filter((message) => (message as { action?: string }).action === "offline-precache-progress");
 
-  it("broadcasts throttled install progress to uncontrolled pages", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
+  it("suppresses unchanged percentages but always broadcasts install completion to uncontrolled pages", async () => {
     const harness = await loadWorker();
     await dispatch(harness.scope, "install");
 
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
     expect(precacheMessages(harness.scope)).toHaveLength(1);
 
-    vi.setSystemTime(1_000_500);
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
 
     expect(precacheMessages(harness.scope)).toHaveLength(2);
     expect(precacheMessages(harness.scope)[0]).toMatchObject({
@@ -802,8 +1095,16 @@ describe("precache plugin", () => {
     const harness = await loadWorker({ hasActiveWorker: true });
     await dispatch(harness.scope, "install");
 
-    await harness.plugin.handlerDidComplete?.({ event: { type: "fetch" } });
-    await harness.plugin.handlerDidComplete?.({ event: { type: "install" } });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "fetch" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
+    await harness.plugin.handlerDidComplete?.({
+      event: { type: "install" },
+      request: new Request(APP_SCOPE),
+      response: new Response("ok"),
+    });
 
     expect(precacheMessages(harness.scope)).toEqual([]);
   });
@@ -927,7 +1228,7 @@ describe("offline warm-up messages", () => {
   };
 
   it("streams interim progress and the final unit result for a pump", async () => {
-    const harness = await loadWorker();
+    const harness = await loadWorker({ manifest: [] });
     vi.mocked(harness.warmup.runNextUnit).mockImplementation(async (onInterim) => {
       onInterim?.({ bytes: 5 });
       return { bytes: 12, files: 1 };
@@ -942,7 +1243,7 @@ describe("offline warm-up messages", () => {
   });
 
   it("reports a failed pump", async () => {
-    const harness = await loadWorker();
+    const harness = await loadWorker({ manifest: [] });
     vi.mocked(harness.warmup.runNextUnit).mockRejectedValue(new Error("disk full"));
 
     const replies = await collect(harness, { action: "offline-warmup-pump" });
@@ -978,6 +1279,7 @@ describe("offline warm-up messages", () => {
         action: "offline-ready-state",
         cachedBytes: 40,
         cachedFiles: 2,
+        enabled: true,
         pendingUnits: 1,
         ready: false,
         totalBytes: 100,
@@ -1067,12 +1369,203 @@ describe("offline warm-up messages", () => {
   });
 });
 
+describe("offline copy policy", () => {
+  const send = async (harness: Harness, data: unknown) => {
+    const replies: unknown[] = [];
+    await dispatch(harness.scope, "message", {
+      data,
+      ports: [{ postMessage: (message: unknown) => replies.push(message) }],
+    });
+    return replies;
+  };
+
+  it("rejects a malformed setting without removing files", async () => {
+    const harness = await loadWorker();
+    await (await harness.cacheStorage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/index.html`, new Response("app"));
+    expect(await send(harness, { action: "set-offline-copy-enabled", enabled: "false" })).toEqual([
+      { action: "offline-copy-state-failed", error: "Error: Offline copy enabled value must be a boolean" },
+    ]);
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeDefined();
+  });
+
+  it("blocks Workbox cache repair while disabled and drops install entries without failing the install", async () => {
+    const harness = await loadWorker();
+    await send(harness, { action: "set-offline-copy-enabled", enabled: false });
+    const request = new Request(`${APP_ORIGIN}/assets/app.js`);
+    const response = new Response("app");
+    expect(await harness.plugin.cacheWillUpdate?.({ event: { type: "fetch" }, request, response })).toBeNull();
+    expect(await harness.plugin.cacheWillUpdate?.({ event: { type: "install" }, request, response })).toBeDefined();
+    await (await harness.cacheStorage.open(PRECACHE_NAME)).put(request, response);
+    await harness.plugin.cacheDidUpdate?.({ request });
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(request)).toBeUndefined();
+  });
+
+  it("removes managed files while keeping COEP, identify choices, and unrelated caches", async () => {
+    const deferredUrl = `${APP_ORIGIN}/assets/deferred.bin`;
+    const wantedUrl = `${APP_ORIGIN}/__rom-weaver-identify-wanted__`;
+    const harness = await loadWorker({
+      manifest: [
+        { url: "index.html", sizeBytes: 3 },
+        { url: "assets/app.js", revision: "r1", sizeBytes: 2 },
+        { url: deferredUrl, install: false, sizeBytes: 4 },
+      ],
+      seedCaches: async (storage) => {
+        await (await storage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/index.html`, new Response("app"));
+        await (await storage.open(RUNTIME_CACHE_NAME)).put(COEP_MODE_URL, new Response("require-corp"));
+        await (await storage.open(RUNTIME_CACHE_NAME)).put(`${APP_ORIGIN}/page`, new Response("page"));
+        await (await storage.open(IDENTIFY_CACHE_NAME)).put(wantedUrl, new Response('["computers"]'));
+        await (
+          await storage.open(IDENTIFY_CACHE_NAME)
+        ).put(`${APP_ORIGIN}/assets/identify-computers.pack`, new Response("pack"));
+        await (await storage.open("unrelated-cache")).put(`${APP_ORIGIN}/save`, new Response("save"));
+      },
+    });
+    vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+      const state = await harness.warmupConfig.precacheState();
+      return {
+        ...state,
+        pendingUnits: state.totalFiles - state.cachedFiles,
+        ready: state.cachedFiles === state.totalFiles,
+      };
+    });
+    harness.fetchStub.handlers.set(APP_SCOPE, () => new Response("app"));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/assets/app.js`, () => new Response("js"));
+    harness.fetchStub.handlers.set(deferredUrl, () => new Response("file"));
+    await (await harness.cacheStorage.open("precache-rom-weaver-app-deferred")).put(deferredUrl, new Response("old"));
+
+    const reply = await send(harness, { action: "set-offline-copy-enabled", enabled: false });
+    expect(reply).toEqual([expect.objectContaining({ action: "offline-copy-state", enabled: false, ready: false })]);
+    expect(await harness.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(COEP_MODE_URL)).toBeDefined();
+    expect(await harness.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(`${APP_ORIGIN}/page`)).toBeUndefined();
+    expect(await harness.cacheStorage.caches.get(IDENTIFY_CACHE_NAME)?.match(wantedUrl)).toBeDefined();
+    expect(
+      await harness.cacheStorage.caches.get(IDENTIFY_CACHE_NAME)?.match(`${APP_ORIGIN}/assets/identify-computers.pack`),
+    ).toBeUndefined();
+    expect(await harness.cacheStorage.caches.get("unrelated-cache")?.match(`${APP_ORIGIN}/save`)).toBeDefined();
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeUndefined();
+    expect(
+      await harness.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(deferredUrl),
+    ).toBeUndefined();
+    expect(harness.scope.clients.claim).not.toHaveBeenCalled();
+
+    await send(harness, { action: "offline-warmup-pump" });
+    expect(harness.fetchStub.calls.some(({ url }) => url === deferredUrl)).toBe(false);
+    expect(await (await routed(harness, requireRoute(2), new Request(deferredUrl))).text()).toBe("file");
+    expect(
+      await harness.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(deferredUrl),
+    ).toBeUndefined();
+    const emulatorUrl = `${APP_ORIGIN}/emulatorjs/data/game.js`;
+    harness.fetchStub.handlers.set(emulatorUrl, () => new Response("game"));
+    expect(await (await routed(harness, harness.emulatorJsRoute, new Request(emulatorUrl))).text()).toBe("game");
+    expect(await harness.cacheStorage.caches.get(EMULATORJS_CACHE_NAME)?.match(emulatorUrl)).toBeUndefined();
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/page`, () => new Response("page"));
+    const page = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/page`));
+    expect(page.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
+    expect(await harness.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(`${APP_ORIGIN}/page`)).toBeUndefined();
+    await send(harness, { action: "set-offline-copy-enabled", enabled: true });
+    expect(await send(harness, { action: "offline-warmup-pump" })).toContainEqual(
+      expect.objectContaining({ action: "offline-warmup-progress" }),
+    );
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeDefined();
+    expect(
+      await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/assets/app.js?__WB_REVISION__=r1`),
+    ).toBeDefined();
+    const complete = await send(harness, { action: "offline-warmup-pump" });
+    expect(harness.fetchStub.calls.some(({ url }) => url === deferredUrl)).toBe(true);
+    expect(await harness.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(deferredUrl)).toBeDefined();
+    expect(complete).toContainEqual(expect.objectContaining({ action: "offline-warmup-progress", ready: true }));
+    expect(await harness.warmupConfig.precacheState()).toMatchObject({
+      cachedBytes: 9,
+      cachedFiles: 3,
+      totalBytes: 9,
+      totalFiles: 3,
+    });
+  });
+
+  it("resumes missing core files after restarting an enabled but incomplete copy", async () => {
+    const harness = await loadWorker({
+      hasActiveWorker: true,
+      manifest: [{ url: "index.html", revision: "root", sizeBytes: 3 }],
+      seedCaches: async (storage) => {
+        await (
+          await storage.open("precache-rom-weaver-offline-policy")
+        ).put(`${APP_ORIGIN}/__rom-weaver-offline-copy-enabled__`, new Response("true"));
+      },
+    });
+    harness.fetchStub.handlers.set(APP_SCOPE, () => new Response("app"));
+    await send(harness, { action: "set-offline-copy-enabled", enabled: true });
+    await send(harness, { action: "offline-warmup-pump" });
+    expect(
+      await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html?__WB_REVISION__=root`),
+    ).toBeDefined();
+    expect(await harness.warmupConfig.precacheState()).toMatchObject({ cachedBytes: 3, cachedFiles: 1, totalFiles: 1 });
+  });
+
+  it("hydrates the disabled choice after a worker restart", async () => {
+    const first = await loadWorker();
+    await send(first, { action: "set-offline-copy-enabled", enabled: false });
+    const metadata = await first.cacheStorage.caches
+      .get("precache-rom-weaver-offline-policy")
+      ?.match(`${APP_ORIGIN}/__rom-weaver-offline-copy-enabled__`);
+    expect(await metadata?.clone().text()).toBe("false");
+    const restarted = await loadWorker({
+      seedCaches: async (storage) => {
+        if (metadata) {
+          await (
+            await storage.open("precache-rom-weaver-offline-policy")
+          ).put(`${APP_ORIGIN}/__rom-weaver-offline-copy-enabled__`, metadata.clone());
+        }
+        await (await storage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/index.html`, new Response("install"));
+        await (
+          await storage.open("precache-rom-weaver-runtime-old-build")
+        ).put(COEP_MODE_URL, new Response("require-corp"));
+        await (await storage.open("precache-rom-weaver-app-deferred")).put(`${APP_ORIGIN}/asset`, new Response("file"));
+      },
+    });
+    restarted.scope.clients.claim.mockImplementation(async () => {
+      expect(await restarted.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeUndefined();
+      expect(
+        await restarted.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(`${APP_ORIGIN}/asset`),
+      ).toBeUndefined();
+      expect(await restarted.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(COEP_MODE_URL)).toBeDefined();
+    });
+    await dispatch(restarted.scope, "activate");
+    expect(restarted.cacheStorage.caches.has("precache-rom-weaver-offline-policy")).toBe(true);
+    expect(restarted.scope.clients.claim).toHaveBeenCalledTimes(1);
+    const page = await restarted.plugin.handlerWillRespond?.({ response: new Response("page") });
+    expect(page?.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
+    expect(await send(restarted, { action: "get-offline-ready-state" })).toEqual([
+      expect.objectContaining({ action: "offline-ready-state", enabled: false, ready: false }),
+    ]);
+    await send(restarted, { action: "offline-warmup-pump" });
+    expect(restarted.warmup.runNextUnit).not.toHaveBeenCalled();
+  });
+});
+
 describe("precache state reported to the warm-up", () => {
+  it("does not count a cached file from a different revision", async () => {
+    const harness = await loadWorker({
+      manifest: [{ url: "index.html", revision: "new", sizeBytes: 10 }],
+      seedCaches: async (storage) => {
+        const cache = await storage.open(PRECACHE_NAME);
+        await cache.put(`${APP_ORIGIN}/index.html?__WB_REVISION__=old`, new Response("old"));
+      },
+    });
+    expect(await harness.warmupConfig.precacheState()).toEqual({
+      cachedBytes: 0,
+      deferredCachedBytes: 0,
+      cachedFiles: 0,
+      totalBytes: 10,
+      totalFiles: 1,
+      transferredBytes: 0,
+      transferBytesIncomplete: false,
+    });
+  });
   it("combines the build's size table with what the precache already holds", async () => {
     const harness = await loadWorker({
       seedCaches: async (cacheStorage) => {
         const cache = await cacheStorage.open(PRECACHE_NAME);
-        await cache.put(new Request(`${APP_ORIGIN}/index.html`), new Response("<html>"));
+        await cache.put(new Request(`${APP_ORIGIN}/index.html?__WB_REVISION__=r1`), new Response("<html>"));
       },
     });
     harness.fetchStub.handlers.set(
@@ -1082,9 +1575,12 @@ describe("precache state reported to the warm-up", () => {
 
     await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
       cachedBytes: 10,
+      deferredCachedBytes: 0,
       cachedFiles: 1,
       totalBytes: 30,
       totalFiles: 3,
+      transferredBytes: 10,
+      transferBytesIncomplete: false,
     });
     expect(harness.fetchStub.calls[0]?.init).toMatchObject({ priority: "low" });
   });
@@ -1095,9 +1591,12 @@ describe("precache state reported to the warm-up", () => {
 
     await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
       cachedBytes: 0,
+      deferredCachedBytes: 0,
       cachedFiles: 0,
       totalBytes: 0,
       totalFiles: 3,
+      transferredBytes: 0,
+      transferBytesIncomplete: false,
     });
   });
 

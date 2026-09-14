@@ -12,8 +12,16 @@ import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } fr
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 import { createOfflineWarmup } from "./offline-warmup.ts";
+import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
-import { keepResourceTimingsRecording, withMeasuredEncodedSize } from "./pwa/response-encoded-size.ts";
+import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
+import { createOfflineCopyPolicy } from "./pwa/offline-copy-policy.ts";
+import { cacheWithDownloadLog, fetchWithDownloadLog, observeDownloadTimings } from "./pwa/offline-download-log.ts";
+import {
+  createCachedTransferSizeReader,
+  keepResourceTimingsRecording,
+  withMeasuredEncodedSize,
+} from "./pwa/response-encoded-size.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
@@ -25,9 +33,13 @@ declare const __IDENTIFY_OPTIONAL_PACK_GROUPS__: Array<{
   required?: boolean;
 }>;
 
-declare let self: ServiceWorkerGlobalScope & {
-  __WB_MANIFEST: Array<string | { revision?: string | null; url: string }>;
+type OfflinePrecacheEntry = {
+  revision?: string | null;
+  url: string;
+  install?: boolean;
+  sizeBytes?: number;
 };
+declare let self: ServiceWorkerGlobalScope;
 
 const PRECACHE_ID = "rom-weaver";
 const COI_COEP_CREDENTIALLESS_ACTION = "set-coep-credentialless";
@@ -60,7 +72,11 @@ const MANAGED_CACHE_PREFIX = `${cacheNames.prefix}-${PRECACHE_ID}-`;
 const EMULATORJS_CACHE_PREFIX = `${MANAGED_CACHE_PREFIX}emulatorjs-`;
 const EMULATORJS_CACHE_NAME = `${EMULATORJS_CACHE_PREFIX}${__EMULATORJS_VERSION__}`;
 const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
+const DEFERRED_CACHE_NAME = `${MANAGED_CACHE_PREFIX}app-deferred`;
+const OFFLINE_POLICY_CACHE_NAME = `${MANAGED_CACHE_PREFIX}offline-policy`;
+const offlineCopyPolicy = createOfflineCopyPolicy(OFFLINE_POLICY_CACHE_NAME, self.registration.scope);
 const CACHE_POLICY = createServiceWorkerCachePolicy({
+  additionalCacheNames: [DEFERRED_CACHE_NAME, OFFLINE_POLICY_CACHE_NAME],
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
   emulatorJsCachePrefix: EMULATORJS_CACHE_PREFIX,
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
@@ -149,6 +165,22 @@ const formatError = (error: unknown) => {
   return String(error);
 };
 
+const runServiceWorkerPhase = async (phase: string, run: () => Promise<unknown>) => {
+  const startedAt = performance.now();
+  logServiceWorker("service worker phase started", { phase });
+  try {
+    await run();
+    logServiceWorker("service worker phase complete", { phase, elapsedMs: Math.round(performance.now() - startedAt) });
+  } catch (error) {
+    logServiceWorker("service worker phase failed", {
+      phase,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      error: formatError(error),
+    });
+    throw error;
+  }
+};
+
 // Lazily load the persisted COEP mode into the in-memory flag. Only the first call after a (re)spawn
 // touches CacheStorage; later calls return the cached flag, so this is cheap to call per request.
 const ensureCoepModeHydrated = async (): Promise<boolean> => {
@@ -157,7 +189,19 @@ const ensureCoepModeHydrated = async (): Promise<boolean> => {
     coepModeHydration = (async () => {
       try {
         const cache = await caches.open(RUNTIME_CACHE_NAME);
-        const stored = await cache.match(COEP_MODE_URL);
+        let stored = await cache.match(COEP_MODE_URL);
+        if (!stored) {
+          const olderRuntimeCaches = (await caches.keys())
+            .filter((name) => name.startsWith(`${MANAGED_CACHE_PREFIX}runtime-`) && name !== RUNTIME_CACHE_NAME)
+            .reverse();
+          for (const name of olderRuntimeCaches) {
+            stored = await (await caches.open(name)).match(COEP_MODE_URL);
+            if (stored) {
+              await cache.put(COEP_MODE_URL, stored.clone());
+              break;
+            }
+          }
+        }
         if (stored) {
           coepCredentialless = (await stored.text()) !== COEP_MODE_REQUIRE_CORP;
           logServiceWorker("hydrated persisted COEP mode", { coepCredentialless });
@@ -262,9 +306,12 @@ const withCrossOriginIsolationHeaders = (
 
 // Broadcast combined precache and warm-up progress on first install; update installs stay silent.
 // Vite injects the manifest once, so other consumers MUST use this binding.
-const PRECACHE_MANIFEST = self.__WB_MANIFEST;
+const PRECACHE_MANIFEST = self.__WB_MANIFEST as Array<string | OfflinePrecacheEntry>;
+const INITIAL_MANIFEST = PRECACHE_MANIFEST.filter((entry) => typeof entry === "string" || entry.install !== false);
+const DEFERRED_MANIFEST = PRECACHE_MANIFEST.filter(
+  (entry): entry is OfflinePrecacheEntry => typeof entry !== "string" && entry.install === false,
+);
 
-const PRECACHE_PROGRESS_THROTTLE_MS = 200;
 // Written beside the bundle by the build's manifestTransform, because workbox
 // strips per-entry sizes before injecting the manifest. Absent in dev and on a
 // host serving an older bundle; the warm-up then falls back to entry counts.
@@ -273,6 +320,7 @@ const PRECACHE_SIZES_URL = new URL("precache-sizes.json", self.registration.scop
 const precacheEntryPath = (url: string) => new URL(url, self.registration.scope).pathname;
 
 let precacheSizesPromise: Promise<Map<string, number>> | null = null;
+const precacheTransferSizes = createCachedTransferSizeReader();
 
 /** Entry path to byte size, for the entries the build could measure. */
 const loadPrecacheSizes = (): Promise<Map<string, number>> => {
@@ -305,50 +353,128 @@ const loadPrecacheSizes = (): Promise<Map<string, number>> => {
  * filling the cache and again once it is complete.
  */
 const precacheState = async () => {
-  const [sizes, cache] = await Promise.all([loadPrecacheSizes(), caches.open(PRECACHE_NAME)]);
-  const cachedPaths = new Set((await cache.keys()).map((request) => new URL(request.url).pathname));
+  const [sizes, cache, deferred] = await Promise.all([
+    loadPrecacheSizes(),
+    caches.open(PRECACHE_NAME),
+    deferredPrecache.state(),
+  ]);
+  const cachedKeys = new Set((await cache.keys()).map((request) => request.url));
   let cachedBytes = 0;
   let cachedFiles = 0;
   let totalBytes = 0;
-  for (const entry of PRECACHE_MANIFEST) {
+  let transferredBytes = deferred.transferredBytes;
+  let transferBytesIncomplete = deferred.transferBytesIncomplete;
+  const transferMeasurements: Array<Promise<void>> = [];
+  for (const entry of INITIAL_MANIFEST) {
     const path = precacheEntryPath(typeof entry === "string" ? entry : entry.url);
-    const size = sizes.get(path) ?? 0;
+    const decodedSize = (typeof entry === "string" ? undefined : entry.sizeBytes) ?? sizes.get(path);
+    const size = decodedSize ?? 0;
     totalBytes += size;
-    if (cachedPaths.has(path)) {
+    const key = new URL(typeof entry === "string" ? entry : entry.url, self.registration.scope);
+    if (typeof entry !== "string" && entry.revision) key.searchParams.set("__WB_REVISION__", entry.revision);
+    if (cachedKeys.has(key.href)) {
       cachedBytes += size;
       cachedFiles += 1;
+      transferMeasurements.push(
+        precacheTransferSizes.read(cache, key.href, decodedSize).then((encodedSize) => {
+          if (encodedSize === null) transferBytesIncomplete = true;
+          else transferredBytes += encodedSize;
+        }),
+      );
     }
   }
-  return { cachedBytes, cachedFiles, totalBytes, totalFiles: PRECACHE_MANIFEST.length };
+  await Promise.all(transferMeasurements);
+  return {
+    cachedBytes: cachedBytes + deferred.cachedBytes,
+    deferredCachedBytes: deferred.cachedBytes,
+    cachedFiles: cachedFiles + deferred.cachedFiles,
+    totalBytes: totalBytes + deferred.totalBytes,
+    totalFiles: INITIAL_MANIFEST.length + deferred.totalFiles,
+    transferredBytes,
+    transferBytesIncomplete,
+  };
 };
 
 let firstInstallInProgress = false;
 let precacheInstalledCount = 0;
-let lastPrecacheBroadcast = 0;
+let installStartedAt = 0;
+let precacheInstallFailed = false;
+const precacheIncomingBytes = new Map<string, number>();
 
 // The install-time readout runs the same combined totals the warm-up reports
 // later, so one percentage covers both stages instead of each filling its own.
-const broadcastPrecacheProgress = async () => {
-  const state = await offlineWarmup.getReadyState();
-  const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
-  const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
-  for (const client of clients) client.postMessage(message);
-};
+const precacheProgress = createOfflineProgressReporter(
+  async () => {
+    const state = await offlineWarmup.getReadyState();
+    state.cachedBytes = Math.min(
+      state.totalBytes,
+      state.cachedBytes + [...precacheIncomingBytes.values()].reduce((sum, value) => sum + value, 0),
+    );
+    return state;
+  },
+  async (state) => {
+    const message = { action: "offline-precache-progress", ...state, phase: "precache", ready: false };
+    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: "window" });
+    for (const client of clients) client.postMessage(message);
+  },
+  (error) => logServiceWorker("precache progress failed", { error: formatError(error) }),
+);
 
 const precachePlugin: WorkboxPlugin = {
   async requestWillFetch({ event, request }) {
+    if (event.type === "install") logServiceWorker("precache download started", { url: new URL(request.url).pathname });
     return prioritizePrecacheInstallRequest(request, event);
   },
-  async handlerDidComplete({ event }) {
-    if (event.type !== "install" || !firstInstallInProgress) return;
+  async handlerDidComplete({ event, error, response, request }) {
+    if (event.type !== "install") return;
     precacheInstalledCount += 1;
-    const done = precacheInstalledCount >= PRECACHE_MANIFEST.length;
-    const now = Date.now();
-    if (!done && now - lastPrecacheBroadcast < PRECACHE_PROGRESS_THROTTLE_MS) return;
-    lastPrecacheBroadcast = now;
-    await broadcastPrecacheProgress();
+    if (error || !response) {
+      precacheInstallFailed = true;
+      logServiceWorker("precache install failed", {
+        url: new URL(request.url).pathname,
+        files: precacheInstalledCount,
+        elapsedMs: Math.round(performance.now() - installStartedAt),
+        error: error ? formatError(error) : "No precache response",
+      });
+    }
+    const done = precacheInstalledCount >= INITIAL_MANIFEST.length;
+    if (done && !precacheInstallFailed) {
+      logServiceWorker("precache install complete", {
+        files: precacheInstalledCount,
+        elapsedMs: Math.round(performance.now() - installStartedAt),
+      });
+    }
+    if (!firstInstallInProgress) return;
+    await precacheProgress.update(done);
   },
-  async cacheWillUpdate({ request, response }) {
+  async fetchDidSucceed({ event, request, response }) {
+    if (event.type !== "install" || !firstInstallInProgress || !response.body || !response.ok) return response;
+    precacheIncomingBytes.set(request.url, 0);
+    const body = response.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          precacheIncomingBytes.set(request.url, (precacheIncomingBytes.get(request.url) ?? 0) + chunk.byteLength);
+          controller.enqueue(chunk);
+          void precacheProgress.update();
+        },
+      }),
+    );
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  },
+  async cacheDidUpdate({ request }) {
+    precacheTransferSizes.forget(request.url);
+    if (!(await offlineCopyPolicy.isEnabled())) {
+      await (await caches.open(PRECACHE_NAME)).delete(request);
+      return;
+    }
+    const url = new URL(request.url);
+    url.searchParams.delete("__WB_REVISION__");
+    precacheIncomingBytes.delete(url.href);
+    logServiceWorker("precache entry stored", { url: url.pathname });
+  },
+  async cacheWillUpdate({ event, request, response }) {
+    // Workbox MUST cache successful install responses or it rejects the new worker. A runtime cache repair is optional.
+    if (event?.type !== "install" && !(await offlineCopyPolicy.isEnabled())) return null;
     // Workbox drops its own defaultPrecacheCacheabilityPlugin as soon as any
     // other plugin defines cacheWillUpdate, so this handler MUST repeat that
     // plugin's guard: without it an error page answered during install is
@@ -373,21 +499,35 @@ const toCredentiallessNoCorsRequest = (request: Request, credentialless = coepCr
 
 const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
   const credentialless = await ensureCoepModeHydrated();
-  const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request, credentialless));
+  const generation = offlineCopyPolicy.token();
+  const fetchedResponse = await fetchWithDownloadLog(
+    toCredentiallessNoCorsRequest(request, credentialless),
+    undefined,
+    logServiceWorker,
+  );
   // Cache the network response without its isolation headers: the stored entry then carries the
   // server's true headers, so a later COEP-mode flip re-stamps it correctly at serve time instead
   // of replaying a stale injected mode. The download size is the one header added, and it says
   // nothing about isolation.
-  if (fetchedResponse.ok) {
+  if (fetchedResponse.ok && offlineCopyRequestedEnabled && (await offlineCopyPolicy.isEnabled())) {
     const cache = await caches.open(RUNTIME_CACHE_NAME);
-    await cache.put(request, await withMeasuredEncodedSize(request.url, fetchedResponse.clone()));
+    await offlineCopyPolicy.write(
+      async () =>
+        cacheWithDownloadLog(
+          cache,
+          request,
+          await withMeasuredEncodedSize(request.url, fetchedResponse.clone()),
+          logServiceWorker,
+        ),
+      generation,
+    );
   }
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
 const matchRouteDocument = async (url: URL) => {
   for (const candidate of routeDocumentCandidates(url.pathname)) {
-    const response = await matchPrecache(candidate);
+    const response = (await matchPrecache(candidate)) ?? (await deferredPrecache.match(candidate));
     if (response) return response;
   }
   return undefined;
@@ -432,14 +572,26 @@ registerRoute(
 // EmulatorJS assets use this dedicated cache and are intentionally unaffected.
 const serveEmulatorJsAsset = async ({ request }: { request: Request }) => {
   const credentialless = await ensureCoepModeHydrated();
+  const generation = offlineCopyPolicy.token();
   const cache = await caches.open(EMULATORJS_CACHE_NAME);
   const cachedResponse = await cache.match(request);
   if (cachedResponse) {
     return withCrossOriginIsolationHeaders(cachedResponse, credentialless) || cachedResponse;
   }
 
-  const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request, credentialless));
-  if (fetchedResponse.ok) await cache.put(request, await withMeasuredEncodedSize(request.url, fetchedResponse.clone()));
+  const fetchedResponse = await fetchForInteractive(toCredentiallessNoCorsRequest(request, credentialless));
+  if (fetchedResponse.ok && offlineCopyRequestedEnabled) {
+    await offlineCopyPolicy.write(
+      async () =>
+        cacheWithDownloadLog(
+          cache,
+          request,
+          await withMeasuredEncodedSize(request.url, fetchedResponse.clone()),
+          logServiceWorker,
+        ),
+      generation,
+    );
+  }
   return withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
 };
 
@@ -458,7 +610,37 @@ const isIdentifyPackRequest = (url: URL) =>
 
 // Use a low-priority fetch hint for background traffic; the browser decides whether to honor it.
 const fetchForWarmup = (input: Request | string, init?: RequestInit) =>
-  fetch(input, { ...init, priority: "low" } as RequestInit);
+  fetchWithDownloadLog(input, { ...init, priority: "low" } as RequestInit, logServiceWorker);
+const fetchForInteractive = (input: Request | string, init?: RequestInit) =>
+  fetchWithDownloadLog(input, init, logServiceWorker);
+
+const deferredPrecache = createDeferredPrecache({
+  entries: DEFERRED_MANIFEST,
+  cacheName: DEFERRED_CACHE_NAME,
+  scope: self.registration.scope,
+  download: fetchForWarmup,
+  policy: offlineCopyPolicy,
+  log: logServiceWorker,
+});
+
+// Workbox installs these files once. The page-paced pump restores them after a user removes and later enables the copy.
+const corePrecache = createDeferredPrecache({
+  entries: INITIAL_MANIFEST.map((entry) => (typeof entry === "string" ? { url: entry } : entry)),
+  cacheName: PRECACHE_NAME,
+  scope: self.registration.scope,
+  download: fetchForWarmup,
+  policy: offlineCopyPolicy,
+  log: logServiceWorker,
+});
+
+registerRoute(
+  ({ request, url }) => request.method === "GET" && deferredPrecache.has(url.href),
+  async ({ url }) => {
+    const credentialless = await ensureCoepModeHydrated();
+    const response = await deferredPrecache.serve(url.href);
+    return withCrossOriginIsolationHeaders(response, credentialless) || response;
+  },
+);
 
 const offlineWarmup = createOfflineWarmup({
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
@@ -466,13 +648,147 @@ const offlineWarmup = createOfflineWarmup({
   fetchForWarmup,
   // On-demand pack serves and settings-triggered installs block a waiting
   // user, so they fetch without the low-priority hint.
-  fetchForInteractive: (input, init) => fetch(input, init),
+  fetchForInteractive,
   identifyOptionalCacheName: IDENTIFY_OPTIONAL_CACHE_NAME,
   identifyOptionalGroups: __IDENTIFY_OPTIONAL_PACK_GROUPS__,
   log: logServiceWorker,
+  policy: offlineCopyPolicy,
   precacheState,
   scope: self.registration.scope,
 });
+
+let appPumpChain: Promise<unknown> = Promise.resolve();
+let appPumpGeneration = 0;
+let offlineCopyRequestedEnabled = true;
+let coreRefillNeeded = true;
+const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
+  // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
+  const generation = appPumpGeneration;
+  const process = async () => {
+    if (generation !== appPumpGeneration || !offlineCopyRequestedEnabled || !(await offlineCopyPolicy.isEnabled())) {
+      return {
+        ...(await offlineWarmup.getReadyState()),
+        enabled: await offlineCopyPolicy.isEnabled(),
+        ready: false,
+      };
+    }
+    const baseline = await offlineWarmup.getReadyState();
+    if (coreRefillNeeded) corePrecache.setSizes(await loadPrecacheSizes());
+    let coreCachedBytes = coreRefillNeeded ? (await corePrecache.state()).cachedBytes : 0;
+    let deferredCachedBytes = baseline.deferredCachedBytes ?? 0;
+    const baseCachedBytes = baseline.cachedBytes - coreCachedBytes - deferredCachedBytes;
+    const progress = createOfflineProgressReporter(
+      async () => ({
+        ...baseline,
+        cachedBytes: Math.min(baseline.totalBytes, baseCachedBytes + coreCachedBytes + deferredCachedBytes),
+        deferredCachedBytes,
+        ready: false,
+        phase: "precache",
+      }),
+      onInterim,
+      (error) => logServiceWorker("offline progress failed", { error: formatError(error) }),
+    );
+    let cacheUpdates = Promise.resolve();
+    const onCached = () => {
+      cacheUpdates = cacheUpdates
+        .then(async () => {
+          const state = await offlineWarmup.getReadyState();
+          baseline.cachedFiles = state.cachedFiles;
+          baseline.pendingUnits = state.pendingUnits;
+          baseline.transferredBytes = state.transferredBytes;
+          baseline.transferBytesIncomplete = state.transferBytesIncomplete;
+          await progress.update(true);
+        })
+        .catch((error) => logServiceWorker("offline cache progress failed", { error: formatError(error) }));
+    };
+    let downloaded: boolean;
+    try {
+      const shouldContinue = () => generation === appPumpGeneration && offlineCopyRequestedEnabled;
+      downloaded = coreRefillNeeded
+        ? await corePrecache.runNextBatch(
+            (cachedBytes) => {
+              coreCachedBytes = cachedBytes;
+              void progress.update();
+            },
+            onCached,
+            shouldContinue,
+          )
+        : false;
+      if (!downloaded && shouldContinue()) {
+        coreRefillNeeded = false;
+        downloaded = await deferredPrecache.runNextBatch(
+          (cachedBytes) => {
+            deferredCachedBytes = cachedBytes;
+            void progress.update();
+          },
+          onCached,
+          shouldContinue,
+        );
+      }
+    } finally {
+      // Interim messages MUST finish before the final reply closes the page's subscription.
+      await cacheUpdates;
+      await progress.flush();
+    }
+    if (!downloaded && generation === appPumpGeneration && offlineCopyRequestedEnabled) {
+      return offlineWarmup.runNextUnit(onInterim);
+    }
+    return {
+      ...(await offlineWarmup.getReadyState()),
+      detail: null,
+      unit: "app-files",
+      unitLoadedBytes: null,
+      unitTotalBytes: null,
+      phase: "precache",
+    };
+  };
+  const pump = appPumpChain.then(process, process);
+  appPumpChain = pump.catch(() => undefined);
+  return pump;
+};
+
+const clearFileEntriesExcept = async (cacheName: string, keepUrl: string) => {
+  const cache = await caches.open(cacheName);
+  for (const request of await cache.keys()) {
+    if (request.url !== keepUrl) await cache.delete(request);
+  }
+};
+
+const removeOfflineCopyFiles = async () => {
+  const names = await caches.keys();
+  for (const name of names) {
+    if (name === OFFLINE_POLICY_CACHE_NAME) continue;
+    if (name === RUNTIME_CACHE_NAME) {
+      await clearFileEntriesExcept(name, COEP_MODE_URL);
+    } else if (name === IDENTIFY_OPTIONAL_CACHE_NAME) {
+      await clearFileEntriesExcept(name, new URL("/__rom-weaver-identify-wanted__", self.registration.scope).href);
+    } else if (name === PRECACHE_NAME || name.startsWith(MANAGED_CACHE_PREFIX)) {
+      await caches.delete(name);
+    }
+  }
+  deferredPrecache.reset();
+  corePrecache.reset();
+  coreRefillNeeded = true;
+  offlineWarmup.reset();
+  precacheTransferSizes.clear();
+  precacheIncomingBytes.clear();
+};
+
+let offlineCopyTransition: Promise<unknown> = Promise.resolve();
+const setOfflineCopyEnabled = (enabled: boolean) => {
+  if (!enabled) appPumpGeneration += 1;
+  offlineCopyRequestedEnabled = enabled;
+  const transition = offlineCopyTransition.then(async () => {
+    const wasEnabled = await offlineCopyPolicy.isEnabled();
+    await offlineCopyPolicy.setEnabled(enabled);
+    if (!enabled) await removeOfflineCopyFiles();
+    else if (!wasEnabled) coreRefillNeeded = true;
+    const state = await offlineWarmup.getReadyState();
+    return { action: "offline-copy-state", ...state, enabled, ready: enabled && state.ready };
+  });
+  offlineCopyTransition = transition.catch(() => undefined);
+  return transition;
+};
 
 // Packs are no longer precached, but a build installed before that change may
 // still hold them there, so the precache is still consulted first.
@@ -520,11 +836,17 @@ crypto.subtle
   .catch((error: unknown) => logServiceWorker("identify pack table digest failed", { error: formatError(error) }));
 
 keepResourceTimingsRecording(self);
+observeDownloadTimings(logServiceWorker);
 addPlugins([precachePlugin]);
-precacheAndRoute(PRECACHE_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
+precacheAndRoute(INITIAL_MANIFEST, { ignoreURLParametersMatching: [/^sha256$/] });
 cleanupOutdatedCaches();
 
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
+  installStartedAt = performance.now();
+  precacheInstalledCount = 0;
+  precacheInstallFailed = false;
+  // Existing complete entries MUST move before Workbox removes them on activation.
+  event.waitUntil(runServiceWorkerPhase("migrate deferred cache", () => deferredPrecache.migrate(PRECACHE_NAME)));
   // First install (no active worker yet): take control immediately so the page can gain
   // cross-origin isolation on its follow-up reload. Updates to an already-controlled page
   // must WAIT - registerType is "prompt", so activation happens only when the client sends
@@ -539,35 +861,41 @@ self.addEventListener("install", () => {
     precacheEntries: PRECACHE_MANIFEST.length,
     precacheName: PRECACHE_NAME,
     precacheVersion: PRECACHE_VERSION,
+    initialEntries: INITIAL_MANIFEST.length,
+    deferredEntries: DEFERRED_MANIFEST.length,
   });
   if (isFirstInstall) void self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((cacheNames) => findStaleServiceWorkerCaches(cacheNames, CACHE_POLICY))
-      .then((cachesToDelete) => {
-        logServiceWorker("activate event; deleting stale caches", {
-          cachesToDelete,
-          count: cachesToDelete.length,
-          emulatorJsCacheName: EMULATORJS_CACHE_NAME,
-          precacheVersion: PRECACHE_VERSION,
-        });
-        return Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName)));
-      })
-      .then(() => self.clients.claim())
-      // Restore the persisted COEP mode so a respawned worker keeps serving require-corp if a prior
-      // session already degraded to it, instead of resetting to the credentialless default.
-      .then(() => ensureCoepModeHydrated())
-      .then(() => {
-        logServiceWorker("activate event; clients claimed", {
-          coepCredentialless,
-          precacheName: PRECACHE_NAME,
-          runtimeCacheName: RUNTIME_CACHE_NAME,
-        });
-      }),
+    runServiceWorkerPhase("activate", async () => {
+      await runServiceWorkerPhase("restore isolation mode", () => ensureCoepModeHydrated());
+      const cachesToDelete = findStaleServiceWorkerCaches(await caches.keys(), CACHE_POLICY);
+      logServiceWorker("activate event; deleting stale caches", {
+        cachesToDelete,
+        count: cachesToDelete.length,
+        emulatorJsCacheName: EMULATORJS_CACHE_NAME,
+        precacheVersion: PRECACHE_VERSION,
+      });
+      await runServiceWorkerPhase("delete stale caches", () =>
+        Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName))),
+      );
+      offlineCopyRequestedEnabled = await offlineCopyPolicy.isEnabled();
+      if (offlineCopyRequestedEnabled) {
+        await runServiceWorkerPhase("clean deferred cache", () => deferredPrecache.cleanup());
+      } else {
+        await runServiceWorkerPhase("clear disabled offline copy", removeOfflineCopyFiles);
+      }
+      await runServiceWorkerPhase("claim clients", () => self.clients.claim());
+      firstInstallInProgress = false;
+      precacheIncomingBytes.clear();
+      logServiceWorker("activate event; clients claimed", {
+        coepCredentialless,
+        precacheName: PRECACHE_NAME,
+        runtimeCacheName: RUNTIME_CACHE_NAME,
+      });
+    }),
   );
 });
 
@@ -595,11 +923,31 @@ self.addEventListener("message", (event) => {
     else if (event.source && "postMessage" in event.source) event.source.postMessage(response);
   };
 
+  if (event.data.action === "offline-warmup-pause") {
+    appPumpGeneration += 1;
+    logServiceWorker("offline app downloads paused; draining active files");
+    return;
+  }
+
+  if (event.data.action === "set-offline-copy-enabled") {
+    const update = (
+      typeof event.data.enabled === "boolean"
+        ? setOfflineCopyEnabled(event.data.enabled)
+        : Promise.reject(new Error("Offline copy enabled value must be a boolean"))
+    ).catch((error) => ({
+      action: "offline-copy-state-failed",
+      error: formatError(error),
+    }));
+    event.waitUntil(update.then(replyTo));
+    return;
+  }
+
   if (event.data.action === "offline-warmup-pump") {
     // Interim byte-level events stream over the same reply port while the
     // unit downloads; the final "offline-warmup-progress" message ends the pump.
-    const pump = offlineWarmup
-      .runNextUnit((interim) => replyTo({ action: "offline-warmup-interim", ...interim }))
+    const pump = pumpOfflineFiles((interim) =>
+      replyTo({ action: "offline-warmup-interim", ...(interim as Record<string, unknown>) }),
+    )
       .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
       .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));
     event.waitUntil(pump.then(replyTo));
@@ -626,9 +974,15 @@ self.addEventListener("message", (event) => {
   }
 
   if (event.data.action === "get-offline-ready-state") {
-    const query = offlineWarmup
-      .getReadyState()
-      .then((state) => ({ action: "offline-ready-state", ...state }))
+    const query = offlineCopyPolicy
+      .isEnabled()
+      .then(async (enabled) => ({ enabled, state: await offlineWarmup.getReadyState() }))
+      .then(({ enabled, state }) => ({
+        action: "offline-ready-state",
+        ...state,
+        enabled,
+        ready: enabled && state.ready,
+      }))
       .catch((error) => ({ action: "offline-ready-state-failed", error: formatError(error) }));
     event.waitUntil(query.then(replyTo));
     return;

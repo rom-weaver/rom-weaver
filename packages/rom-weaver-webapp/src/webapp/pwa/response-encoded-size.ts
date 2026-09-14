@@ -10,6 +10,42 @@
 /** Header carrying the on-the-wire size of a response we downloaded ourselves. */
 const ENCODED_SIZE_HEADER = "x-rom-weaver-encoded-size";
 
+const headerBytes = (response: Response, header: string): number | null => {
+  const value = response.headers.get(header);
+  if (value === null || value.trim() === "") return null;
+  const bytes = Number(value);
+  return Number.isFinite(bytes) && bytes >= 0 ? bytes : null;
+};
+
+// Status MUST read only headers to avoid loading cached bodies on every progress update.
+const createCachedTransferSizeReader = () => {
+  const measurements = new Map<string, Promise<number | null>>();
+  const forget = (url: string) => measurements.delete(url);
+  const read = (cache: Cache, url: string, decodedSize?: number): Promise<number | null> => {
+    const known = measurements.get(url);
+    if (known) return known;
+    const measured = cache
+      .match(url)
+      .then((response) => {
+        if (!response) {
+          forget(url);
+          return null;
+        }
+        const encoded = headerBytes(response, ENCODED_SIZE_HEADER) ?? headerBytes(response, "content-length");
+        if (encoded !== null) return encoded;
+        if (response.type === "opaque" || response.headers.has("content-encoding")) return null;
+        return typeof decodedSize === "number" && Number.isFinite(decodedSize) && decodedSize >= 0 ? decodedSize : null;
+      })
+      .catch(() => {
+        forget(url);
+        return null;
+      });
+    measurements.set(url, measured);
+    return measured;
+  };
+  return { clear: () => measurements.clear(), forget, read };
+};
+
 // Resource Timing keeps 250 entries by default and then silently records no
 // more. One install fetches several hundred files through this worker, so the
 // entries a measurement needs would be dropped long before the set is complete.
@@ -75,4 +111,44 @@ const withMeasuredEncodedSize = async (url: string, response: Response): Promise
   return bufferedResponse(response, buffer, encodedSizeOf(url));
 };
 
-export { bufferedResponse, ENCODED_SIZE_HEADER, encodedSizeOf, keepResourceTimingsRecording, withMeasuredEncodedSize };
+const readWithByteProgress = async (response: Response, onBytes?: (delta: number) => void): Promise<ArrayBuffer> => {
+  if (!(response.body && onBytes)) {
+    const buffer = await response.arrayBuffer();
+    onBytes?.(buffer.byteLength);
+    return buffer;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        totalLength += value.byteLength;
+        onBytes(value.byteLength);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const buffer = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return buffer.buffer;
+};
+
+export {
+  bufferedResponse,
+  createCachedTransferSizeReader,
+  ENCODED_SIZE_HEADER,
+  encodedSizeOf,
+  headerBytes,
+  keepResourceTimingsRecording,
+  readWithByteProgress,
+  withMeasuredEncodedSize,
+};

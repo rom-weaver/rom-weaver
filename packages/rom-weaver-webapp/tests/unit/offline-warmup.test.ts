@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOfflineWarmup } from "../../src/webapp/offline-warmup.ts";
+import { createOfflineCopyPolicy } from "../../src/webapp/pwa/offline-copy-policy.ts";
 
 const SCOPE = "https://example.test/";
 const EMULATORJS_CACHE = "emulatorjs-4.2.3";
@@ -131,6 +132,102 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
+  it("serves a pack online without caching while disabled and restores the selected group on download", async () => {
+    const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
+    const fetcher = createFetcher();
+    const group = (await buildGroups())[0];
+    const warmup = await createWarmupWithOptionalGroup(fetcher, { policy });
+    await policy.setEnabled(false);
+    warmup.reset();
+    const packUrl = new URL(group.packs[0].url, SCOPE).href;
+    const response = await warmup.serveOptionalIdentifyPack(new Request(packUrl));
+    expect(await response.text()).toBe(PACK_BODY);
+    expect(await (await cacheStorage.open(IDENTIFY_CACHE)).match(packUrl)).toBeUndefined();
+    const requestsBeforePump = fetcher.mock.calls.length;
+    expect(await warmup.runNextUnit()).toMatchObject({ ready: false });
+    expect(fetcher.mock.calls.length).toBe(requestsBeforePump);
+    await policy.setEnabled(true);
+    for (let index = 0; index < 4 && !(await warmup.getReadyState()).ready; index += 1) {
+      await warmup.runNextUnit();
+    }
+    expect(await warmup.getReadyState()).toMatchObject({ ready: true });
+    expect(await (await cacheStorage.open(IDENTIFY_CACHE)).match(packUrl)).toBeDefined();
+  });
+
+  it("updates transferred sizes before the next file in the batch finishes", async () => {
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const fetcher = createFetcher();
+    const fallback = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("emulatorjs/manifest.json"))
+        return Response.json({ ...manifest, files: manifest.files.slice(0, 2) });
+      if (url.endsWith("/loader.js"))
+        return new Response("one", { headers: { "content-length": "2", "content-encoding": "br" } });
+      if (url.endsWith("/core.wasm"))
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              stream = controller;
+            },
+          }),
+        );
+      if (!fallback) throw new Error("Missing fallback fetcher");
+      return fallback(input);
+    });
+    const warmup = await createWarmup(fetcher);
+    const interims: unknown[] = [];
+    const pump = warmup.runNextUnit((state) => interims.push(state));
+    try {
+      await vi.waitFor(() =>
+        expect(interims).toContainEqual(expect.objectContaining({ cachedFiles: 1, transferredBytes: 2, ready: false })),
+      );
+      stream?.enqueue(new Uint8Array(2));
+      await vi.waitFor(() =>
+        expect(interims.at(-1)).toMatchObject({ cachedBytes: 5, transferredBytes: 2, ready: false }),
+      );
+      stream?.enqueue(new Uint8Array(3));
+      stream?.close();
+      expect(await pump).toMatchObject({ cachedFiles: 2, transferredBytes: 7, ready: true });
+    } finally {
+      stream?.error(new Error("test stream cleanup"));
+      await pump.catch(() => undefined);
+    }
+  });
+
+  it("reports cached transfer sizes across restarts and excludes unselected groups", async () => {
+    const emulatorCache = await cacheStorage.open(EMULATORJS_CACHE);
+    await emulatorCache.put(
+      `${SCOPE}emulatorjs/data/loader.js`,
+      new Response("one", {
+        headers: { "content-encoding": "br", "content-length": "2" },
+      }),
+    );
+    const group = (await buildGroups())[0];
+    const identifyCache = await cacheStorage.open(IDENTIFY_CACHE);
+    await identifyCache.put(
+      new URL(group.packs[0].url, SCOPE).href,
+      new Response(PACK_BODY, {
+        headers: { "content-encoding": "br", "x-rom-weaver-encoded-size": "4" },
+      }),
+    );
+    const warmup = await createWarmup();
+    expect(await warmup.getReadyState()).toMatchObject({ transferredBytes: 2, transferBytesIncomplete: false });
+    await emulatorCache.put(
+      `${SCOPE}emulatorjs/data/cores/core.wasm`,
+      new Response("five!", {
+        headers: { "content-encoding": "br" },
+      }),
+    );
+    expect(await warmup.getReadyState()).toMatchObject({ transferredBytes: 2, transferBytesIncomplete: true });
+    await warmup.setIdentifyGroupWanted(group.id, true);
+    expect(await warmup.getReadyState()).toMatchObject({ transferredBytes: 6, transferBytesIncomplete: true });
+    const restarted = await createWarmup();
+    expect(await restarted.getReadyState()).toMatchObject({ transferredBytes: 6, transferBytesIncomplete: true });
+    await restarted.setIdentifyGroupWanted(group.id, false);
+    expect(await restarted.getReadyState()).toMatchObject({ transferredBytes: 2, transferBytesIncomplete: true });
+  });
+
   it("always warms a required group and never offers it as a choice", async () => {
     const fetcher = createFetcher();
     const warmup = await createWarmup(fetcher, {
@@ -218,6 +315,22 @@ describe("offline warm-up (service worker side)", () => {
     expect(state.cachedFiles).toBe(2);
   });
 
+  it("cannot finish offline preparation while app files remain missing", async () => {
+    let appReady = false;
+    const warmup = await createWarmup(createFetcher(), {
+      precacheState: async () => ({
+        cachedBytes: appReady ? 10 : 0,
+        cachedFiles: appReady ? 1 : 0,
+        totalBytes: 10,
+        totalFiles: 1,
+      }),
+    });
+    await warmup.runNextUnit();
+    expect(await warmup.getReadyState()).toMatchObject({ ready: false, pendingUnits: 1 });
+    appReady = true;
+    expect(await warmup.getReadyState()).toMatchObject({ ready: true, pendingUnits: 0 });
+  });
+
   it("leaves the precache out of the totals when its state cannot be read", async () => {
     const warmup = await createWarmupWithOptionalGroup(createFetcher(), {
       precacheState: async () => {
@@ -246,7 +359,7 @@ describe("offline warm-up (service worker side)", () => {
     const emulatorJsCache = cacheStorage.caches.get(EMULATORJS_CACHE);
     const identifyCache = cacheStorage.caches.get(IDENTIFY_CACHE);
     expect(emulatorJsCache?.keysCallCount).toBe(1);
-    expect(emulatorJsCache?.matchCallCount).toBe(1);
+    expect(emulatorJsCache?.matchCallCount).toBe(2);
     expect(identifyCache?.keysCallCount).toBe(1);
     // One marker read per group. The opt-in list is memoised by the ticking
     // above, so a snapshot does not re-read it.
@@ -282,6 +395,18 @@ describe("offline warm-up (service worker side)", () => {
     const state = await second.getReadyState();
     expect(state.ready).toBe(true);
     expect(state.pendingUnits).toBe(0);
+  });
+
+  it("keeps download totals after an offline worker restart", async () => {
+    const first = await createWarmup();
+    await first.runNextUnit();
+    const before = await first.getReadyState();
+    const offline = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    const restarted = await createWarmup(offline);
+    expect(await restarted.getReadyState()).toEqual(before);
+    expect(offline).not.toHaveBeenCalled();
   });
 
   it("reports a transfer size for every entry a header or the encoding can settle", async () => {
@@ -336,8 +461,14 @@ describe("offline warm-up (service worker side)", () => {
         sizeBytes: 16,
         url: "https://example.test/emulatorjs/data/loader.js",
       },
+      {
+        cache: EMULATORJS_CACHE,
+        compressedBytes: new TextEncoder().encode(JSON.stringify(manifest)).byteLength,
+        sizeBytes: new TextEncoder().encode(JSON.stringify(manifest)).byteLength,
+        url: "https://example.test/emulatorjs/manifest.json",
+      },
     ]);
-    expect(measured).toHaveLength(2);
+    expect(measured).toHaveLength(3);
   });
 
   it("treats a new emulatorjs version as not ready", async () => {
@@ -368,6 +499,60 @@ describe("offline warm-up (service worker side)", () => {
     // Without the bump the next unit would be emulatorjs:cores/core.wasm.
     expect((await warmup.runNextUnit()).unit).toBe("identify-group:optional-computers");
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
+  });
+
+  it("reports fast chunks while cache reads are blocked", async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const fetcher = createFetcher();
+    const fallback = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/loader.js")) {
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(stream) {
+              controller = stream;
+            },
+          }),
+        );
+      }
+      if (!fallback) throw new Error("Missing fallback fetcher");
+      return fallback(input);
+    });
+    const warmup = await createSerialWarmup(fetcher);
+    const interims: number[] = [];
+    let now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const pump = warmup.runNextUnit((progress) => interims.push(progress.unitLoadedBytes ?? 0));
+    let releaseCache: () => void = () => undefined;
+    const cacheGate = new Promise<void>((resolve) => {
+      releaseCache = resolve;
+    });
+    let keys: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      await vi.waitFor(() => expect(controller).toBeDefined());
+      controller?.enqueue(new Uint8Array(1));
+      await vi.waitFor(() => expect(interims).toContain(1));
+      const cache = await cacheStorage.open(EMULATORJS_CACHE);
+      const readKeys = cache.keys.bind(cache);
+      keys = vi.spyOn(cache, "keys").mockImplementation(async () => {
+        await cacheGate;
+        return readKeys();
+      });
+      now += 50;
+      controller?.enqueue(new Uint8Array(1));
+      await vi.waitFor(() => expect(interims).toContain(2));
+      releaseCache();
+      controller?.enqueue(new Uint8Array(1));
+      controller?.close();
+      expect(await pump).toMatchObject({ cachedFiles: 1 });
+    } finally {
+      releaseCache();
+      controller?.error(new Error("test stream cleanup"));
+      await pump.catch(() => undefined);
+      clock.mockRestore();
+      keys?.mockRestore();
+    }
   });
 
   it("streams interim byte progress with the in-flight unit's name and size", async () => {
@@ -512,6 +697,20 @@ describe("offline warm-up (service worker side)", () => {
     const groups = await buildGroups();
     const packUrl = new URL(groups[0].packs[0].url, SCOPE).href;
     await expect(warmup.serveOptionalIdentifyPack(new Request(packUrl))).rejects.toThrow(/checksum/);
+  });
+
+  it("retries an original pack after the origin recovers from corrupt bytes", async () => {
+    let attempts = 0;
+    const fetcher = vi.fn(async () => {
+      attempts += 1;
+      return new Response(attempts === 1 ? "tampered-bytes" : PACK_BODY);
+    });
+    const warmup = await createWarmup(fetcher);
+    const groups = await buildGroups();
+    const request = new Request(new URL(groups[0].packs[0].url, SCOPE));
+    await expect(warmup.serveOptionalIdentifyPack(request)).rejects.toThrow(/checksum/);
+    expect(await (await warmup.serveOptionalIdentifyPack(request)).text()).toBe(PACK_BODY);
+    expect(attempts).toBe(2);
   });
 
   it("installIdentifyGroup writes the group marker with the pack revision", async () => {

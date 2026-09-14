@@ -12,6 +12,7 @@ const createServiceWorkerCachePolicy = ({
   managedCachePrefix,
   precacheName,
   runtimeCacheName,
+  additionalCacheNames = [],
 }: {
   emulatorJsCacheName: string;
   emulatorJsCachePrefix: string;
@@ -19,8 +20,15 @@ const createServiceWorkerCachePolicy = ({
   managedCachePrefix: string;
   precacheName: string;
   runtimeCacheName: string;
+  additionalCacheNames?: readonly string[];
 }): ServiceWorkerCachePolicy => ({
-  activeCacheNames: [precacheName, runtimeCacheName, emulatorJsCacheName, identifyOptionalCacheName],
+  activeCacheNames: [
+    precacheName,
+    runtimeCacheName,
+    emulatorJsCacheName,
+    identifyOptionalCacheName,
+    ...additionalCacheNames,
+  ],
   emulatorJsCacheName,
   emulatorJsCachePrefix,
   managedCachePrefix,

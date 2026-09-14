@@ -2845,6 +2845,16 @@ msgstr "Schnellstart-Tipps („New here?“) anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyEnabled"
+msgstr "Offline-Kopie behalten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyHelp"
+msgstr "Lädt die App für die Offline-Nutzung automatisch herunter, außer wenn der Datensparmodus aktiviert ist."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Zum Hauptinhalt springen"
 
@@ -3297,6 +3307,66 @@ msgstr "GESAMT"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Übertragen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Offline-Kopie herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Lädt die fehlenden Dateien auch bei aktiviertem Datensparmodus herunter."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Download angefordert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Offline-Downloads sind nicht verfügbar. Lade die Seite neu und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOffline"
+msgstr "Offline-Kopie entfernen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removingOffline"
+msgstr "Offline-Kopie wird entfernt…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabled"
+msgstr "Offline-Kopie deaktiviert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabledDetail"
+msgstr "Automatische Offline-Downloads sind deaktiviert."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOfflineHint"
+msgstr "Entfernt heruntergeladene App-Dateien. Deine Dateien, Spielstände und Einstellungen bleiben auf diesem Gerät."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeUnavailable"
+msgstr "Die Offline-Kopie konnte nicht entfernt werden. Versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.transferred"
+msgstr "Übertragen {size}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.transferredAtLeast"
+msgstr "Mindestens {size} übertragen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -6,7 +6,11 @@ import { copyToClipboard } from "../../src/lib/clipboard.ts";
 import { triggerBrowserDownload } from "../../src/platform/browser/browser-download.ts";
 import { listBrowserOpfs } from "../../src/storage/browser/browser-opfs-cleanup.ts";
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry } from "../../src/webapp/log-store.ts";
-import { queryOfflineCachedFiles } from "../../src/webapp/pwa/offline-warmup-client.ts";
+import {
+  downloadOfflineCopy,
+  queryOfflineCachedFiles,
+  setOfflineWarmupEnabled,
+} from "../../src/webapp/pwa/offline-warmup-client.ts";
 import { cachedFileTotals, LogDialog, sortCachedFiles } from "../../src/webapp/components/log-dialog.tsx";
 import type { OfflineCachedFile } from "../../src/webapp/offline-warmup.ts";
 
@@ -14,7 +18,47 @@ vi.mock("../../src/lib/clipboard.ts", () => ({ copyToClipboard: vi.fn(async () =
 vi.mock("../../src/platform/browser/browser-download.ts", () => ({ triggerBrowserDownload: vi.fn() }));
 vi.mock("../../src/storage/browser/browser-opfs-cleanup.ts", () => ({ listBrowserOpfs: vi.fn(async () => []) }));
 vi.mock("../../src/workers/protocol/browser-virtual-files.ts", () => ({ getActiveBrowserVirtualFiles: () => [] }));
-vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", () => ({ queryOfflineCachedFiles: vi.fn(async () => []) }));
+const offlineCopyStore = vi.hoisted(() => {
+  const initial = {
+    enabled: true,
+    pending: false,
+    error: null as string | null,
+    downloadRequested: false,
+  };
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    getInitial: () => initial,
+    reset: () => {
+      current = initial;
+    },
+    set: (change: Partial<typeof initial>) => {
+      current = { ...current, ...change };
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+});
+
+vi.mock("../../src/webapp/pwa/offline-warmup-client.ts", () => ({
+  downloadOfflineCopy: vi.fn(() => {
+    offlineCopyStore.set({ enabled: true, downloadRequested: true });
+    return true;
+  }),
+  getInitialOfflineCopyState: offlineCopyStore.getInitial,
+  getOfflineCopyState: offlineCopyStore.get,
+  queryOfflineCachedFiles: vi.fn(async () => []),
+  setOfflineWarmupEnabled: vi.fn((enabled: boolean) => {
+    offlineCopyStore.set({ enabled, pending: true, error: null, downloadRequested: false });
+  }),
+  subscribeOfflineCopyState: offlineCopyStore.subscribe,
+}));
 vi.mock("../../src/webapp/log-store.ts", () => ({
   getLastSessionEntries: vi.fn(() => []),
   getLogEntries: vi.fn(() => []),
@@ -59,8 +103,11 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  offlineCopyStore.reset();
   vi.mocked(listBrowserOpfs).mockClear();
   vi.mocked(queryOfflineCachedFiles).mockClear();
+  vi.mocked(downloadOfflineCopy).mockClear();
+  vi.mocked(setOfflineWarmupEnabled).mockClear();
   vi.mocked(copyToClipboard).mockClear();
   vi.mocked(getLogEntries).mockReturnValue([]);
   vi.mocked(getLastSessionEntries).mockReturnValue([]);
@@ -315,6 +362,72 @@ describe("OPFS inspector", () => {
   });
 });
 
+describe("manual offline installation", () => {
+  it("requests the remaining files from Status and shows the accepted request", () => {
+    const onOfflineCopyEnabledChange = vi.fn();
+    const view = renderDialog({
+      serviceWorkerStatus: "active",
+      offlineProgress: { ready: false, cachedBytes: 1, totalBytes: 10 },
+      onOfflineCopyEnabledChange,
+    });
+    fireEvent.click(view.getByRole("button", { name: "Download offline copy" }));
+    expect(onOfflineCopyEnabledChange).toHaveBeenCalledWith(true);
+    expect(downloadOfflineCopy).toHaveBeenCalledTimes(1);
+    expect(view.getByRole("button", { name: "Download requested" }).getAttribute("disabled")).not.toBeNull();
+    expect(view.getByText("Downloads remaining files, even with data saver on.")).toBeTruthy();
+  });
+
+  it.each(["active", "off"] as const)("does not offer downloads when already ready or disabled (%s)", (status) => {
+    const view = renderDialog({
+      serviceWorkerStatus: status,
+      offlineProgress: { ready: status === "active", cachedBytes: 10, totalBytes: 10 },
+    });
+    expect(view.queryByRole("button", { name: "Download offline copy" })).toBeNull();
+  });
+
+  it("keeps the action available when there is no download scheduler", () => {
+    vi.mocked(downloadOfflineCopy).mockReturnValueOnce(false);
+    const view = renderDialog({ serviceWorkerStatus: "active" });
+    const button = view.getByRole("button", { name: "Download offline copy" });
+    fireEvent.click(button);
+    expect(button.getAttribute("disabled")).toBeNull();
+    expect(view.getByRole("alert").textContent).toBe("Offline downloads are unavailable. Reload and try again.");
+  });
+
+  it("offers a download even when cached progress still says ready after the preference is disabled", () => {
+    const onOfflineCopyEnabledChange = vi.fn();
+    const view = renderDialog({
+      offlineCopyEnabled: false,
+      offlineProgress: { ready: true, cachedBytes: 10, totalBytes: 10 },
+      onOfflineCopyEnabledChange,
+      serviceWorkerStatus: "active",
+    });
+
+    expect(view.getByRole("status").textContent).toContain("Offline copy disabled");
+    expect(view.queryByRole("button", { name: "Remove offline copy" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Download offline copy" }));
+    expect(onOfflineCopyEnabledChange).toHaveBeenCalledWith(true);
+    expect(downloadOfflineCopy).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists removal intent, shows pending and failed states, then allows retry", () => {
+    const onOfflineCopyEnabledChange = vi.fn();
+    const view = renderDialog({ onOfflineCopyEnabledChange, serviceWorkerStatus: "active" });
+
+    fireEvent.click(view.getByRole("button", { name: "Remove offline copy" }));
+    expect(onOfflineCopyEnabledChange).toHaveBeenCalledWith(false);
+    expect(setOfflineWarmupEnabled).toHaveBeenCalledWith(false);
+    expect(view.getByRole("button", { name: "Removing offline copy…" }).getAttribute("disabled")).not.toBeNull();
+
+    act(() => offlineCopyStore.set({ pending: false, error: "cache deletion failed" }));
+    expect(view.getByRole("alert").textContent).toBe("Could not remove the offline copy. Try again.");
+    fireEvent.click(view.getByRole("button", { name: "Remove offline copy" }));
+    expect(onOfflineCopyEnabledChange).toHaveBeenCalledTimes(2);
+    expect(setOfflineWarmupEnabled).toHaveBeenCalledTimes(2);
+    expect(view.queryByRole("alert")).toBeNull();
+  });
+});
+
 describe("cached file inventory", () => {
   const openDrawer = (container: HTMLElement) => {
     fireEvent.click(container.querySelector(".sw-cache-drawer > .cks-head") as HTMLButtonElement);
@@ -361,10 +474,24 @@ describe("cached file inventory", () => {
 
     expect(container.querySelectorAll(".sw-cache-size")[0]?.textContent).toBe("—");
   });
+
+  it("pauses inventory reads during policy sync and refreshes after acknowledgment", async () => {
+    renderDialog({
+      offlineProgress: { ready: true, cachedBytes: 1, totalBytes: 1 },
+      serviceWorkerStatus: "active",
+    });
+    await waitFor(() => expect(queryOfflineCachedFiles).toHaveBeenCalledTimes(1));
+
+    act(() => offlineCopyStore.set({ pending: true }));
+    expect(queryOfflineCachedFiles).toHaveBeenCalledTimes(1);
+
+    act(() => offlineCopyStore.set({ pending: false }));
+    await waitFor(() => expect(queryOfflineCachedFiles).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe("status offline row", () => {
-  it("shows the install detail line with file counts, bytes and the current unit", () => {
+  it("shows measured transfer bytes, file counts, and the current unit", () => {
     const { container } = renderDialog({
       offlineProgress: {
         cachedBytes: 400,
@@ -373,17 +500,62 @@ describe("status offline row", () => {
         ready: false,
         totalBytes: 1000,
         totalFiles: 5,
-        unitLoadedBytes: 100,
-        unitTotalBytes: 200,
+        transferredBytes: 512,
       },
       serviceWorkerStatus: "active",
     });
 
     const details = Array.from(container.querySelectorAll(".sw-progress-detail"), (node) => node.textContent);
-    expect(details).toHaveLength(2);
+    expect(details).toHaveLength(3);
     expect(details[0]).toContain("2");
     expect(details[1]).toContain("Computers");
-    expect(details[1]).toContain("(");
+    expect(details[2]).toBe("Transferred 512 B");
+    expect(details.join(" ")).not.toContain("400 B / 1000 B");
+  });
+
+  it("marks a transfer total as incomplete when a cached file has no measurement", () => {
+    const { container } = renderDialog({
+      offlineProgress: {
+        cachedBytes: 400,
+        cachedFiles: 2,
+        ready: false,
+        totalBytes: 1000,
+        totalFiles: 5,
+        transferredBytes: 1024,
+        transferBytesIncomplete: true,
+      },
+      serviceWorkerStatus: "active",
+    });
+
+    expect(container.textContent).toContain("Transferred at least 1.02 KB");
+  });
+
+  it("uses file counts without a transfer value from an older worker", () => {
+    const { container } = renderDialog({
+      offlineProgress: { cachedBytes: 400, cachedFiles: 2, ready: false, totalBytes: 1000, totalFiles: 5 },
+      serviceWorkerStatus: "active",
+    });
+
+    const details = Array.from(container.querySelectorAll(".sw-progress-detail"), (node) => node.textContent);
+    expect(details).toEqual(["2 of 5 files"]);
+    expect(container.textContent).not.toContain("400 B / 1000 B");
+    expect(container.textContent).not.toContain("Transferred 400 B");
+  });
+
+  it("keeps the measured transfer result visible when offline setup is ready", () => {
+    const { container } = renderDialog({
+      offlineProgress: {
+        cachedBytes: 1000,
+        cachedFiles: 5,
+        ready: true,
+        totalBytes: 1000,
+        totalFiles: 5,
+        transferredBytes: 512,
+      },
+      serviceWorkerStatus: "active",
+    });
+
+    expect(container.textContent).toContain("Transferred 512 B");
   });
 
   it("omits the unit line when the progress names no unit", () => {
@@ -399,7 +571,7 @@ describe("status offline row", () => {
     const { container } = renderDialog({ serviceWorkerStatus: "off" });
 
     const rows = container.querySelectorAll(".sw-legend-row");
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(6);
     expect(container.querySelectorAll(".sw-legend-row[data-current]")).toHaveLength(1);
     expect(container.querySelector(".sw-legend-row[data-current] .sw-chip")?.getAttribute("data-sw")).toBe("disabled");
   });

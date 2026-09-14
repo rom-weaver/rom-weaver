@@ -18,6 +18,7 @@ import type {
 
 type RomWeaverReactSettings = ApplySettings &
   CreateSettings & {
+    offlineCopyEnabled?: boolean;
     postApplyDownloadBehavior?: PostApplyActionBehavior;
     postApplyTestBehavior?: PostApplyActionBehavior;
   };

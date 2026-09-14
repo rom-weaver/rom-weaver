@@ -215,6 +215,28 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().draftSettings.language).toBe("de");
   });
 
+  it("commits the offline-copy choice and keeps unrelated unsaved draft fields", () => {
+    const storage = createStorage();
+    const controller = createController(storage);
+    controller.updateDraftSetting("language", "de");
+
+    controller.setOfflineCopyEnabled(false);
+    expect(controller.getState().settings.offlineCopyEnabled).toBe(false);
+    expect(controller.getState().draftSettings.offlineCopyEnabled).toBe(false);
+    expect(controller.getState().draftSettings.language).toBe("de");
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").common?.offlineCopyEnabled).toBe(false);
+
+    controller.setOfflineCopyEnabled(true);
+    expect(controller.getState().settings.offlineCopyEnabled).toBe(true);
+    expect(controller.getState().draftSettings.language).toBe("de");
+    expect(storage.getItem("rom-weaver-settings")).toBeNull();
+
+    controller.updateDraftSetting("offlineCopyEnabled", false);
+    controller.setOfflineCopyEnabled(true);
+    expect(controller.getState().draftSettings.offlineCopyEnabled).toBe(true);
+    expect(controller.getState().draftSettings.language).toBe("de");
+  });
+
   it("rejects a language with no shipped catalog", () => {
     const controller = createController();
     const before = controller.getState().settings.language;

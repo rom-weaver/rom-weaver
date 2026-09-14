@@ -10,6 +10,7 @@ import {
   Save,
   ScrollText,
   Settings,
+  Trash2,
   X,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -27,7 +28,14 @@ import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogE
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
 import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
-import { queryOfflineCachedFiles } from "../pwa/offline-warmup-client.ts";
+import {
+  downloadOfflineCopy,
+  getInitialOfflineCopyState,
+  getOfflineCopyState,
+  queryOfflineCachedFiles,
+  setOfflineWarmupEnabled,
+  subscribeOfflineCopyState,
+} from "../pwa/offline-warmup-client.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import type { OfflineCachedFile } from "../offline-warmup.ts";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
@@ -233,13 +241,35 @@ const StatusRows = ({
   localizer,
   offlineProgress,
   runtimeState,
+  downloadRequested,
+  downloadUnavailable,
+  onDownload,
+  offlineCopyEnabled,
+  removing,
+  removeUnavailable,
+  onRemove,
 }: {
   localizer: Localizer;
+  downloadRequested: boolean;
+  downloadUnavailable: boolean;
+  onDownload: () => void;
+  offlineCopyEnabled: boolean;
+  removing: boolean;
+  removeUnavailable: boolean;
+  onRemove: () => void;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   runtimeState: RuntimeState;
 }) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
+  const transferredBytes = offlineProgress?.transferredBytes;
+  const transferDetail =
+    typeof transferredBytes === "number" && Number.isFinite(transferredBytes) && transferredBytes >= 0
+      ? localizer.message(
+          offlineProgress?.transferBytesIncomplete ? "ui.runtime.transferredAtLeast" : "ui.runtime.transferred",
+          { size: localizer.formatBytes(transferredBytes) },
+        )
+      : null;
   const rows: Array<[string, React.ReactNode]> = [
     [
       localizer.message("ui.status.offline"),
@@ -253,40 +283,60 @@ const StatusRows = ({
             ? installingRuntimeLabel(localizer, offlineProgress ?? null)
             : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
         </span>
-        {runtimeState === "installing" &&
-        offlineProgress &&
-        !offlineProgress.ready &&
-        (offlineProgress.totalBytes > 0 ||
-          (typeof offlineProgress.totalFiles === "number" && offlineProgress.totalFiles > 0)) ? (
+        {/* Remove MUST precede changing download controls and progress so updates cannot move a pressed button. */}
+        {runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
           <>
-            <span className="sw-progress-detail">
-              {/* The first-install precache reports counts only; byte totals arrive with the warm-up. */}
-              {[
-                typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
-                  ? localizer.message("ui.runtime.detailFiles", {
-                      cached: offlineProgress.cachedFiles,
-                      total: offlineProgress.totalFiles,
-                    })
-                  : null,
-                offlineProgress.totalBytes > 0
-                  ? `${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
+            <button className="btn slim ghost" disabled={removing} onClick={onRemove} type="button">
+              <Trash2 aria-hidden="true" size={14} />
+              {localizer.message(removing ? "ui.runtime.removingOffline" : "ui.runtime.removeOffline")}
+            </button>
+            <span className="sw-cache-note">{localizer.message("ui.runtime.removeOfflineHint")}</span>
+            {removeUnavailable ? (
+              <span className="sw-cache-error" role="alert">
+                {localizer.message("ui.runtime.removeUnavailable")}
+              </span>
+            ) : null}
+          </>
+        ) : null}
+        {runtimeState === "installing" || runtimeState === "online" ? (
+          <>
+            <button
+              className="btn slim ghost"
+              disabled={downloadRequested || removing}
+              onClick={onDownload}
+              type="button"
+            >
+              <Download aria-hidden="true" size={14} />
+              {localizer.message(downloadRequested ? "ui.runtime.downloadRequested" : "ui.runtime.downloadOffline")}
+            </button>
+            <span className="sw-cache-note">{localizer.message("ui.runtime.downloadOfflineHint")}</span>
+            {downloadUnavailable ? (
+              <span className="sw-cache-error" role="alert">
+                {localizer.message("ui.runtime.downloadUnavailable")}
+              </span>
+            ) : null}
+          </>
+        ) : null}
+        {runtimeState === "installing" && offlineProgress && !offlineProgress.ready ? (
+          <>
+            {typeof offlineProgress.cachedFiles === "number" &&
+            typeof offlineProgress.totalFiles === "number" &&
+            offlineProgress.totalFiles > 0 ? (
+              <span className="sw-progress-detail">
+                {localizer.message("ui.runtime.detailFiles", {
+                  cached: offlineProgress.cachedFiles,
+                  total: offlineProgress.totalFiles,
+                })}
+              </span>
+            ) : null}
             {(() => {
               const detail = describeWarmupUnit(localizer, offlineProgress);
               if (!detail) return null;
-              const { unitLoadedBytes, unitTotalBytes } = offlineProgress;
-              const unitBytes =
-                typeof unitLoadedBytes === "number" && typeof unitTotalBytes === "number" && unitTotalBytes > 0
-                  ? ` (${localizer.formatBytes(unitLoadedBytes)} / ${localizer.formatBytes(unitTotalBytes)})`
-                  : "";
-              return <span className="sw-progress-detail">{`${detail}${unitBytes}`}</span>;
+              return <span className="sw-progress-detail">{detail}</span>;
             })()}
           </>
         ) : null}
+        {transferDetail ? <span className="sw-progress-detail">{transferDetail}</span> : null}
       </span>,
     ],
     [
@@ -997,6 +1047,8 @@ const LogDialog = ({
   onTabChange,
   serviceWorkerStatus,
   offlineProgress = null,
+  offlineCopyEnabled = true,
+  onOfflineCopyEnabledChange,
   settingsFocusHint,
   settingsPanel,
   updateReady = false,
@@ -1011,6 +1063,8 @@ const LogDialog = ({
   onTabChange?: (tab: LogDialogTab) => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
+  offlineCopyEnabled?: boolean;
+  onOfflineCopyEnabledChange?: (enabled: boolean) => void;
   settingsFocusHint?: SettingsFocusHint | null;
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
@@ -1038,10 +1092,22 @@ const LogDialog = ({
     [onTabChange],
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
-  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress);
+  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress, offlineCopyEnabled);
+  const offlineCopy = useSyncExternalStore(subscribeOfflineCopyState, getOfflineCopyState, getInitialOfflineCopyState);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
   const [opfsError, setOpfsError] = useState<string | null>(null);
+  const [downloadUnavailable, setDownloadUnavailable] = useState(false);
+  const requestDownload = () => {
+    onOfflineCopyEnabledChange?.(true);
+    const accepted = downloadOfflineCopy();
+    setDownloadUnavailable(!accepted);
+  };
+  const requestRemoval = () => {
+    setDownloadUnavailable(false);
+    onOfflineCopyEnabledChange?.(false);
+    setOfflineWarmupEnabled(false);
+  };
   const [cachedFiles, setCachedFiles] = useState<OfflineCachedFile[]>([]);
   const [cachedFilesLoading, setCachedFilesLoading] = useState(false);
   const [cachedFilesError, setCachedFilesError] = useState<string | null>(null);
@@ -1070,7 +1136,7 @@ const LogDialog = ({
   // actually adding files with this panel in front of the user.
   const installing = runtimeState === "installing";
   useEffect(() => {
-    if (!(open && tab === "status")) return undefined;
+    if (!(open && tab === "status") || offlineCopy.pending) return undefined;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = (initial: boolean) => {
@@ -1098,7 +1164,7 @@ const LogDialog = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [installing, open, tab]);
+  }, [installing, offlineCopy.pending, open, tab]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
@@ -1211,7 +1277,18 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows localizer={localizer} offlineProgress={offlineProgress} runtimeState={runtimeState} />
+            <StatusRows
+              downloadRequested={offlineCopy.downloadRequested}
+              downloadUnavailable={downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error)}
+              offlineCopyEnabled={offlineCopyEnabled}
+              removing={!offlineCopy.enabled && offlineCopy.pending}
+              removeUnavailable={!offlineCopy.enabled && !!offlineCopy.error}
+              onRemove={requestRemoval}
+              localizer={localizer}
+              offlineProgress={offlineProgress}
+              onDownload={requestDownload}
+              runtimeState={runtimeState}
+            />
             <OfflineCachedFiles
               error={cachedFilesError}
               files={cachedFiles}

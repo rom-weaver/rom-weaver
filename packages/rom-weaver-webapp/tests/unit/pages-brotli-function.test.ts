@@ -37,8 +37,11 @@ const makeContext = ({
   };
 };
 
-const brSidecar = (body = "brotli-bytes") =>
-  new Response(body, { headers: { "Content-Type": "application/octet-stream" } });
+const brSidecar = (body = "brotli-bytes", headers: HeadersInit = {}) => {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("Content-Type", "application/octet-stream");
+  return new Response(body, { headers: responseHeaders });
+};
 
 describe("pages brotli sidecar function", () => {
   it("serves sidecar bytes with Content-Encoding br and the extension's content type", async () => {
@@ -55,6 +58,30 @@ describe("pages brotli sidecar function", () => {
     expect(response.headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
     expect(await response.text()).toBe("brotli-bytes");
   });
+
+  it("preserves a valid sidecar Content-Length as encoded-size metadata without reading its body", async () => {
+    const sidecar = brSidecar("brotli-bytes", { "Content-Length": "12" });
+    const { context } = makeContext({ sidecarResponse: sidecar });
+
+    const response = await onRequestGet(context);
+
+    expect(sidecar.bodyUsed).toBe(false);
+    expect(response.headers.get("x-rom-weaver-encoded-size")).toBe("12");
+    expect(await response.text()).toBe("brotli-bytes");
+  });
+
+  it.each([undefined, "", "-1", "1.5", "not-a-size", "9007199254740992"])(
+    "leaves encoded-size metadata unknown when sidecar Content-Length is %j",
+    async (contentLength) => {
+      const headers = contentLength === undefined ? {} : { "Content-Length": contentLength };
+      const { context } = makeContext({ sidecarResponse: brSidecar("brotli-bytes", headers) });
+
+      const response = await onRequestGet(context);
+
+      expect(response.headers.has("x-rom-weaver-encoded-size")).toBe(false);
+      expect(await response.text()).toBe("brotli-bytes");
+    },
+  );
 
   it.each([
     ["https://rom-weaver.com/assets/index-DXHhOtA-.js", "text/javascript; charset=utf-8"],

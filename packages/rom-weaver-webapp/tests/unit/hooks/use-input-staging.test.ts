@@ -126,6 +126,8 @@ const createHarness = (overrides: { stageInput?: LocalApplyPatchFormSessionOptio
 // used by the syncPatchFiles-focused tests.
 const createPatchHarness = (
   overrides: {
+    getCurrentSnapshot?: () => ApplyWorkflowStageSnapshot;
+    getPatchKey?: (source: BinarySource, sources?: BinarySource[]) => string;
     stagePatches?: LocalApplyPatchFormSessionOptions["stagePatches"];
     validatePatches?: LocalApplyPatchFormSessionOptions["validatePatches"];
   } = {},
@@ -133,6 +135,7 @@ const createPatchHarness = (
   const romInputsSetter = makeStatefulSetter<unknown[]>([]);
   const inputStagingSetter = makeStatefulSetter(false);
   const patchStagingSetter = makeStatefulSetter(false);
+  const patchValidationPendingSetter = makeStatefulSetter(false);
   const patchInfoByKeySetter = makeStatefulSetter<Record<string, StagedInputInfo>>({});
   const patchProgressSetter = makeStatefulSetter<unknown>(null);
   const patchProgressByKeySetter = makeStatefulSetter<Record<string, unknown>>({});
@@ -145,7 +148,7 @@ const createPatchHarness = (
   const updatePatches = vi.fn();
 
   const getInputKey = (src: BinarySource) => (src as unknown as { name: string }).name;
-  const getPatchKey = (src: BinarySource) => (src as unknown as { name: string }).name;
+  const getPatchKey = overrides.getPatchKey ?? ((src: BinarySource) => (src as unknown as { name: string }).name);
   const getStableInputInfo = (info: StagedInputInfo) => info;
 
   const { result } = renderHook(() => {
@@ -168,9 +171,11 @@ const createPatchHarness = (
         setPatchProgress: patchProgressSetter.spy,
         setPatchProgressByKey: patchProgressByKeySetter.spy,
         setPatchStaging: patchStagingSetter.spy,
+        setPatchValidationPending: patchValidationPendingSetter.spy,
         setRomInputs: romInputsSetter.spy,
       },
       stage: {
+        getCurrentSnapshot: overrides.getCurrentSnapshot,
         stageInput: undefined,
         stagePatches: overrides.stagePatches,
         validatePatches: overrides.validatePatches,
@@ -186,8 +191,10 @@ const createPatchHarness = (
     patchProgressByKeySetter,
     patchProgressSetter,
     patchStagingSetter,
+    patchValidationPendingSetter,
     result,
     setSectionErrorMessage,
+    updatePatches,
   };
 };
 
@@ -497,6 +504,242 @@ describe("useInputStaging syncRomInput", () => {
 });
 
 describe("useInputStaging syncPatchFiles", () => {
+  it("preserves expanded patch details when the archive stage settles", async () => {
+    const archive = source("patches.zip");
+    const leaves = [source("a.ips"), source("b.ips")];
+    const infos = leaves.map(infoFor);
+    let currentPatches = [archive];
+    let finishStage: (infos: StagedInputInfo[]) => void = () => undefined;
+    const stagePatches = vi.fn((_snapshot, handlers) => {
+      handlers.onImplicitPatches?.(leaves, infos);
+      return new Promise<StagedInputInfo[]>((resolve) => {
+        finishStage = resolve;
+      });
+    });
+    const { patchInfoByKeySetter, result } = createPatchHarness({
+      getCurrentSnapshot: () => snapshotOf([], currentPatches),
+      stagePatches,
+    });
+
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [archive])));
+    currentPatches = leaves;
+    await act(async () => {
+      finishStage(infos);
+      await Promise.resolve();
+    });
+
+    expect(patchInfoByKeySetter.value).toEqual({ "a.ips": infos[0], "b.ips": infos[1] });
+  });
+
+  it("restarts a pending archive expansion after a patch is removed or reordered", async () => {
+    for (const edit of ["remove", "reorder"] as const) {
+      const archive = source("patches.zip");
+      const other = source("other.ips");
+      const leaf = source("leaf.ips");
+      let currentPatches = [archive, other];
+      const stages: Array<{
+        handlers: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stagePatches"]>>[1];
+        resolve: (infos: StagedInputInfo[]) => void;
+      }> = [];
+      const stagePatches = vi.fn(
+        (_snapshot, handlers) =>
+          new Promise<StagedInputInfo[]>((resolve) => {
+            stages.push({ handlers, resolve });
+          }),
+      );
+      const { patchStagingSetter, result, updatePatches } = createPatchHarness({
+        getCurrentSnapshot: () => snapshotOf([], currentPatches),
+        stagePatches,
+      });
+
+      act(() => result.current.staging.syncPatchFiles(snapshotOf([], [archive, other])));
+      currentPatches = edit === "remove" ? [archive] : [other, archive];
+      act(() => stages[0]?.handlers.onImplicitPatches?.([leaf, other], [infoFor(leaf, 0), infoFor(other, 1)]));
+
+      expect(updatePatches).not.toHaveBeenCalled();
+      expect(stagePatches).toHaveBeenCalledTimes(2);
+      expect(stagePatches.mock.calls[1]?.[0].patches).toEqual(currentPatches);
+      expect(patchStagingSetter.value).toBe(true);
+      await act(async () => {
+        stages[1]?.resolve(currentPatches.map((patch, index) => infoFor(patch, index)));
+        stages[0]?.resolve([infoFor(archive, 0), infoFor(other, 1)]);
+        await Promise.resolve();
+      });
+      expect(patchStagingSetter.value).toBe(false);
+    }
+  });
+
+  it("retries current patches after a stale stage failure and reports a retained failure", async () => {
+    const removed = source("a.ips");
+    const retained = source("b.ips");
+    let currentPatches = [removed, retained];
+    const rejectStages: Array<(error: Error) => void> = [];
+    const stagePatches = vi.fn(
+      () =>
+        new Promise<StagedInputInfo[]>((_resolve, reject) => {
+          rejectStages.push(reject);
+        }),
+    );
+    const { onError, patchStagingSetter, result, setSectionErrorMessage } = createPatchHarness({
+      getCurrentSnapshot: () => snapshotOf([], currentPatches),
+      stagePatches,
+    });
+
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [removed, retained])));
+    currentPatches = [retained];
+    await act(async () => {
+      rejectStages[0]?.(new Error("removed patch failed"));
+      await Promise.resolve();
+    });
+    expect(stagePatches).toHaveBeenCalledTimes(2);
+    expect(stagePatches.mock.calls[1]?.[0].patches).toEqual([retained]);
+    expect(patchStagingSetter.value).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+    expect(setSectionErrorMessage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rejectStages[1]?.(new Error("retained patch failed"));
+      await Promise.resolve();
+    });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "retained patch failed" }));
+    expect(setSectionErrorMessage).toHaveBeenCalledWith(
+      "patch",
+      expect.objectContaining({ message: "retained patch failed" }),
+    );
+  });
+
+  it("clears superseded validation pending even if replacement staging fails", async () => {
+    const patch = source("a.ips");
+    let finishValidation: (infos: StagedInputInfo[]) => void = () => undefined;
+    const validatePatches = vi.fn(
+      () =>
+        new Promise<StagedInputInfo[]>((resolve) => {
+          finishValidation = resolve;
+        }),
+    );
+    const stagePatches = vi.fn().mockRejectedValue(new Error("patch staging failed"));
+    const { patchInfoByKeySetter, patchValidationPendingSetter, result } = createPatchHarness({
+      stagePatches,
+      validatePatches,
+    });
+
+    act(() => result.current.staging.validatePatchesDeferred(snapshotOf([], [patch])));
+    expect(patchValidationPendingSetter.value).toBe(true);
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [patch])));
+    expect(patchValidationPendingSetter.value).toBe(false);
+    await act(async () => {
+      await Promise.resolve();
+      finishValidation([{ fileName: "a.ips", validationState: "valid" }]);
+      await Promise.resolve();
+    });
+
+    expect(patchValidationPendingSetter.value).toBe(false);
+    expect(patchInfoByKeySetter.value).toEqual({});
+  });
+
+  it("maps staged info to an equivalent current source wrapper", async () => {
+    const stagedPatch = source("a.ips");
+    const currentPatch = source("a.ips");
+    let finishStage: (infos: StagedInputInfo[]) => void = () => undefined;
+    const stagePatches = vi.fn(
+      () =>
+        new Promise<StagedInputInfo[]>((resolve) => {
+          finishStage = resolve;
+        }),
+    );
+    const { patchInfoByKeySetter, result } = createPatchHarness({
+      getCurrentSnapshot: () => snapshotOf([], [currentPatch]),
+      stagePatches,
+    });
+
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [stagedPatch])));
+    await act(async () => {
+      finishStage([{ fileName: "a.ips", format: "ips" }]);
+      await Promise.resolve();
+    });
+
+    expect(patchInfoByKeySetter.value["a.ips"]?.format).toBe("ips");
+  });
+
+  it("ignores late progress for a patch removed during staging", async () => {
+    const removed = source("a.ips");
+    const retained = source("b.ips");
+    let currentPatches = [removed, retained];
+    let handlersRef: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stagePatches"]>>[1] | undefined;
+    let finishStage: (infos: StagedInputInfo[]) => void = () => undefined;
+    const stagePatches = vi.fn(
+      (_snapshot, handlers) =>
+        new Promise<StagedInputInfo[]>((resolve) => {
+          handlersRef = handlers;
+          finishStage = resolve;
+        }),
+    );
+    const { patchInfoByKeySetter, patchProgressByKeySetter, result } = createPatchHarness({
+      getCurrentSnapshot: () => snapshotOf([], currentPatches),
+      stagePatches,
+    });
+
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [removed, retained])));
+    act(() => {
+      currentPatches = [retained];
+      patchProgressByKeySetter.spy({ "b.ips": patchProgressByKeySetter.value["b.ips"] });
+      handlersRef?.onPatchStaged?.({ fileName: "a.ips" }, 0);
+      handlersRef?.onProgress?.({ details: { order: 0 }, label: "Reading a.ips", stage: "input" });
+    });
+    expect(patchInfoByKeySetter.value["a.ips"]).toBeUndefined();
+    expect(patchProgressByKeySetter.value["a.ips"]).toBeUndefined();
+    await act(async () => {
+      finishStage([{ fileName: "a.ips" }, { fileName: "b.ips" }]);
+      await Promise.resolve();
+    });
+    expect(Object.keys(patchInfoByKeySetter.value)).toEqual(["b.ips"]);
+  });
+
+  it("does not route a removed duplicate's late callbacks to its retained twin", async () => {
+    const removed = source("same.ips");
+    const retained = source("same.ips");
+    const keys = new WeakMap<object, string>([
+      [removed as object, "patch-a"],
+      [retained as object, "patch-b"],
+    ]);
+    let currentPatches = [removed, retained];
+    let handlersRef: Parameters<NonNullable<LocalApplyPatchFormSessionOptions["stagePatches"]>>[1] | undefined;
+    let finishStage: (infos: StagedInputInfo[]) => void = () => undefined;
+    const stagePatches = vi.fn(
+      (_snapshot, handlers) =>
+        new Promise<StagedInputInfo[]>((resolve) => {
+          handlersRef = handlers;
+          finishStage = resolve;
+        }),
+    );
+    const { patchInfoByKeySetter, patchProgressByKeySetter, result } = createPatchHarness({
+      getCurrentSnapshot: () => snapshotOf([], currentPatches),
+      getPatchKey: (patch) => keys.get(patch as object) || "",
+      stagePatches,
+    });
+
+    act(() => result.current.staging.syncPatchFiles(snapshotOf([], [removed, retained])));
+    act(() => {
+      currentPatches = [retained];
+      patchProgressByKeySetter.spy({ "patch-b": patchProgressByKeySetter.value["patch-b"] });
+      handlersRef?.onPatchStaged?.({ fileName: "same.ips", format: "removed" }, 0);
+      handlersRef?.onProgress?.({ details: { order: 0 }, label: "Reading removed twin", stage: "input" });
+    });
+    expect(patchInfoByKeySetter.value["patch-a"]).toBeUndefined();
+    expect(patchInfoByKeySetter.value["patch-b"]).toBeUndefined();
+    expect(patchProgressByKeySetter.value["patch-a"]).toBeUndefined();
+
+    await act(async () => {
+      finishStage([
+        { fileName: "same.ips", format: "removed" },
+        { fileName: "same.ips", format: "retained" },
+      ]);
+      await Promise.resolve();
+    });
+    expect(Object.keys(patchInfoByKeySetter.value)).toEqual(["patch-b"]);
+    expect(patchInfoByKeySetter.value["patch-b"]?.format).toBe("retained");
+  });
+
   it("resets patch staging state when there are no patches or no stagePatches handler", () => {
     const { patchStagingSetter, patchProgressSetter, patchProgressByKeySetter, result } = createPatchHarness();
     act(() => result.current.staging.syncPatchFiles(snapshotOf([], [])));
@@ -626,6 +869,33 @@ describe("useInputStaging syncPatchFiles", () => {
 });
 
 describe("useInputStaging validatePatchesDeferred", () => {
+  it("keeps the latest validation verdict when settings change in the same stage generation", async () => {
+    const patch = source("a.ips");
+    const resolvers: Array<(infos: StagedInputInfo[]) => void> = [];
+    const validatePatches = vi.fn(
+      () =>
+        new Promise<StagedInputInfo[]>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    const { patchInfoByKeySetter, result } = createPatchHarness({ validatePatches });
+
+    act(() => {
+      result.current.staging.validatePatchesDeferred(snapshotOf([], [patch]));
+      result.current.staging.validatePatchesDeferred(snapshotOf([], [patch]));
+    });
+    await act(async () => {
+      resolvers[1]?.([{ fileName: "a.ips", validationState: "valid" }]);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      resolvers[0]?.([{ fileName: "a.ips", validationState: "invalid" }]);
+      await Promise.resolve();
+    });
+
+    expect(patchInfoByKeySetter.value["a.ips"]?.validationState).toBe("valid");
+  });
+
   it("merges verdicts back onto patch infos when validation resolves", async () => {
     const patch = source("a.ips");
     const validatePatches = vi.fn(async () => [{ fileName: "a.ips", validationState: "valid" }]);

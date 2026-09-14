@@ -46,6 +46,7 @@ type SettingsState = {
   postApplyTestBehavior: PostApplyActionBehavior;
   betaToolsEnabled: boolean;
   emulatorSaveStorageEnabled: boolean;
+  offlineCopyEnabled: boolean;
   onboardingEnabled: boolean;
   fixChecksum: boolean;
   identifiedOutputName: boolean;
@@ -163,6 +164,7 @@ const SETTINGS_FIELD_ORDER = [
   "logLevel",
   "betaToolsEnabled",
   "emulatorSaveStorageEnabled",
+  "offlineCopyEnabled",
   "onboardingEnabled",
   "fixChecksum",
   "identifiedOutputName",
@@ -227,7 +229,15 @@ const ZIP_ZSTD_CODEC =
  */
 const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title: string }> = [
   {
-    fields: ["language", "accent", "byteUnits", "logLevel", "onboardingEnabled", "betaToolsEnabled"],
+    fields: [
+      "language",
+      "accent",
+      "byteUnits",
+      "logLevel",
+      "offlineCopyEnabled",
+      "onboardingEnabled",
+      "betaToolsEnabled",
+    ],
     title: "Webapp",
   },
   {
@@ -459,6 +469,17 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("onboardingEnabled"),
     labelDataLocalize: 'Show the "New here?" quick-start tips',
     layout: "large",
+  },
+  offlineCopyEnabled: {
+    defaultValue: true,
+    id: "settings-offline-copy-enabled",
+    key: "offlineCopyEnabled",
+    kind: "checkbox",
+    label: getSettingsLabel("offlineCopyEnabled"),
+    labelDataLocalize: "Keep an offline copy",
+    layout: "large",
+    suggestion: getSettingsLabel("offlineCopyHelp"),
+    suggestionDataLocalize: "Automatically download the app for offline use unless data saver is on.",
   },
   requireInputChecksumMatch: {
     defaultValue: true,

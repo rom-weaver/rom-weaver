@@ -1024,10 +1024,11 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   flex-direction: column;
   gap: 2px;
   align-items: flex-start;
+  max-width: 100%;
 }
 /* Warm-up byte counter and current download under the installing badge. */
 .rw-app .sw-progress-detail {
-  max-width: 260px;
+  max-width: min(260px, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 0.65rem;

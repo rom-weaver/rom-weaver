@@ -56,6 +56,7 @@ import {
   listenForOfflinePrecacheProgress,
   listenForServiceWorkerLog,
   persistOfflineReady,
+  getOfflineCopyState,
   queryOfflineReadyState,
   readPersistedOfflineReady,
   scheduleOfflineWarmup,
@@ -372,11 +373,11 @@ function WebappRoot({
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
   const onWarmupProgress = useCallback((progress: OfflineWarmupDisplayProgress) => {
-    setOfflineProgress(progress);
-    persistOfflineReady(progress.ready);
+    const next = { ...progress, ready: getOfflineCopyState().enabled && progress.ready };
+    setOfflineProgress(next);
+    persistOfflineReady(next.ready);
   }, []);
   useEffect(() => {
-    if (notFound) return undefined;
     const progressGate = createOfflineWarmupProgressGate(onWarmupProgress);
     // A page that loads after the warm-up finished gets no progress events;
     // ask the worker once so the chip does not stay "installing" forever.
@@ -395,7 +396,7 @@ function WebappRoot({
       stopWorkerLog();
       cancelWarmup();
     };
-  }, [notFound, onWarmupProgress]);
+  }, [onWarmupProgress]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
@@ -911,6 +912,8 @@ function WebappRoot({
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
               offlineProgress={offlineProgress}
+              offlineCopyEnabled={state.settings.offlineCopyEnabled}
+              onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
               settingsFocusHint={settingsFocusHint}
               settingsPanel={
                 <Suspense fallback={null}>

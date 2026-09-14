@@ -429,6 +429,7 @@
 .rw-app .patch-body {
   display: grid;
   grid-template-rows: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   transition: grid-template-rows 0.16s var(--ease);
 }
 .rw-app .patch-body-inner {

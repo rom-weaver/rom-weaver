@@ -303,6 +303,21 @@ describe("Masthead", () => {
     expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
+  it("shows the offline-copy opt-out in the masthead status", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ offlineCopyEnabled: false }}>
+        <Masthead
+          {...mastheadProps}
+          offlineProgress={{ cachedBytes: 1, ready: true, totalBytes: 1 }}
+          serviceWorkerStatus="active"
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const status = container.querySelector(".sub-status");
+    expect(status?.getAttribute("data-sw")).toBe("online");
+    expect(status?.getAttribute("aria-label")).toBe("Offline copy disabled");
+  });
+
   it("links pull request build tags to their pull request and channels to What's new", () => {
     const { container, getByRole, rerender } = render(
       withSettings(<Masthead {...mastheadProps} channelBadge="pr-123" />),

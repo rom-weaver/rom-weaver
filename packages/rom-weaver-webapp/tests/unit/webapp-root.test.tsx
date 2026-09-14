@@ -426,8 +426,8 @@ describe("entry animations", () => {
 });
 
 describe("offline warm-up progress", () => {
-  it("paints the reported progress on the runtime chip and remembers readiness", async () => {
-    const { container } = await renderRoot({ serviceWorkerStatus: "active" });
+  it.each([false, true])("shows offline progress and saves readiness with notFound=%s", async (notFound) => {
+    const { container } = await renderRoot({ notFound, serviceWorkerStatus: "active" });
     const onProgress = mocks.scheduleOfflineWarmup.mock.calls.at(-1)?.[0]?.onProgress;
     if (!onProgress) throw new Error("The root scheduled no warm-up");
 

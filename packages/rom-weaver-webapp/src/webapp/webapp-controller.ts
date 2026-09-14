@@ -524,6 +524,22 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: { ...state.draftSettings, onboardingEnabled: enabled },
       });
     },
+    setOfflineCopyEnabled(enabled: boolean) {
+      const state = store.getState();
+      const draftSettings = { ...state.draftSettings, offlineCopyEnabled: enabled };
+      if (state.settings.offlineCopyEnabled === enabled) {
+        if (state.draftSettings.offlineCopyEnabled !== enabled) {
+          setState({ draftSettings, validation: buildDraftValidation(draftSettings, state.settings) });
+        }
+        return;
+      }
+      const nextSettings = { ...copySettings(state.settings), offlineCopyEnabled: enabled };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings,
+        validation: buildDraftValidation(draftSettings, nextSettings),
+      });
+    },
     setPatcherInputState(inputs: readonly unknown[]) {
       updatePatcherSession({ romFilePresent: inputs.length > 0 });
     },
