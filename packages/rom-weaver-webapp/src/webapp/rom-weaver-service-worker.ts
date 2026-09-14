@@ -371,6 +371,7 @@ const precacheState = async () => {
   await Promise.all(transferMeasurements);
   return {
     cachedBytes: cachedBytes + deferred.cachedBytes,
+    deferredCachedBytes: deferred.cachedBytes,
     cachedFiles: cachedFiles + deferred.cachedFiles,
     totalBytes: totalBytes + deferred.totalBytes,
     totalFiles: INITIAL_MANIFEST.length + deferred.totalFiles,
@@ -616,18 +617,42 @@ const offlineWarmup = createOfflineWarmup({
 let appPumpChain: Promise<unknown> = Promise.resolve();
 const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
   const process = async () => {
+    const baseline = await offlineWarmup.getReadyState();
+    let deferredCachedBytes = baseline.deferredCachedBytes ?? 0;
+    const baseCachedBytes = baseline.cachedBytes - deferredCachedBytes;
     const progress = createOfflineProgressReporter(
-      async () => ({ ...(await offlineWarmup.getReadyState()), ready: false, phase: "precache" }),
+      async () => ({
+        ...baseline,
+        cachedBytes: Math.min(baseline.totalBytes, baseCachedBytes + deferredCachedBytes),
+        deferredCachedBytes,
+        ready: false,
+        phase: "precache",
+      }),
       onInterim,
       (error) => logServiceWorker("offline progress failed", { error: formatError(error) }),
     );
+    let cacheUpdates = Promise.resolve();
+    const onCached = () => {
+      cacheUpdates = cacheUpdates
+        .then(async () => {
+          const state = await offlineWarmup.getReadyState();
+          baseline.cachedFiles = state.cachedFiles;
+          baseline.pendingUnits = state.pendingUnits;
+          baseline.transferredBytes = state.transferredBytes;
+          baseline.transferBytesIncomplete = state.transferBytesIncomplete;
+          await progress.update(true);
+        })
+        .catch((error) => logServiceWorker("offline cache progress failed", { error: formatError(error) }));
+    };
     let downloaded: boolean;
     try {
-      downloaded = await deferredPrecache.runNextBatch(() => {
+      downloaded = await deferredPrecache.runNextBatch((cachedBytes) => {
+        deferredCachedBytes = cachedBytes;
         void progress.update();
-      });
+      }, onCached);
     } finally {
       // Interim messages MUST finish before the final reply closes the page's subscription.
+      await cacheUpdates;
       await progress.flush();
     }
     if (!downloaded) return offlineWarmup.runNextUnit(onInterim);

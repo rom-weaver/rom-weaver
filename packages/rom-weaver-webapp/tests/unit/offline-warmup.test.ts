@@ -131,6 +131,47 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
+  it("updates transferred sizes before the next file in the batch finishes", async () => {
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const fetcher = createFetcher();
+    const fallback = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("emulatorjs/manifest.json"))
+        return Response.json({ ...manifest, files: manifest.files.slice(0, 2) });
+      if (url.endsWith("/loader.js"))
+        return new Response("one", { headers: { "content-length": "2", "content-encoding": "br" } });
+      if (url.endsWith("/core.wasm"))
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              stream = controller;
+            },
+          }),
+        );
+      if (!fallback) throw new Error("Missing fallback fetcher");
+      return fallback(input);
+    });
+    const warmup = await createWarmup(fetcher);
+    const interims: unknown[] = [];
+    const pump = warmup.runNextUnit((state) => interims.push(state));
+    try {
+      await vi.waitFor(() =>
+        expect(interims).toContainEqual(expect.objectContaining({ cachedFiles: 1, transferredBytes: 2, ready: false })),
+      );
+      stream?.enqueue(new Uint8Array(2));
+      await vi.waitFor(() =>
+        expect(interims.at(-1)).toMatchObject({ cachedBytes: 5, transferredBytes: 2, ready: false }),
+      );
+      stream?.enqueue(new Uint8Array(3));
+      stream?.close();
+      expect(await pump).toMatchObject({ cachedFiles: 2, transferredBytes: 7, ready: true });
+    } finally {
+      stream?.error(new Error("test stream cleanup"));
+      await pump.catch(() => undefined);
+    }
+  });
+
   it("reports cached transfer sizes across restarts and excludes unselected groups", async () => {
     const emulatorCache = await cacheStorage.open(EMULATORJS_CACHE);
     await emulatorCache.put(
@@ -437,7 +478,7 @@ describe("offline warm-up (service worker side)", () => {
     expect((await warmup.runNextUnit()).unit).toBe("emulatorjs:cores/core.wasm");
   });
 
-  it("reports chunks from a download that finishes within 200 ms", async () => {
+  it("reports fast chunks while cache reads are blocked", async () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     const fetcher = createFetcher();
     const fallback = fetcher.getMockImplementation();
@@ -460,20 +501,34 @@ describe("offline warm-up (service worker side)", () => {
     let now = Date.now();
     const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
     const pump = warmup.runNextUnit((progress) => interims.push(progress.unitLoadedBytes ?? 0));
+    let releaseCache: () => void = () => undefined;
+    const cacheGate = new Promise<void>((resolve) => {
+      releaseCache = resolve;
+    });
+    let keys: ReturnType<typeof vi.spyOn> | undefined;
     try {
       await vi.waitFor(() => expect(controller).toBeDefined());
       controller?.enqueue(new Uint8Array(1));
       await vi.waitFor(() => expect(interims).toContain(1));
+      const cache = await cacheStorage.open(EMULATORJS_CACHE);
+      const readKeys = cache.keys.bind(cache);
+      keys = vi.spyOn(cache, "keys").mockImplementation(async () => {
+        await cacheGate;
+        return readKeys();
+      });
       now += 50;
       controller?.enqueue(new Uint8Array(1));
       await vi.waitFor(() => expect(interims).toContain(2));
+      releaseCache();
       controller?.enqueue(new Uint8Array(1));
       controller?.close();
       expect(await pump).toMatchObject({ cachedFiles: 1 });
     } finally {
+      releaseCache();
       controller?.error(new Error("test stream cleanup"));
       await pump.catch(() => undefined);
       clock.mockRestore();
+      keys?.mockRestore();
     }
   });
 

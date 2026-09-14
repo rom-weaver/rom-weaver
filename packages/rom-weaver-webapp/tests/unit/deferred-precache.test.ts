@@ -59,6 +59,63 @@ afterEach(() => {
 });
 
 describe("deferred precache", () => {
+  it("retains arrivals during its starting cache read without double counting cached files", async () => {
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries,
+      scope: SCOPE,
+      download: async (request) => {
+        if (request.url.endsWith("/one.js")) return new Response("one");
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              stream = controller;
+            },
+          }),
+        );
+      },
+    });
+    await queue.serve("assets/one.js");
+    const arrivals = vi.fn();
+    const interactive = queue.serve("assets/two.js", arrivals);
+    const cache = await cacheStorage.open(CACHE_NAME);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const readKeys = cache.keys.bind(cache);
+    const keys = vi.spyOn(cache, "keys").mockImplementation(async () => {
+      const snapshot = await readKeys();
+      await gate;
+      return snapshot;
+    });
+    const progress: number[] = [];
+    let pump: Promise<boolean> | undefined;
+    try {
+      await vi.waitFor(() => expect(stream).toBeDefined());
+      stream?.enqueue(new Uint8Array(1));
+      await vi.waitFor(() => expect(arrivals).toHaveBeenCalledTimes(1));
+      pump = queue.runNextBatch((bytes) => progress.push(bytes));
+      await vi.waitFor(() => expect(keys).toHaveBeenCalledTimes(1));
+      stream?.enqueue(new Uint8Array(1));
+      await vi.waitFor(() => expect(arrivals).toHaveBeenCalledTimes(2));
+      release();
+      await vi.waitFor(() => expect(progress).toContain(5));
+      stream?.enqueue(new Uint8Array(2));
+      stream?.close();
+      await Promise.all([interactive, pump]);
+      expect(progress.at(-1)).toBe(7);
+      expect(progress).toEqual([...progress].sort((left, right) => left - right));
+      expect(keys).toHaveBeenCalledTimes(1);
+    } finally {
+      release();
+      stream?.error(new Error("test stream cleanup"));
+      await Promise.allSettled([interactive, pump]);
+      keys.mockRestore();
+    }
+  });
+
   it("reports an app download started outside the current batch and keeps its partial progress", async () => {
     const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
     const files = Array.from({ length: 5 }, (_, index) => ({ url: `assets/${index}.bin`, sizeBytes: 10 }));
@@ -286,13 +343,14 @@ describe("deferred precache", () => {
     const interactive = queue.serve("assets/two.js");
     // Let the first chunk arrive before the pump joins.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const deltas: number[] = [];
-    const pump = queue.runNextBatch((delta) => deltas.push(delta));
+    const progress: number[] = [];
+    const pump = queue.runNextBatch((cachedBytes) => progress.push(cachedBytes));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(deltas).toContain(4);
+    expect(progress).toContain(4);
     release();
     await Promise.all([interactive, pump]);
-    expect(deltas.reduce((sum, delta) => sum + delta, 0)).toBe(8 + 3);
+    expect(progress.at(-1)).toBe(7);
+    expect(progress).toEqual([...progress].sort((left, right) => left - right));
     expect(await queue.state()).toMatchObject({ cachedFiles: 2 });
   });
 

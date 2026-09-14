@@ -32,6 +32,8 @@ type WarmupBumpTarget = { kind: "emulatorjs" } | { kind: "identify-groups"; grou
 
 type OfflineReadyState = {
   cachedBytes: number;
+  /** Deferred app bytes included in cachedBytes, including active downloads. */
+  deferredCachedBytes?: number;
   /** Files already cached, counting EmulatorJS files and identify packs individually. */
   cachedFiles: number;
   pendingUnits: number;
@@ -105,7 +107,13 @@ type OfflineWarmupOptions = {
   precacheState?: () => Promise<
     Pick<
       OfflineReadyState,
-      "cachedBytes" | "cachedFiles" | "totalBytes" | "totalFiles" | "transferredBytes" | "transferBytesIncomplete"
+      | "cachedBytes"
+      | "deferredCachedBytes"
+      | "cachedFiles"
+      | "totalBytes"
+      | "totalFiles"
+      | "transferredBytes"
+      | "transferBytesIncomplete"
     >
   >;
   scope: string;
@@ -431,6 +439,7 @@ const createOfflineWarmup = ({
     let cachedFiles = 0;
     let pendingUnits = 0;
     let transferredBytes = 0;
+    let deferredCachedBytes: number | undefined;
     let transferBytesIncomplete = false;
     const transferMeasurements: Array<Promise<void>> = [];
     const measureTransfer = (cache: Cache, url: string, decodedSize?: number) => {
@@ -446,6 +455,7 @@ const createOfflineWarmup = ({
         const precache = await precacheState();
         totalBytes += precache.totalBytes;
         cachedBytes += precache.cachedBytes;
+        deferredCachedBytes = precache.deferredCachedBytes;
         totalFiles += precache.totalFiles;
         cachedFiles += precache.cachedFiles;
         transferredBytes += precache.transferredBytes ?? 0;
@@ -515,6 +525,7 @@ const createOfflineWarmup = ({
     await Promise.all(transferMeasurements);
     return {
       cachedBytes,
+      ...(deferredCachedBytes === undefined ? {} : { deferredCachedBytes }),
       cachedFiles,
       pendingUnits,
       ready,
@@ -549,7 +560,12 @@ const createOfflineWarmup = ({
     return files.sort((left, right) => left.url.localeCompare(right.url));
   };
 
-  const installGroupWith = async (fetcher: WarmupFetcher, groupId: string, onBytes?: (delta: number) => void) => {
+  const installGroupWith = async (
+    fetcher: WarmupFetcher,
+    groupId: string,
+    onBytes?: (delta: number) => void,
+    onCached?: () => void,
+  ) => {
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
@@ -558,11 +574,13 @@ const createOfflineWarmup = ({
       if (await cache.match(new URL(pack.url, scope).href)) {
         // Credit cached packs so a resumed group reports continuous progress.
         onBytes?.(pack.sizeBytes || 0);
+        onCached?.();
         continue;
       }
       const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
       await cacheWithDownloadLog(cache, request, response, log);
       transferSizes.forget(request.url);
+      onCached?.();
     }
     await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
     if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === group.id));
@@ -706,6 +724,7 @@ const createOfflineWarmup = ({
     const batchHead = batch[0] ?? unit;
     // Add in-flight bytes to one batch baseline so progress rises during the download.
     let onBytes: ((delta: number) => void) | undefined;
+    let onCached: (() => void) | undefined;
     let flushInterims = () => Promise.resolve();
     if (onInterim) {
       const [baseline, batchCachedBytes] = await Promise.all([getReadyState(), cachedUnitBytes(batch)]);
@@ -717,10 +736,6 @@ const createOfflineWarmup = ({
       let loadedBytes = 0;
       const progress = createOfflineProgressReporter(
         async () => {
-          const state = await getReadyState().catch((error) => {
-            log("transfer progress unavailable", { error: error instanceof Error ? error.message : String(error) });
-            return null;
-          });
           const unitLoadedBytes = Math.min(loadedBytes, unitTotalBytes || loadedBytes);
           return {
             ...baseline,
@@ -730,14 +745,30 @@ const createOfflineWarmup = ({
             unit: label,
             unitLoadedBytes,
             unitTotalBytes,
-            transferredBytes: state?.transferredBytes ?? baseline.transferredBytes,
-            transferBytesIncomplete: state?.transferBytesIncomplete ?? true,
           };
         },
         onInterim,
         (error) => log("offline progress failed", { error: error instanceof Error ? error.message : String(error) }),
       );
-      flushInterims = progress.flush;
+      let cacheUpdates = Promise.resolve();
+      onCached = () => {
+        cacheUpdates = cacheUpdates
+          .then(async () => {
+            const state = await getReadyState();
+            baseline.cachedFiles = state.cachedFiles;
+            baseline.pendingUnits = state.pendingUnits;
+            baseline.transferredBytes = state.transferredBytes;
+            baseline.transferBytesIncomplete = state.transferBytesIncomplete;
+            await progress.update(true);
+          })
+          .catch((error) =>
+            log("offline cache progress failed", { error: error instanceof Error ? error.message : String(error) }),
+          );
+      };
+      flushInterims = async () => {
+        await cacheUpdates;
+        await progress.flush();
+      };
       onBytes = (delta) => {
         loadedBytes += delta;
         void progress.update();
@@ -751,9 +782,10 @@ const createOfflineWarmup = ({
         batch.map(async (batchUnit) => {
           if (batchUnit.kind === "emulatorjs-file") {
             await downloadEmulatorJsFile(batchUnit, onBytes);
+            onCached?.();
             if (queue) queue = queue.filter((candidate) => candidate !== batchUnit);
           } else {
-            await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes);
+            await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes, onCached);
           }
         }),
       );

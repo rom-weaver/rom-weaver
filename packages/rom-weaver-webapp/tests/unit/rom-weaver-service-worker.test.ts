@@ -418,7 +418,63 @@ describe("worker log relay", () => {
 });
 
 describe("service worker bootstrap", () => {
-  it("counts a shared download once across snapshots, interim updates and the final reply", async () => {
+  it("updates transferred sizes when a file is cached while another batch file is still downloading", async () => {
+    const first = `${APP_ORIGIN}/assets/first.bin`;
+    const second = `${APP_ORIGIN}/assets/second.bin`;
+    const harness = await loadWorker({
+      manifest: [
+        { url: first, install: false, sizeBytes: 3 },
+        { url: second, install: false, sizeBytes: 10 },
+      ],
+    });
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    harness.fetchStub.handlers.set(
+      first,
+      () => new Response("one", { headers: { "content-length": "2", "content-encoding": "br" } }),
+    );
+    harness.fetchStub.handlers.set(
+      second,
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              stream = controller;
+            },
+          }),
+        ),
+    );
+    vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+      const state = await harness.warmupConfig.precacheState();
+      return {
+        ...state,
+        ready: state.cachedFiles === state.totalFiles,
+        pendingUnits: state.totalFiles - state.cachedFiles,
+      };
+    });
+    const replies: unknown[] = [];
+    const pump = dispatch(harness.scope, "message", {
+      data: { action: "offline-warmup-pump" },
+      ports: [{ postMessage: (reply) => replies.push(reply) }],
+    });
+    try {
+      await vi.waitFor(() =>
+        expect(replies).toContainEqual(expect.objectContaining({ cachedFiles: 1, transferredBytes: 2, ready: false })),
+      );
+      stream?.enqueue(new Uint8Array(4));
+      await vi.waitFor(() =>
+        expect(replies.at(-1)).toMatchObject({ cachedBytes: 7, transferredBytes: 2, ready: false }),
+      );
+      stream?.enqueue(new Uint8Array(6));
+      stream?.close();
+      await pump;
+      expect(replies.at(-1)).toMatchObject({ cachedFiles: 2, transferredBytes: 12, ready: true });
+    } finally {
+      stream?.error(new Error("test stream cleanup"));
+      await pump.catch(() => undefined);
+    }
+  });
+
+  it("counts a shared download once and streams progress while cache snapshots are blocked", async () => {
     const url = `${APP_ORIGIN}/assets/shared.bin`;
     const harness = await loadWorker({ manifest: [{ url, install: false, sizeBytes: 10 }] });
     const body = new TransformStream<Uint8Array, Uint8Array>();
@@ -436,6 +492,10 @@ describe("service worker bootstrap", () => {
     vi.spyOn(Date, "now").mockImplementation(() => now);
     const interactive = routed(harness, requireRoute(2), new Request(url));
     const replies: Array<{ action: string; cachedBytes: number; ready: boolean }> = [];
+    let releaseSnapshot: () => void = () => undefined;
+    const snapshotGate = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
     let pump: Promise<void> | undefined;
     try {
       await writer.write(new Uint8Array(3));
@@ -445,15 +505,23 @@ describe("service worker bootstrap", () => {
         ports: [{ postMessage: (reply) => replies.push(reply as (typeof replies)[number]) }],
       });
       await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 3, ready: false }));
+      const readState = vi.mocked(harness.warmup.getReadyState).getMockImplementation();
+      vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+        await snapshotGate;
+        if (!readState) throw new Error("Missing ready state reader");
+        return readState();
+      });
       now += 50;
       await writer.write(new Uint8Array(4));
       await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 7, ready: false }));
+      releaseSnapshot();
       await writer.write(new Uint8Array(3));
       await writer.close();
       await Promise.all([interactive, pump]);
-      expect(replies.map((reply) => reply.cachedBytes)).toEqual([3, 7, 10, 10]);
+      expect(replies.map((reply) => reply.cachedBytes)).toEqual([3, 7, 10, 10, 10]);
       expect(replies.at(-1)).toMatchObject({ action: "offline-warmup-progress", ready: true });
     } finally {
+      releaseSnapshot();
       await writer.abort(new Error("test stream cleanup"));
       await Promise.allSettled([interactive, pump]);
       writer.releaseLock();
@@ -467,6 +535,7 @@ describe("service worker bootstrap", () => {
     expect(hoisted.precacheAndRoute).toHaveBeenCalledWith([initial], expect.anything());
     await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
       cachedBytes: 0,
+      deferredCachedBytes: 0,
       cachedFiles: 0,
       totalBytes: 30,
       totalFiles: 2,
@@ -477,6 +546,7 @@ describe("service worker bootstrap", () => {
     await routed(harness, requireRoute(2), new Request(`${APP_ORIGIN}/docs/index.html`));
     await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
       cachedBytes: 20,
+      deferredCachedBytes: 20,
       cachedFiles: 1,
       totalBytes: 30,
       totalFiles: 2,
@@ -1275,6 +1345,7 @@ describe("precache state reported to the warm-up", () => {
     });
     expect(await harness.warmupConfig.precacheState()).toEqual({
       cachedBytes: 0,
+      deferredCachedBytes: 0,
       cachedFiles: 0,
       totalBytes: 10,
       totalFiles: 1,
@@ -1296,6 +1367,7 @@ describe("precache state reported to the warm-up", () => {
 
     await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
       cachedBytes: 10,
+      deferredCachedBytes: 0,
       cachedFiles: 1,
       totalBytes: 30,
       totalFiles: 3,
@@ -1311,6 +1383,7 @@ describe("precache state reported to the warm-up", () => {
 
     await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
       cachedBytes: 0,
+      deferredCachedBytes: 0,
       cachedFiles: 0,
       totalBytes: 0,
       totalFiles: 3,

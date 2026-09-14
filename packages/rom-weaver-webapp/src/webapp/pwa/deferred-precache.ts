@@ -43,7 +43,8 @@ const createDeferredPrecache = ({
   // file when it lands.
   type InFlight = { listeners: Set<(delta: number) => void>; loadedBytes: number; promise: Promise<Response> };
   const inFlight = new Map<string, InFlight>();
-  const progressListeners = new Set<(delta: number) => void>();
+  const progressListeners = new Set<(key: string, loadedBytes: number) => void>();
+  const cachedListeners = new Set<() => void>();
   const transferSizes = createCachedTransferSizeReader();
 
   const find = (input: string) => {
@@ -95,7 +96,11 @@ const createDeferredPrecache = ({
     if (!file) throw new Error(`Unknown offline app file: ${url}`);
     const cache = await caches.open(cacheName);
     const cached = await cache.match(file.key);
-    if (cached) return cached;
+    if (cached) {
+      for (const listener of progressListeners) listener(file.key, file.sizeBytes ?? 0);
+      for (const listener of cachedListeners) listener();
+      return cached;
+    }
     let pending = inFlight.get(file.key);
     if (pending) {
       // Credit what already arrived so the joiner's progress starts where the download is.
@@ -113,11 +118,13 @@ const createDeferredPrecache = ({
           const buffer = await readWithByteProgress(response, (delta) => {
             entry.loadedBytes += delta;
             for (const listener of entry.listeners) listener(delta);
-            for (const listener of progressListeners) listener(delta);
+            for (const listener of progressListeners) listener(file.key, entry.loadedBytes);
           });
           const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
           await cacheWithDownloadLog(cache, file.key, complete.clone(), log);
           transferSizes.forget(file.key);
+          for (const listener of progressListeners) listener(file.key, file.sizeBytes ?? buffer.byteLength);
+          for (const listener of cachedListeners) listener();
           return complete;
         })(),
       };
@@ -132,26 +139,41 @@ const createDeferredPrecache = ({
   };
 
   // A pump MUST observe all downloads, including app requests that start after its batch selection.
-  const runNextBatch = async (onBytes?: (delta: number) => void) => {
-    if (onBytes) {
-      progressListeners.add(onBytes);
-      for (const pending of inFlight.values()) {
-        if (pending.loadedBytes > 0) onBytes(pending.loadedBytes);
-      }
-    }
+  const runNextBatch = async (onProgress?: (cachedBytes: number) => void, onCached?: () => void) => {
+    let cachedKeys: Set<string> | undefined;
+    const loaded = new Map([...inFlight].map(([key, pending]) => [key, pending.loadedBytes]));
+    const report = () => {
+      const keys = cachedKeys;
+      if (!(keys && onProgress)) return;
+      const cachedBytes = files.reduce((sum, file) => {
+        const size = file.sizeBytes ?? 0;
+        return sum + (keys.has(file.key) ? size : Math.min(size, loaded.get(file.key) ?? 0));
+      }, 0);
+      onProgress(cachedBytes);
+    };
+    // The listener MUST retain arrivals while the starting cache snapshot is pending.
+    const onBytes = (key: string, loadedBytes: number) => {
+      loaded.set(key, loadedBytes);
+      report();
+    };
+    if (onProgress) progressListeners.add(onBytes);
+    if (onCached) cachedListeners.add(onCached);
     try {
       const cache = await caches.open(cacheName);
       const keys = new Set((await cache.keys()).map((request) => request.url));
+      cachedKeys = keys;
       const missing = files.filter((file) => !keys.has(file.key));
       const started = missing.filter((file) => inFlight.has(file.key));
       const batch = [...started, ...missing.filter((file) => !inFlight.has(file.key))].slice(0, 4);
+      if (batch.length > 0) report();
       const results = await Promise.allSettled(batch.map((file) => serve(file.url)));
       for (const result of results) {
         if (result.status === "rejected") throw result.reason;
       }
       return batch.length > 0;
     } finally {
-      if (onBytes) progressListeners.delete(onBytes);
+      if (onProgress) progressListeners.delete(onBytes);
+      if (onCached) cachedListeners.delete(onCached);
     }
   };
 
