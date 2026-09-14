@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOfflineWarmup } from "../../src/webapp/offline-warmup.ts";
+import { createOfflineCopyPolicy } from "../../src/webapp/pwa/offline-copy-policy.ts";
 
 const SCOPE = "https://example.test/";
 const EMULATORJS_CACHE = "emulatorjs-4.2.3";
@@ -131,6 +132,28 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
+  it("serves a pack online without caching while disabled and restores the selected group on download", async () => {
+    const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
+    const fetcher = createFetcher();
+    const group = (await buildGroups())[0];
+    const warmup = await createWarmupWithOptionalGroup(fetcher, { policy });
+    await policy.setEnabled(false);
+    warmup.reset();
+    const packUrl = new URL(group.packs[0].url, SCOPE).href;
+    const response = await warmup.serveOptionalIdentifyPack(new Request(packUrl));
+    expect(await response.text()).toBe(PACK_BODY);
+    expect(await (await cacheStorage.open(IDENTIFY_CACHE)).match(packUrl)).toBeUndefined();
+    const requestsBeforePump = fetcher.mock.calls.length;
+    expect(await warmup.runNextUnit()).toMatchObject({ ready: false });
+    expect(fetcher.mock.calls.length).toBe(requestsBeforePump);
+    await policy.setEnabled(true);
+    for (let index = 0; index < 4 && !(await warmup.getReadyState()).ready; index += 1) {
+      await warmup.runNextUnit();
+    }
+    expect(await warmup.getReadyState()).toMatchObject({ ready: true });
+    expect(await (await cacheStorage.open(IDENTIFY_CACHE)).match(packUrl)).toBeDefined();
+  });
+
   it("updates transferred sizes before the next file in the batch finishes", async () => {
     let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
     const fetcher = createFetcher();

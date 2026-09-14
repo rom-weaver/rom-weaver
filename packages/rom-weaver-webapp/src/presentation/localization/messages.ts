@@ -855,6 +855,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "settings.onboardingEnabled",
     message: 'Show the "New here?" quick-start tips',
   }),
+  "settings.offlineCopyEnabled": msg({ id: "settings.offlineCopyEnabled", message: "Keep an offline copy" }),
+  "settings.offlineCopyHelp": msg({
+    id: "settings.offlineCopyHelp",
+    message: "Automatically download the app for offline use unless data saver is on.",
+  }),
   "settings.requireInputChecksumMatch": msg({
     id: "settings.requireInputChecksumMatch",
     message: "Require input checksum match",
@@ -1257,6 +1262,22 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.runtime.downloadUnavailable": msg({
     id: "ui.runtime.downloadUnavailable",
     message: "Offline downloads are unavailable. Reload and try again.",
+  }),
+  "ui.runtime.removeOffline": msg({ id: "ui.runtime.removeOffline", message: "Remove offline copy" }),
+  "ui.runtime.removingOffline": msg({ id: "ui.runtime.removingOffline", message: "Removing offline copy…" }),
+  "ui.runtime.offlineRemoved": msg({ id: "ui.runtime.offlineRemoved", message: "Offline copy removed" }),
+  "ui.runtime.offlineDisabled": msg({ id: "ui.runtime.offlineDisabled", message: "Offline copy disabled" }),
+  "ui.runtime.offlineDisabledDetail": msg({
+    id: "ui.runtime.offlineDisabledDetail",
+    message: "Automatic offline downloads are off.",
+  }),
+  "ui.runtime.removeOfflineHint": msg({
+    id: "ui.runtime.removeOfflineHint",
+    message: "Removes downloaded app files. Your files, saves, and settings stay on this device.",
+  }),
+  "ui.runtime.removeUnavailable": msg({
+    id: "ui.runtime.removeUnavailable",
+    message: "Could not remove the offline copy. Try again.",
   }),
   "ui.runtime.transferred": msg({ id: "ui.runtime.transferred", message: "Transferred {size}" }),
   "ui.runtime.transferredAtLeast": msg({ id: "ui.runtime.transferredAtLeast", message: "Transferred at least {size}" }),

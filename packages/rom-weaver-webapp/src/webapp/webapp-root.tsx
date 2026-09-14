@@ -56,6 +56,7 @@ import {
   listenForOfflinePrecacheProgress,
   listenForServiceWorkerLog,
   persistOfflineReady,
+  getOfflineCopyState,
   queryOfflineReadyState,
   readPersistedOfflineReady,
   scheduleOfflineWarmup,
@@ -372,8 +373,9 @@ function WebappRoot({
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
   const onWarmupProgress = useCallback((progress: OfflineWarmupDisplayProgress) => {
-    setOfflineProgress(progress);
-    persistOfflineReady(progress.ready);
+    const next = { ...progress, ready: getOfflineCopyState().enabled && progress.ready };
+    setOfflineProgress(next);
+    persistOfflineReady(next.ready);
   }, []);
   useEffect(() => {
     if (notFound) return undefined;
@@ -911,6 +913,8 @@ function WebappRoot({
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
               offlineProgress={offlineProgress}
+              offlineCopyEnabled={state.settings.offlineCopyEnabled}
+              onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
               settingsFocusHint={settingsFocusHint}
               settingsPanel={
                 <Suspense fallback={null}>

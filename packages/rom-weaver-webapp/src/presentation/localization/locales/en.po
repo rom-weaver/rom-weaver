@@ -2845,6 +2845,16 @@ msgstr "Show the \"New here?\" quick-start tips"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyEnabled"
+msgstr "Keep an offline copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyHelp"
+msgstr "Automatically download the app for offline use unless data saver is on."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Skip to main content"
 
@@ -3317,6 +3327,41 @@ msgstr "Download requested"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadUnavailable"
 msgstr "Offline downloads are unavailable. Reload and try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOffline"
+msgstr "Remove offline copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removingOffline"
+msgstr "Removing offline copy…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineRemoved"
+msgstr "Offline copy removed"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabled"
+msgstr "Offline copy disabled"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabledDetail"
+msgstr "Automatic offline downloads are off."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOfflineHint"
+msgstr "Removes downloaded app files. Your files, saves, and settings stay on this device."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeUnavailable"
+msgstr "Could not remove the offline copy. Try again."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

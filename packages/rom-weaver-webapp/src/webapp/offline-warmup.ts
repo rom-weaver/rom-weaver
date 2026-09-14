@@ -13,6 +13,7 @@ import {
   readWithByteProgress,
 } from "./pwa/response-encoded-size.ts";
 import { cacheWithDownloadLog } from "./pwa/offline-download-log.ts";
+import type { OfflineCopyPolicy } from "./pwa/offline-copy-policy.ts";
 
 type IdentifyOptionalPack = { sha256: string; sizeBytes?: number; url: string };
 
@@ -99,6 +100,7 @@ type OfflineWarmupOptions = {
   identifyOptionalCacheName: string;
   identifyOptionalGroups: IdentifyOptionalPackGroup[];
   log: (message: string, details?: Record<string, unknown>) => void;
+  policy?: OfflineCopyPolicy;
   /**
    * Bytes and entries of the app's own precache, and how much of it is stored.
    * Counted into every readout so the install reports one total across both
@@ -131,6 +133,7 @@ type OfflineWarmup = {
   runNextUnit: (onInterim?: (progress: WarmupProgress) => void) => Promise<WarmupProgress>;
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
   setIdentifyGroupWanted: (groupId: string, wanted: boolean) => Promise<IdentifyGroupState[]>;
+  reset: () => void;
 };
 
 // Download small EmulatorJS files in one pump. Identify groups stay sequential
@@ -244,6 +247,7 @@ const createOfflineWarmup = ({
   identifyOptionalCacheName,
   identifyOptionalGroups,
   log,
+  policy,
   precacheState,
   scope,
   emulatorJsBatchSize = EMULATORJS_BATCH_SIZE,
@@ -258,28 +262,34 @@ const createOfflineWarmup = ({
   // after a worker restart; bumps reorder it in place.
   let queue: WarmupUnit[] | null = null;
   let queuePromise: Promise<WarmupUnit[]> | null = null;
+  let queueGeneration = 0;
   const transferSizes = createCachedTransferSizeReader();
 
   const loadEmulatorJsManifest = (): Promise<EmulatorJsManifest> => {
     if (!manifestPromise) {
-      manifestPromise = (async () => {
+      const pending = (async () => {
         const cache = await caches.open(emulatorJsCacheName);
         const stored = await cache.match(emulatorJsManifestUrl);
         if (stored) {
           const manifest = parseEmulatorJsManifest(await stored.json());
           if (manifest.version === emulatorJsVersion) return manifest;
         }
+        if (policy && !(await policy.isEnabled())) throw new Error("Offline copy is disabled");
+        const generation = policy?.token();
         const response = await fetchForWarmup(emulatorJsManifestUrl);
         if (!response.ok) throw new Error(`EmulatorJS manifest request failed with HTTP ${response.status}`);
         const manifest = parseEmulatorJsManifest(await response.json());
         if (manifest.version !== emulatorJsVersion)
           throw new Error("EmulatorJS manifest version does not match this worker");
-        await cache.put(emulatorJsManifestUrl, Response.json(manifest));
+        if (policy) await policy.write(() => cache.put(emulatorJsManifestUrl, Response.json(manifest)), generation);
+        else await cache.put(emulatorJsManifestUrl, Response.json(manifest));
         return manifest;
-      })().catch((error) => {
-        manifestPromise = null;
+      })();
+      const tracked = pending.catch((error) => {
+        if (manifestPromise === tracked) manifestPromise = null;
         throw error;
       });
+      manifestPromise = tracked;
     }
     return manifestPromise;
   };
@@ -378,6 +388,7 @@ const createOfflineWarmup = ({
     group.packs.reduce((sum, pack) => sum + (pack.sizeBytes || 0), 0);
 
   const buildQueue = async (): Promise<WarmupUnit[]> => {
+    if (policy && !(await policy.isEnabled())) return [];
     const units: WarmupUnit[] = [];
     const [emulatorJsCache, identifyCache] = await Promise.all([
       caches.open(emulatorJsCacheName),
@@ -406,14 +417,16 @@ const createOfflineWarmup = ({
   const getQueue = (): Promise<WarmupUnit[]> => {
     if (queue) return Promise.resolve(queue);
     if (!queuePromise) {
+      const generation = queueGeneration;
       queuePromise = buildQueue()
         .then((units) => {
+          if (generation !== queueGeneration) return [];
           queue = units;
           queuePromise = null;
-          return units;
+          return queue;
         })
         .catch((error) => {
-          queuePromise = null;
+          if (generation === queueGeneration) queuePromise = null;
           throw error;
         });
     }
@@ -566,23 +579,36 @@ const createOfflineWarmup = ({
     onBytes?: (delta: number) => void,
     onCached?: () => void,
   ) => {
+    if (policy && !(await policy.isEnabled())) return null;
+    const generation = policy?.token();
     const group = identifyOptionalGroups.find((candidate) => candidate.id === groupId);
     if (!group) throw new Error(`Unknown ROM identify pack group: ${groupId}`);
     const cache = await caches.open(identifyOptionalCacheName);
     // Group installs MUST stay sequential so a low-priority warmup does not open one connection per pack.
     for (const pack of group.packs) {
+      if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
       if (await cache.match(new URL(pack.url, scope).href)) {
         // Credit cached packs so a resumed group reports continuous progress.
         onBytes?.(pack.sizeBytes || 0);
         onCached?.();
         continue;
       }
+      if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return null;
       const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
-      await cacheWithDownloadLog(cache, request, response, log);
+      const stored = policy
+        ? await policy.write(() => cacheWithDownloadLog(cache, request, response, log), generation)
+        : (await cacheWithDownloadLog(cache, request, response, log), true);
+      if (!stored) return null;
       transferSizes.forget(request.url);
       onCached?.();
     }
-    await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
+    const marked = policy
+      ? await policy.write(
+          () => cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group))),
+          generation,
+        )
+      : (await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group))), true);
+    if (!marked) return null;
     if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === group.id));
     return { id: group.id, installed: true as const, label: group.label, packs: group.packs.length };
   };
@@ -590,6 +616,7 @@ const createOfflineWarmup = ({
   // A user-selected group downloads at normal priority and joins the offline set.
   const installIdentifyGroup = async (groupId: string) => {
     const result = await installGroupWith(fetchForInteractive, groupId);
+    if (!result) throw new Error("Offline copy is disabled");
     const cache = await caches.open(identifyOptionalCacheName);
     const wanted = await readWantedGroupIds(cache);
     if (!wanted.has(groupId)) await writeWantedGroupIds(cache, new Set([...wanted, groupId]));
@@ -643,21 +670,33 @@ const createOfflineWarmup = ({
     unit: Extract<WarmupUnit, { kind: "emulatorjs-file" }>,
     onBytes?: (delta: number) => void,
   ) => {
+    if (policy && !(await policy.isEnabled())) return false;
+    const generation = policy?.token();
     const cache = await caches.open(emulatorJsCacheName);
     const url = emulatorJsAssetUrl(unit.path);
     if (await cache.match(url)) {
       onBytes?.(unit.sizeBytes);
-      return;
+      return true;
     }
+    if (policy && (generation !== policy.token() || !(await policy.isEnabled()))) return false;
     const response = await fetchForWarmup(url);
     if (!response.ok) throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
     const buffer = await readWithByteProgress(response, onBytes);
-    await cacheWithDownloadLog(cache, url, bufferedResponse(response, buffer, encodedSizeOf(url)), log);
+    const stored = policy
+      ? await policy.write(
+          () => cacheWithDownloadLog(cache, url, bufferedResponse(response, buffer, encodedSizeOf(url)), log),
+          generation,
+        )
+      : (await cacheWithDownloadLog(cache, url, bufferedResponse(response, buffer, encodedSizeOf(url)), log), true);
+    if (!stored) return false;
     transferSizes.forget(url);
+    return true;
   };
 
   /** Write the completion marker once no emulatorjs file unit remains. */
   const finishEmulatorJsIfComplete = async () => {
+    if (policy && !(await policy.isEnabled())) return;
+    const generation = policy?.token();
     if (queue?.some((unit) => unit.kind === "emulatorjs-file")) return;
     const cache = await caches.open(emulatorJsCacheName);
     if (await isEmulatorJsComplete(cache)) return;
@@ -666,10 +705,9 @@ const createOfflineWarmup = ({
     for (const file of manifest.files) {
       if (!cachedUrls.has(emulatorJsAssetUrl(file.path))) return;
     }
-    await cache.put(
-      emulatorJsMarkerUrl,
-      new Response(emulatorJsVersion, { headers: { "content-type": "text/plain" } }),
-    );
+    const marker = new Response(emulatorJsVersion, { headers: { "content-type": "text/plain" } });
+    if (policy) await policy.write(() => cache.put(emulatorJsMarkerUrl, marker), generation);
+    else await cache.put(emulatorJsMarkerUrl, marker);
     log("emulatorjs warm-up complete", { version: emulatorJsVersion });
   };
 
@@ -713,6 +751,7 @@ const createOfflineWarmup = ({
   let pumpChain: Promise<unknown> = Promise.resolve();
 
   const processNextUnit = async (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupUnit | undefined> => {
+    if (policy && !(await policy.isEnabled())) return undefined;
     const units = await getQueue();
     const unit = units[0];
     if (!unit) {
@@ -781,9 +820,9 @@ const createOfflineWarmup = ({
       await Promise.all(
         batch.map(async (batchUnit) => {
           if (batchUnit.kind === "emulatorjs-file") {
-            await downloadEmulatorJsFile(batchUnit, onBytes);
+            const stored = await downloadEmulatorJsFile(batchUnit, onBytes);
             onCached?.();
-            if (queue) queue = queue.filter((candidate) => candidate !== batchUnit);
+            if (stored && queue) queue = queue.filter((candidate) => candidate !== batchUnit);
           } else {
             await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes, onCached);
           }
@@ -797,7 +836,9 @@ const createOfflineWarmup = ({
   };
 
   const runNextUnit = (onInterim?: (progress: WarmupProgress) => void): Promise<WarmupProgress> => {
-    const process = () => processNextUnit(onInterim);
+    const generation = policy?.token();
+    const process = () =>
+      policy && generation !== policy.token() ? Promise.resolve(undefined) : processNextUnit(onInterim);
     const run = pumpChain.then(process, process);
     pumpChain = run.catch(() => undefined);
     return run.then(async (unit) => {
@@ -837,8 +878,10 @@ const createOfflineWarmup = ({
 
   const serveOptionalIdentifyPack = async (request: Request): Promise<Response> => {
     const requestUrl = new URL(request.url);
-    const cache = await caches.open(identifyOptionalCacheName);
-    const cached = await cache.match(request.url);
+    const enabled = !policy || (await policy.isEnabled());
+    const generation = policy?.token();
+    const cache = enabled ? await caches.open(identifyOptionalCacheName) : null;
+    const cached = await cache?.match(request.url);
     if (cached) {
       log("identify pack served from cache", { url: requestUrl.pathname });
       return cached;
@@ -864,9 +907,21 @@ const createOfflineWarmup = ({
       undefined,
       log,
     );
-    await cacheWithDownloadLog(cache, packRequest, response.clone(), log);
-    transferSizes.forget(packRequest.url);
+    if (cache) {
+      const stored = policy
+        ? await policy.write(() => cacheWithDownloadLog(cache, packRequest, response.clone(), log), generation)
+        : (await cacheWithDownloadLog(cache, packRequest, response.clone(), log), true);
+      if (stored) transferSizes.forget(packRequest.url);
+    }
     return response;
+  };
+
+  const reset = () => {
+    queueGeneration += 1;
+    queue = null;
+    queuePromise = null;
+    manifestPromise = null;
+    transferSizes.clear();
   };
 
   return {
@@ -876,6 +931,7 @@ const createOfflineWarmup = ({
     getReadyState,
     installIdentifyGroup,
     runNextUnit,
+    reset,
     serveOptionalIdentifyPack,
     setIdentifyGroupWanted,
   };

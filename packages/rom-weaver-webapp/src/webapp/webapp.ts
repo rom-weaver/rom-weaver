@@ -20,6 +20,7 @@ import { readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { installLogStore } from "./log-store.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
+import { setOfflineWarmupEnabled } from "./pwa/offline-warmup-client.ts";
 import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
 import { preloadCatalog } from "../presentation/localization/index.ts";
 import { getDefaultSettings, LOCAL_STORAGE_SETTINGS_ID, type SettingsState } from "./settings/settings-state.ts";
@@ -176,10 +177,6 @@ if (typeof window !== "undefined") {
   };
 }
 
-if (FORCE_HTTPS_HOSTS.indexOf(location.hostname) !== -1 && location.protocol === "http:")
-  location.href = window.location.href.replace("http:", "https:");
-else serviceWorkerClient.initialize();
-
 // `?bundle=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
 // params stay in the address bar so the session URL remains shareable; only
 // this boot-time read consumes them.
@@ -193,6 +190,7 @@ for (const warning of urlSessionParse.warnings) {
 
 const applySettingsToRuntime = (settings: SettingsState) => {
   setByteUnitSystem(settings.byteUnits);
+  setOfflineWarmupEnabled(settings.offlineCopyEnabled);
   configureLogger({ level: typeof settings.logLevel === "string" ? settings.logLevel : undefined });
   if (applicationStatusReady) logApplicationStatus("Application status changed");
   logger.debug("Applying runtime settings", {
@@ -218,6 +216,9 @@ const webappController = createWebappRootController({
   storage: typeof localStorage === "undefined" ? undefined : localStorage,
 });
 applySettingsToRuntime(webappController.getState().settings);
+if (FORCE_HTTPS_HOSTS.indexOf(location.hostname) !== -1 && location.protocol === "http:")
+  location.href = window.location.href.replace("http:", "https:");
+else serviceWorkerClient.initialize();
 logger.info("Browser environment", collectBrowserInfo());
 applicationStatusReady = true;
 
@@ -446,6 +447,7 @@ const renderWebappRoot = (): undefined => {
         webappController.updateDraftSetting(field as Parameters<typeof webappController.updateDraftSetting>[0], value),
       onLanguageChange: (language) => webappController.setLanguage(language),
       onLogLevelChange: (level) => webappController.setLogLevel(level),
+      onOfflineCopyEnabledChange: (enabled) => webappController.setOfflineCopyEnabled(enabled),
       onOpenSettings: () => webappController.openSettings(),
       onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
       onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),

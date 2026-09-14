@@ -73,6 +73,7 @@ type WebappRootProps = {
     onLanguageChange: (language: string) => void;
     onDraftChange: (field: string, value: string | boolean) => void;
     onLogLevelChange: (level: string) => void;
+    onOfflineCopyEnabledChange: (enabled: boolean) => void;
     onOpenSettings: () => void;
     onReset: () => void;
     onCloseSettings: () => void;

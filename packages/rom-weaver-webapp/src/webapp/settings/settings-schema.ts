@@ -76,6 +76,7 @@ const isCodecSettingValue = (value: unknown): value is string | string[] | numbe
 const BOOLEAN_SETTINGS_FIELDS = [
   "betaToolsEnabled",
   "onboardingEnabled",
+  "offlineCopyEnabled",
   "emulatorSaveStorageEnabled",
   "fixChecksum",
   "identifiedOutputName",
@@ -401,6 +402,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     legacyApplyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     emulatorSaveStorageEnabled: commonSettings.emulatorSaveStorageEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
+    offlineCopyEnabled: commonSettings.offlineCopyEnabled,
     accent: commonSettings.accent,
     byteUnits: commonSettings.byteUnits,
     bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
@@ -524,6 +526,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const onboardingEnabled = readStoredField(storedBooleanSchema, loadedSettings.onboardingEnabled);
     if (onboardingEnabled !== undefined) settings.onboardingEnabled = onboardingEnabled;
 
+    const offlineCopyEnabled = readStoredField(storedBooleanSchema, loadedSettings.offlineCopyEnabled);
+    if (offlineCopyEnabled !== undefined) settings.offlineCopyEnabled = offlineCopyEnabled;
+
     const emulatorSaveStorageEnabled = readStoredField(storedBooleanSchema, loadedSettings.emulatorSaveStorageEnabled);
     if (emulatorSaveStorageEnabled !== undefined) settings.emulatorSaveStorageEnabled = emulatorSaveStorageEnabled;
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
@@ -625,6 +630,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       fieldKey === "betaToolsEnabled" ||
       fieldKey === "emulatorSaveStorageEnabled" ||
       fieldKey === "onboardingEnabled" ||
+      fieldKey === "offlineCopyEnabled" ||
       fieldKey === "language" ||
       fieldKey === "byteUnits" ||
       fieldKey === "logLevel"

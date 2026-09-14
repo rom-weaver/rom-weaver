@@ -10,6 +10,7 @@ import {
   offlineWarmupPercent,
   prefersReducedMotion,
   readPwaState,
+  resolveRuntimeState,
   SiteFooter,
 } from "../../src/webapp/components/shell.tsx";
 import type { WorkflowTab } from "../../src/webapp/components/shell.tsx";
@@ -419,6 +420,16 @@ describe("offlineWarmupPercent", () => {
   });
 });
 
+describe("resolveRuntimeState with the offline-copy preference", () => {
+  it("shows online when the preference is off, except for worker-off and update states", () => {
+    const ready = { cachedBytes: 1, ready: true, totalBytes: 1 };
+    expect(resolveRuntimeState("active", false, ready, false)).toBe("online");
+    expect(resolveRuntimeState("active", false, null, false)).toBe("online");
+    expect(resolveRuntimeState("off", false, ready, false)).toBe("disabled");
+    expect(resolveRuntimeState("active", true, ready, false)).toBe("update");
+  });
+});
+
 describe("describeWarmupUnit", () => {
   const localizer = {
     message: (id: string, values?: Record<string, unknown>) => `${id}:${String(values?.name ?? "")}`,
@@ -493,6 +504,19 @@ describe("the status the prerendered shell resolves", () => {
     window.localStorage.setItem("rom-weaver-offline-ready", "true");
 
     expect(renderShell(READY_WARMUP)).toContain('data-sw="active"');
+  });
+
+  it("renders the persisted offline-copy opt-out as online", () => {
+    document.documentElement.dataset.serviceWorkerEnabled = "true";
+    setServiceWorker({});
+    window.localStorage.setItem("rom-weaver-offline-ready", "true");
+
+    const html = renderToStaticMarkup(
+      <RomWeaverSettingsProvider settings={{ offlineCopyEnabled: false }}>
+        <Masthead {...mastheadProps} offlineProgress={READY_WARMUP} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(html).toContain('data-sw="online"');
   });
 
   it("stays installing while the warm-up has not finished", () => {

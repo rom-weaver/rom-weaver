@@ -4,15 +4,34 @@ import {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
   downloadOfflineCopy,
+  getOfflineCopyState,
   listenForOfflinePrecacheProgress,
   listenForServiceWorkerLog,
   pauseOfflineWarmup,
   queryOfflineCachedFiles,
   resumeOfflineWarmup,
   scheduleOfflineWarmup,
+  setOfflineWarmupEnabled,
 } from "../../src/webapp/pwa/offline-warmup-client.ts";
 
 type Reply = Record<string, unknown>;
+
+const acknowledgePolicy = (message: Reply, transfer?: Transferable[]) => {
+  if (message.action !== "set-offline-copy-enabled") return false;
+  const port = transfer?.[0] as MessagePort;
+  setTimeout(
+    () =>
+      port.postMessage({
+        action: "offline-copy-state",
+        enabled: message.enabled,
+        cachedBytes: 0,
+        ready: false,
+        totalBytes: 2,
+      }),
+    0,
+  );
+  return true;
+};
 
 /**
  * Fake service worker controller: records every posted message, and answers
@@ -20,8 +39,13 @@ type Reply = Record<string, unknown>;
  */
 const createFakeController = (replies: Reply[]) => {
   const messages: Reply[] = [];
+  const policyMessages: Reply[] = [];
   const controller = {
     postMessage: (message: Reply, transfer?: Transferable[]) => {
+      if (acknowledgePolicy(message, transfer)) {
+        policyMessages.push(message);
+        return;
+      }
       messages.push(message);
       const port = transfer?.[0] as MessagePort | undefined;
       if (!port) return;
@@ -30,7 +54,7 @@ const createFakeController = (replies: Reply[]) => {
       setTimeout(() => port.postMessage(reply), 0);
     },
   } as unknown as ServiceWorker;
-  return { controller, messages };
+  return { controller, messages, policyMessages };
 };
 
 const createServiceWorker = (controller: ServiceWorker | null) => {
@@ -67,11 +91,134 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   cancel?.();
   cancel = undefined;
+  setOfflineWarmupEnabled(true);
   await flush();
   configureLogger({ level: "warn", sink: null });
 });
 
 describe("offline warm-up client", () => {
+  it("applies policy to a replacement worker without waiting for the old worker to reply", async () => {
+    const postMessage = vi.fn();
+    const oldWorker = { postMessage } as unknown as ServiceWorker;
+    const { controller, messages, policyMessages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker, notifyControllerChange } = createServiceWorker(oldWorker);
+    const onProgress = vi.fn();
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker }, onProgress });
+    await flush();
+    expect(postMessage).toHaveBeenCalledWith({ action: "set-offline-copy-enabled", enabled: true }, expect.any(Array));
+    serviceWorker.controller = controller;
+    notifyControllerChange();
+    await flush();
+    expect(policyMessages).toEqual([{ action: "set-offline-copy-enabled", enabled: true }]);
+    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
+  });
+
+  it("applies the disabled preference before startup and ignores bumps and reconnects", async () => {
+    setOfflineWarmupEnabled(false);
+    const { controller, messages, policyMessages } = createFakeController([]);
+    const { serviceWorker, notifyControllerChange } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
+    await flush();
+    bumpOfflineWarmupPriority({ groupIds: ["optional-computers"], kind: "identify-groups" });
+    notifyControllerChange();
+    await flush();
+    expect(policyMessages).toEqual([{ action: "set-offline-copy-enabled", enabled: false }]);
+    expect(messages).toEqual([]);
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false, error: null });
+  });
+
+  it("enables automatic downloading except on data saver, where a manual download overrides it", async () => {
+    setOfflineWarmupEnabled(false);
+    const { controller, messages, policyMessages } = createFakeController([progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { connection: { saveData: true }, serviceWorker } });
+    await flush();
+    setOfflineWarmupEnabled(true);
+    await flush();
+    expect(messages).toEqual([]);
+    expect(policyMessages.map(({ enabled }) => enabled)).toEqual([false, true]);
+    expect(downloadOfflineCopy()).toBe(true);
+    await flush();
+    expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
+  });
+
+  it("starts a manual download from disabled and resumes automatic download after removal without data saver", async () => {
+    setOfflineWarmupEnabled(false);
+    const { controller, messages, policyMessages } = createFakeController([
+      progressReply({ ready: true }),
+      progressReply({ ready: true }),
+    ]);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
+    await flush();
+    expect(downloadOfflineCopy()).toBe(true);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: true, downloadRequested: true });
+    setOfflineWarmupEnabled(false);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, downloadRequested: false });
+    setOfflineWarmupEnabled(true);
+    await flush();
+    expect(policyMessages.map(({ enabled }) => enabled)).toEqual([false, true, false, true]);
+    expect(messages.filter(({ action }) => action === "offline-warmup-pump")).toHaveLength(2);
+  });
+
+  it("ignores progress from the active pump once removal starts and allows a fresh download", async () => {
+    let pumpPort: MessagePort | undefined;
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        if (acknowledgePolicy(message, transfer)) return;
+        if (message.action === "offline-warmup-pump") pumpPort = transfer?.[0] as MessagePort;
+      },
+    } as unknown as ServiceWorker;
+    const { serviceWorker } = createServiceWorker(controller);
+    const onProgress = vi.fn();
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker }, onProgress });
+    await flush();
+    const oldPort = pumpPort;
+    expect(oldPort).toBeDefined();
+    setOfflineWarmupEnabled(false);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false });
+    setOfflineWarmupEnabled(true);
+    oldPort?.postMessage(progressReply({ ready: true, cachedBytes: 999 }));
+    await flush();
+    expect(onProgress.mock.calls.some(([progress]) => progress.cachedBytes === 999)).toBe(false);
+    expect(pumpPort).not.toBe(oldPort);
+    pumpPort?.postMessage(progressReply({ ready: true }));
+    await flush();
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
+  });
+
+  it("reports a removal failure and retries without starting a pump", async () => {
+    let fail = true;
+    const messages: Reply[] = [];
+    const controller = {
+      postMessage: (message: Reply, transfer?: Transferable[]) => {
+        messages.push(message);
+        if (message.action !== "set-offline-copy-enabled") return;
+        if (!fail) {
+          acknowledgePolicy(message, transfer);
+          return;
+        }
+        const port = transfer?.[0] as MessagePort;
+        setTimeout(() => port.postMessage({ action: "offline-copy-state-failed", error: "cache is unavailable" }), 0);
+      },
+    } as unknown as ServiceWorker;
+    setOfflineWarmupEnabled(false);
+    const { serviceWorker } = createServiceWorker(controller);
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false, error: "cache is unavailable" });
+    fail = false;
+    setOfflineWarmupEnabled(false);
+    await flush();
+    expect(getOfflineCopyState()).toMatchObject({ enabled: false, pending: false, error: null });
+    expect(messages.filter(({ action }) => action === "set-offline-copy-enabled")).toHaveLength(2);
+    expect(messages.some(({ action }) => action === "offline-warmup-pump")).toBe(false);
+  });
+
   it("ignores an initial snapshot that arrives after live progress", () => {
     const onProgress = vi.fn();
     const gate = createOfflineWarmupProgressGate(onProgress);
@@ -529,6 +676,7 @@ describe("offline warm-up client", () => {
     const messages: Reply[] = [];
     const controller = {
       postMessage: (message: Reply, transfer?: Transferable[]) => {
+        if (acknowledgePolicy(message, transfer)) return;
         messages.push(message);
         const port = transfer?.[0] as MessagePort | undefined;
         if (!port) return;
@@ -558,6 +706,7 @@ describe("offline warm-up client", () => {
     const messages: Reply[] = [];
     const controller = {
       postMessage: (message: Reply, transfer?: Transferable[]) => {
+        if (acknowledgePolicy(message, transfer)) return;
         messages.push(message);
         const port = transfer?.[0] as MessagePort | undefined;
         if (port) setTimeout(() => port.postMessage(replies.shift()), 12);

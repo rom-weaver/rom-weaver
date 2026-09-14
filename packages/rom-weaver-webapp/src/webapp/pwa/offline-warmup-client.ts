@@ -80,9 +80,39 @@ let activeController: {
   download: () => void;
   notifyResume: () => void;
   pause: () => void;
+  configure: () => void;
 } | null = null;
 let pauseCount = 0;
 const pendingBumps: WarmupBumpTarget[] = [];
+const initialOfflineCopyState = {
+  enabled: true,
+  pending: false,
+  error: null as string | null,
+  downloadRequested: false,
+};
+let offlineCopyState = initialOfflineCopyState;
+const offlineCopyListeners = new Set<() => void>();
+const getOfflineCopyState = () => offlineCopyState;
+const getInitialOfflineCopyState = () => initialOfflineCopyState;
+const subscribeOfflineCopyState = (listener: () => void) => {
+  offlineCopyListeners.add(listener);
+  return () => {
+    offlineCopyListeners.delete(listener);
+  };
+};
+const updateOfflineCopyState = (change: Partial<typeof offlineCopyState>) => {
+  offlineCopyState = { ...offlineCopyState, ...change };
+  for (const listener of offlineCopyListeners) listener();
+};
+const setOfflineWarmupEnabled = (enabled: boolean) => {
+  if (enabled === offlineCopyState.enabled && !offlineCopyState.error) return;
+  updateOfflineCopyState({ enabled, pending: true, error: null, downloadRequested: false });
+  if (!enabled) {
+    pendingBumps.length = 0;
+    persistOfflineReady(false);
+  }
+  activeController?.configure();
+};
 
 /** Hold the warm-up while interactive downloads run. Balanced by resumeOfflineWarmup. */
 const pauseOfflineWarmup = () => {
@@ -100,12 +130,15 @@ const resumeOfflineWarmup = () => {
  * immediately, bypassing the idle wait and the data-saver hold.
  */
 const bumpOfflineWarmupPriority = (target: WarmupBumpTarget) => {
+  if (!offlineCopyState.enabled) return;
   if (activeController) activeController.bump(target);
   else pendingBumps.push(target);
 };
 
 const downloadOfflineCopy = (): boolean => {
   if (!activeController) return false;
+  setOfflineWarmupEnabled(true);
+  updateOfflineCopyState({ downloadRequested: true });
   activeController.download();
   return true;
 };
@@ -115,15 +148,32 @@ const postPump = (
   action: string,
   onInterim?: (data: Record<string, unknown>) => void,
   timeoutMs = PUMP_TIMEOUT_MS,
+  payload: Record<string, unknown> = {},
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> =>
   new Promise((resolve, reject) => {
     const channel = new MessageChannel();
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      channel.port1.onmessage = null;
+      channel.port1.close();
+    };
+    const abort = () => {
+      cleanup();
+      reject(new Error(`offline warm-up ${action} cancelled`));
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
     // Interim events reset the deadline: a large file on a slow connection is
     // alive as long as bytes keep arriving.
     const armTimeout = () => {
       timeout = setTimeout(() => {
-        channel.port1.onmessage = null;
+        cleanup();
         reject(new Error(`offline warm-up ${action} timed out`));
       }, timeoutMs);
     };
@@ -136,13 +186,13 @@ const postPump = (
         onInterim?.(data);
         return;
       }
-      channel.port1.onmessage = null;
+      cleanup();
       resolve(data);
     };
     try {
-      controller.postMessage({ action }, [channel.port2]);
+      controller.postMessage({ ...payload, action }, [channel.port2]);
     } catch (error) {
-      clearTimeout(timeout);
+      cleanup();
       reject(error instanceof Error ? error : new Error(String(error)));
     }
   });
@@ -213,6 +263,55 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   let consecutiveFailures = 0;
   let pumpNumber = 0;
   let previousPumpCompletedAt: number | null = null;
+  let generation = 0;
+  let policyController: ServiceWorker | null = null;
+  let policyEnabled: boolean | null = null;
+  let policyChain = Promise.resolve(false);
+  let requestController = new AbortController();
+  let observedController = serviceWorker.controller;
+
+  const synchronizePolicy = () => {
+    const controller = serviceWorker.controller;
+    const enabled = offlineCopyState.enabled;
+    if (!controller || signal.aborted) return Promise.resolve(false);
+    if (policyController === controller && policyEnabled === enabled) return policyChain;
+    policyController = controller;
+    policyEnabled = enabled;
+    const currentGeneration = generation;
+    const requestSignal = requestController.signal;
+    updateOfflineCopyState({ pending: true, error: null });
+    policyChain = policyChain.then(async () => {
+      if (signal.aborted) return false;
+      try {
+        const reply = await postPump(
+          controller,
+          "set-offline-copy-enabled",
+          undefined,
+          PUMP_TIMEOUT_MS,
+          { enabled },
+          requestSignal,
+        );
+        if (reply.action !== "offline-copy-state" || reply.enabled !== enabled) {
+          throw new Error(String(reply.error ?? "offline copy setting returned an invalid response"));
+        }
+        if (!signal.aborted && currentGeneration === generation) {
+          updateOfflineCopyState({ pending: false, error: null });
+          if (!enabled) options.onProgress?.(reply as unknown as OfflineWarmupProgress);
+          persistOfflineReady(enabled && reply.ready === true);
+        }
+        return true;
+      } catch (error) {
+        if (!signal.aborted && currentGeneration === generation) {
+          policyController = null;
+          policyEnabled = null;
+          updateOfflineCopyState({ pending: false, error: formatError(error), downloadRequested: false });
+          logger.warn("offline copy setting failed", { enabled, error: formatError(error) });
+        }
+        return false;
+      }
+    });
+    return policyChain;
+  };
 
   const notifyResume = () => {
     const waiters = resumeWaiters;
@@ -234,8 +333,10 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   const runLoop = async () => {
     if (loopRunning) return;
     loopRunning = true;
+    const loopGeneration = generation;
     try {
-      while (!signal.aborted) {
+      if (!(await synchronizePolicy())) return;
+      while (!signal.aborted && offlineCopyState.enabled && loopGeneration === generation) {
         while (pauseCount > 0 && !signal.aborted) {
           const waitStartedAt = performance.now();
           logger.debug("offline warm-up waiting for interactive work", { pauseCount });
@@ -246,7 +347,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
             pauseCount,
           });
         }
-        if (signal.aborted) return;
+        if (signal.aborted || !offlineCopyState.enabled || loopGeneration !== generation) return;
         if (nav?.onLine === false) {
           // Nothing can download offline. The loop exits; the online listener
           // and any bump restart it.
@@ -263,10 +364,20 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
         });
         let reply: Record<string, unknown>;
         try {
-          reply = await postPump(controller, "offline-warmup-pump", (interim) => {
-            options.onProgress?.(interim as unknown as OfflineWarmupProgress);
-          });
+          reply = await postPump(
+            controller,
+            "offline-warmup-pump",
+            (interim) => {
+              if (offlineCopyState.enabled && loopGeneration === generation && !signal.aborted) {
+                options.onProgress?.(interim as unknown as OfflineWarmupProgress);
+              }
+            },
+            PUMP_TIMEOUT_MS,
+            {},
+            requestController.signal,
+          );
         } catch (error) {
+          if (signal.aborted || loopGeneration !== generation) return;
           previousPumpCompletedAt = performance.now();
           logger.debug("offline warm-up pump completed", {
             durationMs: previousPumpCompletedAt - pumpStartedAt,
@@ -279,6 +390,8 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
           await waitMs(delay, signal);
           continue;
         }
+        if (!offlineCopyState.enabled || loopGeneration !== generation || signal.aborted) return;
+        if (reply.enabled === false) return;
         previousPumpCompletedAt = performance.now();
         logger.debug("offline warm-up pump completed", {
           action: reply.action,
@@ -329,10 +442,12 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
       }
     } finally {
       loopRunning = false;
+      if (!signal.aborted && loopGeneration !== generation && offlineCopyState.enabled && started) void runLoop();
     }
   };
 
   const bump = (target: WarmupBumpTarget) => {
+    if (!offlineCopyState.enabled) return;
     const controller = serviceWorker.controller;
     if (!controller) {
       pendingBumps.push(target);
@@ -364,15 +479,33 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     started = true;
     void runLoop();
   };
-  activeController = { bump, download, notifyResume, pause };
+  const configure = () => {
+    generation += 1;
+    requestController.abort();
+    requestController = new AbortController();
+    if (!offlineCopyState.enabled) {
+      started = false;
+      activeBumps.length = 0;
+      pause();
+      notifyResume();
+    }
+    void synchronizePolicy().then((applied) => {
+      if (!applied || signal.aborted || !offlineCopyState.enabled) return;
+      if (saveData && !offlineCopyState.downloadRequested) return;
+      started = true;
+      void runLoop();
+    });
+  };
+  activeController = { bump, configure, download, notifyResume, pause };
 
   const startWarmup = () => {
     if (signal.aborted || !serviceWorker.controller) return;
     serviceWorker.removeEventListener?.("controllerchange", startWarmup);
+    void synchronizePolicy();
     const drained = pendingBumps.splice(0);
     for (const target of drained) bump(target);
     const begin = () => {
-      if (signal.aborted || started) return;
+      if (signal.aborted || started || !offlineCopyState.enabled) return;
       if (saveData) {
         logger.debug("offline warm-up auto-start skipped; data saver is on");
         return;
@@ -391,6 +524,13 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   // The loop exits when the controller disappears (a worker update in flight);
   // restart it when a new worker takes control.
   const onControllerChange = () => {
+    if (serviceWorker.controller !== observedController) {
+      observedController = serviceWorker.controller;
+      generation += 1;
+      requestController.abort();
+      requestController = new AbortController();
+    }
+    void synchronizePolicy();
     if (started || activeBumps.length) void runLoop();
   };
   serviceWorker.addEventListener?.("controllerchange", onControllerChange);
@@ -400,7 +540,11 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
 
   return () => {
     abortController.abort();
-    if (activeController?.bump === bump) activeController = null;
+    requestController.abort();
+    if (activeController?.bump === bump) {
+      activeController = null;
+      updateOfflineCopyState({ downloadRequested: false });
+    }
     if (typeof removeEventListener === "function") removeEventListener("online", onOnline);
     serviceWorker.removeEventListener?.("controllerchange", startWarmup);
     serviceWorker.removeEventListener?.("controllerchange", onControllerChange);
@@ -528,6 +672,8 @@ export {
   bumpOfflineWarmupPriority,
   createOfflineWarmupProgressGate,
   downloadOfflineCopy,
+  getInitialOfflineCopyState,
+  getOfflineCopyState,
   listenForOfflinePrecacheProgress,
   listenForServiceWorkerLog,
   pauseOfflineWarmup,
@@ -537,4 +683,6 @@ export {
   readPersistedOfflineReady,
   resumeOfflineWarmup,
   scheduleOfflineWarmup,
+  setOfflineWarmupEnabled,
+  subscribeOfflineCopyState,
 };

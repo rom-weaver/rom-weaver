@@ -5,6 +5,7 @@ import {
   readWithByteProgress,
 } from "./response-encoded-size.ts";
 import { cacheWithDownloadLog } from "./offline-download-log.ts";
+import type { OfflineCopyPolicy } from "./offline-copy-policy.ts";
 
 const DOWNLOAD_CONCURRENCY = 4;
 const BATCH_FILE_LIMIT = 16;
@@ -25,12 +26,14 @@ const createDeferredPrecache = ({
   cacheName,
   scope,
   download,
+  policy,
   log = () => undefined,
 }: {
   entries: DeferredEntry[];
   cacheName: string;
   scope: string;
   download: (request: Request) => Promise<Response>;
+  policy?: OfflineCopyPolicy;
   log?: (message: string, details?: Record<string, unknown>) => void;
 }) => {
   const files = entries.map((entry) => {
@@ -97,9 +100,23 @@ const createDeferredPrecache = ({
     return (await caches.open(cacheName)).match(file.key);
   };
 
-  const serve = async (url: string, onBytes?: (delta: number) => void): Promise<Response> => {
+  const serve = async (
+    url: string,
+    onBytes?: (delta: number) => void,
+    backgroundGeneration?: number,
+  ): Promise<Response> => {
     const file = find(url);
     if (!file) throw new Error(`Unknown offline app file: ${url}`);
+    if (
+      policy &&
+      backgroundGeneration !== undefined &&
+      (backgroundGeneration !== policy.token() || !(await policy.isEnabled()))
+    )
+      return Response.error();
+    if (policy && !(await policy.isEnabled())) {
+      return download(new Request(file.downloadUrl, { cache: file.revision ? "reload" : "default" }));
+    }
+    const generation = policy?.token();
     const cache = await caches.open(cacheName);
     const cached = await cache.match(file.key);
     if (cached) {
@@ -107,6 +124,12 @@ const createDeferredPrecache = ({
       for (const listener of cachedListeners) listener();
       return cached;
     }
+    if (
+      policy &&
+      backgroundGeneration !== undefined &&
+      (backgroundGeneration !== policy.token() || !(await policy.isEnabled()))
+    )
+      return Response.error();
     let pending = inFlight.get(file.key);
     if (pending) {
       // Credit what already arrived so the joiner's progress starts where the download is.
@@ -124,15 +147,20 @@ const createDeferredPrecache = ({
           );
           if (!response.ok) throw new Error(`Offline app download failed with HTTP ${response.status}: ${file.url}`);
           const buffer = await readWithByteProgress(response, (delta) => {
+            if (policy && generation !== policy.token()) return;
             entry.loadedBytes += delta;
             for (const listener of entry.listeners) listener(delta);
             for (const listener of progressListeners) listener(file.key, entry.loadedBytes);
           });
           const complete = bufferedResponse(response, buffer, encodedSizeOf(file.downloadUrl));
-          await cacheWithDownloadLog(cache, file.key, complete.clone(), log);
-          transferSizes.forget(file.key);
-          for (const listener of progressListeners) listener(file.key, file.sizeBytes ?? buffer.byteLength);
-          for (const listener of cachedListeners) listener();
+          const stored = policy
+            ? await policy.write(() => cacheWithDownloadLog(cache, file.key, complete.clone(), log), generation)
+            : (await cacheWithDownloadLog(cache, file.key, complete.clone(), log), true);
+          if (stored) {
+            transferSizes.forget(file.key);
+            for (const listener of progressListeners) listener(file.key, file.sizeBytes ?? buffer.byteLength);
+            for (const listener of cachedListeners) listener();
+          }
           return complete;
         })(),
       };
@@ -152,6 +180,8 @@ const createDeferredPrecache = ({
     onCached?: () => void,
     shouldContinue = () => true,
   ) => {
+    if (policy && !(await policy.isEnabled())) return false;
+    const generation = policy?.token();
     let cachedKeys: Set<string> | undefined;
     const loaded = new Map([...inFlight].map(([key, pending]) => [key, pending.loadedBytes]));
     const report = () => {
@@ -181,11 +211,15 @@ const createDeferredPrecache = ({
       let next = 0;
       let failed = false;
       const run = async () => {
-        while (!failed && shouldContinue()) {
+        while (
+          !failed &&
+          shouldContinue() &&
+          (!policy || (generation === policy.token() && (await policy.isEnabled())))
+        ) {
           const file = batch[next++];
           if (!file) return;
           try {
-            await serve(file.url);
+            await serve(file.url, undefined, generation);
           } catch (error) {
             failed = true;
             throw error;
@@ -204,11 +238,16 @@ const createDeferredPrecache = ({
   };
 
   const migrate = async (sourceCacheName: string) => {
+    if (policy && !(await policy.isEnabled())) return;
+    const generation = policy?.token();
     const [source, destination] = await Promise.all([caches.open(sourceCacheName), caches.open(cacheName)]);
     for (const file of files) {
       if (await destination.match(file.key)) continue;
       const cached = await source.match(file.key);
-      if (cached) await destination.put(file.key, cached);
+      if (cached) {
+        if (policy) await policy.write(() => destination.put(file.key, cached), generation);
+        else await destination.put(file.key, cached);
+      }
     }
   };
 
@@ -220,7 +259,26 @@ const createDeferredPrecache = ({
     );
   };
 
-  return { cleanup, has: (url: string) => Boolean(find(url)), match, migrate, runNextBatch, serve, state };
+  const reset = () => {
+    inFlight.clear();
+    transferSizes.clear();
+  };
+
+  const setSizes = (sizes: ReadonlyMap<string, number>) => {
+    for (const file of files) file.sizeBytes ??= sizes.get(new URL(file.url).pathname);
+  };
+
+  return {
+    cleanup,
+    has: (url: string) => Boolean(find(url)),
+    match,
+    migrate,
+    reset,
+    runNextBatch,
+    serve,
+    setSizes,
+    state,
+  };
 };
 
 export { createDeferredPrecache };

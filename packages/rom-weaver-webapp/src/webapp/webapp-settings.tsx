@@ -315,16 +315,19 @@ const SettingsToggle = ({ fieldKey, draftSettings, uiState, onDraftChange }: Fie
       ? getChoiceCheckboxValue(fieldKey, draftSettings) === field.checkedValue
       : getCheckboxValue(fieldKey, draftSettings);
   return (
-    <label className="popt opt">
-      <input
-        checked={checked}
-        disabled={disabled}
-        id={field.id}
-        onChange={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
-        type="checkbox"
-      />
-      {field.label}
-    </label>
+    <div className="slabel">
+      <label className="popt opt">
+        <input
+          checked={checked}
+          disabled={disabled}
+          id={field.id}
+          onChange={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
+          type="checkbox"
+        />
+        {field.label}
+      </label>
+      {renderFieldInfo(fieldKey, draftSettings, uiState)}
+    </div>
   );
 };
 

@@ -43,7 +43,7 @@ const createCachedTransferSizeReader = () => {
     measurements.set(url, measured);
     return measured;
   };
-  return { forget, read };
+  return { clear: () => measurements.clear(), forget, read };
 };
 
 // Resource Timing keeps 250 entries by default and then silently records no

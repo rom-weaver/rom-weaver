@@ -15,14 +15,52 @@ vi.mock("../../../src/workers/protocol/browser-virtual-files.ts", () => ({
   getActiveBrowserVirtualFiles: vi.fn(() => []),
 }));
 
+const offlineCopyStore = vi.hoisted(() => {
+  const initial = {
+    enabled: true,
+    pending: false,
+    error: null as string | null,
+    downloadRequested: false,
+  };
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    getInitial: () => initial,
+    reset: () => {
+      current = initial;
+    },
+    set: (change: Partial<typeof initial>) => {
+      current = { ...current, ...change };
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+});
+
 vi.mock("../../../src/webapp/pwa/offline-warmup-client.ts", () => ({
-  downloadOfflineCopy: vi.fn(() => true),
+  downloadOfflineCopy: vi.fn(() => {
+    offlineCopyStore.set({ enabled: true, downloadRequested: true });
+    return true;
+  }),
+  getInitialOfflineCopyState: offlineCopyStore.getInitial,
+  getOfflineCopyState: offlineCopyStore.get,
   queryOfflineCachedFiles: vi.fn(() => Promise.resolve([])),
+  setOfflineWarmupEnabled: vi.fn((enabled: boolean) => {
+    offlineCopyStore.set({ enabled, pending: true, error: null, downloadRequested: false });
+  }),
+  subscribeOfflineCopyState: offlineCopyStore.subscribe,
 }));
 
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
 afterEach(() => {
   cleanup();
+  offlineCopyStore.reset();
   vi.mocked(getActiveBrowserVirtualFiles).mockReturnValue([]);
   vi.mocked(queryOfflineCachedFiles).mockResolvedValue([]);
 });

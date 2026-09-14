@@ -1,12 +1,31 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getDefaultSettings, getSettingsUiState } from "../../src/webapp/settings/settings-state.ts";
 import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
 import { createEmptyValidationState } from "../../src/webapp/webapp-state-types.ts";
 
 describe("SettingsPanel sections", () => {
+  it("starts with the offline-copy choice enabled and stages changes", () => {
+    const draftSettings = getDefaultSettings();
+    const onDraftChange = vi.fn();
+    const { getByRole } = render(
+      <RomWeaverSettingsProvider settings={draftSettings}>
+        <SettingsPanel
+          draftSettings={draftSettings}
+          onDraftChange={onDraftChange}
+          uiState={getSettingsUiState(draftSettings)}
+          validation={createEmptyValidationState()}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const checkbox = getByRole("checkbox", { name: "Keep an offline copy" }) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+    fireEvent.click(checkbox);
+    expect(onDraftChange).toHaveBeenCalledWith("offlineCopyEnabled", false);
+  });
+
   it("separates Webapp presentation and Behavior workflow settings", () => {
     const draftSettings = getDefaultSettings();
     const { container } = render(
@@ -29,6 +48,7 @@ describe("SettingsPanel sections", () => {
       "#settings-accent",
       "#settings-byte-units",
       "#settings-log-level",
+      "#settings-offline-copy-enabled",
       "#settings-onboarding-enabled",
       "#settings-beta-tools-enabled",
     ])

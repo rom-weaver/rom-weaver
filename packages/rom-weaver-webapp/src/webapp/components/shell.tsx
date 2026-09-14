@@ -816,14 +816,15 @@ const useHydratedServiceWorkerStatus = (status: ServiceWorkerStatus | null | und
  * The runtime status control and its dialog share these states in display order.
  * A controlling worker or a ready cache does not prove that this document was served from cache.
  */
-type RuntimeState = "active" | "ready" | "update" | "installing" | "disabled";
+type RuntimeState = "active" | "ready" | "update" | "installing" | "disabled" | "online";
 
-const RUNTIME_STATES: readonly RuntimeState[] = ["active", "ready", "update", "installing", "disabled"];
+const RUNTIME_STATES: readonly RuntimeState[] = ["active", "ready", "update", "installing", "online", "disabled"];
 
 const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: MessageId }> = {
   active: { description: "ui.runtime.activeDesc", label: "ui.runtime.active" },
   disabled: { description: "ui.runtime.disabledDesc", label: "ui.runtime.disabled" },
   installing: { description: "ui.runtime.installingDesc", label: "ui.runtime.installing" },
+  online: { description: "ui.runtime.offlineDisabledDetail", label: "ui.runtime.offlineDisabled" },
   ready: { description: "ui.runtime.readyDesc", label: "ui.runtime.ready" },
   update: { description: "ui.runtime.updateDesc", label: "ui.runtime.update" },
 };
@@ -903,9 +904,11 @@ const resolveRuntimeState = (
   status: ServiceWorkerStatus | null | undefined,
   updateReady: boolean,
   offlineProgress: OfflineWarmupDisplayProgress | null = null,
+  offlineCopyEnabled = true,
 ): RuntimeState => {
   if (updateReady) return "update";
   if (status === "off") return "disabled";
+  if (!offlineCopyEnabled) return "online";
   if ((status === "active" || status === "ready") && !offlineProgress?.ready) return "installing";
   if (status === "active") return "active";
   if (status === "ready") return "ready";
@@ -928,6 +931,7 @@ const RUNTIME_ICONS = {
   active: CloudCheck,
   disabled: CloudOff,
   installing: LoaderCircle,
+  online: CloudOff,
   ready: PackageCheck,
   update: CloudDownload,
 } satisfies Record<RuntimeState, typeof CloudCheck>;
@@ -1217,7 +1221,7 @@ const Masthead = ({
   const threadsLabel = localizer.message("ui.env.threads");
   const navLabel = localizer.message("ui.nav.primary");
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
-  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, offlineProgress);
+  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, offlineProgress, settings.offlineCopyEnabled);
   const runtimeLabel =
     runtimeState === "installing"
       ? installingRuntimeLabel(localizer, offlineProgress)

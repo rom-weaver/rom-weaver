@@ -57,6 +57,7 @@ describe("getDefaultSettings", () => {
     expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
+    expect(settings.offlineCopyEnabled).toBe(true);
     expect(settings.threads).toBe("auto");
   });
 
@@ -202,6 +203,10 @@ describe("validateSettingsDraft", () => {
       validateSettingsDraft(validDraft({ emulatorSaveStorageEnabled: false })).settings.emulatorSaveStorageEnabled,
     ).toBe(false);
   });
+
+  it("accepts the offline-copy opt-out", () => {
+    expect(validateSettingsDraft(validDraft({ offlineCopyEnabled: false })).settings.offlineCopyEnabled).toBe(false);
+  });
 });
 
 describe("serializeSettingsForStorage", () => {
@@ -213,6 +218,16 @@ describe("serializeSettingsForStorage", () => {
   it("persists the emulator save storage opt-out", () => {
     const settings = { ...getDefaultSettings(), emulatorSaveStorageEnabled: false };
     expect(loadSettings(makeStorage(serializeSettingsForStorage(settings))).emulatorSaveStorageEnabled).toBe(false);
+  });
+
+  it("persists the offline-copy opt-out and defaults older settings to enabled", () => {
+    const settings = { ...getDefaultSettings(), offlineCopyEnabled: false };
+    const serialized = serializeSettingsForStorage(settings);
+    expect(JSON.parse(serialized as string).common.offlineCopyEnabled).toBe(false);
+    expect(loadSettings(makeStorage(serialized)).offlineCopyEnabled).toBe(false);
+    expect(
+      loadSettings(makeStorage(JSON.stringify({ version: SETTINGS_STORAGE_VERSION, common: {} }))).offlineCopyEnabled,
+    ).toBe(true);
   });
 
   it("stores the identified-name default under both workflow output groups and loads it back", () => {

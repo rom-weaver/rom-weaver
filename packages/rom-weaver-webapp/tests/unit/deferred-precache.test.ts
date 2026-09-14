@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { brotliCompressSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferredPrecache } from "../../src/webapp/pwa/deferred-precache.ts";
+import { createOfflineCopyPolicy } from "../../src/webapp/pwa/offline-copy-policy.ts";
 
 const SCOPE = "https://example.test/";
 const CACHE_NAME = "deferred-precache";
@@ -59,6 +60,162 @@ afterEach(() => {
 });
 
 describe("deferred precache", () => {
+  it("ignores old stream progress after removal starts a fresh download", async () => {
+    const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
+    let oldStream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let newStream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const download = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              oldStream = controller;
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              newStream = controller;
+            },
+          }),
+        ),
+      );
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: entries.slice(0, 1),
+      scope: SCOPE,
+      policy,
+      download,
+    });
+    const oldServe = queue.serve("assets/one.js");
+    await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1));
+    await policy.setEnabled(false);
+    queue.reset();
+    await policy.setEnabled(true);
+    const progress = vi.fn();
+    const pump = queue.runNextBatch(progress);
+    try {
+      await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(2));
+      newStream?.enqueue(new Uint8Array(1));
+      await vi.waitFor(() => expect(progress).toHaveBeenLastCalledWith(1));
+      oldStream?.enqueue(new Uint8Array(3));
+      oldStream?.close();
+      await oldServe;
+      expect(progress).toHaveBeenLastCalledWith(1);
+      newStream?.enqueue(new Uint8Array(2));
+      newStream?.close();
+      await pump;
+      expect(progress).toHaveBeenLastCalledWith(3);
+    } finally {
+      oldStream?.error(new Error("test stream cleanup"));
+      newStream?.error(new Error("test stream cleanup"));
+      await Promise.allSettled([oldServe, pump]);
+    }
+  });
+
+  it("does not start a background fetch after removal interrupts a cache read", async () => {
+    const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
+    const download = vi.fn(async () => new Response("one"));
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: entries.slice(0, 1),
+      scope: SCOPE,
+      policy,
+      download,
+    });
+    const cache = await cacheStorage.open(CACHE_NAME);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const match = vi.spyOn(cache, "match").mockImplementation(async () => {
+      await gate;
+      return undefined;
+    });
+    const pump = queue.runNextBatch();
+    try {
+      await vi.waitFor(() => expect(match).toHaveBeenCalledTimes(1));
+      await policy.setEnabled(false);
+      release();
+      await pump;
+      expect(download).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await pump;
+      match.mockRestore();
+    }
+  });
+
+  it("drains a cache write before removal and rejects a stale write after enabling", async () => {
+    const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
+    const cache = await cacheStorage.open(CACHE_NAME);
+    const oldGeneration = policy.token();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = vi.fn();
+    const writing = policy.write(async () => {
+      started();
+      await gate;
+      await cache.put(new URL("assets/one.js", SCOPE), new Response("one"));
+    }, oldGeneration);
+    await vi.waitFor(() => expect(started).toHaveBeenCalledTimes(1));
+    let removed = false;
+    const removal = policy.setEnabled(false).then(() => {
+      cacheStorage.caches.delete(CACHE_NAME);
+      removed = true;
+    });
+    expect(removed).toBe(false);
+    release();
+    await Promise.all([writing, removal]);
+    expect(cacheStorage.caches.has(CACHE_NAME)).toBe(false);
+    await policy.setEnabled(true);
+    expect(
+      await policy.write(() => cache.put(new URL("assets/two.js", SCOPE), new Response("two")), oldGeneration),
+    ).toBe(false);
+    expect((await cache.keys()).map((request) => request.url)).toEqual([new URL("assets/one.js", SCOPE).href]);
+  });
+
+  it("does not restore a removed file from a late download and fetches it again after enabling", async () => {
+    const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let downloads = 0;
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: entries.slice(0, 1),
+      scope: SCOPE,
+      policy,
+      download: async () => {
+        downloads += 1;
+        if (downloads > 1) return new Response("one");
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              stream = controller;
+            },
+          }),
+        );
+      },
+    });
+    const first = queue.serve("assets/one.js");
+    await vi.waitFor(() => expect(stream).toBeDefined());
+    await policy.setEnabled(false);
+    cacheStorage.caches.delete(CACHE_NAME);
+    stream?.enqueue(new TextEncoder().encode("one"));
+    stream?.close();
+    expect(await (await first).text()).toBe("one");
+    expect(await queue.match("assets/one.js")).toBeUndefined();
+    expect(await queue.runNextBatch()).toBe(false);
+    await policy.setEnabled(true);
+    expect(await queue.runNextBatch()).toBe(true);
+    expect(await (await queue.match("assets/one.js"))?.text()).toBe("one");
+    expect(downloads).toBe(2);
+  });
   it("retains arrivals during its starting cache read without double counting cached files", async () => {
     let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
     const queue = createDeferredPrecache({

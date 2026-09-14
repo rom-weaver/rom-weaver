@@ -10,7 +10,11 @@ type CapturedRoute = {
 type CapturedPlugin = {
   fetchDidSucceed?: (options: { event: { type: string }; request: Request; response: Response }) => Promise<Response>;
   cacheDidUpdate?: (options: { request: Request }) => Promise<void>;
-  cacheWillUpdate?: (options: { request: Request; response: Response }) => Promise<Response | null | undefined>;
+  cacheWillUpdate?: (options: {
+    event?: { type: string };
+    request: Request;
+    response: Response;
+  }) => Promise<Response | null | undefined>;
   handlerDidComplete?: (options: {
     event: { type: string };
     request: Request;
@@ -37,6 +41,7 @@ type WarmupStub = {
   getReadyState: () => Promise<ReadyState>;
   installIdentifyGroup: (groupId: string) => Promise<{ id: string; installed: boolean }>;
   runNextUnit: (onInterim?: (interim: { bytes: number }) => void) => Promise<{ bytes: number; files: number }>;
+  reset: () => void;
   serveOptionalIdentifyPack: (request: Request) => Promise<Response>;
   setIdentifyGroupWanted: (groupId: string, wanted: boolean) => Promise<Array<{ id: string }>>;
 };
@@ -232,6 +237,7 @@ const createWarmupStub = (): WarmupStub => ({
   })),
   installIdentifyGroup: vi.fn(async (groupId: string) => ({ id: groupId, installed: true })),
   runNextUnit: vi.fn(async () => ({ bytes: 12, files: 1 })),
+  reset: vi.fn(),
   serveOptionalIdentifyPack: vi.fn(async () => new Response("pack-bytes")),
   setIdentifyGroupWanted: vi.fn(async () => [{ id: "computers" }]),
 });
@@ -729,7 +735,6 @@ describe("network-first handler", () => {
         await cache.put(new Request(`${APP_ORIGIN}/index.html`), new Response("cached", { status: 200 }));
       },
     });
-
     const response = await routed(harness, harness.networkFirstRoute, new Request(`${APP_ORIGIN}/index.html`));
 
     await expect(response.text()).resolves.toBe("cached");
@@ -1223,7 +1228,7 @@ describe("offline warm-up messages", () => {
   };
 
   it("streams interim progress and the final unit result for a pump", async () => {
-    const harness = await loadWorker();
+    const harness = await loadWorker({ manifest: [] });
     vi.mocked(harness.warmup.runNextUnit).mockImplementation(async (onInterim) => {
       onInterim?.({ bytes: 5 });
       return { bytes: 12, files: 1 };
@@ -1238,7 +1243,7 @@ describe("offline warm-up messages", () => {
   });
 
   it("reports a failed pump", async () => {
-    const harness = await loadWorker();
+    const harness = await loadWorker({ manifest: [] });
     vi.mocked(harness.warmup.runNextUnit).mockRejectedValue(new Error("disk full"));
 
     const replies = await collect(harness, { action: "offline-warmup-pump" });
@@ -1274,6 +1279,7 @@ describe("offline warm-up messages", () => {
         action: "offline-ready-state",
         cachedBytes: 40,
         cachedFiles: 2,
+        enabled: true,
         pendingUnits: 1,
         ready: false,
         totalBytes: 100,
@@ -1360,6 +1366,179 @@ describe("offline warm-up messages", () => {
     await expect(collect(harness, { action: "install-identify-pack-group", groupId: "computers" })).resolves.toEqual([
       { action: "identify-pack-group-install-failed", error: "Error: download failed", id: "computers" },
     ]);
+  });
+});
+
+describe("offline copy policy", () => {
+  const send = async (harness: Harness, data: unknown) => {
+    const replies: unknown[] = [];
+    await dispatch(harness.scope, "message", {
+      data,
+      ports: [{ postMessage: (message: unknown) => replies.push(message) }],
+    });
+    return replies;
+  };
+
+  it("rejects a malformed setting without removing files", async () => {
+    const harness = await loadWorker();
+    await (await harness.cacheStorage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/index.html`, new Response("app"));
+    expect(await send(harness, { action: "set-offline-copy-enabled", enabled: "false" })).toEqual([
+      { action: "offline-copy-state-failed", error: "Error: Offline copy enabled value must be a boolean" },
+    ]);
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeDefined();
+  });
+
+  it("blocks Workbox cache repair while disabled and drops install entries without failing the install", async () => {
+    const harness = await loadWorker();
+    await send(harness, { action: "set-offline-copy-enabled", enabled: false });
+    const request = new Request(`${APP_ORIGIN}/assets/app.js`);
+    const response = new Response("app");
+    expect(await harness.plugin.cacheWillUpdate?.({ event: { type: "fetch" }, request, response })).toBeNull();
+    expect(await harness.plugin.cacheWillUpdate?.({ event: { type: "install" }, request, response })).toBeDefined();
+    await (await harness.cacheStorage.open(PRECACHE_NAME)).put(request, response);
+    await harness.plugin.cacheDidUpdate?.({ request });
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(request)).toBeUndefined();
+  });
+
+  it("removes managed files while keeping COEP, identify choices, and unrelated caches", async () => {
+    const deferredUrl = `${APP_ORIGIN}/assets/deferred.bin`;
+    const wantedUrl = `${APP_ORIGIN}/__rom-weaver-identify-wanted__`;
+    const harness = await loadWorker({
+      manifest: [
+        { url: "index.html", sizeBytes: 3 },
+        { url: "assets/app.js", revision: "r1", sizeBytes: 2 },
+        { url: deferredUrl, install: false, sizeBytes: 4 },
+      ],
+      seedCaches: async (storage) => {
+        await (await storage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/index.html`, new Response("app"));
+        await (await storage.open(RUNTIME_CACHE_NAME)).put(COEP_MODE_URL, new Response("require-corp"));
+        await (await storage.open(RUNTIME_CACHE_NAME)).put(`${APP_ORIGIN}/page`, new Response("page"));
+        await (await storage.open(IDENTIFY_CACHE_NAME)).put(wantedUrl, new Response('["computers"]'));
+        await (
+          await storage.open(IDENTIFY_CACHE_NAME)
+        ).put(`${APP_ORIGIN}/assets/identify-computers.pack`, new Response("pack"));
+        await (await storage.open("unrelated-cache")).put(`${APP_ORIGIN}/save`, new Response("save"));
+      },
+    });
+    vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+      const state = await harness.warmupConfig.precacheState();
+      return {
+        ...state,
+        pendingUnits: state.totalFiles - state.cachedFiles,
+        ready: state.cachedFiles === state.totalFiles,
+      };
+    });
+    harness.fetchStub.handlers.set(APP_SCOPE, () => new Response("app"));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/assets/app.js`, () => new Response("js"));
+    harness.fetchStub.handlers.set(deferredUrl, () => new Response("file"));
+    await (await harness.cacheStorage.open("precache-rom-weaver-app-deferred")).put(deferredUrl, new Response("old"));
+
+    const reply = await send(harness, { action: "set-offline-copy-enabled", enabled: false });
+    expect(reply).toEqual([expect.objectContaining({ action: "offline-copy-state", enabled: false, ready: false })]);
+    expect(await harness.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(COEP_MODE_URL)).toBeDefined();
+    expect(await harness.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(`${APP_ORIGIN}/page`)).toBeUndefined();
+    expect(await harness.cacheStorage.caches.get(IDENTIFY_CACHE_NAME)?.match(wantedUrl)).toBeDefined();
+    expect(
+      await harness.cacheStorage.caches.get(IDENTIFY_CACHE_NAME)?.match(`${APP_ORIGIN}/assets/identify-computers.pack`),
+    ).toBeUndefined();
+    expect(await harness.cacheStorage.caches.get("unrelated-cache")?.match(`${APP_ORIGIN}/save`)).toBeDefined();
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeUndefined();
+    expect(
+      await harness.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(deferredUrl),
+    ).toBeUndefined();
+    expect(harness.scope.clients.claim).not.toHaveBeenCalled();
+
+    await send(harness, { action: "offline-warmup-pump" });
+    expect(harness.fetchStub.calls.some(({ url }) => url === deferredUrl)).toBe(false);
+    expect(await (await routed(harness, requireRoute(2), new Request(deferredUrl))).text()).toBe("file");
+    expect(
+      await harness.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(deferredUrl),
+    ).toBeUndefined();
+    const emulatorUrl = `${APP_ORIGIN}/emulatorjs/data/game.js`;
+    harness.fetchStub.handlers.set(emulatorUrl, () => new Response("game"));
+    expect(await (await routed(harness, harness.emulatorJsRoute, new Request(emulatorUrl))).text()).toBe("game");
+    expect(await harness.cacheStorage.caches.get(EMULATORJS_CACHE_NAME)?.match(emulatorUrl)).toBeUndefined();
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/page`, () => new Response("page"));
+    const page = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/page`));
+    expect(page.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
+    expect(await harness.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(`${APP_ORIGIN}/page`)).toBeUndefined();
+    await send(harness, { action: "set-offline-copy-enabled", enabled: true });
+    expect(await send(harness, { action: "offline-warmup-pump" })).toContainEqual(
+      expect.objectContaining({ action: "offline-warmup-progress" }),
+    );
+    expect(await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeDefined();
+    expect(
+      await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/assets/app.js?__WB_REVISION__=r1`),
+    ).toBeDefined();
+    const complete = await send(harness, { action: "offline-warmup-pump" });
+    expect(harness.fetchStub.calls.some(({ url }) => url === deferredUrl)).toBe(true);
+    expect(await harness.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(deferredUrl)).toBeDefined();
+    expect(complete).toContainEqual(expect.objectContaining({ action: "offline-warmup-progress", ready: true }));
+    expect(await harness.warmupConfig.precacheState()).toMatchObject({
+      cachedBytes: 9,
+      cachedFiles: 3,
+      totalBytes: 9,
+      totalFiles: 3,
+    });
+  });
+
+  it("resumes missing core files after restarting an enabled but incomplete copy", async () => {
+    const harness = await loadWorker({
+      hasActiveWorker: true,
+      manifest: [{ url: "index.html", revision: "root", sizeBytes: 3 }],
+      seedCaches: async (storage) => {
+        await (
+          await storage.open("precache-rom-weaver-offline-policy")
+        ).put(`${APP_ORIGIN}/__rom-weaver-offline-copy-enabled__`, new Response("true"));
+      },
+    });
+    harness.fetchStub.handlers.set(APP_SCOPE, () => new Response("app"));
+    await send(harness, { action: "set-offline-copy-enabled", enabled: true });
+    await send(harness, { action: "offline-warmup-pump" });
+    expect(
+      await harness.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html?__WB_REVISION__=root`),
+    ).toBeDefined();
+    expect(await harness.warmupConfig.precacheState()).toMatchObject({ cachedBytes: 3, cachedFiles: 1, totalFiles: 1 });
+  });
+
+  it("hydrates the disabled choice after a worker restart", async () => {
+    const first = await loadWorker();
+    await send(first, { action: "set-offline-copy-enabled", enabled: false });
+    const metadata = await first.cacheStorage.caches
+      .get("precache-rom-weaver-offline-policy")
+      ?.match(`${APP_ORIGIN}/__rom-weaver-offline-copy-enabled__`);
+    expect(await metadata?.clone().text()).toBe("false");
+    const restarted = await loadWorker({
+      seedCaches: async (storage) => {
+        if (metadata) {
+          await (
+            await storage.open("precache-rom-weaver-offline-policy")
+          ).put(`${APP_ORIGIN}/__rom-weaver-offline-copy-enabled__`, metadata.clone());
+        }
+        await (await storage.open(PRECACHE_NAME)).put(`${APP_ORIGIN}/index.html`, new Response("install"));
+        await (
+          await storage.open("precache-rom-weaver-runtime-old-build")
+        ).put(COEP_MODE_URL, new Response("require-corp"));
+        await (await storage.open("precache-rom-weaver-app-deferred")).put(`${APP_ORIGIN}/asset`, new Response("file"));
+      },
+    });
+    restarted.scope.clients.claim.mockImplementation(async () => {
+      expect(await restarted.cacheStorage.caches.get(PRECACHE_NAME)?.match(`${APP_ORIGIN}/index.html`)).toBeUndefined();
+      expect(
+        await restarted.cacheStorage.caches.get("precache-rom-weaver-app-deferred")?.match(`${APP_ORIGIN}/asset`),
+      ).toBeUndefined();
+      expect(await restarted.cacheStorage.caches.get(RUNTIME_CACHE_NAME)?.match(COEP_MODE_URL)).toBeDefined();
+    });
+    await dispatch(restarted.scope, "activate");
+    expect(restarted.cacheStorage.caches.has("precache-rom-weaver-offline-policy")).toBe(true);
+    expect(restarted.scope.clients.claim).toHaveBeenCalledTimes(1);
+    const page = await restarted.plugin.handlerWillRespond?.({ response: new Response("page") });
+    expect(page?.headers.get("Cross-Origin-Embedder-Policy")).toBe("require-corp");
+    expect(await send(restarted, { action: "get-offline-ready-state" })).toEqual([
+      expect.objectContaining({ action: "offline-ready-state", enabled: false, ready: false }),
+    ]);
+    await send(restarted, { action: "offline-warmup-pump" });
+    expect(restarted.warmup.runNextUnit).not.toHaveBeenCalled();
   });
 });
 
