@@ -90,7 +90,8 @@ const captureRegion = async (page, selector) => {
 
 const capture = async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  const browser = await chromium.launch();
+  const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
+  const browser = await chromium.launch(launchOptions);
   try {
     for (const viewport of DOCS_SCREENSHOT_VIEWPORTS) {
       for (const theme of DOCS_SCREENSHOT_THEMES) {
