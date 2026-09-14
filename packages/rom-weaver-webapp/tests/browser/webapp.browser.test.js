@@ -620,3 +620,22 @@ test("mobile More stays in view on a short screen", async () => {
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
   await page.viewport(1280, 900);
 });
+
+test("mobile More keeps its row spacing after opening", async () => {
+  await page.viewport(390, 664);
+  mountWebappRoot();
+
+  await page.getByRole("button", { name: "More" }).click();
+  const menu = document.querySelector(".shared-more-menu");
+  const project = menu?.querySelectorAll(".more-group")[1];
+  expect(project).not.toBeNull();
+  const start = {
+    menuHeight: menu.getBoundingClientRect().height,
+    projectTop: project.getBoundingClientRect().top,
+  };
+
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  expect(menu.getBoundingClientRect().height).toBeCloseTo(start.menuHeight, 1);
+  expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
+  await page.viewport(1280, 900);
+});
