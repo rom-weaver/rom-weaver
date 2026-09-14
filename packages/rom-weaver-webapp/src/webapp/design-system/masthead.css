@@ -617,7 +617,7 @@ html.vt-theme .mode-rail .mode {
 }
 .rw-app .shared-more-menu {
   inset-block-start: calc(100% + var(--sp-xs));
-  animation-name: fade-in;
+  animation: none;
 }
 .rw-app .more-menu[hidden] {
   display: none;
@@ -1041,6 +1041,8 @@ html.vt-theme .mode-rail .mode {
     inset-block-start: auto;
     inset-block-end: calc(var(--dock-h) + var(--sp-xs));
     inset-inline-end: max(var(--sp-s), var(--safe-r));
+    max-block-size: calc(100dvh - var(--dock-h) - 2 * var(--sp-xs));
+    overflow-y: auto;
   }
 }
 

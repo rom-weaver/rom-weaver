@@ -19,11 +19,6 @@
     transform: scale(1);
   }
 }
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-}
 @keyframes drop-in {
   from {
     opacity: 0;

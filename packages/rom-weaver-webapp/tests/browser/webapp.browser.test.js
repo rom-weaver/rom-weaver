@@ -602,3 +602,20 @@ test("mobile More carries app utilities plus the external links, and the footer 
 
   await page.viewport(1280, 900);
 });
+
+test("mobile More stays in view on a short screen", async () => {
+  await page.viewport(320, 480);
+  mountWebappRoot();
+
+  await page.getByRole("button", { name: "More" }).click();
+  const menu = document.querySelector(".shared-more-menu");
+  expect(menu).not.toBeNull();
+  expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
+  expect(getComputedStyle(menu).animationName).toBe("none");
+  expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+
+  await page.getByRole("menuitem", { name: "Logs" }).click();
+  await expect.element(page.getByRole("dialog")).toBeInTheDocument();
+  await page.viewport(1280, 900);
+});
