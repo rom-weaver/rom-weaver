@@ -1265,7 +1265,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.runtime.removeOffline": msg({ id: "ui.runtime.removeOffline", message: "Remove offline copy" }),
   "ui.runtime.removingOffline": msg({ id: "ui.runtime.removingOffline", message: "Removing offline copy…" }),
-  "ui.runtime.offlineRemoved": msg({ id: "ui.runtime.offlineRemoved", message: "Offline copy removed" }),
   "ui.runtime.offlineDisabled": msg({ id: "ui.runtime.offlineDisabled", message: "Offline copy disabled" }),
   "ui.runtime.offlineDisabledDetail": msg({
     id: "ui.runtime.offlineDisabledDetail",

@@ -3340,11 +3340,6 @@ msgstr "Eliminando copia sin conexión…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineRemoved"
-msgstr "Copia sin conexión eliminada"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.offlineDisabled"
 msgstr "Copia sin conexión desactivada"
 

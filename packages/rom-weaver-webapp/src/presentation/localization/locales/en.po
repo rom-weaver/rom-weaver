@@ -3340,11 +3340,6 @@ msgstr "Removing offline copy…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineRemoved"
-msgstr "Offline copy removed"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.offlineDisabled"
 msgstr "Offline copy disabled"
 
