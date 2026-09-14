@@ -28,6 +28,7 @@ const createDeferredPrecache = ({
   // file when it lands.
   type InFlight = { listeners: Set<(delta: number) => void>; loadedBytes: number; promise: Promise<Response> };
   const inFlight = new Map<string, InFlight>();
+  const progressListeners = new Set<(delta: number) => void>();
 
   const find = (input: string) => {
     const url = new URL(input, scope);
@@ -42,7 +43,10 @@ const createDeferredPrecache = ({
     const result = { cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: files.length };
     for (const file of files) {
       result.totalBytes += file.sizeBytes ?? 0;
-      if (!keys.has(file.key)) continue;
+      if (!keys.has(file.key)) {
+        result.cachedBytes += Math.min(file.sizeBytes ?? 0, inFlight.get(file.key)?.loadedBytes ?? 0);
+        continue;
+      }
       result.cachedBytes += file.sizeBytes ?? 0;
       result.cachedFiles += 1;
     }
@@ -78,6 +82,7 @@ const createDeferredPrecache = ({
           const buffer = await readWithByteProgress(response, (delta) => {
             entry.loadedBytes += delta;
             for (const listener of entry.listeners) listener(delta);
+            for (const listener of progressListeners) listener(delta);
           });
           const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
           await cache.put(file.key, complete.clone());
@@ -94,19 +99,28 @@ const createDeferredPrecache = ({
     }
   };
 
-  // Files the app is already downloading come first: joining them is free and
-  // reports bytes that would otherwise land on the readout all at once.
+  // A pump MUST observe all downloads, including app requests that start after its batch selection.
   const runNextBatch = async (onBytes?: (delta: number) => void) => {
-    const cache = await caches.open(cacheName);
-    const keys = new Set((await cache.keys()).map((request) => request.url));
-    const missing = files.filter((file) => !keys.has(file.key));
-    const started = missing.filter((file) => inFlight.has(file.key));
-    const batch = [...started, ...missing.filter((file) => !inFlight.has(file.key))].slice(0, 4);
-    const results = await Promise.allSettled(batch.map((file) => serve(file.url, onBytes)));
-    for (const result of results) {
-      if (result.status === "rejected") throw result.reason;
+    if (onBytes) {
+      progressListeners.add(onBytes);
+      for (const pending of inFlight.values()) {
+        if (pending.loadedBytes > 0) onBytes(pending.loadedBytes);
+      }
     }
-    return batch.length > 0;
+    try {
+      const cache = await caches.open(cacheName);
+      const keys = new Set((await cache.keys()).map((request) => request.url));
+      const missing = files.filter((file) => !keys.has(file.key));
+      const started = missing.filter((file) => inFlight.has(file.key));
+      const batch = [...started, ...missing.filter((file) => !inFlight.has(file.key))].slice(0, 4);
+      const results = await Promise.allSettled(batch.map((file) => serve(file.url)));
+      for (const result of results) {
+        if (result.status === "rejected") throw result.reason;
+      }
+      return batch.length > 0;
+    } finally {
+      if (onBytes) progressListeners.delete(onBytes);
+    }
   };
 
   const migrate = async (sourceCacheName: string) => {

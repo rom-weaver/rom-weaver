@@ -413,6 +413,48 @@ describe("worker log relay", () => {
 });
 
 describe("service worker bootstrap", () => {
+  it("counts a shared download once across snapshots, interim updates and the final reply", async () => {
+    const url = `${APP_ORIGIN}/assets/shared.bin`;
+    const harness = await loadWorker({ manifest: [{ url, install: false, sizeBytes: 10 }] });
+    const body = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = body.writable.getWriter();
+    harness.fetchStub.handlers.set(url, () => new Response(body.readable));
+    vi.mocked(harness.warmup.getReadyState).mockImplementation(async () => {
+      const state = await harness.warmupConfig.precacheState();
+      return {
+        ...state,
+        ready: state.cachedFiles === state.totalFiles,
+        pendingUnits: state.totalFiles - state.cachedFiles,
+      };
+    });
+    let now = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const interactive = routed(harness, requireRoute(2), new Request(url));
+    const replies: Array<{ action: string; cachedBytes: number; ready: boolean }> = [];
+    let pump: Promise<void> | undefined;
+    try {
+      await writer.write(new Uint8Array(3));
+      expect(await harness.warmup.getReadyState()).toMatchObject({ cachedBytes: 3, ready: false });
+      pump = dispatch(harness.scope, "message", {
+        data: { action: "offline-warmup-pump" },
+        ports: [{ postMessage: (reply) => replies.push(reply as (typeof replies)[number]) }],
+      });
+      await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 3, ready: false }));
+      now += 200;
+      await writer.write(new Uint8Array(4));
+      await vi.waitFor(() => expect(replies.at(-1)).toMatchObject({ cachedBytes: 7, ready: false }));
+      await writer.write(new Uint8Array(3));
+      await writer.close();
+      await Promise.all([interactive, pump]);
+      expect(replies.map((reply) => reply.cachedBytes)).toEqual([3, 7, 10]);
+      expect(replies.at(-1)).toMatchObject({ action: "offline-warmup-progress", ready: true });
+    } finally {
+      await writer.abort(new Error("test stream cleanup"));
+      await Promise.allSettled([interactive, pump]);
+      writer.releaseLock();
+    }
+  });
+
   it("installs only essential entries and includes deferred files in offline totals", async () => {
     const initial = { install: true, revision: "root", sizeBytes: 10, url: "index.html" };
     const deferred = { install: false, revision: "docs", sizeBytes: 20, url: "docs/index.html" };

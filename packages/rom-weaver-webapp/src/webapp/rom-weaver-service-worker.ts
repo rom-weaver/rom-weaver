@@ -547,21 +547,28 @@ const offlineWarmup = createOfflineWarmup({
 let appPumpChain: Promise<unknown> = Promise.resolve();
 const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
   const process = async () => {
-    const baseline = await offlineWarmup.getReadyState();
-    let received = 0;
     let lastEmit = 0;
-    const downloaded = await deferredPrecache.runNextBatch((delta) => {
-      received += delta;
-      const now = Date.now();
-      if (now - lastEmit < PRECACHE_PROGRESS_THROTTLE_MS) return;
-      lastEmit = now;
-      onInterim({
-        ...baseline,
-        cachedBytes: Math.min(baseline.totalBytes, baseline.cachedBytes + received),
-        ready: false,
-        phase: "precache",
+    let progress = Promise.resolve();
+    let downloaded: boolean;
+    try {
+      downloaded = await deferredPrecache.runNextBatch(() => {
+        const now = Date.now();
+        if (now - lastEmit < PRECACHE_PROGRESS_THROTTLE_MS) return;
+        lastEmit = now;
+        progress = progress
+          .then(async () => {
+            onInterim({
+              ...(await offlineWarmup.getReadyState()),
+              ready: false,
+              phase: "precache",
+            });
+          })
+          .catch((error) => logServiceWorker("offline progress failed", { error: formatError(error) }));
       });
-    });
+    } finally {
+      // Interim messages MUST finish before the final reply closes the page's subscription.
+      await progress;
+    }
     if (!downloaded) return offlineWarmup.runNextUnit(onInterim);
     return {
       ...(await offlineWarmup.getReadyState()),

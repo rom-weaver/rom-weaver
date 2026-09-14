@@ -59,6 +59,51 @@ afterEach(() => {
 });
 
 describe("deferred precache", () => {
+  it("reports an app download started outside the current batch and keeps its partial progress", async () => {
+    const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+    const files = Array.from({ length: 5 }, (_, index) => ({ url: `assets/${index}.bin`, sizeBytes: 10 }));
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: files,
+      scope: SCOPE,
+      download: async (request) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              streams.set(request.url, controller);
+            },
+          }),
+        ),
+    });
+    const onBytes = vi.fn();
+    const pump = queue.runNextBatch(onBytes);
+    await vi.waitFor(() => expect(streams.size).toBe(4));
+    const interactive = queue.serve("assets/4.bin");
+    await vi.waitFor(() => expect(streams.size).toBe(5));
+    const appStream = streams.get(new URL("assets/4.bin", SCOPE).href);
+    try {
+      appStream?.enqueue(new Uint8Array(3));
+      await vi.waitFor(() => expect(onBytes).toHaveBeenCalledWith(3));
+      expect(await queue.state()).toMatchObject({ cachedBytes: 3, cachedFiles: 0, totalBytes: 50 });
+      for (const [url, stream] of streams) {
+        if (url.endsWith("/4.bin")) continue;
+        stream.enqueue(new Uint8Array(10));
+        stream.close();
+      }
+      await pump;
+      expect(await queue.state()).toMatchObject({ cachedBytes: 43, cachedFiles: 4 });
+      onBytes.mockClear();
+      appStream?.enqueue(new Uint8Array(7));
+      appStream?.close();
+      await interactive;
+      expect(onBytes).not.toHaveBeenCalled();
+      expect(await queue.state()).toMatchObject({ cachedBytes: 50, cachedFiles: 5 });
+    } finally {
+      for (const stream of streams.values()) stream.error(new Error("test stream cleanup"));
+      await Promise.allSettled([pump, interactive]);
+    }
+  });
+
   it.each(["br", "identity"])("resumes completed original files over HTTP %s after restart", async (encoding) => {
     vi.stubGlobal("DecompressionStream", undefined);
     const requests: string[] = [];
