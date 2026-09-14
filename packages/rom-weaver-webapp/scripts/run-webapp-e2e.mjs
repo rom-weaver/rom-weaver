@@ -998,7 +998,7 @@ const createWorkerReuseCorpus = () => {
 const configureUncompressedOutput = async (page) => {
   await page.locator(".panel.workflow:not([hidden]) .panel-settings-btn").click();
   await page.locator("#settings-default-compression").selectOption("none");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { exact: true, name: "Save" }).click();
 };
 
 const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
