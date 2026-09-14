@@ -378,7 +378,6 @@ function WebappRoot({
     persistOfflineReady(next.ready);
   }, []);
   useEffect(() => {
-    if (notFound) return undefined;
     const progressGate = createOfflineWarmupProgressGate(onWarmupProgress);
     // A page that loads after the warm-up finished gets no progress events;
     // ask the worker once so the chip does not stay "installing" forever.
@@ -397,7 +396,7 @@ function WebappRoot({
       stopWorkerLog();
       cancelWarmup();
     };
-  }, [notFound, onWarmupProgress]);
+  }, [onWarmupProgress]);
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
