@@ -229,10 +229,8 @@ applicationStatusReady = true;
 // boundary owns the error.
 const preloadInitialWorkflowRoute = async (): Promise<unknown> => {
   const { currentView: view, settings } = webappController.getState();
-  // The message catalog is fetched alongside the route chunk so the first
-  // render is already translated. Hydration reads the browser locale (it
-  // renders with default settings), later renders the Language setting; both
-  // are warmed. English is in the main bundle and resolves at once.
+  // The first render after hydration MUST have the browser or saved language
+  // catalog available so it does not flash untranslated messages.
   const catalogs = [preloadCatalog(), preloadCatalog(settings.language)];
   await Promise.all([preloadWorkflowRoute(view), ...catalogs]);
   if (view === "docs") await preloadDocsRouteHtml();
@@ -393,6 +391,7 @@ const renderWebappRoot = (): undefined => {
     ? {
         ...getDefaultSettings(),
         betaToolsEnabled: readHydrationBetaToolsEnabled(),
+        language: document.documentElement.lang || "en",
         threads: state.settings.threads,
       }
     : state.settings;
