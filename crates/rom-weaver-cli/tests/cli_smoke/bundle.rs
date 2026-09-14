@@ -40,7 +40,7 @@ fn bundle_parse_plain_json_resolves_refs_verbatim() {
             "parse",
             "--input",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -95,7 +95,7 @@ fn bundle_parse_reads_gzipped_bundle() {
             "parse",
             "--input",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -141,7 +141,7 @@ fn bundle_parse_archive_extracts_referenced_members() {
             archive.path().to_str().expect("path"),
             "--output",
             extract_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -218,7 +218,7 @@ fn bundle_parse_archive_content_probes_noncanonical_member() {
             archive.path().to_str().expect("path"),
             "--output",
             extract_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -251,7 +251,7 @@ fn bundle_parse_archive_without_bundle_fails() {
             "parse",
             "--input",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -383,7 +383,7 @@ fn bundle_apply_gzipped_bundle_with_cli_output() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -437,7 +437,7 @@ fn bundle_apply_everything_archive_skips_optional() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -465,7 +465,7 @@ fn bundle_apply_with_flag_includes_optional() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -493,7 +493,7 @@ fn bundle_apply_without_can_disable_default_patch() {
             "--output",
             temp.child("patched.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -532,7 +532,7 @@ fn bundle_apply_rom_checks_mismatch_fails() {
             "--output",
             temp.child("patched.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -578,7 +578,7 @@ fn bundle_apply_explicit_bundle_flag_keeps_input_rom() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -650,7 +650,7 @@ fn bundle_apply_missing_output_fails_with_code() {
                 .path()
                 .to_str()
                 .expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -691,7 +691,7 @@ fn bundle_parse_rejects_output_compression() {
                 .path()
                 .to_str()
                 .expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -799,7 +799,7 @@ fn bundle_apply_url_patch_downloads_and_applies() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -846,7 +846,7 @@ fn bundle_apply_url_bundle_resolves_relative_entries() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -893,7 +893,7 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
             "patched.bin",
             "--output",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -914,7 +914,7 @@ fn bundle_create_computes_checks_and_aligns_metadata() {
             "parse",
             "--input",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -986,7 +986,7 @@ fn bundle_create_upgrades_v1_with_auto_basis_and_omits_redundant_entry_basis() {
             spec.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1012,7 +1012,7 @@ fn bundle_create_upgrades_v1_with_auto_basis_and_omits_redundant_entry_basis() {
             "base",
             "--output",
             base_output.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1043,7 +1043,7 @@ fn bundle_create_uses_cached_rom_checks_and_size() {
             patch.to_str().expect("path"),
             "--output",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1054,7 +1054,7 @@ fn bundle_create_uses_cached_rom_checks_and_size() {
             "parse",
             "--input",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1080,7 +1080,7 @@ fn bundle_create_gzip_output_parses_back() {
             main.to_str().expect("path"),
             "--output",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1090,7 +1090,7 @@ fn bundle_create_gzip_output_parses_back() {
             "parse",
             "--input",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1119,7 +1119,7 @@ fn bundle_create_bundle_roundtrips_through_apply() {
             bundle_out.path().to_str().expect("path"),
             "--bundle",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1141,7 +1141,7 @@ fn bundle_create_bundle_roundtrips_through_apply() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1205,7 +1205,7 @@ fn bundle_create_reuses_equal_payloads_and_disambiguates_same_basename() {
             bundle_json.path().to_str().expect("path"),
             "--bundle",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1252,7 +1252,7 @@ fn bundle_create_from_preserves_shared_size_only_check_state() {
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1292,7 +1292,7 @@ fn bundle_create_from_preserves_an_explicit_shared_input_state_without_basis_inf
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1329,7 +1329,7 @@ fn bundle_create_keeps_equal_checks_for_a_different_rom_member() {
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1358,7 +1358,7 @@ fn bundle_create_patch_check_emits_checks_and_apply_enforces() {
             "crc32=00000000",
             "--output",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1368,7 +1368,7 @@ fn bundle_create_patch_check_emits_checks_and_apply_enforces() {
             "parse",
             "--input",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1391,7 +1391,7 @@ fn bundle_create_patch_check_emits_checks_and_apply_enforces() {
             "--output",
             temp.child("patched.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1425,7 +1425,7 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
             bundle_out.path().to_str().expect("path"),
             "--bundle",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1435,7 +1435,7 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
             "parse",
             "--input",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1465,7 +1465,7 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1483,7 +1483,7 @@ fn bundle_create_no_bundle_rom_emits_checks_only_entry() {
             bundle.path().to_str().expect("path"),
             "--output",
             temp.child("nope.bin").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1527,7 +1527,7 @@ fn bundle_apply_warns_but_succeeds_when_rom_name_differs() {
             main.to_str().expect("path"),
             "--output",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1576,7 +1576,7 @@ fn bundle_apply_warns_but_succeeds_when_rom_name_differs() {
             "--force",
             "--output",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1627,7 +1627,7 @@ fn bundle_create_empty_rom_name_suppresses_the_default() {
             patch.to_str().expect("path"),
             "--output",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1672,7 +1672,7 @@ fn bundle_apply_enforces_mid_chain_declared_input_checks() {
             "--output",
             temp.child("out.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1717,7 +1717,7 @@ fn bundle_apply_named_patch_input_uses_producer_bytes_not_current_chain_bytes() 
             "--output",
             temp.child("out.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1767,7 +1767,7 @@ fn bundle_apply_rom_member_selects_the_exact_archive_entry() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1817,7 +1817,7 @@ fn bundle_apply_verifies_checks_for_the_explicit_rom_member() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1852,7 +1852,7 @@ fn bundle_apply_rejects_disabled_named_patch_input_producer() {
             "--output",
             temp.child("out.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1894,7 +1894,7 @@ fn bundle_create_keeps_implicit_chain_inputs_implicit_across_optional_steps() {
             "c",
             "--output",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1904,7 +1904,7 @@ fn bundle_create_keeps_implicit_chain_inputs_implicit_across_optional_steps() {
             "parse",
             "--input",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1927,7 +1927,7 @@ fn bundle_create_keeps_implicit_chain_inputs_implicit_across_optional_steps() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1998,7 +1998,7 @@ fn bundle_input_checks_block_conflicting_embedded_base_inference() {
             "--output",
             temp.child("out.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2045,7 +2045,7 @@ fn bundle_input_checks_block_conflicting_embedded_base_inference() {
                 .to_str()
                 .expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2103,7 +2103,7 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
             "--output",
             out.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2126,7 +2126,7 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
             "--output",
             out.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2153,7 +2153,7 @@ fn bundle_apply_base_basis_verifies_declared_checks_against_the_rom() {
             // refuses to overwrite without --force.
             "--force",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2213,7 +2213,7 @@ fn bundle_declared_base_conflict_is_rejected_and_cli_auto_clears_the_declaration
             "--output",
             temp.child("conflict.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2249,7 +2249,7 @@ fn bundle_declared_base_conflict_is_rejected_and_cli_auto_clears_the_declaration
             "--output",
             temp.child("stale.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2271,7 +2271,7 @@ fn bundle_declared_base_conflict_is_rejected_and_cli_auto_clears_the_declaration
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2318,7 +2318,7 @@ fn bundle_v2_patch_basis_precedence_is_patch_cli_shared_entry_then_bundle() {
             "--output",
             temp.child("entry.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2337,7 +2337,7 @@ fn bundle_v2_patch_basis_precedence_is_patch_cli_shared_entry_then_bundle() {
             "--output",
             temp.child("shared.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2362,7 +2362,7 @@ fn bundle_v2_patch_basis_precedence_is_patch_cli_shared_entry_then_bundle() {
             "--output",
             temp.child("patch.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2419,7 +2419,7 @@ fn patch_apply_emit_bundle_preserves_per_patch_basis_overrides() {
             "--emit-bundle",
             emitted.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2444,7 +2444,7 @@ fn patch_apply_emit_bundle_preserves_per_patch_basis_overrides() {
             "--output",
             replay_output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2504,7 +2504,7 @@ fn bundle_ignore_mode_does_not_use_stale_output_checks_to_select_rup_direction()
             output.path().to_str().expect("path"),
             "--ignore-checksum-validation",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2547,7 +2547,7 @@ fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
             &format!("crc32={final_crc}"),
             "--output",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2557,7 +2557,7 @@ fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
             "parse",
             "--input",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2602,7 +2602,7 @@ fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2635,7 +2635,7 @@ fn bundle_create_dedups_endpoint_checks_and_apply_validates_output() {
             "--output",
             temp.child("partial.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2687,7 +2687,7 @@ fn bundle_apply_partial_chain_skips_full_chain_output_checks() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2741,7 +2741,7 @@ fn bundle_apply_non_prefix_selection_skips_entry_output_checks() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2766,7 +2766,7 @@ fn bundle_apply_non_prefix_selection_skips_entry_output_checks() {
             "--output",
             temp.child("full-chain.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2795,7 +2795,7 @@ fn bundle_create_source_url_emits_url_entry() {
             "https://example.test/patches/main.ips",
             "--output",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2805,7 +2805,7 @@ fn bundle_create_source_url_emits_url_entry() {
             "parse",
             "--input",
             bundle_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2879,7 +2879,7 @@ fn bundle_target_chains_follow_optional_selection_after_create() {
                 "--output",
                 output.path().to_str().expect("path"),
                 "--no-compress",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -2940,7 +2940,7 @@ fn bundle_generated_output_members_support_fixed_and_cumulative_inputs() {
                 "--output",
                 output.path().to_str().expect("path"),
                 "--no-compress",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -3191,7 +3191,7 @@ fn bundle_member_lane_checks_filled_from_identify_data_name_the_expected_title()
             "--output",
             temp.child("raw/disc.cue").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         &[(
             "ROM_WEAVER_DATA_DIR",
@@ -3229,7 +3229,7 @@ fn bundle_member_lane_checks_filled_from_identify_data_name_the_expected_title()
                 .to_str()
                 .expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         &[(
             "ROM_WEAVER_DATA_DIR",
@@ -3347,7 +3347,7 @@ fn bundle_disc_targets_preserve_all_tracks_and_chd_parity() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3380,7 +3380,7 @@ fn bundle_disc_targets_preserve_all_tracks_and_chd_parity() {
             "zstd",
             "--threads",
             "1",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3484,7 +3484,7 @@ fn bundle_target_lane_verifies_bps_base_and_previous_states() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3555,7 +3555,7 @@ fn bundle_target_lane_endpoint_checks_run_before_a_later_lane() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -3583,7 +3583,7 @@ fn bundle_target_lane_endpoint_checks_run_before_a_later_lane() {
             output.path().to_str().expect("path"),
             "--force",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3606,7 +3606,7 @@ fn bundle_target_lane_endpoint_checks_run_before_a_later_lane() {
             output.path().to_str().expect("path"),
             "--force",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );

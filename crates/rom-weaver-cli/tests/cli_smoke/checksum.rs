@@ -383,7 +383,7 @@ fn checksum_auto_extract_stream_container_uses_streamed_hashing() {
             "crc32",
             "--algo",
             "sha1",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -469,7 +469,7 @@ fn checksum_auto_extract_tar_stream_uses_streamed_hashing() {
             "crc32",
             "--algo",
             "sha1",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1305,7 +1305,7 @@ fn extract_checksum_variants_match_checksum_command() {
                 "crc32",
                 "--checksum",
                 "sha1",
-                "--json",
+                "--jsonl",
             ],
             0,
         );

@@ -6,68 +6,197 @@ use serde_json::{Map, Value};
 
 use super::{Surface, humanize_bytes};
 
-/// Commands whose success rendering is a recap of work done rather than the
-/// answer the user asked for. `--quiet` drops these; `probe`, `checksum`,
-/// `patch validate` and friends keep printing because their summary *is* the
-/// output.
-const WRITE_SUMMARY_COMMANDS: &[&str] = &[
-    "extract",
-    "compress",
-    "patch-apply",
-    "patch-create",
-    "trim",
-    "ingest",
-    "bundle-create",
-    "bundle-apply",
-    "save-set",
-];
-
-pub fn success_is_write_summary(command: &str) -> bool {
-    WRITE_SUMMARY_COMMANDS.contains(&command)
+#[derive(Default)]
+pub(super) struct OutputSelection {
+    explicit_output: Option<std::path::PathBuf>,
+    suppress_files: bool,
+    probe: bool,
 }
 
-pub(super) fn quiet_suppresses_success(quiet: bool, event: &ProgressEvent) -> bool {
-    quiet
-        && success_is_write_summary(&event.command)
-        && !is_dry_run(event)
-        && !is_save_preview(event)
-        && event
-            .details
-            .as_ref()
-            .and_then(|details| details.get("patch_create_format_candidates"))
-            .is_none()
+impl OutputSelection {
+    pub(super) fn for_command(command: &crate::Commands) -> Self {
+        use crate::{BundleCommands, Commands, PatchCommands, SaveCommands, ToolsCommands};
+        let mut selection = Self::default();
+        selection.explicit_output = match command {
+            Commands::Compress(args) => Some(args.output.clone()),
+            Commands::Patch(PatchCommands::Apply(args)) => args.output.clone(),
+            Commands::Patch(PatchCommands::Create(args)) => args.output.clone(),
+            Commands::Bundle(BundleCommands::Create(args)) => Some(args.output.clone()),
+            Commands::Save(SaveCommands::Set(args)) => args.output.clone(),
+            Commands::Tools(ToolsCommands::PpfUndo(args)) => Some(args.output.clone()),
+            Commands::Trim(args) => {
+                selection.suppress_files = args.in_place;
+                args.output.clone()
+            }
+            Commands::Extract(args) => {
+                selection.probe = args.probe;
+                None
+            }
+            _ => None,
+        };
+        selection
+    }
+
+    fn shows_file(&self, file: &Value) -> bool {
+        if self.suppress_files {
+            return false;
+        }
+        let Some(output) = &self.explicit_output else {
+            return true;
+        };
+        if output == std::path::Path::new("-") {
+            return false;
+        }
+        let Some(path) = file.get("path").and_then(Value::as_str) else {
+            return false;
+        };
+        let output = std::fs::canonicalize(output).unwrap_or_else(|_| output.clone());
+        let path = std::fs::canonicalize(path).unwrap_or_else(|_| path.into());
+        output != path
+    }
 }
 
-/// Render the summary for a succeeded command, dispatching on the command name.
-pub fn render_success(surface: &Surface, event: &ProgressEvent) {
+pub(super) fn render_success(
+    surface: &Surface,
+    event: &ProgressEvent,
+    selection: &OutputSelection,
+) {
     if is_dry_run(event) {
-        render_dry_run(surface, event);
-    } else {
-        match event.command.as_str() {
-            "probe" => render_container_or_patch(surface, event),
-            "extract" | "compress" | "patch-apply" => render_emitted_files(surface, event),
-            "patch-create" => {
-                if event
-                    .details
-                    .as_ref()
-                    .and_then(|details| details.get("patch_create_format_candidates"))
-                    .is_some()
-                {
-                    render_candidates(surface, event);
-                } else {
-                    render_emitted_files(surface, event);
+        return render_dry_run(surface, event);
+    }
+    match event.command.as_str() {
+        "probe" => render_container_or_patch(surface, event),
+        "extract" | "compress" | "patch-apply" | "trim" | "bundle-create" | "tools-ppf-undo" => {
+            render_emitted_files(surface, event, selection);
+        }
+        "patch-create" => {
+            if event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("patch_create_format_candidates"))
+                .is_some()
+            {
+                render_candidates(surface, event);
+            } else {
+                render_emitted_files(surface, event, selection);
+            }
+        }
+        "patch-validate" => label_line(surface, event),
+        "checksum" => render_checksum(surface, event),
+        "identify" if event.format.as_deref() == Some("identify-database") => {
+            render_database(surface, event);
+        }
+        "identify" => render_identify(surface, event),
+        "setup" => {}
+        "cheat" => render_cheat_list(surface, event),
+        "save-identify" => render_save_identify(surface, event),
+        "save-inspect" => render_save_inspect(surface, event),
+        "save-get" => label_line(surface, event),
+        "save-set" if is_save_preview(event) => render_save_result(surface, event),
+        "save-set" => render_emitted_files(surface, event, selection),
+        "save-export-schema" => render_save_schema(surface, event),
+        _ => render_details_or_label(surface, event),
+    }
+}
+
+pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
+    let diagnostics = surface.diagnostics();
+    if is_dry_run(event) || is_save_preview(event) {
+        return;
+    }
+    if let Some(files) = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("emitted_files"))
+        .and_then(Value::as_array)
+        .filter(|files| !files.is_empty())
+    {
+        for file in files {
+            let path = emitted_file_path(file);
+            let size = size_field(file, "size_bytes");
+            let codec = event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("compression"))
+                .and_then(|compression| compression.get("codec"))
+                .and_then(Value::as_str)
+                .or(event.format.as_deref());
+            let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
+            diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
+        }
+    } else if !event.label.is_empty() {
+        diagnostics.line(&format!("{}: {}", event.command, event.label));
+    }
+    if event.command == "probe" {
+        if let Some(details) = event.details.as_ref() {
+            let container = details.get("container").unwrap_or(details);
+            for field in ["recommended_compress_format", "reason"] {
+                if let Some(value) = container.get(field).and_then(Value::as_str) {
+                    diagnostics.line(&format!("probe: {}: {value}", humanize_key(field)));
                 }
             }
-            "checksum" => render_checksum(surface, event),
-            "identify" => render_identify(surface, event),
-            "cheat" => render_cheat_list(surface, event),
-            "save-identify" => render_save_identify(surface, event),
-            "save-inspect" => render_save_inspect(surface, event),
-            "save-get" => label_line(surface, event),
-            "save-set" => render_save_result(surface, event),
-            "save-export-schema" => render_save_schema(surface, event),
-            _ => render_details_or_label(surface, event),
         }
+    } else if event.command == "patch-validate"
+        && let Some(details) = &event.details
+    {
+        render_object(&diagnostics, details);
+    }
+    if let Some(elapsed) = event.elapsed_ms {
+        diagnostics.line(&format!(
+            "{}: finished in {}",
+            event.command,
+            format_elapsed_ms(elapsed)
+        ));
+    }
+}
+
+fn render_database(surface: &Surface, event: &ProgressEvent) {
+    let Some(details) = &event.details else {
+        return;
+    };
+    match event.stage.as_str() {
+        "path" => {
+            if let Some(path) = details.get("database_dir").and_then(Value::as_str) {
+                surface.line(path);
+            }
+        }
+        "list" => {
+            if let Some(platforms) = details.get("platforms").and_then(Value::as_array) {
+                let rows = platforms
+                    .iter()
+                    .map(|platform| {
+                        vec![
+                            string_field(platform, "platform"),
+                            string_field(platform, "source"),
+                            string_field(platform, "pack_slug"),
+                            if platform.get("installed").and_then(Value::as_bool) == Some(true) {
+                                "installed".to_string()
+                            } else {
+                                "not installed".to_string()
+                            },
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                surface.rows(&rows);
+            }
+        }
+        "status" => {
+            if let Some(packs) = details.get("packs").and_then(Value::as_array) {
+                let rows = packs
+                    .iter()
+                    .map(|pack| {
+                        vec![
+                            string_field(pack, "slug"),
+                            string_field(pack, "format"),
+                            size_field(pack, "bytes"),
+                            string_field(pack, "sha256"),
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                surface.rows(&rows);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -224,20 +353,8 @@ fn render_save_result(surface: &Surface, event: &ProgressEvent) {
     } else {
         return label_line(surface, event);
     }
-    if is_save_preview(event) {
-        label_line(surface, event);
-        surface.note("no files written");
-    } else if event
-        .details
-        .as_ref()
-        .and_then(|details| details.get("emitted_files"))
-        .and_then(Value::as_array)
-        .is_some()
-    {
-        render_emitted_files(surface, event);
-    } else {
-        label_line(surface, event);
-    }
+    label_line(surface, event);
+    surface.note("no files written");
 }
 
 fn is_save_preview(event: &ProgressEvent) -> bool {
@@ -324,39 +441,58 @@ fn render_container_or_patch(surface: &Surface, event: &ProgressEvent) {
     {
         return;
     }
-    render_details_or_label(surface, event);
+    if let Some(format) = &event.format {
+        surface.key_values(&[("Format".to_string(), format.clone())]);
+    }
+    let pairs = probe_pairs(details);
+    if pairs.is_empty() {
+        label_line(surface, event);
+    } else {
+        surface.key_values(&pairs);
+    }
+}
+
+fn probe_pairs(details: &Value) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    if let Some(details) = details.as_object() {
+        for (key, value) in details {
+            if !matches!(
+                key.as_str(),
+                "container" | "recommended_compress_format" | "reason"
+            ) {
+                collect_value(key, value, &mut pairs);
+            }
+        }
+    }
+    pairs
 }
 
 fn render_container(surface: &Surface, event: &ProgressEvent, container: &Value) {
     if let Some(format) = &event.format {
         surface.key_values(&[("Format".to_string(), format.clone())]);
     }
-    if let Some(details) = event.details.as_ref().and_then(Value::as_object) {
-        let mut pairs = Vec::new();
-        for (key, value) in details {
-            if key != "container" {
-                collect_value(key, value, &mut pairs);
-            }
-        }
-        surface.key_values(&pairs);
+    if let Some(details) = event.details.as_ref() {
+        surface.key_values(&probe_pairs(details));
     }
     if let Some(container) = container.as_object() {
         let mut pairs = Vec::new();
         for (key, value) in container {
-            if !matches!(key.as_str(), "entries" | "entry_records") {
+            if !matches!(
+                key.as_str(),
+                "entries"
+                    | "entry_records"
+                    | "recommended_compress_format"
+                    | "compress_recommendation"
+                    | "reason"
+            ) {
                 collect_value(key, value, &mut pairs);
             }
         }
         surface.key_values(&pairs);
     }
     let Some(entries) = container.get("entry_records").and_then(Value::as_array) else {
-        label_line(surface, event);
         return;
     };
-    if entries.is_empty() {
-        surface.line("No entries found");
-        return;
-    }
     let rows = entries
         .iter()
         .map(|entry| {
@@ -369,33 +505,47 @@ fn render_container(surface: &Surface, event: &ProgressEvent, container: &Value)
     surface.rows(&rows);
 }
 
-/// Extract/compress/patch-apply/patch-create: the output files and final status label; otherwise
-/// the label. The full destination path is useful when commands infer a nested output directory.
-fn render_emitted_files(surface: &Surface, event: &ProgressEvent) {
-    let files = event
+fn render_emitted_files(surface: &Surface, event: &ProgressEvent, selection: &OutputSelection) {
+    let Some(files) = event
         .details
         .as_ref()
         .and_then(|details| details.get("emitted_files"))
-        .and_then(Value::as_array);
-    let Some(files) = files else {
-        return render_details_or_label(surface, event);
+        .and_then(Value::as_array)
+    else {
+        return;
     };
-    let rows = files.iter().map(emitted_file_row).collect::<Vec<_>>();
+    let rows = files
+        .iter()
+        .filter(|file| selection.shows_file(file))
+        .map(|file| emitted_file_row(file, selection.probe))
+        .collect::<Vec<_>>();
     surface.rows(&rows);
-    let noun = if files.len() == 1 { "file" } else { "files" };
-    surface.note(&format!("{} {noun} written", files.len()));
-    label_line(surface, event);
 }
 
-fn emitted_file_row(file: &Value) -> Vec<String> {
-    vec![
-        nonempty_string_field(file, "path").unwrap_or_else(|| string_field(file, "file_name")),
-        size_field(file, "size_bytes"),
-        file.get("kind")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string(),
-    ]
+fn emitted_file_path(file: &Value) -> String {
+    nonempty_string_field(file, "path").unwrap_or_else(|| string_field(file, "file_name"))
+}
+
+fn emitted_file_row(file: &Value, probe: bool) -> Vec<String> {
+    let mut row = vec![emitted_file_path(file)];
+    if probe {
+        if let Some(kind) = file.get("kind").and_then(Value::as_str) {
+            row.push(kind.to_string());
+        }
+        for field in ["format", "platform", "disc_format"] {
+            if let Some(value) = file.get(field).and_then(Value::as_str) {
+                row.push(format!("{field}={value}"));
+            }
+        }
+    }
+    if let Some(checksums) = file.get("checksums").and_then(Value::as_object) {
+        for (algorithm, digest) in checksums {
+            if let Some(digest) = digest.as_str() {
+                row.push(format!("{algorithm}={digest}"));
+            }
+        }
+    }
+    row
 }
 
 /// Dry runs describe the command plan without using the normal success renderer, which would say
@@ -544,7 +694,7 @@ fn render_candidates(surface: &Surface, event: &ProgressEvent) {
     }
 }
 
-/// `cheat list`: the match class, the attribution line, then one row per cheat.
+/// Cheat attribution MUST remain visible with every result, including an empty list.
 fn render_cheat_list(surface: &Surface, event: &ProgressEvent) {
     let Some(list) = event
         .details
@@ -553,7 +703,6 @@ fn render_cheat_list(surface: &Surface, event: &ProgressEvent) {
     else {
         return render_details_or_label(surface, event);
     };
-    label_line(surface, event);
     let text = |key: &str| list.get(key).and_then(Value::as_str).unwrap_or("");
     surface.line(&format!(
         "system {}, matched by {}{}",
@@ -568,30 +717,19 @@ fn render_cheat_list(surface: &Surface, event: &ProgressEvent) {
     let Some(entries) = entries else {
         return surface.line(text("attribution"));
     };
-    let width = |key: &str| {
-        entries
-            .iter()
-            .filter_map(|entry| entry.get(key).and_then(Value::as_str))
-            .map(str::len)
-            .max()
-            .unwrap_or(0)
-    };
-    let (id_width, delivery_width, code_width) = (width("id"), width("delivery"), width("code"));
-    for entry in entries {
-        let field = |key: &str| entry.get(key).and_then(Value::as_str).unwrap_or("");
-        surface.line(&format!(
-            "{:id_width$}  {:delivery_width$}  {:code_width$}  {}",
-            field("id"),
-            field("delivery"),
-            field("code"),
-            field("description")
-        ));
-    }
+    let rows = entries
+        .iter()
+        .map(|entry| {
+            ["id", "delivery", "code", "description"]
+                .iter()
+                .map(|key| string_field(entry, key))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    surface.rows(&rows);
     surface.line(text("attribution"));
 }
 
-/// Identify: all names first, then the rest of the identify object.
-/// Keep game names together before the remaining metadata for easier scanning.
 fn render_identify(surface: &Surface, event: &ProgressEvent) {
     let Some(identify) = event
         .details
@@ -601,117 +739,79 @@ fn render_identify(surface: &Surface, event: &ProgressEvent) {
     else {
         return render_details_or_label(surface, event);
     };
-    if is_name_search(identify) {
-        return render_name_search(surface, identify);
+    if let Some(hint) = identify.get("hint").and_then(Value::as_str) {
+        surface.diagnostics().line(&format!("identify: {hint}"));
     }
-    let names = identify_names(identify);
-    let mut pairs = Vec::new();
-    if !names.is_empty() {
-        pairs.push(("Names".to_string(), names.join(", ")));
-    }
-    collect_pairs("", identify, &mut pairs);
-    if pairs.is_empty() {
+    let Some(matches) = identify.get("matches").and_then(Value::as_array) else {
+        return label_line(surface, event);
+    };
+    if matches.is_empty() {
         return label_line(surface, event);
     }
-    surface.key_values(&pairs);
-}
-
-/// A name search reports every match it found, so the flattened key/value form
-/// would print one JSON blob per result. `--name` sets `algorithm` to `name`
-/// on each match, which is what tells the two report shapes apart.
-fn is_name_search(identify: &Map<String, Value>) -> bool {
-    identify
-        .get("matches")
-        .and_then(Value::as_array)
-        .and_then(|matches| matches.first())
-        .and_then(|entry| entry.get("algorithm"))
-        .and_then(Value::as_str)
-        == Some("name")
-}
-
-/// One row per match: the name, then the fields that tell two dumps of the
-/// same title apart. A reader picks a result from this table and looks it up
-/// again by checksum, so the row carries the CRC32 of the primary payload.
-fn render_name_search(surface: &Surface, identify: &Map<String, Value>) {
-    let Some(matches) = identify.get("matches").and_then(Value::as_array) else {
-        return;
-    };
-    let mut rows = vec![vec![
-        "Name".to_string(),
-        "Region".to_string(),
-        "Revision".to_string(),
-        "Tags".to_string(),
-        "Crc32".to_string(),
-    ]];
-    for entry in matches {
-        let text = |key: &str| {
-            entry
-                .get(key)
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string()
-        };
-        let tags = entry
-            .get("dump_tags")
-            .and_then(Value::as_array)
-            .map(|tags| {
-                tags.iter()
-                    .filter_map(Value::as_str)
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            })
-            .unwrap_or_default();
-        let crc32 = entry
-            .get("expected_components")
-            .and_then(Value::as_array)
-            .and_then(|components| components.first())
-            .and_then(|component| component.get("crc32"))
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        rows.push(vec![
-            text("name"),
-            text("region"),
-            text("revision"),
-            tags,
-            crc32,
-        ]);
+    surface.rows(&identify_rows(matches));
+    let mut qualifiers = Vec::new();
+    if let Some(quality) = identify.get("quality").and_then(Value::as_str) {
+        qualifiers.push(("Match quality".to_string(), quality.to_string()));
     }
-    surface.rows(&rows);
-    surface.key_values(&[
-        (
-            "Input".to_string(),
-            identify
-                .get("input")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-        ),
-        ("Matches".to_string(), (rows.len() - 1).to_string()),
-    ]);
-}
-
-fn identify_names(identify: &Map<String, Value>) -> Vec<String> {
-    let mut names = Vec::new();
-    let Some(matches) = identify.get("matches").and_then(Value::as_array) else {
-        return names;
-    };
-    for entry in matches {
-        if let Some(name) = entry.get("name").and_then(Value::as_str)
-            && !names.iter().any(|known| known == name)
-        {
-            names.push(name.to_string());
-        }
-        let Some(alternate_names) = entry.get("alternate_names").and_then(Value::as_array) else {
-            continue;
-        };
-        for name in alternate_names.iter().filter_map(Value::as_str) {
-            if !names.iter().any(|known| known == name) {
-                names.push(name.to_string());
+    if let Some(evidence) = identify.get("evidence") {
+        for key in ["missing_components", "unexpected_components"] {
+            if let Some(value) = evidence
+                .get(key)
+                .filter(|value| value.as_array().is_some_and(|items| !items.is_empty()))
+            {
+                collect_value(key, value, &mut qualifiers);
             }
         }
     }
-    names
+    surface.key_values(&qualifiers);
+}
+
+fn identify_rows(matches: &[Value]) -> Vec<Vec<String>> {
+    matches
+        .iter()
+        .map(|entry| {
+            let mut row = vec![string_field(entry, "name"), string_field(entry, "platform")];
+            if let Some(names) = entry.get("alternate_names").and_then(Value::as_array) {
+                let names = names
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter(|name| Some(*name) != entry.get("name").and_then(Value::as_str))
+                    .collect::<Vec<_>>();
+                if !names.is_empty() {
+                    row.push(format!("also={}", names.join("; ")));
+                }
+            }
+            for key in ["region", "language", "revision", "disc_number", "game_id"] {
+                if let Some(value) = entry.get(key).and_then(scalar) {
+                    row.push(format!("{key}={value}"));
+                }
+            }
+            if let Some(tags) = entry.get("dump_tags").and_then(Value::as_array) {
+                row.extend(tags.iter().filter_map(Value::as_str).map(str::to_string));
+            }
+            if let Some(component) = entry
+                .get("expected_components")
+                .and_then(Value::as_array)
+                .and_then(|components| components.first())
+            {
+                for algorithm in ["crc32", "sha1", "md5"] {
+                    if let Some(digest) = component.get(algorithm).and_then(Value::as_str) {
+                        row.push(format!("{algorithm}={digest}"));
+                        break;
+                    }
+                }
+            }
+            if let Some(variant) = entry.get("variant").and_then(Value::as_str)
+                && variant != "name"
+            {
+                row.push(format!("variant={variant}"));
+            }
+            if let Some(database) = entry.get("database").and_then(Value::as_str) {
+                row.push(format!("database={database}"));
+            }
+            row
+        })
+        .collect()
 }
 
 fn render_details_or_label(surface: &Surface, event: &ProgressEvent) {
@@ -767,7 +867,7 @@ fn collect_pairs(prefix: &str, object: &Map<String, Value>, pairs: &mut Vec<(Str
 }
 
 fn collect_value(key: &str, value: &Value, pairs: &mut Vec<(String, String)>) {
-    if is_execution_detail(key) {
+    if key == "warnings" || is_execution_detail(key) {
         return;
     }
     match value {
@@ -835,7 +935,6 @@ fn nonempty_string_field(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
         .and_then(Value::as_str)
-        .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(ToString::to_string)
 }

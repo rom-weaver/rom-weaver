@@ -27,7 +27,7 @@ fn probe_reports_known_container_as_supported() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -38,7 +38,7 @@ fn probe_reports_known_container_as_supported() {
             "--input",
             archive.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1020,7 +1020,7 @@ fn extract_checksum_rom_only_hashes_rom_outputs_only() {
             "--no-ignore",
             "--checksum-rom",
             "crc32",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1070,7 +1070,7 @@ fn extract_emits_early_probe_manifest_for_rom_archive() {
             archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1142,7 +1142,7 @@ fn extract_streams_payload_identity_before_completion() {
             out_dir.path().to_str().expect("path"),
             "--checksum-rom",
             "crc32",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1216,7 +1216,7 @@ fn extract_probe_manifest_marks_patch_only_archive_as_not_rom() {
             archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1378,7 +1378,7 @@ fn extract_pbp_without_select_emits_all_discs() {
             source.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1440,7 +1440,7 @@ fn extract_reports_thread_fallback_in_json() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1499,7 +1499,7 @@ fn extract_checksum_emits_requested_output_digests() {
             "md5",
             "--checksum",
             "sha1",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1653,7 +1653,7 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
             "inner-second.zip",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1828,7 +1828,7 @@ fn extract_rar_reports_thread_fallback_in_json() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1900,14 +1900,13 @@ fn extract_progress_text_keeps_diagnostics_separate_from_files() {
         stderr.contains('%'),
         "expected extract progress on stderr, got: {stderr}"
     );
-    // ...and the summary table on stdout lists the extracted file and count.
     assert!(
         stdout.contains("sample.bin"),
         "expected extracted file in summary, got: {stdout}"
     );
-    assert!(
-        stdout.contains("1 file written"),
-        "expected file count in summary, got: {stdout}"
+    assert_eq!(
+        stdout,
+        format!("{}\n", extract_dir.child("sample.bin").path().display())
     );
     assert!(
         !stdout.contains("elapsed:"),

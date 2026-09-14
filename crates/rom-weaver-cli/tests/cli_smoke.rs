@@ -66,3 +66,6 @@ mod dry_run;
 
 #[path = "cli_smoke/save.rs"]
 mod save;
+
+#[path = "cli_smoke/report_output.rs"]
+mod report_output;

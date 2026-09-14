@@ -9,9 +9,9 @@ use std::sync::Arc;
 use clap::{ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand};
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_app::{
-    BundleCommands, Commands, JsonProgressSink, LogLevel, PATCH_APPLY_AFTER_HELP,
-    PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCommands, RomWeaverRunOutputOptions,
-    RunCommandOptions, run_command, run_command_outcome,
+    BundleCommands, Commands, LogLevel, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
+    PatchApplyCommand, PatchCommands, RomWeaverRunOutputOptions, RunCommandOptions, run_command,
+    run_command_outcome,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_core::{
@@ -21,6 +21,8 @@ use rom_weaver_core::{
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::formats_command::print_formats;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::native_output::{self, JsonReporter, OutputMode, print_argument_result, print_asset};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
 
@@ -96,10 +98,14 @@ struct Cli {
             long,
             global = true,
             help_heading = GLOBAL_HELP_HEADING,
-            help = "Print one JSON object per line instead of human-readable output"
+            conflicts_with = "jsonl",
+            help = "Print one complete JSON report; progress and diagnostics use stderr"
         )
     )]
     json: bool,
+    #[arg(long, global = true, conflicts_with = "json", help_heading = GLOBAL_HELP_HEADING,
+        help = "Stream JSON events, including progress, one object per line")]
+    jsonl: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -107,7 +113,7 @@ struct Cli {
             global = true,
             conflicts_with = "no_progress",
             help_heading = GLOBAL_HELP_HEADING,
-            help = "Show progress even when output is piped to a file or another program"
+            help = "Show progress on stderr (off by default; JSONL includes progress)"
         )
     )]
     progress: bool,
@@ -130,7 +136,7 @@ struct Cli {
             value_enum,
             conflicts_with_all = ["verbose", "debug", "quiet"],
             help_heading = GLOBAL_HELP_HEADING,
-            help = "How much rom-weaver logs to stderr. Separate from the normal output [default: off]"
+            help = "How much rom-weaver logs to stderr. Separate from the normal output [default: warn]"
         )
     )]
     log_level: Option<LogLevel>,
@@ -141,7 +147,7 @@ struct Cli {
             long,
             global = true,
             action = ArgAction::Count,
-            conflicts_with_all = ["log_level", "debug", "quiet"],
+            conflicts_with_all = ["log_level", "debug"],
             help_heading = GLOBAL_HELP_HEADING,
             help = "Show user diagnostics on stderr; repeat for developer detail (-vv debug, -vvv trace)"
         )
@@ -164,9 +170,9 @@ struct Cli {
             short = 'q',
             long,
             global = true,
-            conflicts_with_all = ["log_level", "verbose", "debug"],
+            conflicts_with_all = ["log_level", "debug"],
             help_heading = GLOBAL_HELP_HEADING,
-            help = "Hide write summaries and log errors only; keep query results and dry-run plans"
+            help = "Hide optional diagnostics and progress; keep results, warnings, and errors"
         )
     )]
     quiet: bool,
@@ -296,7 +302,7 @@ pub fn cli_command() -> clap::Command {
                 clap::Arg::new("digest")
                     .long("digest")
                     .action(ArgAction::SetTrue)
-                    .conflicts_with_all(["json", "dry_run"])
+                    .conflicts_with_all(["json", "jsonl", "dry_run"])
                     .help("Print only the digest; requires one --algo (no labels or elapsed time)"),
             )
         },
@@ -305,11 +311,29 @@ pub fn cli_command() -> clap::Command {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Cli {
+    fn output_mode(&self) -> OutputMode {
+        if self.json {
+            return OutputMode::Json;
+        }
+        if self.jsonl {
+            return OutputMode::JsonLines;
+        }
+        OutputMode::Human
+    }
+
     fn output_options(&self, interactive: bool) -> RomWeaverRunOutputOptions {
         RomWeaverRunOutputOptions {
-            json: self.json,
-            progress: progress_override(self.progress, self.no_progress),
-            log_level: log_level_override(self.log_level, self.verbose, self.debug, self.quiet),
+            json: self.output_mode().is_json(),
+            progress: Some(
+                !self.quiet
+                    && progress_override(self.progress, self.no_progress).unwrap_or(self.jsonl),
+            ),
+            log_level: log_level_override(self.log_level, self.verbose, self.debug, self.quiet)
+                .or_else(|| {
+                    crate::configured_trace_filter()
+                        .is_none()
+                        .then_some(LogLevel::Warn)
+                }),
             dep_trace: self.dep_trace,
             interactive_selection_enabled: interactive,
             assume_yes: self.yes,
@@ -328,14 +352,14 @@ fn log_level_override(
         return log_level;
     }
     if quiet {
-        return Some(LogLevel::Error);
+        return Some(LogLevel::Warn);
     }
     if debug {
         return Some(LogLevel::Trace);
     }
     match verbose {
         0 => None,
-        1 => Some(LogLevel::Info),
+        1 => Some(LogLevel::Warn),
         2 => Some(LogLevel::Debug),
         _ => Some(LogLevel::Trace),
     }
@@ -368,7 +392,9 @@ fn color_override(color: bool, no_color: bool) -> Option<bool> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
-    crate::stdout_output::finish(run_cli())
+    let args: Vec<_> = std::env::args_os().collect();
+    let mode = OutputMode::from_args(&args);
+    crate::stdout_output::finish(run_cli(args, mode), mode.is_json())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -395,76 +421,33 @@ fn argument_color(args: &[std::ffi::OsString]) -> clap::ColorChoice {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn run_cli() -> ExitCode {
-    // Patch header options bind by argument index, so parsing MUST preserve
-    // the raw matches as well as the derived command.
-    let args: Vec<_> = std::env::args_os().collect();
-    let mut parser = cli_command().color(argument_color(&args));
-    let matches = parser
-        .try_get_matches_from_mut(args)
-        .unwrap_or_else(|error| error.exit());
-    let mut cli = match Cli::from_arg_matches(&matches) {
-        Ok(cli) => cli,
-        Err(error) => error.exit(),
-    };
-    if let CliCommand::App(command) = &mut cli.command
-        && let Err(error) = crate::cli_inputs::resolve(command, &matches)
-    {
-        error.format(&mut parser).exit();
-    }
-    let digest = matches
-        .subcommand_matches("checksum")
-        .is_some_and(|matches| matches.get_flag("digest"));
-    if digest && (cli.json || cli.dry_run) {
-        parser
-            .error(
-                clap::error::ErrorKind::ArgumentConflict,
-                "--digest cannot be used with --json or --dry-run",
-            )
-            .exit();
-    }
-    if digest
-        && let CliCommand::App(Commands::Checksum(command)) = &cli.command
-        && command.algo.len() != 1
-    {
-        parser
-            .error(
-                clap::error::ErrorKind::ArgumentConflict,
-                "--digest requires exactly one algorithm; use --algo ALGO",
-            )
-            .exit();
-    }
-    let native_command = match &cli.command {
-        CliCommand::Completions { .. } => Some("completions"),
-        CliCommand::Man { .. } => Some("man"),
-        CliCommand::Formats => Some("formats"),
-        CliCommand::App(Commands::Bundle(BundleCommands::Schema)) => Some("bundle-schema"),
-        _ => None,
-    };
-    if let Some(command) = native_command {
-        let output = cli.output_options(false);
-        crate::init_logging(output.log_level, output.dep_trace, output.json);
-        tracing::info!(
-            command,
-            version = env!("CARGO_PKG_VERSION"),
-            dry_run = cli.dry_run,
-            "running command"
-        );
-        tracing::debug!(options = ?cli, "native command options");
-    }
+fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
+    let output = cli.output_options(false);
+    crate::init_logging(output.log_level, output.dep_trace, output.json);
+    tracing::info!(
+        command,
+        version = env!("CARGO_PKG_VERSION"),
+        dry_run = cli.dry_run,
+        "running command"
+    );
+    tracing::debug!(options = ?cli, "native command options");
     // `completions` is a native-only concern: emit the script and exit before
     // any command runs. `cli_command()` rebuilds the same clap tree the parse
     // used, so the generated script covers every real subcommand.
     if let CliCommand::Completions { shell } = &cli.command {
         if cli.dry_run {
-            return print_native_dry_run_plan("completions", Vec::new(), cli.json);
+            return print_native_dry_run_plan("completions", Vec::new(), mode);
         }
         let shell = *shell;
         let mut command = cli_command();
         let mut script = Vec::new();
         clap_complete::generate(shell, &mut command, "rom-weaver", &mut script);
-        crate::stdout_output::write(format_args!("{}", String::from_utf8_lossy(&script)));
-        return ExitCode::SUCCESS;
+        return print_asset(
+            mode,
+            "completions",
+            "shell",
+            &String::from_utf8_lossy(&script),
+        );
     }
     if let CliCommand::Man {
         command,
@@ -477,25 +460,115 @@ fn run_cli() -> ExitCode {
             *install,
             man_dir.as_deref(),
             cli.dry_run,
-            cli.json,
-            cli.quiet,
+            mode,
+            cli.verbose > 0 && !cli.quiet,
         );
     }
     if let CliCommand::Formats = &cli.command {
         if cli.dry_run {
-            return print_native_dry_run_plan("formats", Vec::new(), cli.json);
+            return print_native_dry_run_plan("formats", Vec::new(), mode);
         }
-        print_formats(cli.json);
+        print_formats(mode.is_json());
+        if cli.verbose > 0 && !cli.quiet {
+            native_output::diagnostic(
+                mode.is_json(),
+                "INFO",
+                "formats",
+                "listed supported formats",
+            );
+        }
         return ExitCode::SUCCESS;
     }
     // `bundle schema` prints the raw JSON Schema to stdout (redirect it to a
     // file / point an editor at it), before any command runs.
     if let CliCommand::App(Commands::Bundle(BundleCommands::Schema)) = &cli.command {
         if cli.dry_run {
-            return print_native_dry_run_plan("bundle-schema", Vec::new(), cli.json);
+            return print_native_dry_run_plan("bundle-schema", Vec::new(), mode);
+        }
+        if mode.is_json() {
+            let schema =
+                match serde_json::from_str::<serde_json::Value>(rom_weaver_app::BUNDLE_JSON_SCHEMA)
+                {
+                    Ok(schema) => schema,
+                    Err(error) => {
+                        return native_output::print_error(
+                            mode,
+                            "bundle-schema",
+                            "schema",
+                            "cli.schema",
+                            &error.to_string(),
+                            1,
+                        );
+                    }
+                };
+            return native_output::print_event(
+                mode,
+                native_output::result_event(
+                    "bundle-schema",
+                    "schema",
+                    "bundle schema",
+                    Some(serde_json::json!({ "schema": schema })),
+                ),
+                0,
+            );
         }
         crate::stdout_output::write(format_args!("{}", rom_weaver_app::BUNDLE_JSON_SCHEMA));
         return ExitCode::SUCCESS;
+    }
+    unreachable!("only native commands reach this dispatcher")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
+    // Patch header options bind by argument index, so parsing MUST preserve
+    // the raw matches as well as the derived command.
+    let mut parser = cli_command().color(argument_color(&args));
+    let matches = match parser.try_get_matches_from_mut(args) {
+        Ok(matches) => matches,
+        Err(error) => return print_argument_result(error, mode),
+    };
+    let mut cli = match Cli::from_arg_matches(&matches) {
+        Ok(cli) => cli,
+        Err(error) => return print_argument_result(error, mode),
+    };
+    if let CliCommand::App(command) = &mut cli.command
+        && let Err(error) = crate::cli_inputs::resolve(command, &matches)
+    {
+        return print_argument_result(error.format(&mut parser), mode);
+    }
+    let digest = matches
+        .subcommand_matches("checksum")
+        .is_some_and(|matches| matches.get_flag("digest"));
+    if digest && (mode.is_json() || cli.dry_run) {
+        return print_argument_result(
+            parser.error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--digest cannot be used with --json, --jsonl, or --dry-run",
+            ),
+            mode,
+        );
+    }
+    if digest
+        && let CliCommand::App(Commands::Checksum(command)) = &cli.command
+        && command.algo.len() != 1
+    {
+        return print_argument_result(
+            parser.error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--digest requires exactly one algorithm; use --algo ALGO",
+            ),
+            mode,
+        );
+    }
+    let native_command = match &cli.command {
+        CliCommand::Completions { .. } => Some("completions"),
+        CliCommand::Man { .. } => Some("man"),
+        CliCommand::Formats => Some("formats"),
+        CliCommand::App(Commands::Bundle(BundleCommands::Schema)) => Some("bundle-schema"),
+        _ => None,
+    };
+    if let Some(command) = native_command {
+        return run_native_command(&cli, mode, command);
     }
     // `weave` is a top-level spelling of `patch apply`; fold it into the shared
     // enum so everything downstream sees exactly one command shape.
@@ -531,7 +604,7 @@ fn run_cli() -> ExitCode {
     let stdout_is_tty = io::stdout().is_terminal();
     // Interactive prompting needs a terminal on both stdin (to read) and stderr (to draw), and is
     // meaningless when emitting JSON.
-    let interactive = !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
+    let interactive = !mode.is_json() && io::stdin().is_terminal() && io::stderr().is_terminal();
     let options = RunCommandOptions::from_output(
         cli.output_options(interactive),
         crate::render::terminal_supports_progress(),
@@ -542,12 +615,31 @@ fn run_cli() -> ExitCode {
     };
 
     let color = color_override(cli.color, cli.no_color);
-    let reporter: Arc<dyn ProgressSink> = if cli.json {
-        Arc::new(JsonProgressSink)
-    } else if stdout_is_tty {
-        Arc::new(HumanReporter::new(HumanStyle::Rich, color, cli.quiet))
+    let json_reporter = mode.is_json().then(|| {
+        Arc::new(JsonReporter::new(
+            mode,
+            options.emit_progress_events,
+            cli.verbose > 0 && !cli.quiet,
+        ))
+    });
+    let CliCommand::App(ref command) = cli.command else {
+        unreachable!("native commands handled above");
+    };
+    let reporter: Arc<dyn ProgressSink> = if let Some(reporter) = &json_reporter {
+        Arc::clone(reporter) as Arc<dyn ProgressSink>
     } else {
-        Arc::new(HumanReporter::new(HumanStyle::Simple, color, cli.quiet))
+        let style = if stdout_is_tty {
+            HumanStyle::Rich
+        } else {
+            HumanStyle::Simple
+        };
+        Arc::new(HumanReporter::for_command(
+            style,
+            color,
+            cli.quiet,
+            cli.verbose > 0,
+            command,
+        ))
     };
     let prompter: Arc<dyn SelectionPrompter> = if interactive {
         Arc::new(StdinPrompter::new())
@@ -563,17 +655,6 @@ fn run_cli() -> ExitCode {
     // `apply --emit-bundle`.
     let is_apply_tui =
         matches!(&command, Commands::Patch(PatchCommands::Apply(apply)) if apply.tui);
-    if is_apply_tui && !options.dry_run && !crate::streams::handles(&command, None) {
-        if !interactive {
-            crate::render::write_stderr(format_args!(
-                "error: --tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs\n"
-            ));
-            return ExitCode::from(2);
-        }
-        install_cancel_handler();
-        return finish_run(run_apply_tui(command, options, reporter, prompter));
-    }
-    install_cancel_handler();
     let stdin_name = matches.subcommand().and_then(|(name, args)| {
         if matches!(name, "extract" | "compress") {
             args.get_one::<String>("stdin_name").map(String::as_str)
@@ -581,17 +662,33 @@ fn run_cli() -> ExitCode {
             None
         }
     });
-    if crate::streams::handles(&command, stdin_name) {
-        return finish_run(crate::streams::run(
-            command, options, reporter, prompter, stdin_name,
-        ));
+    install_cancel_handler(mode);
+    let status = if is_apply_tui && !options.dry_run && !crate::streams::handles(&command, None) {
+        if !interactive {
+            let message = "--tui needs an interactive terminal; use `bundle create` or `apply --emit-bundle` for scripted runs";
+            reporter.emit(native_output::error_event(
+                "patch-apply",
+                "validate",
+                "cli.interactive_required",
+                message,
+                2,
+            ));
+            ExitCode::from(2)
+        } else {
+            run_apply_tui(command, options, reporter, prompter)
+        }
+    } else if crate::streams::handles(&command, stdin_name) {
+        crate::streams::run(command, options, reporter, prompter, stdin_name)
+    } else if digest && let Commands::Checksum(command) = command {
+        crate::checksum_output::run(command, options, reporter, prompter)
+    } else {
+        run_command(command, options, reporter, prompter)
+    };
+    let status = finish_run(status);
+    match json_reporter {
+        Some(reporter) => reporter.finish(status),
+        None => status,
     }
-    if digest && let Commands::Checksum(command) = command {
-        return finish_run(crate::checksum_output::run(
-            command, options, reporter, prompter,
-        ));
-    }
-    finish_run(run_command(command, options, reporter, prompter))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -600,19 +697,24 @@ fn run_man_command(
     install: bool,
     man_dir: Option<&std::path::Path>,
     dry_run: bool,
-    json: bool,
-    quiet: bool,
+    mode: OutputMode,
+    verbose: bool,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
     let selected = rom_weaver_app::manpages::page_name(topics);
-    if !pages.contains_key(&selected) {
-        crate::render::write_stderr(format_args!(
-            "error: unknown man page `{}`; pass a command path such as `patch apply`\n",
-            crate::render::display_text(&topics.join(" "))
-        ));
-        return ExitCode::from(2);
-    }
-
+    let Some(page) = pages.get(&selected) else {
+        return native_output::print_error(
+            mode,
+            "man",
+            "arguments",
+            "cli.unknown_man_page",
+            &format!(
+                "unknown man page `{}`; pass a command path such as `patch apply`",
+                topics.join(" ")
+            ),
+            2,
+        );
+    };
     let output_dir = man_dir
         .map(std::path::Path::to_path_buf)
         .unwrap_or_else(rom_weaver_app::manpages::default_man_dir);
@@ -622,65 +724,58 @@ fn run_man_command(
         } else {
             Vec::new()
         };
-        return print_native_dry_run_plan("man", writes, json);
+        return print_native_dry_run_plan("man", writes, mode);
     }
-    if install {
-        let selected_page = if topics.is_empty() {
-            None
-        } else {
-            Some(selected.as_str())
-        };
-        match rom_weaver_app::manpages::write_man_pages(&pages, &output_dir, selected_page) {
-            Ok(count) => {
-                let label = format!(
-                    "installed {count} man page{} to {}",
-                    if count == 1 { "" } else { "s" },
-                    output_dir.display()
-                );
-                if json {
-                    let mut report = OperationReport::succeeded(
-                        OperationFamily::Command,
-                        None,
-                        "install",
-                        label,
-                        Some(100.0),
-                        None,
-                    );
-                    report.details = Some(serde_json::json!({
-                        "installed_pages": count,
-                        "output_dir": output_dir,
-                    }));
-                    crate::stdout_output::write(format_args!(
-                        "{}\n",
-                        serde_json::json!(report.into_event("man"))
-                    ));
-                } else if !quiet {
-                    crate::stdout_output::write(format_args!(
-                        "{}\n",
-                        crate::render::display_text(&label)
-                    ));
-                }
-                ExitCode::SUCCESS
-            }
-            Err(error) => {
-                crate::render::write_stderr(format_args!(
-                    "error: failed to install man pages in {}: {error}\n",
-                    crate::render::display_text(&output_dir.to_string_lossy())
-                ));
-                ExitCode::from(1)
-            }
-        }
+    if !install {
+        return print_asset(mode, "man", "roff", &String::from_utf8_lossy(page));
+    }
+    let selected_page = if topics.is_empty() {
+        None
     } else {
-        crate::stdout_output::write(format_args!(
-            "{}",
-            String::from_utf8_lossy(&pages[&selected])
-        ));
-        ExitCode::SUCCESS
+        Some(selected.as_str())
+    };
+    match rom_weaver_app::manpages::write_man_pages(&pages, &output_dir, selected_page) {
+        Ok(count) => {
+            let label = format!(
+                "installed {count} man page{} to {}",
+                if count == 1 { "" } else { "s" },
+                output_dir.display()
+            );
+            if verbose {
+                native_output::diagnostic(mode.is_json(), "INFO", "man", &label);
+            }
+            if mode.is_json() {
+                return native_output::print_event(
+                    mode,
+                    native_output::result_event(
+                        "man",
+                        "install",
+                        &label,
+                        Some(serde_json::json!({
+                            "installed_pages": count, "output_dir": output_dir,
+                        })),
+                    ),
+                    0,
+                );
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => native_output::print_error(
+            mode,
+            "man",
+            "install",
+            "cli.man_install",
+            &format!(
+                "failed to install man pages in {}: {error}",
+                output_dir.display()
+            ),
+            1,
+        ),
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn print_native_dry_run_plan(command: &str, writes: Vec<String>, json: bool) -> ExitCode {
+fn print_native_dry_run_plan(command: &str, writes: Vec<String>, mode: OutputMode) -> ExitCode {
     let read_only = writes.is_empty();
     let writes_label = writes.join(", ");
     let label = if read_only {
@@ -705,16 +800,8 @@ fn print_native_dry_run_plan(command: &str, writes: Vec<String>, json: bool) -> 
         "outputs_unknown": false,
         "notes": [],
     }));
-    if json {
-        match serde_json::to_string(&report.into_event(command)) {
-            Ok(event) => crate::stdout_output::write(format_args!("{event}\n")),
-            Err(error) => {
-                crate::render::write_stderr(format_args!(
-                    "error: failed to serialize dry-run plan: {error}\n"
-                ));
-                return ExitCode::from(1);
-            }
-        }
+    if mode.is_json() {
+        return native_output::print_event(mode, report.into_event(command), 0);
     } else {
         crate::stdout_output::write(format_args!("{label}\n"));
         if !read_only {
@@ -731,7 +818,7 @@ fn print_native_dry_run_plan(command: &str, writes: Vec<String>, json: bool) -> 
 /// the partial output is cleaned up. A second Ctrl-C means the operation is not
 /// unwinding, so leave immediately after removing what was written.
 #[cfg(not(target_arch = "wasm32"))]
-fn install_cancel_handler() {
+fn install_cancel_handler(mode: OutputMode) {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static SIGNALLED: AtomicBool = AtomicBool::new(false);
@@ -740,20 +827,37 @@ fn install_cancel_handler() {
         if SIGNALLED.swap(true, Ordering::SeqCst) {
             remove_in_progress_outputs();
             crate::render::clear_progress();
-            crate::render::write_stderr(format_args!("cancelled\n"));
+            if mode.is_json() {
+                native_output::print_error(
+                    mode,
+                    "cli",
+                    "cancel",
+                    "operation.cancelled",
+                    "cancelled",
+                    130,
+                );
+            } else {
+                crate::render::write_stderr(format_args!("cancelled\n"));
+            }
             std::process::exit(130);
         }
         token.cancel();
         crate::render::clear_progress();
-        crate::render::write_stderr(format_args!(
-            "cancelling; press Ctrl-C again to stop immediately\n"
-        ));
+        native_output::diagnostic(
+            mode.is_json(),
+            "INFO",
+            "cli",
+            "cancelling; press Ctrl-C again to stop immediately",
+        );
     });
     if let Err(error) = result {
         // Not fatal: without a handler Ctrl-C keeps its default behaviour.
-        crate::render::write_stderr(format_args!(
-            "warning: could not install the Ctrl-C handler ({error})\n"
-        ));
+        native_output::diagnostic(
+            mode.is_json(),
+            "WARN",
+            "cli",
+            &format!("could not install the Ctrl-C handler ({error})"),
+        );
     }
 }
 
@@ -1091,13 +1195,13 @@ mod tests {
     #[test]
     fn verbosity_short_flags_map_to_log_levels() {
         for (args, expected) in [
-            (vec!["-v"], Some(LogLevel::Info)),
-            (vec!["--verbose"], Some(LogLevel::Info)),
+            (vec!["-v"], Some(LogLevel::Warn)),
+            (vec!["--verbose"], Some(LogLevel::Warn)),
             (vec!["--debug"], Some(LogLevel::Trace)),
             (vec!["-vv"], Some(LogLevel::Debug)),
             (vec!["-vvv"], Some(LogLevel::Trace)),
-            (vec!["--quiet"], Some(LogLevel::Error)),
-            (vec![], None),
+            (vec!["--quiet"], Some(LogLevel::Warn)),
+            (vec![], Some(LogLevel::Warn)),
         ] {
             let mut argv = vec!["rom-weaver"];
             argv.extend(args);

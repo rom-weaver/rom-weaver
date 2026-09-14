@@ -51,7 +51,8 @@ fn write_fixture(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
 
 /// Run `patch apply` for a `.dcp` and return the terminal event's label.
 fn failure_label(app: &CliApp, sink: &RecordingProgressSink, args: PatchApplyCommand) -> String {
-    let outcome = app.run_dcp_apply(args, None);
+    let report = app.run_dcp_apply(args, None);
+    let outcome = app.finish("patch-apply", report);
     assert_eq!(outcome.exit_code, 1, "a rejected .dcp apply exits non-zero");
     let terminal = sink
         .snapshot()

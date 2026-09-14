@@ -14,7 +14,7 @@ fn compress_dry_run_does_not_create_output_directory() {
             "--output",
             destination.path().to_str().expect("path"),
             "--dry-run",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -25,13 +25,14 @@ fn compress_dry_run_does_not_create_output_directory() {
 }
 
 #[test]
-fn compress_human_summary_keeps_destination_and_format_warning() {
+fn compress_explicit_destination_is_silent_but_keeps_format_warning() {
     let temp = setup_temp_dir();
     let input = temp.child("source.bin");
     input.write_str("payload").expect("fixture");
     let destination = temp.child("output.7z");
-    let output = command_stdout(
-        &[
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
             "compress",
             "--input",
             input.path().to_str().expect("path"),
@@ -40,12 +41,15 @@ fn compress_human_summary_keeps_destination_and_format_warning() {
             "--format",
             "zip",
             "--no-color",
-        ],
-        0,
-    );
-    let output = String::from_utf8(output).expect("UTF-8 output");
-    assert!(output.contains(destination.path().to_str().expect("path")));
-    assert!(output.contains("warning:"), "{output}");
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 diagnostic");
+    assert!(stderr.contains("warning:"), "{stderr}");
+    assert!(stderr.contains("extension"), "{stderr}");
     assert!(destination.path().exists());
 }
 
@@ -66,7 +70,7 @@ fn compress_routes_through_registered_container_format() {
             "zip",
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -113,7 +117,7 @@ fn assert_compress_extract_only_rejection(format: &str, output_name: &str) {
             format,
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -159,7 +163,7 @@ fn compress_wbfs_rejects_create_but_extract_round_trips() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -206,7 +210,7 @@ fn compress_wia_rejects_create_but_extract_round_trips() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -250,7 +254,7 @@ fn extract_nfs_invalid_source_emits_running_progress() {
             temp.child("disc.nfs").path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -277,7 +281,7 @@ fn extract_tgc_invalid_source_emits_running_progress() {
             temp.child("disc.tgc").path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -304,7 +308,7 @@ fn extract_xiso_invalid_source_emits_running_progress() {
             temp.child("disc.xiso").path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -339,7 +343,7 @@ fn compress_rejects_unregistered_output_format() {
             "not-a-format",
             "--output",
             temp.child("out.bin").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -371,7 +375,7 @@ fn compress_suggests_the_closest_output_format_for_a_typo() {
             "cdh",
             "--output",
             temp.child("out.chd").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -400,7 +404,7 @@ fn compress_without_format_infers_7z_from_output_extension() {
             source_path.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -426,7 +430,7 @@ fn compress_without_format_infers_zip_from_output_extension() {
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -455,7 +459,7 @@ fn compress_without_format_infers_rvz_from_output_extension_for_iso_inputs() {
             temp.child("source.iso").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -484,7 +488,7 @@ fn compress_without_format_infers_rvz_from_output_extension_for_wbfs_inputs() {
             source_wbfs.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -513,7 +517,7 @@ fn compress_without_format_infers_rvz_from_output_extension_for_wia_inputs() {
             source_wia.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -542,7 +546,7 @@ fn compress_format_flag_overrides_mismatched_extension_with_warning() {
             "7z",
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -571,7 +575,7 @@ fn compress_without_format_rejects_extensionless_output() {
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -601,7 +605,7 @@ fn compress_without_format_rejects_extract_only_output_extension() {
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -638,7 +642,7 @@ fn compress_rejects_auto_format_keyword() {
             "auto",
             "--output",
             output_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -668,7 +672,7 @@ fn compress_without_format_rejects_unsupported_output_extension() {
             temp.child("source-a.bin").path().to_str().expect("path"),
             "--output",
             temp.child("out.auto").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -696,7 +700,7 @@ fn compress_rejects_wua_output_format() {
             "wua",
             "--output",
             temp.child("out.wua").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -732,7 +736,7 @@ fn compress_rejects_invalid_codec_level_value() {
             temp.child("out.zip").path().to_str().expect("path"),
             "--codec",
             "deflate:fast",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -780,7 +784,7 @@ fn compress_accepts_global_level_profiles_for_creatable_archives() {
                     codec,
                     "--level",
                     profile,
-                    "--json",
+                    "--jsonl",
                 ],
                 0,
             );
@@ -831,7 +835,7 @@ fn compress_defaults_to_max_global_level_profile() {
                 default_output.path().to_str().expect("path"),
                 "--codec",
                 codec,
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -850,7 +854,7 @@ fn compress_defaults_to_max_global_level_profile() {
                 codec,
                 "--level",
                 "max",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -882,7 +886,7 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     if let Some(codec) = codec {
         compress.arg("--codec").arg(codec);
     }
-    compress.arg("--json");
+    compress.arg("--jsonl");
     let compress_output = compress.assert().code(0).get_output().stdout.clone();
 
     let compress_events = parse_json_lines(&compress_output);
@@ -899,7 +903,7 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
             "--input",
             archive.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -921,7 +925,7 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -985,7 +989,7 @@ fn zip_zstd_large_incompressible_payload_round_trips() {
             "zstd",
             "--threads",
             "4",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1002,7 +1006,7 @@ fn zip_zstd_large_incompressible_payload_round_trips() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "4",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1036,7 +1040,7 @@ fn extract_zst_reports_parallel_decode_threads() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1087,7 +1091,7 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1123,7 +1127,7 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
             archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1179,7 +1183,7 @@ fn seven_z_lzma2_threaded_single_chunk_emits_codec_progress() {
             "lzma2:5",
             "--threads",
             "10",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1250,7 +1254,7 @@ fn seven_z_lzma2_single_thread_emits_running_codec_progress() {
             "1",
             "--level",
             "low",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1285,7 +1289,7 @@ fn seven_z_lzma2_single_thread_emits_running_codec_progress() {
             archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1313,7 +1317,7 @@ fn extract_recursively_handles_nested_containers() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1328,7 +1332,7 @@ fn extract_recursively_handles_nested_containers() {
             "zip",
             "--output",
             zip_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1343,7 +1347,7 @@ fn extract_recursively_handles_nested_containers() {
             "7z",
             "--output",
             seven_z_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1356,7 +1360,7 @@ fn extract_recursively_handles_nested_containers() {
             seven_z_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1395,7 +1399,7 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
             "zip",
             "--output",
             inner_zip.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1410,7 +1414,7 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
             "7z",
             "--output",
             outer_7z.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1425,7 +1429,7 @@ fn extract_nested_checksum_reports_only_leaf_with_step_events() {
             out_dir.path().to_str().expect("path"),
             "--checksum",
             "sha1",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1520,7 +1524,7 @@ fn extract_nested_scan_ignores_existing_output_archives() {
             "zip",
             "--output",
             fresh_archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1536,7 +1540,7 @@ fn extract_nested_scan_ignores_existing_output_archives() {
             "zip",
             "--output",
             stale_archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1548,7 +1552,7 @@ fn extract_nested_scan_ignores_existing_output_archives() {
             fresh_archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );

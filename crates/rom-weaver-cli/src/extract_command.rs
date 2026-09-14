@@ -197,6 +197,7 @@ impl CliApp {
         }
         if !warnings.is_empty() {
             report.label = format!("{}; warning={}", report.label, warnings.join("; "));
+            Self::append_report_warnings(&mut report, warnings);
         }
         if report.status == OperationStatus::Succeeded {
             let format_name = handler.descriptor().name;

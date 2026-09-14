@@ -23,7 +23,7 @@ fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
             bundle.path().to_str().expect("path"),
             "--no-compress",
             "--dry-run",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -86,7 +86,7 @@ fn run_round_trip(rt: &RoundTrip) {
             &patch_s,
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -114,7 +114,7 @@ fn run_round_trip(rt: &RoundTrip) {
         "--no-compress",
     ];
     apply_args.extend_from_slice(rt.apply_extra);
-    apply_args.push("--json");
+    apply_args.push("--jsonl");
     let apply = run_single_json_event(&apply_args, 0);
     assert_patch_envelope(&apply, "patch-apply", rt.expect_format, "succeeded");
     assert_eq!(
@@ -200,7 +200,7 @@ fn patch_create_accepts_typed_solid_metadata() {
             "Example Hack",
             "--solid-version",
             "v1.0",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -226,7 +226,7 @@ fn patch_create_accepts_typed_solid_metadata() {
             "--output",
             blank_extended.path().to_str().expect("path"),
             "--solid-extended",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -252,7 +252,7 @@ fn patch_create_rejects_solid_metadata_when_it_cannot_be_used() {
             "update.ips",
             "--solid-system",
             "NDS",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -274,7 +274,7 @@ fn patch_create_rejects_solid_metadata_when_it_cannot_be_used() {
             "--plan",
             "--solid-author",
             "rom-weaver",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -436,7 +436,7 @@ fn run_patch_apply(
     ];
     args.extend_from_slice(extra);
     args.push("--no-compress");
-    args.push("--json");
+    args.push("--jsonl");
     let json = run_single_json_event(&args, 0);
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
@@ -482,7 +482,7 @@ fn create_patch_bytes(format: &str, patch_ext: &str, original: &[u8], modified: 
             format,
             "--output",
             patch_child.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -543,7 +543,7 @@ fn patch_apply_rejects_output_aliases_without_modifying_sources() {
                 "--output",
                 output.to_str().expect("output path"),
                 "--no-compress",
-                "--json",
+                "--jsonl",
             ],
             1,
         )
@@ -774,7 +774,7 @@ fn run_probe_success(patch_name: &str, patch: &[u8], expect_format: &str) {
             "probe",
             "--input",
             patch_child.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -904,7 +904,7 @@ fn run_can_ignore_checksum(
             "--output",
             strict_out.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -928,7 +928,7 @@ fn run_can_ignore_checksum(
             out_child.path().to_str().expect("path"),
             "--ignore-checksum-validation",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1048,7 +1048,7 @@ fn patch_apply_validates_output_checksum() {
             "crc32=3fc13708",
             "--expect-out",
             "sha1=10c54c25716315070c5c7336ae9fcd483991f6e7",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1075,7 +1075,7 @@ fn patch_apply_validates_output_checksum() {
             "--no-compress",
             "--expect-out",
             "crc32=deadbeef",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1120,7 +1120,7 @@ fn patch_apply_can_ignore_recoverable_ips_validation() {
                 .to_str()
                 .expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1150,7 +1150,7 @@ fn patch_apply_can_ignore_recoverable_ips_validation() {
                 .expect("path"),
             "--ignore-checksum-validation",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1197,7 +1197,7 @@ fn patch_apply_warns_when_ips_does_not_change_output() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1235,7 +1235,7 @@ fn patch_apply_reports_pds_as_explicitly_unsupported() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1263,7 +1263,7 @@ fn patch_create_label_for_format(temp: &TempDir, format: &str) -> String {
             temp.child("update.bin").path().to_str().expect("path"),
             "--format",
             format,
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1316,7 +1316,7 @@ fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1335,7 +1335,7 @@ fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
             output_base.path().to_str().expect("path"),
             "--compress-format",
             "7z",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1362,7 +1362,7 @@ fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
             compressed_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1404,7 +1404,7 @@ fn patch_apply_z3ds_compression_uses_matching_container_suffix() {
                 "bps",
                 "--output",
                 patch.path().to_str().expect("path"),
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -1421,7 +1421,7 @@ fn patch_apply_z3ds_compression_uses_matching_container_suffix() {
                 output_base.path().to_str().expect("path"),
                 "--compress-format",
                 "z3ds",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -1461,7 +1461,7 @@ fn patch_apply_infers_zip_from_output_extension() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1475,7 +1475,7 @@ fn patch_apply_infers_zip_from_output_extension() {
             "zip",
             "--output",
             input_zip.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1490,7 +1490,7 @@ fn patch_apply_infers_zip_from_output_extension() {
             patch.path().to_str().expect("path"),
             "--output",
             output_base.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1512,7 +1512,7 @@ fn patch_apply_infers_zip_from_output_extension() {
             compressed_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1544,7 +1544,7 @@ fn patch_apply_infers_raw_output_from_rom_extension() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1559,7 +1559,7 @@ fn patch_apply_infers_raw_output_from_rom_extension() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1600,7 +1600,7 @@ fn patch_apply_default_output_is_collision_safe() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1613,7 +1613,7 @@ fn patch_apply_default_output_is_collision_safe() {
             original.path().to_str().expect("path"),
             "--patch",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1649,7 +1649,7 @@ fn patch_apply_infers_z3ds_subtype_from_source_extension() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1664,7 +1664,7 @@ fn patch_apply_infers_z3ds_subtype_from_source_extension() {
             patch.path().to_str().expect("path"),
             "--format",
             "z3ds",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1694,7 +1694,7 @@ fn patch_apply_emit_bundle_records_inferred_container_output() {
             "previous",
             "--emit-bundle",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1732,7 +1732,7 @@ fn patch_apply_emit_bundle_records_appended_output_extension() {
             "zip",
             "--emit-bundle",
             bundle.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1763,7 +1763,7 @@ fn patch_apply_rejects_invalid_codec_before_patching() {
             "zip",
             "--codec",
             "not-a-codec",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -1799,7 +1799,7 @@ fn patch_apply_rejects_invalid_chd_codec_combination_before_patching() {
             "chd",
             "--codec",
             "zstd,avhuff",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -1838,7 +1838,7 @@ fn patch_apply_rejects_unknown_or_ambiguous_output_extensions() {
                 patch.path().to_str().expect("path"),
                 "--output",
                 output.path().to_str().expect("path"),
-                "--json",
+                "--jsonl",
             ],
             1,
         ));
@@ -1874,7 +1874,7 @@ fn patch_apply_accepts_raw_and_compression_flag_aliases() {
             "--output",
             raw_output.path().to_str().expect("path"),
             "--raw",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1900,7 +1900,7 @@ fn patch_apply_accepts_raw_and_compression_flag_aliases() {
             "deflate",
             "--level",
             "high",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1917,7 +1917,7 @@ fn patch_apply_accepts_raw_and_compression_flag_aliases() {
             patch.path().to_str().expect("path"),
             "--format",
             "zip",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1945,7 +1945,7 @@ fn make_bps_patch_fixture(
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1968,7 +1968,7 @@ fn patch_apply_rejects_extensionless_output_without_format() {
             patch.path().to_str().expect("path"),
             "--output",
             output_base.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2000,7 +2000,7 @@ fn patch_apply_compress_format_overrides_mismatched_extension_with_warning() {
             output_base.path().to_str().expect("path"),
             "--compress-format",
             "7z",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2032,7 +2032,7 @@ fn patch_apply_rejects_extract_only_output_extension() {
             patch.path().to_str().expect("path"),
             "--output",
             output_base.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2070,7 +2070,7 @@ fn patch_apply_accepts_explicit_compress_format_and_codec() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2091,7 +2091,7 @@ fn patch_apply_accepts_explicit_compress_format_and_codec() {
             "deflate",
             "--compress-level",
             "very-high",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2130,7 +2130,7 @@ fn patch_apply_rejects_no_compress_with_compress_flags() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2148,7 +2148,7 @@ fn patch_apply_rejects_no_compress_with_compress_flags() {
             "--no-compress",
             "--compress-format",
             "zip",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2190,7 +2190,7 @@ fn patch_apply_applies_multiple_patches_in_order() {
             "ips",
             "--output",
             second_patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2210,7 +2210,7 @@ fn patch_apply_applies_multiple_patches_in_order() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2269,7 +2269,7 @@ fn patch_apply_succeeds_for_valid_ips32_patch() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2320,7 +2320,7 @@ fn patch_apply_succeeds_for_ips32_patch_with_ips_extension() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2355,7 +2355,7 @@ fn patch_create_warns_for_identical_ips_inputs() {
             "ips",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2390,7 +2390,7 @@ fn patch_create_candidates_default_to_bps_for_small_inputs() {
             original.path().to_str().expect("path"),
             "--modified",
             modified.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2430,7 +2430,7 @@ fn patch_create_candidates_default_to_xdelta_for_special_compression_inputs() {
             original.path().to_str().expect("path"),
             "--modified",
             modified.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2469,7 +2469,7 @@ fn patch_create_candidates_default_to_xdelta_for_archives_above_64_mib() {
             original.path().to_str().expect("path"),
             "--modified",
             modified.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2506,7 +2506,7 @@ fn patch_create_candidates_default_to_xdelta_from_128_mib() {
             original.path().to_str().expect("path"),
             "--modified",
             modified.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2546,7 +2546,7 @@ fn patch_create_candidates_default_to_xdelta_above_256_mib_while_allowing_ppf() 
             original.path().to_str().expect("path"),
             "--modified",
             modified.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2596,7 +2596,7 @@ fn patch_create_allows_ppf_above_256_mib_when_requested() {
             patch.path().to_str().expect("path"),
             "--threads",
             "1",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2630,7 +2630,7 @@ fn patch_create_rejects_non_xdelta_ppf_formats_above_256_mib() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2669,7 +2669,7 @@ fn patch_create_rejects_classic_ips_at_size_limit_even_when_validation_ignored()
             "ips",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2698,7 +2698,7 @@ fn patch_create_rejects_classic_ips_at_size_limit_even_when_validation_ignored()
             "--output",
             patch.path().to_str().expect("path"),
             "--ignore-checksum-validation",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2735,7 +2735,7 @@ fn patch_create_reports_pds_as_explicitly_unsupported() {
             "pds",
             "--output",
             temp.child("output.pds").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2773,7 +2773,7 @@ fn patch_create_rejects_ips32_at_large_size() {
             patch.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2824,7 +2824,7 @@ fn patch_apply_supports_patch_header_strip_with_output_modes() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2856,7 +2856,7 @@ fn patch_apply_supports_patch_header_strip_with_output_modes() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2907,7 +2907,7 @@ fn patch_apply_supports_nes_patch_header_strip_with_output_modes() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2945,7 +2945,7 @@ fn patch_apply_supports_nes_patch_header_strip_with_output_modes() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2993,7 +2993,7 @@ fn patch_apply_patch_header_strip_readds_nes_header_via_output_auto() {
             "--patch-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3076,7 +3076,7 @@ fn patch_apply_positional_patch_header_binds_to_preceding_patch() {
                 .to_str()
                 .expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3113,7 +3113,7 @@ fn patch_apply_positional_patch_header_binds_to_preceding_patch() {
                 .to_str()
                 .expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3183,7 +3183,7 @@ fn weave_aliases_match_patch_apply() {
             "--output",
             &output_path,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ]);
 
         let output = command_stdout(&args, 0);
@@ -3219,7 +3219,7 @@ fn patch_apply_auto_header_strips_when_patch_targets_headerless_bytes() {
             "bps",
             "--output",
             temp.child("update.bps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3237,7 +3237,7 @@ fn patch_apply_auto_header_strips_when_patch_targets_headerless_bytes() {
             "--output",
             temp.child("output.nes").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3282,7 +3282,7 @@ fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
             "bps",
             "--output",
             temp.child("update.bps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3295,7 +3295,7 @@ fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
             temp.child("input.v64").path().to_str().expect("path"),
             "--patch",
             temp.child("update.bps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3312,7 +3312,7 @@ fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
             "--output",
             temp.child("output.v64").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3336,7 +3336,7 @@ fn patch_apply_auto_n64_byte_order_matches_patch_and_restores_input_order() {
             "--output",
             temp.child("keep.v64").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -3391,7 +3391,7 @@ fn patch_apply_multi_patch_n64_inference_uses_converted_base() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3448,7 +3448,7 @@ fn patch_validate_and_apply_later_base_step_match_third_n64_order() {
             "--patch",
             second_patch.path().to_str().expect("path"),
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3477,7 +3477,7 @@ fn patch_validate_and_apply_later_base_step_match_third_n64_order() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3503,7 +3503,7 @@ fn patch_validate_and_apply_later_base_step_match_third_n64_order() {
             ignored_output.path().to_str().expect("path"),
             "--no-compress",
             "--ignore-checksum-validation",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3556,7 +3556,7 @@ fn patch_apply_base_step_restores_original_n64_order_after_magic_changes() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3590,7 +3590,7 @@ fn patch_apply_auto_output_header_drops_snes_copier_header() {
             "bps",
             "--output",
             temp.child("update.bps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3608,7 +3608,7 @@ fn patch_apply_auto_output_header_drops_snes_copier_header() {
             "--output",
             temp.child("output-auto.sfc").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3633,7 +3633,7 @@ fn patch_apply_auto_output_header_drops_snes_copier_header() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3668,7 +3668,7 @@ fn patch_apply_auto_output_header_retains_nsrt_snes_copier_header() {
             "bps",
             "--output",
             temp.child("update.bps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3687,7 +3687,7 @@ fn patch_apply_auto_output_header_retains_nsrt_snes_copier_header() {
             "--output",
             temp.child("output-auto.smc").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3715,7 +3715,7 @@ fn patch_apply_auto_output_header_retains_nsrt_snes_copier_header() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3760,7 +3760,7 @@ fn patch_apply_output_header_strip_removes_kept_header() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3794,7 +3794,7 @@ fn patch_apply_adjusts_smc_extension_for_headerless_output() {
             "bps",
             "--output",
             temp.child("update.bps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3812,7 +3812,7 @@ fn patch_apply_adjusts_smc_extension_for_headerless_output() {
             "--output",
             temp.child("output.smc").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3844,7 +3844,7 @@ fn patch_apply_adjusts_smc_extension_for_headerless_output() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3874,7 +3874,7 @@ fn patch_apply_adjusts_smc_extension_for_headerless_output() {
             "--output",
             temp.child("output.rom").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3915,7 +3915,7 @@ fn patch_apply_auto_header_keeps_header_when_patch_targets_raw_bytes() {
             "bps",
             "--output",
             temp.child("update.bps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3931,7 +3931,7 @@ fn patch_apply_auto_header_keeps_header_when_patch_targets_raw_bytes() {
             "--output",
             temp.child("output.nes").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3970,7 +3970,7 @@ fn create_bps_patch(
             "bps",
             "--output",
             output.to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -3993,7 +3993,7 @@ fn create_rup_patch(
             "rup",
             "--output",
             output.to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4075,7 +4075,7 @@ fn create_ips_patch(
             "ips",
             "--output",
             output.to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4121,7 +4121,7 @@ fn patch_apply_auto_strips_mid_chain_on_embedded_checksum() {
             "--output",
             temp.child("output.nes").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4181,7 +4181,7 @@ fn patch_apply_auto_restores_header_mid_chain_on_embedded_checksum() {
             "--output",
             temp.child("output.nes").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4225,7 +4225,7 @@ fn patch_apply_repair_checksum_repairs_genesis_header() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--repair-checksum",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4277,7 +4277,7 @@ fn patch_apply_repair_checksum_repairs_gba_header() {
             temp.child("output.gba").path().to_str().expect("path"),
             "--repair-checksum",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4329,7 +4329,7 @@ fn patch_apply_repair_checksum_repairs_nds_header_crc() {
             temp.child("output.nds").path().to_str().expect("path"),
             "--repair-checksum",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4381,7 +4381,7 @@ fn patch_apply_repair_checksum_warns_for_unsupported_targets() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--repair-checksum",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4421,7 +4421,7 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4435,7 +4435,7 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4451,7 +4451,7 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4493,7 +4493,7 @@ fn patch_apply_discovers_libretro_sidecar_patches_inside_input_archive() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4516,7 +4516,7 @@ fn patch_apply_discovers_libretro_sidecar_patches_inside_input_archive() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4552,7 +4552,7 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4566,7 +4566,7 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4583,7 +4583,7 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
             output.path().to_str().expect("path"),
             "--no-extract",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -4623,7 +4623,7 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4639,7 +4639,7 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4655,7 +4655,7 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -4700,7 +4700,7 @@ fn patch_apply_auto_extract_pbp_multi_disc_requires_select() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4717,7 +4717,7 @@ fn patch_apply_auto_extract_pbp_multi_disc_requires_select() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -4756,7 +4756,7 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4772,7 +4772,7 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4790,7 +4790,7 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
             "--select",
             "alpha.bin",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4834,7 +4834,7 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4850,7 +4850,7 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             "zip",
             "--output",
             input_archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4866,7 +4866,7 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             "zip",
             "--output",
             patch_archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4886,7 +4886,7 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4928,7 +4928,7 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
             "bps",
             "--output",
             patch_a.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4945,7 +4945,7 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
             "bps",
             "--output",
             patch_b.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4961,7 +4961,7 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
             "zip",
             "--output",
             patch_archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -4977,7 +4977,7 @@ fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -5019,7 +5019,7 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
             "bps",
             "--output",
             patch_a.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5036,7 +5036,7 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
             "bps",
             "--output",
             patch_b.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5052,7 +5052,7 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
             "zip",
             "--output",
             patch_archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5070,7 +5070,7 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5102,7 +5102,7 @@ fn create_bps(original: &std::path::Path, modified: &std::path::Path, output: &s
             "bps",
             "--output",
             output.to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5118,7 +5118,7 @@ fn zip_files(inputs: &[&std::path::Path], output: &std::path::Path) {
     args.push("zip".to_string());
     args.push("--output".to_string());
     args.push(output.to_str().expect("path").to_string());
-    args.push("--json".to_string());
+    args.push("--jsonl".to_string());
     let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
     command_stdout(&borrowed, 0);
 }
@@ -5163,7 +5163,7 @@ fn patch_apply_patch_select_scopes_the_selector_to_the_patch_archive() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5221,7 +5221,7 @@ fn patch_apply_patch_select_binds_to_the_preceding_patch() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5261,7 +5261,7 @@ fn patch_validate_accepts_a_patch_select_per_patch() {
             patch_archive.path().to_str().expect("path"),
             "--patch-select",
             "update-a.bps",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5297,7 +5297,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5315,7 +5315,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5331,7 +5331,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5358,7 +5358,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             "--force",
             "--no-ignore",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -5392,7 +5392,7 @@ fn patch_apply_accepts_multiple_validate_with_checksum_values() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5415,7 +5415,7 @@ fn patch_apply_accepts_multiple_validate_with_checksum_values() {
             "--expect-in",
             &format!("sha1={input_sha1}"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5454,7 +5454,7 @@ fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5472,7 +5472,7 @@ fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
             "--expect-in",
             "crc32=00000000",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -5511,7 +5511,7 @@ fn patch_apply_uses_checksum_cache_hint_for_validation() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5531,7 +5531,7 @@ fn patch_apply_uses_checksum_cache_hint_for_validation() {
             "--expect-in",
             "sha1=0000000000000000000000000000000000000000",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5568,7 +5568,7 @@ fn probe_patch_reports_expected_checksums_for_bps() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5578,7 +5578,7 @@ fn probe_patch_reports_expected_checksums_for_bps() {
             "probe",
             "--input",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5615,7 +5615,7 @@ fn probe_patch_reports_structured_summary_for_ups() {
             "ups",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5625,7 +5625,7 @@ fn probe_patch_reports_structured_summary_for_ups() {
             "probe",
             "--input",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5663,7 +5663,7 @@ fn patch_apply_succeeds_for_valid_bsp_patch() {
                 "--output",
                 output.path().to_str().expect("path"),
                 "--no-compress",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -5704,7 +5704,7 @@ fn patch_create_succeeds_for_rup_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5729,7 +5729,7 @@ fn patch_create_succeeds_for_rup_and_round_trips() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5754,7 +5754,7 @@ fn patch_create_succeeds_for_rup_and_round_trips() {
             "--output",
             reverse.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5802,7 +5802,7 @@ fn patch_create_succeeds_for_aps_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5827,7 +5827,7 @@ fn patch_create_succeeds_for_aps_and_round_trips() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5872,7 +5872,7 @@ fn patch_create_succeeds_for_dldi_and_round_trips() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5899,7 +5899,7 @@ fn patch_create_succeeds_for_dldi_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5924,7 +5924,7 @@ fn patch_create_succeeds_for_dldi_and_round_trips() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -5968,7 +5968,7 @@ fn patch_apply_warns_and_succeeds_for_oversized_dldi_driver() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6019,7 +6019,7 @@ fn patch_apply_reports_unsupported_for_misaligned_dldi_slot() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         2,
     );
@@ -6056,7 +6056,7 @@ fn patch_create_succeeds_for_gdiff_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6087,7 +6087,7 @@ fn patch_create_succeeds_for_gdiff_and_round_trips() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6129,7 +6129,7 @@ fn patch_create_reports_unsupported_for_hdiffpatch() {
             patch.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         2,
     );
@@ -6176,7 +6176,7 @@ fn patch_apply_hdiffpatch_reports_parallel_execution_for_multi_chunk_patch() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6222,7 +6222,7 @@ fn patch_apply_hpatchz_sf20_reports_parallel_execution_for_multi_step_payload() 
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6268,7 +6268,7 @@ fn patch_apply_hpatchz_sf20_reports_parallel_fallback_for_single_step_payload() 
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6313,7 +6313,7 @@ fn patch_apply_hdiff19_directory_patch_reports_unsupported() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         2,
     );
@@ -6359,7 +6359,7 @@ fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
             "8",
             "--xdelta-secondary",
             "auto",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6398,7 +6398,7 @@ fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6436,7 +6436,7 @@ fn probe_succeeds_for_valid_vcdiff_patch() {
             "probe",
             "--input",
             temp.child("update.vcdiff").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6486,7 +6486,7 @@ fn patch_validate_detects_xdelta_window_checksum_mismatch() {
             temp.child("input.bin").path().to_str().expect("path"),
             "--patch",
             temp.child("update.xdelta").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -6522,7 +6522,7 @@ fn patch_validate_succeeds_with_source_values() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6544,7 +6544,7 @@ fn patch_validate_succeeds_with_source_values() {
             &format!("size={input_size}"),
             "--expect-in",
             &format!("crc32={input_crc32}"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6626,7 +6626,7 @@ fn patch_validate_succeeds_for_native_validate_formats() {
                 temp.child(patch_name).path().to_str().expect("path"),
                 "--threads",
                 "8",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -6669,7 +6669,7 @@ fn patch_validate_rejects_apsgba_checksum_mismatch() {
             temp.child("wrong-input.gba").path().to_str().expect("path"),
             "--patch",
             temp.child("update.aps").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -6709,7 +6709,7 @@ fn patch_validate_independent_reports_all_passed() {
             "--patch",
             patch_b.path().to_str().expect("path"),
             "--independent",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6767,7 +6767,7 @@ fn patch_validate_independent_reports_mixed_without_aborting() {
             "--patch",
             patch_bad.path().to_str().expect("path"),
             "--independent",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6832,7 +6832,7 @@ fn patch_validate_plan_reports_endpoint_resolution_failure_without_aborting() {
             "--patch",
             named_patch.path().to_str().expect("path"),
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6864,7 +6864,7 @@ fn patch_validate_plan_reports_endpoint_resolution_failure_without_aborting() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         2,
     );
@@ -6906,7 +6906,7 @@ fn patch_validate_plan_resolves_same_base_patches() {
             "--default-patch-basis",
             "auto",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -6969,7 +6969,7 @@ fn patch_validate_plan_verifies_checksumless_alternatives_against_base() {
                 "--patch",
                 order[1].path().to_str().expect("path"),
                 "--plan",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -7024,7 +7024,7 @@ fn patch_validate_plan_defers_mid_chain_patch() {
             "--default-patch-basis",
             "auto",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7095,7 +7095,7 @@ fn patch_validate_plan_suggests_reorder_for_out_of_order_chain() {
             "--default-patch-basis",
             "auto",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7140,7 +7140,7 @@ fn run_same_base_chain_contract(format: &str, extension: &str, expected_format: 
                 format,
                 "--output",
                 patch.path().to_str().expect("path"),
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -7157,7 +7157,7 @@ fn run_same_base_chain_contract(format: &str, extension: &str, expected_format: 
             "--patch",
             patch_b.path().to_str().expect("path"),
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7187,7 +7187,7 @@ fn run_same_base_chain_contract(format: &str, extension: &str, expected_format: 
             "--output",
             strict_output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7208,7 +7208,7 @@ fn run_same_base_chain_contract(format: &str, extension: &str, expected_format: 
             ignore_output.path().to_str().expect("path"),
             "--no-compress",
             "--ignore-checksum-validation",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7284,7 +7284,7 @@ fn patch_validate_plan_hashes_headerless_md5_and_sha1_variants() {
                 "--patch",
                 second_patch.path().to_str().expect("path"),
                 "--plan",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -7335,7 +7335,7 @@ fn patch_validate_plan_accepts_declared_headerless_size() {
             "--patch-basis",
             "base",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7383,7 +7383,7 @@ fn patch_apply_mixed_header_chain_enforces_inferred_headerless_base() {
             "solid",
             "--output",
             second_patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7399,7 +7399,7 @@ fn patch_apply_mixed_header_chain_enforces_inferred_headerless_base() {
             "--patch",
             second_patch.path().to_str().expect("path"),
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7432,7 +7432,7 @@ fn patch_apply_mixed_header_chain_enforces_inferred_headerless_base() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7464,7 +7464,7 @@ fn patch_apply_mixed_header_chain_enforces_inferred_headerless_base() {
             ignored_output.path().to_str().expect("path"),
             "--no-compress",
             "--ignore-checksum-validation",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7492,7 +7492,7 @@ fn patch_apply_mixed_header_chain_enforces_inferred_headerless_base() {
             "--output",
             temp.child("rejected.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -7524,7 +7524,7 @@ fn patch_validate_plan_disables_declared_output_after_preflight_failure() {
             "--patch-output-check",
             "crc32=00000000",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7585,7 +7585,7 @@ fn patch_apply_base_step_restores_original_headered_representation() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7633,7 +7633,7 @@ fn patch_apply_declared_rup_reverse_base_step_honors_planned_direction() {
             "rup",
             "--output",
             reverse_patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7651,7 +7651,7 @@ fn patch_apply_declared_rup_reverse_base_step_honors_planned_direction() {
             "--patch-basis",
             "base",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7676,7 +7676,7 @@ fn patch_apply_declared_rup_reverse_base_step_honors_planned_direction() {
             single_output.path().to_str().expect("path"),
             "--no-compress",
             "--ignore-checksum-validation",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7702,7 +7702,7 @@ fn patch_apply_declared_rup_reverse_base_step_honors_planned_direction() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7727,7 +7727,7 @@ fn patch_apply_declared_rup_reverse_base_step_honors_planned_direction() {
             ignored_output.path().to_str().expect("path"),
             "--no-compress",
             "--ignore-checksum-validation",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7771,7 +7771,7 @@ fn patch_apply_rup_revert_step_uses_previous_rule() {
             "--default-patch-basis",
             "previous",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7795,7 +7795,7 @@ fn patch_apply_rup_revert_step_uses_previous_rule() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7845,7 +7845,7 @@ fn patch_apply_typed_rup_base_step_uses_handler_normalized_n64_identity() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7892,7 +7892,7 @@ fn patch_apply_single_typed_rup_restores_original_n64_order() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7935,7 +7935,7 @@ fn patch_apply_single_typed_rup_restores_original_little_endian_n64_order() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -7989,7 +7989,7 @@ fn patch_apply_first_typed_rup_uses_prepared_n64_order_hint() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8046,7 +8046,7 @@ fn patch_apply_selected_snes_rup_base_step_uses_normalized_forward_endpoint() {
             "--patch",
             rup_patch.path().to_str().expect("path"),
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8069,7 +8069,7 @@ fn patch_apply_selected_snes_rup_base_step_uses_normalized_forward_endpoint() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8114,7 +8114,7 @@ fn patch_apply_declared_unif_rup_base_step_uses_normalized_reverse_endpoint() {
             "--patch-basis",
             "base",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8140,7 +8140,7 @@ fn patch_apply_declared_unif_rup_base_step_uses_normalized_reverse_endpoint() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8175,7 +8175,7 @@ fn patch_apply_multi_variant_rup_chain_keeps_ambiguous_input_fail_closed() {
                 "rup",
                 "--output",
                 patch.path().to_str().expect("path"),
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -8210,7 +8210,7 @@ fn patch_apply_multi_variant_rup_chain_keeps_ambiguous_input_fail_closed() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8258,7 +8258,7 @@ fn patch_apply_ignores_later_filename_checksum_for_basis_inference() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8300,7 +8300,7 @@ fn patch_apply_declared_basis_previous_overrides_base_inference() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8356,7 +8356,7 @@ fn patch_apply_declared_previous_skips_irrelevant_base_endpoint_resolution() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8399,7 +8399,7 @@ fn patch_apply_declared_basis_base_rejects_non_base_patch() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8441,7 +8441,7 @@ fn patch_validate_plan_honors_declared_basis_flag() {
             "--patch-basis",
             "previous",
             "--plan",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8493,7 +8493,7 @@ fn patch_apply_uses_parallel_threads_for_large_ips_patch() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8552,7 +8552,7 @@ fn patch_apply_falls_back_to_single_thread_when_pool_build_fails() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ])
         .assert()
         .code(0)
@@ -8610,7 +8610,7 @@ fn patch_apply_succeeds_for_secondary_xdelta_patch_with_parallel_threads() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8676,7 +8676,7 @@ fn patch_apply_uses_parallel_threads_for_multi_window_xdelta_patch() {
             "--threads",
             "8",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8707,7 +8707,7 @@ fn probe_reports_invalid_vcdiff_content_as_failed() {
             "probe",
             "--input",
             temp.child("broken.vcdiff").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8728,7 +8728,7 @@ fn probe_reports_unknown_formats_cleanly() {
             "probe",
             "--input",
             temp.child("unknown.bin").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8755,7 +8755,7 @@ fn probe_reports_pds_as_explicitly_unsupported() {
             "probe",
             "--input",
             temp.child("legacy.pds").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8790,7 +8790,7 @@ fn patch_create_infers_format_from_output_extension() {
             modified.path().to_str().expect("path"),
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8820,7 +8820,7 @@ fn patch_create_rejects_extensionless_output_without_format() {
             modified.path().to_str().expect("path"),
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8858,7 +8858,7 @@ fn patch_create_format_flag_overrides_mismatched_extension_with_warning() {
             "bps",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8894,7 +8894,7 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
             "--output",
             patch.path().to_str().expect("path"),
             "--checksum-name",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8926,7 +8926,7 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
             "--output",
             temp.child("ok.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -8957,7 +8957,7 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
             "--output",
             temp.child("bad.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -8983,7 +8983,7 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
             temp.child("ignored.bin").path().to_str().expect("path"),
             "--ignore-checksum-validation",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9019,7 +9019,7 @@ fn patch_apply_validates_bare_enclosed_crc32_from_patch_name() {
             temp.child("probe.ips").path().to_str().expect("path"),
             "--checksum-name",
             "--ignore-checksum-validation",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9044,7 +9044,7 @@ fn patch_apply_validates_bare_enclosed_crc32_from_patch_name() {
             "--output",
             temp.child("bare-out.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9088,7 +9088,7 @@ fn patch_apply_validates_size_requirement_from_patch_name() {
             "--output",
             temp.child("out.bin").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -9642,7 +9642,7 @@ fn patch_apply_auto_header_strips_for_a_checksumless_ips_patch() {
             "ips",
             "--output",
             temp.child("update.ips").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9660,7 +9660,7 @@ fn patch_apply_auto_header_strips_for_a_checksumless_ips_patch() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9706,7 +9706,7 @@ fn patch_apply_auto_header_keeps_the_header_for_a_headered_ips_patch() {
             "ips",
             "--output",
             temp.child("update.ips").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9724,7 +9724,7 @@ fn patch_apply_auto_header_keeps_the_header_for_a_headered_ips_patch() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9785,7 +9785,7 @@ fn patch_apply_auto_header_tiebreaks_on_the_internal_rom_header() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9845,7 +9845,7 @@ fn apply_auto_header_ips(temp: &TempDir, headered: &[u8], modified: &[u8]) -> Ve
             "ips",
             "--output",
             temp.child("update.ips").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9862,7 +9862,7 @@ fn apply_auto_header_ips(temp: &TempDir, headered: &[u8], modified: &[u8]) -> Ve
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9944,7 +9944,7 @@ fn patch_apply_auto_header_reports_an_inferred_basis() {
             "ips",
             "--output",
             temp.child("update.ips").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -9962,7 +9962,7 @@ fn patch_apply_auto_header_reports_an_inferred_basis() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10015,7 +10015,7 @@ fn patch_apply_auto_header_tiebreaker_can_choose_the_raw_basis() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10075,7 +10075,7 @@ fn patch_apply_auto_header_infers_a_basis_from_a_read_only_input() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10121,7 +10121,7 @@ fn patch_apply_auto_header_does_not_call_an_nsrt_header_copier_junk() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10215,7 +10215,7 @@ fn patch_apply_auto_header_keeps_a_super_magic_drive_header() {
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10266,7 +10266,7 @@ fn create_basis_patch(
             format,
             "--output",
             patch.to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10315,7 +10315,7 @@ fn patch_apply_auto_header_proves_the_basis_from_a_declared_md5() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10357,7 +10357,7 @@ fn patch_apply_auto_header_proves_the_basis_from_an_embedded_md5() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10404,7 +10404,7 @@ fn patch_apply_auto_header_tiebreaks_a_patch_with_no_record_geometry() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10444,7 +10444,7 @@ fn patch_apply_auto_header_tiebreak_keeps_a_raw_basis_with_no_record_geometry() 
             "--output-header",
             "keep",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10485,7 +10485,7 @@ fn patch_apply_auto_header_reads_a_rejected_apply_as_proof() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10538,7 +10538,7 @@ fn patch_apply_auto_header_still_tiebreaks_when_checksums_are_ignored() {
             "--output-header",
             "strip",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10610,7 +10610,7 @@ fn repair_n64_rom(temp: &TempDir, rom: &[u8], name: &str) -> Vec<u8> {
             output.path().to_str().expect("path"),
             "--repair-checksum",
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10661,7 +10661,7 @@ fn patch_apply_auto_n64_order_infers_from_the_internal_boot_checksum() {
             "ips",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10679,7 +10679,7 @@ fn patch_apply_auto_n64_order_infers_from_the_internal_boot_checksum() {
             "--output",
             temp.child("output.v64").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10727,7 +10727,7 @@ fn patch_apply_auto_n64_order_keeps_the_order_when_the_input_is_not_the_base() {
             "ips",
             "--output",
             patch.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10746,7 +10746,7 @@ fn patch_apply_auto_n64_order_keeps_the_order_when_the_input_is_not_the_base() {
             "--output",
             temp.child("output.v64").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10814,7 +10814,7 @@ fn patch_apply_auto_n64_order_infers_from_a_written_magic() {
             "--output",
             temp.child("output.v64").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10856,7 +10856,7 @@ fn patch_apply_n64_order_keep_overrides_the_inference() {
             "--output",
             temp.child("output.v64").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -10907,7 +10907,7 @@ fn patch_apply_auto_n64_order_leaves_a_checksummed_patch_alone() {
             "--output",
             temp.child("output.v64").path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );

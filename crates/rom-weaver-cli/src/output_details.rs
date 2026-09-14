@@ -12,6 +12,30 @@ pub(super) const EMITTED_ROM_EXTENSIONS: &[&str] = &[
 ];
 
 impl CliApp {
+    pub(super) fn append_report_warnings(
+        report: &mut OperationReport,
+        warnings: impl IntoIterator<Item = String>,
+    ) {
+        let warnings = warnings.into_iter().collect::<Vec<_>>();
+        if warnings.is_empty() {
+            return;
+        }
+        let mut details = operation_report_details(report);
+        let mut entries = match details.remove("warnings") {
+            Some(Value::Array(entries)) => entries,
+            Some(value) => vec![value],
+            None => Vec::new(),
+        };
+        for warning in warnings {
+            let value = Value::String(warning);
+            if !entries.contains(&value) {
+                entries.push(value);
+            }
+        }
+        details.insert("warnings".to_string(), Value::Array(entries));
+        report.details = Some(Value::Object(details));
+    }
+
     pub(super) fn attach_emitted_files_details(
         report: OperationReport,
         emitted_files: Vec<PathBuf>,
@@ -112,7 +136,6 @@ impl CliApp {
                         Value::Object(map) => map.get("path").and_then(Value::as_str),
                         _ => None,
                     })
-                    .map(str::trim)
                     .filter(|path| !path.is_empty())
                     .map(PathBuf::from)
                     .collect(),
