@@ -67,9 +67,12 @@ fn elapsed_past_an_hour_reads_as_hours_minutes_and_seconds() {
 }
 
 #[test]
-fn humanize_key_title_cases_the_last_dotted_segment() {
+fn humanize_key_preserves_parent_context() {
     assert_eq!(humanize_key("repaired_files"), "Repaired files");
-    assert_eq!(humanize_key("container.entry_count"), "Entry count");
+    assert_eq!(
+        humanize_key("container.entry_count"),
+        "Container / Entry count"
+    );
     assert_eq!(humanize_key(""), "");
 }
 
@@ -148,8 +151,8 @@ fn collect_pairs_flattens_nested_objects_and_humanizes_byte_counts() {
     assert_eq!(
         pairs,
         vec![
-            ("Entry count".to_string(), "3".to_string()),
-            ("Total bytes".to_string(), humanize_bytes(2048)),
+            ("Container / Entry count".to_string(), "3".to_string()),
+            ("Container / Total bytes".to_string(), humanize_bytes(2048)),
             ("Format".to_string(), "chd".to_string()),
         ]
     );
@@ -176,7 +179,7 @@ fn collect_pairs_keeps_object_and_empty_arrays_visible() {
             ("Codecs", "zstd, lzma, 7, true"),
             ("Flag", "false"),
             ("Nulls", "none"),
-            ("Objects", r#"{"a":1}"#),
+            ("Objects[1] / A", "1"),
         ],
         "arrays of objects and empty values remain visible in a human summary"
     );
@@ -260,6 +263,135 @@ fn quiet_keeps_dry_run_plans_visible() {
 }
 
 #[test]
+fn quiet_keeps_patch_format_planning_visible() {
+    let planning = event(
+        "patch-create",
+        "recommended patch create format bps",
+        Some(json!({
+            "patch_create_format_candidates": {
+                "default": "bps",
+                "formats": ["bps", "ips"],
+            },
+        })),
+    );
+    assert!(!quiet_suppresses_success(true, &planning));
+}
+
+#[test]
+fn quiet_keeps_save_edit_previews_visible() {
+    let preview = ProgressEvent {
+        stage: "preview".to_string(),
+        ..event(
+            "save-set",
+            "Save edit preview is valid",
+            Some(json!({
+                "save_editor": { "result": { "preview": { "changed": true } } },
+            })),
+        )
+    };
+    assert!(!quiet_suppresses_success(true, &preview));
+    assert!(quiet_suppresses_success(
+        true,
+        &ProgressEvent {
+            stage: "set".to_string(),
+            ..preview
+        }
+    ));
+}
+
+#[test]
+fn checksum_digests_ignore_label_context_and_use_structured_values() {
+    let checksum = event(
+        "checksum",
+        "range=0..1024 sha1=old; sha1 reused from chd raw_sha1 metadata",
+        Some(json!({ "checksums": { "sha1": "correct" } })),
+    );
+    assert_eq!(
+        checksum_pairs(&checksum),
+        vec![("SHA1".to_string(), "correct".to_string())]
+    );
+}
+
+#[test]
+fn checksum_label_fallback_excludes_suffixes_range_and_cache() {
+    let checksum = event(
+        "checksum",
+        "range=0..1024 cache=hit crc32=deadbeef; checksum source resolved via 1 container extract step(s)",
+        None,
+    );
+    assert_eq!(
+        checksum_pairs(&checksum),
+        vec![("CRC32".to_string(), "deadbeef".to_string())]
+    );
+}
+
+#[test]
+fn nested_arrays_keep_each_result_and_distinguish_matching_field_names() {
+    let details = json!({
+        "patches": [
+            { "source": { "size_bytes": 1024 }, "target": { "size_bytes": 2048 } },
+            { "source": { "size_bytes": 2048 }, "target": { "size_bytes": 3072 } },
+        ],
+        "options": {},
+    });
+    let mut pairs = Vec::new();
+    collect_pairs("", details.as_object().expect("details object"), &mut pairs);
+    assert_eq!(
+        pairs,
+        vec![
+            ("Options".to_string(), "none".to_string()),
+            (
+                "Patches[1] / Source / Size bytes".to_string(),
+                humanize_bytes(1024)
+            ),
+            (
+                "Patches[1] / Target / Size bytes".to_string(),
+                humanize_bytes(2048)
+            ),
+            (
+                "Patches[2] / Source / Size bytes".to_string(),
+                humanize_bytes(2048)
+            ),
+            (
+                "Patches[2] / Target / Size bytes".to_string(),
+                humanize_bytes(3072)
+            ),
+        ]
+    );
+}
+
+#[test]
+fn normal_summaries_omit_execution_telemetry_without_hiding_plan_budgets() {
+    let details = json!({
+        "extraction": {
+            "written_bytes": 1024,
+            "requested_threads": 4,
+            "effective_threads": 4,
+            "thread_mode": "fixed",
+            "used_parallelism": true,
+            "thread_fallback": false,
+            "thread_fallback_reason": "none",
+        },
+        "extract_batch_plan": { "threads_per_job": 4 },
+    });
+    let mut pairs = Vec::new();
+    collect_pairs("", details.as_object().expect("details object"), &mut pairs);
+    assert_eq!(
+        pairs,
+        vec![
+            (
+                "Extract batch plan / Threads per job".to_string(),
+                "4".to_string()
+            ),
+            (
+                "Extraction / Written bytes".to_string(),
+                humanize_bytes(1024)
+            ),
+        ]
+    );
+}
+
+#[test]
 fn dry_run_without_a_no_write_label_gets_a_clear_notice() {
     assert!(needs_no_files_written_notice("trim simulation complete"));
     assert!(!needs_no_files_written_notice(
@@ -277,7 +409,10 @@ fn collect_pairs_prefixes_nested_keys_for_uniqueness() {
     collect_pairs("root", value.as_object().expect("object"), &mut pairs);
     assert_eq!(
         pairs,
-        vec![("Leaf bytes".to_string(), humanize_bytes(1024))]
+        vec![(
+            "Root / Outer / Inner / Leaf bytes".to_string(),
+            humanize_bytes(1024)
+        )]
     );
 }
 
