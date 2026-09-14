@@ -632,10 +632,13 @@ test("mobile More keeps its row spacing after opening", async () => {
   const start = {
     menuHeight: menu.getBoundingClientRect().height,
     projectTop: project.getBoundingClientRect().top,
+    projectOffset: project.getBoundingClientRect().top - menu.getBoundingClientRect().top,
   };
 
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(menu.getBoundingClientRect().height).toBeCloseTo(start.menuHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
+  await page.viewport(390, 600);
+  expect(project.getBoundingClientRect().top - menu.getBoundingClientRect().top).toBeCloseTo(start.projectOffset, 1);
   await page.viewport(1280, 900);
 });
