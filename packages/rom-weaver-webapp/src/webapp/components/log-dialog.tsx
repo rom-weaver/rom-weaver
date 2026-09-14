@@ -283,6 +283,40 @@ const StatusRows = ({
             ? installingRuntimeLabel(localizer, offlineProgress ?? null)
             : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
         </span>
+        {/* Remove MUST precede changing download controls and progress so updates cannot move a pressed button. */}
+        {runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
+          <>
+            <button className="btn slim ghost" disabled={removing} onClick={onRemove} type="button">
+              <Trash2 aria-hidden="true" size={14} />
+              {localizer.message(removing ? "ui.runtime.removingOffline" : "ui.runtime.removeOffline")}
+            </button>
+            <span className="sw-cache-note">{localizer.message("ui.runtime.removeOfflineHint")}</span>
+            {removeUnavailable ? (
+              <span className="sw-cache-error" role="alert">
+                {localizer.message("ui.runtime.removeUnavailable")}
+              </span>
+            ) : null}
+          </>
+        ) : null}
+        {runtimeState === "installing" || runtimeState === "online" ? (
+          <>
+            <button
+              className="btn slim ghost"
+              disabled={downloadRequested || removing}
+              onClick={onDownload}
+              type="button"
+            >
+              <Download aria-hidden="true" size={14} />
+              {localizer.message(downloadRequested ? "ui.runtime.downloadRequested" : "ui.runtime.downloadOffline")}
+            </button>
+            <span className="sw-cache-note">{localizer.message("ui.runtime.downloadOfflineHint")}</span>
+            {downloadUnavailable ? (
+              <span className="sw-cache-error" role="alert">
+                {localizer.message("ui.runtime.downloadUnavailable")}
+              </span>
+            ) : null}
+          </>
+        ) : null}
         {runtimeState === "installing" && offlineProgress && !offlineProgress.ready ? (
           <>
             {typeof offlineProgress.cachedFiles === "number" &&
@@ -303,39 +337,6 @@ const StatusRows = ({
           </>
         ) : null}
         {transferDetail ? <span className="sw-progress-detail">{transferDetail}</span> : null}
-        {runtimeState === "installing" || runtimeState === "online" ? (
-          <>
-            <button
-              className="btn slim ghost"
-              disabled={downloadRequested || removing}
-              onClick={onDownload}
-              type="button"
-            >
-              <Download aria-hidden="true" size={14} />
-              {localizer.message(downloadRequested ? "ui.runtime.downloadRequested" : "ui.runtime.downloadOffline")}
-            </button>
-            <span className="sw-cache-note">{localizer.message("ui.runtime.downloadOfflineHint")}</span>
-            {downloadUnavailable ? (
-              <span className="sw-cache-error" role="alert">
-                {localizer.message("ui.runtime.downloadUnavailable")}
-              </span>
-            ) : null}
-          </>
-        ) : null}
-        {runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
-          <>
-            <button className="btn slim ghost" disabled={removing} onClick={onRemove} type="button">
-              <Trash2 aria-hidden="true" size={14} />
-              {localizer.message(removing ? "ui.runtime.removingOffline" : "ui.runtime.removeOffline")}
-            </button>
-            <span className="sw-cache-note">{localizer.message("ui.runtime.removeOfflineHint")}</span>
-            {removeUnavailable ? (
-              <span className="sw-cache-error" role="alert">
-                {localizer.message("ui.runtime.removeUnavailable")}
-              </span>
-            ) : null}
-          </>
-        ) : null}
       </span>,
     ],
     [
