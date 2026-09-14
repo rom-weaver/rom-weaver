@@ -1,6 +1,6 @@
 # Icon masters
 
-Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. The masters use the Cartridge W paths from `../../src/assets/app/root/logo.svg` with fixed colors and padding for each surface.
+Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. The masters use the cartridge RW paths from `../../src/assets/app/root/logo.svg` with fixed colors and padding for each surface.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -12,7 +12,7 @@ Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. T
 
 ## Geometry
 
-The logo uses a 64 × 64 viewBox. The cartridge occupies 48 × 56 units, with an accent-colored W, a recessed top edge, and three centered contact cuts at the bottom. The top-right corner uses the cartridge color. The paths contain no fonts, strokes, masks, or clip paths.
+The logo uses a 64 × 64 viewBox. The cartridge occupies 52 × 56 units. The R is a cutout and the W uses the accent color. The top edge is recessed, and three contact cuts sit at the bottom. The paths contain no fonts, strokes, masks, or clip paths.
 
 The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon adds a charcoal tile so it stays visible without color-scheme support.
 

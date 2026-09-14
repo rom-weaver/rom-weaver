@@ -2,7 +2,7 @@
 /**
  * Rasterize the production and per-channel app icons.
  *
- * The cartridge MUST stay cream on the launcher background; only the tab uses the channel accent.
+ * The cartridge MUST stay cream on the launcher background; only the W uses the channel accent.
  *
  * Rendering matches design/icon-masters/README.md: headless Chrome, because
  * ImageMagick's SVG delegate does not render these masters exactly. Playwright's
