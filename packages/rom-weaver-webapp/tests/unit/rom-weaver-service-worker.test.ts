@@ -470,6 +470,8 @@ describe("service worker bootstrap", () => {
       cachedFiles: 0,
       totalBytes: 30,
       totalFiles: 2,
+      transferredBytes: 0,
+      transferBytesIncomplete: false,
     });
     harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/index.html`, () => new Response("docs"));
     await routed(harness, requireRoute(2), new Request(`${APP_ORIGIN}/docs/index.html`));
@@ -478,6 +480,8 @@ describe("service worker bootstrap", () => {
       cachedFiles: 1,
       totalBytes: 30,
       totalFiles: 2,
+      transferredBytes: 20,
+      transferBytesIncomplete: false,
     });
     harness.fetchStub.handlers.delete(`${APP_ORIGIN}/docs/index.html`);
     const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/docs`));
@@ -1277,6 +1281,8 @@ describe("precache state reported to the warm-up", () => {
       cachedFiles: 0,
       totalBytes: 10,
       totalFiles: 1,
+      transferredBytes: 0,
+      transferBytesIncomplete: false,
     });
   });
   it("combines the build's size table with what the precache already holds", async () => {
@@ -1296,6 +1302,8 @@ describe("precache state reported to the warm-up", () => {
       cachedFiles: 1,
       totalBytes: 30,
       totalFiles: 3,
+      transferredBytes: 10,
+      transferBytesIncomplete: false,
     });
     expect(harness.fetchStub.calls[0]?.init).toMatchObject({ priority: "low" });
   });
@@ -1309,6 +1317,8 @@ describe("precache state reported to the warm-up", () => {
       cachedFiles: 0,
       totalBytes: 0,
       totalFiles: 3,
+      transferredBytes: 0,
+      transferBytesIncomplete: false,
     });
   });
 

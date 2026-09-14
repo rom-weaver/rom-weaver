@@ -240,6 +240,14 @@ const StatusRows = ({
 }) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
+  const transferredBytes = offlineProgress?.transferredBytes;
+  const transferDetail =
+    typeof transferredBytes === "number" && Number.isFinite(transferredBytes) && transferredBytes >= 0
+      ? localizer.message(
+          offlineProgress?.transferBytesIncomplete ? "ui.runtime.transferredAtLeast" : "ui.runtime.transferred",
+          { size: localizer.formatBytes(transferredBytes) },
+        )
+      : null;
   const rows: Array<[string, React.ReactNode]> = [
     [
       localizer.message("ui.status.offline"),
@@ -253,40 +261,26 @@ const StatusRows = ({
             ? installingRuntimeLabel(localizer, offlineProgress ?? null)
             : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
         </span>
-        {runtimeState === "installing" &&
-        offlineProgress &&
-        !offlineProgress.ready &&
-        (offlineProgress.totalBytes > 0 ||
-          (typeof offlineProgress.totalFiles === "number" && offlineProgress.totalFiles > 0)) ? (
+        {runtimeState === "installing" && offlineProgress && !offlineProgress.ready ? (
           <>
-            <span className="sw-progress-detail">
-              {/* The first-install precache reports counts only; byte totals arrive with the warm-up. */}
-              {[
-                typeof offlineProgress.cachedFiles === "number" && typeof offlineProgress.totalFiles === "number"
-                  ? localizer.message("ui.runtime.detailFiles", {
-                      cached: offlineProgress.cachedFiles,
-                      total: offlineProgress.totalFiles,
-                    })
-                  : null,
-                offlineProgress.totalBytes > 0
-                  ? `${localizer.formatBytes(offlineProgress.cachedBytes)} / ${localizer.formatBytes(offlineProgress.totalBytes)}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
+            {typeof offlineProgress.cachedFiles === "number" &&
+            typeof offlineProgress.totalFiles === "number" &&
+            offlineProgress.totalFiles > 0 ? (
+              <span className="sw-progress-detail">
+                {localizer.message("ui.runtime.detailFiles", {
+                  cached: offlineProgress.cachedFiles,
+                  total: offlineProgress.totalFiles,
+                })}
+              </span>
+            ) : null}
             {(() => {
               const detail = describeWarmupUnit(localizer, offlineProgress);
               if (!detail) return null;
-              const { unitLoadedBytes, unitTotalBytes } = offlineProgress;
-              const unitBytes =
-                typeof unitLoadedBytes === "number" && typeof unitTotalBytes === "number" && unitTotalBytes > 0
-                  ? ` (${localizer.formatBytes(unitLoadedBytes)} / ${localizer.formatBytes(unitTotalBytes)})`
-                  : "";
-              return <span className="sw-progress-detail">{`${detail}${unitBytes}`}</span>;
+              return <span className="sw-progress-detail">{detail}</span>;
             })()}
           </>
         ) : null}
+        {transferDetail ? <span className="sw-progress-detail">{transferDetail}</span> : null}
       </span>,
     ],
     [

@@ -1,11 +1,48 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createCachedTransferSizeReader,
   ENCODED_SIZE_HEADER,
   keepResourceTimingsRecording,
   withMeasuredEncodedSize,
 } from "../../src/webapp/pwa/response-encoded-size.ts";
 
 const URL_UNDER_TEST = "https://example.test/index.html";
+
+describe("cached transfer sizes", () => {
+  it("reads measured compressed size without consuming or repeatedly fetching the cached body", async () => {
+    const response = new Response("decoded body", {
+      headers: {
+        "content-encoding": "br",
+        "content-length": "7",
+        [ENCODED_SIZE_HEADER]: "5",
+      },
+    });
+    const match = vi.fn(async () => response);
+    const cache = { match } as unknown as Cache;
+    const sizes = createCachedTransferSizeReader();
+    expect(await sizes.read(cache, URL_UNDER_TEST, 12)).toBe(5);
+    expect(await sizes.read(cache, URL_UNDER_TEST, 12)).toBe(5);
+    expect(match).toHaveBeenCalledOnce();
+    expect(response.bodyUsed).toBe(false);
+    sizes.forget(URL_UNDER_TEST);
+    match.mockResolvedValue(new Response("updated", { headers: { "content-length": "3" } }));
+    expect(await sizes.read(cache, URL_UNDER_TEST, 7)).toBe(3);
+  });
+
+  it("keeps unknown compressed sizes distinct from identity sizes and real zero bytes", async () => {
+    const sizes = createCachedTransferSizeReader();
+    const match = vi.fn(async () => new Response("body", { headers: { "content-encoding": "br" } }));
+    const cache = { match } as unknown as Cache;
+    expect(await sizes.read(cache, "compressed", 400)).toBeNull();
+    match.mockResolvedValue(new Response("body"));
+    expect(await sizes.read(cache, "identity", 400)).toBe(400);
+    expect(await sizes.read(cache, "unknown")).toBeNull();
+    match.mockResolvedValue(new Response(null, { headers: { "content-length": "0" } }));
+    expect(await sizes.read(cache, "empty", 400)).toBe(0);
+    match.mockRejectedValue(new Error("cache unavailable"));
+    expect(await sizes.read(cache, "failed", 400)).toBeNull();
+  });
+});
 
 describe("withMeasuredEncodedSize", () => {
   it("leaves a response the caches can already measure untouched", async () => {

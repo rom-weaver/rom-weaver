@@ -3300,6 +3300,16 @@ msgstr "Übertragen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.transferred"
+msgstr "Übertragen {size}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.transferredAtLeast"
+msgstr "Mindestens {size} übertragen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.trim"
 msgstr "Kürzen"
 

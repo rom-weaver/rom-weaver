@@ -842,6 +842,10 @@ type OfflineWarmupDisplayProgress = {
   ready: boolean;
   totalBytes: number;
   totalFiles?: number;
+  /** Measured encoded bytes transferred for cached offline target files. */
+  transferredBytes?: number;
+  /** One or more cached target files have no measured encoded size. */
+  transferBytesIncomplete?: boolean;
   /** Warm-up unit label, e.g. "emulatorjs:loader.js" or "identify-group:<id>". */
   unit?: string | null;
   /** Bytes of the in-flight unit downloaded so far; null/absent outside a download. */

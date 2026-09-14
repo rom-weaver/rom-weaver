@@ -364,7 +364,7 @@ describe("cached file inventory", () => {
 });
 
 describe("status offline row", () => {
-  it("shows the install detail line with file counts, bytes and the current unit", () => {
+  it("shows measured transfer bytes, file counts, and the current unit", () => {
     const { container } = renderDialog({
       offlineProgress: {
         cachedBytes: 400,
@@ -373,17 +373,62 @@ describe("status offline row", () => {
         ready: false,
         totalBytes: 1000,
         totalFiles: 5,
-        unitLoadedBytes: 100,
-        unitTotalBytes: 200,
+        transferredBytes: 512,
       },
       serviceWorkerStatus: "active",
     });
 
     const details = Array.from(container.querySelectorAll(".sw-progress-detail"), (node) => node.textContent);
-    expect(details).toHaveLength(2);
+    expect(details).toHaveLength(3);
     expect(details[0]).toContain("2");
     expect(details[1]).toContain("Computers");
-    expect(details[1]).toContain("(");
+    expect(details[2]).toBe("Transferred 512 B");
+    expect(details.join(" ")).not.toContain("400 B / 1000 B");
+  });
+
+  it("marks a transfer total as incomplete when a cached file has no measurement", () => {
+    const { container } = renderDialog({
+      offlineProgress: {
+        cachedBytes: 400,
+        cachedFiles: 2,
+        ready: false,
+        totalBytes: 1000,
+        totalFiles: 5,
+        transferredBytes: 1024,
+        transferBytesIncomplete: true,
+      },
+      serviceWorkerStatus: "active",
+    });
+
+    expect(container.textContent).toContain("Transferred at least 1.02 KB");
+  });
+
+  it("uses file counts without a transfer value from an older worker", () => {
+    const { container } = renderDialog({
+      offlineProgress: { cachedBytes: 400, cachedFiles: 2, ready: false, totalBytes: 1000, totalFiles: 5 },
+      serviceWorkerStatus: "active",
+    });
+
+    const details = Array.from(container.querySelectorAll(".sw-progress-detail"), (node) => node.textContent);
+    expect(details).toEqual(["2 of 5 files"]);
+    expect(container.textContent).not.toContain("400 B / 1000 B");
+    expect(container.textContent).not.toContain("Transferred 400 B");
+  });
+
+  it("keeps the measured transfer result visible when offline setup is ready", () => {
+    const { container } = renderDialog({
+      offlineProgress: {
+        cachedBytes: 1000,
+        cachedFiles: 5,
+        ready: true,
+        totalBytes: 1000,
+        totalFiles: 5,
+        transferredBytes: 512,
+      },
+      serviceWorkerStatus: "active",
+    });
+
+    expect(container.textContent).toContain("Transferred 512 B");
   });
 
   it("omits the unit line when the progress names no unit", () => {

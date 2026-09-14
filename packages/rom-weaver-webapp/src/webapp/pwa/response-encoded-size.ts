@@ -10,6 +10,42 @@
 /** Header carrying the on-the-wire size of a response we downloaded ourselves. */
 const ENCODED_SIZE_HEADER = "x-rom-weaver-encoded-size";
 
+const headerBytes = (response: Response, header: string): number | null => {
+  const value = response.headers.get(header);
+  if (value === null || value.trim() === "") return null;
+  const bytes = Number(value);
+  return Number.isFinite(bytes) && bytes >= 0 ? bytes : null;
+};
+
+// Status MUST read only headers to avoid loading cached bodies on every progress update.
+const createCachedTransferSizeReader = () => {
+  const measurements = new Map<string, Promise<number | null>>();
+  const forget = (url: string) => measurements.delete(url);
+  const read = (cache: Cache, url: string, decodedSize?: number): Promise<number | null> => {
+    const known = measurements.get(url);
+    if (known) return known;
+    const measured = cache
+      .match(url)
+      .then((response) => {
+        if (!response) {
+          forget(url);
+          return null;
+        }
+        const encoded = headerBytes(response, ENCODED_SIZE_HEADER) ?? headerBytes(response, "content-length");
+        if (encoded !== null) return encoded;
+        if (response.type === "opaque" || response.headers.has("content-encoding")) return null;
+        return typeof decodedSize === "number" && Number.isFinite(decodedSize) && decodedSize >= 0 ? decodedSize : null;
+      })
+      .catch(() => {
+        forget(url);
+        return null;
+      });
+    measurements.set(url, measured);
+    return measured;
+  };
+  return { forget, read };
+};
+
 // Resource Timing keeps 250 entries by default and then silently records no
 // more. One install fetches several hundred files through this worker, so the
 // entries a measurement needs would be dropped long before the set is complete.
@@ -108,8 +144,10 @@ const readWithByteProgress = async (response: Response, onBytes?: (delta: number
 
 export {
   bufferedResponse,
+  createCachedTransferSizeReader,
   ENCODED_SIZE_HEADER,
   encodedSizeOf,
+  headerBytes,
   keepResourceTimingsRecording,
   readWithByteProgress,
   withMeasuredEncodedSize,

@@ -5,8 +5,10 @@
 
 import {
   bufferedResponse,
+  createCachedTransferSizeReader,
   ENCODED_SIZE_HEADER,
   encodedSizeOf,
+  headerBytes,
   readWithByteProgress,
 } from "./pwa/response-encoded-size.ts";
 import { cacheWithDownloadLog } from "./pwa/offline-download-log.ts";
@@ -35,6 +37,8 @@ type OfflineReadyState = {
   ready: boolean;
   totalBytes: number;
   totalFiles: number;
+  transferredBytes?: number;
+  transferBytesIncomplete?: boolean;
 };
 
 /**
@@ -97,7 +101,12 @@ type OfflineWarmupOptions = {
    * Counted into every readout so the install reports one total across both
    * stages. Omitted (or failing) leaves the precache out of the totals.
    */
-  precacheState?: () => Promise<{ cachedBytes: number; cachedFiles: number; totalBytes: number; totalFiles: number }>;
+  precacheState?: () => Promise<
+    Pick<
+      OfflineReadyState,
+      "cachedBytes" | "cachedFiles" | "totalBytes" | "totalFiles" | "transferredBytes" | "transferBytesIncomplete"
+    >
+  >;
   scope: string;
   /** EmulatorJS files one pump downloads concurrently. Default {@link EMULATORJS_BATCH_SIZE}. */
   emulatorJsBatchSize?: number;
@@ -140,13 +149,6 @@ const optionalGroupRevision = (group: IdentifyOptionalPackGroup) =>
 const sha256HexOf = async (bytes: ArrayBuffer) => {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-};
-
-/** Header value as a byte count, or null when it is absent or not a size. */
-const headerBytes = (response: Response, header: string): number | null => {
-  if (!response.headers.has(header)) return null;
-  const value = Number(response.headers.get(header));
-  return Number.isFinite(value) && value >= 0 ? value : null;
 };
 
 /**
@@ -251,6 +253,7 @@ const createOfflineWarmup = ({
   // after a worker restart; bumps reorder it in place.
   let queue: WarmupUnit[] | null = null;
   let queuePromise: Promise<WarmupUnit[]> | null = null;
+  const transferSizes = createCachedTransferSizeReader();
 
   const loadEmulatorJsManifest = (): Promise<EmulatorJsManifest> => {
     if (!manifestPromise) {
@@ -327,7 +330,13 @@ const createOfflineWarmup = ({
 
   /** Remove a group's packs and its completion marker. */
   const removeGroupFromCache = async (cache: Cache, group: IdentifyOptionalPackGroup) => {
-    await Promise.all(group.packs.map((pack) => cache.delete(new URL(pack.url, scope).href)));
+    await Promise.all(
+      group.packs.map((pack) => {
+        const url = new URL(pack.url, scope).href;
+        transferSizes.forget(url);
+        return cache.delete(url);
+      }),
+    );
     await cache.delete(optionalGroupMarkerUrl(scope, group.id));
   };
 
@@ -416,14 +425,25 @@ const createOfflineWarmup = ({
       Promise.all(identifyOptionalGroups.map((group) => isGroupInstalled(identifyCache, group))),
     ]);
     const [cachedEmulatorJsUrls, cachedIdentifyUrls] = await Promise.all([
-      emulatorJsReady ? null : cachedRequestUrls(emulatorJsCache),
-      installedGroups.every(Boolean) ? null : cachedRequestUrls(identifyCache),
+      cachedRequestUrls(emulatorJsCache),
+      cachedRequestUrls(identifyCache),
     ]);
     let totalBytes = 0;
     let cachedBytes = 0;
     let totalFiles = 0;
     let cachedFiles = 0;
     let pendingUnits = 0;
+    let transferredBytes = 0;
+    let transferBytesIncomplete = false;
+    const transferMeasurements: Array<Promise<void>> = [];
+    const measureTransfer = (cache: Cache, url: string, decodedSize?: number) => {
+      transferMeasurements.push(
+        transferSizes.read(cache, url, decodedSize).then((size) => {
+          if (size === null) transferBytesIncomplete = true;
+          else transferredBytes += size;
+        }),
+      );
+    };
     if (precacheState) {
       try {
         const precache = await precacheState();
@@ -431,9 +451,14 @@ const createOfflineWarmup = ({
         cachedBytes += precache.cachedBytes;
         totalFiles += precache.totalFiles;
         cachedFiles += precache.cachedFiles;
+        transferredBytes += precache.transferredBytes ?? 0;
+        transferBytesIncomplete ||=
+          precache.transferBytesIncomplete === true ||
+          (precache.cachedFiles > 0 && precache.transferredBytes === undefined);
         pendingUnits += Math.max(0, precache.totalFiles - precache.cachedFiles);
       } catch (error) {
         pendingUnits += 1;
+        transferBytesIncomplete = true;
         // The app's own bytes drop out of the totals; the warm-up share still reports.
         log("precache state unavailable for ready state", {
           error: error instanceof Error ? error.message : String(error),
@@ -443,6 +468,10 @@ const createOfflineWarmup = ({
     try {
       const manifest = await loadEmulatorJsManifest();
       const manifestBytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
+      for (const file of manifest.files) {
+        const url = emulatorJsAssetUrl(file.path);
+        if (emulatorJsReady || cachedEmulatorJsUrls.has(url)) measureTransfer(emulatorJsCache, url, file.sizeBytes);
+      }
       totalBytes += manifestBytes;
       totalFiles += manifest.files.length;
       if (emulatorJsReady) {
@@ -458,6 +487,7 @@ const createOfflineWarmup = ({
     } catch (error) {
       // Offline with no cached manifest: readiness cannot improve right now.
       // Report not-ready without byte totals for the emulatorjs share.
+      transferBytesIncomplete = true;
       if (!emulatorJsReady) pendingUnits += 1;
       log("emulatorjs manifest unavailable for ready state", {
         error: error instanceof Error ? error.message : String(error),
@@ -467,6 +497,10 @@ const createOfflineWarmup = ({
     for (const [index, group] of identifyOptionalGroups.entries()) {
       // Only selected groups count toward offline readiness. On-demand cached packs remain outside these totals.
       if (!isGroupWanted(group, wanted)) continue;
+      for (const pack of group.packs) {
+        const url = new URL(pack.url, scope).href;
+        if (installedGroups[index] || cachedIdentifyUrls.has(url)) measureTransfer(identifyCache, url, pack.sizeBytes);
+      }
       totalBytes += groupBytes(group);
       totalFiles += group.packs.length;
       if (installedGroups[index]) {
@@ -481,7 +515,17 @@ const createOfflineWarmup = ({
       }
     }
     const ready = emulatorJsReady && pendingUnits === 0;
-    return { cachedBytes, cachedFiles, pendingUnits, ready, totalBytes, totalFiles };
+    await Promise.all(transferMeasurements);
+    return {
+      cachedBytes,
+      cachedFiles,
+      pendingUnits,
+      ready,
+      totalBytes,
+      totalFiles,
+      transferredBytes,
+      transferBytesIncomplete,
+    };
   };
 
   /**
@@ -521,6 +565,7 @@ const createOfflineWarmup = ({
       }
       const { request, response } = await fetchVerifiedPack(pack, scope, fetcher, onBytes, log);
       await cacheWithDownloadLog(cache, request, response, log);
+      transferSizes.forget(request.url);
     }
     await cache.put(optionalGroupMarkerUrl(scope, group.id), new Response(optionalGroupRevision(group)));
     if (queue) queue = queue.filter((unit) => !(unit.kind === "identify-group" && unit.group.id === group.id));
@@ -593,6 +638,7 @@ const createOfflineWarmup = ({
     if (!response.ok) throw new Error(`EmulatorJS warm-up download failed with HTTP ${response.status}: ${unit.path}`);
     const buffer = await readWithByteProgress(response, onBytes);
     await cacheWithDownloadLog(cache, url, bufferedResponse(response, buffer, encodedSizeOf(url)), log);
+    transferSizes.forget(url);
   };
 
   /** Write the completion marker once no emulatorjs file unit remains. */
@@ -663,6 +709,7 @@ const createOfflineWarmup = ({
     const batchHead = batch[0] ?? unit;
     // Add in-flight bytes to one batch baseline so progress rises during the download.
     let onBytes: ((delta: number) => void) | undefined;
+    let interimUpdates = Promise.resolve();
     if (onInterim) {
       const [baseline, batchCachedBytes] = await Promise.all([getReadyState(), cachedUnitBytes(batch)]);
       const detail = unitDetail(batchHead, batch.length);
@@ -674,7 +721,7 @@ const createOfflineWarmup = ({
       let lastEmit = 0;
       const emit = () => {
         const unitLoadedBytes = Math.min(loadedBytes, unitTotalBytes || loadedBytes);
-        onInterim({
+        const progress = {
           ...baseline,
           cachedBytes: Math.min(baseCachedBytes + unitLoadedBytes, baseline.totalBytes || Number.MAX_SAFE_INTEGER),
           detail,
@@ -682,6 +729,17 @@ const createOfflineWarmup = ({
           unit: label,
           unitLoadedBytes,
           unitTotalBytes,
+        };
+        interimUpdates = interimUpdates.then(async () => {
+          const state = await getReadyState().catch((error) => {
+            log("transfer progress unavailable", { error: error instanceof Error ? error.message : String(error) });
+            return null;
+          });
+          onInterim({
+            ...progress,
+            transferredBytes: state?.transferredBytes ?? progress.transferredBytes,
+            transferBytesIncomplete: state?.transferBytesIncomplete ?? true,
+          });
         });
       };
       onBytes = (delta) => {
@@ -695,16 +753,20 @@ const createOfflineWarmup = ({
       emit();
     }
     // Remove completed files by identity because a priority bump can replace or reorder the live queue.
-    await Promise.all(
-      batch.map(async (batchUnit) => {
-        if (batchUnit.kind === "emulatorjs-file") {
-          await downloadEmulatorJsFile(batchUnit, onBytes);
-          if (queue) queue = queue.filter((candidate) => candidate !== batchUnit);
-        } else {
-          await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes);
-        }
-      }),
-    );
+    try {
+      await Promise.all(
+        batch.map(async (batchUnit) => {
+          if (batchUnit.kind === "emulatorjs-file") {
+            await downloadEmulatorJsFile(batchUnit, onBytes);
+            if (queue) queue = queue.filter((candidate) => candidate !== batchUnit);
+          } else {
+            await installGroupWith(fetchForWarmup, batchUnit.group.id, onBytes);
+          }
+        }),
+      );
+    } finally {
+      await interimUpdates;
+    }
     if (batch.some((batchUnit) => batchUnit.kind === "emulatorjs-file")) await finishEmulatorJsIfComplete();
     return batchHead;
   };
@@ -778,6 +840,7 @@ const createOfflineWarmup = ({
       log,
     );
     await cacheWithDownloadLog(cache, packRequest, response.clone(), log);
+    transferSizes.forget(packRequest.url);
     return response;
   };
 

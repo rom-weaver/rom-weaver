@@ -131,7 +131,14 @@ describe("deferred precache", () => {
       recovered = true;
       const restarted = createDeferredPrecache(options);
       await restarted.runNextBatch();
-      expect(await restarted.state()).toEqual({ cachedFiles: 2, cachedBytes: 7, totalFiles: 2, totalBytes: 7 });
+      expect(await restarted.state()).toEqual({
+        cachedFiles: 2,
+        cachedBytes: 7,
+        totalFiles: 2,
+        totalBytes: 7,
+        transferredBytes: encoding === "br" ? 15 : 7,
+        transferBytesIncomplete: false,
+      });
       expect(await (await restarted.match("assets/two.js"))?.text()).toBe("two!");
       expect((await restarted.match("assets/two.js"))?.headers.get("Content-Type")).toBe("text/javascript");
       expect(requests.filter((url) => url === "/assets/one.js")).toHaveLength(1);
@@ -188,7 +195,14 @@ describe("deferred precache", () => {
       },
     });
     await queue.migrate("old-precache");
-    expect(await queue.state()).toEqual({ cachedBytes: 3, cachedFiles: 1, totalBytes: 7, totalFiles: 2 });
+    expect(await queue.state()).toEqual({
+      cachedBytes: 3,
+      cachedFiles: 1,
+      totalBytes: 7,
+      totalFiles: 2,
+      transferredBytes: 3,
+      transferBytesIncomplete: false,
+    });
     expect(await (await queue.match("assets/one.js"))?.text()).toBe("one");
     expect(await queue.match("assets/two.js")).toBeUndefined();
   });

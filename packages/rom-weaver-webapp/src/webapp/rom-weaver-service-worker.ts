@@ -15,7 +15,11 @@ import { createOfflineWarmup } from "./offline-warmup.ts";
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
 import { cacheWithDownloadLog, fetchWithDownloadLog, observeDownloadTimings } from "./pwa/offline-download-log.ts";
-import { keepResourceTimingsRecording, withMeasuredEncodedSize } from "./pwa/response-encoded-size.ts";
+import {
+  createCachedTransferSizeReader,
+  keepResourceTimingsRecording,
+  withMeasuredEncodedSize,
+} from "./pwa/response-encoded-size.ts";
 import { routeDocumentCandidates } from "./pwa/route-documents.ts";
 import { createServiceWorkerCachePolicy, findStaleServiceWorkerCaches } from "./pwa/service-worker-cache-policy.ts";
 
@@ -301,6 +305,7 @@ const PRECACHE_SIZES_URL = new URL("precache-sizes.json", self.registration.scop
 const precacheEntryPath = (url: string) => new URL(url, self.registration.scope).pathname;
 
 let precacheSizesPromise: Promise<Map<string, number>> | null = null;
+const precacheTransferSizes = createCachedTransferSizeReader();
 
 /** Entry path to byte size, for the entries the build could measure. */
 const loadPrecacheSizes = (): Promise<Map<string, number>> => {
@@ -342,22 +347,35 @@ const precacheState = async () => {
   let cachedBytes = 0;
   let cachedFiles = 0;
   let totalBytes = 0;
+  let transferredBytes = deferred.transferredBytes;
+  let transferBytesIncomplete = deferred.transferBytesIncomplete;
+  const transferMeasurements: Array<Promise<void>> = [];
   for (const entry of INITIAL_MANIFEST) {
     const path = precacheEntryPath(typeof entry === "string" ? entry : entry.url);
-    const size = (typeof entry === "string" ? undefined : entry.sizeBytes) ?? sizes.get(path) ?? 0;
+    const decodedSize = (typeof entry === "string" ? undefined : entry.sizeBytes) ?? sizes.get(path);
+    const size = decodedSize ?? 0;
     totalBytes += size;
     const key = new URL(typeof entry === "string" ? entry : entry.url, self.registration.scope);
     if (typeof entry !== "string" && entry.revision) key.searchParams.set("__WB_REVISION__", entry.revision);
     if (cachedKeys.has(key.href)) {
       cachedBytes += size;
       cachedFiles += 1;
+      transferMeasurements.push(
+        precacheTransferSizes.read(cache, key.href, decodedSize).then((encodedSize) => {
+          if (encodedSize === null) transferBytesIncomplete = true;
+          else transferredBytes += encodedSize;
+        }),
+      );
     }
   }
+  await Promise.all(transferMeasurements);
   return {
     cachedBytes: cachedBytes + deferred.cachedBytes,
     cachedFiles: cachedFiles + deferred.cachedFiles,
     totalBytes: totalBytes + deferred.totalBytes,
     totalFiles: INITIAL_MANIFEST.length + deferred.totalFiles,
+    transferredBytes,
+    transferBytesIncomplete,
   };
 };
 
@@ -431,6 +449,7 @@ const precachePlugin: WorkboxPlugin = {
     return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
   },
   async cacheDidUpdate({ request }) {
+    precacheTransferSizes.forget(request.url);
     const url = new URL(request.url);
     url.searchParams.delete("__WB_REVISION__");
     precacheIncomingBytes.delete(url.href);

@@ -1,9 +1,21 @@
-import { bufferedResponse, encodedSizeOf, readWithByteProgress } from "./response-encoded-size.ts";
+import {
+  bufferedResponse,
+  createCachedTransferSizeReader,
+  encodedSizeOf,
+  readWithByteProgress,
+} from "./response-encoded-size.ts";
 import { cacheWithDownloadLog } from "./offline-download-log.ts";
 
 type DeferredEntry = { url: string; revision?: string | null; sizeBytes?: number };
 
-type DeferredState = { cachedBytes: number; cachedFiles: number; totalBytes: number; totalFiles: number };
+type DeferredState = {
+  cachedBytes: number;
+  cachedFiles: number;
+  totalBytes: number;
+  totalFiles: number;
+  transferredBytes: number;
+  transferBytesIncomplete: boolean;
+};
 
 const createDeferredPrecache = ({
   entries,
@@ -32,6 +44,7 @@ const createDeferredPrecache = ({
   type InFlight = { listeners: Set<(delta: number) => void>; loadedBytes: number; promise: Promise<Response> };
   const inFlight = new Map<string, InFlight>();
   const progressListeners = new Set<(delta: number) => void>();
+  const transferSizes = createCachedTransferSizeReader();
 
   const find = (input: string) => {
     const url = new URL(input, scope);
@@ -43,7 +56,15 @@ const createDeferredPrecache = ({
   const state = async (): Promise<DeferredState> => {
     const cache = await caches.open(cacheName);
     const keys = new Set((await cache.keys()).map((request) => request.url));
-    const result = { cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: files.length };
+    const result = {
+      cachedBytes: 0,
+      cachedFiles: 0,
+      totalBytes: 0,
+      totalFiles: files.length,
+      transferredBytes: 0,
+      transferBytesIncomplete: false,
+    };
+    const measurements: Array<Promise<void>> = [];
     for (const file of files) {
       result.totalBytes += file.sizeBytes ?? 0;
       if (!keys.has(file.key)) {
@@ -52,7 +73,14 @@ const createDeferredPrecache = ({
       }
       result.cachedBytes += file.sizeBytes ?? 0;
       result.cachedFiles += 1;
+      measurements.push(
+        transferSizes.read(cache, file.key, file.sizeBytes).then((size) => {
+          if (size === null) result.transferBytesIncomplete = true;
+          else result.transferredBytes += size;
+        }),
+      );
     }
+    await Promise.all(measurements);
     return result;
   };
 
@@ -89,6 +117,7 @@ const createDeferredPrecache = ({
           });
           const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
           await cacheWithDownloadLog(cache, file.key, complete.clone(), log);
+          transferSizes.forget(file.key);
           return complete;
         })(),
       };

@@ -278,6 +278,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
           cachedFiles: reply.cachedFiles,
           decodedCachedByteCount: reply.cachedBytes,
           decodedTotalByteCount: reply.totalBytes,
+          transferredByteCount: reply.transferredBytes,
           durationMs: previousPumpCompletedAt - pumpStartedAt,
           pendingUnits: reply.pendingUnits,
           pumpNumber: currentPump,
@@ -433,6 +434,14 @@ const listenForOfflinePrecacheProgress = (
       ready: false,
       totalBytes: count(data.totalBytes),
       totalFiles,
+      ...(typeof data.transferredBytes === "number" &&
+      Number.isFinite(data.transferredBytes) &&
+      data.transferredBytes >= 0
+        ? { transferredBytes: data.transferredBytes }
+        : {}),
+      ...(typeof data.transferBytesIncomplete === "boolean"
+        ? { transferBytesIncomplete: data.transferBytesIncomplete }
+        : {}),
     });
   };
   container.addEventListener("message", onMessage);

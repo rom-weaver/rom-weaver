@@ -204,6 +204,8 @@ describe("offline warm-up client", () => {
       pendingUnits: 5,
       totalBytes: 1200,
       totalFiles: 40,
+      transferredBytes: 200,
+      transferBytesIncomplete: true,
     });
     expect(onProgress).toHaveBeenLastCalledWith({
       cachedBytes: 300,
@@ -213,16 +215,36 @@ describe("offline warm-up client", () => {
       ready: false,
       totalBytes: 1200,
       totalFiles: 40,
+      transferredBytes: 200,
+      transferBytesIncomplete: true,
     });
 
-    post({ action: "offline-precache-progress", cachedBytes: "junk", cachedFiles: "junk", totalFiles: -1 });
-    expect(onProgress).toHaveBeenLastCalledWith(
-      expect.objectContaining({ cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: 0 }),
-    );
+    for (const transferredBytes of [-1, Infinity, NaN, "200"]) {
+      post({
+        action: "offline-precache-progress",
+        cachedBytes: "junk",
+        cachedFiles: "junk",
+        totalFiles: -1,
+        transferredBytes,
+        transferBytesIncomplete: "yes",
+      });
+      expect(onProgress).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cachedBytes: 0, cachedFiles: 0, totalBytes: 0, totalFiles: 0 }),
+      );
+      expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferredBytes");
+      expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferBytesIncomplete");
+    }
+
+    post({ action: "offline-precache-progress", transferredBytes: 0, transferBytesIncomplete: false });
+    expect(onProgress.mock.lastCall?.[0]).toMatchObject({ transferredBytes: 0, transferBytesIncomplete: false });
+
+    post({ action: "offline-precache-progress" });
+    expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferredBytes");
+    expect(onProgress.mock.lastCall?.[0]).not.toHaveProperty("transferBytesIncomplete");
 
     stop();
     post({ action: "offline-precache-progress", cachedFiles: 13, totalFiles: 40 });
-    expect(onProgress).toHaveBeenCalledTimes(2);
+    expect(onProgress).toHaveBeenCalledTimes(7);
   });
 
   it("queries the service worker for cached files", async () => {
@@ -393,7 +415,7 @@ describe("offline warm-up client", () => {
   it("logs measured pump and idle waits with decoded progress totals", async () => {
     vi.stubGlobal("requestIdleCallback", undefined);
     const replies = [
-      progressReply({ cachedFiles: 1, totalFiles: 2 }),
+      progressReply({ cachedFiles: 1, totalFiles: 2, transferredBytes: 123 }),
       progressReply({ cachedBytes: 2, cachedFiles: 2, pendingUnits: 0, ready: true, totalFiles: 2 }),
     ];
     const messages: Reply[] = [];
@@ -433,6 +455,7 @@ describe("offline warm-up client", () => {
       cachedFiles: 1,
       decodedCachedByteCount: 1,
       decodedTotalByteCount: 2,
+      transferredByteCount: 123,
       pendingUnits: 1,
       pumpNumber: 1,
       totalFiles: 2,

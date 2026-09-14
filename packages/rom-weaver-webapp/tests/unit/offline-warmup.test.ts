@@ -131,6 +131,39 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
+  it("reports cached transfer sizes across restarts and excludes unselected groups", async () => {
+    const emulatorCache = await cacheStorage.open(EMULATORJS_CACHE);
+    await emulatorCache.put(
+      `${SCOPE}emulatorjs/data/loader.js`,
+      new Response("one", {
+        headers: { "content-encoding": "br", "content-length": "2" },
+      }),
+    );
+    const group = (await buildGroups())[0];
+    const identifyCache = await cacheStorage.open(IDENTIFY_CACHE);
+    await identifyCache.put(
+      new URL(group.packs[0].url, SCOPE).href,
+      new Response(PACK_BODY, {
+        headers: { "content-encoding": "br", "x-rom-weaver-encoded-size": "4" },
+      }),
+    );
+    const warmup = await createWarmup();
+    expect(await warmup.getReadyState()).toMatchObject({ transferredBytes: 2, transferBytesIncomplete: false });
+    await emulatorCache.put(
+      `${SCOPE}emulatorjs/data/cores/core.wasm`,
+      new Response("five!", {
+        headers: { "content-encoding": "br" },
+      }),
+    );
+    expect(await warmup.getReadyState()).toMatchObject({ transferredBytes: 2, transferBytesIncomplete: true });
+    await warmup.setIdentifyGroupWanted(group.id, true);
+    expect(await warmup.getReadyState()).toMatchObject({ transferredBytes: 6, transferBytesIncomplete: true });
+    const restarted = await createWarmup();
+    expect(await restarted.getReadyState()).toMatchObject({ transferredBytes: 6, transferBytesIncomplete: true });
+    await restarted.setIdentifyGroupWanted(group.id, false);
+    expect(await restarted.getReadyState()).toMatchObject({ transferredBytes: 2, transferBytesIncomplete: true });
+  });
+
   it("always warms a required group and never offers it as a choice", async () => {
     const fetcher = createFetcher();
     const warmup = await createWarmup(fetcher, {
