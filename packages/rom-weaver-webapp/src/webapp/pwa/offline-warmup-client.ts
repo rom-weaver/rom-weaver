@@ -78,6 +78,7 @@ const formatError = (error: unknown) => (error instanceof Error ? error.message 
 let activeController: {
   bump: (target: WarmupBumpTarget) => void;
   notifyResume: () => void;
+  pause: () => void;
 } | null = null;
 let pauseCount = 0;
 const pendingBumps: WarmupBumpTarget[] = [];
@@ -85,6 +86,7 @@ const pendingBumps: WarmupBumpTarget[] = [];
 /** Hold the warm-up while interactive downloads run. Balanced by resumeOfflineWarmup. */
 const pauseOfflineWarmup = () => {
   pauseCount += 1;
+  if (pauseCount === 1) activeController?.pause();
 };
 
 const resumeOfflineWarmup = () => {
@@ -344,7 +346,14 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     void runLoop();
   };
 
-  activeController = { bump, notifyResume };
+  const pause = () => {
+    try {
+      serviceWorker.controller?.postMessage({ action: "offline-warmup-pause" });
+    } catch (error) {
+      logger.warn("offline warm-up pause failed", { error: formatError(error) });
+    }
+  };
+  activeController = { bump, notifyResume, pause };
 
   const startWarmup = () => {
     if (started || signal.aborted || !serviceWorker.controller) return;

@@ -338,11 +338,15 @@ describe("offline warm-up client", () => {
     });
     try {
       await flush(8);
-      expect(messages).toHaveLength(1);
+      expect(messages.map(({ action }) => action)).toEqual(["offline-warmup-pump", "offline-warmup-pause"]);
 
       resumeOfflineWarmup();
       await flush(8);
-      expect(messages).toHaveLength(2);
+      expect(messages.map(({ action }) => action)).toEqual([
+        "offline-warmup-pump",
+        "offline-warmup-pause",
+        "offline-warmup-pump",
+      ]);
     } finally {
       resumeOfflineWarmup();
     }

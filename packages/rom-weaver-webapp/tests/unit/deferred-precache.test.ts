@@ -118,7 +118,7 @@ describe("deferred precache", () => {
 
   it("reports an app download started outside the current batch and keeps its partial progress", async () => {
     const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
-    const files = Array.from({ length: 5 }, (_, index) => ({ url: `assets/${index}.bin`, sizeBytes: 10 }));
+    const files = Array.from({ length: 17 }, (_, index) => ({ url: `assets/${index}.bin`, sizeBytes: 10 }));
     const queue = createDeferredPrecache({
       cacheName: CACHE_NAME,
       entries: files,
@@ -135,30 +135,182 @@ describe("deferred precache", () => {
     const onBytes = vi.fn();
     const pump = queue.runNextBatch(onBytes);
     await vi.waitFor(() => expect(streams.size).toBe(4));
-    const interactive = queue.serve("assets/4.bin");
+    const interactive = queue.serve("assets/16.bin");
     await vi.waitFor(() => expect(streams.size).toBe(5));
-    const appStream = streams.get(new URL("assets/4.bin", SCOPE).href);
+    const appStream = streams.get(new URL("assets/16.bin", SCOPE).href);
     try {
       appStream?.enqueue(new Uint8Array(3));
       await vi.waitFor(() => expect(onBytes).toHaveBeenCalledWith(3));
-      expect(await queue.state()).toMatchObject({ cachedBytes: 3, cachedFiles: 0, totalBytes: 50 });
+      expect(await queue.state()).toMatchObject({ cachedBytes: 3, cachedFiles: 0, totalBytes: 170 });
       for (const [url, stream] of streams) {
-        if (url.endsWith("/4.bin")) continue;
+        if (url.endsWith("/16.bin")) continue;
         stream.enqueue(new Uint8Array(10));
         stream.close();
       }
+      for (let index = 4; index < 16; index += 4) {
+        await vi.waitFor(() => expect(streams.size).toBe(index + 5));
+        for (let offset = 0; offset < 4; offset += 1) {
+          const stream = streams.get(new URL(`assets/${index + offset}.bin`, SCOPE).href);
+          stream?.enqueue(new Uint8Array(10));
+          stream?.close();
+        }
+      }
       await pump;
-      expect(await queue.state()).toMatchObject({ cachedBytes: 43, cachedFiles: 4 });
+      expect(await queue.state()).toMatchObject({ cachedBytes: 163, cachedFiles: 16 });
       onBytes.mockClear();
       appStream?.enqueue(new Uint8Array(7));
       appStream?.close();
       await interactive;
       expect(onBytes).not.toHaveBeenCalled();
-      expect(await queue.state()).toMatchObject({ cachedBytes: 50, cachedFiles: 5 });
+      expect(await queue.state()).toMatchObject({ cachedBytes: 170, cachedFiles: 17 });
     } finally {
       for (const stream of streams.values()) stream.error(new Error("test stream cleanup"));
       await Promise.allSettled([pump, interactive]);
     }
+  });
+
+  it("refills free download slots while a slow file remains in flight", async () => {
+    const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: Array.from({ length: 6 }, (_, index) => ({ url: `assets/${index}.bin`, sizeBytes: 1 })),
+      scope: SCOPE,
+      download: async (request) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              streams.set(request.url, controller);
+            },
+          }),
+        ),
+    });
+    const pump = queue.runNextBatch();
+    try {
+      await vi.waitFor(() => expect(streams.size).toBe(4));
+      const finish = (index: number) => {
+        const stream = streams.get(new URL(`assets/${index}.bin`, SCOPE).href);
+        stream?.enqueue(new Uint8Array(1));
+        stream?.close();
+      };
+      finish(1);
+      await vi.waitFor(() => expect(streams.size).toBe(5));
+      expect(await queue.state()).toMatchObject({ cachedFiles: 1 });
+      finish(4);
+      await vi.waitFor(() => expect(streams.size).toBe(6));
+      for (const index of [0, 2, 3, 5]) finish(index);
+      await pump;
+      expect(await queue.state()).toMatchObject({ cachedFiles: 6 });
+    } finally {
+      for (const stream of streams.values()) stream.error(new Error("test stream cleanup"));
+      await Promise.allSettled([pump]);
+    }
+  });
+
+  it("stops refilling on pause and resumes only missing files in the next pump", async () => {
+    const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+    let running = true;
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: Array.from({ length: 5 }, (_, index) => ({ url: `assets/${index}.bin`, sizeBytes: 1 })),
+      scope: SCOPE,
+      download: async (request) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              streams.set(request.url, controller);
+            },
+          }),
+        ),
+    });
+    const pump = queue.runNextBatch(undefined, undefined, () => running);
+    try {
+      await vi.waitFor(() => expect(streams.size).toBe(4));
+      running = false;
+      for (const stream of streams.values()) {
+        stream.enqueue(new Uint8Array(1));
+        stream.close();
+      }
+      await pump;
+      expect(streams.size).toBe(4);
+      expect(await queue.state()).toMatchObject({ cachedFiles: 4 });
+      const resumed = queue.runNextBatch();
+      await vi.waitFor(() => expect(streams.size).toBe(5));
+      const last = streams.get(new URL("assets/4.bin", SCOPE).href);
+      last?.enqueue(new Uint8Array(1));
+      last?.close();
+      await resumed;
+      expect(await queue.state()).toMatchObject({ cachedFiles: 5 });
+    } finally {
+      for (const stream of streams.values()) stream.error(new Error("test stream cleanup"));
+      await Promise.allSettled([pump]);
+    }
+  });
+
+  it("drains active files after failure and retries without downloading completed files", async () => {
+    const streams = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+    const fetched: string[] = [];
+    let retry = false;
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: Array.from({ length: 6 }, (_, index) => ({ url: `assets/${index}.bin`, sizeBytes: 1 })),
+      scope: SCOPE,
+      download: async (request) => {
+        fetched.push(request.url);
+        if (retry) return new Response("x");
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              streams.set(request.url, controller);
+            },
+          }),
+        );
+      },
+    });
+    let settled = false;
+    const pump = queue.runNextBatch().finally(() => {
+      settled = true;
+    });
+    const failed = expect(pump).rejects.toThrow("lost connection");
+    try {
+      await vi.waitFor(() => expect(streams.size).toBe(4));
+      streams.get(new URL("assets/0.bin", SCOPE).href)?.error(new Error("lost connection"));
+      await vi.waitFor(async () => expect(await queue.state()).toMatchObject({ cachedFiles: 0 }));
+      expect(settled).toBe(false);
+      for (const index of [1, 2, 3]) {
+        const stream = streams.get(new URL(`assets/${index}.bin`, SCOPE).href);
+        stream?.enqueue(new Uint8Array(1));
+        stream?.close();
+      }
+      await failed;
+      expect(fetched).toHaveLength(4);
+      expect(await queue.state()).toMatchObject({ cachedFiles: 3 });
+      retry = true;
+      await queue.runNextBatch();
+      expect(fetched.slice(4)).toEqual([0, 4, 5].map((index) => new URL(`assets/${index}.bin`, SCOPE).href));
+      expect(await queue.state()).toMatchObject({ cachedFiles: 6 });
+    } finally {
+      for (const stream of streams.values()) stream.error(new Error("test stream cleanup"));
+      await Promise.allSettled([pump, failed]);
+    }
+  });
+
+  it("fetches directory documents without redirects and retains revisioned cache keys", async () => {
+    const download = vi.fn(async (_request: Request) => new Response("guide"));
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: [{ url: "docs/guide/index.html", revision: "guide-v1", sizeBytes: 5 }],
+      scope: `${SCOPE}app/`,
+      download,
+    });
+    await queue.runNextBatch();
+    expect(download.mock.calls[0]?.[0].url).toBe(`${SCOPE}app/docs/guide/`);
+    expect(await (await queue.match("docs/guide/index.html"))?.text()).toBe("guide");
+    const cache = await cacheStorage.open(CACHE_NAME);
+    expect((await cache.keys()).map((request) => request.url)).toEqual([
+      `${SCOPE}app/docs/guide/index.html?__WB_REVISION__=guide-v1`,
+    ]);
+    await queue.serve("docs/guide/index.html");
+    expect(download).toHaveBeenCalledTimes(1);
   });
 
   it.each(["br", "identity"])("resumes completed original files over HTTP %s after restart", async (encoding) => {
@@ -355,7 +507,7 @@ describe("deferred precache", () => {
   });
 
   it("deduplicates interactive fetches and completes state only after every batch file is stored", async () => {
-    const many = Array.from({ length: 5 }, (_, index) => ({
+    const many = Array.from({ length: 17 }, (_, index) => ({
       revision: `r${index}`,
       sizeBytes: index + 1,
       url: `assets/${index}.bin`,
@@ -373,10 +525,10 @@ describe("deferred precache", () => {
 
     const first = await queue.runNextBatch();
     expect(first).toBe(true);
-    expect(await queue.state()).toMatchObject({ cachedFiles: 4, totalFiles: 5 });
+    expect(await queue.state()).toMatchObject({ cachedFiles: 16, totalFiles: 17 });
     const second = await queue.runNextBatch();
     expect(second).toBe(true);
-    expect(await queue.state()).toMatchObject({ cachedFiles: 5, totalFiles: 5 });
+    expect(await queue.state()).toMatchObject({ cachedFiles: 17, totalFiles: 17 });
     expect(await queue.runNextBatch()).toBe(false);
 
     const interactive = createDeferredPrecache({

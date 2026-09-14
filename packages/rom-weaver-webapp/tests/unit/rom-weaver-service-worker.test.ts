@@ -418,6 +418,35 @@ describe("worker log relay", () => {
 });
 
 describe("service worker bootstrap", () => {
+  it("honors a pause received while the pump is waiting for its initial cache state", async () => {
+    const urls = Array.from({ length: 6 }, (_, index) => `${APP_ORIGIN}/assets/${index}.bin`);
+    const harness = await loadWorker({ manifest: urls.map((url) => ({ url, install: false, sizeBytes: 1 })) });
+    for (const url of urls) harness.fetchStub.handlers.set(url, () => new Response("x"));
+    const state = await harness.warmup.getReadyState();
+    let release: () => void = () => undefined;
+    const gate = new Promise<ReadyState>((resolve) => {
+      release = () => resolve(state);
+    });
+    const readState = vi
+      .mocked(harness.warmup.getReadyState)
+      .mockClear()
+      .mockImplementationOnce(() => gate);
+    const pump = dispatch(harness.scope, "message", { data: { action: "offline-warmup-pump" } });
+    try {
+      await vi.waitFor(() => expect(readState).toHaveBeenCalledTimes(1));
+      await dispatch(harness.scope, "message", { data: { action: "offline-warmup-pause" } });
+      release();
+      await pump;
+      expect(harness.fetchStub.calls.filter(({ url }) => urls.includes(url))).toHaveLength(0);
+      expect(harness.warmup.runNextUnit).not.toHaveBeenCalled();
+      await dispatch(harness.scope, "message", { data: { action: "offline-warmup-pump" } });
+      expect(harness.fetchStub.calls.filter(({ url }) => urls.includes(url))).toHaveLength(6);
+    } finally {
+      release();
+      await pump;
+    }
+  });
+
   it("updates transferred sizes when a file is cached while another batch file is still downloading", async () => {
     const first = `${APP_ORIGIN}/assets/first.bin`;
     const second = `${APP_ORIGIN}/assets/second.bin`;
@@ -542,7 +571,7 @@ describe("service worker bootstrap", () => {
       transferredBytes: 0,
       transferBytesIncomplete: false,
     });
-    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/index.html`, () => new Response("docs"));
+    harness.fetchStub.handlers.set(`${APP_ORIGIN}/docs/`, () => new Response("docs"));
     await routed(harness, requireRoute(2), new Request(`${APP_ORIGIN}/docs/index.html`));
     await expect(harness.warmupConfig.precacheState()).resolves.toEqual({
       cachedBytes: 20,
@@ -553,7 +582,7 @@ describe("service worker bootstrap", () => {
       transferredBytes: 20,
       transferBytesIncomplete: false,
     });
-    harness.fetchStub.handlers.delete(`${APP_ORIGIN}/docs/index.html`);
+    harness.fetchStub.handlers.delete(`${APP_ORIGIN}/docs/`);
     const response = await routed(harness, harness.networkFirstRoute, asDocumentRequest(`${APP_ORIGIN}/docs`));
     expect(await response.text()).toBe("docs");
   });

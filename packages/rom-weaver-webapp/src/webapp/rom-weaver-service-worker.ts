@@ -615,7 +615,10 @@ const offlineWarmup = createOfflineWarmup({
 });
 
 let appPumpChain: Promise<unknown> = Promise.resolve();
+let appPumpGeneration = 0;
 const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
+  // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
+  const generation = appPumpGeneration;
   const process = async () => {
     const baseline = await offlineWarmup.getReadyState();
     let deferredCachedBytes = baseline.deferredCachedBytes ?? 0;
@@ -646,16 +649,20 @@ const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
     };
     let downloaded: boolean;
     try {
-      downloaded = await deferredPrecache.runNextBatch((cachedBytes) => {
-        deferredCachedBytes = cachedBytes;
-        void progress.update();
-      }, onCached);
+      downloaded = await deferredPrecache.runNextBatch(
+        (cachedBytes) => {
+          deferredCachedBytes = cachedBytes;
+          void progress.update();
+        },
+        onCached,
+        () => generation === appPumpGeneration,
+      );
     } finally {
       // Interim messages MUST finish before the final reply closes the page's subscription.
       await cacheUpdates;
       await progress.flush();
     }
-    if (!downloaded) return offlineWarmup.runNextUnit(onInterim);
+    if (!downloaded && generation === appPumpGeneration) return offlineWarmup.runNextUnit(onInterim);
     return {
       ...(await offlineWarmup.getReadyState()),
       detail: null,
@@ -805,6 +812,12 @@ self.addEventListener("message", (event) => {
     if (event.ports?.[0]) event.ports[0].postMessage(response);
     else if (event.source && "postMessage" in event.source) event.source.postMessage(response);
   };
+
+  if (event.data.action === "offline-warmup-pause") {
+    appPumpGeneration += 1;
+    logServiceWorker("offline app downloads paused; draining active files");
+    return;
+  }
 
   if (event.data.action === "offline-warmup-pump") {
     // Interim byte-level events stream over the same reply port while the

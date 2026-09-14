@@ -6,6 +6,9 @@ import {
 } from "./response-encoded-size.ts";
 import { cacheWithDownloadLog } from "./offline-download-log.ts";
 
+const DOWNLOAD_CONCURRENCY = 4;
+const BATCH_FILE_LIMIT = 16;
+
 type DeferredEntry = { url: string; revision?: string | null; sizeBytes?: number };
 
 type DeferredState = {
@@ -34,7 +37,10 @@ const createDeferredPrecache = ({
     const url = new URL(entry.url, scope);
     const key = new URL(url);
     if (entry.revision) key.searchParams.set("__WB_REVISION__", entry.revision);
-    return { ...entry, key: key.href, url: url.href };
+    const downloadUrl = new URL(url);
+    // Directory URLs MUST avoid the index.html redirect used by static hosts.
+    downloadUrl.pathname = downloadUrl.pathname.replace(/\/index\.html$/, "/");
+    return { ...entry, downloadUrl: downloadUrl.href, key: key.href, url: url.href };
   });
   const byUrl = new Map(files.map((file) => [file.url, file]));
   // One download per file. Every caller that joins it gets the same byte
@@ -113,14 +119,16 @@ const createDeferredPrecache = ({
         listeners: new Set(onBytes ? [onBytes] : []),
         loadedBytes: 0,
         promise: (async () => {
-          const response = await download(new Request(file.url, { cache: file.revision ? "reload" : "default" }));
+          const response = await download(
+            new Request(file.downloadUrl, { cache: file.revision ? "reload" : "default" }),
+          );
           if (!response.ok) throw new Error(`Offline app download failed with HTTP ${response.status}: ${file.url}`);
           const buffer = await readWithByteProgress(response, (delta) => {
             entry.loadedBytes += delta;
             for (const listener of entry.listeners) listener(delta);
             for (const listener of progressListeners) listener(file.key, entry.loadedBytes);
           });
-          const complete = bufferedResponse(response, buffer, encodedSizeOf(file.url));
+          const complete = bufferedResponse(response, buffer, encodedSizeOf(file.downloadUrl));
           await cacheWithDownloadLog(cache, file.key, complete.clone(), log);
           transferSizes.forget(file.key);
           for (const listener of progressListeners) listener(file.key, file.sizeBytes ?? buffer.byteLength);
@@ -139,7 +147,11 @@ const createDeferredPrecache = ({
   };
 
   // A pump MUST observe all downloads, including app requests that start after its batch selection.
-  const runNextBatch = async (onProgress?: (cachedBytes: number) => void, onCached?: () => void) => {
+  const runNextBatch = async (
+    onProgress?: (cachedBytes: number) => void,
+    onCached?: () => void,
+    shouldContinue = () => true,
+  ) => {
     let cachedKeys: Set<string> | undefined;
     const loaded = new Map([...inFlight].map(([key, pending]) => [key, pending.loadedBytes]));
     const report = () => {
@@ -164,9 +176,23 @@ const createDeferredPrecache = ({
       cachedKeys = keys;
       const missing = files.filter((file) => !keys.has(file.key));
       const started = missing.filter((file) => inFlight.has(file.key));
-      const batch = [...started, ...missing.filter((file) => !inFlight.has(file.key))].slice(0, 4);
+      const batch = [...started, ...missing.filter((file) => !inFlight.has(file.key))].slice(0, BATCH_FILE_LIMIT);
       if (batch.length > 0) report();
-      const results = await Promise.allSettled(batch.map((file) => serve(file.url)));
+      let next = 0;
+      let failed = false;
+      const run = async () => {
+        while (!failed && shouldContinue()) {
+          const file = batch[next++];
+          if (!file) return;
+          try {
+            await serve(file.url);
+          } catch (error) {
+            failed = true;
+            throw error;
+          }
+        }
+      };
+      const results = await Promise.allSettled(Array.from({ length: DOWNLOAD_CONCURRENCY }, run));
       for (const result of results) {
         if (result.status === "rejected") throw result.reason;
       }
