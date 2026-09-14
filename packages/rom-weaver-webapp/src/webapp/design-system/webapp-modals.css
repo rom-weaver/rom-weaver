@@ -399,6 +399,11 @@ html:has(.rw-modal) {
 .rw-app .card.patch {
   contain: layout style;
 }
+/* Layout containment creates a stacking context, so an open menu MUST raise
+   its card above the following cards. */
+.rw-app .card.patch:has(.patch-menu-btn.is-open) {
+  z-index: 1;
+}
 
 /* Keep meter animation on the compositor during main-thread stalls. */
 .rw-app .meter.indet .fill {
