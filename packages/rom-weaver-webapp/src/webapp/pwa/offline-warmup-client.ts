@@ -6,7 +6,6 @@ import { createLogger } from "../../lib/logging.ts";
 import type { LogDetails } from "../../types/logging.ts";
 import type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress } from "../offline-warmup.ts";
 
-const IDLE_DELAY_MS = 250;
 const PUMP_TIMEOUT_MS = 120_000;
 const CACHE_INVENTORY_TIMEOUT_MS = 2000;
 const MAX_FAILURE_DELAY_MS = 30_000;
@@ -184,7 +183,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
 
   const abortController = new AbortController();
   const signal = abortController.signal;
-  const idleDelayMs = options.idleDelayMs ?? IDLE_DELAY_MS;
+  const idleDelayMs = options.idleDelayMs ?? 0;
   const delayMs = options.delayMs ?? 0;
   const idleMechanism = typeof requestIdleCallback === "function" ? "requestIdleCallback" : "timer";
   const saveData = nav?.connection?.saveData === true;

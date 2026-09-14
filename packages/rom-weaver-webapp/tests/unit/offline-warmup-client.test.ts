@@ -301,10 +301,51 @@ describe("offline warm-up client", () => {
     const { controller, messages } = createFakeController([progressReply({ ready: true })]);
     const { serviceWorker } = createServiceWorker(controller);
 
-    cancel = scheduleOfflineWarmup({ idleDelayMs: 0, navigator: { serviceWorker } });
+    cancel = scheduleOfflineWarmup({ navigator: { serviceWorker } });
     await flush();
 
     expect(messages.map((message) => message.action)).toEqual(["offline-warmup-pump"]);
+  });
+
+  it("yields between default fallback pumps without a 250 ms wait", async () => {
+    vi.stubGlobal("requestIdleCallback", undefined);
+    const { controller, messages } = createFakeController([progressReply(), progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+    const observedPumpCounts: number[] = [];
+
+    cancel = scheduleOfflineWarmup({
+      navigator: { serviceWorker },
+      onProgress: (progress) => {
+        if (!progress.ready) setTimeout(() => observedPumpCounts.push(messages.length), 0);
+      },
+    });
+    await flush();
+
+    expect(messages).toHaveLength(2);
+    expect(observedPumpCounts).toEqual([1]);
+  });
+
+  it("honors a pause between default fallback pumps", async () => {
+    vi.stubGlobal("requestIdleCallback", undefined);
+    const { controller, messages } = createFakeController([progressReply(), progressReply({ ready: true })]);
+    const { serviceWorker } = createServiceWorker(controller);
+
+    cancel = scheduleOfflineWarmup({
+      navigator: { serviceWorker },
+      onProgress: (progress) => {
+        if (!progress.ready) pauseOfflineWarmup();
+      },
+    });
+    try {
+      await flush(8);
+      expect(messages).toHaveLength(1);
+
+      resumeOfflineWarmup();
+      await flush(8);
+      expect(messages).toHaveLength(2);
+    } finally {
+      resumeOfflineWarmup();
+    }
   });
 
   it("does not pump before the delay elapses or without a controller", async () => {
@@ -503,7 +544,7 @@ describe("offline warm-up client", () => {
     const { controller, messages } = createFakeController(replies);
     const { serviceWorker } = createServiceWorker(controller);
 
-    cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
+    cancel = scheduleOfflineWarmup({ delayMs: 0, navigator: { serviceWorker } });
     await flush(4);
     cancel();
     cancel = undefined;
