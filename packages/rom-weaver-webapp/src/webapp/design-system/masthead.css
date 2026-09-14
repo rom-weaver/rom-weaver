@@ -1041,8 +1041,11 @@ html.vt-theme .mode-rail .mode {
     inset-block-start: auto;
     inset-block-end: calc(var(--dock-h) + var(--sp-xs));
     inset-inline-end: max(var(--sp-s), var(--safe-r));
-    max-block-size: calc(100dvh - var(--dock-h) - 2 * var(--sp-xs));
+    max-block-size: calc(100svh - var(--dock-h) - 2 * var(--sp-xs));
     overflow-y: auto;
+  }
+  .rw-app .shared-more-menu > * {
+    flex-shrink: 0;
   }
 }
 

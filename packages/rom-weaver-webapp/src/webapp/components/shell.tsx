@@ -525,7 +525,7 @@ const UtilityMenu = ({
   useEffect(() => {
     if (!open) return;
     if (!autoFocusFirst) {
-      menuRef.current?.focus();
+      menuRef.current?.focus({ preventScroll: true });
       return;
     }
     const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');

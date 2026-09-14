@@ -605,7 +605,7 @@ test("mobile More carries app utilities plus the external links, and the footer 
 
 test("mobile More stays in view on a short screen", async () => {
   await page.viewport(320, 480);
-  mountWebappRoot();
+  mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   await page.getByRole("button", { name: "More" }).click();
   const menu = document.querySelector(".shared-more-menu");
@@ -614,6 +614,7 @@ test("mobile More stays in view on a short screen", async () => {
   expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
   expect(getComputedStyle(menu).animationName).toBe("none");
   expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+  await expect.element(page.getByRole("menuitem", { name: "PPF undo Beta" })).toBeInTheDocument();
 
   await page.getByRole("menuitem", { name: "Logs" }).click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
