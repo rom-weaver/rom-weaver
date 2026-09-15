@@ -883,7 +883,7 @@ function WebappRoot({
           />
           {previewEnabled && previewLayout ? (
             <section aria-label="Preview controls" className="status-prototype-bar">
-              <label htmlFor="status-prototype-layout">
+              <label className="status-prototype-layout" htmlFor="status-prototype-layout">
                 Layout
                 <select
                   id="status-prototype-layout"

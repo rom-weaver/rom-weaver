@@ -1333,6 +1333,26 @@
     display: block;
   }
   @media (max-width: 449px) {
+    .rw-app .status-prototype-bar {
+      gap: 8px;
+      align-items: center;
+      padding-block: 5px;
+    }
+    .rw-app .status-prototype-bar .status-prototype-layout {
+      display: none;
+    }
+    .rw-app .status-prototype-bar label:not(.status-prototype-layout) {
+      flex-direction: row;
+      gap: 6px;
+      align-items: center;
+    }
+    .rw-app .status-prototype-bar select {
+      min-block-size: 32px;
+    }
+    .rw-app .status-prototype-bar > span {
+      padding: 0;
+      margin-inline-start: auto;
+    }
     .rw-app .shell-head-tools {
       gap: 0;
     }
@@ -1363,16 +1383,15 @@
     }
     .rw-app .title-build-row {
       inline-size: calc(100vw - 2 * var(--gutter) - 38px);
-      margin-block-start: 11px;
+      margin-block-start: 7px;
     }
-    .rw-app .status-prototype-bar {
-      position: relative;
+    .rw-app .title-build-row .sub-chip {
+      align-items: flex-start;
+      padding-block-start: 2px;
     }
-    .rw-app .status-prototype-bar > span {
-      position: absolute;
-      inset-block-start: 10px;
-      inset-inline-end: var(--gutter);
-      padding: 0;
+    .rw-app .shell-head-tools .tool {
+      width: 24px;
+      height: 24px;
     }
   }
   /* The trailing pair would paint its tooltip past the window edge and give
