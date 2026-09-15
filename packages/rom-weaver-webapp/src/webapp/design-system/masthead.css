@@ -565,6 +565,7 @@ html.vt-theme .mode-rail .mode {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+  text-decoration: none;
   appearance: none;
   cursor: pointer;
   background: transparent;
@@ -791,11 +792,12 @@ html.vt-theme .mode-rail .mode {
    cluster stops reading as a second nav beside the mode rail. Fluid so it cedes
    width smoothly as the viewport tightens. */
 .rw-app .tool {
+  --tool-block-size: clamp(32px, 26px + 1vw, 38px);
   position: relative;
   display: grid;
   place-items: center;
   width: clamp(30px, 22px + 1.2vw, 38px);
-  height: clamp(32px, 26px + 1vw, 38px);
+  height: var(--tool-block-size);
   color: var(--ink-2);
   appearance: none;
   cursor: pointer;
@@ -834,6 +836,7 @@ html.vt-theme .mode-rail .mode {
   align-items: center;
   justify-content: center;
   width: clamp(30px, 22px + 1.2vw, 38px);
+  height: var(--tool-block-size);
   padding-inline: 0;
   font-size: 0.78rem;
   font-weight: 650;
@@ -1099,7 +1102,8 @@ html.vt-theme .mode-rail .mode {
   white-space: nowrap;
 }
 .rw-app .dock-tab[aria-selected="true"],
-.rw-app .dock-action[aria-expanded="true"] {
+.rw-app .dock-action[aria-expanded="true"],
+.rw-app .dock-action.is-current {
   color: var(--thread-text);
 }
 @media (hover: hover) {
@@ -1111,6 +1115,15 @@ html.vt-theme .mode-rail .mode {
 .rw-app .dock-tab:not([aria-selected="true"]):active,
 .rw-app .dock-action:not([aria-expanded="true"]):active {
   color: var(--ink);
+}
+.rw-app .dock-action.is-current::before {
+  position: absolute;
+  inset-block-start: -5px;
+  inset-inline: 10px;
+  block-size: 2px;
+  content: "";
+  background: var(--thread);
+  border-radius: 1px;
 }
 /* the shuttle stitch: a thread carried along the dock's top seam */
 .rw-app .dock-thumb {

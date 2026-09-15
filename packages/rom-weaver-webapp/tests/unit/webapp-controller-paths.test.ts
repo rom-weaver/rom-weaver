@@ -168,6 +168,8 @@ describe("the landing route at the app base", () => {
       ["/test-rom", "test"],
       ["/trim", "trim"],
       ["/trim-rom", "trim"],
+      ["/more", "more"],
+      ["/more.html", "more"],
     ] as const) {
       expect(readWorkflowViewFromPath(route)).toBe(view);
     }

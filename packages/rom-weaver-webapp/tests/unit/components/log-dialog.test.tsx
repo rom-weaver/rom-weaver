@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { listBrowserOpfs } from "../../../src/storage/browser/browser-opfs-cleanup.ts";
 import { getActiveBrowserVirtualFiles } from "../../../src/workers/protocol/browser-virtual-files.ts";
-import { LogDialog } from "../../../src/webapp/components/log-dialog.tsx";
+import { LogDialog, MorePage } from "../../../src/webapp/components/log-dialog.tsx";
 import { queryOfflineCachedFiles } from "../../../src/webapp/pwa/offline-warmup-client.ts";
 
 vi.mock("../../../src/storage/browser/browser-opfs-cleanup.ts", () => ({
@@ -66,6 +66,19 @@ afterEach(() => {
 });
 
 describe("LogDialog", () => {
+  it("renders the unified console as the More page without a modal", () => {
+    const { container, getByRole } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <MorePage onLevelChange={() => undefined} />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(container.querySelector(".more-page")).not.toBeNull();
+    expect(container.querySelector("dialog.log-dlg")).toBeNull();
+    expect(getByRole("heading", { name: "Status" })).not.toBeNull();
+    expect(container.querySelectorAll(".more-page-tabs [role=tab]")).toHaveLength(4);
+  });
+
   it("lists every cached offline file with its sizes on Status", async () => {
     vi.mocked(queryOfflineCachedFiles).mockResolvedValue([
       {

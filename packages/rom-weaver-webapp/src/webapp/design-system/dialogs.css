@@ -128,6 +128,53 @@
 .rw-app .log-dlg {
   max-width: min(1280px, calc(100vw - 32px));
 }
+.rw-app .more-page {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+}
+.rw-app .more-page .dlg-frame {
+  width: min(600px, 100%);
+  height: min(90dvh, 940px);
+  max-height: min(90dvh, 940px);
+  border-radius: var(--r-l);
+  opacity: 1;
+  transform: none;
+}
+.rw-app .more-page-head {
+  display: block;
+  padding-block: var(--sp-l) var(--sp-m);
+}
+.rw-app .more-page-heading span {
+  display: block;
+  margin-block-end: var(--sp-2xs);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.rw-app .more-page-heading h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.rw-app .more-page-tabs {
+  flex: none;
+  order: 5;
+  padding: var(--sp-s) var(--sp-m) calc(var(--sp-s) + env(safe-area-inset-bottom, 0px));
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .more-page-tabs .dialog-subrail {
+  justify-content: space-between;
+  overflow: visible;
+}
+.rw-app .more-page-tabs .subtab {
+  flex: 1 1 0;
+  justify-content: center;
+}
 .rw-app .log-dlg .dlg-frame {
   height: min(90dvh, 940px);
   max-height: min(90dvh, 940px);

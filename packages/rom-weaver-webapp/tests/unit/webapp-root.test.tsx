@@ -193,55 +193,35 @@ describe("tab selection", () => {
     expect(mocks.requestEmulatorStartFromUserAction).toHaveBeenCalledTimes(1);
   });
 
-  it("waits for the lazy Docs route before switching to it", async () => {
+  it("opens the More route from the desktop rail", async () => {
     const { called, container } = await renderRoot();
 
-    // Docs is a More entry (Project), never a dock tab.
-    expect(container.querySelector('.dock-tab[data-mode="docs"]')).toBeNull();
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-    fireEvent.click(container.querySelector('[data-more-workflow="docs"]') as HTMLAnchorElement);
-    expect(called("onSelectView")).not.toHaveBeenCalled();
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLAnchorElement);
 
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("docs"));
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 });
 
-describe("the unified dialog", () => {
-  const openFromMore = (container: HTMLElement, name: string) => {
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-    const item = Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((entry) =>
-      entry.textContent?.includes(name),
-    );
-    fireEvent.click(item as HTMLElement);
-  };
+describe("the unified More page", () => {
+  const openTab = (container: HTMLElement, name: string) =>
+    fireEvent.click(container.querySelector(`[data-logtab="${name.toLowerCase()}"]`) as HTMLButtonElement);
 
-  it("opens on Status from the More menu", async () => {
-    const { container } = await renderRoot();
+  it("opens on Status", async () => {
+    const { container } = await renderRoot({ currentView: "more" });
 
-    openFromMore(container, "Status");
-
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).not.toBeNull());
-    expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
-  });
-
-  it("opens on Status while an update is waiting", async () => {
-    const { container } = await renderRoot({ updateReady: true });
-
-    openFromMore(container, "Status");
-
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).not.toBeNull());
+    await waitFor(() => expect(container.querySelector(".more-page")).not.toBeNull());
     expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
   it("opens on Storage and on Logs", async () => {
-    const { container } = await renderRoot();
+    const { container } = await renderRoot({ currentView: "more" });
 
-    openFromMore(container, "Storage");
+    openTab(container, "Storage");
     await waitFor(() =>
       expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
     );
 
-    openFromMore(container, "Logs");
+    openTab(container, "Logs");
     await waitFor(() =>
       expect(container.querySelector('[data-logtab="logs"]')?.getAttribute("aria-selected")).toBe("true"),
     );
@@ -253,9 +233,7 @@ describe("the unified dialog", () => {
     fireEvent.click(container.querySelector(".workflow-panel-head button") as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
-    await waitFor(() =>
-      expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
-    );
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 
   it("resets the workflow from the panel head", async () => {
@@ -319,16 +297,12 @@ describe("the What's new route", () => {
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
   });
 
-  it("reaches the route from the More menu's Project group", async () => {
+  it("reaches the More route from the masthead", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-    const item = Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((entry) =>
-      entry.textContent?.includes("What’s new"),
-    );
-    fireEvent.click(item as HTMLElement);
+    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLAnchorElement);
 
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
+    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("more"));
   });
 });
 
@@ -442,16 +416,16 @@ describe("offline warm-up progress", () => {
 
 describe("the settings draft flow", () => {
   const openSettings = (container: HTMLElement) => {
-    fireEvent.click(container.querySelector(".workflow-panel-head button") as HTMLButtonElement);
     return waitFor(() => {
-      const dialog = container.querySelector("dialog.log-dlg");
-      if (!dialog) throw new Error("The settings dialog never opened");
-      return dialog as HTMLDialogElement;
+      const settings = container.querySelector('[data-logtab="settings"]');
+      if (!settings) throw new Error("The More page has no Settings tab");
+      fireEvent.click(settings);
+      return settings as HTMLButtonElement;
     });
   };
 
   it("re-stages the draft when the dialog's own Settings tab is chosen", async () => {
-    const { called, container } = await renderRoot({ settingsDialogOpen: true });
+    const { called, container } = await renderRoot({ currentView: "more" });
     await openSettings(container);
     const before = called("onOpenSettings").mock.calls.length;
 
@@ -461,34 +435,20 @@ describe("the settings draft flow", () => {
     expect(called("onOpenSettings").mock.calls.length).toBe(before + 1);
   });
 
-  it("runs the discard flow instead of closing the dialog outright", async () => {
-    const { called, container } = await renderRoot({ settingsDialogOpen: true });
-    const dialog = await openSettings(container);
+  it("offers a discard action on the More page", async () => {
+    const { called, container } = await renderRoot({ currentView: "more" });
+    await openSettings(container);
 
-    fireEvent.keyDown(dialog, { key: "Escape" });
-
-    expect(called("onCloseSettings")).toHaveBeenCalledTimes(1);
-    // The dialog stays up until the controller actually clears the draft.
-    expect(container.querySelector("dialog.log-dlg")).not.toBeNull();
-  });
-
-  it("closes the dialog straight away when no draft is staged", async () => {
-    const { called, container } = await renderRoot();
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-    const status = Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((entry) =>
-      entry.textContent?.includes("Status"),
+    const discard = Array.from(container.querySelectorAll<HTMLButtonElement>(".settings-actions button")).find(
+      (button) => button.textContent?.includes("Cancel"),
     );
-    fireEvent.click(status as HTMLElement);
-    const dialog = await waitFor(() => container.querySelector("dialog.log-dlg") as HTMLDialogElement);
+    fireEvent.click(discard as HTMLButtonElement);
 
-    fireEvent.keyDown(dialog, { key: "Escape" });
-
-    expect(called("onCloseSettings")).not.toHaveBeenCalled();
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).toBeNull());
+    expect(called("onDiscardSettings")).toHaveBeenCalledTimes(1);
   });
 
-  it("saves the draft from the dialog's Save control", async () => {
-    const { called, container } = await renderRoot({ settingsDialogOpen: true });
+  it("saves the draft from the More page Save control", async () => {
+    const { called, container } = await renderRoot({ currentView: "more" });
     await openSettings(container);
 
     const save = await waitFor(() => {
@@ -509,9 +469,7 @@ describe("the settings draft flow", () => {
     fireEvent.click(container.querySelector(".masthead-threads") as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
-    await waitFor(() =>
-      expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
-    );
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 });
 
@@ -553,15 +511,11 @@ describe("host ingest", () => {
 });
 
 describe("the mobile More settings row", () => {
-  it("opens the settings tab from the phone menu", async () => {
+  it("opens the More route from the phone dock", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".mobile-more .dock-action") as HTMLButtonElement);
-    const settings = Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((entry) =>
-      entry.textContent?.includes("Settings"),
-    );
-    fireEvent.click(settings as HTMLElement);
+    fireEvent.click(container.querySelector(".mobile-more .dock-action") as HTMLAnchorElement);
 
-    expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 });

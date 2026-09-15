@@ -684,17 +684,19 @@ const DialogTabRail = ({
   );
 };
 
-/** Save/restore for the settings tab; absent handlers drop their buttons. */
+/** Settings actions stay in the tab's control bar; absent handlers drop their buttons. */
 const SettingsActionsBar = ({
   localizer,
+  onDiscardSettings,
   onRestoreDefaults,
   onSaveSettings,
 }: {
   localizer: Localizer;
+  onDiscardSettings?: () => void;
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
 }) => {
-  if (!(onRestoreDefaults || onSaveSettings)) return null;
+  if (!(onDiscardSettings || onRestoreDefaults || onSaveSettings)) return null;
   return (
     <div className="dlg-subhead">
       <div className="log-controls">
@@ -708,6 +710,17 @@ const SettingsActionsBar = ({
             >
               <RotateCcw aria-hidden="true" />
               <span className="bl">{localizer.message("ui.settings.defaults")}</span>
+            </button>
+          ) : null}
+          {onDiscardSettings ? (
+            <button
+              className="btn ghost"
+              onClick={onDiscardSettings}
+              title={localizer.message("ui.common.cancel")}
+              type="button"
+            >
+              <X aria-hidden="true" />
+              <span className="bl">{localizer.message("ui.common.cancel")}</span>
             </button>
           ) : null}
           {onSaveSettings ? (
@@ -1036,29 +1049,15 @@ const LogsStoragePanel = ({
   );
 };
 
-const LogDialog = ({
-  open,
-  onClose,
-  level,
-  onLevelChange,
-  initialTab = "status",
-  onRestoreDefaults,
-  onSaveSettings,
-  onTabChange,
-  serviceWorkerStatus,
-  offlineProgress = null,
-  offlineCopyEnabled = true,
-  onOfflineCopyEnabledChange,
-  settingsFocusHint,
-  settingsPanel,
-  updateReady = false,
-}: {
+type LogDialogProps = {
   open: boolean;
   onClose: () => void;
+  active?: boolean;
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
   onRestoreDefaults?: () => void;
+  onDiscardSettings?: () => void;
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
@@ -1069,7 +1068,32 @@ const LogDialog = ({
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
   updateReady?: boolean;
-}) => {
+  /** Render the console as the More route instead of a modal dialog. */
+  page?: boolean;
+};
+
+type MorePageProps = Omit<LogDialogProps, "open" | "onClose" | "page">;
+
+const LogDialog = ({
+  open,
+  onClose,
+  active = true,
+  level,
+  onLevelChange,
+  initialTab = "status",
+  onRestoreDefaults,
+  onDiscardSettings,
+  onSaveSettings,
+  onTabChange,
+  serviceWorkerStatus,
+  offlineProgress = null,
+  offlineCopyEnabled = true,
+  onOfflineCopyEnabledChange,
+  settingsFocusHint,
+  settingsPanel,
+  updateReady = false,
+  page = false,
+}: LogDialogProps) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const traceRef = useRef<HTMLDivElement | null>(null);
@@ -1079,6 +1103,7 @@ const LogDialog = ({
   const [viewportHeight, setViewportHeight] = useState(0);
   const [view, setView] = useState<"current" | "previous">("current");
   const [tab, setTab] = useState<LogDialogTab>(initialTab);
+  const panelActive = page ? active : open;
   const copyFeedback = useCopyFeedback(1300, 1600);
   // Each open lands on the tab the control that opened it names.
   useEffect(() => {
@@ -1091,7 +1116,7 @@ const LogDialog = ({
     },
     [onTabChange],
   );
-  useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
+  useSettingsFieldFocus(panelActive && tab === "settings", settingsFocusHint);
   const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress, offlineCopyEnabled);
   const offlineCopy = useSyncExternalStore(subscribeOfflineCopyState, getOfflineCopyState, getInitialOfflineCopyState);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
@@ -1128,15 +1153,15 @@ const LogDialog = ({
     }
   }, []);
   useEffect(() => {
-    if (!(open && showingOpfs)) return;
+    if (!(panelActive && showingOpfs)) return;
     void refreshOpfs();
-  }, [open, refreshOpfs, showingOpfs]);
+  }, [panelActive, refreshOpfs, showingOpfs]);
   // The inventory reads every cached body to measure it, so it is refreshed on
   // a slow tick rather than per progress event, and only while an install is
   // actually adding files with this panel in front of the user.
   const installing = runtimeState === "installing";
   useEffect(() => {
-    if (!(open && tab === "status") || offlineCopy.pending) return undefined;
+    if (!(panelActive && tab === "status") || offlineCopy.pending) return undefined;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = (initial: boolean) => {
@@ -1164,17 +1189,18 @@ const LogDialog = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [installing, offlineCopy.pending, open, tab]);
+  }, [installing, offlineCopy.pending, panelActive, tab]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
-    open && tab === "logs" && !showingPrevious ? subscribeLogEntries : noopSubscribe,
-    open && tab === "logs" && !showingPrevious ? getLogEntries : getEmptyEntries,
+    panelActive && tab === "logs" && !showingPrevious ? subscribeLogEntries : noopSubscribe,
+    panelActive && tab === "logs" && !showingPrevious ? getLogEntries : getEmptyEntries,
     getEmptyEntries,
   );
   const entries = showingPrevious ? previousEntries : liveEntries;
 
   useEffect(() => {
+    if (page) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
@@ -1187,7 +1213,7 @@ const LogDialog = ({
       // rail - without lighting up a control nobody has reached yet.
       dialog.focus({ preventScroll: true });
     } else if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, page]);
 
   const visible = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -1202,23 +1228,132 @@ const LogDialog = ({
     return leafEntries.filter((entry) => `${formatOpfsEntry(entry)} ${entry.path}`.toLowerCase().includes(query));
   }, [filter, opfsEntries]);
   useEffect(() => {
-    if (!(open && tab === "logs")) return;
+    if (!(panelActive && tab === "logs")) return;
     const trace = traceRef.current;
     if (!trace) return;
     const updateViewport = () => setViewportHeight(trace.clientHeight);
     updateViewport();
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
-  }, [open, tab]);
+  }, [panelActive, tab]);
 
   // Keep the newest lines in view while the dialog is open.
   useEffect(() => {
     const trace = traceRef.current;
-    if (open && trace && viewportHeight > 0) {
+    if (panelActive && trace && viewportHeight > 0) {
       trace.scrollTop = trace.scrollHeight;
       setScrollTop(trace.scrollTop);
     }
-  }, [open, viewportHeight]);
+  }, [panelActive, viewportHeight]);
+
+  const panelContent = (
+    <>
+      {page ? (
+        <header className="dlg-head more-page-head">
+          <div className="more-page-heading">
+            <span>{localizer.message("ui.tools.more")}</span>
+            <h1>{localizer.message(TAB_MESSAGES[tab])}</h1>
+          </div>
+        </header>
+      ) : (
+        <header className="dlg-head">
+          <DialogTabRail localizer={localizer} onSelect={selectTab} tab={tab} />
+          <button
+            aria-label={localizer.message("ui.common.close")}
+            className="dlg-x"
+            onClick={onClose}
+            title={localizer.message("ui.common.close")}
+            type="button"
+          >
+            <X aria-hidden="true" />
+            <span className="dlg-x-label">{localizer.message("ui.common.close")}</span>
+          </button>
+        </header>
+      )}
+      {tab === "settings" ? (
+        <SettingsActionsBar
+          localizer={localizer}
+          onDiscardSettings={onDiscardSettings}
+          onRestoreDefaults={onRestoreDefaults}
+          onSaveSettings={onSaveSettings}
+        />
+      ) : null}
+      {tab === "settings" ? (
+        <div
+          aria-labelledby="logtab-settings"
+          className="dlg-body settings-body"
+          id="logpanel-settings"
+          role="tabpanel"
+        >
+          {settingsPanel}
+        </div>
+      ) : null}
+      {tab === "status" ? (
+        <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
+          <StatusRows
+            downloadRequested={offlineCopy.downloadRequested}
+            downloadUnavailable={downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error)}
+            offlineCopyEnabled={offlineCopyEnabled}
+            removing={!offlineCopy.enabled && offlineCopy.pending}
+            removeUnavailable={!offlineCopy.enabled && !!offlineCopy.error}
+            onRemove={requestRemoval}
+            localizer={localizer}
+            offlineProgress={offlineProgress}
+            onDownload={requestDownload}
+            runtimeState={runtimeState}
+          />
+          <OfflineCachedFiles
+            error={cachedFilesError}
+            files={cachedFiles}
+            loading={cachedFilesLoading}
+            localizer={localizer}
+          />
+          <OfflineLegend current={runtimeState} localizer={localizer} />
+          <AboutLink localizer={localizer} />
+        </div>
+      ) : null}
+      {tab === "logs" || tab === "storage" ? (
+        <LogsStoragePanel
+          copyFeedback={copyFeedback}
+          currentLevel={currentLevel}
+          entries={visible}
+          filter={filter}
+          hasPrevious={hasPrevious}
+          localizer={localizer}
+          onFilterChange={(next) => {
+            setFilter(next);
+            if (traceRef.current) traceRef.current.scrollTop = 0;
+            setScrollTop(0);
+          }}
+          onLevelChange={onLevelChange}
+          onRefreshOpfs={() => void refreshOpfs()}
+          onScroll={setScrollTop}
+          onViewChange={setView}
+          opfsEntries={visibleOpfs}
+          opfsError={opfsError}
+          opfsLoading={opfsLoading}
+          scrollTop={scrollTop}
+          showingPrevious={showingPrevious}
+          tab={tab}
+          traceRef={traceRef}
+          viewportHeight={viewportHeight}
+        />
+      ) : null}
+      {page ? (
+        <nav className="more-page-tabs">
+          <DialogTabRail localizer={localizer} onSelect={selectTab} tab={tab} />
+        </nav>
+      ) : null}
+    </>
+  );
+
+  if (page) {
+    return (
+      <section aria-label={localizer.message("ui.tools.more")} className="dlg log-dlg more-page">
+        <div className="dlg-frame">{panelContent}</div>
+      </section>
+    );
+  }
 
   return (
     <dialog
@@ -1239,98 +1374,12 @@ const LogDialog = ({
       }}
       ref={dialogRef}
     >
-      <div className="dlg-frame">
-        {/* the weft sub-rail IS the header: no title competing with it, and the
-            close button parks at the rail's end. On a phone the whole head
-            drops to the foot of the sheet - see responsive.css. */}
-        <header className="dlg-head">
-          <DialogTabRail localizer={localizer} onSelect={selectTab} tab={tab} />
-          <button
-            aria-label={localizer.message("ui.common.close")}
-            className="dlg-x"
-            onClick={onClose}
-            title={localizer.message("ui.common.close")}
-            type="button"
-          >
-            <X aria-hidden="true" />
-            {/* Only shown when the head is the phone's bottom bar, where a bare
-                glyph among labelled columns is the odd one out. */}
-            <span className="dlg-x-label">{localizer.message("ui.common.close")}</span>
-          </button>
-        </header>
-        {tab === "settings" ? (
-          <SettingsActionsBar
-            localizer={localizer}
-            onRestoreDefaults={onRestoreDefaults}
-            onSaveSettings={onSaveSettings}
-          />
-        ) : null}
-        {tab === "settings" ? (
-          <div
-            aria-labelledby="logtab-settings"
-            className="dlg-body settings-body"
-            id="logpanel-settings"
-            role="tabpanel"
-          >
-            {settingsPanel}
-          </div>
-        ) : null}
-        {tab === "status" ? (
-          <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows
-              downloadRequested={offlineCopy.downloadRequested}
-              downloadUnavailable={downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error)}
-              offlineCopyEnabled={offlineCopyEnabled}
-              removing={!offlineCopy.enabled && offlineCopy.pending}
-              removeUnavailable={!offlineCopy.enabled && !!offlineCopy.error}
-              onRemove={requestRemoval}
-              localizer={localizer}
-              offlineProgress={offlineProgress}
-              onDownload={requestDownload}
-              runtimeState={runtimeState}
-            />
-            <OfflineCachedFiles
-              error={cachedFilesError}
-              files={cachedFiles}
-              loading={cachedFilesLoading}
-              localizer={localizer}
-            />
-            <OfflineLegend current={runtimeState} localizer={localizer} />
-            <AboutLink localizer={localizer} />
-          </div>
-        ) : null}
-        {tab === "logs" || tab === "storage" ? (
-          <LogsStoragePanel
-            copyFeedback={copyFeedback}
-            currentLevel={currentLevel}
-            entries={visible}
-            filter={filter}
-            hasPrevious={hasPrevious}
-            localizer={localizer}
-            onFilterChange={(next) => {
-              setFilter(next);
-              // A new query re-ranges the list, so start reading it from the top.
-              if (traceRef.current) traceRef.current.scrollTop = 0;
-              setScrollTop(0);
-            }}
-            onLevelChange={onLevelChange}
-            onRefreshOpfs={() => void refreshOpfs()}
-            onScroll={setScrollTop}
-            onViewChange={setView}
-            opfsEntries={visibleOpfs}
-            opfsError={opfsError}
-            opfsLoading={opfsLoading}
-            scrollTop={scrollTop}
-            showingPrevious={showingPrevious}
-            tab={tab}
-            traceRef={traceRef}
-            viewportHeight={viewportHeight}
-          />
-        ) : null}
-      </div>
+      <div className="dlg-frame">{panelContent}</div>
     </dialog>
   );
 };
 
-export { cachedFileBytesLabel, cachedFileTotals, LogDialog, sortCachedFiles };
-export type { LogDialogTab, SettingsFocusHint };
+const MorePage = (props: MorePageProps) => <LogDialog {...props} open page onClose={() => undefined} />;
+
+export { cachedFileBytesLabel, cachedFileTotals, LogDialog, MorePage, sortCachedFiles };
+export type { LogDialogProps, LogDialogTab, MorePageProps, SettingsFocusHint };
