@@ -147,8 +147,8 @@
       // the prerendered masthead metadata. It resolves the build facts and
       // status before the shell can paint, and produces the text React hydrates.
       window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY = function () {
-        // The desktop runtime button renders before hydration. The resolver
-        // MUST update every runtime-dependent prerendered node.
+        // The runtime buttons in both layouts render before hydration.
+        // The resolver MUST update every runtime-dependent prerendered node.
         // A stale "installing" state makes React discard the prerendered page.
         const threadSlots = [...document.querySelectorAll(".masthead-threads")];
         const statusSlots = [...document.querySelectorAll(".sub-status")];

@@ -142,7 +142,7 @@ describe("Masthead", () => {
     expect(container.querySelectorAll("h1").length).toBe(1);
     expect(container.querySelectorAll(".brand").length).toBe(1);
     expect(container.querySelectorAll(".masthead-threads").length).toBe(1);
-    expect(container.querySelectorAll(".sub-status").length).toBe(1);
+    expect(container.querySelectorAll(".sub-status").length).toBe(2);
     expect(container.querySelector(".brand-copy .build-facts")).toBeTruthy();
     expect(container.querySelector(".dock-state-dot")).toBeNull();
 

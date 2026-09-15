@@ -463,6 +463,9 @@
   flex: 1 1 auto;
   min-inline-size: min-content;
 }
+.rw-app .phone-runtime {
+  display: none;
+}
 
 /* ── desktop sidebar ──
    The identity block heads the column and the nav scrolls under it, so the
@@ -801,12 +804,16 @@
   inset-inline-end: auto;
 }
 .rw-app .nav-tool-anchor .nav-tool-pop {
-  position: relative;
+  position: fixed;
   inset: auto;
-  inline-size: 100%;
-  min-inline-size: 0;
-  margin-block: 4px;
-  box-shadow: none;
+  min-inline-size: min(210px, calc(100vw - 16px));
+  max-inline-size: calc(100vw - 16px);
+  max-block-size: calc(100dvh - 16px);
+  margin: 0;
+  overflow-y: auto;
+}
+.rw-app .nav-tool-pop[popover]:not(:popover-open) {
+  display: none;
 }
 .rw-app .nav-tool-pop .tool-pop-item {
   white-space: normal;
@@ -1128,6 +1135,45 @@
   .rw-app .brand-copy .masthead-threads,
   .rw-app .brand-copy .sub-separator {
     display: none;
+  }
+  .rw-app .shell-head-top {
+    align-items: flex-start;
+    padding-block: 5px;
+  }
+  .rw-app .shell-head-tools {
+    margin-block-start: 3px;
+  }
+  .rw-app .shell-head-top .brand {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0 var(--sp-s);
+  }
+  .rw-app .brand-mark-link {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .rw-app .brand-copy {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  .rw-app .phone-runtime {
+    display: block;
+    grid-row: 2;
+    grid-column: 1 / -1;
+    min-inline-size: 0;
+    margin-block-start: 8px;
+  }
+  .rw-app .phone-runtime .sub-status {
+    max-inline-size: 100%;
+    block-size: auto;
+    min-block-size: 26px;
+    padding-inline: 0;
+    font-size: 0.68rem;
+    text-align: start;
+    white-space: normal;
+  }
+  .rw-app .phone-runtime .sub-status-text {
+    overflow-wrap: anywhere;
   }
   .rw-app .dock {
     display: grid;

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
@@ -418,6 +418,48 @@ const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: T
   { icon: <MonitorCog aria-hidden="true" />, label: "ui.theme.matchSystem", value: "auto" },
 ];
 
+/** Nav panels MUST enter the top layer so the scroll boxes cannot clip them. */
+const useNavToolPopover = (
+  open: boolean,
+  navRow: boolean,
+  buttonRef: RefObject<HTMLButtonElement | null>,
+  panelRef: RefObject<HTMLDivElement | null>,
+) => {
+  useLayoutEffect(() => {
+    const button = buttonRef.current;
+    const panel = panelRef.current;
+    if (!(open && navRow && button && panel)) return undefined;
+
+    if (typeof panel.showPopover === "function") panel.showPopover();
+    else panel.removeAttribute("popover");
+
+    const position = () => {
+      const trigger = button.getBoundingClientRect();
+      const width = panel.offsetWidth;
+      const height = panel.offsetHeight;
+      const margin = 8;
+      const gap = 4;
+      const left = Math.max(margin, Math.min(trigger.left, window.innerWidth - width - margin));
+      const below = trigger.bottom + gap;
+      const above = trigger.top - height - gap;
+      let top = below;
+      if (below + height > window.innerHeight - margin) {
+        top = above >= margin ? above : Math.max(margin, Math.min(below, window.innerHeight - height - margin));
+      }
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+    };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+      if (typeof panel.hidePopover === "function" && panel.matches(":popover-open")) panel.hidePopover();
+    };
+  }, [open, navRow, buttonRef, panelRef]);
+};
+
 /**
  * Theme as a menu, not a cycle: three named choices, each showing which one is
  * on. A toggle could not say what "follow the system" was doing, and a second
@@ -436,6 +478,8 @@ const ThemeTile = ({
 }) => {
   const { preference, setPreference, theme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useNavToolPopover(open, navRow, buttonRef, panelRef);
   const label = localizer.message("ui.tools.theme");
   const current = THEME_CHOICES.find((choice) => choice.value === preference);
   const currentName = localizer.message(current?.label ?? "ui.theme.matchSystem");
@@ -460,7 +504,12 @@ const ThemeTile = ({
         )}
       </button>
       {open ? (
-        <div className={navRow ? "tool-pop nav-tool-pop" : "tool-pop"} role="menu">
+        <div
+          className={navRow ? "tool-pop nav-tool-pop" : "tool-pop"}
+          popover={navRow ? "manual" : undefined}
+          ref={panelRef}
+          role="menu"
+        >
           <p className="tool-pop-head">{label}</p>
           {THEME_CHOICES.map((choice) => (
             <button
@@ -513,7 +562,9 @@ const AccentTile = ({
   open: boolean;
 }) => {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
+  useNavToolPopover(open, navRow, buttonRef, panelRef);
   const accent = useAccent();
   const label = localizer.message("ui.tools.accent");
   const currentLabel = ACCENTS.find((entry) => entry.value === accent)?.label ?? "";
@@ -546,7 +597,11 @@ const AccentTile = ({
         )}
       </button>
       {open ? (
-        <div className={navRow ? "tool-pop accent-pop nav-tool-pop" : "tool-pop accent-pop"}>
+        <div
+          className={navRow ? "tool-pop accent-pop nav-tool-pop" : "tool-pop accent-pop"}
+          popover={navRow ? "manual" : undefined}
+          ref={panelRef}
+        >
           <p className="tool-pop-head">{`${label}: ${currentLabel}`}</p>
           <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
             {ACCENTS.map((entry) => (
@@ -1440,8 +1495,8 @@ const Masthead = ({
           while staying inside a single landmark - two `header` elements at this
           level would leave the page with two banners. */}
       <header className="shell-banner">
-        {/* One column on desktop, one page header on the phone. Build facts stay
-            with the brand; the phone Menu carries runtime status. */}
+        {/* One column on desktop, one page header on the phone. Build facts and
+            the phone runtime status stay with the brand. */}
         <div className="side-col">
           <div className="shell-head">
             <div className="shell-head-top">
@@ -1462,6 +1517,15 @@ const Masthead = ({
                     onPreloadSettings={onPreloadSettings}
                     threads={threads}
                     threadsLabel={threadsLabel}
+                  />
+                </span>
+                <span className="phone-runtime">
+                  <StatusChip
+                    label={runtimeLabel}
+                    onOpenStatus={onOpenStatus}
+                    percent={runtimePercent}
+                    state={runtimeState}
+                    title={runtimeTitle}
                   />
                 </span>
               </span>

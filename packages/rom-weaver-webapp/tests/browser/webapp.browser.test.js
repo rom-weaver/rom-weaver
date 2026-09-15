@@ -287,7 +287,7 @@ test("the phone head keeps the version and tools on one line", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
-  expect(document.querySelectorAll(".sub-status").length).toBe(1);
+  expect(document.querySelectorAll(".sub-status").length).toBe(2);
   expect(document.querySelectorAll(".masthead-threads").length).toBe(1);
   expect(document.querySelector(".brand-copy .build-facts")).toBeTruthy();
 
@@ -311,6 +311,9 @@ test("the phone head keeps the version and tools on one line", async () => {
       expect(getComputedStyle(document.querySelector(".masthead-threads")).display).toBe("none");
       expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
       expect(document.querySelector(".dock-state-dot")).toBeNull();
+      const mobileStatus = document.querySelector(".phone-runtime .sub-status");
+      expect(getComputedStyle(mobileStatus).display).not.toBe("none");
+      expect(mobileStatus.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       const brand = document.querySelector(".brand").getBoundingClientRect();
       const tools = document.querySelector(".shell-head-tools").getBoundingClientRect();
@@ -610,6 +613,39 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
 
   navRow("Logs", ".menu-sheet").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
+  await page.viewport(1280, 900);
+});
+
+test("Theme and Accent float above the navigation without moving its rows", async () => {
+  for (const [width, height] of [
+    [320, 480],
+    [390, 664],
+    [1280, 900],
+  ]) {
+    await page.viewport(width, height);
+    mountWebappRoot();
+    const scope = width < 1000 ? ".menu-sheet" : ".side-nav";
+    if (width < 1000) await openMenuSheet();
+    await expect.poll(() => document.querySelector(`${scope} .nav-group`)).toBeTruthy();
+    const nav = document.querySelector(scope);
+    const project = nav.querySelectorAll(".nav-group")[3];
+    const projectTop = project.offsetTop;
+    const navHeight = nav.scrollHeight;
+
+    for (const name of ["Theme", "Accent"]) {
+      navRow(name, scope).click();
+      await expect.poll(() => nav.querySelector(".nav-tool-pop:popover-open")).toBeTruthy();
+      const panel = nav.querySelector(".nav-tool-pop:popover-open");
+      const bounds = panel.getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(width);
+      expect(bounds.top).toBeGreaterThanOrEqual(0);
+      expect(bounds.bottom).toBeLessThanOrEqual(height);
+      expect(project.offsetTop).toBe(projectTop);
+      expect(nav.scrollHeight).toBe(navHeight);
+      navRow(name, scope).click();
+    }
+  }
   await page.viewport(1280, 900);
 });
 
