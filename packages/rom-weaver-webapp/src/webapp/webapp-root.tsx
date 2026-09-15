@@ -882,7 +882,7 @@ function WebappRoot({
             title={pageUpdate.title}
           />
           {previewEnabled && previewLayout ? (
-            <div className="status-prototype-bar">
+            <section aria-label="Preview controls" className="status-prototype-bar">
               <label htmlFor="status-prototype-layout">
                 Layout
                 <select
@@ -925,7 +925,7 @@ function WebappRoot({
                 </select>
               </label>
               <span>Display only</span>
-            </div>
+            </section>
           ) : null}
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />

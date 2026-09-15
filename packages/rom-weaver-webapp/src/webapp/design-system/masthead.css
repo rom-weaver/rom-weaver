@@ -1357,6 +1357,24 @@
       margin-inline: 3px;
     }
   }
+  @media (max-width: 389px) {
+    .rw-app .shell-head-top .brand {
+      min-inline-size: 0;
+    }
+    .rw-app .title-build-row {
+      inline-size: calc(100vw - 2 * var(--gutter) - 38px);
+      margin-block-start: 11px;
+    }
+    .rw-app .status-prototype-bar {
+      position: relative;
+    }
+    .rw-app .status-prototype-bar > span {
+      position: absolute;
+      inset-block-start: 10px;
+      inset-inline-end: var(--gutter);
+      padding: 0;
+    }
+  }
   /* The trailing pair would paint its tooltip past the window edge and give
      the page a phantom horizontal scrollbar. */
   .rw-app .shell-head-tools .tool:nth-last-child(-n + 2) .tip {
