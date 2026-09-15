@@ -46,8 +46,8 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
-import { Masthead, UpdateBanner } from "./components/shell.tsx";
-import type { OfflineWarmupDisplayProgress, WorkflowTab } from "./components/shell.tsx";
+import { Masthead, RUNTIME_STATES, UpdateBanner } from "./components/shell.tsx";
+import type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
@@ -381,6 +381,27 @@ function WebappRoot({
   const [offlineProgress, setOfflineProgress] = useState<OfflineWarmupDisplayProgress | null>(() =>
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
+  const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const layout = params.get("offline-layout");
+    if (layout !== "tab" && layout !== "strip") return;
+    setPreviewEnabled(true);
+    const state = params.get("offline-state");
+    if (state && (RUNTIME_STATES as readonly string[]).includes(state)) {
+      setPreviewRuntimeState(state as RuntimeState);
+    }
+  }, []);
+  const changePreviewRuntimeState = useCallback((state: RuntimeState | null) => {
+    setPreviewRuntimeState(state);
+    const url = new URL(window.location.href);
+    if (state) url.searchParams.set("offline-state", state);
+    else url.searchParams.delete("offline-state");
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+  const previewOfflineProgress =
+    previewRuntimeState === "installing" ? { cachedBytes: 40, ready: false, totalBytes: 100 } : offlineProgress;
   const onWarmupProgress = useCallback((progress: OfflineWarmupDisplayProgress) => {
     const next = { ...progress, ready: getOfflineCopyState().enabled && progress.ready };
     setOfflineProgress(next);
@@ -773,7 +794,8 @@ function WebappRoot({
             onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
             onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-            offlineProgress={offlineProgress}
+            offlineProgress={previewOfflineProgress}
+            previewRuntimeState={previewRuntimeState}
             threads={resolveThreads(threads)}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
@@ -918,7 +940,9 @@ function WebappRoot({
               onTabChange={handleDialogTabChange}
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-              offlineProgress={offlineProgress}
+              offlineProgress={previewOfflineProgress}
+              previewRuntimeState={previewRuntimeState}
+              onPreviewRuntimeStateChange={previewEnabled ? changePreviewRuntimeState : undefined}
               offlineCopyEnabled={state.settings.offlineCopyEnabled}
               onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
               settingsFocusHint={settingsFocusHint}

@@ -241,6 +241,7 @@ const StatusRows = ({
   localizer,
   offlineProgress,
   runtimeState,
+  previewActive = false,
   downloadRequested,
   downloadUnavailable,
   onDownload,
@@ -259,6 +260,7 @@ const StatusRows = ({
   onRemove: () => void;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   runtimeState: RuntimeState;
+  previewActive?: boolean;
 }) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
@@ -284,7 +286,7 @@ const StatusRows = ({
             : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
         </span>
         {/* Remove MUST precede changing download controls and progress so updates cannot move a pressed button. */}
-        {runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
+        {!previewActive && runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
           <>
             <button className="btn slim ghost" disabled={removing} onClick={onRemove} type="button">
               <Trash2 aria-hidden="true" size={14} />
@@ -298,7 +300,7 @@ const StatusRows = ({
             ) : null}
           </>
         ) : null}
-        {runtimeState === "installing" || runtimeState === "online" ? (
+        {!previewActive && (runtimeState === "installing" || runtimeState === "online") ? (
           <>
             <button
               className="btn slim ghost"
@@ -1052,6 +1054,8 @@ const LogDialog = ({
   settingsFocusHint,
   settingsPanel,
   updateReady = false,
+  previewRuntimeState = null,
+  onPreviewRuntimeStateChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1069,6 +1073,8 @@ const LogDialog = ({
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
   updateReady?: boolean;
+  previewRuntimeState?: RuntimeState | null;
+  onPreviewRuntimeStateChange?: (state: RuntimeState | null) => void;
 }) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -1092,7 +1098,8 @@ const LogDialog = ({
     [onTabChange],
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
-  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress, offlineCopyEnabled);
+  const runtimeState =
+    previewRuntimeState ?? resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress, offlineCopyEnabled);
   const offlineCopy = useSyncExternalStore(subscribeOfflineCopyState, getOfflineCopyState, getInitialOfflineCopyState);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
@@ -1277,6 +1284,27 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
+            {onPreviewRuntimeStateChange ? (
+              <div className="status-preview-control">
+                <label htmlFor="offline-state-preview">Preview offline state</label>
+                <select
+                  id="offline-state-preview"
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    onPreviewRuntimeStateChange(next === "actual" ? null : (next as RuntimeState));
+                  }}
+                  value={previewRuntimeState ?? "actual"}
+                >
+                  <option value="actual">Actual state</option>
+                  {RUNTIME_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {localizer.message(RUNTIME_MESSAGES[state].label)}
+                    </option>
+                  ))}
+                </select>
+                <p>This preview changes the display only. It does not change the offline copy.</p>
+              </div>
+            ) : null}
             <StatusRows
               downloadRequested={offlineCopy.downloadRequested}
               downloadUnavailable={downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error)}
@@ -1288,6 +1316,7 @@ const LogDialog = ({
               offlineProgress={offlineProgress}
               onDownload={requestDownload}
               runtimeState={runtimeState}
+              previewActive={previewRuntimeState !== null}
             />
             <OfflineCachedFiles
               error={cachedFilesError}

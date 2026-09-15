@@ -1133,6 +1133,7 @@ const Masthead = ({
   onPreloadSettings,
   serviceWorkerStatus,
   offlineProgress = null,
+  previewRuntimeState = null,
   confirmExternalNavigation,
   donateHref,
   githubHref,
@@ -1164,6 +1165,7 @@ const Masthead = ({
   onPreloadSettings?: () => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
+  previewRuntimeState?: RuntimeState | null;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
@@ -1306,7 +1308,9 @@ const Masthead = ({
   }, [openTool]);
 
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
-  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, offlineProgress, settings.offlineCopyEnabled);
+  const runtimeState =
+    previewRuntimeState ??
+    resolveRuntimeState(hydratedStatus, updateReady, offlineProgress, settings.offlineCopyEnabled);
   /* The chip prints the percent in its own tabular-numeral span, so the visible
      wording stays percent-free; only the accessible name, which replaces the
      whole chip rather than adding to it, carries the number. */
