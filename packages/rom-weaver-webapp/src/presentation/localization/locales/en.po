@@ -166,7 +166,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
-msgstr ", an output extension. The format selector adds the extension — remove it to avoid a doubled name."
+msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -226,7 +226,7 @@ msgstr "{count} warning(s)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.identified"
-msgstr "{title} — {platform}"
+msgstr "{title}: {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -460,13 +460,13 @@ msgstr "Apply this patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Apply to — {input}"
+msgid "ui.patch.applyToAll"
+msgstr "Apply to all"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.applyToAll"
-msgstr "Apply to all"
+msgid "ui.patchChecks.execution"
+msgstr "Apply to: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,13 +515,13 @@ msgstr "Author"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.input"
-msgstr "Authored input checks — {basis}"
+msgid "ui.patchChecks.explanation"
+msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.explanation"
-msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
+msgid "ui.patchChecks.input"
+msgstr "Authored input checks: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -582,6 +582,16 @@ msgstr "Automatic detection"
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.actions"
 msgstr "Available actions"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabledDetail"
+msgstr "Automatic offline downloads are off."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyHelp"
+msgstr "Automatically download the app for offline use unless data saver is on."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -671,7 +681,7 @@ msgstr "Bundle + patches (.zip)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.bundlesApplyPatch"
-msgstr "Bundles — Apply Patch"
+msgstr "Bundles: Apply Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -806,7 +816,7 @@ msgstr "Checks"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.deferred"
-msgstr "Checks during apply — {input}"
+msgstr "Checks during apply: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1015,6 +1025,11 @@ msgstr "Create {format} Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeUnavailable"
+msgstr "Could not remove the offline copy. Try again."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Create {format} ROM Bundle"
 
@@ -1200,8 +1215,23 @@ msgstr "download-play certificate preserved"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Download offline copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Download requested"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.reorderTitle"
 msgstr "Drag to reorder · click to edit position · up/down arrow keys"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Downloads remaining files, even with data saver on."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1256,7 +1286,7 @@ msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
-msgstr "Embedded output checks — Standalone patch result"
+msgstr "Embedded output checks: Standalone patch result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1646,7 +1676,7 @@ msgstr "Installing app"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingAppProgress"
-msgstr "Installing app — {percent}%"
+msgstr "Installing app: {percent}%"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1656,7 +1686,7 @@ msgstr "Installing offline copy"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingProgress"
-msgstr "Installing offline copy — {percent}%"
+msgstr "Installing offline copy: {percent}%"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1687,6 +1717,11 @@ msgstr "keep {header}"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64Order.keep"
 msgstr "keep current"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyEnabled"
+msgstr "Keep an offline copy"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2061,7 +2096,7 @@ msgstr "No selectable file was found."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unknown"
-msgstr "Not checked yet — {input}"
+msgstr "Not checked yet: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2102,6 +2137,16 @@ msgstr "Offline active"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.ready"
 msgstr "Offline ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabled"
+msgstr "Offline copy disabled"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Offline downloads are unavailable. Reload and try again."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2365,11 +2410,6 @@ msgstr "Patched {format}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.nav.groupPatches"
-msgstr "Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.fileTypes.patches"
 msgstr "Patches"
 
@@ -2381,6 +2421,11 @@ msgstr "Patches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
+msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupPatches"
 msgstr "Patches"
 
 #. js-lingui-explicit-id
@@ -2600,6 +2645,11 @@ msgstr "Remove ROM input"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOffline"
+msgstr "Remove offline copy"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
 msgstr "Remove unused padding from supported ROMs and disc images to save storage space."
 
@@ -2607,6 +2657,16 @@ msgstr "Remove unused padding from supported ROMs and disc images to save storag
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.replacePatch"
 msgstr "Replace patch"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOfflineHint"
+msgstr "Removes downloaded app files. Your files, saves, and settings stay on this device."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removingOffline"
+msgstr "Removing offline copy…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2725,12 +2785,12 @@ msgstr "rom-weaver verified this patch against the current input."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.nav.groupRoms"
+msgid "ui.apply.fileTypes.roms"
 msgstr "ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.fileTypes.roms"
+msgid "ui.nav.groupRoms"
 msgstr "ROMs"
 
 #. js-lingui-explicit-id
@@ -2841,7 +2901,7 @@ msgstr "Share your changes."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Shared input checks — {input}"
+msgstr "Shared input checks: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2862,16 +2922,6 @@ msgstr "Show {label} details"
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
 msgstr "Show the \"New here?\" quick-start tips"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyEnabled"
-msgstr "Keep an offline copy"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyHelp"
-msgstr "Automatically download the app for offline use unless data saver is on."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2901,7 +2951,7 @@ msgstr "Source"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
-msgstr "Stack output checks — Combined result"
+msgstr "Stack output checks: Combined result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3016,7 +3066,7 @@ msgstr "Tap to choose files"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.targetRom"
-msgstr "Target ROM — {target}"
+msgstr "Target ROM: {target}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3335,56 +3385,6 @@ msgstr "Transferred"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadOffline"
-msgstr "Download offline copy"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadOfflineHint"
-msgstr "Downloads remaining files, even with data saver on."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadRequested"
-msgstr "Download requested"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadUnavailable"
-msgstr "Offline downloads are unavailable. Reload and try again."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeOffline"
-msgstr "Remove offline copy"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removingOffline"
-msgstr "Removing offline copy…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineDisabled"
-msgstr "Offline copy disabled"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineDisabledDetail"
-msgstr "Automatic offline downloads are off."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeOfflineHint"
-msgstr "Removes downloaded app files. Your files, saves, and settings stay on this device."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeUnavailable"
-msgstr "Could not remove the offline copy. Try again."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.transferred"
 msgstr "Transferred {size}"
 
@@ -3509,13 +3509,13 @@ msgstr "Variant class"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Verified — {input}"
+msgid "ui.chain.verifiedDuringWeave"
+msgstr "verified during apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "verified during apply"
+msgid "ui.patchChecks.verified"
+msgstr "Verified: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3595,7 +3595,7 @@ msgstr "with copier-header detection and repair"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis2"
-msgstr "with every checksum recalculated before you download —"
+msgstr "with every checksum recalculated before you download."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

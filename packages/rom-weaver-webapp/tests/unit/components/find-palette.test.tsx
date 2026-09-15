@@ -157,7 +157,7 @@ describe("Find", () => {
     fireEvent.change(findInput(container), { target: { value: "bundle" } });
 
     const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
-    expect(first?.textContent).toContain("Bundles — Apply Patch");
+    expect(first?.textContent).toContain("Bundles: Apply Patch");
     fireEvent.keyDown(findInput(container), { key: "Enter" });
 
     expect(onSelectTab).toHaveBeenCalledWith("bundle");

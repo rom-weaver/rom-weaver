@@ -135,7 +135,7 @@ describe("ApplyPatchListStep", () => {
     });
     const { container } = renderList({ patches: [verifiedWithoutIdentity] });
 
-    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Verified — Game A");
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Verified: Game A");
   });
 
   it("takes the strip header option away while cheats are on", () => {

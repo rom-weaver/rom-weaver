@@ -68,7 +68,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identifyDrawer.variantClass": msg({ id: "ui.identifyDrawer.variantClass", message: "Variant class" }),
   "ui.output.doubledExtension.after": msg({
     id: "ui.output.doubledExtension.after",
-    message: ", an output extension. The format selector adds the extension — remove it to avoid a doubled name.",
+    message: ", an output extension. The format selector adds the extension; remove it to avoid a doubled name.",
   }),
   "ui.output.doubledExtension.before": msg({ id: "ui.output.doubledExtension.before", message: "The name ends in" }),
   "ui.output.file": msg({ id: "ui.output.file", message: "File" }),
@@ -878,19 +878,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patchInputs.auto": msg({ id: "ui.patchInputs.auto", message: "Automatic" }),
   "ui.patchInputs.original": msg({ id: "ui.patchInputs.original", message: "Original ROM" }),
   "ui.patchInputs.previous": msg({ id: "ui.patchInputs.previous", message: "Previous patch output" }),
-  "ui.patchChecks.identified": msg({ id: "ui.patchChecks.identified", message: "{title} — {platform}" }),
-  "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Authored input checks — {basis}" }),
+  "ui.patchChecks.identified": msg({ id: "ui.patchChecks.identified", message: "{title}: {platform}" }),
+  "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Authored input checks: {basis}" }),
   "ui.patchChecks.explanation": msg({
     id: "ui.patchChecks.explanation",
     message: "Authored input checks describe a patch source. Every patch runs on the current stack input.",
   }),
   "ui.patchChecks.currentStackInput": msg({ id: "ui.patchChecks.currentStackInput", message: "Current stack input" }),
-  "ui.patchChecks.deferred": msg({ id: "ui.patchChecks.deferred", message: "Checks during apply — {input}" }),
+  "ui.patchChecks.deferred": msg({ id: "ui.patchChecks.deferred", message: "Checks during apply: {input}" }),
   "ui.patchChecks.embeddedOutput": msg({
     id: "ui.patchChecks.embeddedOutput",
-    message: "Embedded output checks — Standalone patch result",
+    message: "Embedded output checks: Standalone patch result",
   }),
-  "ui.patchChecks.execution": msg({ id: "ui.patchChecks.execution", message: "Apply to — {input}" }),
+  "ui.patchChecks.execution": msg({ id: "ui.patchChecks.execution", message: "Apply to: {input}" }),
   "ui.patchChecks.executionMember": msg({ id: "ui.patchChecks.executionMember", message: "Member path" }),
   "ui.patchChecks.executionMemberTitle": msg({
     id: "ui.patchChecks.executionMemberTitle",
@@ -899,19 +899,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patchChecks.expects": msg({ id: "ui.patchChecks.expects", message: "Requires {patch} first" }),
   "ui.patchChecks.originalRom": msg({ id: "ui.patchChecks.originalRom", message: "Original ROM{member}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
-  "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input checks — {input}" }),
+  "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input checks: {input}" }),
   "ui.patchChecks.stackOutput": msg({
     id: "ui.patchChecks.stackOutput",
-    message: "Stack output checks — Combined result",
+    message: "Stack output checks: Combined result",
   }),
-  "ui.patchChecks.targetRom": msg({ id: "ui.patchChecks.targetRom", message: "Target ROM — {target}" }),
-  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet — {input}" }),
+  "ui.patchChecks.targetRom": msg({ id: "ui.patchChecks.targetRom", message: "Target ROM: {target}" }),
+  "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
   "ui.patchChecks.unknownPatchOutput": msg({
     id: "ui.patchChecks.unknownPatchOutput",
     message: "Unknown patch output ({patch})",
   }),
   "ui.patchChecks.patchNumber": msg({ id: "ui.patchChecks.patchNumber", message: "Patch {n}" }),
-  "ui.patchChecks.verified": msg({ id: "ui.patchChecks.verified", message: "Verified — {input}" }),
+  "ui.patchChecks.verified": msg({ id: "ui.patchChecks.verified", message: "Verified: {input}" }),
   "ui.patchChecks.automatic": msg({ id: "ui.patchChecks.automatic", message: "Automatic detection" }),
   "ui.patchChecks.autoBase": msg({ id: "ui.patchChecks.autoBase", message: "Original ROM (automatic)" }),
   "ui.patchChecks.autoPrevious": msg({
@@ -976,7 +976,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.find.bundleHint",
     message: "Apply Patch owns bundles and runs their saved patch sequence.",
   }),
-  "ui.find.bundlesApplyPatch": msg({ id: "ui.find.bundlesApplyPatch", message: "Bundles — Apply Patch" }),
+  "ui.find.bundlesApplyPatch": msg({ id: "ui.find.bundlesApplyPatch", message: "Bundles: Apply Patch" }),
   "ui.find.cliArchiveHint": msg({
     id: "ui.find.cliArchiveHint",
     message: "The CLI can extract and compress archives.",
@@ -1086,7 +1086,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.saveThesis2": msg({
     id: "ui.hero.saveThesis2",
-    message: "with every checksum recalculated before you download —",
+    message: "with every checksum recalculated before you download.",
   }),
   "ui.hero.trimThesis": msg({
     id: "ui.hero.trimThesis",
@@ -1241,12 +1241,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.runtime.installingProgress": msg({
     id: "ui.runtime.installingProgress",
-    message: "Installing offline copy — {percent}%",
+    message: "Installing offline copy: {percent}%",
   }),
   "ui.runtime.installingApp": msg({ id: "ui.runtime.installingApp", message: "Installing app" }),
   "ui.runtime.installingAppProgress": msg({
     id: "ui.runtime.installingAppProgress",
-    message: "Installing app — {percent}%",
+    message: "Installing app: {percent}%",
   }),
   "ui.runtime.detailFiles": msg({
     id: "ui.runtime.detailFiles",

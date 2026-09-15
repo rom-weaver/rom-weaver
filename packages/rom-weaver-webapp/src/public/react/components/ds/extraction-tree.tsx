@@ -205,13 +205,13 @@ const ExtractName = ({ displayName, fileName, folderPath, identified }: ExtractN
       {/* Assistive technology gets the identified title and full filename; the visible face
         drops the extension because the format badge carries it. */}
       <span className="sr-only">
-        {displayName?.trim() ? `${displayName.trim()} — ${fileName}` : fileName}
-        {identified ? ` — ${localizer.message("ui.file.identified")}` : ""}
+        {displayName?.trim() ? `${displayName.trim()}: ${fileName}` : fileName}
+        {identified ? ` · ${localizer.message("ui.file.identified")}` : ""}
       </span>
       <span
         aria-hidden="true"
         className="nm"
-        title={[displayName?.trim(), folderPath ? `${folderPath} › ${fileName}` : fileName].filter(Boolean).join(" — ")}
+        title={[displayName?.trim(), folderPath ? `${folderPath} › ${fileName}` : fileName].filter(Boolean).join(": ")}
       >
         {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
         {displayName?.trim() || getDisplayName(fileName)}

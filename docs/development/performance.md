@@ -122,7 +122,7 @@ Five commercial discs spanning all three CHD disc types: PS1 CDs with mixed data
 | GD-ROM A | GD-ROM | 5.394 s ± 0.096 | 27.031 s ± 0.032 | −21.637 s (−80.0%) | 1,145.4 MB |
 | PS2 DVD | DVD | 5.726 s ± 0.062 | 17.766 s ± 0.034 | −12.040 s (−67.8%) | 1,697.8 MB |
 
-rom-weaver extracted these discs 3.1–5.8× faster than chdman — 6 to 22 seconds sooner per disc.
+rom-weaver extracted these discs 3.1–5.8× faster than chdman, 6 to 22 seconds sooner per disc.
 
 Output sizes agree with chdman's to within 72 bytes on every disc. The difference is cue-sheet text - track naming and line endings - not image data.
 

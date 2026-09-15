@@ -579,8 +579,8 @@ const createPwaServiceWorkerClient = ({
         const autoApplyReloads = Number.parseInt(getSessionStorageItem(AUTO_APPLY_RELOAD_COUNT_KEY), 10) || 0;
         if (shouldAutoApplyUpdate?.() && updateServiceWorker && autoApplyReloads < AUTO_APPLY_RELOAD_BUDGET) {
           // Reload only when the page is still running the code the outgoing controller cached. When the
-          // running version is already ahead of that controller — the shell was served fresh from the
-          // network — the page IS the incoming version, so a reload would swap in nothing; activate via
+          // running version is already ahead of that controller: the shell was served fresh from the
+          // network, so the page IS the incoming version and a reload would swap in nothing; activate via
           // skipWaiting silently and let the controllerchange handler re-sync COEP and the cache version.
           const reloadToApply = controllerVersion === appVersion;
           logServiceWorkerClient("auto-applying service worker update; no in-progress work", {
