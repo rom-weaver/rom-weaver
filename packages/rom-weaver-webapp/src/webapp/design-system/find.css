@@ -6,7 +6,10 @@
    phones. */
 .rw-app .find-palette {
   position: fixed;
-  inset-block-start: calc(46px + var(--sp-s));
+  /* Under the top bar, which the shell offsets by the safe-area inset; a fixed
+     element that ignored it would open on top of the field that opened it in an
+     installed PWA. */
+  inset-block-start: calc(var(--safe-t) + var(--topbar-h) + var(--sp-s));
   inset-inline-start: 50%;
   z-index: 2000;
   display: flex;

@@ -1,4 +1,5 @@
 import {
+  Cloud,
   CloudCheck,
   CloudDownload,
   CloudOff,
@@ -132,6 +133,34 @@ const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * The full name, when it is safe to use as the accessible name of a row that
+ * shows the short one. WCAG 2.5.3 (Label in Name) requires the accessible name
+ * to contain the visible text, so a speech user saying what they can read
+ * actually activates the row: "Saves" is not contained in "Save Editor", and
+ * that row keeps its visible label as its name instead.
+ */
+const fullNameFor = (tab: WorkflowTab) => {
+  if (!tab.railLabel) return undefined;
+  return tab.label.toLowerCase().includes(tab.railLabel.toLowerCase()) ? tab.label : undefined;
+};
+
+/**
+ * The first candidate the current layout actually shows, falling back to the
+ * first that exists. The chrome renders some controls twice and hides one copy
+ * with CSS, and `focus()` on a `display: none` element silently does nothing
+ * and drops focus to the body. The fallback matters where there is no layout
+ * to read - a test environment, or a control measured before first paint.
+ */
+const visibleFirst = <T extends HTMLElement>(candidates: Iterable<T | null | undefined>): T | null => {
+  let fallback: T | null = null;
+  for (const node of candidates) {
+    if (node?.offsetParent) return node;
+    fallback ??= node ?? null;
+  }
+  return fallback;
+};
 
 const activateOnClick = (event: React.MouseEvent, run: () => void) => {
   if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -291,6 +320,7 @@ const PhoneDock = ({
  * zone, above the dock.
  */
 const MenuSheet = ({
+  findRef,
   localizer,
   onClose,
   onOpenFind,
@@ -299,6 +329,8 @@ const MenuSheet = ({
   sections,
   triggerRef,
 }: {
+  /** The sheet's own Find row, so Escape can return focus to it on the phone. */
+  findRef: RefObject<HTMLButtonElement | null>;
   localizer: Localizer;
   onClose: () => void;
   onOpenFind: () => void;
@@ -309,7 +341,6 @@ const MenuSheet = ({
   sections: NavSectionData[];
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
-  const sheetRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!open) return undefined;
     const dismiss = (event: KeyboardEvent) => {
@@ -324,7 +355,7 @@ const MenuSheet = ({
 
   return (
     <nav aria-label={localizer.message("ui.tools.menu")} className="menu-sheet" hidden={!open} id="menu-sheet">
-      <div className="menu-sheet-body" ref={sheetRef}>
+      <div className="menu-sheet-body">
         {opened
           ? sections.map((section) => (
               <div className="nav-group" key={section.id}>
@@ -347,7 +378,7 @@ const MenuSheet = ({
           : null}
       </div>
       <div className="menu-sheet-foot">
-        <button className="menu-find" onClick={onOpenFind} type="button">
+        <button className="menu-find" onClick={onOpenFind} ref={findRef} type="button">
           <Search aria-hidden="true" />
           <span>{localizer.message("ui.find.placeholder")}</span>
           <kbd>{FIND_SHORTCUT_HINT}</kbd>
@@ -368,7 +399,15 @@ const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: T
  * on. A toggle could not say what "follow the system" was doing, and a second
  * click on a cycle was the control users read as broken.
  */
-const ThemeTile = ({ localizer, onToggle, open }: { localizer: Localizer; onToggle: () => void; open: boolean }) => {
+const ThemeTile = ({
+  localizer,
+  onToggle,
+  open,
+}: {
+  localizer: Localizer;
+  onToggle: (button: HTMLButtonElement | null) => void;
+  open: boolean;
+}) => {
   const { preference, setPreference, theme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const label = localizer.message("ui.tools.theme");
@@ -380,7 +419,7 @@ const ThemeTile = ({ localizer, onToggle, open }: { localizer: Localizer; onTogg
         aria-expanded={open}
         aria-label={`${label}: ${currentName}`}
         className="tool"
-        onClick={onToggle}
+        onClick={() => onToggle(buttonRef.current)}
         ref={buttonRef}
         type="button"
       >
@@ -400,7 +439,7 @@ const ThemeTile = ({ localizer, onToggle, open }: { localizer: Localizer; onTogg
               key={choice.value}
               onClick={() => {
                 runThemeWipe(() => setPreference(choice.value), buttonRef.current);
-                onToggle();
+                onToggle(buttonRef.current);
               }}
               role="menuitemradio"
               type="button"
@@ -438,9 +477,10 @@ const AccentTile = ({
   /** Radio group name. Two pickers share the page, and one name would join them. */
   name: string;
   onChange: (accent: string) => void;
-  onToggle: () => void;
+  onToggle: (button: HTMLButtonElement | null) => void;
   open: boolean;
 }) => {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
   const accent = useAccent();
   const label = localizer.message("ui.tools.accent");
@@ -459,7 +499,8 @@ const AccentTile = ({
         aria-expanded={open}
         aria-label={`${label}: ${currentLabel}`}
         className="tool accent-tool"
-        onClick={onToggle}
+        onClick={() => onToggle(buttonRef.current)}
+        ref={buttonRef}
         type="button"
       >
         <Palette aria-hidden="true" />
@@ -1026,12 +1067,35 @@ const Masthead = ({
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
   const [openTool, setOpenTool] = useState<"accent" | "theme" | null>(null);
+  /* The control that opened the popover, so Escape returns focus to it. The
+     tiles render twice and only one copy is on screen, so the DOM cannot say
+     which one the user actually used. */
+  const openToolRef = useRef<HTMLButtonElement | null>(null);
+  const toggleTool = (kind: "accent" | "theme", button: HTMLButtonElement | null) => {
+    openToolRef.current = button;
+    setOpenTool((open) => (open === kind ? null : kind));
+  };
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const toolsRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuFindRef = useRef<HTMLButtonElement | null>(null);
+  /* Find opens from the top bar on desktop and from the Menu sheet's foot on
+     the phone. Escape restores focus to whichever of those the layout shows,
+     resolved at call time rather than stored, because the layout is CSS's
+     decision and this component never reads a breakpoint. */
+  const activeFindRef = useMemo(
+    () => ({
+      get current() {
+        return visibleFirst([findTriggerRef.current, menuFindRef.current, menuTriggerRef.current]);
+      },
+      set current(node: HTMLButtonElement | null) {
+        findTriggerRef.current = node;
+      },
+    }),
+    [],
+  );
   const navLabel = localizer.message("ui.nav.primary");
   const threadsLabel = localizer.message("ui.env.threads");
   const docsHref = tabs.find((tab) => tab.id === "docs")?.href ?? "docs";
@@ -1089,15 +1153,19 @@ const Masthead = ({
   // before the target's own handler runs.
   useEffect(() => {
     if (!openTool) return undefined;
+    /* Scoped to the anchor, not to one cluster: the appearance tiles render
+       twice (top bar and phone header) and a press inside the copy the current
+       layout shows would otherwise count as "outside", closing the popover on
+       pointerdown so the click never reached the choice. */
     const dismiss = (event: Event) => {
       const target = event.target;
-      if (target instanceof Node && toolsRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest(".tool-anchor")) return;
       setOpenTool(null);
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpenTool(null);
-      toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
+      openToolRef.current?.focus();
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", dismissOnEscape);
@@ -1144,7 +1212,7 @@ const Masthead = ({
           id: tab.id,
           label: tab.railLabel ?? tab.label,
           onSelect: () => onSelectTab(tab.id),
-          title: tab.railLabel ? tab.label : undefined,
+          title: fullNameFor(tab),
         })),
       id: group,
       title: localizer.message(NAV_GROUP_TITLES[group]),
@@ -1152,7 +1220,14 @@ const Masthead = ({
     const device: NavSectionData = {
       entries: [
         {
-          icon: <RuntimeGlyph percent={runtimePercent} state={runtimeState} />,
+          /* A fixed glyph, not the runtime one. The prerendered shell is built
+             in Node, where the state always resolves to "installing", and the
+             parser-time resolver in index.html only rewrites the identity
+             block's chip. A second state-dependent glyph here would still say
+             "installing" when React's first client render says otherwise, and
+             that mismatch makes React throw away the whole prerendered page.
+             The chip above this nav reports the state; the row only opens it. */
+          icon: <Cloud aria-hidden="true" />,
           id: "status",
           label: localizer.message("ui.log.tabStatus"),
           onSelect: onOpenStatus,
@@ -1223,8 +1298,6 @@ const Masthead = ({
     onOpenStatus,
     onSelectTab,
     openStorage,
-    runtimePercent,
-    runtimeState,
     tabs,
   ]);
 
@@ -1251,16 +1324,12 @@ const Masthead = ({
      Everything about the app's identity below is rendered exactly once. */
   const appearanceTiles = (scope: string) => (
     <>
-      <ThemeTile
-        localizer={localizer}
-        onToggle={() => setOpenTool((open) => (open === "theme" ? null : "theme"))}
-        open={openTool === "theme"}
-      />
+      <ThemeTile localizer={localizer} onToggle={(button) => toggleTool("theme", button)} open={openTool === "theme"} />
       <AccentTile
         localizer={localizer}
         name={`shell-accent-${scope}`}
         onChange={(accent) => onAccentChange?.(accent)}
-        onToggle={() => setOpenTool((open) => (open === "accent" ? null : "accent"))}
+        onToggle={(button) => toggleTool("accent", button)}
         open={openTool === "accent"}
       />
     </>
@@ -1366,7 +1435,7 @@ const Masthead = ({
             <span className="topbar-find-text">{localizer.message("ui.find.placeholder")}</span>
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
-          <div className="topbar-tools" ref={toolsRef}>
+          <div className="topbar-tools">
             {appearanceTiles("desktop")}
             <span aria-hidden="true" className="tool-separator" />
             {projectTiles}
@@ -1379,7 +1448,7 @@ const Masthead = ({
         onClose={closeFind}
         open={findOpen}
         sources={findSources}
-        triggerRef={findTriggerRef}
+        triggerRef={activeFindRef}
       />
       {/* The parser-time resolver in index.html rewrites the thread count and
           runtime status before the shell paints, and removes itself. Keep its
@@ -1403,6 +1472,7 @@ const Masthead = ({
       <MenuSheet
         localizer={localizer}
         onClose={closeMenu}
+        findRef={menuFindRef}
         onOpenFind={() => {
           setMenuOpen(false);
           setFindOpen(true);

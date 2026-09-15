@@ -304,6 +304,32 @@ describe("Masthead", () => {
     expect(container.querySelector(".accent-tray")).toBeTruthy();
   });
 
+  it("commits an appearance choice from the phone header copy too", () => {
+    const onAccentChange = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onAccentChange={onAccentChange} />));
+    // A press inside the copy the phone layout shows must not count as an
+    // outside press: that closed the popover on pointerdown, so the click
+    // never reached the choice and nothing was ever committed.
+    const tile = container.querySelector(".shell-head-tools .accent-tool") as HTMLButtonElement;
+    fireEvent.click(tile);
+    const swatch = container.querySelectorAll<HTMLInputElement>(".shell-head-tools .accent-tray input")[1];
+    fireEvent.pointerDown(swatch as HTMLInputElement);
+    expect(container.querySelector(".shell-head-tools .accent-tray")).toBeTruthy();
+    fireEvent.click(swatch as HTMLInputElement);
+    expect(onAccentChange).toHaveBeenCalledWith("woad");
+  });
+
+  it("keeps a row's accessible name containing the label it shows", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    for (const row of container.querySelectorAll<HTMLElement>(".side-nav .nav-row")) {
+      const visible = row.querySelector(".nav-row-label")?.textContent ?? "";
+      // WCAG 2.5.3: a speech user says what they can read, so the accessible
+      // name has to contain it. "Saves" is not contained in "Save Editor".
+      expect((row.getAttribute("aria-label") ?? visible).toLowerCase()).toContain(visible.toLowerCase());
+    }
+    expect(container.querySelector('.nav-row[href="save-editor"]')?.getAttribute("aria-label")).toBeNull();
+  });
+
   it("closes an open picker on Escape", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     fireEvent.click(container.querySelector(".topbar-tools .accent-tool") as HTMLButtonElement);

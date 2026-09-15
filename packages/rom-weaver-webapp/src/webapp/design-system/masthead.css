@@ -6,6 +6,12 @@
    sections become the Menu sheet and three workflows keep a dock slot each.
    Nothing is reachable in one layout and missing from the other, and no
    destination hides behind an unlabelled glyph. */
+.rw-app {
+  /* The top bar's height, shared so the Find palette can sit under it without
+     repeating the number (find.css). */
+  --topbar-h: 46px;
+}
+
 .rw-app .skip-link {
   position: fixed;
   inset-block-start: var(--sp-s);
@@ -348,11 +354,11 @@
   height: 18px;
   opacity: 0.85;
 }
+/* Wraps rather than truncating: the rail is a fixed width and a locale with
+   longer words must still be able to show the whole name. */
 .rw-app .nav-row-label {
   min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 @media (hover: hover) {
   .rw-app .nav-row:not([aria-current="page"]):hover {
@@ -502,7 +508,7 @@
   display: flex;
   gap: var(--sp-s);
   align-items: center;
-  min-block-size: 46px;
+  min-block-size: var(--topbar-h);
   padding-block: var(--sp-xs);
 }
 .rw-app .topbar-find {

@@ -147,9 +147,17 @@
       // the prerendered masthead metadata. It resolves both slots before the
       // rest of the shell can paint, and produces the exact text React hydrates.
       window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY = function () {
-        // The two shells each carry their own copy of the build facts and the
-        // runtime state, and CSS decides which one is on screen. Both must be
-        // resolved: React hydrates against every copy, not just the visible one.
+        // The shell renders the build facts and the runtime state exactly once
+        // today; the loops keep this correct if a layout ever carries a second
+        // copy, since React hydrates against every copy it finds.
+        //
+        // This resolves THESE two slots and nothing else. Any other node that
+        // renders from the runtime state would keep the prerender's
+        // "installing" while React's first client render says otherwise, and
+        // that mismatch makes React discard the whole prerendered page. See the
+        // Status nav row in shell.tsx, which carries a fixed glyph for exactly
+        // this reason, and the hydration parity tests in
+        // tests/browser/shell-hydration.browser.test.js.
         const threadSlots = [...document.querySelectorAll(".masthead-threads")];
         const statusSlots = [...document.querySelectorAll(".sub-status")];
         if (threadSlots.length === 0 || statusSlots.length === 0) return;

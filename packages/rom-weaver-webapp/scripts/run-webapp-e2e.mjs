@@ -24,7 +24,7 @@ const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 // Derived from the route table, so a new guide is audited without a second edit.
 export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => source.slug);
-export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layout.footerInFirstViewport;
+export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layout.dockInFirstViewport;
 const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
@@ -257,21 +257,21 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             const root = document.getElementById("webapp-root");
             // The dock is the phone chrome the shell must paint inside the
             // first viewport now that the footer is gone.
-            const footer = document.querySelector(".dock")?.getBoundingClientRect();
+            const dock = document.querySelector(".dock")?.getBoundingClientRect();
             const links = document.querySelector(".dock-tab")?.getBoundingClientRect();
             const status = [...document.querySelectorAll(".dock-tab")].at(-1)?.getBoundingClientRect();
             const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
             return {
-              footerInFirstViewport:
-                !!footer &&
-                footer.top < window.innerHeight &&
-                footer.bottom <= window.innerHeight &&
+              dockInFirstViewport:
+                !!dock &&
+                dock.top < window.innerHeight &&
+                dock.bottom <= window.innerHeight &&
                 !!links &&
                 links.bottom <= window.innerHeight &&
                 !!status &&
                 status.bottom <= window.innerHeight,
               prerendered: root?.hasAttribute("aria-busy") === true,
-              footerTop: footer?.top ?? null,
+              dockTop: dock?.top ?? null,
               workflowTop: workflow?.top ?? null,
             };
           });
@@ -300,7 +300,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const result = await page.evaluate((initialLayout) => {
           const audit = window.__romWeaverHydrationAudit;
           const root = document.getElementById("webapp-root");
-          const footer = document.querySelector(".dock")?.getBoundingClientRect();
+          const dock = document.querySelector(".dock")?.getBoundingClientRect();
           const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
@@ -317,7 +317,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             threadTexts: audit.threadTexts,
             shellHandoffStable:
               !initialLayout ||
-              (Math.abs((footer?.top ?? 0) - initialLayout.footerTop) <= 0.5 &&
+              (Math.abs((dock?.top ?? 0) - initialLayout.dockTop) <= 0.5 &&
                 Math.abs((workflow?.top ?? 0) - initialLayout.workflowTop) <= 0.5),
             shellSettled: root?.dataset.shellSettled === "true",
             panelAnimation: workflowStyle ? getComputedStyle(workflowStyle).animationName : "",

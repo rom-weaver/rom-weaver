@@ -188,9 +188,9 @@ describe("computeDocsRouteSlugs", () => {
 
 describe("hasVisiblePrerenderedShell", () => {
   it("requires both prerendering and an in-viewport dock", () => {
-    assert.equal(hasVisiblePrerenderedShell({ footerInFirstViewport: true, prerendered: true }), true);
-    assert.equal(hasVisiblePrerenderedShell({ footerInFirstViewport: false, prerendered: true }), false);
-    assert.equal(hasVisiblePrerenderedShell({ footerInFirstViewport: true, prerendered: false }), false);
+    assert.equal(hasVisiblePrerenderedShell({ dockInFirstViewport: true, prerendered: true }), true);
+    assert.equal(hasVisiblePrerenderedShell({ dockInFirstViewport: false, prerendered: true }), false);
+    assert.equal(hasVisiblePrerenderedShell({ dockInFirstViewport: true, prerendered: false }), false);
   });
 });
 

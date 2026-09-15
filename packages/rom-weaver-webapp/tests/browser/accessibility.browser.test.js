@@ -963,6 +963,25 @@ describe("webapp keyboard navigation", () => {
     expect(selected).toEqual(["creator"]);
   });
 
+  test("Escape from Find returns focus to the trigger the layout shows", async () => {
+    // `.topbar-find` is display:none below the threshold, and focusing a hidden
+    // button silently drops focus to the body.
+    await setViewport(VIEWPORTS[0]);
+    await renderMasthead(noop);
+    if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
+    await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
+    host.querySelector(".menu-find").click();
+    await settleUntil(() => !!host.querySelector(".find-input"));
+
+    host
+      .querySelector(".find-input")
+      .dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await settleUntil(() => !host.querySelector(".find-input"));
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement.closest(".menu-find, .dock-menu")).toBeTruthy();
+  });
+
   test("Menu closes on Escape and hands focus back to its trigger", async () => {
     // The dock only exists below the layout threshold, and focus cannot return
     // to a control the current layout does not show.
@@ -1208,9 +1227,12 @@ describe("webapp responsive navigation", () => {
       await setViewport({ height: 900, width });
       await renderMastheadOnly(ALL_TABS);
       for (const label of host.querySelectorAll(".side-nav .nav-row-label")) {
-        // painted in full: never clipped to a glyph, never ellipsized
+        // painted in full: never clipped to a glyph, never ellipsized. A locale
+        // with longer words wraps the row instead of truncating the name.
         expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
         expect(label.scrollWidth).toBeLessThanOrEqual(label.getBoundingClientRect().width + 1);
+        expect(getComputedStyle(label).textOverflow).not.toBe("ellipsis");
+        expect(getComputedStyle(label).maxWidth).toBe("none");
       }
     }
   });
