@@ -226,11 +226,15 @@ pub(crate) fn emitted_file_entry<'a>(json: &'a Value, file_name: &str) -> &'a Va
         .unwrap_or_else(|| panic!("missing emitted file `{file_name}`"))
 }
 
+/// Build the `path` an emitted-file entry carries. This MUST reuse
+/// `emitted_path_key` rather than fold separators itself, or the expectation
+/// drifts from the shape the CLI actually writes.
 pub(crate) fn expected_event_path(path: &std::path::Path) -> String {
-    fs::canonicalize(path)
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .replace('\\', "/")
+    rom_weaver_core::emitted_path_key(
+        &fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy(),
+    )
 }
 
 pub(crate) fn assert_emitted_file(

@@ -48,6 +48,9 @@ pub fn insert_thread_execution_details(
     }
 }
 
+/// The shape every emitted `path` takes. Callers that need to recognize or
+/// rebuild one MUST use this rather than folding separators themselves.
+///
 /// Emitted paths MUST use the same separators during comparison so seeded
 /// Windows paths and stored forward-slash paths do not produce duplicate rows.
 ///
@@ -55,7 +58,7 @@ pub fn insert_thread_execution_details(
 /// That prefix MUST be dropped: it names the same file but never matches a
 /// caller-supplied path, so keeping it both duplicates rows and prints a path
 /// that many Windows tools reject.
-fn emitted_path_key(path: &str) -> String {
+pub fn emitted_path_key(path: &str) -> String {
     let simplified = match path.strip_prefix(r"\\?\UNC\") {
         Some(rest) => format!(r"\\{rest}"),
         None => path.strip_prefix(r"\\?\").unwrap_or(path).to_string(),

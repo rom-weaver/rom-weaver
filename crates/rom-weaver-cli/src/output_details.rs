@@ -169,8 +169,11 @@ impl CliApp {
         Self::normalize_emitted_path_string(&canonical.to_string_lossy())
     }
 
+    /// Delegates so CLI-side keys keep matching the `path` core stores. Folding
+    /// separators here instead would drop core's Windows verbatim-prefix strip
+    /// and make the two disagree on every canonicalized path.
     pub(super) fn normalize_emitted_path_string(path: &str) -> String {
-        path.replace('\\', "/")
+        rom_weaver_core::emitted_path_key(path)
     }
 
     pub(super) fn build_emitted_file_detail(

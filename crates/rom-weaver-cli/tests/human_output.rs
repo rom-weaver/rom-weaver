@@ -321,7 +321,7 @@ fn extraction_paths_and_requested_details_survive_quiet() {
             .get_output()
             .clone();
         let path = fs::canonicalize(destination.path().join("hello.bin")).expect("extracted ROM");
-        let path = path.to_string_lossy().replace('\\', "/");
+        let path = rom_weaver_core::emitted_path_key(&path.to_string_lossy());
         let expected = if flags.contains(&"--checksum") {
             format!("{path}  bin  crc32=0d4a1185\n")
         } else {
@@ -381,7 +381,10 @@ fn patch_apply_reports_inferred_names_and_silences_explicit_outputs() {
         let path = fs::canonicalize(&inferred).expect("patched file");
         assert_eq!(
             String::from_utf8_lossy(&output.stdout),
-            format!("{}\n", path.to_string_lossy().replace('\\', "/"))
+            format!(
+                "{}\n",
+                rom_weaver_core::emitted_path_key(&path.to_string_lossy())
+            )
         );
         assert_eq!(fs::read(&inferred).expect("patched file"), b"hello there");
         fs::remove_file(inferred).expect("remove inferred output");
