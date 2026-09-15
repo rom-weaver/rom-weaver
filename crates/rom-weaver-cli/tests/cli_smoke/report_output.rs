@@ -4,12 +4,15 @@ fn report(args: &[&str]) -> Value {
     serde_json::from_slice(&command_stdout(args, 0)).expect("one complete JSON report")
 }
 
-fn emitted_paths(report: &Value) -> Vec<PathBuf> {
+/// The emitted `path` strings as written. Comparing these against a bare
+/// `fs::canonicalize` result cannot work on Windows, where canonicalize returns
+/// a verbatim path; pair them with `expected_event_path` instead.
+fn emitted_paths(report: &Value) -> Vec<String> {
     report["details"]["emitted_files"]
         .as_array()
         .expect("emitted files")
         .iter()
-        .map(|entry| PathBuf::from(entry["path"].as_str().expect("output path")))
+        .map(|entry| entry["path"].as_str().expect("output path").to_string())
         .collect()
 }
 
@@ -49,7 +52,7 @@ fn report_output_extract_preserves_warnings_and_emitted_files() {
     let files = emitted_paths(&result);
     assert_eq!(
         files,
-        [fs::canonicalize(output.child("game.bin").path()).expect("output")]
+        [expected_event_path(output.child("game.bin").path())]
     );
     assert_eq!(
         fs::read(&files[0]).expect("extracted bytes"),
@@ -109,10 +112,7 @@ fn report_output_patch_create_names_output_without_checksum_name() {
         patch.path().to_str().expect("patch path"),
         "--json",
     ]);
-    assert_eq!(
-        emitted_paths(&result),
-        [fs::canonicalize(patch.path()).expect("patch")]
-    );
+    assert_eq!(emitted_paths(&result), [expected_event_path(patch.path())]);
 }
 
 #[test]
@@ -163,10 +163,7 @@ fn report_output_apply_reports_failed_bundle_sidecar_before_terminal_success() {
                 warning.contains("--emit-bundle") && warning.contains("failed")
             }))
     );
-    assert_eq!(
-        emitted_paths(&result),
-        [fs::canonicalize(output.path()).expect("output")]
-    );
+    assert_eq!(emitted_paths(&result), [expected_event_path(output.path())]);
 }
 
 #[test]
@@ -186,10 +183,7 @@ fn report_output_trim_reports_final_path_and_size() {
         output.path().to_str().expect("output path"),
         "--json",
     ]);
-    assert_eq!(
-        emitted_paths(&result),
-        [fs::canonicalize(output.path()).expect("output")]
-    );
+    assert_eq!(emitted_paths(&result), [expected_event_path(output.path())]);
     assert_eq!(
         result["details"]["emitted_files"][0]["size_bytes"],
         fs::metadata(output.path()).expect("output metadata").len()
@@ -232,8 +226,8 @@ fn report_output_bundle_create_reports_definition_and_archive() {
     assert_eq!(
         emitted_paths(&result),
         [
-            fs::canonicalize(definition.path()).expect("definition"),
-            fs::canonicalize(archive.path()).expect("archive"),
+            expected_event_path(definition.path()),
+            expected_event_path(archive.path()),
         ]
     );
 }
@@ -275,8 +269,8 @@ fn report_output_bundle_sidecar_preserves_whitespace_in_rom_paths() {
     assert_eq!(
         emitted_paths(&result),
         [
-            fs::canonicalize(output.path()).unwrap(),
-            fs::canonicalize(bundle.path()).unwrap(),
+            expected_event_path(output.path()),
+            expected_event_path(bundle.path()),
         ]
     );
     assert_eq!(fs::read(output.path()).unwrap(), b"Hello world");
