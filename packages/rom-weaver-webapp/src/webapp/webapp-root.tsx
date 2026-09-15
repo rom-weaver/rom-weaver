@@ -159,6 +159,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
 ];
 
 const PREVIEW_LAYOUTS = [
+  { id: "title", label: "Beside version" },
   { id: "edge", label: "Edge badge" },
   { id: "quiet", label: "Attention only" },
   { id: "tab", label: "Dock tab" },
@@ -821,6 +822,7 @@ function WebappRoot({
             offlineProgress={previewOfflineProgress}
             previewRuntimeState={previewRuntimeState}
             previewPhoneOverlay={previewLayout === "edge" || previewLayout === "quiet"}
+            previewVersionStatus={previewLayout === "title"}
             threads={resolveThreads(threads)}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}

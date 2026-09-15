@@ -104,6 +104,22 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
+.rw-app .title-build-row .build-facts {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  block-size: auto;
+  min-block-size: 26px;
+}
+.rw-app .title-build-row .build-runtime {
+  display: inline-flex;
+  margin-inline-start: 8px;
+}
+.rw-app .title-build-row .sub-separator {
+  display: none;
+}
+.rw-app .title-build-row .sub-status {
+  font-size: 0.68rem;
+}
 .rw-app .sub-separator {
   flex: none;
   margin-inline: 0.28em;
@@ -920,6 +936,21 @@
 }
 
 @media (max-width: 999px) {
+  .rw-app .title-build-row .masthead-threads {
+    display: none;
+  }
+  html[data-offline-layout="title"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="title"] .rw-app .dock {
+    row-gap: 0;
+  }
+  html[data-offline-layout="title"] .rw-app .dock-tab {
+    grid-row: 1;
+  }
+  html[data-offline-layout="title"] .rw-app .dock-runtime {
+    display: none;
+  }
   html[data-offline-layout="edge"] .rw-app,
   html[data-offline-layout="quiet"] .rw-app {
     --dock-h: calc(53px + max(3px, var(--safe-b)));
@@ -1256,6 +1287,12 @@
 @media (min-width: 1000px) {
   .rw-app {
     --rail-w: clamp(198px, 17vw, 236px);
+  }
+  html[data-offline-layout="title"] .rw-app {
+    --rail-w: clamp(310px, 25vw, 330px);
+  }
+  html[data-offline-layout="title"] .rw-app .topbar-tools > .sub-status {
+    display: none;
   }
   /* The sidebar is a column of the app grid rather than a fixed overlay, so it
      scrolls with nothing and the content column keeps its own max width. */

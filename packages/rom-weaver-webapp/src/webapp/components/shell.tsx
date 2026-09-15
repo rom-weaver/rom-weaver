@@ -37,7 +37,7 @@ import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
 if (typeof window !== "undefined") {
   const layout = new URLSearchParams(window.location.search).get("offline-layout");
-  if (layout === "tab" || layout === "strip" || layout === "edge" || layout === "quiet") {
+  if (layout === "tab" || layout === "strip" || layout === "edge" || layout === "quiet" || layout === "title") {
     document.documentElement.dataset.offlineLayout = layout;
   }
 }
@@ -1073,12 +1073,14 @@ const BuildTag = ({
 /** Version and worker threads: the two facts that only change on release or in Settings. */
 const BuildFacts = ({
   buildTag,
+  status,
   onOpenThreads,
   onPreloadSettings,
   threads,
   threadsLabel,
 }: {
   buildTag: ReactNode;
+  status?: ReactNode;
   onOpenThreads: () => void;
   onPreloadSettings?: () => void;
   threads?: number;
@@ -1086,6 +1088,7 @@ const BuildFacts = ({
 }) => (
   <span className="build-facts">
     {buildTag}
+    {status ? <span className="build-runtime">{status}</span> : null}
     {buildTag && threads ? (
       <span aria-hidden="true" className="sub-separator">
         /
@@ -1135,6 +1138,7 @@ const Masthead = ({
   offlineProgress = null,
   previewRuntimeState = null,
   previewPhoneOverlay = false,
+  previewVersionStatus = false,
   confirmExternalNavigation,
   donateHref,
   githubHref,
@@ -1168,6 +1172,7 @@ const Masthead = ({
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   previewRuntimeState?: RuntimeState | null;
   previewPhoneOverlay?: boolean;
+  previewVersionStatus?: boolean;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
@@ -1469,6 +1474,29 @@ const Masthead = ({
       versionTitle={versionTitle}
     />
   ) : null;
+  const buildFacts = (
+    <BuildFacts
+      buildTag={buildTag}
+      onOpenThreads={openThreads}
+      onPreloadSettings={onPreloadSettings}
+      status={
+        previewVersionStatus ? (
+          <StatusChip
+            label={runtimeLabel}
+            onOpenStatus={() => {
+              closeMenu();
+              onOpenStatus();
+            }}
+            percent={runtimePercent}
+            state={runtimeState}
+            title={runtimeTitle}
+          />
+        ) : null
+      }
+      threads={threads}
+      threadsLabel={threadsLabel}
+    />
+  );
   /* Theme and accent appear in the chrome (the top bar on desktop, the brand
      row on the phone) and again inside the navigation (the sidebar foot and the
      Menu sheet), so each copy owns its own popover key and radio group name.
@@ -1528,13 +1556,7 @@ const Masthead = ({
                       <b>weaver</b>
                     </BrandHeading>
                   </a>
-                  <BuildFacts
-                    buildTag={buildTag}
-                    onOpenThreads={openThreads}
-                    onPreloadSettings={onPreloadSettings}
-                    threads={threads}
-                    threadsLabel={threadsLabel}
-                  />
+                  {previewVersionStatus ? null : buildFacts}
                 </span>
               </span>
               <div className="shell-head-tools">
@@ -1543,6 +1565,7 @@ const Masthead = ({
                 <span className="phone-project-tools">{projectTiles}</span>
               </div>
             </div>
+            {previewVersionStatus ? <div className="title-build-row">{buildFacts}</div> : null}
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
           <aside className="side-rail">
