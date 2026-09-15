@@ -982,6 +982,33 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement.closest(".menu-find, .dock-menu")).toBeTruthy();
   });
 
+  test("the Menu sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
+    await setViewport(VIEWPORTS[0]);
+    await renderMasthead(noop);
+    const banner = host.querySelector(".shell-banner");
+    const covered = host.querySelector('.shell-head-tools .tool[aria-label="Docs"]');
+    expect(banner.hasAttribute("inert")).toBe(false);
+
+    if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
+    await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
+
+    // The scrim blocks the pointer here, so the keyboard must not get through.
+    expect(banner.hasAttribute("inert")).toBe(true);
+    covered.focus();
+    expect(document.activeElement).not.toBe(covered);
+    // The dock stays reachable: Menu is what closes the sheet again.
+    const menu = host.querySelector(".dock-menu");
+    expect(host.querySelector(".dock").hasAttribute("inert")).toBe(false);
+    menu.focus();
+    expect(document.activeElement).toBe(menu);
+
+    menu.click();
+    await settleUntil(() => host.querySelector(".menu-sheet").hidden);
+    expect(banner.hasAttribute("inert")).toBe(false);
+    covered.focus();
+    expect(document.activeElement).toBe(covered);
+  });
+
   test("Menu closes on Escape and hands focus back to its trigger", async () => {
     // The dock only exists below the layout threshold, and focus cannot return
     // to a control the current layout does not show.

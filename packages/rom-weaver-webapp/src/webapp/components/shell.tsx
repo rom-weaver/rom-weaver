@@ -1149,6 +1149,24 @@ const Masthead = ({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  /* The sheet covers the page and its scrim blocks pointer input, so the
+     keyboard has to agree: what the sheet covers goes inert while it is open,
+     or Tab walks into controls nobody can see or click. The dock stays live
+     because its Menu button is what closes the sheet again, and the scrim is a
+     close control in its own right. Only attributes set here are cleared, so a
+     dialog that inerted the same node keeps its own. */
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const sheet = document.getElementById("menu-sheet");
+    const covered = Array.from(sheet?.parentElement?.children ?? []).filter(
+      (node) => node !== sheet && !node.matches(".dock, .scrim") && !node.hasAttribute("inert"),
+    );
+    for (const node of covered) node.setAttribute("inert", "");
+    return () => {
+      for (const node of covered) node.removeAttribute("inert");
+    };
+  }, [menuOpen]);
+
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
   useEffect(() => {
