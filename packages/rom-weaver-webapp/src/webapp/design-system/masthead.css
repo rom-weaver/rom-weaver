@@ -878,6 +878,7 @@
 }
 .rw-app .dock-runtime {
   display: flex;
+  grid-row: 1;
   grid-column: 1 / -1;
   align-items: center;
   justify-content: center;
@@ -895,6 +896,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  grid-row: 2;
   gap: 2px;
   align-items: center;
   justify-content: center;
@@ -912,6 +914,90 @@
   background: transparent;
   border: 0;
   border-radius: var(--r-s);
+}
+
+@media (max-width: 999px) {
+  html[data-offline-layout="tab"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="strip"] .rw-app {
+    --dock-h: calc(78px + max(3px, var(--safe-b)));
+  }
+
+  html[data-offline-layout="tab"] .rw-app .dock {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    row-gap: 0;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-tab,
+  html[data-offline-layout="tab"] .rw-app .dock-runtime {
+    grid-row: 1;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime {
+    grid-column: 5;
+    min-block-size: 49px;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    justify-content: center;
+    inline-size: 100%;
+    block-size: 49px;
+    padding: 5px 2px;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-s);
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status svg {
+    width: 20px;
+    height: 20px;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status-text,
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status-percent {
+    display: none;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status::before {
+    order: 3;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    content: "STATUS";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="active"]::before,
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="ready"]::before {
+    content: "OFFLINE";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="update"]::before {
+    content: "UPDATE";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="installing"]::before {
+    content: "LOADING";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="online"]::before {
+    content: "ONLINE";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="disabled"]::before {
+    content: "OFF";
+  }
+
+  html[data-offline-layout="strip"] .rw-app .dock {
+    row-gap: 0;
+  }
+  html[data-offline-layout="strip"] .rw-app .dock-tab {
+    grid-row: 1;
+  }
+  html[data-offline-layout="strip"] .rw-app .dock-runtime {
+    grid-row: 2;
+    min-block-size: 25px;
+    border-block-start: 1px solid var(--seam-soft);
+  }
+  html[data-offline-layout="strip"] .rw-app .dock-runtime .sub-status {
+    block-size: 24px;
+    padding-inline: 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
 }
 .rw-app .dock-tab svg {
   width: 20px;

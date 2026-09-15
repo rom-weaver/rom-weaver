@@ -35,6 +35,13 @@ import type { ThemePreference } from "../theme.ts";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
+if (typeof window !== "undefined") {
+  const layout = new URLSearchParams(window.location.search).get("offline-layout");
+  if (layout === "tab" || layout === "strip") {
+    document.documentElement.dataset.offlineLayout = layout;
+  }
+}
+
 const Github = createLucideIcon("github", [
   [
     "path",
@@ -296,7 +303,6 @@ const PhoneDock = ({
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => (
   <nav aria-label={navLabel} className="dock">
-    <span className="dock-runtime">{status}</span>
     {tabs.map((tab) => (
       <a
         aria-current={tab.id === current ? "page" : undefined}
@@ -322,6 +328,7 @@ const PhoneDock = ({
       <Menu aria-hidden="true" />
       <span>{menuLabel}</span>
     </button>
+    <span className="dock-runtime">{status}</span>
   </nav>
 );
 
