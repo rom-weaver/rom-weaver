@@ -247,7 +247,6 @@ const createWebappRootController = (options: ControllerOptions) => {
   const settings = loadSettings(options.storage);
   // Before the React tree renders, so the accent tokens resolve on first paint.
   applyAccent(settings.accent);
-  // The URL path is the source of truth. The app root has no workflow path, so it uses Apply.
   const initialView = normalizeWorkflowViewForSettings(readWorkflowViewFromPath() || DEFAULT_WORKFLOW_VIEW, settings);
   writeWorkflowViewToPath(initialView, options.initialHistoryMode ?? "replace");
   const store = createStore<WebappState>(() => ({

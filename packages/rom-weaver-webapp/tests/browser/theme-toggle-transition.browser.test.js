@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { applyAccent } from "../../src/webapp/accent.ts";
 import { Masthead } from "../../src/webapp/components/shell.tsx";
 
 const noop = () => undefined;
@@ -76,6 +77,7 @@ const renderMasthead = async () => {
         onOpenLog: noop,
         onOpenSettings: noop,
         onOpenStatus: noop,
+        onAccentChange: applyAccent,
         onSelectTab: noop,
         tabs: PAGE_TABS,
       }),
@@ -91,8 +93,7 @@ const renderMasthead = async () => {
   return toggle;
 };
 
-/* Theme is a named menu rather than a cycle, so the wipe runs from the chosen
-   row. The origin it is fed is still the control that opened the menu. */
+/* The wipe starts at the chosen row in the theme menu. */
 const pickTheme = async (toggle, value) => {
   toggle.click();
   const anchor = toggle.closest(".tool-anchor");
@@ -100,10 +101,9 @@ const pickTheme = async (toggle, value) => {
   for (let attempt = 0; rows().length === 0 && attempt < 50; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  // The origin is read when the choice commits, and the open menu is part of
-  // the layout at that moment, so the rect has to be taken there too.
-  const rect = toggle.getBoundingClientRect();
-  rows()[THEME_CHOICE[value]].click();
+  const choice = rows()[THEME_CHOICE[value]];
+  const rect = choice.getBoundingClientRect();
+  choice.click();
   return rect;
 };
 
@@ -136,7 +136,7 @@ describe("theme toggle view-transition gate", () => {
     expect(document.documentElement.getAttribute("data-theme")).not.toBe(before);
   });
 
-  test("feeds the wipe its origin from the button", async () => {
+  test("feeds the wipe its origin from the clicked choice", async () => {
     pretendIosWebKit();
     const { rect } = await clickThemeToggle();
 
@@ -144,6 +144,27 @@ describe("theme toggle view-transition gate", () => {
     expect(root_.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
     expect(root_.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
     expect(Number.parseFloat(root_.style.getPropertyValue("--wipe-r"))).toBeGreaterThan(0);
+  });
+
+  test("sweeps an accent change from the chosen swatch", async () => {
+    pretendIosWebKit();
+    await renderMasthead();
+    const toggle = host.querySelector(".topbar-tools .accent-tool");
+    toggle.click();
+    const findChoice = () => host.querySelector('.topbar-tools .accent-chip:has(input[value="woad"])');
+    let choice = findChoice();
+    for (let attempt = 0; !choice && attempt < 50; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      choice = findChoice();
+    }
+    if (!choice) throw new Error("accent choice never rendered");
+    const rect = choice.getBoundingClientRect();
+    choice.querySelector("input").click();
+
+    expect(startCalls).toHaveLength(1);
+    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
+    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
+    expect(document.documentElement.getAttribute("data-accent")).toBe("woad");
   });
 
   test("keeps vt-theme held when a second toggle overlaps the first", async () => {

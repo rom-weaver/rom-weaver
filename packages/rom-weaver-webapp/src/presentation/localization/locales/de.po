@@ -2780,6 +2780,11 @@ msgstr "rom-weaver Startseite"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.homeShort"
+msgstr "Startseite"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
 msgstr "rom-weaver ist in diesem Browser für die Offline-Nutzung zwischengespeichert. Wenn du online bist, kann die App neuere Inhalte laden."
 

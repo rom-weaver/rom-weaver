@@ -6,6 +6,7 @@ import {
   createLucideIcon,
   HardDrive,
   Heart,
+  House,
   LoaderCircle,
   Menu,
   MonitorCog,
@@ -99,6 +100,7 @@ type NavEntry = {
   icon: ReactNode;
   id: string;
   label: string;
+  stateLabel?: string;
   /** Runs instead of following the href, for a row that routes or opens a dialog. */
   onSelect?: () => void;
   /** Runs before an external row opens, for the running-job guard. */
@@ -108,8 +110,8 @@ type NavEntry = {
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string };
 
-/** Reveal light/dark changes from the theme control that caused them. */
-const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
+/** Reveal appearance changes from the choice that caused them. */
+const runAppearanceWipe = (update: () => void, source: HTMLElement | null, kind: "theme" | "accent") => {
   const root = document.documentElement;
   if (viewTransitionsUnsupported()) {
     update();
@@ -122,7 +124,7 @@ const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
   root.style.setProperty("--wipe-x", `${cx}px`);
   root.style.setProperty("--wipe-y", `${cy}px`);
   root.style.setProperty("--wipe-r", `${radius}px`);
-  const release = holdTransitionClasses(["vt-theme"]);
+  const release = holdTransitionClasses([`vt-${kind}`]);
   const transition = document.startViewTransition(update);
   transition.ready.catch(() => undefined);
   transition.finished.then(release, release);
@@ -190,7 +192,10 @@ const NavRow = ({
   const body = (
     <>
       {entry.icon}
-      <span className="nav-row-label">{entry.label}</span>
+      <span className="nav-row-label">
+        {entry.label}
+        {entry.stateLabel ? <span className="nav-row-state">{entry.stateLabel}</span> : null}
+      </span>
       {entry.beta ? <span className="nav-beta">{localizer.message("ui.tools.beta")}</span> : null}
     </>
   );
@@ -506,8 +511,8 @@ const ThemeTile = ({
               aria-checked={choice.value === preference}
               className="tool-pop-item"
               key={choice.value}
-              onClick={() => {
-                runThemeWipe(() => setPreference(choice.value), buttonRef.current);
+              onClick={(event) => {
+                runAppearanceWipe(() => setPreference(choice.value), event.currentTarget, "theme");
                 onToggle(buttonRef.current);
               }}
               role="menuitemradio"
@@ -600,7 +605,9 @@ const AccentTile = ({
                   aria-label={entry.label}
                   checked={entry.value === accent}
                   name={name}
-                  onChange={() => onChange(entry.value)}
+                  onChange={(event) =>
+                    runAppearanceWipe(() => onChange(entry.value), event.currentTarget.closest("label"), "accent")
+                  }
                   type="radio"
                   value={entry.value}
                 />
@@ -1134,7 +1141,7 @@ const Masthead = ({
   tabs: WorkflowTab[];
   currentTab: string;
   dirty?: boolean;
-  /** The workbench, as a route: a bare "/" maps to no route and so hard-reloads. */
+  /** Base URL of the app's Home route. */
   homeHref: string;
   onSelectTab: (id: string) => void;
   onOpenWhatsNew: () => void;
@@ -1343,17 +1350,13 @@ const Masthead = ({
     const device: NavSectionData = {
       entries: [
         {
-          /* A fixed glyph, not the runtime one. The prerendered shell is built
-             in Node, where the state always resolves to "installing", and the
-             parser-time resolver in index.html only rewrites the identity
-             block's chip. A second state-dependent glyph here would still say
-             "installing" when React's first client render says otherwise, and
-             that mismatch makes React throw away the whole prerendered page.
-             The chip above this nav reports the state; the row only opens it. */
-          icon: <Cloud aria-hidden="true" />,
+          /* The first client render MUST match the prerendered glyph. The
+             parser-time resolver only updates the identity status chips. */
+          icon: hydrated && runtimeState === "update" ? <RuntimeGlyph state="update" /> : <Cloud aria-hidden="true" />,
           id: "status",
           label: localizer.message("ui.log.tabStatus"),
           onSelect: onOpenStatus,
+          stateLabel: hydrated && runtimeState === "update" ? localizer.message("ui.runtime.update") : undefined,
         },
         {
           icon: <HardDrive aria-hidden="true" />,
@@ -1378,6 +1381,14 @@ const Masthead = ({
       title: localizer.message("ui.nav.groupDevice"),
     };
     const project = workflowGroup("project");
+    project.entries.unshift({
+      current: currentTab === "home",
+      href: homeHref,
+      icon: <House aria-hidden="true" />,
+      id: "home",
+      label: localizer.message("ui.nav.homeShort"),
+      onSelect: () => onSelectTab("home"),
+    });
     project.entries.push({
       current: currentTab === "whats-new",
       href: "whats-new",
@@ -1415,12 +1426,15 @@ const Masthead = ({
     currentTab,
     donateHref,
     githubHref,
+    homeHref,
+    hydrated,
     localizer,
     onOpenLog,
     onOpenSettings,
     onOpenStatus,
     onSelectTab,
     openStorage,
+    runtimeState,
     tabs,
   ]);
 

@@ -559,6 +559,10 @@ function WebappRoot({
   const handleSelectTab = useCallback(
     (id: string) => {
       if (notFound) {
+        if (id === "home") {
+          window.location.assign(resolvedAssetBaseUrl);
+          return;
+        }
         // The nav can also reach a view with no WorkflowTab entry (What's
         // new), so it falls back to the id itself as the slug.
         const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
@@ -589,7 +593,7 @@ function WebappRoot({
       pendingViewRef.current = null;
       selectViewWithTransition(() => actions.onSelectView(view));
     },
-    [actions, notFound],
+    [actions, notFound, resolvedAssetBaseUrl],
   );
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a

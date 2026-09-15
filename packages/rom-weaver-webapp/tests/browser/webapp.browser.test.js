@@ -116,17 +116,17 @@ const createWebappState = (settings = getDefaultSettings(), currentView = "patch
   validation: createEmptyValidationState(),
 });
 
-function WebappRootHarness({ initialView = "patcher", settings } = {}) {
+function WebappRootHarness({ initialView = "patcher", settings, updateReady = false } = {}) {
   const [currentView, setCurrentView] = useState(initialView);
   const props = useMemo(
     () => ({
       actions: { ...createNoopActions(), onSelectView: setCurrentView },
       confirmationDialog: createEmptyConfirmationDialogState(),
-      pageUpdate: createEmptyPageUpdateState(),
+      pageUpdate: { ...createEmptyPageUpdateState(), ready: updateReady },
       serviceWorkerCache: createServiceWorkerCacheState(),
       state: createWebappState(settings, currentView),
     }),
-    [currentView, settings],
+    [currentView, settings, updateReady],
   );
   return createElement(WebappRoot, props);
 }
@@ -154,7 +154,7 @@ beforeEach(() => {
 /** A nav row by its visible label, from whichever layout the test names. */
 const navRow = (name, scope = ".side-nav") =>
   [...document.querySelectorAll(`${scope} .nav-row`)].find(
-    (row) => !row.hidden && row.querySelector(".nav-row-label")?.textContent === name,
+    (row) => !row.hidden && row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
   );
 const openMenuSheet = async () => {
   await expect.poll(() => document.querySelector(".dock-menu")).toBeTruthy();
@@ -212,6 +212,7 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
   expect(navRow("Identify")).toBeUndefined();
   // Docs is a named row rather than something behind a glyph.
   expect(navRow("Docs")).toBeTruthy();
+  expect(navRow("Home")).toBeTruthy();
 });
 
 const dropOnPage = async (fileName) => {
@@ -308,6 +309,9 @@ test("the phone head keeps the version and tools on one line", async () => {
       expect(getComputedStyle(word).display).not.toBe("none");
       expect(word.scrollWidth).toBeLessThanOrEqual(word.getBoundingClientRect().width + 1);
       expect(getComputedStyle(status).cursor).toBe("pointer");
+      expect(status.getBoundingClientRect().height).toBe(
+        document.querySelector(".topbar-tools .tool").getBoundingClientRect().height,
+      );
       expect(getComputedStyle(document.querySelector(".masthead-threads")).display).not.toBe("none");
     } else {
       expect(getComputedStyle(document.querySelector(".masthead-threads")).display).toBe("none");
@@ -514,6 +518,19 @@ test("WebappRoot names diagnostics in the nav - the Log dialog owns them", async
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
 
+test("navigation Status shows the current update state and opens that Status view", async () => {
+  await page.viewport(1280, 900);
+  mountWebappRoot({ updateReady: true });
+  await expect.poll(() => navRow("Status")?.querySelector(".nav-row-state")?.textContent).toBe("Update available");
+  navRow("Status").click();
+  await expect
+    .poll(() => document.querySelector(".log-dlg[open] #logpanel-status .sw-legend [data-current]"))
+    .toBeTruthy();
+  expect(document.querySelector(".log-dlg #logpanel-status .sw-legend [data-current] .sw-chip")?.textContent).toContain(
+    "Update available",
+  );
+});
+
 test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   const height = 844;
   await page.viewport(393, height);
@@ -564,7 +581,7 @@ test("the phone header carries appearance and the project links, and Menu carrie
   }
 
   await openMenuSheet();
-  for (const name of ["Storage", "Logs", "Settings", "Theme", "Accent", "Docs", "GitHub", "Support"]) {
+  for (const name of ["Storage", "Logs", "Settings", "Theme", "Accent", "Home", "Docs", "GitHub", "Support"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
   expect(document.querySelector(".dock-runtime .sub-status-text").textContent).toBe(

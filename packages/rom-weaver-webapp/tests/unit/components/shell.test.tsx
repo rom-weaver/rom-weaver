@@ -79,7 +79,7 @@ const TABS = [
 
 const mastheadProps = {
   currentTab: "patcher",
-  homeHref: "/apply",
+  homeHref: "/",
   donateHref: "https://example.com/donate",
   githubHref: "https://example.com/repo",
   onOpenWhatsNew: () => undefined,
@@ -126,18 +126,22 @@ describe("Masthead", () => {
       "Settings",
       "Theme",
       "Accent",
+      "Home",
       "Docs",
       "What\u2019s new",
       "GitHub",
       "Support",
     ]);
 
-    // "/" maps to no route, so the brand has to name one or the browser
-    // hard-reloads and every staged file goes with it.
+    // The brand and Home row both reach the app's base route.
     const logoHome = getByRole("link", { name: "rom-weaver home" });
-    expect(logoHome.getAttribute("href")).toBe("/apply");
+    expect(logoHome.getAttribute("href")).toBe("/");
     expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
-    expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
+    expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/");
+    const home = nav.querySelector("#tab-home") as HTMLAnchorElement;
+    expect(home.getAttribute("href")).toBe("/");
+    fireEvent.click(home);
+    expect(onSelectTab).toHaveBeenCalledWith("home");
     // Build facts stay with the title in both layouts.
     expect(container.querySelectorAll("h1").length).toBe(1);
     expect(container.querySelectorAll(".brand").length).toBe(1);
@@ -464,8 +468,19 @@ describe("Masthead", () => {
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("disabled");
     // an available update outranks every other runtime state
-    rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="active" updateReady />));
+    rerender(
+      withSettings(
+        <Masthead {...mastheadProps} onOpenStatus={onOpenStatus} serviceWorkerStatus="active" updateReady />,
+      ),
+    );
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("update");
+    const statusRow = Array.from(container.querySelectorAll<HTMLButtonElement>(".side-nav button.nav-row")).find(
+      (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent === "Status",
+    ) as HTMLButtonElement;
+    expect(statusRow.querySelector(".nav-row-label")?.firstChild?.textContent).toBe("Status");
+    expect(statusRow.querySelector(".nav-row-state")?.textContent).toBe("Update available");
+    fireEvent.click(statusRow);
+    expect(onOpenStatus).toHaveBeenCalledTimes(2);
   });
 
   it("routes the thread count to the threads deep link when one is offered", () => {

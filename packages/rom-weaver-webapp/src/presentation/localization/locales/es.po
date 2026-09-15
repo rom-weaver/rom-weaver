@@ -2780,6 +2780,11 @@ msgstr "Inicio de rom-weaver"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.homeShort"
+msgstr "Inicio"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.readyDesc"
 msgstr "rom-weaver está en la caché de este navegador para usarlo sin conexión. Si tienes conexión, puede descargar contenido más reciente."
 

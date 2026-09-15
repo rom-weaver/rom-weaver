@@ -271,6 +271,7 @@
   text-decoration: none;
 }
 .rw-app .topbar-tools .sub-status {
+  block-size: 32px;
   padding-inline: 8px;
   background: var(--well);
   border: 1px solid var(--seam);
@@ -366,6 +367,12 @@
 .rw-app .nav-row-label {
   min-inline-size: 0;
   overflow-wrap: anywhere;
+}
+.rw-app .nav-row-state {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--thread-text);
 }
 @media (hover: hover) {
   .rw-app .nav-row:not([aria-current="page"]):hover {

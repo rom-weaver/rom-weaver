@@ -1005,6 +1005,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.nav.groupPatches": msg({ id: "ui.nav.groupPatches", message: "Patches" }),
   "ui.nav.groupRoms": msg({ id: "ui.nav.groupRoms", message: "ROMs" }),
   "ui.nav.home": msg({ id: "ui.nav.home", message: "rom-weaver home" }),
+  "ui.nav.homeShort": msg({ id: "ui.nav.homeShort", message: "Home" }),
   "ui.nav.primary": msg({ id: "ui.nav.primary", message: "Workflow" }),
   "ui.log.dialogLabel": msg({ id: "ui.log.dialogLabel", message: "Diagnostics" }),
   "ui.log.tabLogs": msg({ id: "ui.log.tabLogs", message: "Logs" }),

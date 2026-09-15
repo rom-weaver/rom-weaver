@@ -186,9 +186,12 @@ if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home pag
 assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply-patch"', "home Apply card");
 assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/supported-formats"', "home formats reference link");
-// The landing page has no current workflow row.
-if (homeHtml.includes('aria-current="page" class="nav-row"')) {
-  throw new Error("the home page marks a workflow row as the current page");
+// Home is the only current Project destination on the landing page.
+const currentHomeRows = [...homeHtml.matchAll(/aria-current="page"[^>]*class="nav-row"[^>]*id="([^"]+)"/g)].map(
+  (match) => match[1],
+);
+if (currentHomeRows.length !== 1 || currentHomeRows[0] !== "tab-home") {
+  throw new Error(`the home page must mark only Home as current; found ${currentHomeRows.join(", ")}`);
 }
 assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
 assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
