@@ -136,11 +136,12 @@ describe("Masthead", () => {
     expect(logoHome.getAttribute("href")).toBe("/apply");
     expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
     expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/apply");
-    // The identity block is stated once, so the two layouts cannot disagree.
+    // Build facts stay with the title in both layouts.
     expect(container.querySelectorAll("h1").length).toBe(1);
     expect(container.querySelectorAll(".brand").length).toBe(1);
     expect(container.querySelectorAll(".masthead-threads").length).toBe(1);
-    expect(container.querySelectorAll(".sub-status").length).toBe(1);
+    expect(container.querySelectorAll(".sub-status").length).toBe(2);
+    expect(container.querySelector(".brand-copy .build-facts")).toBeTruthy();
 
     const apply = nav.querySelector('[aria-current="page"]') as HTMLAnchorElement;
     expect(apply.textContent).toBe("Apply");
@@ -447,8 +448,7 @@ describe("Masthead", () => {
     // The accessible name replaces the chip rather than adding to it, so it is
     // the one place that still has to carry the number.
     expect(container.querySelector(".sub-status")?.getAttribute("aria-label")).toBe("Installing offline copy: 25%");
-    // Install progress is an overlay on the block's edge, so it moves nothing.
-    expect(container.querySelector(".install-rule")?.parentElement?.classList.contains("shell-head")).toBe(true);
+    expect(container.querySelector(".install-rule")).toBeNull();
 
     rerender(withSettings(<Masthead {...mastheadProps} serviceWorkerStatus="off" />));
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("disabled");
@@ -499,19 +499,22 @@ describe("Masthead", () => {
     const channel = container.querySelector(".channel-badge") as HTMLButtonElement;
     expect(channel.tagName).toBe("BUTTON");
     expect(channel.getAttribute("data-channel")).toBe("nightly");
-    expect(channel.getAttribute("aria-label")).toBe("Nightly build, v1.2.3");
-    expect(channel.querySelector(".tag-channel")?.textContent).toBe("nightly");
-    expect(channel.textContent).toBe("nightly / v1.2.3");
+    expect(channel.getAttribute("aria-label")).toBe("Nightly build, v1.2.3n");
+    expect(channel.querySelector(".tag-channel")).toBeNull();
+    expect(channel.textContent).toBe("v1.2.3n");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="beta" />));
     const beta = container.querySelector(".channel-badge") as HTMLButtonElement;
-    expect(beta.querySelector(".tag-channel")?.textContent).toBe("beta");
-    expect(beta.textContent).toBe("beta / v1.2.3");
+    expect(beta.querySelector(".tag-channel")).toBeNull();
+    expect(beta.textContent).toBe("v1.2.3b");
 
     rerender(withSettings(<Masthead {...mastheadProps} channelBadge="dev" />));
     const dev = container.querySelector(".channel-badge") as HTMLButtonElement;
-    expect(dev.querySelector(".tag-channel")?.textContent).toBe("dev");
-    expect(dev.textContent).toBe("dev / v1.2.3");
+    expect(dev.querySelector(".tag-channel")).toBeNull();
+    expect(dev.textContent).toBe("v1.2.3d");
+
+    rerender(withSettings(<Masthead {...mastheadProps} channelBadge="dev" commitsSinceVersion={3} dirty />));
+    expect((container.querySelector(".channel-badge") as HTMLButtonElement).textContent).toBe("v1.2.3d+3*");
   });
 
   it("preloads the Log dialog when Menu is about to open", () => {

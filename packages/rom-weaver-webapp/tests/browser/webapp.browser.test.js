@@ -283,16 +283,13 @@ test("WebappRoot reports the configured thread count in the chrome, not the core
     .toContain("1 threads");
 });
 
-test("the runtime state reads as a word at every width, beside the build facts", async () => {
-  // A lone cloud glyph was the clearest case of chrome a new user could not
-  // read, so the state keeps its word in both layouts rather than yielding it.
+test("the runtime state stays in the header while build facts sit under the title", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
-  // One copy of the identity block, so the layouts cannot disagree about it.
-  expect(document.querySelectorAll(".sub-status").length).toBe(1);
+  expect(document.querySelectorAll(".sub-status").length).toBe(2);
   expect(document.querySelectorAll(".masthead-threads").length).toBe(1);
-  expect(document.querySelector(".meta-strip .sub-status")).toBeTruthy();
+  expect(document.querySelector(".brand-copy .build-facts")).toBeTruthy();
 
   for (const [width, height] of [
     [1280, 900],
@@ -300,13 +297,17 @@ test("the runtime state reads as a word at every width, beside the build facts",
     [390, 844],
   ]) {
     await page.viewport(width, height);
-    const status = document.querySelector(".sub-status");
-    await expect.poll(() => getComputedStyle(document.querySelector(".sub-status svg")).display).not.toBe("none");
+    const status = document.querySelector(width >= 1000 ? ".topbar .sub-status" : ".shell-head-tools .sub-status");
+    await expect.poll(() => getComputedStyle(status.querySelector("svg")).display).not.toBe("none");
     const word = status.querySelector(".sub-status-text");
     expect(word.textContent.trim().length).toBeGreaterThan(0);
-    expect(getComputedStyle(word).display).not.toBe("none");
-    // The word is painted in full rather than clipped to fit the line.
-    expect(word.scrollWidth).toBeLessThanOrEqual(word.getBoundingClientRect().width + 1);
+    if (width >= 1000) {
+      expect(getComputedStyle(word).display).not.toBe("none");
+      expect(word.scrollWidth).toBeLessThanOrEqual(word.getBoundingClientRect().width + 1);
+    } else {
+      expect(getComputedStyle(word).display).toBe("none");
+      expect(status.getAttribute("aria-label")).toContain(word.textContent.trim());
+    }
     expect(getComputedStyle(status).cursor).toBe("pointer");
     // The wordmark still leads the block it heads.
     const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
@@ -611,13 +612,16 @@ test("the Menu sheet keeps its row spacing after opening", async () => {
   const start = {
     sheetHeight: sheet.getBoundingClientRect().height,
     projectTop: project.getBoundingClientRect().top,
-    projectOffset: project.getBoundingClientRect().top - sheet.getBoundingClientRect().top,
+    projectBottomGap:
+      sheet.querySelector(".menu-sheet-foot").getBoundingClientRect().top - project.getBoundingClientRect().bottom,
   };
 
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(sheet.getBoundingClientRect().height).toBeCloseTo(start.sheetHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
   await page.viewport(390, 600);
-  expect(project.getBoundingClientRect().top - sheet.getBoundingClientRect().top).toBeCloseTo(start.projectOffset, 1);
+  expect(
+    sheet.querySelector(".menu-sheet-foot").getBoundingClientRect().top - project.getBoundingClientRect().bottom,
+  ).toBeCloseTo(start.projectBottomGap, 1);
   await page.viewport(1280, 900);
 });

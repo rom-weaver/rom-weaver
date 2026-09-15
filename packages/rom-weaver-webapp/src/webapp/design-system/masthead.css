@@ -2,7 +2,7 @@
    Two layouts, one threshold (▼ below), and one description of the navigation
    behind both. Above the threshold a sidebar carries the brand, every
    destination the app has, and the build facts, while a slim top bar carries
-   what is about this browser rather than about the app. Below it the sidebar's
+   runtime status and browser tools. Below it the sidebar's
    sections become the Menu sheet and three workflows keep a dock slot each.
    Nothing is reachable in one layout and missing from the other, and no
    destination hides behind an unlabelled glyph. */
@@ -61,6 +61,11 @@
 }
 .rw-app .brand-word-link:focus-visible {
   outline-offset: -2px;
+}
+.rw-app .brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
 }
 .rw-app .brand-word {
   display: block;
@@ -201,11 +206,6 @@
   text-transform: none;
   letter-spacing: 0;
 }
-.rw-app .build-tag .tag-channel {
-  font-weight: 800;
-  text-transform: none;
-  letter-spacing: 0;
-}
 .rw-app .build-tag .tag-letter {
   font-weight: 800;
 }
@@ -263,11 +263,18 @@
    rewritten by the parser-time resolver in index.html: keep both names. */
 .rw-app .sub-status {
   display: inline-flex;
+  flex: none;
   gap: 5px;
   align-items: center;
   font-size: 0.72rem;
   font-weight: 600;
   text-decoration: none;
+}
+.rw-app .topbar-tools .sub-status {
+  padding-inline: 8px;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
 }
 .rw-app .sub-status svg {
   flex: none;
@@ -462,8 +469,14 @@
 }
 /* The sheet's foot already draws the seam and the gutter. */
 .rw-app .menu-sheet .nav-appearance {
-  padding-block: 0 var(--sp-xs);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 0 var(--sp-2xs);
   border-block-start: 0;
+}
+.rw-app .menu-sheet .nav-appearance .nav-group-label {
+  padding: 0;
 }
 
 /* The banner is the whole chrome: identity, navigation and the top bar. It
@@ -474,8 +487,7 @@
 }
 
 /* ── the identity block ──
-   The sidebar's head on desktop, the page header on the phone. One element, so
-   the build facts and the runtime state cannot disagree between layouts. */
+   The sidebar's head on desktop, the page header on the phone. */
 .rw-app .shell-head {
   position: relative;
   display: flex;
@@ -493,35 +505,6 @@
   flex: 1 1 auto;
   min-inline-size: min-content;
 }
-.rw-app .meta-strip {
-  display: flex;
-  align-items: center;
-  padding-block: 3px;
-  background: var(--well);
-  border-block: 1px solid var(--seam-soft);
-}
-/* An overlay on the block's bottom edge: install progress reports on the page
-   without moving it. */
-.rw-app .install-rule {
-  position: absolute;
-  inset-block-end: 0;
-  inset-inline: 0;
-  z-index: 2;
-  display: block;
-  block-size: 3px;
-  background: color-mix(in srgb, var(--thread) 20%, transparent);
-}
-.rw-app .install-rule i {
-  display: block;
-  block-size: 100%;
-  background: var(--thread);
-  transition: inline-size 0.3s var(--ease);
-}
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .install-rule i {
-    transition: none;
-  }
-}
 
 /* ── desktop sidebar ──
    The identity block heads the column and the nav scrolls under it, so the
@@ -537,8 +520,7 @@
 }
 
 /* ── desktop top bar ──
-   Only two things belong here: the one box that reaches everything (Find) and
-   the controls that change this browser rather than the app. Everything that
+   Find, runtime status, and browser tools sit here. Everything that
    is a destination lives in the sidebar, so nothing is listed twice. */
 .rw-app .topbar {
   display: flex;
@@ -610,6 +592,9 @@
   flex: none;
   gap: var(--sp-2xs);
   align-items: center;
+}
+.rw-app .phone-project-tools {
+  display: contents;
 }
 /* Appearance, then the project links: the same pair and the same order in both
    layouts, so one teaches the other. */
@@ -970,10 +955,15 @@
   display: none;
 }
 .rw-app .menu-sheet-body {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   min-block-size: 0;
   padding: var(--sp-s) var(--gutter) var(--sp-m);
   overflow-y: auto;
+}
+.rw-app .menu-sheet-body > .nav-group:first-child {
+  margin-block-start: auto;
 }
 .rw-app .menu-sheet .nav-group-label {
   padding-block: 10px 3px;
@@ -1000,7 +990,7 @@
    already puts the palette it opens. */
 .rw-app .menu-sheet-foot {
   flex: none;
-  padding: var(--sp-s) var(--gutter);
+  padding: var(--sp-xs) var(--gutter);
   border-block-start: 1px solid var(--seam);
 }
 .rw-app .menu-find {
@@ -1088,32 +1078,6 @@
   .rw-app .shell-head-tools {
     display: none;
   }
-  /* The rail is too narrow for three facts on one line, so the runtime state
-     takes its own row and the separator that joined them goes away. */
-  .rw-app .meta-strip {
-    display: grid;
-    gap: 3px;
-    justify-items: start;
-    padding-inline: 8px;
-    background: transparent;
-    border-block-end: 0;
-  }
-  .rw-app .meta-strip > .sub-separator {
-    display: none;
-  }
-  /* In the rail the head's bottom edge is a column away from the chip that
-     reports the progress, and a rule pinned there reads as a broken divider
-     over the first nav section. Lifting it by the head's own bottom padding
-     seats it under the strip, where it belongs to the "Saving offline" line. */
-  .rw-app .install-rule {
-    inset-block-end: var(--sp-m);
-    inset-inline: 8px;
-    block-size: 2px;
-    border-radius: 999px;
-  }
-  .rw-app .install-rule i {
-    border-radius: inherit;
-  }
   .rw-app .app:has(#panel-docs:not([hidden])) {
     max-width: calc(var(--app-max-docs) + var(--rail-w) + var(--sp-l));
   }
@@ -1130,14 +1094,21 @@
   .rw-app .side-col {
     display: block;
   }
-  /* The strip runs to the window edges, not to the app column's gutter: it is
-     the seam between the brand and the page, not a box inside the page. */
-  .rw-app .meta-strip {
-    padding-inline: var(--gutter);
-    margin-inline: calc(var(--gutter) * -1);
+  .rw-app .topbar-tools {
+    display: none;
   }
-  .rw-app .install-rule {
-    inset-inline: calc(var(--gutter) * -1);
+  .rw-app .shell-head-tools .sub-status {
+    justify-content: center;
+    inline-size: 32px;
+    block-size: 32px;
+    padding: 0;
+    background: var(--well);
+    border: 1px solid var(--seam);
+    border-radius: var(--r-s);
+  }
+  .rw-app .shell-head-tools .sub-status-text,
+  .rw-app .shell-head-tools .sub-status-percent {
+    display: none;
   }
   .rw-app .dock {
     display: grid;
@@ -1148,17 +1119,32 @@
   .rw-app .scrim:not([hidden]) {
     display: block;
   }
-  /* A 320px phone has room for the brand or for five 32px glyphs, not both, so
-     below 400px every part of the row steps down together. */
-  @media (max-width: 399px) {
+  /* The project tools take a second line while the full build identity and
+     offline button share the first line on narrow phones. */
+  @media (max-width: 449px) {
+    .rw-app .shell-head-tools {
+      flex-wrap: wrap;
+      gap: 0;
+      justify-content: flex-end;
+      inline-size: 88px;
+    }
+    .rw-app .shell-head-tools > .tool-separator {
+      display: none;
+    }
+    .rw-app .phone-project-tools {
+      display: flex;
+      flex: 0 0 100%;
+      justify-content: flex-end;
+    }
+    .rw-app .shell-head-tools .sub-status {
+      inline-size: 28px;
+      block-size: 28px;
+    }
     .rw-app .brand-mark {
       width: 32px;
     }
     .rw-app .brand-word {
       font-size: 1.06rem;
-    }
-    .rw-app .shell-head-tools {
-      gap: 0;
     }
     .rw-app .shell-head-tools .tool {
       width: 28px;

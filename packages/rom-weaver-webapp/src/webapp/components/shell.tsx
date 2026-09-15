@@ -900,8 +900,7 @@ const guardExternalClick = (
  * preview is the exception - the number IS the useful identity, so it links
  * straight to the pull request.
  */
-const CHANNEL_LETTERS: Record<string, string> = { beta: "B", dev: "D", nightly: "N", preview: "P" };
-const CHANNEL_PREFIXES: Record<string, string> = { beta: "beta", dev: "dev", nightly: "nightly" };
+const CHANNEL_SUFFIXES: Record<string, string> = { beta: "b", dev: "d", nightly: "n" };
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
   dev: "ui.channel.dev",
@@ -930,7 +929,8 @@ const BuildTag = ({
   version: string;
   versionTitle?: string;
 }) => {
-  const versionText = `v${version}${commitDistance ? `+${commitDistance}` : ""}${dirty ? "*" : ""}`;
+  const suffix = CHANNEL_SUFFIXES[channelBadge?.toLowerCase() ?? ""] ?? "";
+  const versionText = `v${version}${suffix}${commitDistance ? `+${commitDistance}` : ""}${dirty ? "*" : ""}`;
   const prNumber = channelBadge?.match(/^pr-(\d+)$/i)?.[1];
   if (prNumber) {
     const prHref = githubBaseHref ? `${githubBaseHref}pull/${prNumber}` : undefined;
@@ -959,10 +959,11 @@ const BuildTag = ({
   }
   if (channelBadge) {
     const key = channelBadge.toLowerCase();
-    const letter = CHANNEL_LETTERS[key] ?? channelBadge.slice(0, 1).toUpperCase();
-    const prefix = CHANNEL_PREFIXES[key];
+    const letter = channelBadge.slice(0, 1).toUpperCase();
     const nameId = CHANNEL_MESSAGES[key];
     const name = nameId ? localizer.message(nameId) : channelBadge;
+    let channelText: ReactNode = null;
+    if (!suffix) channelText = <b className="tag-letter">{letter}</b>;
     return (
       <span className="build-tag">
         <button
@@ -973,10 +974,12 @@ const BuildTag = ({
           onClick={onOpenWhatsNew}
           type="button"
         >
-          {prefix ? <span className="tag-channel">{prefix}</span> : <b className="tag-letter">{letter}</b>}
-          <span aria-hidden="true" className="tag-separator">
-            {" / "}
-          </span>
+          {channelText}
+          {suffix ? null : (
+            <span aria-hidden="true" className="tag-separator">
+              {" / "}
+            </span>
+          )}
           <span className="tag-version">{versionText}</span>
         </button>
       </span>
@@ -1425,10 +1428,8 @@ const Masthead = ({
           while staying inside a single landmark - two `header` elements at this
           level would leave the page with two banners. */}
       <header className="shell-banner">
-        {/* One column on desktop, one page header on the phone. The brand, the
-            build facts and the runtime state are stated once inside it, so the
-            two shells can never disagree about what build this is or whether
-            the offline copy is working. */}
+        {/* One column on desktop, one page header on the phone. Build facts stay
+            with the brand, while each layout puts runtime status in its tools. */}
         <div className="side-col">
           <div className="shell-head">
             <div className="shell-head-top">
@@ -1436,51 +1437,35 @@ const Masthead = ({
                 <a aria-label={localizer.message("ui.nav.home")} className="brand-mark-link" href={homeHref}>
                   <BrandMark />
                 </a>
-                <a className="brand-word-link" href={homeHref}>
-                  <BrandHeading className="brand-word">
-                    rom<span className="brand-hy">-</span>
-                    <b>weaver</b>
-                  </BrandHeading>
-                </a>
+                <span className="brand-copy">
+                  <a className="brand-word-link" href={homeHref}>
+                    <BrandHeading className="brand-word">
+                      rom<span className="brand-hy">-</span>
+                      <b>weaver</b>
+                    </BrandHeading>
+                  </a>
+                  <BuildFacts
+                    buildTag={buildTag}
+                    onOpenThreads={openThreads}
+                    onPreloadSettings={onPreloadSettings}
+                    threads={threads}
+                    threadsLabel={threadsLabel}
+                  />
+                </span>
               </span>
-              {/* The phone has no top bar to put these in, so they ride the brand row. */}
               <div className="shell-head-tools">
+                <StatusChip
+                  label={runtimeLabel}
+                  onOpenStatus={onOpenStatus}
+                  percent={runtimePercent}
+                  state={runtimeState}
+                  title={runtimeTitle}
+                />
                 {appearanceTiles("phone")}
                 <span aria-hidden="true" className="tool-separator" />
-                {projectTiles}
+                <span className="phone-project-tools">{projectTiles}</span>
               </div>
             </div>
-            {/* A recessed strip, so identity and instrumentation stop competing for
-            one line, and the facts read as reported values rather than as
-            decoration on the logo. */}
-            <div className="meta-strip">
-              <BuildFacts
-                buildTag={buildTag}
-                onOpenThreads={openThreads}
-                onPreloadSettings={onPreloadSettings}
-                threads={threads}
-                threadsLabel={threadsLabel}
-              />
-              {(buildTag || threads) && (
-                <span aria-hidden="true" className="sub-separator">
-                  /
-                </span>
-              )}
-              <StatusChip
-                label={runtimeLabel}
-                onOpenStatus={onOpenStatus}
-                percent={runtimePercent}
-                state={runtimeState}
-                title={runtimeTitle}
-              />
-            </div>
-            {/* An overlay on the head's bottom edge: install progress must not move
-            the page it is reporting on. */}
-            {runtimePercent === null ? null : (
-              <span aria-hidden="true" className="install-rule">
-                <i style={{ width: `${runtimePercent}%` }} />
-              </span>
-            )}
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
           <aside className="side-rail">
@@ -1507,6 +1492,13 @@ const Masthead = ({
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
           <div className="topbar-tools">
+            <StatusChip
+              label={runtimeLabel}
+              onOpenStatus={onOpenStatus}
+              percent={runtimePercent}
+              state={runtimeState}
+              title={runtimeTitle}
+            />
             {appearanceTiles("desktop")}
             <span aria-hidden="true" className="tool-separator" />
             {projectTiles}
@@ -1522,8 +1514,7 @@ const Masthead = ({
         triggerRef={activeFindRef}
       />
       {/* The parser-time resolver in index.html rewrites the thread count and
-          runtime status before the shell paints, and removes itself. Keep its
-          marker after the chrome so every slot exists when it runs. */}
+          both runtime buttons before the shell paints. */}
       <span className="shell-identity" hidden />
       <PhoneDock
         current={currentTab}

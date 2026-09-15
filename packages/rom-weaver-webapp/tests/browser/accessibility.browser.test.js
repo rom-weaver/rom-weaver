@@ -986,7 +986,7 @@ describe("webapp keyboard navigation", () => {
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);
     const banner = host.querySelector(".shell-banner");
-    const covered = host.querySelector('.shell-head-tools .tool[aria-label="Docs"]');
+    const covered = host.querySelector(".shell-head-tools .sub-status");
     expect(banner.hasAttribute("inert")).toBe(false);
 
     if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
@@ -1302,12 +1302,11 @@ describe("webapp responsive navigation", () => {
       expect(Math.abs(sheet.bottom - dock.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
       expect(sheet.top).toBeLessThanOrEqual(1);
 
-      // The header keeps its single brand row over the recessed strip.
+      // The brand and tools share one row without overlap.
       const brand = host.querySelector(".brand").getBoundingClientRect();
       const tools = host.querySelector(".shell-head-tools").getBoundingClientRect();
-      const strip = host.querySelector(".meta-strip").getBoundingClientRect();
       expect(brand.right).toBeLessThanOrEqual(tools.left + 1);
-      expect(brand.bottom).toBeLessThanOrEqual(strip.top + 1);
+      expect(host.querySelector(".brand-copy .build-facts")).toBeTruthy();
 
       host.querySelector(".dock-menu").click();
       await settleUntil(() => host.querySelector(".menu-sheet").hidden);

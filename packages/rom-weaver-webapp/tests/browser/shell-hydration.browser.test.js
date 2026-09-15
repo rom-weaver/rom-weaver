@@ -94,15 +94,17 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   // loads: the count, its accessible name, and the runtime state, title, glyph,
   // and lucide class.
   const threads = host.querySelector(".masthead-threads");
-  const runtime = host.querySelector(".sub-status");
+  const runtime = [...host.querySelectorAll(".sub-status")];
   threads.querySelector(".masthead-threads-count").textContent = "8";
   threads.setAttribute("aria-label", "8 threads");
-  runtime.dataset.sw = "disabled";
-  runtime.setAttribute("aria-label", "Offline support off");
-  runtime.setAttribute("title", "Offline support off");
-  runtime.querySelector("svg").setAttribute("class", "lucide lucide-cloud-off");
-  runtime.querySelector("svg").innerHTML =
-    '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path>';
+  for (const slot of runtime) {
+    slot.dataset.sw = "disabled";
+    slot.setAttribute("aria-label", "Offline support off");
+    slot.setAttribute("title", "Offline support off");
+    slot.querySelector("svg").setAttribute("class", "lucide lucide-cloud-off");
+    slot.querySelector("svg").innerHTML =
+      '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path>';
+  }
 
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const recoverableErrors = [];
@@ -113,7 +115,7 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   });
 
   expect(host.querySelector(".masthead-threads")).toBe(threads);
-  expect(host.querySelector(".sub-status")).toBe(runtime);
+  expect([...host.querySelectorAll(".sub-status")]).toEqual(runtime);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });
@@ -168,14 +170,16 @@ const resolvedShellMarkup = () => {
   return renderToString(shell(8, null, false, READY_WARMUP));
 };
 
-/** What the resolver leaves behind: the chip, and only the chip, made current. */
+/** What the resolver leaves behind: both runtime buttons made current. */
 const applyResolver = (host, resolvedState) => {
   const target = document.createElement("div");
   target.innerHTML = renderToString(shell(8, resolvedState, false, READY_WARMUP));
-  const from = target.querySelector(".sub-status");
-  const into = host.querySelector(".sub-status");
-  for (const { name, value } of from.attributes) into.setAttribute(name, value);
-  into.innerHTML = from.innerHTML;
+  const from = [...target.querySelectorAll(".sub-status")];
+  const into = [...host.querySelectorAll(".sub-status")];
+  for (const [index, slot] of into.entries()) {
+    for (const { name, value } of from[index].attributes) slot.setAttribute(name, value);
+    slot.innerHTML = from[index].innerHTML;
+  }
 };
 
 test.each([
@@ -200,7 +204,7 @@ test.each([
     });
   });
 
-  // Nothing outside the chip may render from the runtime state, or the shell
+  // Nothing outside the runtime buttons may render from the runtime state, or the shell
   // the visitor already sees is discarded and rebuilt.
   expect(recoverableErrors.map((error) => error.message)).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
