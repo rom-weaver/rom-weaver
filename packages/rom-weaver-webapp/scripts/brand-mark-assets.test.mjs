@@ -7,6 +7,12 @@ import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 const logo = fs.readFileSync(new URL("../src/assets/app/root/logo.svg", import.meta.url), "utf8");
 const generatedAssets = new URL("../../../dist/generated-assets/", import.meta.url);
 
+test("the masthead reuses the source SVG shapes", () => {
+  const component = fs.readFileSync(new URL("../src/webapp/components/brand-mark.tsx", import.meta.url), "utf8");
+  assert.ok(component.includes("/logo.svg#brand-${name}"));
+  for (const name of ["cartridge", "r", "w"]) assert.ok(logo.includes(`id="brand-${name}"`));
+});
+
 test("rejects a source missing the accent color", () => {
   assert.throws(() => tintBrandMark(logo.replaceAll("#d9690f", "#000000"), ACCENTS[1]), /missing the accent color/);
 });

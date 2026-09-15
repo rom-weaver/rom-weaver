@@ -20,15 +20,26 @@ const logger = createLogger("accent");
 type Accent = (typeof ACCENTS)[number]["value"];
 const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
 const FAVICON_URLS = new Map(
-  ACCENTS.map((accent) => [accent.value, `data:image/svg+xml,${encodeURIComponent(tintBrandMark(logo, accent))}`]),
+  ACCENTS.flatMap((accent) =>
+    (["light", "dark"] as const).map((theme) => [
+      `${accent.value}-${theme}`,
+      `data:image/svg+xml,${encodeURIComponent(tintBrandMark(logo, accent).replace('class="brand-mark"', `class="brand-mark" data-theme="${theme}"`))}`,
+    ]),
+  ),
 );
-
 const isAccent = (value: unknown): value is Accent => typeof value === "string" && ACCENT_VALUES.includes(value);
 
 const listeners = new Set<() => void>();
 let current: Accent = DEFAULT_ACCENT;
 
 const getAccent = (): Accent => current;
+
+const refreshFavicon = () => {
+  if (typeof document === "undefined" || !document.documentElement) return;
+  const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  const faviconUrl = FAVICON_URLS.get(`${current}-${theme}`);
+  if (faviconUrl) document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.setAttribute("href", faviconUrl);
+};
 
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -72,10 +83,7 @@ const applyAccent = (value: unknown) => {
     if (animate) armAccentAnimation(document.documentElement);
     if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute("data-accent");
     else document.documentElement.setAttribute("data-accent", accent);
-    const faviconUrl = FAVICON_URLS.get(accent);
-    if (faviconUrl) {
-      document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.setAttribute("href", faviconUrl);
-    }
+    refreshFavicon();
   }
   logger.trace("Applied accent", { accent, animate, changed, requested: value });
   if (changed) for (const listener of listeners) listener();
@@ -84,5 +92,5 @@ const applyAccent = (value: unknown) => {
 /** Subscribe a component to the active accent. */
 const useAccent = (): Accent => useSyncExternalStore(subscribe, getAccent, getAccent);
 
-export { ACCENTS, applyAccent, DEFAULT_ACCENT, useAccent };
+export { ACCENTS, applyAccent, DEFAULT_ACCENT, refreshFavicon, useAccent };
 export type { Accent };

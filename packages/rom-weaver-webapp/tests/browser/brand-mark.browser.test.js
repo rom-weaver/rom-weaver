@@ -11,27 +11,38 @@ afterEach(() => {
   root?.unmount();
   host?.remove();
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-accent");
 });
 
-test.each(["light", "dark"])("the %s logo has centered contacts and no generic icon outline", async (theme) => {
+test.each(["light", "dark"])("the %s logo has no square background", async (theme) => {
   document.documentElement.dataset.theme = theme;
   host = document.createElement("div");
   host.className = "rw-app";
   document.body.append(host);
   root = createRoot(host);
   root.render(createElement(BrandMark));
-  await expect.poll(() => host.querySelector(".brand-mark path")).not.toBeNull();
+  await expect.poll(() => host.querySelector(".brand-mark-accent")).not.toBeNull();
+  const mark = host.querySelector(".brand-mark");
+  expect(mark.tagName.toLowerCase()).toBe("svg");
+  expect(mark.getBoundingClientRect().width).toBe(mark.getBoundingClientRect().height);
+  expect([...mark.querySelectorAll("rect")].every((rect) => rect.hasAttribute("mask"))).toBe(true);
+  expect(mark.getAttribute("aria-hidden")).toBe("true");
+  const cartridge = mark.querySelector("rect");
+  expect(getComputedStyle(cartridge).fill).toBe(theme === "light" ? "rgb(32, 40, 45)" : "rgb(246, 236, 218)");
+});
 
-  for (const shape of host.querySelectorAll(".brand-mark path, .brand-mark rect")) {
-    expect(getComputedStyle(shape).stroke).toBe("none");
-  }
-
-  const cartridge = host.querySelector(".brand-mark > path");
-  for (let x = 0.25; x < 32; x += 0.5) {
-    expect(cartridge.isPointInFill(new DOMPoint(x, 55))).toBe(cartridge.isPointInFill(new DOMPoint(64 - x, 55)));
-  }
-
-  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  host.append(icon);
-  expect(getComputedStyle(icon).stroke).not.toBe("none");
+test.each(["woad", "teal"])("the light logo W follows the %s accent", async (accent) => {
+  document.documentElement.dataset.theme = "light";
+  document.documentElement.dataset.accent = accent;
+  host = document.createElement("div");
+  host.className = "rw-app";
+  document.body.append(host);
+  root = createRoot(host);
+  root.render(createElement(BrandMark));
+  await expect.poll(() => host.querySelector(".brand-mark-accent")).not.toBeNull();
+  const w = host.querySelector(".brand-mark-accent");
+  const expected = document.createElement("span");
+  expected.style.color = "var(--thread)";
+  host.append(expected);
+  expect(getComputedStyle(w).fill).toBe(getComputedStyle(expected).color);
 });
