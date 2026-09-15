@@ -59,7 +59,7 @@ Your browser downloads a new ROM. The sample ROM you started from is untouched.
 
 ## Step 4: check that you got the right bytes
 
-1. Keep the downloaded ROM, then open a fresh [Apply page](https://rom-weaver.com/apply).
+1. Keep the downloaded ROM, then open a fresh [Apply page](https://rom-weaver.com/apply-patch).
 2. Add only the downloaded ROM and wait for checksumming to finish.
 3. Open **Checks** on its ROM card and compare its SHA-1 with the value below.
 
