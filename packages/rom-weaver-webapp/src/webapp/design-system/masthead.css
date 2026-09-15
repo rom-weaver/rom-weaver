@@ -1101,6 +1101,19 @@
   .rw-app .meta-strip > .sub-separator {
     display: none;
   }
+  /* In the rail the head's bottom edge is a column away from the chip that
+     reports the progress, and a rule pinned there reads as a broken divider
+     over the first nav section. Lifting it by the head's own bottom padding
+     seats it under the strip, where it belongs to the "Saving offline" line. */
+  .rw-app .install-rule {
+    inset-block-end: var(--sp-m);
+    inset-inline: 8px;
+    block-size: 2px;
+    border-radius: 999px;
+  }
+  .rw-app .install-rule i {
+    border-radius: inherit;
+  }
   .rw-app .app:has(#panel-docs:not([hidden])) {
     max-width: calc(var(--app-max-docs) + var(--rail-w) + var(--sp-l));
   }
