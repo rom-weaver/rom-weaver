@@ -50,8 +50,17 @@ pub fn insert_thread_execution_details(
 
 /// Emitted paths MUST use the same separators during comparison so seeded
 /// Windows paths and stored forward-slash paths do not produce duplicate rows.
+///
+/// Windows `fs::canonicalize` returns a verbatim path (`\\?\D:\out\game.nes`).
+/// That prefix MUST be dropped: it names the same file but never matches a
+/// caller-supplied path, so keeping it both duplicates rows and prints a path
+/// that many Windows tools reject.
 fn emitted_path_key(path: &str) -> String {
-    path.replace('\\', "/")
+    let simplified = match path.strip_prefix(r"\\?\UNC\") {
+        Some(rest) => format!(r"\\{rest}"),
+        None => path.strip_prefix(r"\\?\").unwrap_or(path).to_string(),
+    };
+    simplified.replace('\\', "/")
 }
 
 /// Attach known output files without scanning a shared output directory.
@@ -294,6 +303,27 @@ mod tests {
         );
         // A posix path never contains a backslash separator to rewrite.
         assert_eq!(emitted_path_key("/tmp/out/game.nes"), "/tmp/out/game.nes");
+    }
+
+    #[test]
+    fn emitted_path_key_drops_the_windows_verbatim_prefix() {
+        // What `fs::canonicalize` actually returns on Windows. The prefix goes;
+        // the drive letter and the rest of the path stay.
+        assert_eq!(
+            emitted_path_key(r"\\?\D:\a\rom-weaver\out\game.nes"),
+            "D:/a/rom-weaver/out/game.nes"
+        );
+        // A verbatim UNC path folds back to its plain `\\server\share` form
+        // rather than losing the leading separators that name the host.
+        assert_eq!(
+            emitted_path_key(r"\\?\UNC\server\share\game.nes"),
+            "//server/share/game.nes"
+        );
+        // A plain UNC path has no verbatim prefix to strip.
+        assert_eq!(
+            emitted_path_key(r"\\server\share\game.nes"),
+            "//server/share/game.nes"
+        );
     }
 
     #[test]

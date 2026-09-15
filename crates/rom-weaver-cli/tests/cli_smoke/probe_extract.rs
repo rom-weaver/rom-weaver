@@ -1900,13 +1900,27 @@ fn extract_progress_text_keeps_diagnostics_separate_from_files() {
         stderr.contains('%'),
         "expected extract progress on stderr, got: {stderr}"
     );
+    // ...and stdout carries only the extracted file's absolute path, in the
+    // emitted-path shape: forward slashes and no Windows verbatim prefix, so a
+    // script can pipe the line straight into another tool.
+    let printed = stdout
+        .strip_suffix('\n')
+        .expect("trailing newline on stdout");
     assert!(
-        stdout.contains("sample.bin"),
-        "expected extracted file in summary, got: {stdout}"
+        !printed.contains('\n'),
+        "expected a single path on stdout, got: {stdout}"
     );
-    assert_eq!(
-        stdout,
-        format!("{}\n", extract_dir.child("sample.bin").path().display())
+    assert!(
+        printed.ends_with("/sample.bin") && !printed.contains('\\'),
+        "expected a forward-slash path to the extracted file, got: {printed}"
+    );
+    assert!(
+        !printed.starts_with("//?/"),
+        "expected no Windows verbatim prefix, got: {printed}"
+    );
+    assert!(
+        Path::new(printed).is_file(),
+        "expected the printed path to name the extracted file, got: {printed}"
     );
     assert!(
         !stdout.contains("elapsed:"),
