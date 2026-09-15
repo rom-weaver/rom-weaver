@@ -2,7 +2,8 @@
 /**
  * Rasterize the production and per-channel app icons.
  *
- * The cartridge MUST stay cream on the launcher background; only the W uses the channel accent.
+ * Every generated mark comes from the opaque production PNG. Channel builds
+ * share this mark because its pixels are part of the brand asset.
  *
  * Rendering matches design/icon-masters/README.md: headless Chrome, because
  * ImageMagick's SVG delegate does not render these masters exactly. Playwright's
@@ -23,8 +24,6 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
 import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
@@ -60,11 +59,9 @@ const parseOptions = (args) => {
   return { checkOnly, outputDir: path.resolve(process.cwd(), outputDir) };
 };
 
-// Channel defaults MUST match src/webapp/build-channel.ts.
-const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "verdigris", preview: "plum" };
+const CHANNELS = ["production", "beta", "nightly", "preview"];
 
-// Sizes come from design/icon-masters/README.md; each master already bakes in
-// its own scale/offset for the mask it targets.
+// Sizes come from design/icon-masters/README.md.
 const RASTER_TARGETS = [
   { master: "icon-maskable.svg", output: "icon-maskable-512.png", size: 512 },
   { master: "icon-maskable.svg", output: "icon-maskable-192.png", size: 192 },
@@ -77,6 +74,9 @@ const RASTER_TARGETS = [
 const SOCIAL_PREVIEW = { height: 1280, master: "social-preview.svg", width: 2560 };
 
 const digest = (buffer) => createHash("sha256").update(buffer).digest("hex").slice(0, 12);
+
+const inlineLogo = (master, logo) =>
+  master.replaceAll("__ROM_WEAVER_LOGO_PNG__", `data:image/png;base64,${logo.toString("base64")}`);
 
 /**
  * Lay an SVG out at an exact pixel size. It is handed over as a data URI inside
@@ -143,7 +143,7 @@ const encodeFavicon = (images) => {
 const main = async () => {
   const { checkOnly, outputDir } = parseOptions(process.argv.slice(2));
   const outputRoot = path.join(outputDir, "channel-icons");
-  const variantRoot = path.join(outputDir, "logo-variants");
+  const logo = fs.readFileSync(path.join(assetRoot, "logo.png"));
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
   const browser = await chromium.launch(launchOptions);
   const page = await browser.newPage({ deviceScaleFactor: 1 });
@@ -165,23 +165,18 @@ const main = async () => {
   };
 
   try {
-    for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
-      const accent = ACCENTS.find((entry) => entry.value === accentName);
-      if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
+    for (const channel of CHANNELS) {
       const channelDir = path.join(outputRoot, channel);
 
       console.log(channel);
-      emit(
-        path.join(channelDir, "logo.svg"),
-        Buffer.from(tintBrandMark(fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8"), accent)),
-      );
+      emit(path.join(channelDir, "logo.png"), logo);
 
       for (const target of RASTER_TARGETS) {
-        const master = tintBrandMark(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), accent);
+        const master = inlineLogo(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), logo);
         emit(path.join(channelDir, target.output), await rasterize(page, master, target.size));
       }
 
-      const favicon = tintBrandMark(fs.readFileSync(path.join(masterRoot, "favicon.svg"), "utf8"), accent);
+      const favicon = inlineLogo(fs.readFileSync(path.join(masterRoot, "favicon.svg"), "utf8"), logo);
       const images = [];
       for (const size of [16, 32, 48, 64]) {
         images.push({ size, png: await rasterize(page, favicon, size) });
@@ -190,15 +185,10 @@ const main = async () => {
     }
 
     console.log("social preview");
-    const socialMaster = fs.readFileSync(path.join(designRoot, SOCIAL_PREVIEW.master), "utf8");
+    const socialMaster = inlineLogo(fs.readFileSync(path.join(designRoot, SOCIAL_PREVIEW.master), "utf8"), logo);
     const social = await renderSocialPreview(page, socialMaster);
     for (const [format, buffer] of Object.entries(social)) {
       emit(path.join(outputDir, `social-preview.${format}`), buffer);
-    }
-
-    const logo = fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8");
-    for (const accent of ACCENTS) {
-      emit(path.join(variantRoot, `${accent.value}.svg`), Buffer.from(tintBrandMark(logo, accent)));
     }
   } finally {
     await browser.close();

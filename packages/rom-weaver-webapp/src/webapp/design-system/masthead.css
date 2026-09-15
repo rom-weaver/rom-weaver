@@ -63,12 +63,7 @@
   width: clamp(32px, 2.6vw + 21px, 46px);
   height: auto;
   aspect-ratio: 1;
-  color: var(--ink);
   border-radius: 8px;
-  stroke: none;
-}
-.rw-app .brand-mark-accent {
-  fill: var(--thread);
 }
 .rw-app .brand-copy {
   display: block;

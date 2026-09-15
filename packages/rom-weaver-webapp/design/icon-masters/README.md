@@ -1,6 +1,6 @@
 # Icon masters
 
-Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. The masters use the cartridge RW paths from `../../src/assets/app/root/logo.svg` with fixed colors and padding for each surface.
+Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. The generator replaces each logo placeholder with the exact opaque PNG from `../../src/assets/app/root/logo.png` before it rasterizes the master.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -12,17 +12,13 @@ Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. T
 
 ## Geometry
 
-The logo uses a 64 × 64 viewBox. The cartridge occupies 52 × 56 units. The R is a cutout and the W uses the accent color. The top edge is recessed, and three contact cuts sit at the bottom. The paths contain no fonts, strokes, masks, or clip paths.
-
-The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon adds a charcoal tile so it stays visible without color-scheme support.
+The source logo is a 1254 × 1254 opaque PNG. It provides the complete background, cartridge, and RW mark. Channel assets use the same PNG bytes. They do not recolor the W.
 
 | Master | Output | Scale | Offset (x and y) | Background |
 | --- | --- | --- | --- | --- |
-| icon-maskable.svg | icon-maskable-{192,512}.png | 0.72 | 8.96 | `#31343a` |
-| apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.80 | 6.4 | `#31343a` |
-| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | 1 | 0 | `#20282d` tile |
-
-`offset = 32 * (1 - scale)`. The maskable master keeps the mark inside the central 80%-diameter safe circle.
+| icon-maskable.svg | icon-maskable-{192,512}.png | 1 | 0 | source PNG |
+| apple-touch-icon.svg | apple-touch-icon.png (180px) | 1 | 0 | source PNG |
+| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | 1 | 0 | source PNG |
 
 ## Rendering
 
@@ -32,7 +28,7 @@ From the repository root, regenerate production, beta, nightly, and preview icon
 npm --prefix packages/rom-weaver-webapp run icons:channels
 ```
 
-The generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's W from the accent palette. It writes channel icons and reusable logo variants to the repository `dist/generated-assets/` directory. The build, development server, and script tests run it before they load generated assets. The tracked social preview files in `../../design/` are separate build inputs.
+The generator uses the installed Playwright Chromium browser. It renders the PNGs and stores optimized PNG frames in each ICO. It writes channel icons to the repository `dist/generated-assets/` directory. The build, development server, and script tests run it before they load generated assets. The tracked social preview files in `../../design/` are separate build inputs.
 
 Check the generated output against the current masters:
 

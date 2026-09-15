@@ -140,11 +140,6 @@ const parseColor = (value) => {
   return { a: parts[3] ?? 1, b: parts[2] ?? 0, g: parts[1] ?? 0, r: parts[0] ?? 0 };
 };
 
-const hexToRgbString = (hex) => {
-  const value = Number.parseInt(hex.slice(1), 16);
-  return `rgb(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255})`;
-};
-
 const relativeLuminance = ({ r, g, b }) => {
   const channel = (raw) => {
     const c = raw / 255;
@@ -1058,9 +1053,8 @@ describe("accent dye-lot accessibility", () => {
 
             if (badge) {
               expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
-              const accentTab = host.querySelector(".brand-mark-accent");
-              expect(accentTab).toBeTruthy();
-              expect(getComputedStyle(accentTab).fill).toBe(hexToRgbString(accent.swatch));
+              const mark = host.querySelector(".brand-mark");
+              await expect.poll(() => mark?.complete && mark.naturalWidth).toBe(192);
             }
 
             const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });

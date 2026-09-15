@@ -6,22 +6,15 @@ let applyAccent: typeof import("../../src/webapp/accent.ts").applyAccent;
 let favicon: HTMLLinkElement;
 let touchIcon: HTMLLinkElement;
 
-const readFavicon = () => {
-  const prefix = "data:image/svg+xml,";
-  const href = favicon.getAttribute("href") ?? "";
-  expect(href.startsWith(prefix)).toBe(true);
-  return new DOMParser().parseFromString(decodeURIComponent(href.slice(prefix.length)), "image/svg+xml");
-};
-
-describe("accent favicon", () => {
+describe("static favicon with accents", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.useFakeTimers();
     ({ applyAccent } = await import("../../src/webapp/accent.ts"));
     favicon = document.createElement("link");
     favicon.rel = "icon";
-    favicon.type = "image/svg+xml";
-    favicon.href = "/logo.svg";
+    favicon.type = "image/x-icon";
+    favicon.href = "/favicon.ico";
     touchIcon = document.createElement("link");
     touchIcon.rel = "apple-touch-icon";
     touchIcon.href = "/apple-touch-icon.png";
@@ -37,20 +30,20 @@ describe("accent favicon", () => {
     document.documentElement.removeAttribute("data-accent");
   });
 
-  test.each(ACCENTS)("applies $label to the favicon on initial load", (accent) => {
+  test.each(ACCENTS)("keeps the favicon for $label", (accent) => {
     applyAccent(accent.value);
-    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe(accent.swatch);
+    expect(favicon.getAttribute("href")).toBe("/favicon.ico");
     expect(touchIcon.getAttribute("href")).toBe("/apple-touch-icon.png");
   });
 
-  test("changes the favicon immediately and restores madder for invalid values", () => {
+  test("keeps the favicon while accents change and invalid values reset", () => {
     applyAccent("woad");
     const initialUrl = favicon.href;
     applyAccent("teal");
-    expect(favicon.href).not.toBe(initialUrl);
-    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#2aa0a8");
+    expect(favicon.href).toBe(initialUrl);
     applyAccent("chartreuse");
-    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#d9690f");
+    expect(favicon.href).toBe(initialUrl);
+    expect(document.documentElement.hasAttribute("data-accent")).toBe(false);
   });
 
   test("applies the accent when the host page has no favicon link", () => {

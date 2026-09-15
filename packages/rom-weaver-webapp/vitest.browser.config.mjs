@@ -42,7 +42,7 @@ const generatedRootIconAssets = new Map(
     ["/favicon.ico", "favicon.ico"],
     ["/icon-maskable-192.png", "icon-maskable-192.png"],
     ["/icon-maskable-512.png", "icon-maskable-512.png"],
-    ["/logo.svg", "logo.svg"],
+    ["/logo.png", "logo.png"],
   ].map(([requestPath, name]) => [requestPath, generatedChannelAssetPath("dev", name)]),
 );
 const generatedRootIconContentType = (requestPath) => {
