@@ -1300,7 +1300,10 @@ describe("webapp responsive navigation", () => {
       expect(Math.abs(sheet.bottom - dock.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
       expect(sheet.top).toBeGreaterThanOrEqual(0);
       expect(host.querySelector(".menu-sheet .nav-group").getBoundingClientRect().top - sheet.top).toBeLessThan(24);
-      expect(host.querySelector(".menu-sheet-foot .sub-status")?.textContent).toContain("Status:");
+      expect(host.querySelector(".menu-sheet .sub-status")).toBeNull();
+      expect(dock.querySelector(".dock-runtime .sub-status")?.getAttribute("aria-label")).toBe(
+        host.querySelector(".topbar .sub-status")?.getAttribute("aria-label"),
+      );
 
       // The brand and tools share one row without overlap.
       const brand = host.querySelector(".brand").getBoundingClientRect();
@@ -1313,7 +1316,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the Menu foot keeps Status and the sheet lists the other sidebar rows", async () => {
+  test("the dock keeps Status and Menu lists the other sidebar rows", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
@@ -1323,7 +1326,9 @@ describe("webapp responsive navigation", () => {
     await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
 
     expect(labels(".menu-sheet")).toEqual(labels(".side-nav").filter((label) => label !== "Status"));
-    expect(host.querySelector(".menu-sheet-foot .sub-status")?.getAttribute("aria-label")).toContain("Status:");
+    expect(host.querySelector(".dock-runtime .sub-status")?.getAttribute("aria-label")).toBe(
+      host.querySelector(".topbar .sub-status")?.getAttribute("aria-label"),
+    );
   });
 
   test("the wordmark is never truncated by the brand's min-content floor", async () => {

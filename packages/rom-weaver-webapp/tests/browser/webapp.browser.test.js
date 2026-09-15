@@ -265,12 +265,12 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
-    // Mobile Status stays in the fixed Menu foot; other destinations keep their groups.
+    // Mobile Status stays in the dock; other destinations keep their groups.
     if (width < 1000) await openMenuSheet();
     for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
-    if (width < 1000) expect(document.querySelector(".menu-sheet-foot .sub-status")).toBeTruthy();
+    if (width < 1000) expect(document.querySelector(".dock-runtime .sub-status")).toBeTruthy();
     else expect(navRow("Status", scope)).toBeTruthy();
   }
   await page.viewport(1280, 900);
@@ -313,7 +313,7 @@ test("the phone head keeps the version and tools on one line", async () => {
       expect(getComputedStyle(document.querySelector(".masthead-threads")).display).toBe("none");
       expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
       expect(document.querySelector(".dock-state-dot")).toBeNull();
-      const mobileStatus = document.querySelector(".phone-runtime .sub-status");
+      const mobileStatus = document.querySelector(".dock-runtime .sub-status");
       expect(getComputedStyle(mobileStatus).display).not.toBe("none");
       expect(mobileStatus.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
@@ -520,7 +520,7 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   mountWebappRoot();
 
   await openMenuSheet();
-  document.querySelector(".menu-sheet-foot .sub-status")?.click();
+  document.querySelector(".dock-runtime .sub-status")?.click();
   await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
 
   const rail = document.querySelector(".log-dlg .dialog-subrail");
@@ -567,9 +567,10 @@ test("the phone header carries appearance and the project links, and Menu carrie
   for (const name of ["Storage", "Logs", "Settings", "Theme", "Accent", "Docs", "GitHub", "Support"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
-  expect(document.querySelector(".menu-sheet-foot .sub-status-text").textContent).toContain(
-    document.querySelector(".phone-runtime .sub-status-text").textContent,
+  expect(document.querySelector(".dock-runtime .sub-status-text").textContent).toBe(
+    document.querySelector(".topbar .sub-status-text").textContent,
   );
+  expect(document.querySelector(".menu-sheet .sub-status")).toBeNull();
   expect(navRow("GitHub", ".menu-sheet").getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/");
   expect(navRow("Support", ".menu-sheet").getAttribute("href")).toBe("https://ko-fi.com/brandonocasey");
   // Support is the one row that is not neutral; every other row shares one ink.
@@ -616,7 +617,8 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   const footTop = foot.getBoundingClientRect().top;
   body.scrollTop = 150;
   expect(foot.getBoundingClientRect().top).toBe(footTop);
-  expect(foot.querySelector(".sub-status")?.textContent).toContain("Status:");
+  expect(document.querySelector(".dock-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
+  expect(foot.querySelector(".sub-status")).toBeNull();
 
   navRow("Logs", ".menu-sheet").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
@@ -680,7 +682,7 @@ test("the Menu sheet uses its content height and keeps its foot at the dock", as
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(sheet.getBoundingClientRect().height).toBeCloseTo(start.sheetHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
-  await page.viewport(390, 600);
+  await page.viewport(390, 520);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(foot.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);

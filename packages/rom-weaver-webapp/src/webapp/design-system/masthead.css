@@ -463,9 +463,6 @@
   flex: 1 1 auto;
   min-inline-size: min-content;
 }
-.rw-app .phone-runtime {
-  display: none;
-}
 
 /* ── desktop sidebar ──
    The identity block heads the column and the nav scrolls under it, so the
@@ -856,23 +853,36 @@
 }
 
 /* ── the phone dock ──
-   Three workflows and Menu. A fourth workflow would push every label past the
-   width it stays readable at, and Menu is what makes that unnecessary: it
-   opens the same sections the sidebar shows, so nothing is lost by not being
-   docked. */
+   Runtime status spans the top row, so its wording stays readable above the
+   three workflows and Menu. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
   inset-inline: 0;
   z-index: 1000;
   display: none;
-  grid-auto-columns: 1fr;
-  grid-auto-flow: column;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  row-gap: 2px;
   padding: 3px max(var(--sp-s), var(--safe-r)) max(3px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
   background: color-mix(in oklab, var(--plate) 88%, transparent);
   border-block-start: 1px solid var(--seam-soft);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
+}
+.rw-app .dock-runtime {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 30px;
+}
+.rw-app .dock-runtime .sub-status {
+  block-size: 30px;
+  padding-inline: 10px;
+  font-size: 0.68rem;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: 999px;
 }
 .rw-app .dock-tab {
   position: relative;
@@ -1005,26 +1015,9 @@
 /* Find sits at the bottom edge, in the thumb zone, where the phone layout
    already puts the palette it opens. */
 .rw-app .menu-sheet-foot {
-  display: grid;
   flex: none;
-  gap: var(--sp-xs);
   padding: var(--sp-xs) var(--gutter);
   border-block-start: 1px solid var(--seam);
-}
-.rw-app .menu-sheet-foot .sub-status {
-  inline-size: 100%;
-  block-size: auto;
-  min-block-size: 42px;
-  padding: 8px 10px;
-  font-size: 0.8rem;
-  text-align: start;
-  white-space: normal;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-s);
-}
-.rw-app .menu-sheet-foot .sub-status-text {
-  overflow-wrap: anywhere;
 }
 .rw-app .menu-find {
   display: flex;
@@ -1117,7 +1110,7 @@
 }
 @media (max-width: 999px) {
   .rw-app {
-    --dock-h: calc(57px + var(--safe-b));
+    --dock-h: calc(86px + max(3px, var(--safe-b)));
   }
   .rw-app .side-rail,
   .rw-app .topbar {
@@ -1133,45 +1126,6 @@
   .rw-app .brand-copy .sub-separator {
     display: none;
   }
-  .rw-app .shell-head-top {
-    align-items: flex-start;
-    padding-block: 5px;
-  }
-  .rw-app .shell-head-tools {
-    margin-block-start: 3px;
-  }
-  .rw-app .shell-head-top .brand {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 0 var(--sp-s);
-  }
-  .rw-app .brand-mark-link {
-    grid-row: 1;
-    grid-column: 1;
-  }
-  .rw-app .brand-copy {
-    grid-row: 1;
-    grid-column: 2;
-  }
-  .rw-app .phone-runtime {
-    display: block;
-    grid-row: 2;
-    grid-column: 1 / -1;
-    min-inline-size: 0;
-    margin-block-start: 8px;
-  }
-  .rw-app .phone-runtime .sub-status {
-    max-inline-size: 100%;
-    block-size: auto;
-    min-block-size: 26px;
-    padding-inline: 0;
-    font-size: 0.68rem;
-    text-align: start;
-    white-space: normal;
-  }
-  .rw-app .phone-runtime .sub-status-text {
-    overflow-wrap: anywhere;
-  }
   .rw-app .dock {
     display: grid;
   }
@@ -1182,7 +1136,7 @@
     display: block;
   }
   /* The five header tools stay on one line after the thread link and offline
-     button move out of the phone head. */
+     status move out of the phone head. */
   @media (max-width: 449px) {
     .rw-app .shell-head-tools {
       gap: 0;

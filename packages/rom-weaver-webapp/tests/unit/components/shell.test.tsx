@@ -154,7 +154,7 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("creator");
   });
 
-  it("moves mobile Status to the Menu foot while preserving the other sections", () => {
+  it("keeps mobile Status in the dock and other sidebar destinations in Menu", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
     expect(sheet.getAttribute("aria-label")).toBe("Menu");
@@ -164,16 +164,20 @@ describe("Masthead", () => {
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
 
     expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")).filter((label) => label !== "Status"));
-    expect(sheet.querySelector(".menu-sheet-foot .sub-status")?.textContent).toContain("Status:");
+    expect(sheet.querySelector(".sub-status")).toBeNull();
+    expect(container.querySelector(".dock-runtime .sub-status-text")?.textContent).toBe(
+      container.querySelector(".topbar .sub-status-text")?.textContent,
+    );
   });
 
   it("docks three workflows plus Menu, and toggles the sheet from the same button", () => {
     const onSelectTab = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
     const dockNav = container.querySelector(".dock") as HTMLElement;
-    const slots = Array.from(dockNav.children);
+    const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
     expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Menu"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
+    expect(dockNav.querySelector(".dock-runtime .sub-status")).toBeTruthy();
 
     const menu = container.querySelector(".dock-menu") as HTMLButtonElement;
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
@@ -359,8 +363,9 @@ describe("Masthead", () => {
         expected,
       );
     }
-    expect(container.querySelector(".menu-sheet-foot .sub-status-text")?.textContent).toContain(
-      container.querySelector(".phone-runtime .sub-status-text")?.textContent ?? "",
+    expect(container.querySelector(".menu-sheet .sub-status")).toBeNull();
+    expect(container.querySelector(".dock-runtime .sub-status-text")?.textContent).toBe(
+      container.querySelector(".topbar .sub-status-text")?.textContent,
     );
   });
 

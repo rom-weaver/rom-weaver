@@ -266,8 +266,8 @@ const SideNav = ({
 
 /**
  * Phone primary nav: the three workflows that carry the app, plus Menu. Menu
- * toggles the sheet that holds everything else, so the dock never has to grow
- * a scroll or an unreadable fifth slot.
+ * toggles the sheet that holds everything else. A status control spans the
+ * dock above those four destinations so its full wording stays readable.
  */
 const PhoneDock = ({
   current,
@@ -276,6 +276,7 @@ const PhoneDock = ({
   navLabel,
   onSelect,
   onToggleMenu,
+  status,
   tabs,
   triggerRef,
 }: {
@@ -285,10 +286,12 @@ const PhoneDock = ({
   navLabel: string;
   onSelect: (id: string) => void;
   onToggleMenu: () => void;
+  status: ReactNode;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => (
   <nav aria-label={navLabel} className="dock">
+    <span className="dock-runtime">{status}</span>
     {tabs.map((tab) => (
       <a
         aria-current={tab.id === current ? "page" : undefined}
@@ -317,12 +320,6 @@ const PhoneDock = ({
   </nav>
 );
 
-/**
- * The phone's index of everything the sidebar shows on desktop. Full height so
- * one open reads as one place, and the same sections in the same order, so the
- * two layouts teach each other. Find sits at the bottom edge, in the thumb
- * zone, above the dock.
- */
 const MenuSheet = ({
   appearance,
   findRef,
@@ -332,7 +329,6 @@ const MenuSheet = ({
   open,
   opened,
   sections,
-  status,
   toolOpen,
   triggerRef,
 }: {
@@ -347,7 +343,6 @@ const MenuSheet = ({
   /** The secondary nav mounts after the first open, once hydration is complete. */
   opened: boolean;
   sections: NavSectionData[];
-  status: ReactNode;
   /** True while a popover inside THIS sheet is open; Escape closes that first.
       A popover in the chrome must not count: it is inert behind the sheet, so
       letting it claim the press would spend it on nothing. */
@@ -394,7 +389,6 @@ const MenuSheet = ({
           : null}
       </div>
       <div className="menu-sheet-foot">
-        {opened ? status : null}
         <button className="menu-find" onClick={onOpenFind} ref={findRef} type="button">
           <Search aria-hidden="true" />
           <span>{localizer.message("ui.find.placeholder")}</span>
@@ -1491,8 +1485,8 @@ const Masthead = ({
           while staying inside a single landmark - two `header` elements at this
           level would leave the page with two banners. */}
       <header className="shell-banner">
-        {/* One column on desktop, one page header on the phone. Build facts and
-            the phone runtime status stay with the brand. */}
+        {/* One column on desktop, one page header on the phone. Build facts stay
+            with the brand, and the phone dock carries runtime status. */}
         <div className="side-col">
           <div className="shell-head">
             <div className="shell-head-top">
@@ -1513,15 +1507,6 @@ const Masthead = ({
                     onPreloadSettings={onPreloadSettings}
                     threads={threads}
                     threadsLabel={threadsLabel}
-                  />
-                </span>
-                <span className="phone-runtime">
-                  <StatusChip
-                    label={runtimeLabel}
-                    onOpenStatus={onOpenStatus}
-                    percent={runtimePercent}
-                    state={runtimeState}
-                    title={runtimeTitle}
                   />
                 </span>
               </span>
@@ -1594,6 +1579,18 @@ const Masthead = ({
           setMenuMounted(true);
           setMenuOpen((open) => !open);
         }}
+        status={
+          <StatusChip
+            label={runtimeLabel}
+            onOpenStatus={() => {
+              closeMenu();
+              onOpenStatus();
+            }}
+            percent={runtimePercent}
+            state={runtimeState}
+            title={runtimeTitle}
+          />
+        }
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />
@@ -1611,18 +1608,6 @@ const Masthead = ({
         open={menuOpen}
         opened={menuMounted}
         sections={sections}
-        status={
-          <StatusChip
-            label={`${localizer.message("ui.log.tabStatus")}: ${runtimeLabel}`}
-            onOpenStatus={() => {
-              closeMenu();
-              onOpenStatus();
-            }}
-            percent={runtimePercent}
-            state={runtimeState}
-            title={`${localizer.message("ui.log.tabStatus")}: ${runtimeTitle}`}
-          />
-        }
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />
