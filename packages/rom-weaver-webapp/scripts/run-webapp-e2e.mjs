@@ -152,6 +152,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
     Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: undefined });
     const audit = {
       identityResolved: false,
+      resolverCalls: 0,
       initialTheme: "",
       initialView: "",
       runtime: null,
@@ -164,7 +165,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       const active = document.querySelector('.side-nav [aria-current="page"]');
       if (!audit.initialView && active) audit.initialView = active.id.replace(/^tab-/, "");
       if (!audit.identityResolved) return;
-      const threads = document.querySelector(".masthead-threads");
+      const threads = document.querySelector(".panel-threads-btn");
       const runtime = document.querySelector(".sub-status");
       if (!(threads && runtime)) return;
       if (!audit.threads) {
@@ -184,7 +185,8 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       set: (resolver) => {
         resolveShellIdentity = (...args) => {
           const result = resolver(...args);
-          audit.identityResolved = true;
+          audit.resolverCalls += 1;
+          audit.identityResolved = audit.resolverCalls === 2;
           sample();
           return result;
         };
@@ -313,7 +315,8 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             initialView: audit.initialView,
             runtimeRetained: document.querySelector(".sub-status") === audit.runtime,
             runtimeTexts: audit.runtimeTexts,
-            threadRetained: document.querySelector(".masthead-threads") === audit.threads,
+            resolverCalls: audit.resolverCalls,
+            threadRetained: document.querySelector(".panel-threads-btn") === audit.threads,
             threadTexts: audit.threadTexts,
             shellHandoffStable:
               !initialLayout ||
@@ -325,6 +328,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         }, initialShellLayout);
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
+        if (result.resolverCalls !== 2) problems.push(`shell resolver ran ${result.resolverCalls} times`);
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
         // The chip's label is localized, so this audit owns the count and the
         // word, never their capitalization.

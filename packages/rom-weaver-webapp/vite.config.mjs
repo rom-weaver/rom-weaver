@@ -563,6 +563,7 @@ const stampChannelIdentity = (channel, channelLabel, serviceWorkerEnabled) => ({
 });
 
 const PRERENDER_RUNTIME_SLOT = '<span class="shell-identity" hidden=""></span>';
+const PRERENDER_THREADS_SLOT = '<span class="shell-threads-identity" hidden=""></span>';
 const PRERENDER_RUNTIME_RESOLVER =
   "<script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}finally{document.currentScript.remove()}</script>";
 const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
@@ -632,6 +633,7 @@ const assertShellLoomCanvas = (shell) => {
 const PRERENDER_ROOT = (shell) =>
   `<div id="webapp-root" aria-busy="true">${shell
     .replace(PRERENDER_RUNTIME_SLOT, `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}`)
+    .replace(PRERENDER_THREADS_SLOT, `${PRERENDER_THREADS_SLOT}${PRERENDER_RUNTIME_RESOLVER}`)
     .replace(
       PRERENDER_LOOM_CANVAS,
       (canvas) => `${canvas}${shellLoomScript.html}`,

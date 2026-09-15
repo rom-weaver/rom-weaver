@@ -1130,6 +1130,11 @@ msgstr "Diagnostics"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDisabled"
+msgstr "Disabled"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.disc"
 msgstr "Disc"
 
@@ -1227,6 +1232,11 @@ msgstr "Download requested"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.trimCert"
 msgstr "download-play certificate preserved"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDownloading"
+msgstr "Downloading"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1567,6 +1577,11 @@ msgstr "Headerless: the patched output has no ROM header."
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.hideVariants"
 msgstr "Hide {count} more {count, plural, one {variant} other {variants}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.homeShort"
+msgstr "Home"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2585,6 +2600,11 @@ msgstr "reads and writes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerReady"
+msgstr "Ready"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis2"
 msgstr "Recover the original."
 
@@ -2777,11 +2797,6 @@ msgstr "rom-weaver finished in {t}"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.home"
 msgstr "rom-weaver home"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.nav.homeShort"
-msgstr "Home"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3350,6 +3365,11 @@ msgstr "This ROM's name or checks do not match what this run expects - see the E
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.env.thread"
+msgstr "thread"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.env.threads"
 msgstr "threads"
 
@@ -3469,8 +3489,18 @@ msgstr "Unknown patch output ({patch})"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUnsupported"
+msgstr "Unsupported"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.unusedInputs"
 msgstr "Unused inputs: {names}{count, plural, =0 {} one {, and one more} other {, and # more}}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUpdate"
+msgstr "Update"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

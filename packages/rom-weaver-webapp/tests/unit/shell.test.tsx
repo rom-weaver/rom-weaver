@@ -37,7 +37,6 @@ const mastheadProps = {
   onOpenStatus: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
-  threads: 8,
   version: "1.2.3",
 };
 
@@ -52,7 +51,7 @@ const navs = (container: HTMLElement) => {
 };
 const rowNamed = (scope: HTMLElement, name: string) =>
   Array.from(scope.querySelectorAll<HTMLElement>(".nav-row")).find(
-    (row) => row.querySelector(".nav-row-label")?.textContent === name,
+    (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
   ) as HTMLElement;
 
 afterEach(() => {
@@ -69,13 +68,20 @@ describe("the navigation both layouts share", () => {
     const onSelectTab = vi.fn();
     const { container } = render(
       withSettings(
-        <Masthead {...mastheadProps} onOpenLog={onOpenLog} onOpenStatus={onOpenStatus} onSelectTab={onSelectTab} />,
+        <Masthead
+          {...mastheadProps}
+          onOpenLog={onOpenLog}
+          onOpenStatus={onOpenStatus}
+          onSelectTab={onSelectTab}
+          previewVersionStatus
+        />,
       ),
     );
 
+    fireEvent.click(container.querySelector(".title-build-row .sub-status") as HTMLButtonElement);
     for (const scope of Object.values(navs(container))) {
       onSelectTab.mockClear();
-      fireEvent.click(rowNamed(scope, "Status"));
+      if (scope.classList.contains("side-nav")) fireEvent.click(rowNamed(scope, "Status"));
       fireEvent.click(rowNamed(scope, "Logs"));
       fireEvent.click(rowNamed(scope, "What\u2019s new"));
       expect(onSelectTab).toHaveBeenCalledWith("whats-new");

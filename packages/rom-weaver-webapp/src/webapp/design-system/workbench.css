@@ -247,7 +247,8 @@
 }
 /* Heading actions use text-only styling to match the section titles. */
 .rw-app .reset-btn,
-.rw-app .panel-settings-btn {
+.rw-app .panel-settings-btn,
+.rw-app .panel-threads-btn {
   position: relative;
   display: inline-flex;
   gap: 5px;
@@ -279,7 +280,8 @@
 }
 /* the halo is on top of that floor, for the finger rather than the audit */
 .rw-app .reset-btn::after,
-.rw-app .panel-settings-btn::after {
+.rw-app .panel-settings-btn::after,
+.rw-app .panel-threads-btn::after {
   position: absolute;
   inset: -4px -8px;
   content: "";
@@ -299,6 +301,32 @@
 }
 .rw-app .panel-settings-btn:active {
   color: var(--thread-ink);
+}
+.rw-app .panel-threads-btn {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
+  text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .rw-app .panel-threads-btn:hover {
+    color: var(--thread-ink);
+    text-decoration-color: currentColor;
+  }
+}
+.rw-app .panel-threads-btn:active {
+  color: var(--thread-ink);
+  text-decoration-color: currentColor;
+}
+@media (max-width: 359px) {
+  .rw-app .workflow-panel-head[data-threads] .panel-settings-btn,
+  .rw-app .workflow-panel-head[data-threads] .reset-btn {
+    justify-content: center;
+    min-inline-size: 24px;
+  }
+  .rw-app .workflow-panel-head[data-threads] .panel-settings-btn span,
+  .rw-app .workflow-panel-head[data-threads] .reset-btn span {
+    display: none;
+  }
 }
 /* Save Editor */
 .rw-app .save-editor-file {

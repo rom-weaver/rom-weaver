@@ -1130,6 +1130,11 @@ msgstr "Diagnóstico"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDisabled"
+msgstr "Desactivada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.disc"
 msgstr "Disco"
 
@@ -1227,6 +1232,11 @@ msgstr "Descarga solicitada"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.trimCert"
 msgstr "certificado de descarga y juego conservado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDownloading"
+msgstr "Descargando"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1567,6 +1577,11 @@ msgstr "Sin encabezado: la salida parcheada no tiene encabezado de ROM."
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.hideVariants"
 msgstr "Ocultar {count} {count, plural, one {variante más} other {variantes más}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.homeShort"
+msgstr "Inicio"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2585,6 +2600,11 @@ msgstr "lee y escribe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerReady"
+msgstr "Lista"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis2"
 msgstr "usando los datos de deshacer del propio parche."
 
@@ -2777,11 +2797,6 @@ msgstr "rom-weaver terminó en {t}"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.home"
 msgstr "Inicio de rom-weaver"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.nav.homeShort"
-msgstr "Inicio"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3350,6 +3365,11 @@ msgstr "El nombre o las comprobaciones de esta ROM no coinciden con lo que esper
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.env.thread"
+msgstr "hilo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.env.threads"
 msgstr "hilos"
 
@@ -3469,8 +3489,18 @@ msgstr "Salida de parche desconocida ({patch})"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUnsupported"
+msgstr "No compatible"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.unusedInputs"
 msgstr "Entradas sin usar: {names}{count, plural, =0 {} one { y una más} other { y # más}}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUpdate"
+msgstr "Actualización"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

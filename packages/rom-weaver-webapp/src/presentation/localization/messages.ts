@@ -971,6 +971,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Unused inputs: {names}{count, plural, =0 {} one {, and one more} other {, and # more}}.",
   }),
   "ui.env.threads": msg({ id: "ui.env.threads", message: "threads" }),
+  "ui.env.thread": msg({ id: "ui.env.thread", message: "thread" }),
   "ui.find.empty": msg({ id: "ui.find.empty", message: "Nothing matches" }),
   "ui.find.bundleHint": msg({
     id: "ui.find.bundleHint",
@@ -1224,6 +1225,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.step.rom": msg({ id: "ui.step.rom", message: "ROM" }),
   "ui.theme.toDark": msg({ id: "ui.theme.toDark", message: "Switch to dark theme" }),
   "ui.runtime.active": msg({ id: "ui.runtime.active", message: "Offline active" }),
+  "ui.runtime.headerReady": msg({ id: "ui.runtime.headerReady", message: "Ready" }),
+  "ui.runtime.headerDownloading": msg({ id: "ui.runtime.headerDownloading", message: "Downloading" }),
+  "ui.runtime.headerUpdate": msg({ id: "ui.runtime.headerUpdate", message: "Update" }),
+  "ui.runtime.headerDisabled": msg({ id: "ui.runtime.headerDisabled", message: "Disabled" }),
+  "ui.runtime.headerUnsupported": msg({ id: "ui.runtime.headerUnsupported", message: "Unsupported" }),
   "ui.runtime.activeDesc": msg({
     id: "ui.runtime.activeDesc",
     message:

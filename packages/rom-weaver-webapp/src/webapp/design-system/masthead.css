@@ -88,11 +88,7 @@
   color: var(--ink-4);
 }
 
-/* ── build facts ──
-   Version and threads, the two facts that only change on release or in
-   Settings. The row is as tall as its ink, not as tall as its targets: the
-   controls keep the 26px box the target-size floor needs and overflow this row
-   symmetrically. Nothing is painted on that box, so the overflow never shows. */
+/* The controls keep their 26px target box while this row stays as tall as its text. */
 .rw-app .build-facts {
   display: flex;
   column-gap: 0;
@@ -110,23 +106,16 @@
   block-size: auto;
   min-block-size: 26px;
 }
+.rw-app .title-build-row {
+  padding-inline-start: calc(38px + var(--sp-s));
+}
 .rw-app .title-build-row .build-runtime {
   display: inline-flex;
   margin-inline-start: 8px;
 }
-.rw-app .title-build-row .sub-separator {
-  display: none;
-}
 .rw-app .title-build-row .sub-status {
   font-size: 0.68rem;
 }
-.rw-app .sub-separator {
-  flex: none;
-  margin-inline: 0.28em;
-  color: var(--ink-4);
-}
-/* the version opens the changelog and the thread count opens settings; the
-   underline in the `.sub-chip` block below is the affordance both wear */
 .rw-app .sub-link {
   position: relative;
   display: inline-flex;
@@ -147,12 +136,6 @@
 .rw-app .sub-link:active {
   color: var(--ink-2);
 }
-.rw-app .masthead-threads-space {
-  flex: none;
-  inline-size: 0.28em;
-  font-size: inherit;
-}
-
 .rw-app .channel-badge {
   display: inline-flex;
   flex: none;
@@ -936,9 +919,6 @@
 }
 
 @media (max-width: 999px) {
-  .rw-app .title-build-row .masthead-threads {
-    display: none;
-  }
   html[data-offline-layout="title"] .rw-app {
     --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
@@ -950,6 +930,10 @@
   }
   html[data-offline-layout="title"] .rw-app .dock-runtime {
     display: none;
+  }
+  html[data-offline-layout="title"] .rw-app .menu-sheet {
+    inset-block-end: var(--dock-h);
+    max-block-size: calc(100dvh - var(--dock-h));
   }
   html[data-offline-layout="edge"] .rw-app,
   html[data-offline-layout="quiet"] .rw-app {
@@ -1343,10 +1327,6 @@
   .rw-app .topbar-tools {
     display: none;
   }
-  .rw-app .brand-copy .masthead-threads,
-  .rw-app .brand-copy .sub-separator {
-    display: none;
-  }
   .rw-app .dock {
     display: grid;
   }
@@ -1356,9 +1336,10 @@
   .rw-app .scrim:not([hidden]) {
     display: block;
   }
-  /* The five header tools stay on one line after the thread link and offline
-     status move out of the phone head. */
   @media (max-width: 449px) {
+    .rw-app .title-build-row {
+      padding-inline-start: calc(32px + var(--sp-s));
+    }
     .rw-app .shell-head-tools {
       gap: 0;
     }

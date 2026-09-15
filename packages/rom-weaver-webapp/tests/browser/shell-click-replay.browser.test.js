@@ -14,7 +14,7 @@ const SHELL_MARKUP = `
     <button aria-label="Settings" class="tool" type="button"><span class="tool-text">Settings</span></button>
     <button class="mode" data-mode="creator" role="tab" type="button">Create</button>
     <button class="tool" disabled type="button">Apply</button>
-    <span class="masthead-threads">· 8 threads</span>
+    <span class="brand-hy">-</span>
   </header>
   <section class="step is-input">
     <label class="drop hero bare"><input id="rom-weaver-input-file-unified" type="file" /></label>
@@ -108,7 +108,7 @@ test("drops clicks on gesture-gated targets the browser would block anyway", () 
 });
 
 test("drops clicks on inert chrome", () => {
-  appRoot.querySelector(".masthead-threads").click();
+  appRoot.querySelector(".brand-hy").click();
   captureShellClicks();
   hydrateShell();
   replayShellClicks(appRoot);

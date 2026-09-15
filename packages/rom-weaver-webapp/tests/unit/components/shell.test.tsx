@@ -9,7 +9,7 @@ import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 /**
  * App-shell contract: one description of the navigation rendered as the desktop
  * sidebar and as the phone Menu sheet, the dock's three workflow slots plus
- * Menu, the identity block's build/threads/runtime controls, the top bar's
+ * Menu, the identity block's build/runtime controls, the top bar's
  * appearance and project tiles, and the update banner.
  */
 
@@ -89,7 +89,6 @@ const mastheadProps = {
   onOpenStorage: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
-  threads: 8,
   version: "1.2.3",
 };
 
@@ -145,7 +144,7 @@ describe("Masthead", () => {
     // Build facts stay with the title in both layouts.
     expect(container.querySelectorAll("h1").length).toBe(1);
     expect(container.querySelectorAll(".brand").length).toBe(1);
-    expect(container.querySelectorAll(".masthead-threads").length).toBe(1);
+    expect(container.querySelectorAll(".masthead-threads").length).toBe(0);
     expect(container.querySelectorAll(".sub-status").length).toBe(2);
     expect(container.querySelector(".brand-copy .build-facts")).toBeTruthy();
     expect(container.querySelector(".dock-state-dot")).toBeNull();
@@ -407,9 +406,8 @@ describe("Masthead", () => {
     expect(container.querySelector(".accent-tray")).toBeNull();
   });
 
-  it("carries the build, thread count and runtime state in one identity block", () => {
+  it("carries the build and runtime state in the identity block", () => {
     const onOpenWhatsNew = vi.fn();
-    const onOpenSettings = vi.fn();
     const onOpenStatus = vi.fn();
     const { container, rerender } = render(
       withSettings(
@@ -419,7 +417,6 @@ describe("Masthead", () => {
           dirty
           onOpenWhatsNew={onOpenWhatsNew}
           offlineProgress={{ cachedBytes: 1, ready: true, totalBytes: 1 }}
-          onOpenSettings={onOpenSettings}
           onOpenStatus={onOpenStatus}
           serviceWorkerStatus="active"
         />,
@@ -429,13 +426,6 @@ describe("Masthead", () => {
     expect(buildTag.textContent).toBe("v1.2.3+3*");
     fireEvent.click(buildTag);
     expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
-
-    const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
-    expect(threads.textContent).toBe("8 threads");
-    expect(threads.getAttribute("aria-label")).toBe("8 threads");
-    fireEvent.click(threads);
-    // no deep-link handler supplied, so the thread count still just opens settings
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
 
     const status = container.querySelector(".sub-status") as HTMLButtonElement;
     // a service worker controlling this page is `active`; `ready` is the cache
@@ -483,18 +473,6 @@ describe("Masthead", () => {
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
   });
 
-  it("routes the thread count to the threads deep link when one is offered", () => {
-    const onOpenSettings = vi.fn();
-    const onOpenThreads = vi.fn();
-    const { container } = render(
-      withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} onOpenThreads={onOpenThreads} />),
-    );
-
-    fireEvent.click(container.querySelector(".masthead-threads") as HTMLButtonElement);
-    expect(onOpenThreads).toHaveBeenCalledTimes(1);
-    expect(onOpenSettings).not.toHaveBeenCalled();
-  });
-
   it("shows the offline-copy opt-out in the masthead status", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{ offlineCopyEnabled: false }}>
@@ -508,6 +486,31 @@ describe("Masthead", () => {
     const status = container.querySelector(".sub-status");
     expect(status?.getAttribute("data-sw")).toBe("online");
     expect(status?.getAttribute("aria-label")).toBe("Offline copy disabled");
+  });
+
+  it.each([
+    ["disabled", "Unsupported"],
+    ["online", "Disabled"],
+    ["installing", "Downloading"],
+    ["update", "Update"],
+    ["ready", "Ready"],
+    ["active", "Ready"],
+  ] as const)("shows %s as %s beside the version", (state, label) => {
+    const { container } = render(
+      withSettings(
+        <Masthead
+          {...mastheadProps}
+          offlineProgress={{ cachedBytes: 40, ready: false, totalBytes: 100 }}
+          previewRuntimeState={state}
+          previewVersionStatus
+        />,
+      ),
+    );
+    const row = container.querySelector(".title-build-row") as HTMLElement;
+    expect(row.querySelector(".build-tag")?.textContent).toBe("v1.2.3");
+    expect(row.querySelector(".sub-status-text")?.textContent).toBe(label);
+    expect(row.querySelector(".sub-status")?.getAttribute("data-sw")).toBe(state);
+    expect(container.querySelector(".brand-copy .build-facts")).toBeNull();
   });
 
   it("links pull request build tags to their pull request and channels to What's new", () => {
@@ -548,16 +551,6 @@ describe("Masthead", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     expect(onPreloadLog).toHaveBeenCalledTimes(1);
-  });
-
-  it("preloads the settings dialog from the thread chip", () => {
-    const onPreloadSettings = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadSettings={onPreloadSettings} />));
-    const threads = container.querySelector(".masthead-threads") as HTMLButtonElement;
-    fireEvent.pointerEnter(threads);
-    fireEvent.focus(threads);
-    fireEvent.pointerDown(threads);
-    expect(onPreloadSettings).toHaveBeenCalledTimes(3);
   });
 });
 

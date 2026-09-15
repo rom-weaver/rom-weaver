@@ -299,7 +299,7 @@ const selectViewWithTransition = (select: () => void) => runFlatViewTransition(s
 const ResetButton = ({ onReset }: { onReset: () => void }) => {
   const localizer = useUiLocalizer();
   return (
-    <button className="reset-btn" onClick={onReset} type="button">
+    <button aria-label={localizer.message("ui.settings.reset")} className="reset-btn" onClick={onReset} type="button">
       <RotateCcw aria-hidden="true" />
       <span>{localizer.message("ui.settings.reset")}</span>
     </button>
@@ -320,6 +320,7 @@ const PanelSettingsButton = ({
   const label = localizer.message("ui.settings.title");
   return (
     <button
+      aria-label={label}
       aria-expanded={settingsOpen}
       aria-haspopup="dialog"
       className="panel-settings-btn"
@@ -331,6 +332,38 @@ const PanelSettingsButton = ({
     >
       <Settings aria-hidden="true" />
       <span>{label}</span>
+    </button>
+  );
+};
+
+const PanelThreadCount = ({
+  count,
+  onOpenThreads,
+  onPreloadSettings,
+}: {
+  count: number;
+  onOpenThreads: () => void;
+  onPreloadSettings?: () => void;
+}) => {
+  const localizer = useUiLocalizer();
+  const singular = localizer.message("ui.env.thread");
+  const plural = localizer.message("ui.env.threads");
+  return (
+    <button
+      aria-haspopup="dialog"
+      className="panel-threads-btn"
+      data-thread-plural={plural}
+      data-thread-singular={singular}
+      onClick={onOpenThreads}
+      onFocus={onPreloadSettings}
+      onPointerDown={onPreloadSettings}
+      onPointerEnter={onPreloadSettings}
+      type="button"
+    >
+      <span className="panel-threads-text">
+        <span className="panel-threads-count">{count}</span>{" "}
+        <span className="panel-threads-word">{count === 1 ? singular : plural}</span>
+      </span>
     </button>
   );
 };
@@ -400,7 +433,7 @@ function WebappRoot({
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
   const [previewEnabled, setPreviewEnabled] = useState(false);
-  const [previewLayout, setPreviewLayout] = useState<PreviewLayout | null>(null);
+  const [previewLayout, setPreviewLayout] = useState<PreviewLayout>("title");
   const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -480,6 +513,7 @@ function WebappRoot({
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
   const threads = state.settings.threads;
+  const threadCount = resolveThreads(threads);
   useLayoutEffect(() => notifyGuidedSampleView(state.currentView), [state.currentView]);
   useLayoutEffect(() => {
     document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
@@ -766,12 +800,22 @@ function WebappRoot({
         id={`panel-${view}`}
       >
         {view === "docs" || view === "whats-new" ? null : (
-          <div className="workflow-panel-head">
+          <div
+            className="workflow-panel-head"
+            data-threads={view === "patcher" || view === "creator" || view === "trim" ? "" : undefined}
+          >
             <PanelSettingsButton
               onOpenSettings={() => openSettingsTab()}
               onPreloadSettings={preloadSettingsPanel}
               settingsOpen={state.settingsDialogOpen}
             />
+            {view === "patcher" || view === "creator" || view === "trim" ? (
+              <PanelThreadCount
+                count={threadCount}
+                onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
+                onPreloadSettings={preloadSettingsPanel}
+              />
+            ) : null}
             <ResetButton onReset={actions.onReset} />
           </div>
         )}
@@ -816,14 +860,11 @@ function WebappRoot({
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenSettingsField={openSettingsTab}
-            onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
-            onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             offlineProgress={previewOfflineProgress}
             previewRuntimeState={previewRuntimeState}
             previewPhoneOverlay={previewLayout === "edge" || previewLayout === "quiet"}
             previewVersionStatus={previewLayout === "title"}
-            threads={resolveThreads(threads)}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
@@ -996,6 +1037,7 @@ function WebappRoot({
               </>
             )}
           </main>
+          <span className="shell-threads-identity" hidden />
           {/* the dock is fixed, so the column reserves its height through the one
               variable masthead.css raises below the dock threshold */}
           <div aria-hidden="true" className="dock-pad" />

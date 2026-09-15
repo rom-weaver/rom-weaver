@@ -224,11 +224,14 @@ assertIncludes(
 );
 assertIncludes(identifyHtml, 'id="panel-identify"', "identify prerendered workflow");
 assertHasClass(homeHtml, "build-tag", "preloaded build tag");
-assertHasClass(homeHtml, "masthead-threads-count", "preloaded thread count");
+assertHasClass(applyHtml, "panel-threads-count", "preloaded Apply thread count");
+assertHasClass(createHtml, "panel-threads-count", "preloaded Create thread count");
 assertHasClass(homeHtml, "sub-status", "preloaded runtime status control");
 assertIncludes(homeHtml, 'data-service-worker-enabled="true"', "service-worker build marker");
 const runtimeResolver =
   '<span class="shell-identity" hidden=""></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
+const threadResolver =
+  '<span class="shell-threads-identity" hidden=""></span><script>try{window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY()}';
 for (const route of [
   "index.html",
   "apply.html",
@@ -244,7 +247,8 @@ for (const route of [
 ]) {
   const html = read(route);
   assertIncludes(html, runtimeResolver, `${route} parser-time runtime status resolver placement`);
-  assertCount(html, "ROM_WEAVER_RESOLVE_SHELL_IDENTITY()", 1, `${route} parser-time runtime status resolver`);
+  assertIncludes(html, threadResolver, `${route} parser-time thread resolver placement`);
+  assertCount(html, "ROM_WEAVER_RESOLVE_SHELL_IDENTITY()", 2, `${route} parser-time shell resolver`);
 }
 assertIncludes(
   read("create/index.html"),

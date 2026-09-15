@@ -35,13 +35,6 @@ import type { ThemePreference } from "../theme.ts";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
-if (typeof window !== "undefined") {
-  const layout = new URLSearchParams(window.location.search).get("offline-layout");
-  if (layout === "tab" || layout === "strip" || layout === "edge" || layout === "quiet" || layout === "title") {
-    document.documentElement.dataset.offlineLayout = layout;
-  }
-}
-
 const Github = createLucideIcon("github", [
   [
     "path",
@@ -761,6 +754,14 @@ const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: Me
   ready: { description: "ui.runtime.readyDesc", label: "ui.runtime.ready" },
   update: { description: "ui.runtime.updateDesc", label: "ui.runtime.update" },
 };
+const HEADER_RUNTIME_MESSAGES: Record<RuntimeState, MessageId> = {
+  active: "ui.runtime.headerReady",
+  ready: "ui.runtime.headerReady",
+  update: "ui.runtime.headerUpdate",
+  installing: "ui.runtime.headerDownloading",
+  online: "ui.runtime.headerDisabled",
+  disabled: "ui.runtime.headerUnsupported",
+};
 
 /** Byte progress of the background offline warm-up, when the page knows it. */
 type OfflineWarmupDisplayProgress = {
@@ -1070,52 +1071,6 @@ const BuildTag = ({
   );
 };
 
-/** Version and worker threads: the two facts that only change on release or in Settings. */
-const BuildFacts = ({
-  buildTag,
-  status,
-  onOpenThreads,
-  onPreloadSettings,
-  threads,
-  threadsLabel,
-}: {
-  buildTag: ReactNode;
-  status?: ReactNode;
-  onOpenThreads: () => void;
-  onPreloadSettings?: () => void;
-  threads?: number;
-  threadsLabel: string;
-}) => (
-  <span className="build-facts">
-    {buildTag}
-    {status ? <span className="build-runtime">{status}</span> : null}
-    {buildTag && threads ? (
-      <span aria-hidden="true" className="sub-separator">
-        /
-      </span>
-    ) : null}
-    {threads ? (
-      <button
-        aria-haspopup="dialog"
-        aria-label={`${threads} ${threadsLabel}`}
-        className="sub-chip sub-link masthead-threads"
-        data-thread-label={threadsLabel}
-        onClick={onOpenThreads}
-        onFocus={onPreloadSettings}
-        onPointerDown={onPreloadSettings}
-        onPointerEnter={onPreloadSettings}
-        type="button"
-      >
-        <span className="masthead-threads-count">{threads}</span>
-        <span aria-hidden="true" className="masthead-threads-space">
-          {" "}
-        </span>
-        <span aria-hidden="true">{threadsLabel}</span>
-      </button>
-    ) : null}
-  </span>
-);
-
 const Masthead = ({
   channelBadge,
   commitsSinceVersion,
@@ -1132,8 +1087,6 @@ const Masthead = ({
   onPreloadLog,
   onOpenSettings,
   onOpenSettingsField,
-  onOpenThreads,
-  onPreloadSettings,
   serviceWorkerStatus,
   offlineProgress = null,
   previewRuntimeState = null,
@@ -1142,7 +1095,6 @@ const Masthead = ({
   confirmExternalNavigation,
   donateHref,
   githubHref,
-  threads,
   updateReady = false,
   version,
   versionTitle,
@@ -1165,9 +1117,6 @@ const Masthead = ({
   onOpenSettings: () => void;
   /** Find's deep link into one settings field; falls back to plain Settings. */
   onOpenSettingsField?: (fieldId: string) => void;
-  /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
-  onOpenThreads?: () => void;
-  onPreloadSettings?: () => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   previewRuntimeState?: RuntimeState | null;
@@ -1176,7 +1125,6 @@ const Masthead = ({
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
-  threads?: number;
   updateReady?: boolean;
   version?: string;
   versionTitle?: string;
@@ -1218,7 +1166,6 @@ const Masthead = ({
     [],
   );
   const navLabel = localizer.message("ui.nav.primary");
-  const threadsLabel = localizer.message("ui.env.threads");
   const docsHref = tabs.find((tab) => tab.id === "docs")?.href ?? "docs";
 
   /* The beta-tools setting is client-only, so the prerendered shell must not
@@ -1325,6 +1272,7 @@ const Masthead = ({
     runtimeState === "installing"
       ? installingRuntimeWording(localizer, offlineProgress)
       : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const headerRuntimeLabel = localizer.message(HEADER_RUNTIME_MESSAGES[runtimeState]);
   const runtimeSpokenLabel =
     runtimeState === "installing" ? installingRuntimeLabel(localizer, offlineProgress) : runtimeLabel;
   const runtimePercent = runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null;
@@ -1338,7 +1286,6 @@ const Masthead = ({
     typeof commitsSinceVersion === "number" && Number.isInteger(commitsSinceVersion) && commitsSinceVersion > 0
       ? commitsSinceVersion
       : 0;
-  const openThreads = onOpenThreads ?? onOpenSettings;
   const openStorage = onOpenStorage ?? onOpenLog;
 
   /* One description of the nav, rendered by the sidebar and by the phone menu.
@@ -1475,14 +1422,12 @@ const Masthead = ({
     />
   ) : null;
   const buildFacts = (
-    <BuildFacts
-      buildTag={buildTag}
-      onOpenThreads={openThreads}
-      onPreloadSettings={onPreloadSettings}
-      status={
-        previewVersionStatus ? (
+    <span className="build-facts">
+      {buildTag}
+      {previewVersionStatus ? (
+        <span className="build-runtime">
           <StatusChip
-            label={runtimeLabel}
+            label={headerRuntimeLabel}
             onOpenStatus={() => {
               closeMenu();
               onOpenStatus();
@@ -1491,11 +1436,9 @@ const Masthead = ({
             state={runtimeState}
             title={runtimeTitle}
           />
-        ) : null
-      }
-      threads={threads}
-      threadsLabel={threadsLabel}
-    />
+        </span>
+      ) : null}
+    </span>
   );
   /* Theme and accent appear in the chrome (the top bar on desktop, the brand
      row on the phone) and again inside the navigation (the sidebar foot and the
@@ -1540,8 +1483,7 @@ const Masthead = ({
           while staying inside a single landmark - two `header` elements at this
           level would leave the page with two banners. */}
       <header className="shell-banner">
-        {/* One column on desktop, one page header on the phone. Build facts stay
-            with the brand, and the phone dock carries runtime status. */}
+        {/* One column on desktop, one page header on the phone. */}
         <div className="side-col">
           <div className="shell-head">
             <div className="shell-head-top">

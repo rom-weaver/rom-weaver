@@ -131,7 +131,7 @@ afterEach(() => {
 /** A nav row by its visible label, from whichever layout the test names. */
 const navRow = (container: HTMLElement, name: string, scope = ".side-nav") =>
   Array.from(container.querySelectorAll<HTMLElement>(`${scope} .nav-row`)).find(
-    (row) => row.querySelector(".nav-row-label")?.textContent === name,
+    (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
   ) as HTMLElement;
 
 describe("resolveThreads", () => {
@@ -258,6 +258,21 @@ describe("the unified dialog", () => {
       expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
     );
   });
+
+  it.each(["patcher", "creator", "trim"] as const)("shows the thread setting beside Settings on %s", async (view) => {
+    const { container } = await renderRoot({ currentView: view });
+    const button = container.querySelector(`#panel-${view} .panel-threads-btn`) as HTMLButtonElement | null;
+    expect(button?.textContent).toMatch(/^\d+ threads?$/);
+    expect(container.querySelector(".masthead-threads")).toBeNull();
+  });
+
+  it.each(["identify", "test", "ppf-undo", "save-editor"] as const)(
+    "does not show the thread setting on %s",
+    async (view) => {
+      const { container } = await renderRoot({ currentView: view });
+      expect(container.querySelector(`#panel-${view} .panel-threads-btn`)).toBeNull();
+    },
+  );
 
   it("resets the workflow from the panel head", async () => {
     const { called, container } = await renderRoot();
@@ -496,10 +511,10 @@ describe("the settings draft flow", () => {
     expect(called("onSaveClose")).toHaveBeenCalledTimes(1);
   });
 
-  it("deep links the thread count into the Threads setting", async () => {
+  it("deep links the page thread count into the Threads setting", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".masthead-threads") as HTMLButtonElement);
+    fireEvent.click(container.querySelector("#panel-patcher .panel-threads-btn") as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
     await waitFor(() =>

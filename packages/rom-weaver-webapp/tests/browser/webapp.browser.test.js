@@ -143,6 +143,7 @@ const mountWebappRoot = (options = {}) => {
 };
 
 beforeEach(() => {
+  document.documentElement.dataset.offlineLayout = "title";
   mountedRoot?.unmount?.();
   mountedRoot = null;
   rootElement = document.createElement("div");
@@ -277,22 +278,26 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
   await page.viewport(1280, 900);
 });
 
-test("WebappRoot reports the configured thread count in the chrome, not the core count", async () => {
-  // The chrome's thread count MUST use the saved Threads setting.
+test("WebappRoot reports the configured thread count beside the workflow Settings control", async () => {
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
-  await expect.poll(() => document.querySelector(".masthead-threads")?.textContent || "").toContain("1 threads");
   await expect
-    .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
-    .toContain("1 threads");
+    .poll(() => document.querySelector("#panel-patcher .panel-threads-btn")?.textContent || "")
+    .toContain("1 thread");
+  expect(document.querySelector(".masthead-threads")).toBeNull();
 });
 
-test("the phone head keeps the version and tools on one line", async () => {
+test("the wordmark keeps version and status below it while phone tools stay on one line", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
-  await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
-  expect(document.querySelectorAll(".sub-status").length).toBe(2);
-  expect(document.querySelectorAll(".masthead-threads").length).toBe(1);
-  expect(document.querySelector(".brand-copy .build-facts")).toBeTruthy();
+  await expect
+    .poll(() => document.querySelector(".title-build-row .sub-status")?.getAttribute("aria-label") || "")
+    .not.toBe("");
+  expect(document.querySelector(".masthead-threads")).toBeNull();
+  expect(document.querySelector(".brand-copy .build-facts")).toBeNull();
+  expect(document.querySelector(".title-build-row .build-facts")).toBeTruthy();
+  await expect
+    .poll(() => document.querySelector("#panel-patcher .panel-threads-btn")?.textContent || "")
+    .toContain("10 threads");
 
   for (const [width, height] of [
     [1280, 900],
@@ -301,25 +306,20 @@ test("the phone head keeps the version and tools on one line", async () => {
     [390, 844],
   ]) {
     await page.viewport(width, height);
+    const status = document.querySelector(".title-build-row .sub-status");
+    const version = document.querySelector(".title-build-row .build-tag");
+    expect(getComputedStyle(status).display).not.toBe("none");
+    expect(status.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
+    expect(Math.abs(status.getBoundingClientRect().top - version.getBoundingClientRect().top)).toBeLessThanOrEqual(2);
+    expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(
+      document.querySelector(".side-col").getBoundingClientRect().right,
+    );
     if (width >= 1000) {
-      const status = document.querySelector(".topbar .sub-status");
-      await expect.poll(() => getComputedStyle(status.querySelector("svg")).display).not.toBe("none");
-      const word = status.querySelector(".sub-status-text");
-      expect(word.textContent.trim().length).toBeGreaterThan(0);
-      expect(getComputedStyle(word).display).not.toBe("none");
-      expect(word.scrollWidth).toBeLessThanOrEqual(word.getBoundingClientRect().width + 1);
-      expect(getComputedStyle(status).cursor).toBe("pointer");
-      expect(status.getBoundingClientRect().height).toBe(
-        document.querySelector(".topbar-tools .tool").getBoundingClientRect().height,
-      );
-      expect(getComputedStyle(document.querySelector(".masthead-threads")).display).not.toBe("none");
+      expect(getComputedStyle(document.querySelector(".topbar .sub-status")).display).toBe("none");
     } else {
-      expect(getComputedStyle(document.querySelector(".masthead-threads")).display).toBe("none");
       expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
       expect(document.querySelector(".dock-state-dot")).toBeNull();
-      const mobileStatus = document.querySelector(".dock-runtime .sub-status");
-      expect(getComputedStyle(mobileStatus).display).not.toBe("none");
-      expect(mobileStatus.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
+      expect(getComputedStyle(document.querySelector(".dock-runtime")).display).toBe("none");
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       const brand = document.querySelector(".brand").getBoundingClientRect();
       const tools = document.querySelector(".shell-head-tools").getBoundingClientRect();
@@ -487,11 +487,6 @@ test("the New here? beacon stays compact and its popover carries every start act
 });
 
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {
-  // "auto" in the masthead must agree with the Threads field's `auto (N)`
-  // placeholder. Raw navigator.hardwareConcurrency disagrees with it on any
-  // host below the 4-thread floor - 2 cores read "2 threads" against "auto (4)".
-  // Two cores is below the 4-thread floor, so the two resolvers can only agree
-  // if the masthead uses the shared one.
   const hardwareConcurrency = Object.getOwnPropertyDescriptor(Navigator.prototype, "hardwareConcurrency");
   Object.defineProperty(navigator, "hardwareConcurrency", { configurable: true, value: 2 });
   try {
@@ -499,7 +494,7 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
     expect(expected).not.toBe(2);
     mountWebappRoot({ settings: { ...getDefaultSettings(), threads: "auto" } });
     await expect
-      .poll(() => document.querySelector(".masthead-threads")?.getAttribute("aria-label") || "")
+      .poll(() => document.querySelector("#panel-patcher .panel-threads-btn")?.textContent || "")
       .toContain(`${expected} threads`);
   } finally {
     Reflect.deleteProperty(navigator, "hardwareConcurrency");
