@@ -158,6 +158,23 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   { group: "project", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
 ];
 
+const PREVIEW_LAYOUTS = [
+  { id: "edge", label: "Edge badge" },
+  { id: "quiet", label: "Attention only" },
+  { id: "tab", label: "Dock tab" },
+  { id: "strip", label: "Dock strip" },
+] as const;
+type PreviewLayout = (typeof PREVIEW_LAYOUTS)[number]["id"];
+
+const PREVIEW_STATE_LABELS: Record<RuntimeState, string> = {
+  active: "Offline active",
+  ready: "Offline ready",
+  update: "Update ready",
+  installing: "Installing 40%",
+  online: "Online only",
+  disabled: "Offline disabled",
+};
+
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
 const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
@@ -382,12 +399,14 @@ function WebappRoot({
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
   const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewLayout, setPreviewLayout] = useState<PreviewLayout | null>(null);
   const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const layout = params.get("offline-layout");
-    if (layout !== "tab" && layout !== "strip") return;
+    if (!PREVIEW_LAYOUTS.some((item) => item.id === layout)) return;
     setPreviewEnabled(true);
+    setPreviewLayout(layout as PreviewLayout);
     const state = params.get("offline-state");
     if (state && (RUNTIME_STATES as readonly string[]).includes(state)) {
       setPreviewRuntimeState(state as RuntimeState);
@@ -399,6 +418,11 @@ function WebappRoot({
     if (state) url.searchParams.set("offline-state", state);
     else url.searchParams.delete("offline-state");
     window.history.replaceState(window.history.state, "", url);
+  }, []);
+  const changePreviewLayout = useCallback((layout: PreviewLayout) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("offline-layout", layout);
+    window.location.assign(url);
   }, []);
   const previewOfflineProgress =
     previewRuntimeState === "installing" ? { cachedBytes: 40, ready: false, totalBytes: 100 } : offlineProgress;
@@ -796,6 +820,7 @@ function WebappRoot({
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             offlineProgress={previewOfflineProgress}
             previewRuntimeState={previewRuntimeState}
+            previewPhoneOverlay={previewLayout === "edge" || previewLayout === "quiet"}
             threads={resolveThreads(threads)}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
@@ -813,6 +838,52 @@ function WebappRoot({
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
           />
+          {previewEnabled && previewLayout ? (
+            <div className="status-prototype-bar">
+              <label htmlFor="status-prototype-layout">
+                Layout
+                <select
+                  id="status-prototype-layout"
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    if (PREVIEW_LAYOUTS.some((item) => item.id === next)) changePreviewLayout(next as PreviewLayout);
+                  }}
+                  value={previewLayout}
+                >
+                  {PREVIEW_LAYOUTS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label htmlFor="status-prototype-state">
+                State
+                <select
+                  id="status-prototype-state"
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    if (next === "actual") {
+                      changePreviewRuntimeState(null);
+                      return;
+                    }
+                    if ((RUNTIME_STATES as readonly string[]).includes(next)) {
+                      changePreviewRuntimeState(next as RuntimeState);
+                    }
+                  }}
+                  value={previewRuntimeState ?? "actual"}
+                >
+                  <option value="actual">Actual</option>
+                  {RUNTIME_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {PREVIEW_STATE_LABELS[state]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span>Display only</span>
+            </div>
+          ) : null}
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
@@ -942,7 +1013,6 @@ function WebappRoot({
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
               offlineProgress={previewOfflineProgress}
               previewRuntimeState={previewRuntimeState}
-              onPreviewRuntimeStateChange={previewEnabled ? changePreviewRuntimeState : undefined}
               offlineCopyEnabled={state.settings.offlineCopyEnabled}
               onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
               settingsFocusHint={settingsFocusHint}

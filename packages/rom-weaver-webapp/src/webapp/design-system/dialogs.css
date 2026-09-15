@@ -959,35 +959,6 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   flex-direction: column;
   gap: var(--sp-l);
 }
-.rw-app .status-preview-control {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-xs);
-  align-items: center;
-  padding: var(--sp-s) var(--sp-m);
-  background: var(--plate-2);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
-}
-.rw-app .status-preview-control label {
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-.rw-app .status-preview-control select {
-  min-height: 36px;
-  padding: 4px 8px;
-  font: inherit;
-  color: var(--ink);
-  background: var(--plate);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-s);
-}
-.rw-app .status-preview-control p {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 0.7rem;
-  color: var(--ink-3);
-}
 /* ── the shared dialog section head ──
    The workbench marks a section by laying a thread block under its heading and
    masking it with the plain weave (see `.step-num` in workbench.css). The same

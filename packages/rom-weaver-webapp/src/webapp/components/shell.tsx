@@ -37,7 +37,7 @@ import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
 if (typeof window !== "undefined") {
   const layout = new URLSearchParams(window.location.search).get("offline-layout");
-  if (layout === "tab" || layout === "strip") {
+  if (layout === "tab" || layout === "strip" || layout === "edge" || layout === "quiet") {
     document.documentElement.dataset.offlineLayout = layout;
   }
 }
@@ -1134,6 +1134,7 @@ const Masthead = ({
   serviceWorkerStatus,
   offlineProgress = null,
   previewRuntimeState = null,
+  previewPhoneOverlay = false,
   confirmExternalNavigation,
   donateHref,
   githubHref,
@@ -1166,6 +1167,7 @@ const Masthead = ({
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   previewRuntimeState?: RuntimeState | null;
+  previewPhoneOverlay?: boolean;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
@@ -1592,6 +1594,20 @@ const Masthead = ({
         sources={findSources}
         triggerRef={activeFindRef}
       />
+      {previewPhoneOverlay ? (
+        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || findOpen}>
+          <StatusChip
+            label={runtimeLabel}
+            onOpenStatus={() => {
+              closeMenu();
+              onOpenStatus();
+            }}
+            percent={runtimePercent}
+            state={runtimeState}
+            title={runtimeTitle}
+          />
+        </span>
+      ) : null}
       <PhoneDock
         current={currentTab}
         menuLabel={localizer.message("ui.tools.menu")}

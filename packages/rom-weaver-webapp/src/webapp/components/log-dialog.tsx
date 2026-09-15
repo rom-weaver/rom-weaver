@@ -1055,7 +1055,6 @@ const LogDialog = ({
   settingsPanel,
   updateReady = false,
   previewRuntimeState = null,
-  onPreviewRuntimeStateChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1074,7 +1073,6 @@ const LogDialog = ({
   settingsPanel?: ReactNode;
   updateReady?: boolean;
   previewRuntimeState?: RuntimeState | null;
-  onPreviewRuntimeStateChange?: (state: RuntimeState | null) => void;
 }) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -1284,27 +1282,6 @@ const LogDialog = ({
         ) : null}
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            {onPreviewRuntimeStateChange ? (
-              <div className="status-preview-control">
-                <label htmlFor="offline-state-preview">Preview offline state</label>
-                <select
-                  id="offline-state-preview"
-                  onChange={(event) => {
-                    const next = event.currentTarget.value;
-                    onPreviewRuntimeStateChange(next === "actual" ? null : (next as RuntimeState));
-                  }}
-                  value={previewRuntimeState ?? "actual"}
-                >
-                  <option value="actual">Actual state</option>
-                  {RUNTIME_STATES.map((state) => (
-                    <option key={state} value={state}>
-                      {localizer.message(RUNTIME_MESSAGES[state].label)}
-                    </option>
-                  ))}
-                </select>
-                <p>This preview changes the display only. It does not change the offline copy.</p>
-              </div>
-            ) : null}
             <StatusRows
               downloadRequested={offlineCopy.downloadRequested}
               downloadUnavailable={downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error)}

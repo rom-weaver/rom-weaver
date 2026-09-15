@@ -892,6 +892,9 @@
   border: 1px solid var(--seam);
   border-radius: 999px;
 }
+.rw-app .phone-overlay-runtime {
+  display: none;
+}
 .rw-app .dock-tab {
   position: relative;
   display: flex;
@@ -917,6 +920,57 @@
 }
 
 @media (max-width: 999px) {
+  html[data-offline-layout="edge"] .rw-app,
+  html[data-offline-layout="quiet"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="edge"] .rw-app .dock,
+  html[data-offline-layout="quiet"] .rw-app .dock {
+    row-gap: 0;
+  }
+  html[data-offline-layout="edge"] .rw-app .dock-tab,
+  html[data-offline-layout="quiet"] .rw-app .dock-tab {
+    grid-row: 1;
+  }
+  html[data-offline-layout="edge"] .rw-app .dock-runtime,
+  html[data-offline-layout="quiet"] .rw-app .dock-runtime {
+    display: none;
+  }
+  html[data-offline-layout="edge"] .rw-app .phone-overlay-runtime:not([hidden]) {
+    position: fixed;
+    inset-block-end: calc(var(--dock-h) + 10px);
+    inset-inline-end: max(12px, var(--safe-r));
+    z-index: 998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime:not([hidden])[data-sw="installing"],
+  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime:not([hidden])[data-sw="update"] {
+    display: flex;
+    align-items: center;
+    min-block-size: 42px;
+    padding: 4px var(--gutter);
+    background: var(--plate-2);
+    border-block-end: 1px solid var(--seam);
+  }
+  html[data-offline-layout="edge"] .rw-app .phone-overlay-runtime .sub-status {
+    min-block-size: 36px;
+    padding-inline: 12px;
+    font-size: 0.68rem;
+    background: var(--plate);
+    border: 1px solid var(--seam-strong);
+    border-radius: 999px;
+    box-shadow: 0 2px 10px color-mix(in oklab, var(--chassis) 30%, transparent);
+  }
+  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime .sub-status {
+    min-block-size: 34px;
+    padding-inline: 4px;
+    font-size: 0.68rem;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-s);
+  }
   html[data-offline-layout="tab"] .rw-app {
     --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
@@ -998,6 +1052,43 @@
     border: 0;
     border-radius: 0;
   }
+}
+.rw-app .status-prototype-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: end;
+  padding: 8px var(--gutter);
+  background: var(--plate-2);
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .status-prototype-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rw-app .status-prototype-bar select {
+  max-inline-size: 140px;
+  min-block-size: 36px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: normal;
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .status-prototype-bar > span {
+  padding-block-end: 10px;
+  font-size: 0.66rem;
+  color: var(--ink-3);
 }
 .rw-app .dock-tab svg {
   width: 20px;
