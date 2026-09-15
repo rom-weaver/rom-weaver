@@ -190,6 +190,32 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("test");
   });
 
+  it("spends Escape on the sheet when the open popover is the chrome's, not the sheet's", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    // Keyboard activation fires click with no pointerdown, so the brand-row
+    // popover is still mounted when the sheet opens over it. It is inert behind
+    // the sheet, so it MUST NOT claim the press the sheet is waiting for.
+    fireEvent.click(container.querySelector('.shell-head-tools .tool[aria-label^="Theme"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    const sheet = container.querySelector(".menu-sheet") as HTMLElement;
+    expect(sheet.hidden).toBe(false);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(sheet.hidden).toBe(true);
+  });
+
+  it("spends Escape on the sheet's own popover before the sheet", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    const sheet = container.querySelector(".menu-sheet") as HTMLElement;
+    fireEvent.click(sheet.querySelector(".nav-appearance .accent-tool") as HTMLButtonElement);
+    expect(sheet.querySelector(".accent-tray")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(sheet.querySelector(".accent-tray")).toBeNull();
+    expect(sheet.hidden).toBe(false);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(sheet.hidden).toBe(true);
+  });
+
   it("closes the Menu sheet when a row inside it routes", () => {
     const onSelectTab = vi.fn();
     const onOpenStorage = vi.fn();
@@ -282,7 +308,7 @@ describe("Masthead", () => {
     expect(container.querySelector('.topbar-tools [role="menu"]')).toBeNull();
   });
 
-  it("gives each accent picker its own radio group, so the two copies never join", () => {
+  it("opens only the accent picker that was pressed", () => {
     const onAccentChange = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onAccentChange={onAccentChange} />));
     const button = container.querySelector(".topbar-tools .accent-tool") as HTMLButtonElement;
@@ -291,17 +317,45 @@ describe("Masthead", () => {
     fireEvent.click(button);
     const swatches = Array.from(container.querySelectorAll<HTMLInputElement>(".topbar-tools .accent-tray input"));
     expect(swatches.length).toBe(6);
-    // The phone copy is on the page too; one shared name would make the two
-    // pickers one radio group and leave only one of them able to show a choice.
-    const names = new Set(
-      Array.from(container.querySelectorAll<HTMLInputElement>(".accent-tray input")).map((input) => input.name),
-    );
-    expect(names.size).toBe(2);
+    // Four copies of the pair are on the page: the chrome copy and the nav copy
+    // of each layout. A key of "accent" alone opened every one of them at once.
+    expect(container.querySelectorAll(".accent-tray").length).toBe(1);
     expect(swatches.filter((swatch) => swatch.checked).map((swatch) => swatch.value)).toEqual(["madder"]);
     fireEvent.click(swatches[1] as HTMLInputElement);
     expect(onAccentChange).toHaveBeenCalledWith("woad");
     // stays open so a second lot can be compared without reopening
     expect(container.querySelector(".accent-tray")).toBeTruthy();
+  });
+
+  it("gives every accent picker its own radio group, so the copies never join", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    const names = Array.from(container.querySelectorAll<HTMLButtonElement>(".accent-tool")).map((button) => {
+      fireEvent.click(button);
+      const input = container.querySelector<HTMLInputElement>(".accent-tray input");
+      fireEvent.click(button);
+      return input?.name;
+    });
+    // One shared name would make the pickers one radio group and leave only one
+    // of them able to show a choice.
+    expect(names.length).toBe(4);
+    expect(new Set(names).size).toBe(4);
+  });
+
+  it("names theme and accent inside the navigation as well as in the chrome", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    // The sheet's copy waits for the sheet, so the prerendered shell carries
+    // only the sidebar's.
+    expect(container.querySelectorAll(".nav-appearance").length).toBe(1);
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    const blocks = Array.from(container.querySelectorAll(".nav-appearance"));
+    // One for the desktop sidebar's foot, one for the phone Menu sheet's foot.
+    expect(blocks.length).toBe(2);
+    for (const block of blocks) {
+      expect(block.querySelector(".nav-group-label")?.textContent).toBe("Appearance");
+      expect(block.querySelectorAll('.tool[aria-label^="Theme"]').length).toBe(1);
+      expect(block.querySelectorAll(".accent-tool").length).toBe(1);
+    }
   });
 
   it("commits an appearance choice from the phone header copy too", () => {

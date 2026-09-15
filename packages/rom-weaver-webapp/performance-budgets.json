@@ -3,11 +3,11 @@
     "brotliQuality": 6,
     "budgets": [
       {
-        "_comment": "Re-baselined when the shell replaced its overflow menu with one named nav. Every destination is now in the prerendered HTML, which is what makes them crawlable and reachable without JavaScript, so ~15 labelled rows and their icons ship in the shell instead of 6.",
+        "_comment": "Re-baselined when the shell replaced its overflow menu with one named nav. Every destination is now in the prerendered HTML, which is what makes them crawlable and reachable without JavaScript, so ~15 labelled rows and their icons ship in the shell instead of 6. Raised again when theme and accent joined the navigation: the sidebar's copy of the pair ships in the shell, which is ~2 KiB of icon markup raw and nothing measurable brotli. The Menu sheet's copy waits for the sheet, so it costs the shell nothing.",
         "name": "HTML shell",
         "path": "index.html",
-        "expectedRawBytes": 47250,
-        "maxRawBytes": 48200,
+        "expectedRawBytes": 49300,
+        "maxRawBytes": 50300,
         "expectedBrotliBytes": 10300,
         "maxBrotliBytes": 10600
       },

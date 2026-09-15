@@ -385,6 +385,11 @@ msgstr "App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.appearance"
+msgstr "Darstellung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "wird nach Patch {n} angewendet"
 
@@ -580,11 +585,6 @@ msgstr "Automatische Erkennung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.actions"
-msgstr "Verfügbare Aktionen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.offlineDisabledDetail"
 msgstr "Automatische Offline-Downloads sind deaktiviert."
 
@@ -592,6 +592,11 @@ msgstr "Automatische Offline-Downloads sind deaktiviert."
 #: src/presentation/localization/messages.ts
 msgid "settings.offlineCopyHelp"
 msgstr "Lädt die App für die Offline-Nutzung automatisch herunter, außer wenn der Datensparmodus aktiviert ist."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.actions"
+msgstr "Verfügbare Aktionen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1020,13 +1025,13 @@ msgstr "Die Ausgabe konnte nicht für EmulatorJS vorbereitet werden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.create"
-msgstr "{format}-Bundle erstellen"
+msgid "ui.runtime.removeUnavailable"
+msgstr "Die Offline-Kopie konnte nicht entfernt werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeUnavailable"
-msgstr "Die Offline-Kopie konnte nicht entfernt werden. Versuche es erneut."
+msgid "ui.bundleExport.create"
+msgstr "{format}-Bundle erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1210,11 +1215,6 @@ msgstr "Test-Bundle herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.sourceInfo.trimCert"
-msgstr "Download-Play-Zertifikat erhalten"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadOffline"
 msgstr "Offline-Kopie herunterladen"
 
@@ -1225,13 +1225,18 @@ msgstr "Download angefordert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.reorderTitle"
-msgstr "Zum Sortieren ziehen · zum Bearbeiten der Position klicken · Pfeiltasten hoch/runter"
+msgid "ui.sourceInfo.trimCert"
+msgstr "Download-Play-Zertifikat erhalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadOfflineHint"
 msgstr "Lädt die fehlenden Dateien auch bei aktiviertem Datensparmodus herunter."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.reorderTitle"
+msgstr "Zum Sortieren ziehen · zum Bearbeiten der Position klicken · Pfeiltasten hoch/runter"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1715,13 +1720,13 @@ msgstr "{header} behalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.n64Order.keep"
-msgstr "aktuelle behalten"
+msgid "settings.offlineCopyEnabled"
+msgstr "Offline-Kopie behalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyEnabled"
-msgstr "Offline-Kopie behalten"
+msgid "ui.patch.n64Order.keep"
+msgstr "aktuelle behalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2135,11 +2140,6 @@ msgstr "Offline aktiv"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.ready"
-msgstr "Offline bereit"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.offlineDisabled"
 msgstr "Offline-Kopie deaktiviert"
 
@@ -2147,6 +2147,11 @@ msgstr "Offline-Kopie deaktiviert"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadUnavailable"
 msgstr "Offline-Downloads sind nicht verfügbar. Lade die Seite neu und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.ready"
+msgstr "Offline bereit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2420,12 +2425,12 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.step.patches"
+msgid "ui.nav.groupPatches"
 msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.nav.groupPatches"
+msgid "ui.step.patches"
 msgstr "Patches"
 
 #. js-lingui-explicit-id
@@ -2640,23 +2645,18 @@ msgstr "Disc entfernen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.removeRom"
-msgstr "ROM-Eingabe entfernen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.removeOffline"
 msgstr "Offline-Kopie entfernen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.trimDescription"
-msgstr "Entferne ungenutzte Fülldaten aus unterstützten ROMs und Disc-Images, um Speicherplatz zu sparen."
+msgid "ui.apply.removeRom"
+msgstr "ROM-Eingabe entfernen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.replacePatch"
-msgstr "Patch ersetzen"
+msgid "ui.hero.trimDescription"
+msgstr "Entferne ungenutzte Fülldaten aus unterstützten ROMs und Disc-Images, um Speicherplatz zu sparen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2667,6 +2667,11 @@ msgstr "Entfernt heruntergeladene App-Dateien. Deine Dateien, Spielstände und E
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.removingOffline"
 msgstr "Offline-Kopie wird entfernt…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.replacePatch"
+msgstr "Patch ersetzen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

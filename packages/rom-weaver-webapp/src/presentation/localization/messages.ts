@@ -1337,6 +1337,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.theme.matchSystem": msg({ id: "ui.theme.matchSystem", message: "Match system" }),
   "ui.tools.accent": msg({ id: "ui.tools.accent", message: "Accent" }),
   "ui.tools.app": msg({ id: "ui.tools.app", message: "App" }),
+  "ui.tools.appearance": msg({ id: "ui.tools.appearance", message: "Appearance" }),
   "ui.tools.beta": msg({ id: "ui.tools.beta", message: "Beta" }),
   "ui.tools.github": msg({ id: "ui.tools.github", message: "View source on GitHub" }),
   "ui.tools.githubShort": msg({ id: "ui.tools.githubShort", message: "GitHub" }),

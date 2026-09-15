@@ -385,6 +385,11 @@ msgstr "App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.appearance"
+msgstr "Apariencia"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "se aplica después del parche {n}"
 
@@ -580,11 +585,6 @@ msgstr "Detección automática"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.actions"
-msgstr "Acciones disponibles"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.offlineDisabledDetail"
 msgstr "Las descargas automáticas sin conexión están desactivadas."
 
@@ -592,6 +592,11 @@ msgstr "Las descargas automáticas sin conexión están desactivadas."
 #: src/presentation/localization/messages.ts
 msgid "settings.offlineCopyHelp"
 msgstr "Descarga la aplicación automáticamente para usarla sin conexión, salvo si el ahorro de datos está activado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.actions"
+msgstr "Acciones disponibles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1020,13 +1025,13 @@ msgstr "No se pudo preparar la salida para EmulatorJS."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.create"
-msgstr "Crear bundle {format}"
+msgid "ui.runtime.removeUnavailable"
+msgstr "No se pudo eliminar la copia sin conexión. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeUnavailable"
-msgstr "No se pudo eliminar la copia sin conexión. Inténtalo de nuevo."
+msgid "ui.bundleExport.create"
+msgstr "Crear bundle {format}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1210,11 +1215,6 @@ msgstr "Descargar un paquete de prueba"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.sourceInfo.trimCert"
-msgstr "certificado de descarga y juego conservado"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadOffline"
 msgstr "Descargar copia sin conexión"
 
@@ -1225,13 +1225,18 @@ msgstr "Descarga solicitada"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.reorderTitle"
-msgstr "Arrastra para reordenar · haz clic para editar la posición · teclas de flecha arriba/abajo"
+msgid "ui.sourceInfo.trimCert"
+msgstr "certificado de descarga y juego conservado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadOfflineHint"
 msgstr "Descarga los archivos restantes, incluso con el ahorro de datos activado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.reorderTitle"
+msgstr "Arrastra para reordenar · haz clic para editar la posición · teclas de flecha arriba/abajo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1715,13 +1720,13 @@ msgstr "conservar {header}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.n64Order.keep"
-msgstr "mantener actual"
+msgid "settings.offlineCopyEnabled"
+msgstr "Mantener una copia sin conexión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyEnabled"
-msgstr "Mantener una copia sin conexión"
+msgid "ui.patch.n64Order.keep"
+msgstr "mantener actual"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2135,11 +2140,6 @@ msgstr "Sin conexión activo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.ready"
-msgstr "Lista sin conexión"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.offlineDisabled"
 msgstr "Copia sin conexión desactivada"
 
@@ -2147,6 +2147,11 @@ msgstr "Copia sin conexión desactivada"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadUnavailable"
 msgstr "Las descargas sin conexión no están disponibles. Recarga la página e inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.ready"
+msgstr "Lista sin conexión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2420,12 +2425,12 @@ msgstr "Parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.step.patches"
+msgid "ui.nav.groupPatches"
 msgstr "Parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.nav.groupPatches"
+msgid "ui.step.patches"
 msgstr "Parches"
 
 #. js-lingui-explicit-id
@@ -2640,23 +2645,18 @@ msgstr "Eliminar disco"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.removeRom"
-msgstr "Eliminar entrada de ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.runtime.removeOffline"
 msgstr "Eliminar copia sin conexión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.trimDescription"
-msgstr "Elimina el relleno sin usar de ROMs e imágenes de disco compatibles para ahorrar espacio."
+msgid "ui.apply.removeRom"
+msgstr "Eliminar entrada de ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.replacePatch"
-msgstr "Reemplazar parche"
+msgid "ui.hero.trimDescription"
+msgstr "Elimina el relleno sin usar de ROMs e imágenes de disco compatibles para ahorrar espacio."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2667,6 +2667,11 @@ msgstr "Elimina los archivos descargados de la aplicación. Tus archivos, partid
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.removingOffline"
 msgstr "Eliminando copia sin conexión…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.replacePatch"
+msgstr "Reemplazar parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

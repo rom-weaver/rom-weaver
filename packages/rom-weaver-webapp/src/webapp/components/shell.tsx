@@ -262,6 +262,18 @@ const SideNav = ({
 );
 
 /**
+ * Appearance, stated where the navigation already lists everything else. It
+ * sits outside the rail's scroll box on purpose: the popovers are wider than
+ * the rail, and a scroll container would clip them into a sideways scrollbar.
+ */
+const NavAppearance = ({ label, children }: { children: ReactNode; label: string }) => (
+  <div className="nav-appearance">
+    <h2 className="nav-group-label">{label}</h2>
+    <div className="nav-appearance-tools">{children}</div>
+  </div>
+);
+
+/**
  * Phone primary nav: the three workflows that carry the app, plus Menu. Menu
  * toggles the sheet that holds everything else, so the dock never has to grow
  * a scroll or an unreadable fifth slot.
@@ -320,6 +332,7 @@ const PhoneDock = ({
  * zone, above the dock.
  */
 const MenuSheet = ({
+  appearance,
   findRef,
   localizer,
   onClose,
@@ -327,8 +340,12 @@ const MenuSheet = ({
   open,
   opened,
   sections,
+  toolOpen,
   triggerRef,
 }: {
+  /** The theme and accent pair, so the phone's index carries them too. Rendered
+      with the rows, not before them, so the prerendered shell ships neither. */
+  appearance: ReactNode;
   /** The sheet's own Find row, so Escape can return focus to it on the phone. */
   findRef: RefObject<HTMLButtonElement | null>;
   localizer: Localizer;
@@ -339,10 +356,14 @@ const MenuSheet = ({
       sidebar already carries, so the prerendered shell ships them once. */
   opened: boolean;
   sections: NavSectionData[];
+  /** True while a popover inside THIS sheet is open; Escape closes that first.
+      A popover in the chrome must not count: it is inert behind the sheet, so
+      letting it claim the press would spend it on nothing. */
+  toolOpen: boolean;
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || toolOpen) return undefined;
     const dismiss = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -351,7 +372,7 @@ const MenuSheet = ({
     };
     document.addEventListener("keydown", dismiss);
     return () => document.removeEventListener("keydown", dismiss);
-  }, [onClose, open, triggerRef]);
+  }, [onClose, open, toolOpen, triggerRef]);
 
   return (
     <nav aria-label={localizer.message("ui.tools.menu")} className="menu-sheet" hidden={!open} id="menu-sheet">
@@ -378,6 +399,7 @@ const MenuSheet = ({
           : null}
       </div>
       <div className="menu-sheet-foot">
+        {opened ? appearance : null}
         <button className="menu-find" onClick={onOpenFind} ref={findRef} type="button">
           <Search aria-hidden="true" />
           <span>{localizer.message("ui.find.placeholder")}</span>
@@ -387,6 +409,9 @@ const MenuSheet = ({
     </nav>
   );
 };
+
+/** The Menu sheet's copy of the appearance pair, as its popover keys spell it. */
+const MENU_TOOL_SCOPE = "menu";
 
 const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: ThemePreference }> = [
   { icon: <SunMedium aria-hidden="true" />, label: "ui.theme.light", value: "light" },
@@ -1077,14 +1102,17 @@ const Masthead = ({
   const settings = useRomWeaverSettings();
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
-  const [openTool, setOpenTool] = useState<"accent" | "theme" | null>(null);
-  /* The control that opened the popover, so Escape returns focus to it. The
-     tiles render twice and only one copy is on screen, so the DOM cannot say
-     which one the user actually used. */
+  /* Keyed by kind AND copy: the same viewport now shows the pair twice - the
+     chrome copy and the one inside the navigation - and a key of "theme" alone
+     would open both menus from one press. */
+  const [openTool, setOpenTool] = useState<string | null>(null);
+  /* The control that opened the popover, so Escape returns focus to it. Several
+     copies of the pair are in the DOM at once, so the DOM cannot say which one
+     the user actually used. */
   const openToolRef = useRef<HTMLButtonElement | null>(null);
-  const toggleTool = (kind: "accent" | "theme", button: HTMLButtonElement | null) => {
+  const toggleTool = (key: string, button: HTMLButtonElement | null) => {
     openToolRef.current = button;
-    setOpenTool((open) => (open === kind ? null : kind));
+    setOpenTool((open) => (open === key ? null : key));
   };
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
@@ -1182,10 +1210,10 @@ const Masthead = ({
   // before the target's own handler runs.
   useEffect(() => {
     if (!openTool) return undefined;
-    /* Scoped to the anchor, not to one cluster: the appearance tiles render
-       twice (top bar and phone header) and a press inside the copy the current
-       layout shows would otherwise count as "outside", closing the popover on
-       pointerdown so the click never reached the choice. */
+    /* Scoped to the anchor, not to one cluster: the appearance tiles render in
+       several places and a press inside the copy the current layout shows would
+       otherwise count as "outside", closing the popover on pointerdown so the
+       click never reached the choice. */
     const dismiss = (event: Event) => {
       const target = event.target;
       if (target instanceof Element && target.closest(".tool-anchor")) return;
@@ -1355,21 +1383,27 @@ const Masthead = ({
       versionTitle={versionTitle}
     />
   ) : null;
-  /* Theme and accent appear in two places by design - the top bar on desktop,
-     the header row on the phone - so each copy owns its own radio group name.
+  /* Theme and accent appear in the chrome (the top bar on desktop, the brand
+     row on the phone) and again inside the navigation (the sidebar foot and the
+     Menu sheet), so each copy owns its own popover key and radio group name.
      Everything about the app's identity below is rendered exactly once. */
   const appearanceTiles = (scope: string) => (
     <>
-      <ThemeTile localizer={localizer} onToggle={(button) => toggleTool("theme", button)} open={openTool === "theme"} />
+      <ThemeTile
+        localizer={localizer}
+        onToggle={(button) => toggleTool(`theme:${scope}`, button)}
+        open={openTool === `theme:${scope}`}
+      />
       <AccentTile
         localizer={localizer}
         name={`shell-accent-${scope}`}
         onChange={(accent) => onAccentChange?.(accent)}
-        onToggle={(button) => toggleTool("accent", button)}
-        open={openTool === "accent"}
+        onToggle={(button) => toggleTool(`accent:${scope}`, button)}
+        open={openTool === `accent:${scope}`}
       />
     </>
   );
+  const appearanceLabel = localizer.message("ui.tools.appearance");
   const projectTiles = (
     <ProjectTiles
       confirmExternalNavigation={confirmExternalNavigation}
@@ -1452,6 +1486,7 @@ const Masthead = ({
           <aside className="side-rail">
             <SideNav localizer={localizer} navLabel={navLabel} sections={sections} />
           </aside>
+          <NavAppearance label={appearanceLabel}>{appearanceTiles("rail")}</NavAppearance>
         </div>
         {/* Desktop top bar: the one box that reaches everything, and the controls
           that change this browser rather than the app. No destinations, so
@@ -1506,6 +1541,7 @@ const Masthead = ({
         triggerRef={menuTriggerRef}
       />
       <MenuSheet
+        appearance={<NavAppearance label={appearanceLabel}>{appearanceTiles(MENU_TOOL_SCOPE)}</NavAppearance>}
         localizer={localizer}
         onClose={closeMenu}
         findRef={menuFindRef}
@@ -1516,6 +1552,7 @@ const Masthead = ({
         open={menuOpen}
         opened={menuMounted}
         sections={sections}
+        toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />
       {/* A real button, so the backdrop is dismissable by keyboard too and
