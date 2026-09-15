@@ -74,6 +74,7 @@ import {
   EmulatorTestRoute,
   HomePageRoute,
   IdentifyRouteForm,
+  MorePageRoute,
   preloadWorkflowRoute,
   PpfUndoRouteForm,
   SaveEditorRouteForm,
@@ -165,6 +166,10 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
   if (view === "whats-new") {
     document.title = "rom-weaver - What's new";
+    return;
+  }
+  if (view === "more") {
+    document.title = "rom-weaver - More";
     return;
   }
   let route = null;
@@ -402,7 +407,9 @@ function WebappRoot({
   useEffect(() => {
     if (notFound) return;
     setActiveSelectionForm(
-      state.currentView === "docs" || state.currentView === "whats-new" ? undefined : state.currentView,
+      state.currentView === "docs" || state.currentView === "more" || state.currentView === "whats-new"
+        ? undefined
+        : state.currentView,
     );
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
@@ -414,6 +421,7 @@ function WebappRoot({
   // flow actually clears `settingsDialogOpen`.
   const settingsCloseArmedRef = useRef(false);
   const pendingViewRef = useRef<WebappView | null>(null);
+  const pendingViewAfterSettingsCloseRef = useRef<WebappView | null>(null);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
@@ -455,7 +463,7 @@ function WebappRoot({
     // the visitor clicks through to preloads the same runtime, memoized, so the
     // engine is still warmed exactly once.
     let cancelPreload: () => void = () => undefined;
-    if (state.currentView === "docs" || state.currentView === "home") {
+    if (state.currentView === "docs" || state.currentView === "home" || state.currentView === "more") {
       scheduleDialogPreload();
     } else {
       cancelPreload = scheduleBrowserRuntimePreload(() => {
@@ -480,8 +488,9 @@ function WebappRoot({
       settingsCloseArmedRef.current = false;
       setSettingsFocusHint(fieldId ? { fieldId, token: Date.now() } : null);
       setLogTab("settings");
-      setLogOpen(true);
+      setLogOpen(false);
       actions.onOpenSettings();
+      selectViewWithTransition(() => actions.onSelectView("more"));
     },
     [actions, preloadSettingsPanel],
   );
@@ -514,7 +523,11 @@ function WebappRoot({
     settingsCloseArmedRef.current = false;
     logger.trace("unified dialog closing after the settings draft settled");
     setLogOpen(false);
-  }, [state.settingsDialogOpen]);
+    const pendingView = pendingViewAfterSettingsCloseRef.current;
+    pendingViewAfterSettingsCloseRef.current = null;
+    if (pendingView && pendingView !== state.currentView)
+      selectViewWithTransition(() => actions.onSelectView(pendingView));
+  }, [actions, state.currentView, state.settingsDialogOpen]);
   /* Every workflow the user has visited stays mounted, so a single page drop
      would otherwise reach all of them at once - two forms staging the same file
      and overwriting each other's activity-store entry. The drop goes ONLY to the
@@ -531,13 +544,21 @@ function WebappRoot({
   const openStatusTab = useCallback(() => {
     preloadLogDialog();
     setLogTab("status");
-    setLogOpen(true);
-  }, [preloadLogDialog]);
+    setLogOpen(false);
+    selectViewWithTransition(() => actions.onSelectView("more"));
+  }, [actions, preloadLogDialog]);
   const openStorageTab = useCallback(() => {
     preloadLogDialog();
     setLogTab("storage");
-    setLogOpen(true);
-  }, [preloadLogDialog]);
+    setLogOpen(false);
+    selectViewWithTransition(() => actions.onSelectView("more"));
+  }, [actions, preloadLogDialog]);
+  const openLogsTab = useCallback(() => {
+    preloadLogDialog();
+    setLogTab("logs");
+    setLogOpen(false);
+    selectViewWithTransition(() => actions.onSelectView("more"));
+  }, [actions, preloadLogDialog]);
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(
     () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
@@ -556,11 +577,30 @@ function WebappRoot({
         if (href) window.location.assign(`/${href}`);
         return;
       }
+      if (id === "more") {
+        pendingViewRef.current = null;
+        selectViewWithTransition(() => actions.onSelectView("more"));
+        return;
+      }
       if (id === "bundle") {
+        if (state.currentView === "more" && state.settingsDialogOpen) {
+          if (window.location.hash.toLowerCase() !== "#bundle") window.location.hash = "bundle";
+          pendingViewAfterSettingsCloseRef.current = "patcher";
+          settingsCloseArmedRef.current = true;
+          actions.onCloseSettings();
+          return;
+        }
         if (window.location.hash.toLowerCase() === "#bundle") window.dispatchEvent(new Event("hashchange"));
         else window.location.hash = "bundle";
         pendingViewRef.current = null;
         selectViewWithTransition(() => actions.onSelectView("patcher"));
+        return;
+      }
+      const nextView = id as WebappView;
+      if (state.currentView === "more" && state.settingsDialogOpen && nextView !== "more") {
+        pendingViewAfterSettingsCloseRef.current = nextView;
+        settingsCloseArmedRef.current = true;
+        actions.onCloseSettings();
         return;
       }
       const view = id as WebappRootProps["state"]["currentView"];
@@ -580,7 +620,7 @@ function WebappRoot({
       pendingViewRef.current = null;
       selectViewWithTransition(() => actions.onSelectView(view));
     },
-    [actions, notFound],
+    [actions, notFound, state.currentView, state.settingsDialogOpen],
   );
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
@@ -626,7 +666,7 @@ function WebappRoot({
   // fires continuously, so a short debounce clears the flag once it stops (drag
   // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
   useEffect(() => {
-    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") {
+    if (notFound || state.currentView === "docs" || state.currentView === "more" || state.currentView === "whats-new") {
       setPageDragging(false);
       return undefined;
     }
@@ -653,7 +693,8 @@ function WebappRoot({
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
-    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") return undefined;
+    if (notFound || state.currentView === "docs" || state.currentView === "more" || state.currentView === "whats-new")
+      return undefined;
     const handlePageDragOver = (event: DragEvent) => {
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
@@ -705,7 +746,7 @@ function WebappRoot({
         id={`panel-${view}`}
         role="tabpanel"
       >
-        {view === "docs" || view === "whats-new" ? null : (
+        {view === "docs" || view === "more" || view === "whats-new" ? null : (
           <div className="workflow-panel-head">
             <PanelSettingsButton
               onOpenSettings={() => openSettingsTab()}
@@ -748,9 +789,9 @@ function WebappRoot({
             dirty={Boolean(DIRTY_HASH)}
             onOpenWhatsNew={openWhatsNew}
             onOpenLog={() => {
-              setLogTab("logs");
-              setLogOpen(true);
+              openLogsTab();
             }}
+            onOpenMore={() => handleSelectTab("more")}
             onOpenStatus={openStatusTab}
             onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
@@ -856,6 +897,35 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel(
+                  "more",
+                  <MorePageRoute
+                    active={state.currentView === "more"}
+                    initialTab={logTab}
+                    level={state.settings.logLevel}
+                    onLevelChange={actions.onLogLevelChange}
+                    onDiscardSettings={actions.onDiscardSettings}
+                    onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
+                    onRestoreDefaults={actions.onRestoreDefaults}
+                    onSaveSettings={saveSettings}
+                    onTabChange={handleDialogTabChange}
+                    offlineCopyEnabled={state.settings.offlineCopyEnabled}
+                    offlineProgress={offlineProgress}
+                    serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
+                    settingsFocusHint={settingsFocusHint}
+                    settingsPanel={
+                      <Suspense fallback={null}>
+                        <SettingsPanel
+                          draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+                          onDraftChange={actions.onDraftChange}
+                          uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+                          validation={state.validation}
+                        />
+                      </Suspense>
+                    }
+                    updateReady={pageUpdate.ready}
+                  />,
+                )}
+                {workflowPanel(
                   "identify",
                   <IdentifyRouteForm onSelectTab={handleSelectTab} pageDrop={pageDropFor("identify")} />,
                 )}
@@ -884,7 +954,11 @@ function WebappRoot({
                     pageDrop={pageDropFor("save-editor")}
                   />,
                 )}
-                {state.currentView === "docs" || state.currentView === "whats-new" ? null : <DropVeil />}
+                {state.currentView === "docs" ||
+                state.currentView === "more" ||
+                state.currentView === "whats-new" ? null : (
+                  <DropVeil />
+                )}
               </>
             )}
           </main>
@@ -933,7 +1007,11 @@ function WebappRoot({
           body={confirmationDialog.message}
           cancelLabel={confirmationDialog.cancelLabel}
           confirmLabel={confirmationDialog.confirmLabel}
-          onCancel={actions.onCancelConfirmation}
+          onCancel={() => {
+            pendingViewAfterSettingsCloseRef.current = null;
+            settingsCloseArmedRef.current = false;
+            actions.onCancelConfirmation();
+          }}
           onConfirm={actions.onConfirmConfirmation}
           open={confirmationDialog.open}
           title={confirmationDialog.title}

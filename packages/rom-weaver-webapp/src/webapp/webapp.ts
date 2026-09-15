@@ -207,6 +207,27 @@ const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "home";
 const webappController = createWebappRootController({
   initialHistoryMode: isNotFoundPage ? "none" : "replace",
   onApplySettings: applySettingsToRuntime,
+  onConfirmViewLeave: ({ currentView, nextView }) => {
+    if (currentView !== "more" || nextView === "more") return true;
+    const state = webappController.getState();
+    if (!state.settingsDialogOpen) return true;
+    if (!shouldConfirmDiscardSettings(state)) {
+      webappController.closeSettings();
+      return true;
+    }
+    void requestConfirmation({
+      cancelLabel: "Keep editing",
+      confirmLabel: "Discard changes",
+      level: "warning",
+      message: getDiscardSettingsConfirmationMessage(),
+      title: "Discard settings changes?",
+    }).then((accepted) => {
+      if (!accepted) return;
+      webappController.discardDraftSettings();
+      webappController.selectView(nextView);
+    });
+    return false;
+  },
   onCreatorViewRequested: () => true,
   onFocusField: (fieldId) => {
     const field = document.getElementById(fieldId);
@@ -426,6 +447,7 @@ const renderWebappRoot = (): undefined => {
           if (accepted) webappController.discardDraftSettings();
         })();
       },
+      onDiscardSettings: () => webappController.discardDraftSettings(),
       onAccentChange: (accent) => webappController.setAccent(accent),
       onConfirmConfirmation: () => closeConfirmationDialog(true),
       onConfirmExternalNavigation: async () => {

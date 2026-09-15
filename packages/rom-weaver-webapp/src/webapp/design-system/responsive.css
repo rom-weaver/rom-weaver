@@ -431,3 +431,32 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+@media (max-width: 720px) {
+  .rw-app .more-page {
+    width: 100%;
+    max-width: 100%;
+    height: calc(100dvh - var(--dock-h) - clamp(40px, calc(32px + 2vw), 48px));
+    min-height: 0;
+  }
+  .rw-app .more-page .dlg-frame {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: none;
+  }
+  .rw-app .more-page .more-page-head {
+    display: block;
+    order: 0;
+    padding-block: var(--sp-l) var(--sp-m);
+  }
+  .rw-app .more-page .dlg-subhead {
+    order: 1;
+  }
+  .rw-app .more-page .dlg-body {
+    order: 2;
+  }
+  .rw-app .more-page .more-page-tabs {
+    order: 3;
+  }
+}

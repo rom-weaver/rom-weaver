@@ -775,6 +775,35 @@ const MoreMenu = ({
   );
 };
 
+const MoreRouteLink = ({
+  className,
+  current,
+  label,
+  onSelect,
+}: {
+  className: string;
+  current: boolean;
+  label: string;
+  onSelect: () => void;
+}) => (
+  <span className={className}>
+    <a
+      aria-current={current ? "page" : undefined}
+      aria-label={label}
+      className={join(className === "desktop-more" ? "mode-more" : "dock-action", current && "is-current")}
+      href="more"
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        onSelect();
+      }}
+    >
+      <MoreHorizontal aria-hidden="true" />
+      <span className="tool-text">{label}</span>
+    </a>
+  </span>
+);
+
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
  * resolver in `index.html` rewrites before React loads - that is what stops the
@@ -1101,6 +1130,7 @@ const Masthead = ({
   onSelectTab,
   onOpenWhatsNew,
   onOpenLog,
+  onOpenMore,
   onOpenStatus,
   onOpenStorage,
   onPreloadLog,
@@ -1131,6 +1161,7 @@ const Masthead = ({
   onSelectTab: (id: string) => void;
   onOpenWhatsNew: () => void;
   onOpenLog: () => void;
+  onOpenMore?: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
   onPreloadLog?: () => void;
@@ -1213,7 +1244,7 @@ const Masthead = ({
   const toolsRef = useRef<HTMLDivElement | null>(null);
   // Docs and the landing page bring their own h1, so the brand steps down to a
   // span there rather than giving the document two.
-  const BrandHeading = currentTab === "docs" || currentTab === "home" ? "span" : "h1";
+  const BrandHeading = currentTab === "docs" || currentTab === "home" || currentTab === "more" ? "span" : "h1";
   const moreLabel = localizer.message("ui.tools.more");
   const moreTabs = tabs.filter(isMoreMenuTab);
   // What's new has no WorkflowTab entry; it lives in More's Project group.
@@ -1349,33 +1380,42 @@ const Masthead = ({
           tabs={tabs}
           trailing={
             <>
-              <MoreMenu
-                autoFocusFirst={utilityViaKeyboard}
-                buttonClassName="mode-more"
-                current={currentInMore}
-                className="desktop-more"
-                confirmExternalNavigation={confirmExternalNavigation}
-                donateHref={donateHref}
-                githubHref={githubHref}
-                localizer={localizer}
-                menuId="more-menu"
-                moreLabel={moreLabel}
-                onClose={closeUtility}
-                onOpenLog={onOpenLog}
-                onOpenStatus={onOpenStatus}
-                onOpenStorage={onOpenStorage ?? onOpenLog}
-                moreTabs={moreTabs}
-                onOpenWorkflowTab={onSelectTab}
-                onOpenSettings={onOpenSettings}
-                onPreloadLog={onPreloadLog}
-                onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
-                open={utilityOpen && utilityPlacement === "desktop"}
-                renderMenu={utilityOpen && utilityPlacement === "desktop"}
-                runtimeState={runtimeState}
-                runtimePercent={runtimePercent}
-                toolsEnabled={betaToolsEnabled}
-                triggerRef={desktopMoreRef}
-              />
+              {onOpenMore ? (
+                <MoreRouteLink
+                  className="desktop-more"
+                  current={currentTab === "more"}
+                  label={moreLabel}
+                  onSelect={onOpenMore}
+                />
+              ) : (
+                <MoreMenu
+                  autoFocusFirst={utilityViaKeyboard}
+                  buttonClassName="mode-more"
+                  current={currentInMore}
+                  className="desktop-more"
+                  confirmExternalNavigation={confirmExternalNavigation}
+                  donateHref={donateHref}
+                  githubHref={githubHref}
+                  localizer={localizer}
+                  menuId="more-menu"
+                  moreLabel={moreLabel}
+                  onClose={closeUtility}
+                  onOpenLog={onOpenLog}
+                  onOpenStatus={onOpenStatus}
+                  onOpenStorage={onOpenStorage ?? onOpenLog}
+                  moreTabs={moreTabs}
+                  onOpenWorkflowTab={onSelectTab}
+                  onOpenSettings={onOpenSettings}
+                  onPreloadLog={onPreloadLog}
+                  onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
+                  open={utilityOpen && utilityPlacement === "desktop"}
+                  renderMenu={utilityOpen && utilityPlacement === "desktop"}
+                  runtimeState={runtimeState}
+                  runtimePercent={runtimePercent}
+                  toolsEnabled={betaToolsEnabled}
+                  triggerRef={desktopMoreRef}
+                />
+              )}
             </>
           }
         />
@@ -1427,7 +1467,7 @@ const Masthead = ({
             onToggle={() => setAccentOpen((open) => !open)}
             open={accentOpen}
           />
-          {utilityOpen && utilityPlacement === "mobile" ? (
+          {utilityOpen && utilityPlacement === "mobile" && !onOpenMore ? (
             <UtilityMenu
               autoFocusFirst={utilityViaKeyboard}
               confirmExternalNavigation={confirmExternalNavigation}
@@ -1483,31 +1523,40 @@ const Masthead = ({
               <Search aria-hidden="true" />
               <span>{findLabel}</span>
             </button>
-            <MoreMenu
-              buttonClassName="dock-action"
-              current={currentInMore}
-              className="mobile-more"
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
-              localizer={localizer}
-              menuId="more-menu"
-              moreLabel={moreLabel}
-              onClose={closeUtility}
-              onOpenLog={onOpenLog}
-              onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              moreTabs={moreTabs}
-              onOpenWorkflowTab={onSelectTab}
-              onPreloadLog={onPreloadLog}
-              onToggle={(viaKeyboard) => toggleUtility("mobile", viaKeyboard)}
-              open={utilityOpen && utilityPlacement === "mobile"}
-              renderMenu={false}
-              runtimeState={runtimeState}
-              runtimePercent={runtimePercent}
-              toolsEnabled={betaToolsEnabled}
-              triggerRef={mobileMoreRef}
-            />
+            {onOpenMore ? (
+              <MoreRouteLink
+                className="mobile-more"
+                current={currentTab === "more"}
+                label={moreLabel}
+                onSelect={onOpenMore}
+              />
+            ) : (
+              <MoreMenu
+                buttonClassName="dock-action"
+                current={currentInMore}
+                className="mobile-more"
+                confirmExternalNavigation={confirmExternalNavigation}
+                donateHref={donateHref}
+                githubHref={githubHref}
+                localizer={localizer}
+                menuId="more-menu"
+                moreLabel={moreLabel}
+                onClose={closeUtility}
+                onOpenLog={onOpenLog}
+                onOpenStatus={onOpenStatus}
+                onOpenStorage={onOpenStorage ?? onOpenLog}
+                moreTabs={moreTabs}
+                onOpenWorkflowTab={onSelectTab}
+                onPreloadLog={onPreloadLog}
+                onToggle={(viaKeyboard) => toggleUtility("mobile", viaKeyboard)}
+                open={utilityOpen && utilityPlacement === "mobile"}
+                renderMenu={false}
+                runtimeState={runtimeState}
+                runtimePercent={runtimePercent}
+                toolsEnabled={betaToolsEnabled}
+                triggerRef={mobileMoreRef}
+              />
+            )}
           </>
         }
         navLabel={navLabel}

@@ -6,6 +6,7 @@ import type { SaveEditorProps } from "./components/save-editor.tsx";
 import type { IdentifyFormProps } from "./components/identify-form.tsx";
 import type { HomePageProps } from "./components/home-page.tsx";
 import type { WhatsNewPageProps } from "./whats-new-page.tsx";
+import type { MorePageProps } from "./components/log-dialog.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
 
 /**
@@ -23,6 +24,7 @@ type WorkflowRouteProps = {
     slug: string;
   };
   home: HomePageProps;
+  more: MorePageProps;
   identify: IdentifyFormProps;
   patcher: ApplyPatchFormProps;
   test: {
@@ -97,6 +99,9 @@ const PatcherRoute = createWorkflowRoute("patcher", () =>
 const HomeRoute = createWorkflowRoute("home", () =>
   import("./components/home-page.tsx").then((module) => ({ default: module.HomePage })),
 );
+const MoreRoute = createWorkflowRoute("more", () =>
+  import("./components/log-dialog.tsx").then((module) => ({ default: module.MorePage })),
+);
 const IdentifyRoute = createWorkflowRoute("identify", () =>
   import("./components/identify-form.tsx").then((module) => ({ default: module.IdentifyForm })),
 );
@@ -120,6 +125,7 @@ const WORKFLOW_ROUTES = {
   creator: CreatorRoute,
   docs: DocsRoute,
   home: HomeRoute,
+  more: MoreRoute,
   identify: IdentifyRoute,
   patcher: PatcherRoute,
   test: TestRoute,
@@ -134,6 +140,7 @@ const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
 const EmulatorTestRoute = TestRoute.Component;
 const HomePageRoute = HomeRoute.Component;
+const MorePageRoute = MoreRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
 const PpfUndoRouteForm = PpfUndoRoute.Component;
 const SaveEditorRouteForm = SaveEditorRoute.Component;
@@ -157,6 +164,7 @@ export {
   DocsPageRoute,
   EmulatorTestRoute,
   HomePageRoute,
+  MorePageRoute,
   IdentifyRouteForm,
   preloadDocsRouteHtml,
   preloadWorkflowRoute,
