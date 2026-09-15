@@ -144,7 +144,7 @@ describe("Masthead", () => {
     expect(container.querySelectorAll(".masthead-threads").length).toBe(1);
     expect(container.querySelectorAll(".sub-status").length).toBe(1);
     expect(container.querySelector(".brand-copy .build-facts")).toBeTruthy();
-    expect(container.querySelector(".dock-state-dot")).toBeTruthy();
+    expect(container.querySelector(".dock-state-dot")).toBeNull();
 
     const apply = nav.querySelector('[aria-current="page"]') as HTMLAnchorElement;
     expect(apply.textContent).toBe("Apply");
@@ -363,6 +363,9 @@ describe("Masthead", () => {
         "Accent",
       ]);
     }
+    expect(container.querySelector(".menu-sheet .nav-status .nav-row-detail")?.textContent).toBe(
+      container.querySelector(".sub-status-text")?.textContent,
+    );
   });
 
   it("commits an appearance choice from the phone header copy too", () => {
@@ -436,8 +439,7 @@ describe("Masthead", () => {
     expect(status.getAttribute("aria-label")).toBe("Offline active");
     // The state is a word, not a lone glyph.
     expect(status.querySelector(".sub-status-text")?.textContent).toBe("Offline active");
-    expect(container.querySelector(".dock-state-dot")?.getAttribute("data-sw")).toBe("active");
-    expect(container.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu, Offline active");
+    expect(container.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
     fireEvent.click(status);
     expect(onOpenStatus).toHaveBeenCalledTimes(1);
 

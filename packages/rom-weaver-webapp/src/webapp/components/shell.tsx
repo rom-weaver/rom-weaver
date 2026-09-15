@@ -99,6 +99,7 @@ type NavEntry = {
   icon: ReactNode;
   id: string;
   label: string;
+  detail?: string;
   /** Runs instead of following the href, for a row that routes or opens a dialog. */
   onSelect?: () => void;
   /** Runs before an external row opens, for the running-job guard. */
@@ -191,6 +192,7 @@ const NavRow = ({
     <>
       {entry.icon}
       <span className="nav-row-label">{entry.label}</span>
+      {entry.detail ? <span className="nav-row-detail">{entry.detail}</span> : null}
       {entry.beta ? <span className="nav-beta">{localizer.message("ui.tools.beta")}</span> : null}
     </>
   );
@@ -276,8 +278,6 @@ const PhoneDock = ({
   navLabel,
   onSelect,
   onToggleMenu,
-  runtimeState,
-  runtimeTitle,
   tabs,
   triggerRef,
 }: {
@@ -287,8 +287,6 @@ const PhoneDock = ({
   navLabel: string;
   onSelect: (id: string) => void;
   onToggleMenu: () => void;
-  runtimeState: RuntimeState;
-  runtimeTitle: string;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => (
@@ -309,15 +307,13 @@ const PhoneDock = ({
     <button
       aria-controls="menu-sheet"
       aria-expanded={menuOpen}
-      aria-label={`${menuLabel}, ${runtimeTitle}`}
+      aria-label={menuLabel}
       className="dock-tab dock-menu"
       onClick={onToggleMenu}
       ref={triggerRef}
-      title={runtimeTitle}
       type="button"
     >
       <Menu aria-hidden="true" />
-      <i aria-hidden="true" className="dock-state-dot" data-sw={runtimeState} />
       <span>{menuLabel}</span>
     </button>
   </nav>
@@ -337,6 +333,7 @@ const MenuSheet = ({
   onOpenFind,
   open,
   opened,
+  runtimeLabel,
   sections,
   toolOpen,
   triggerRef,
@@ -352,6 +349,7 @@ const MenuSheet = ({
   /** True once Menu has been opened. The sheet's rows are the same fifteen the
       sidebar already carries, so the prerendered shell ships them once. */
   opened: boolean;
+  runtimeLabel: string;
   sections: NavSectionData[];
   /** True while a popover inside THIS sheet is open; Escape closes that first.
       A popover in the chrome must not count: it is inert behind the sheet, so
@@ -384,7 +382,11 @@ const MenuSheet = ({
                   {section.entries.map((entry) => (
                     <NavRow
                       className="nav-row"
-                      entry={entry}
+                      entry={
+                        entry.id === "status"
+                          ? { ...entry, className: join(entry.className, "nav-status"), detail: runtimeLabel }
+                          : entry
+                      }
                       key={entry.id}
                       localizer={localizer}
                       onNavigate={onClose}
@@ -1532,12 +1534,10 @@ const Masthead = ({
           setMenuMounted(true);
           setMenuOpen((open) => !open);
         }}
-        runtimeState={runtimeState}
-        runtimeTitle={runtimeTitle}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />
-      {/* The parser-time resolver runs here, after all three identity slots exist. */}
+      {/* The parser-time resolver runs here, after the identity slots exist. */}
       <span className="shell-identity" hidden />
       <MenuSheet
         appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
@@ -1550,6 +1550,7 @@ const Masthead = ({
         }}
         open={menuOpen}
         opened={menuMounted}
+        runtimeLabel={runtimeLabel}
         sections={sections}
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}

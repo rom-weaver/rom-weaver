@@ -95,13 +95,8 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   // and lucide class.
   const threads = host.querySelector(".masthead-threads");
   const runtime = [...host.querySelectorAll(".sub-status")];
-  const dockDot = host.querySelector(".dock-state-dot");
-  const dockMenu = host.querySelector(".dock-menu");
   threads.querySelector(".masthead-threads-count").textContent = "8";
   threads.setAttribute("aria-label", "8 threads");
-  dockDot.dataset.sw = "disabled";
-  dockMenu.setAttribute("aria-label", "Menu, Offline support off");
-  dockMenu.setAttribute("title", "Offline support off");
   for (const slot of runtime) {
     slot.dataset.sw = "disabled";
     slot.setAttribute("aria-label", "Offline support off");
@@ -121,7 +116,6 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
 
   expect(host.querySelector(".masthead-threads")).toBe(threads);
   expect([...host.querySelectorAll(".sub-status")]).toEqual(runtime);
-  expect(host.querySelector(".dock-state-dot")).toBe(dockDot);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });
@@ -186,13 +180,6 @@ const applyResolver = (host, resolvedState) => {
     for (const { name, value } of from[index].attributes) slot.setAttribute(name, value);
     slot.innerHTML = from[index].innerHTML;
   }
-  const fromDot = target.querySelector(".dock-state-dot");
-  const intoDot = host.querySelector(".dock-state-dot");
-  intoDot.dataset.sw = fromDot.dataset.sw;
-  const fromMenu = target.querySelector(".dock-menu");
-  const intoMenu = host.querySelector(".dock-menu");
-  intoMenu.setAttribute("aria-label", fromMenu.getAttribute("aria-label"));
-  intoMenu.setAttribute("title", fromMenu.getAttribute("title"));
 };
 
 test.each([

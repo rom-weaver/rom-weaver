@@ -309,8 +309,8 @@ test("the phone head keeps the version and tools on one line", async () => {
       expect(getComputedStyle(document.querySelector(".masthead-threads")).display).not.toBe("none");
     } else {
       expect(getComputedStyle(document.querySelector(".masthead-threads")).display).toBe("none");
-      expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")?.toLowerCase()).toContain("offline");
-      expect(document.querySelector(".dock-state-dot")?.getAttribute("data-sw")).toBeTruthy();
+      expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
+      expect(document.querySelector(".dock-state-dot")).toBeNull();
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       const brand = document.querySelector(".brand").getBoundingClientRect();
       const tools = document.querySelector(".shell-head-tools").getBoundingClientRect();
@@ -562,6 +562,9 @@ test("the phone header carries appearance and the project links, and Menu carrie
   for (const name of ["Status", "Storage", "Logs", "Settings", "Theme", "Accent", "Docs", "GitHub", "Support"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
+  expect(navRow("Status", ".menu-sheet").querySelector(".nav-row-detail").textContent).toBe(
+    document.querySelector(".sub-status-text").textContent,
+  );
   expect(navRow("GitHub", ".menu-sheet").getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/");
   expect(navRow("Support", ".menu-sheet").getAttribute("href")).toBe("https://ko-fi.com/brandonocasey");
   // Support is the one row that is not neutral; every other row shares one ink.
