@@ -753,16 +753,27 @@ const resolveRuntimeState = (
   return "installing";
 };
 
+/**
+ * The install wording on its own. Callers that print the percent in their own
+ * element MUST use this rather than {@link installingRuntimeLabel}, or the page
+ * states the same percentage twice.
+ */
+const installingRuntimeWording = (
+  localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
+  offlineProgress: OfflineWarmupDisplayProgress | null,
+) => localizer.message(offlineProgress?.phase === "precache" ? "ui.runtime.installingApp" : "ui.runtime.installing");
+
+/** The install wording with the percent folded in, for a single-string caller. */
 const installingRuntimeLabel = (
   localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
   offlineProgress: OfflineWarmupDisplayProgress | null,
 ) => {
   const percent = offlineWarmupPercent(offlineProgress);
-  const precache = offlineProgress?.phase === "precache";
-  if (percent === null) return localizer.message(precache ? "ui.runtime.installingApp" : "ui.runtime.installing");
-  return localizer.message(precache ? "ui.runtime.installingAppProgress" : "ui.runtime.installingProgress", {
-    percent,
-  });
+  if (percent === null) return installingRuntimeWording(localizer, offlineProgress);
+  return localizer.message(
+    offlineProgress?.phase === "precache" ? "ui.runtime.installingAppProgress" : "ui.runtime.installingProgress",
+    { percent },
+  );
 };
 
 const RUNTIME_ICONS = {
@@ -1195,13 +1206,20 @@ const Masthead = ({
 
   const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
   const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, offlineProgress, settings.offlineCopyEnabled);
+  /* The chip prints the percent in its own tabular-numeral span, so the visible
+     wording stays percent-free; only the accessible name, which replaces the
+     whole chip rather than adding to it, carries the number. */
   const runtimeLabel =
     runtimeState === "installing"
-      ? installingRuntimeLabel(localizer, offlineProgress)
+      ? installingRuntimeWording(localizer, offlineProgress)
       : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const runtimeSpokenLabel =
+    runtimeState === "installing" ? installingRuntimeLabel(localizer, offlineProgress) : runtimeLabel;
   const runtimePercent = runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null;
   const runtimeDetail = runtimeState === "installing" ? describeWarmupUnit(localizer, offlineProgress) : null;
-  const runtimeTitle = runtimeDetail ? `${runtimeLabel}: ${runtimeDetail}` : runtimeLabel;
+  /* A middle dot, not a second colon: the installing wording already ends in
+     ": <percent>%", and "copy: 25%: EmulatorJS file x" reads as one broken list. */
+  const runtimeTitle = runtimeDetail ? `${runtimeSpokenLabel} · ${runtimeDetail}` : runtimeSpokenLabel;
 
   const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
   const commitDistance =

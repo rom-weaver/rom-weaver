@@ -388,6 +388,11 @@ describe("Masthead", () => {
       ),
     );
     expect(container.querySelector(".sub-status-percent")?.textContent).toBe("25%");
+    // The chip owns the percent; the wording beside it MUST NOT repeat it.
+    expect(container.querySelector(".sub-status-text")?.textContent).toBe("Installing offline copy");
+    // The accessible name replaces the chip rather than adding to it, so it is
+    // the one place that still has to carry the number.
+    expect(container.querySelector(".sub-status")?.getAttribute("aria-label")).toBe("Installing offline copy: 25%");
     // Install progress is an overlay on the block's edge, so it moves nothing.
     expect(container.querySelector(".install-rule")?.parentElement?.classList.contains("shell-head")).toBe(true);
 
