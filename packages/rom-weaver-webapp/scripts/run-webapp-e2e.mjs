@@ -326,7 +326,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
-        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 Threads"))
+        // The chip's label is localized, so this audit owns the count and the
+        // word, never their capitalization.
+        if (result.threadTexts.length !== 1 || !/3\s*threads/i.test(result.threadTexts[0] ?? ""))
           problems.push(`thread text changed: ${JSON.stringify(result.threadTexts)}`);
         if (result.runtimeTexts.length !== 1)
           problems.push(`runtime text changed: ${JSON.stringify(result.runtimeTexts)}`);
