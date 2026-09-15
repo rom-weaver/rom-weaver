@@ -549,13 +549,15 @@
 }
 .rw-app .topbar-find {
   display: flex;
-  flex: 0 1 420px;
+  /* The one box that reaches everything spans the bar: it grows into whatever
+     the tool cluster leaves, and `min-inline-size: 0` lets it shrink past the
+     label's intrinsic width so a narrow bar ellipsizes instead of overflowing. */
+  flex: 1 1 auto;
   gap: var(--sp-s);
   align-items: center;
   min-inline-size: 0;
   block-size: 32px;
   padding-inline: 10px;
-  margin-inline-end: auto;
   font: inherit;
   font-size: 0.78rem;
   color: var(--ink-3);
