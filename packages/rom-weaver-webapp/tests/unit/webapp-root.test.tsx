@@ -200,50 +200,35 @@ describe("tab selection", () => {
     expect(mocks.requestEmulatorStartFromUserAction).toHaveBeenCalledTimes(1);
   });
 
-  it("waits for the lazy Docs route before switching to it", async () => {
+  it("opens the More route from the desktop rail", async () => {
     const { called, container } = await renderRoot();
 
-    // Docs is a Project entry in the nav, never one of the dock's three slots.
-    expect(container.querySelector('.dock-tab[data-mode="docs"]')).toBeNull();
-    fireEvent.click(navRow(container, "Docs"));
-    expect(called("onSelectView")).not.toHaveBeenCalled();
+    fireEvent.click(navRow(container, "More"));
 
-    await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("docs"));
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 });
 
-describe("the unified dialog", () => {
-  const openFromMore = (container: HTMLElement, name: string) => {
-    fireEvent.click(navRow(container, name));
-  };
+describe("the unified More page", () => {
+  const openTab = (container: HTMLElement, name: string) =>
+    fireEvent.click(container.querySelector(`[data-logtab="${name.toLowerCase()}"]`) as HTMLButtonElement);
 
-  it("opens on Status from the More menu", async () => {
-    const { container } = await renderRoot();
+  it("opens on Status", async () => {
+    const { container } = await renderRoot({ currentView: "more" });
 
-    openFromMore(container, "Status");
-
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).not.toBeNull());
-    expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
-  });
-
-  it("opens on Status while an update is waiting", async () => {
-    const { container } = await renderRoot({ updateReady: true });
-
-    openFromMore(container, "Status");
-
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).not.toBeNull());
+    await waitFor(() => expect(container.querySelector(".more-page")).not.toBeNull());
     expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
   it("opens on Storage and on Logs", async () => {
-    const { container } = await renderRoot();
+    const { container } = await renderRoot({ currentView: "more" });
 
-    openFromMore(container, "Storage");
+    openTab(container, "Storage");
     await waitFor(() =>
       expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
     );
 
-    openFromMore(container, "Logs");
+    openTab(container, "Logs");
     await waitFor(() =>
       expect(container.querySelector('[data-logtab="logs"]')?.getAttribute("aria-selected")).toBe("true"),
     );
@@ -255,9 +240,7 @@ describe("the unified dialog", () => {
     fireEvent.click(container.querySelector(".workflow-panel-head button") as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
-    await waitFor(() =>
-      expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
-    );
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 
   it.each(["patcher", "creator", "trim"] as const)("shows the thread setting beside Settings on %s", async (view) => {
@@ -336,7 +319,7 @@ describe("the What's new route", () => {
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("whats-new"));
   });
 
-  it("reaches the route from the nav's Project group", async () => {
+  it("reaches What's new from the nav's Project group", async () => {
     const { called, container } = await renderRoot();
 
     fireEvent.click(navRow(container, "What’s new"));
@@ -455,16 +438,16 @@ describe("offline warm-up progress", () => {
 
 describe("the settings draft flow", () => {
   const openSettings = (container: HTMLElement) => {
-    fireEvent.click(container.querySelector(".workflow-panel-head button") as HTMLButtonElement);
     return waitFor(() => {
-      const dialog = container.querySelector("dialog.log-dlg");
-      if (!dialog) throw new Error("The settings dialog never opened");
-      return dialog as HTMLDialogElement;
+      const settings = container.querySelector('[data-logtab="settings"]');
+      if (!settings) throw new Error("The More page has no Settings tab");
+      fireEvent.click(settings);
+      return settings as HTMLButtonElement;
     });
   };
 
   it("re-stages the draft when the dialog's own Settings tab is chosen", async () => {
-    const { called, container } = await renderRoot({ settingsDialogOpen: true });
+    const { called, container } = await renderRoot({ currentView: "more" });
     await openSettings(container);
     const before = called("onOpenSettings").mock.calls.length;
 
@@ -474,30 +457,20 @@ describe("the settings draft flow", () => {
     expect(called("onOpenSettings").mock.calls.length).toBe(before + 1);
   });
 
-  it("runs the discard flow instead of closing the dialog outright", async () => {
-    const { called, container } = await renderRoot({ settingsDialogOpen: true });
-    const dialog = await openSettings(container);
+  it("offers a discard action on the More page", async () => {
+    const { called, container } = await renderRoot({ currentView: "more" });
+    await openSettings(container);
 
-    fireEvent.keyDown(dialog, { key: "Escape" });
+    const discard = Array.from(container.querySelectorAll<HTMLButtonElement>(".settings-actions button")).find(
+      (button) => button.textContent?.includes("Cancel"),
+    );
+    fireEvent.click(discard as HTMLButtonElement);
 
-    expect(called("onCloseSettings")).toHaveBeenCalledTimes(1);
-    // The dialog stays up until the controller actually clears the draft.
-    expect(container.querySelector("dialog.log-dlg")).not.toBeNull();
+    expect(called("onDiscardSettings")).toHaveBeenCalledTimes(1);
   });
 
-  it("closes the dialog straight away when no draft is staged", async () => {
-    const { called, container } = await renderRoot();
-    fireEvent.click(navRow(container, "Status"));
-    const dialog = await waitFor(() => container.querySelector("dialog.log-dlg") as HTMLDialogElement);
-
-    fireEvent.keyDown(dialog, { key: "Escape" });
-
-    expect(called("onCloseSettings")).not.toHaveBeenCalled();
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).toBeNull());
-  });
-
-  it("saves the draft from the dialog's Save control", async () => {
-    const { called, container } = await renderRoot({ settingsDialogOpen: true });
+  it("saves the draft from the More page Save control", async () => {
+    const { called, container } = await renderRoot({ currentView: "more" });
     await openSettings(container);
 
     const save = await waitFor(() => {
@@ -518,9 +491,7 @@ describe("the settings draft flow", () => {
     fireEvent.click(container.querySelector("#panel-patcher .panel-threads-btn") as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
-    await waitFor(() =>
-      expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
-    );
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 });
 
@@ -568,7 +539,7 @@ describe("the phone Menu sheet", () => {
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     fireEvent.click(navRow(container, "Settings", ".menu-sheet"));
 
-    expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
+    expect(called("onSelectView")).toHaveBeenCalledWith("more");
   });
 });
 

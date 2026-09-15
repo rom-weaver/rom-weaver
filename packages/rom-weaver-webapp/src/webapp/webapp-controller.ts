@@ -34,6 +34,7 @@ import {
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
 const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "home",
+  "more",
   "patcher",
   "creator",
   "docs",
@@ -61,6 +62,7 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   // The landing page is the app base itself, so its slug is empty and
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
   home: "",
+  more: "more",
   docs: "docs",
   identify: "identify-rom",
   patcher: "apply-patch",
@@ -97,6 +99,8 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "trim.html": "trim",
   "whats-new": "whats-new",
   "whats-new.html": "whats-new",
+  more: "more",
+  "more.html": "more",
   // Keep old links usable when a host has not applied the server redirect.
   tools: "ppf-undo",
   weave: "patcher",

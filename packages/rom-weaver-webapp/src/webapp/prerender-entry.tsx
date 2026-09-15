@@ -27,6 +27,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onAccentChange: noop,
   onCancelConfirmation: noop,
   onCloseSettings: noop,
+  onDiscardSettings: noop,
   onConfirmConfirmation: noop,
   onConfirmExternalNavigation: () => Promise.resolve(true),
   onCreatorModifiedChange: noop,

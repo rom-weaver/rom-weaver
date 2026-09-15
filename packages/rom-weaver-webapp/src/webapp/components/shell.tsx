@@ -9,6 +9,7 @@ import {
   House,
   LoaderCircle,
   Menu,
+  MoreHorizontal,
   MonitorCog,
   Moon,
   Newspaper,
@@ -1080,6 +1081,7 @@ const Masthead = ({
   onSelectTab,
   onOpenWhatsNew,
   onOpenLog,
+  onOpenMore,
   onOpenStatus,
   onOpenStorage,
   onPreloadLog,
@@ -1109,6 +1111,7 @@ const Masthead = ({
   onSelectTab: (id: string) => void;
   onOpenWhatsNew: () => void;
   onOpenLog: () => void;
+  onOpenMore?: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
   onPreloadLog?: () => void;
@@ -1358,6 +1361,15 @@ const Masthead = ({
       label: localizer.message("ui.update.whatsNew"),
       onSelect: () => onSelectTab("whats-new"),
     });
+    project.entries.push({
+      className: "nav-more",
+      current: currentTab === "more",
+      href: "more",
+      icon: <MoreHorizontal aria-hidden="true" />,
+      id: "more",
+      label: localizer.message("ui.tools.more"),
+      onSelect: onOpenMore ?? (() => onSelectTab("more")),
+    });
     if (githubHref) {
       project.entries.push({
         external: true,
@@ -1391,6 +1403,7 @@ const Masthead = ({
     hydrated,
     localizer,
     onOpenLog,
+    onOpenMore,
     onOpenSettings,
     onOpenStatus,
     onSelectTab,

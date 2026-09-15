@@ -77,6 +77,7 @@ type WebappRootProps = {
     onOpenSettings: () => void;
     onReset: () => void;
     onCloseSettings: () => void;
+    onDiscardSettings: () => void;
     onReloadUpdate: () => void;
     onRestoreDefaults: () => void;
     onSaveClose: () => void;

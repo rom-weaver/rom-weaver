@@ -1,6 +1,6 @@
 type WorkflowView = "patcher" | "creator" | "identify" | "trim" | "ppf-undo" | "save-editor" | "test";
 /** "home" is the apex landing route: a WebappView the shell renders, but not a workflow. */
-type WebappView = WorkflowView | "docs" | "home" | "whats-new";
+type WebappView = WorkflowView | "docs" | "home" | "more" | "whats-new";
 
 type ValidationState = {
   messages: string[];
