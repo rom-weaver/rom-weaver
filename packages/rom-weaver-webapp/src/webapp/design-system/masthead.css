@@ -34,7 +34,7 @@
 .rw-app .brand {
   display: flex;
   gap: var(--sp-s);
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
 }
 .rw-app .brand-mark-link {
@@ -104,14 +104,13 @@
   flex-wrap: wrap;
   row-gap: 2px;
   block-size: auto;
-  min-block-size: 26px;
 }
 .rw-app .title-build-row {
-  padding-inline-start: calc(38px + var(--sp-s));
+  display: block;
 }
 .rw-app .title-build-row .build-runtime {
   display: inline-flex;
-  margin-inline-start: 8px;
+  margin-inline-start: 5px;
 }
 .rw-app .title-build-row .sub-status {
   font-size: 0.68rem;
@@ -383,13 +382,12 @@
   color: var(--ink);
   background: var(--plate-2);
 }
-/* "you are here" is a filled row, not a thin marker: the sidebar is long
-   enough that the current page has to be findable at a glance. */
 .rw-app .nav-row[aria-current="page"] {
-  color: var(--thread-ink);
-  background: var(--thread);
+  color: var(--ink);
+  background: color-mix(in oklab, var(--thread) 12%, var(--well));
 }
 .rw-app .nav-row[aria-current="page"] svg {
+  color: var(--thread-text);
   opacity: 1;
 }
 @media (forced-colors: active) {
@@ -460,7 +458,7 @@
 .rw-app .shell-head-top {
   display: flex;
   gap: var(--sp-s);
-  align-items: center;
+  align-items: flex-start;
   min-block-size: 44px;
 }
 /* The wordmark keeps its own width; the glyph cluster beside it is what gives
@@ -1115,7 +1113,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rw-app .dock-tab[aria-current="page"],
+.rw-app .dock-tab[aria-current="page"] {
+  color: var(--ink);
+}
 .rw-app .dock-menu[aria-expanded="true"] {
   color: var(--thread-text);
 }
@@ -1127,14 +1127,13 @@
 .rw-app .dock-tab:not([aria-current="page"]):active {
   color: var(--ink);
 }
-/* the shuttle stitch: a thread carried along the dock's top seam */
 .rw-app .dock-tab[aria-current="page"]::before {
   position: absolute;
-  inset-inline: 6px;
+  inset-inline: 12px;
   top: -1px;
-  height: 3px;
+  height: 2px;
   content: "";
-  background: var(--thread);
+  background: color-mix(in oklab, var(--thread) 45%, var(--seam));
   border-radius: 0 0 2px 2px;
 }
 @media (forced-colors: active) {
@@ -1272,9 +1271,6 @@
   .rw-app {
     --rail-w: clamp(198px, 17vw, 236px);
   }
-  html[data-offline-layout="title"] .rw-app {
-    --rail-w: clamp(310px, 25vw, 330px);
-  }
   html[data-offline-layout="title"] .rw-app .topbar-tools > .sub-status {
     display: none;
   }
@@ -1337,9 +1333,6 @@
     display: block;
   }
   @media (max-width: 449px) {
-    .rw-app .title-build-row {
-      padding-inline-start: calc(32px + var(--sp-s));
-    }
     .rw-app .shell-head-tools {
       gap: 0;
     }

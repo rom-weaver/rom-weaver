@@ -1498,7 +1498,7 @@ const Masthead = ({
                       <b>weaver</b>
                     </BrandHeading>
                   </a>
-                  {previewVersionStatus ? null : buildFacts}
+                  {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : buildFacts}
                 </span>
               </span>
               <div className="shell-head-tools">
@@ -1507,7 +1507,6 @@ const Masthead = ({
                 <span className="phone-project-tools">{projectTiles}</span>
               </div>
             </div>
-            {previewVersionStatus ? <div className="title-build-row">{buildFacts}</div> : null}
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
           <aside className="side-rail">

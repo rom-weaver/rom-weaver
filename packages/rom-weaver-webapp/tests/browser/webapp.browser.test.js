@@ -278,12 +278,15 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
   await page.viewport(1280, 900);
 });
 
-test("WebappRoot reports the configured thread count beside the workflow Settings control", async () => {
+test("WebappRoot reports the configured thread count before the workflow Settings control", async () => {
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
   await expect
     .poll(() => document.querySelector("#panel-patcher .panel-threads-btn")?.textContent || "")
     .toContain("1 thread");
   expect(document.querySelector(".masthead-threads")).toBeNull();
+  const threadButton = document.querySelector("#panel-patcher .panel-threads-btn");
+  const settingsButton = document.querySelector("#panel-patcher .panel-settings-btn");
+  expect(threadButton.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("the wordmark keeps version and status below it while phone tools stay on one line", async () => {
@@ -293,7 +296,7 @@ test("the wordmark keeps version and status below it while phone tools stay on o
     .poll(() => document.querySelector(".title-build-row .sub-status")?.getAttribute("aria-label") || "")
     .not.toBe("");
   expect(document.querySelector(".masthead-threads")).toBeNull();
-  expect(document.querySelector(".brand-copy .build-facts")).toBeNull();
+  expect(document.querySelector(".brand-copy .build-facts")).toBeTruthy();
   expect(document.querySelector(".title-build-row .build-facts")).toBeTruthy();
   await expect
     .poll(() => document.querySelector("#panel-patcher .panel-threads-btn")?.textContent || "")
@@ -310,7 +313,8 @@ test("the wordmark keeps version and status below it while phone tools stay on o
     const version = document.querySelector(".title-build-row .build-tag");
     expect(getComputedStyle(status).display).not.toBe("none");
     expect(status.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
-    expect(Math.abs(status.getBoundingClientRect().top - version.getBoundingClientRect().top)).toBeLessThanOrEqual(2);
+    expect(status.getBoundingClientRect().top).toBeGreaterThanOrEqual(version.getBoundingClientRect().top);
+    expect(status.getBoundingClientRect().top).toBeLessThanOrEqual(version.getBoundingClientRect().bottom + 2);
     expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(
       document.querySelector(".side-col").getBoundingClientRect().right,
     );
@@ -330,6 +334,9 @@ test("the wordmark keeps version and status below it while phone tools stay on o
     const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
     const factsSize = Number.parseFloat(getComputedStyle(document.querySelector(".build-facts")).fontSize);
     expect(titleSize).toBeGreaterThan(factsSize * 1.4);
+    expect(document.querySelector(".brand-mark").getBoundingClientRect().top).toBeLessThanOrEqual(
+      document.querySelector(".brand-word").getBoundingClientRect().top + 2,
+    );
   }
   await page.viewport(1280, 900);
 });

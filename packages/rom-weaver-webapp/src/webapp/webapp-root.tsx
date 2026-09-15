@@ -804,11 +804,6 @@ function WebappRoot({
             className="workflow-panel-head"
             data-threads={view === "patcher" || view === "creator" || view === "trim" ? "" : undefined}
           >
-            <PanelSettingsButton
-              onOpenSettings={() => openSettingsTab()}
-              onPreloadSettings={preloadSettingsPanel}
-              settingsOpen={state.settingsDialogOpen}
-            />
             {view === "patcher" || view === "creator" || view === "trim" ? (
               <PanelThreadCount
                 count={threadCount}
@@ -816,6 +811,11 @@ function WebappRoot({
                 onPreloadSettings={preloadSettingsPanel}
               />
             ) : null}
+            <PanelSettingsButton
+              onOpenSettings={() => openSettingsTab()}
+              onPreloadSettings={preloadSettingsPanel}
+              settingsOpen={state.settingsDialogOpen}
+            />
             <ResetButton onReset={actions.onReset} />
           </div>
         )}
