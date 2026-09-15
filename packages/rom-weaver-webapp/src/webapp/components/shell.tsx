@@ -241,10 +241,12 @@ const NavRow = ({
  * behind an overflow menu.
  */
 const SideNav = ({
+  appearance,
   localizer,
   navLabel,
   sections,
 }: {
+  appearance: ReactNode;
   localizer: Localizer;
   navLabel: string;
   sections: NavSectionData[];
@@ -256,21 +258,10 @@ const SideNav = ({
         {section.entries.map((entry) => (
           <NavRow className="nav-row" entry={entry} idPrefix="tab-" key={entry.id} localizer={localizer} />
         ))}
+        {section.id === "device" ? appearance : null}
       </div>
     ))}
   </nav>
-);
-
-/**
- * Appearance, stated where the navigation already lists everything else. It
- * sits outside the rail's scroll box on purpose: the popovers are wider than
- * the rail, and a scroll container would clip them into a sideways scrollbar.
- */
-const NavAppearance = ({ label, children }: { children: ReactNode; label: string }) => (
-  <div className="nav-appearance">
-    <h2 className="nav-group-label">{label}</h2>
-    <div className="nav-appearance-tools">{children}</div>
-  </div>
 );
 
 /**
@@ -285,6 +276,8 @@ const PhoneDock = ({
   navLabel,
   onSelect,
   onToggleMenu,
+  runtimeState,
+  runtimeTitle,
   tabs,
   triggerRef,
 }: {
@@ -294,6 +287,8 @@ const PhoneDock = ({
   navLabel: string;
   onSelect: (id: string) => void;
   onToggleMenu: () => void;
+  runtimeState: RuntimeState;
+  runtimeTitle: string;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => (
@@ -314,12 +309,15 @@ const PhoneDock = ({
     <button
       aria-controls="menu-sheet"
       aria-expanded={menuOpen}
+      aria-label={`${menuLabel}, ${runtimeTitle}`}
       className="dock-tab dock-menu"
       onClick={onToggleMenu}
       ref={triggerRef}
+      title={runtimeTitle}
       type="button"
     >
       <Menu aria-hidden="true" />
+      <i aria-hidden="true" className="dock-state-dot" data-sw={runtimeState} />
       <span>{menuLabel}</span>
     </button>
   </nav>
@@ -343,8 +341,7 @@ const MenuSheet = ({
   toolOpen,
   triggerRef,
 }: {
-  /** The theme and accent pair, so the phone's index carries them too. Rendered
-      with the rows, not before them, so the prerendered shell ships neither. */
+  /** Theme and accent rows join This Device after the sheet opens. */
   appearance: ReactNode;
   /** The sheet's own Find row, so Escape can return focus to it on the phone. */
   findRef: RefObject<HTMLButtonElement | null>;
@@ -393,13 +390,13 @@ const MenuSheet = ({
                       onNavigate={onClose}
                     />
                   ))}
+                  {section.id === "device" ? appearance : null}
                 </div>
               </div>
             ))
           : null}
       </div>
       <div className="menu-sheet-foot">
-        {opened ? appearance : null}
         <button className="menu-find" onClick={onOpenFind} ref={findRef} type="button">
           <Search aria-hidden="true" />
           <span>{localizer.message("ui.find.placeholder")}</span>
@@ -426,10 +423,12 @@ const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: T
  */
 const ThemeTile = ({
   localizer,
+  navRow = false,
   onToggle,
   open,
 }: {
   localizer: Localizer;
+  navRow?: boolean;
   onToggle: (button: HTMLButtonElement | null) => void;
   open: boolean;
 }) => {
@@ -439,23 +438,27 @@ const ThemeTile = ({
   const current = THEME_CHOICES.find((choice) => choice.value === preference);
   const currentName = localizer.message(current?.label ?? "ui.theme.matchSystem");
   return (
-    <span className="tool-anchor">
+    <span className={navRow ? "tool-anchor nav-tool-anchor" : "tool-anchor"}>
       <button
         aria-expanded={open}
         aria-label={`${label}: ${currentName}`}
-        className="tool"
+        className={navRow ? "tool nav-row nav-tool" : "tool"}
         onClick={() => onToggle(buttonRef.current)}
         ref={buttonRef}
         type="button"
       >
         <Moon aria-hidden="true" className="ico-moon" />
         <SunMedium aria-hidden="true" className="ico-sun" />
-        <span aria-hidden="true" className="tip">
-          {label}
-        </span>
+        {navRow ? (
+          <span className="nav-row-label">{label}</span>
+        ) : (
+          <span aria-hidden="true" className="tip">
+            {label}
+          </span>
+        )}
       </button>
       {open ? (
-        <div className="tool-pop" role="menu">
+        <div className={navRow ? "tool-pop nav-tool-pop" : "tool-pop"} role="menu">
           <p className="tool-pop-head">{label}</p>
           {THEME_CHOICES.map((choice) => (
             <button
@@ -494,6 +497,7 @@ const ThemeTile = ({
 const AccentTile = ({
   localizer,
   name,
+  navRow = false,
   onChange,
   onToggle,
   open,
@@ -501,6 +505,7 @@ const AccentTile = ({
   localizer: Localizer;
   /** Radio group name. Two pickers share the page, and one name would join them. */
   name: string;
+  navRow?: boolean;
   onChange: (accent: string) => void;
   onToggle: (button: HTMLButtonElement | null) => void;
   open: boolean;
@@ -519,23 +524,27 @@ const AccentTile = ({
   }, [open]);
 
   return (
-    <span className="tool-anchor">
+    <span className={navRow ? "tool-anchor nav-tool-anchor" : "tool-anchor"}>
       <button
         aria-expanded={open}
         aria-label={`${label}: ${currentLabel}`}
-        className="tool accent-tool"
+        className={navRow ? "tool accent-tool nav-row nav-tool" : "tool accent-tool"}
         onClick={() => onToggle(buttonRef.current)}
         ref={buttonRef}
         type="button"
       >
         <Palette aria-hidden="true" />
         <span aria-hidden="true" className="accent-tool-dot" />
-        <span aria-hidden="true" className="tip">
-          {label}
-        </span>
+        {navRow ? (
+          <span className="nav-row-label">{label}</span>
+        ) : (
+          <span aria-hidden="true" className="tip">
+            {label}
+          </span>
+        )}
       </button>
       {open ? (
-        <div className="tool-pop accent-pop">
+        <div className={navRow ? "tool-pop accent-pop nav-tool-pop" : "tool-pop accent-pop"}>
           <p className="tool-pop-head">{`${label}: ${currentLabel}`}</p>
           <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
             {ACCENTS.map((entry) => (
@@ -1390,23 +1399,24 @@ const Masthead = ({
      row on the phone) and again inside the navigation (the sidebar foot and the
      Menu sheet), so each copy owns its own popover key and radio group name.
      Everything about the app's identity below is rendered exactly once. */
-  const appearanceTiles = (scope: string) => (
+  const appearanceTiles = (scope: string, navRow = false) => (
     <>
       <ThemeTile
         localizer={localizer}
+        navRow={navRow}
         onToggle={(button) => toggleTool(`theme:${scope}`, button)}
         open={openTool === `theme:${scope}`}
       />
       <AccentTile
         localizer={localizer}
         name={`shell-accent-${scope}`}
+        navRow={navRow}
         onChange={(accent) => onAccentChange?.(accent)}
         onToggle={(button) => toggleTool(`accent:${scope}`, button)}
         open={openTool === `accent:${scope}`}
       />
     </>
   );
-  const appearanceLabel = localizer.message("ui.tools.appearance");
   const projectTiles = (
     <ProjectTiles
       confirmExternalNavigation={confirmExternalNavigation}
@@ -1429,7 +1439,7 @@ const Masthead = ({
           level would leave the page with two banners. */}
       <header className="shell-banner">
         {/* One column on desktop, one page header on the phone. Build facts stay
-            with the brand, while each layout puts runtime status in its tools. */}
+            with the brand; the phone Menu carries runtime status. */}
         <div className="side-col">
           <div className="shell-head">
             <div className="shell-head-top">
@@ -1454,13 +1464,6 @@ const Masthead = ({
                 </span>
               </span>
               <div className="shell-head-tools">
-                <StatusChip
-                  label={runtimeLabel}
-                  onOpenStatus={onOpenStatus}
-                  percent={runtimePercent}
-                  state={runtimeState}
-                  title={runtimeTitle}
-                />
                 {appearanceTiles("phone")}
                 <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-project-tools">{projectTiles}</span>
@@ -1469,9 +1472,13 @@ const Masthead = ({
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
           <aside className="side-rail">
-            <SideNav localizer={localizer} navLabel={navLabel} sections={sections} />
+            <SideNav
+              appearance={appearanceTiles("rail", true)}
+              localizer={localizer}
+              navLabel={navLabel}
+              sections={sections}
+            />
           </aside>
-          <NavAppearance label={appearanceLabel}>{appearanceTiles("rail")}</NavAppearance>
         </div>
         {/* Desktop top bar: the one box that reaches everything, and the controls
           that change this browser rather than the app. No destinations, so
@@ -1513,9 +1520,6 @@ const Masthead = ({
         sources={findSources}
         triggerRef={activeFindRef}
       />
-      {/* The parser-time resolver in index.html rewrites the thread count and
-          both runtime buttons before the shell paints. */}
-      <span className="shell-identity" hidden />
       <PhoneDock
         current={currentTab}
         menuLabel={localizer.message("ui.tools.menu")}
@@ -1528,11 +1532,15 @@ const Masthead = ({
           setMenuMounted(true);
           setMenuOpen((open) => !open);
         }}
+        runtimeState={runtimeState}
+        runtimeTitle={runtimeTitle}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />
+      {/* The parser-time resolver runs here, after all three identity slots exist. */}
+      <span className="shell-identity" hidden />
       <MenuSheet
-        appearance={<NavAppearance label={appearanceLabel}>{appearanceTiles(MENU_TOOL_SCOPE)}</NavAppearance>}
+        appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
         localizer={localizer}
         onClose={closeMenu}
         findRef={menuFindRef}

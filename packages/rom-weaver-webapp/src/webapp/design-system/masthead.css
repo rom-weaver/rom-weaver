@@ -437,48 +437,6 @@
   }
 }
 
-/* ── appearance, inside the navigation ──
-   Theme and accent are named here as well as in the chrome, so a reader who
-   goes looking for them in the list of everything the app has finds them. The
-   block sits below the destinations and outside the rail's scroll box: the
-   popovers are wider than the rail, and a scroll container would clip them
-   into a sideways scrollbar. */
-.rw-app .nav-appearance {
-  flex: none;
-  padding-block: var(--sp-s);
-  border-block-start: 1px solid var(--seam);
-}
-/* One pixel, so a 32px tile centres its glyph on the same axis as the 18px
-   icon in an 8px-padded nav row above it. */
-.rw-app .nav-appearance-tools {
-  display: flex;
-  gap: var(--sp-2xs);
-  align-items: center;
-  padding-inline: 1px;
-}
-/* The block is at the foot of its column, so both the popover and the tooltip
-   open upward; downward would place them past the bottom edge. */
-.rw-app .nav-appearance .tool-pop {
-  inset-block: auto calc(100% + var(--sp-xs));
-  inset-inline: 0 auto;
-}
-.rw-app .nav-appearance .tip {
-  inset-block: auto calc(100% + 6px);
-  inset-inline: 0 auto;
-  translate: 0 2px;
-}
-/* The sheet's foot already draws the seam and the gutter. */
-.rw-app .menu-sheet .nav-appearance {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-block: 0 var(--sp-2xs);
-  border-block-start: 0;
-}
-.rw-app .menu-sheet .nav-appearance .nav-group-label {
-  padding: 0;
-}
-
 /* The banner is the whole chrome: identity, navigation and the top bar. It
    carries no box of its own, so each part lands in the grid cell the layout
    gives it. */
@@ -808,6 +766,53 @@
   gap: var(--sp-s);
   padding: 2px 8px 6px;
 }
+/* Inside This Device, the same pickers use named rows. Their choices expand
+   in the scroll box, so neither picker needs a floating panel outside it. */
+.rw-app .nav-tool-anchor {
+  display: block;
+  inline-size: 100%;
+}
+.rw-app .nav-tool-anchor .tool.nav-tool {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 36px;
+  padding: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: start;
+  border: 0;
+}
+.rw-app .nav-tool-anchor .tool.nav-tool svg {
+  grid-area: 1 / 1;
+  width: 18px;
+  height: 18px;
+}
+.rw-app .nav-tool-anchor .nav-row-label {
+  grid-area: 1 / 2;
+}
+.rw-app .nav-tool-anchor .accent-tool-dot {
+  inset-block-end: 7px;
+  inset-inline-start: 19px;
+  inset-inline-end: auto;
+}
+.rw-app .nav-tool-anchor .nav-tool-pop {
+  position: relative;
+  inset: auto;
+  inline-size: 100%;
+  min-inline-size: 0;
+  margin-block: 4px;
+  box-shadow: none;
+}
+.rw-app .nav-tool-pop .tool-pop-item {
+  white-space: normal;
+}
+.rw-app .nav-tool-pop .accent-tray {
+  flex-wrap: wrap;
+}
 @media (hover: hover) {
   .rw-app .accent-tray .accent-chip:hover .accent-chip-dot {
     scale: 1.12;
@@ -887,6 +892,24 @@
   width: 20px;
   height: 20px;
 }
+.rw-app .dock-state-dot {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-start: calc(50% + 8px);
+  inline-size: 7px;
+  block-size: 7px;
+  background: var(--ink-4);
+  border-radius: 50%;
+}
+.rw-app .dock-state-dot[data-sw="active"] {
+  background: var(--verified);
+}
+.rw-app .dock-state-dot[data-sw="update"] {
+  background: var(--care-text);
+}
+.rw-app .dock-state-dot[data-sw="installing"] {
+  background: var(--thread);
+}
 .rw-app .dock-tab span {
   max-width: 100%;
   overflow: hidden;
@@ -944,7 +967,7 @@
 }
 .rw-app .menu-sheet {
   position: fixed;
-  inset: 0 0 var(--dock-h);
+  inset: 0 0 calc(var(--dock-h) - 1px);
   z-index: 1001;
   display: none;
   flex-direction: column;
@@ -961,6 +984,14 @@
   min-block-size: 0;
   padding: var(--sp-s) var(--gutter) var(--sp-m);
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+:root:has(.rw-app .menu-sheet:not([hidden])) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.rw-app:has(.menu-sheet:not([hidden])) .dock {
+  background: var(--plate);
 }
 .rw-app .menu-sheet-body > .nav-group:first-child {
   margin-block-start: auto;
@@ -1087,7 +1118,6 @@
     --dock-h: calc(57px + var(--safe-b));
   }
   .rw-app .side-rail,
-  .rw-app .side-col > .nav-appearance,
   .rw-app .topbar {
     display: none;
   }
@@ -1097,17 +1127,8 @@
   .rw-app .topbar-tools {
     display: none;
   }
-  .rw-app .shell-head-tools .sub-status {
-    justify-content: center;
-    inline-size: 32px;
-    block-size: 32px;
-    padding: 0;
-    background: var(--well);
-    border: 1px solid var(--seam);
-    border-radius: var(--r-s);
-  }
-  .rw-app .shell-head-tools .sub-status-text,
-  .rw-app .shell-head-tools .sub-status-percent {
+  .rw-app .brand-copy .masthead-threads,
+  .rw-app .brand-copy .sub-separator {
     display: none;
   }
   .rw-app .dock {
@@ -1119,26 +1140,14 @@
   .rw-app .scrim:not([hidden]) {
     display: block;
   }
-  /* The project tools take a second line while the full build identity and
-     offline button share the first line on narrow phones. */
+  /* The five header tools stay on one line after the thread link and offline
+     button move out of the phone head. */
   @media (max-width: 449px) {
     .rw-app .shell-head-tools {
-      flex-wrap: wrap;
       gap: 0;
-      justify-content: flex-end;
-      inline-size: 88px;
     }
     .rw-app .shell-head-tools > .tool-separator {
       display: none;
-    }
-    .rw-app .phone-project-tools {
-      display: flex;
-      flex: 0 0 100%;
-      justify-content: flex-end;
-    }
-    .rw-app .shell-head-tools .sub-status {
-      inline-size: 28px;
-      block-size: 28px;
     }
     .rw-app .brand-mark {
       width: 32px;

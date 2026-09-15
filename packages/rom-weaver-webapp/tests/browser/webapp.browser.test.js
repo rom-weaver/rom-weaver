@@ -283,32 +283,40 @@ test("WebappRoot reports the configured thread count in the chrome, not the core
     .toContain("1 threads");
 });
 
-test("the runtime state stays in the header while build facts sit under the title", async () => {
+test("the phone head keeps the version and tools on one line", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect.poll(() => document.querySelector(".sub-status")?.getAttribute("aria-label") || "").not.toBe("");
-  expect(document.querySelectorAll(".sub-status").length).toBe(2);
+  expect(document.querySelectorAll(".sub-status").length).toBe(1);
   expect(document.querySelectorAll(".masthead-threads").length).toBe(1);
   expect(document.querySelector(".brand-copy .build-facts")).toBeTruthy();
 
   for (const [width, height] of [
     [1280, 900],
     [1100, 900],
+    [320, 844],
     [390, 844],
   ]) {
     await page.viewport(width, height);
-    const status = document.querySelector(width >= 1000 ? ".topbar .sub-status" : ".shell-head-tools .sub-status");
-    await expect.poll(() => getComputedStyle(status.querySelector("svg")).display).not.toBe("none");
-    const word = status.querySelector(".sub-status-text");
-    expect(word.textContent.trim().length).toBeGreaterThan(0);
     if (width >= 1000) {
+      const status = document.querySelector(".topbar .sub-status");
+      await expect.poll(() => getComputedStyle(status.querySelector("svg")).display).not.toBe("none");
+      const word = status.querySelector(".sub-status-text");
+      expect(word.textContent.trim().length).toBeGreaterThan(0);
       expect(getComputedStyle(word).display).not.toBe("none");
       expect(word.scrollWidth).toBeLessThanOrEqual(word.getBoundingClientRect().width + 1);
+      expect(getComputedStyle(status).cursor).toBe("pointer");
+      expect(getComputedStyle(document.querySelector(".masthead-threads")).display).not.toBe("none");
     } else {
-      expect(getComputedStyle(word).display).toBe("none");
-      expect(status.getAttribute("aria-label")).toContain(word.textContent.trim());
+      expect(getComputedStyle(document.querySelector(".masthead-threads")).display).toBe("none");
+      expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")?.toLowerCase()).toContain("offline");
+      expect(document.querySelector(".dock-state-dot")?.getAttribute("data-sw")).toBeTruthy();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      const brand = document.querySelector(".brand").getBoundingClientRect();
+      const tools = document.querySelector(".shell-head-tools").getBoundingClientRect();
+      expect(brand.right).toBeLessThanOrEqual(tools.left);
+      expect(tools.bottom - tools.top).toBeLessThanOrEqual(32);
     }
-    expect(getComputedStyle(status).cursor).toBe("pointer");
     // The wordmark still leads the block it heads.
     const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
     const factsSize = Number.parseFloat(getComputedStyle(document.querySelector(".build-facts")).fontSize);
@@ -506,8 +514,8 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   await page.viewport(393, height);
   mountWebappRoot();
 
-  await expect.poll(() => document.querySelector(".sub-status")).toBeTruthy();
-  document.querySelector(".sub-status")?.click();
+  await openMenuSheet();
+  navRow("Status", ".menu-sheet")?.click();
   await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
 
   const rail = document.querySelector(".log-dlg .dialog-subrail");
@@ -551,7 +559,7 @@ test("the phone header carries appearance and the project links, and Menu carrie
   }
 
   await openMenuSheet();
-  for (const name of ["Status", "Storage", "Logs", "Settings", "Docs", "GitHub", "Support"]) {
+  for (const name of ["Status", "Storage", "Logs", "Settings", "Theme", "Accent", "Docs", "GitHub", "Support"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
   expect(navRow("GitHub", ".menu-sheet").getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/");
@@ -566,9 +574,8 @@ test("the phone header carries appearance and the project links, and Menu carrie
     expect(getComputedStyle(row).color).toBe(neutral);
   }
 
-  // Appearance is a named menu, not a cycling glyph.
-  document.querySelector('.shell-head-tools .tool[aria-label^="Accent"]').click();
-  await expect.element(page.getByRole("radiogroup", { name: "Accent" }).first()).toBeInTheDocument();
+  navRow("Accent", ".menu-sheet").click();
+  await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 
   const buildTag = document.querySelector(".build-tag");
   expect(buildTag?.textContent).toMatch(/v\d/);
@@ -590,9 +597,10 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   const sheet = await openMenuSheet();
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(sheet.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight);
-  // The sheet ends at the dock's top edge, and its body is what scrolls.
+  // The sheet overlaps the dock edge, and its body is what scrolls.
   const dock = document.querySelector(".dock").getBoundingClientRect();
-  expect(Math.abs(sheet.getBoundingClientRect().bottom - dock.top)).toBeLessThanOrEqual(1);
+  expect(sheet.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(dock.top);
+  expect(getComputedStyle(document.documentElement).overflow).toBe("hidden");
   const body = sheet.querySelector(".menu-sheet-body");
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(navRow("PPF undo", ".menu-sheet")).toBeTruthy();

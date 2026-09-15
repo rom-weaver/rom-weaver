@@ -986,7 +986,7 @@ describe("webapp keyboard navigation", () => {
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);
     const banner = host.querySelector(".shell-banner");
-    const covered = host.querySelector(".shell-head-tools .sub-status");
+    const covered = host.querySelector('.shell-head-tools .tool[aria-label="Docs"]');
     expect(banner.hasAttribute("inert")).toBe(false);
 
     if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();

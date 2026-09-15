@@ -124,6 +124,8 @@ describe("Masthead", () => {
       "Storage",
       "Logs",
       "Settings",
+      "Theme",
+      "Accent",
       "Docs",
       "What\u2019s new",
       "GitHub",
@@ -140,8 +142,9 @@ describe("Masthead", () => {
     expect(container.querySelectorAll("h1").length).toBe(1);
     expect(container.querySelectorAll(".brand").length).toBe(1);
     expect(container.querySelectorAll(".masthead-threads").length).toBe(1);
-    expect(container.querySelectorAll(".sub-status").length).toBe(2);
+    expect(container.querySelectorAll(".sub-status").length).toBe(1);
     expect(container.querySelector(".brand-copy .build-facts")).toBeTruthy();
+    expect(container.querySelector(".dock-state-dot")).toBeTruthy();
 
     const apply = nav.querySelector('[aria-current="page"]') as HTMLAnchorElement;
     expect(apply.textContent).toBe("Apply");
@@ -208,7 +211,7 @@ describe("Masthead", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    fireEvent.click(sheet.querySelector(".nav-appearance .accent-tool") as HTMLButtonElement);
+    fireEvent.click(sheet.querySelector(".nav-tool-anchor .accent-tool") as HTMLButtonElement);
     expect(sheet.querySelector(".accent-tray")).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(sheet.querySelector(".accent-tray")).toBeNull();
@@ -343,19 +346,22 @@ describe("Masthead", () => {
     expect(new Set(names).size).toBe(4);
   });
 
-  it("names theme and accent inside the navigation as well as in the chrome", () => {
+  it("puts theme and accent under This device in both navigation layouts", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    // The sheet's copy waits for the sheet, so the prerendered shell carries
-    // only the sidebar's.
-    expect(container.querySelectorAll(".nav-appearance").length).toBe(1);
+    expect(container.querySelector(".nav-appearance")).toBeNull();
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    const blocks = Array.from(container.querySelectorAll(".nav-appearance"));
-    // One for the desktop sidebar's foot, one for the phone Menu sheet's foot.
-    expect(blocks.length).toBe(2);
-    for (const block of blocks) {
-      expect(block.querySelector(".nav-group-label")?.textContent).toBe("Appearance");
-      expect(block.querySelectorAll('.tool[aria-label^="Theme"]').length).toBe(1);
-      expect(block.querySelectorAll(".accent-tool").length).toBe(1);
+    for (const scope of [".side-nav", ".menu-sheet"]) {
+      const device = Array.from(container.querySelectorAll(`${scope} .nav-group`)).find(
+        (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
+      );
+      expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
+        "Status",
+        "Storage",
+        "Logs",
+        "Settings",
+        "Theme",
+        "Accent",
+      ]);
     }
   });
 
@@ -430,6 +436,8 @@ describe("Masthead", () => {
     expect(status.getAttribute("aria-label")).toBe("Offline active");
     // The state is a word, not a lone glyph.
     expect(status.querySelector(".sub-status-text")?.textContent).toBe("Offline active");
+    expect(container.querySelector(".dock-state-dot")?.getAttribute("data-sw")).toBe("active");
+    expect(container.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu, Offline active");
     fireEvent.click(status);
     expect(onOpenStatus).toHaveBeenCalledTimes(1);
 

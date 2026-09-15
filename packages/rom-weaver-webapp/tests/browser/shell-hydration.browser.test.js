@@ -95,8 +95,13 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
   // and lucide class.
   const threads = host.querySelector(".masthead-threads");
   const runtime = [...host.querySelectorAll(".sub-status")];
+  const dockDot = host.querySelector(".dock-state-dot");
+  const dockMenu = host.querySelector(".dock-menu");
   threads.querySelector(".masthead-threads-count").textContent = "8";
   threads.setAttribute("aria-label", "8 threads");
+  dockDot.dataset.sw = "disabled";
+  dockMenu.setAttribute("aria-label", "Menu, Offline support off");
+  dockMenu.setAttribute("title", "Offline support off");
   for (const slot of runtime) {
     slot.dataset.sw = "disabled";
     slot.setAttribute("aria-label", "Offline support off");
@@ -116,6 +121,7 @@ test("hydrates parser-resolved thread and runtime nodes in place", async () => {
 
   expect(host.querySelector(".masthead-threads")).toBe(threads);
   expect([...host.querySelectorAll(".sub-status")]).toEqual(runtime);
+  expect(host.querySelector(".dock-state-dot")).toBe(dockDot);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });
@@ -170,7 +176,7 @@ const resolvedShellMarkup = () => {
   return renderToString(shell(8, null, false, READY_WARMUP));
 };
 
-/** What the resolver leaves behind: both runtime buttons made current. */
+/** What the resolver leaves behind: the desktop button and phone Menu indicator made current. */
 const applyResolver = (host, resolvedState) => {
   const target = document.createElement("div");
   target.innerHTML = renderToString(shell(8, resolvedState, false, READY_WARMUP));
@@ -180,6 +186,13 @@ const applyResolver = (host, resolvedState) => {
     for (const { name, value } of from[index].attributes) slot.setAttribute(name, value);
     slot.innerHTML = from[index].innerHTML;
   }
+  const fromDot = target.querySelector(".dock-state-dot");
+  const intoDot = host.querySelector(".dock-state-dot");
+  intoDot.dataset.sw = fromDot.dataset.sw;
+  const fromMenu = target.querySelector(".dock-menu");
+  const intoMenu = host.querySelector(".dock-menu");
+  intoMenu.setAttribute("aria-label", fromMenu.getAttribute("aria-label"));
+  intoMenu.setAttribute("title", fromMenu.getAttribute("title"));
 };
 
 test.each([
@@ -204,7 +217,7 @@ test.each([
     });
   });
 
-  // Nothing outside the runtime buttons may render from the runtime state, or the shell
+  // Nothing outside the runtime button and Menu indicator may render from the runtime state, or the shell
   // the visitor already sees is discarded and rebuilt.
   expect(recoverableErrors.map((error) => error.message)).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();

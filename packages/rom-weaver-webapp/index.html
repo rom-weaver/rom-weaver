@@ -147,18 +147,14 @@
       // the prerendered masthead metadata. It resolves both slots before the
       // rest of the shell can paint, and produces the exact text React hydrates.
       window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY = function () {
-        // Both layouts carry their own runtime button. React hydrates against
-        // every copy, so the resolver updates each one before the shell paints.
+        // The desktop runtime button and the phone Menu indicator both render
+        // before hydration, so the resolver updates each before the shell paints.
         //
-        // This resolves THESE two slots and nothing else. Any other node that
-        // renders from the runtime state would keep the prerender's
-        // "installing" while React's first client render says otherwise, and
-        // that mismatch makes React discard the whole prerendered page. See the
-        // Status nav row in shell.tsx, which carries a fixed glyph for exactly
-        // this reason, and the hydration parity tests in
-        // tests/browser/shell-hydration.browser.test.js.
+        // The resolver MUST update every runtime-dependent prerendered node.
+        // A stale "installing" state makes React discard the prerendered page.
         const threadSlots = [...document.querySelectorAll(".masthead-threads")];
         const statusSlots = [...document.querySelectorAll(".sub-status")];
+        const dockDot = document.querySelector(".dock-state-dot");
         if (threadSlots.length === 0 || statusSlots.length === 0) return;
         if (!threadSlots.every((slot) => slot.querySelector(".masthead-threads-count"))) return;
         if (!statusSlots.every((slot) => slot.querySelector("svg") && slot.querySelector(".sub-status-text"))) return;
@@ -234,6 +230,14 @@
         // early - both are locale-independent.
         const english = (document.documentElement.lang || "en").indexOf("en") === 0;
         const setRuntimeStatus = (state) => {
+          if (dockDot) {
+            dockDot.dataset.sw = state;
+            if (english) {
+              const menu = dockDot.closest(".dock-menu");
+              menu.setAttribute("aria-label", `Menu, ${wording[state]}`);
+              menu.setAttribute("title", wording[state]);
+            }
+          }
           for (const slot of statusSlots) {
             slot.dataset.sw = state;
             const icon = slot.querySelector("svg");
