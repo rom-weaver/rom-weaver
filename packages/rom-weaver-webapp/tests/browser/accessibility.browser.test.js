@@ -1054,7 +1054,7 @@ describe("accent dye-lot accessibility", () => {
             if (badge) {
               expect(host.querySelector(".channel-badge")?.getAttribute("data-channel")).toBe("nightly");
               const mark = host.querySelector(".brand-mark");
-              await expect.poll(() => mark?.complete && mark.naturalWidth).toBe(192);
+              await expect.poll(() => mark?.querySelector(".brand-mark-accent")).not.toBeNull();
             }
 
             const surfaceViolations = await scanViolations(host, { onlyRules: ["color-contrast"], region: isPage });

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createLogger } from "../lib/logging.ts";
+import { refreshFavicon } from "./accent.ts";
 
 /**
  * Persist an explicit theme or follow the OS preference, and reflect it on html[data-theme].
@@ -59,6 +60,7 @@ const applyTheme = (theme: Theme) => {
   if (typeof document !== "undefined" && document.documentElement) {
     document.documentElement.setAttribute("data-theme", theme);
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLORS[theme]);
+    refreshFavicon();
   }
   logger.trace("Applied theme", { theme, userPreference });
 };

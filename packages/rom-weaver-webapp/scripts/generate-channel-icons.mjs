@@ -2,8 +2,7 @@
 /**
  * Rasterize the production and per-channel app icons.
  *
- * Every generated mark comes from the opaque production PNG. Channel builds
- * share this mark because its pixels are part of the brand asset.
+ * The transparent cartridge mark uses each channel's default accent color.
  *
  * Rendering matches design/icon-masters/README.md: headless Chrome, because
  * ImageMagick's SVG delegate does not render these masters exactly. Playwright's
@@ -24,6 +23,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
+import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
 import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
@@ -59,7 +60,8 @@ const parseOptions = (args) => {
   return { checkOnly, outputDir: path.resolve(process.cwd(), outputDir) };
 };
 
-const CHANNELS = ["production", "beta", "nightly", "preview"];
+// Channel defaults MUST match src/webapp/build-channel.ts.
+const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "verdigris", preview: "plum" };
 
 // Sizes come from design/icon-masters/README.md.
 const RASTER_TARGETS = [
@@ -76,7 +78,10 @@ const SOCIAL_PREVIEW = { height: 1280, master: "social-preview.svg", width: 2560
 const digest = (buffer) => createHash("sha256").update(buffer).digest("hex").slice(0, 12);
 
 const inlineLogo = (master, logo) =>
-  master.replaceAll("__ROM_WEAVER_LOGO_PNG__", `data:image/png;base64,${logo.toString("base64")}`);
+  master.replaceAll("__ROM_WEAVER_LOGO_SVG__", `data:image/svg+xml;base64,${Buffer.from(logo).toString("base64")}`);
+
+const launcherInk = (logo) =>
+  logo.replace("</style>", "  .brand-mark { --brand-cartridge: #f6ecda; --brand-r: #20282d; }\n  </style>");
 
 /**
  * Lay an SVG out at an exact pixel size. It is handed over as a data URI inside
@@ -143,7 +148,8 @@ const encodeFavicon = (images) => {
 const main = async () => {
   const { checkOnly, outputDir } = parseOptions(process.argv.slice(2));
   const outputRoot = path.join(outputDir, "channel-icons");
-  const logo = fs.readFileSync(path.join(assetRoot, "logo.png"));
+  const variantRoot = path.join(outputDir, "logo-variants");
+  const logo = fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8");
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
   const browser = await chromium.launch(launchOptions);
   const page = await browser.newPage({ deviceScaleFactor: 1 });
@@ -165,18 +171,24 @@ const main = async () => {
   };
 
   try {
-    for (const channel of CHANNELS) {
+    for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
+      const accent = ACCENTS.find((entry) => entry.value === accentName);
+      if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
       const channelDir = path.join(outputRoot, channel);
+      const tintedLogo = tintBrandMark(logo, accent);
 
       console.log(channel);
-      emit(path.join(channelDir, "logo.png"), logo);
+      emit(path.join(channelDir, "logo.svg"), Buffer.from(tintedLogo));
 
       for (const target of RASTER_TARGETS) {
-        const master = inlineLogo(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), logo);
+        const master = inlineLogo(
+          fs.readFileSync(path.join(masterRoot, target.master), "utf8"),
+          launcherInk(tintedLogo),
+        );
         emit(path.join(channelDir, target.output), await rasterize(page, master, target.size));
       }
 
-      const favicon = inlineLogo(fs.readFileSync(path.join(masterRoot, "favicon.svg"), "utf8"), logo);
+      const favicon = inlineLogo(fs.readFileSync(path.join(masterRoot, "favicon.svg"), "utf8"), tintedLogo);
       const images = [];
       for (const size of [16, 32, 48, 64]) {
         images.push({ size, png: await rasterize(page, favicon, size) });
@@ -185,10 +197,19 @@ const main = async () => {
     }
 
     console.log("social preview");
-    const socialMaster = inlineLogo(fs.readFileSync(path.join(designRoot, SOCIAL_PREVIEW.master), "utf8"), logo);
+    const defaultAccent = ACCENTS.find((entry) => entry.value === DEFAULT_ACCENT);
+    if (!defaultAccent) throw new Error(`Unknown default accent: ${DEFAULT_ACCENT}`);
+    const socialMaster = inlineLogo(
+      fs.readFileSync(path.join(designRoot, SOCIAL_PREVIEW.master), "utf8"),
+      launcherInk(tintBrandMark(logo, defaultAccent)),
+    );
     const social = await renderSocialPreview(page, socialMaster);
     for (const [format, buffer] of Object.entries(social)) {
       emit(path.join(outputDir, `social-preview.${format}`), buffer);
+    }
+
+    for (const accent of ACCENTS) {
+      emit(path.join(variantRoot, `${accent.value}.svg`), Buffer.from(tintBrandMark(logo, accent)));
     }
   } finally {
     await browser.close();

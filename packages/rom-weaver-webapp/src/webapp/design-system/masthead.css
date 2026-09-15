@@ -59,11 +59,16 @@
 }
 /* brand sizes ride one fluid scale: 30px @360 → ~40px @720 → 46px cap */
 .rw-app .brand-mark {
+  --brand-cartridge: #20282d;
+  --brand-r: #eef2f7;
   display: block;
   width: clamp(32px, 2.6vw + 21px, 46px);
   height: auto;
   aspect-ratio: 1;
-  border-radius: 8px;
+}
+:root[data-theme="dark"] .rw-app .brand-mark {
+  --brand-cartridge: #f6ecda;
+  --brand-r: #20282d;
 }
 .rw-app .brand-copy {
   display: block;

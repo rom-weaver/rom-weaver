@@ -16,5 +16,5 @@
     <text x="76" y="584" fill="#62645f" font-size="19">Your files stay on your device.</text>
     <text x="1052" y="552" fill="#f6ecda" font-size="24" font-weight="600" text-anchor="middle" letter-spacing="-.3">rom-weaver.com</text>
   </g>
-  <image x="852" y="114" width="400" height="400" href="__ROM_WEAVER_LOGO_PNG__"/>
+  <image x="852" y="114" width="400" height="400" href="__ROM_WEAVER_LOGO_SVG__"/>
 </svg>
