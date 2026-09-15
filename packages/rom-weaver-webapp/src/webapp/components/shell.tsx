@@ -99,7 +99,6 @@ type NavEntry = {
   icon: ReactNode;
   id: string;
   label: string;
-  detail?: string;
   /** Runs instead of following the href, for a row that routes or opens a dialog. */
   onSelect?: () => void;
   /** Runs before an external row opens, for the running-job guard. */
@@ -192,7 +191,6 @@ const NavRow = ({
     <>
       {entry.icon}
       <span className="nav-row-label">{entry.label}</span>
-      {entry.detail ? <span className="nav-row-detail">{entry.detail}</span> : null}
       {entry.beta ? <span className="nav-beta">{localizer.message("ui.tools.beta")}</span> : null}
     </>
   );
@@ -333,8 +331,8 @@ const MenuSheet = ({
   onOpenFind,
   open,
   opened,
-  runtimeLabel,
   sections,
+  status,
   toolOpen,
   triggerRef,
 }: {
@@ -346,11 +344,10 @@ const MenuSheet = ({
   onClose: () => void;
   onOpenFind: () => void;
   open: boolean;
-  /** True once Menu has been opened. The sheet's rows are the same fifteen the
-      sidebar already carries, so the prerendered shell ships them once. */
+  /** The secondary nav mounts after the first open, once hydration is complete. */
   opened: boolean;
-  runtimeLabel: string;
   sections: NavSectionData[];
+  status: ReactNode;
   /** True while a popover inside THIS sheet is open; Escape closes that first.
       A popover in the chrome must not count: it is inert behind the sheet, so
       letting it claim the press would spend it on nothing. */
@@ -379,19 +376,17 @@ const MenuSheet = ({
                 {/* Two columns: the heading carries the noun, so every label is
                 short enough to pair up and the whole index fits one screen. */}
                 <div className="nav-group-grid">
-                  {section.entries.map((entry) => (
-                    <NavRow
-                      className="nav-row"
-                      entry={
-                        entry.id === "status"
-                          ? { ...entry, className: join(entry.className, "nav-status"), detail: runtimeLabel }
-                          : entry
-                      }
-                      key={entry.id}
-                      localizer={localizer}
-                      onNavigate={onClose}
-                    />
-                  ))}
+                  {section.entries
+                    .filter((entry) => entry.id !== "status")
+                    .map((entry) => (
+                      <NavRow
+                        className="nav-row"
+                        entry={entry}
+                        key={entry.id}
+                        localizer={localizer}
+                        onNavigate={onClose}
+                      />
+                    ))}
                   {section.id === "device" ? appearance : null}
                 </div>
               </div>
@@ -399,6 +394,7 @@ const MenuSheet = ({
           : null}
       </div>
       <div className="menu-sheet-foot">
+        {opened ? status : null}
         <button className="menu-find" onClick={onOpenFind} ref={findRef} type="button">
           <Search aria-hidden="true" />
           <span>{localizer.message("ui.find.placeholder")}</span>
@@ -1614,8 +1610,19 @@ const Masthead = ({
         }}
         open={menuOpen}
         opened={menuMounted}
-        runtimeLabel={runtimeLabel}
         sections={sections}
+        status={
+          <StatusChip
+            label={`${localizer.message("ui.log.tabStatus")}: ${runtimeLabel}`}
+            onOpenStatus={() => {
+              closeMenu();
+              onOpenStatus();
+            }}
+            percent={runtimePercent}
+            state={runtimeState}
+            title={`${localizer.message("ui.log.tabStatus")}: ${runtimeTitle}`}
+          />
+        }
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />

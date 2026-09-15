@@ -265,11 +265,13 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
-    // Both layouts carry the same destinations under the same headings.
+    // Mobile Status stays in the fixed Menu foot; other destinations keep their groups.
     if (width < 1000) await openMenuSheet();
-    for (const name of ["Docs", "Settings", "Status", "Storage", "Logs", "Support"]) {
+    for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
+    if (width < 1000) expect(document.querySelector(".menu-sheet-foot .sub-status")).toBeTruthy();
+    else expect(navRow("Status", scope)).toBeTruthy();
   }
   await page.viewport(1280, 900);
 });
@@ -518,7 +520,7 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   mountWebappRoot();
 
   await openMenuSheet();
-  navRow("Status", ".menu-sheet")?.click();
+  document.querySelector(".menu-sheet-foot .sub-status")?.click();
   await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
 
   const rail = document.querySelector(".log-dlg .dialog-subrail");
@@ -562,11 +564,11 @@ test("the phone header carries appearance and the project links, and Menu carrie
   }
 
   await openMenuSheet();
-  for (const name of ["Status", "Storage", "Logs", "Settings", "Theme", "Accent", "Docs", "GitHub", "Support"]) {
+  for (const name of ["Storage", "Logs", "Settings", "Theme", "Accent", "Docs", "GitHub", "Support"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
-  expect(navRow("Status", ".menu-sheet").querySelector(".nav-row-detail").textContent).toBe(
-    document.querySelector(".sub-status-text").textContent,
+  expect(document.querySelector(".menu-sheet-foot .sub-status-text").textContent).toContain(
+    document.querySelector(".phone-runtime .sub-status-text").textContent,
   );
   expect(navRow("GitHub", ".menu-sheet").getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/");
   expect(navRow("Support", ".menu-sheet").getAttribute("href")).toBe("https://ko-fi.com/brandonocasey");
@@ -610,6 +612,11 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   const body = sheet.querySelector(".menu-sheet-body");
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(navRow("PPF undo", ".menu-sheet")).toBeTruthy();
+  const foot = sheet.querySelector(".menu-sheet-foot");
+  const footTop = foot.getBoundingClientRect().top;
+  body.scrollTop = 150;
+  expect(foot.getBoundingClientRect().top).toBe(footTop);
+  expect(foot.querySelector(".sub-status")?.textContent).toContain("Status:");
 
   navRow("Logs", ".menu-sheet").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
@@ -649,26 +656,33 @@ test("Theme and Accent float above the navigation without moving its rows", asyn
   await page.viewport(1280, 900);
 });
 
-test("the Menu sheet keeps its row spacing after opening", async () => {
-  await page.viewport(390, 664);
+test("the Menu sheet uses its content height and keeps its foot at the dock", async () => {
+  await page.viewport(390, 844);
   mountWebappRoot();
 
   const sheet = await openMenuSheet();
   const project = sheet?.querySelectorAll(".nav-group")[3];
   expect(project).not.toBeNull();
+  const body = sheet.querySelector(".menu-sheet-body");
+  const foot = sheet.querySelector(".menu-sheet-foot");
+  const dock = document.querySelector(".dock");
+  expect(sheet.getBoundingClientRect().top).toBeGreaterThan(100);
+  expect(
+    sheet.querySelector(".nav-group").getBoundingClientRect().top - sheet.getBoundingClientRect().top,
+  ).toBeLessThan(24);
+  expect(body.scrollHeight).toBe(body.clientHeight);
+  expect(foot.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
   const start = {
     sheetHeight: sheet.getBoundingClientRect().height,
     projectTop: project.getBoundingClientRect().top,
-    projectBottomGap:
-      sheet.querySelector(".menu-sheet-foot").getBoundingClientRect().top - project.getBoundingClientRect().bottom,
   };
 
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(sheet.getBoundingClientRect().height).toBeCloseTo(start.sheetHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
   await page.viewport(390, 600);
-  expect(
-    sheet.querySelector(".menu-sheet-foot").getBoundingClientRect().top - project.getBoundingClientRect().bottom,
-  ).toBeCloseTo(start.projectBottomGap, 1);
+  expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expect(foot.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
   await page.viewport(1280, 900);
 });

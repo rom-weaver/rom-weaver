@@ -154,18 +154,17 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("creator");
   });
 
-  it("gives the phone Menu the same sections in the same order as the sidebar", () => {
+  it("moves mobile Status to the Menu foot while preserving the other sections", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
     expect(sheet.getAttribute("aria-label")).toBe("Menu");
     expect(sheet.hasAttribute("hidden")).toBe(true);
-    // The sheet's rows are the sidebar's rows, so the prerendered shell ships
-    // them once and the sheet fills in the first time Menu is opened.
     expect(rowsOf(sheet)).toEqual([]);
 
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
 
-    expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")));
+    expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")).filter((label) => label !== "Status"));
+    expect(sheet.querySelector(".menu-sheet-foot .sub-status")?.textContent).toContain("Status:");
   });
 
   it("docks three workflows plus Menu, and toggles the sheet from the same button", () => {
@@ -354,17 +353,14 @@ describe("Masthead", () => {
       const device = Array.from(container.querySelectorAll(`${scope} .nav-group`)).find(
         (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
       );
-      expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
-        "Status",
-        "Storage",
-        "Logs",
-        "Settings",
-        "Theme",
-        "Accent",
-      ]);
+      const expected = ["Storage", "Logs", "Settings", "Theme", "Accent"];
+      if (scope === ".side-nav") expected.unshift("Status");
+      expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual(
+        expected,
+      );
     }
-    expect(container.querySelector(".menu-sheet .nav-status .nav-row-detail")?.textContent).toBe(
-      container.querySelector(".sub-status-text")?.textContent,
+    expect(container.querySelector(".menu-sheet-foot .sub-status-text")?.textContent).toContain(
+      container.querySelector(".phone-runtime .sub-status-text")?.textContent ?? "",
     );
   });
 

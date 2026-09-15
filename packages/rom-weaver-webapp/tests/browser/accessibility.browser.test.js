@@ -1292,15 +1292,15 @@ describe("webapp responsive navigation", () => {
         expect(label.scrollWidth).toBeLessThanOrEqual(label.getBoundingClientRect().width + 1);
       }
 
-      // The sheet ends exactly at the dock's top edge, so one open reads as one place.
-      // Menu toggles, and re-rendering the same tree keeps its open state, so
-      // this opens it only when it is actually closed.
+      // Menu toggles, and re-rendering the same tree keeps its open state.
       if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
       await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
       const sheet = host.querySelector(".menu-sheet").getBoundingClientRect();
       expect(sheet.height).toBeGreaterThan(0);
       expect(Math.abs(sheet.bottom - dock.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
-      expect(sheet.top).toBeLessThanOrEqual(1);
+      expect(sheet.top).toBeGreaterThanOrEqual(0);
+      expect(host.querySelector(".menu-sheet .nav-group").getBoundingClientRect().top - sheet.top).toBeLessThan(24);
+      expect(host.querySelector(".menu-sheet-foot .sub-status")?.textContent).toContain("Status:");
 
       // The brand and tools share one row without overlap.
       const brand = host.querySelector(".brand").getBoundingClientRect();
@@ -1313,18 +1313,17 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the Menu sheet lists exactly what the sidebar lists", async () => {
+  test("the Menu foot keeps Status and the sheet lists the other sidebar rows", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
 
-    // The sheet's rows are the sidebar's rows, so the prerendered shell carries
-    // them once and the sheet fills in the first time Menu is opened. Menu
-    // toggles, and re-rendering the same tree keeps its open state.
+    // Menu toggles, and re-rendering the same tree keeps its open state.
     if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
     await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
 
-    expect(labels(".menu-sheet")).toEqual(labels(".side-nav"));
+    expect(labels(".menu-sheet")).toEqual(labels(".side-nav").filter((label) => label !== "Status"));
+    expect(host.querySelector(".menu-sheet-foot .sub-status")?.getAttribute("aria-label")).toContain("Status:");
   });
 
   test("the wordmark is never truncated by the brand's min-content floor", async () => {
