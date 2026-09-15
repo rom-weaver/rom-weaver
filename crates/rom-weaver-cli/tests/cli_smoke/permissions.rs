@@ -34,7 +34,7 @@ fn unreadable_input_fails_validation_naming_the_path_and_identity() {
             "probe",
             "--input",
             input.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -81,7 +81,7 @@ fn read_only_output_directory_fails_before_any_work() {
             input.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -114,7 +114,7 @@ fn missing_input_is_still_reported_as_missing() {
             "probe",
             "--input",
             missing.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );

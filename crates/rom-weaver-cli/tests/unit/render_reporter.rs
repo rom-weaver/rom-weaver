@@ -13,7 +13,7 @@ fn running_event(label: &str, percent: Option<f32>) -> ProgressEvent {
 
 #[test]
 fn forced_plain_progress_shows_work_without_a_percentage_once() {
-    let mut deciles = HashMap::new();
+    let mut deciles: HashMap<String, PlainProgress> = HashMap::new();
     let event = running_event("preparing zip archive", None);
     assert_eq!(
         plain_progress_line(&mut deciles, "create".into(), &event, None),
@@ -23,6 +23,7 @@ fn forced_plain_progress_shows_work_without_a_percentage_once() {
         plain_progress_line(&mut deciles, "create".into(), &event, None),
         None
     );
+    deciles.get_mut("create").unwrap().printed_at -= Duration::from_secs(1);
     assert_eq!(
         plain_progress_line(&mut deciles, "create".into(), &event, Some(10.0)),
         Some(" 10% preparing zip archive".to_string())
@@ -31,10 +32,13 @@ fn forced_plain_progress_shows_work_without_a_percentage_once() {
 
 #[test]
 fn forced_plain_progress_limits_each_stage_to_deciles() {
-    let mut deciles = HashMap::new();
+    let mut deciles: HashMap<String, PlainProgress> = HashMap::new();
     let event = running_event("compressing archive", None);
     let lines = (0..=1000)
         .filter_map(|value| {
+            for previous in deciles.values_mut() {
+                previous.printed_at -= Duration::from_secs(1);
+            }
             plain_progress_line(
                 &mut deciles,
                 "create".into(),
@@ -51,7 +55,7 @@ fn forced_plain_progress_limits_each_stage_to_deciles() {
 
 #[test]
 fn forced_plain_progress_escapes_control_characters_in_labels() {
-    let mut deciles = HashMap::new();
+    let mut deciles: HashMap<String, PlainProgress> = HashMap::new();
     let event = running_event("extracting game\r\n\x1b[2J", None);
     assert_eq!(
         plain_progress_line(&mut deciles, "extract".into(), &event, None),
@@ -77,4 +81,19 @@ fn terminal_event_resets_plain_progress_for_the_next_operation() {
     assert!(reporter.simple_deciles.lock().unwrap().is_empty());
     reporter.emit(running_event("compressing second archive", Some(0.0)));
     assert!(!reporter.simple_deciles.lock().unwrap().is_empty());
+}
+
+#[test]
+fn fast_plain_progress_emits_initial_and_final_updates_only() {
+    let mut deciles = HashMap::new();
+    let event = running_event("compressing archive", None);
+    let lines = (0..=100)
+        .filter_map(|value| {
+            plain_progress_line(&mut deciles, "create".into(), &event, Some(value as f32))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lines,
+        vec!["  0% compressing archive", "100% compressing archive"]
+    );
 }

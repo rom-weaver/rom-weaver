@@ -91,29 +91,62 @@ pub(crate) fn run(
     prompter: Arc<dyn SelectionPrompter>,
     stdin_name: Option<&str>,
 ) -> ExitCode {
+    let command_name = crate::CliApp::command_name(&command);
     if let Err(error) = validate(&command, &options, stdin_name) {
-        crate::render::write_stderr(format_args!(
-            "error: {}\n",
-            crate::render::display_text(&error.to_string())
-        ));
+        report_error(
+            &reporter,
+            options.json,
+            command_name,
+            "cli.invalid_stream",
+            &error,
+            2,
+        );
         return ExitCode::from(2);
     }
     crate::init_logging(options.log_level, options.dep_trace, options.json);
     match run_staged(
         command,
         options,
-        reporter,
+        Arc::clone(&reporter),
         prompter,
         stdin_name.unwrap_or("stdin.bin"),
     ) {
         Ok(status) => status,
         Err(error) => {
-            crate::render::write_stderr(format_args!(
-                "error: {}\n",
-                crate::render::display_text(&error.to_string())
-            ));
+            report_error(
+                &reporter,
+                options.json,
+                command_name,
+                "cli.stream",
+                &error,
+                1,
+            );
             ExitCode::FAILURE
         }
+    }
+}
+
+fn report_error(
+    reporter: &Arc<dyn ProgressSink>,
+    json: bool,
+    command: &str,
+    code: &str,
+    error: &RomWeaverError,
+    status: u8,
+) {
+    if json {
+        reporter.emit(crate::native_output::error_event(
+            command,
+            "stream",
+            code,
+            &error.to_string(),
+            status,
+        ));
+    } else {
+        crate::render::write_stderr(format_args!(
+            "error: {}\n",
+            crate::render::display_text(&error.to_string())
+        ));
     }
 }
 
@@ -144,7 +177,7 @@ fn validate(command: &Commands, options: &RunCommandOptions, name: Option<&str>)
     }
     if options.json || options.dry_run {
         return Err(invalid(
-            "output - cannot be combined with --json or --dry-run",
+            "output - cannot be combined with --json, --jsonl, or --dry-run",
         ));
     }
     if io::stdout().is_terminal() {

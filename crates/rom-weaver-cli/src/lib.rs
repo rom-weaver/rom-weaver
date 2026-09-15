@@ -23,6 +23,8 @@ mod interactive;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod manpages;
 #[cfg(not(target_arch = "wasm32"))]
+mod native_output;
+#[cfg(not(target_arch = "wasm32"))]
 mod render;
 mod save_command;
 #[cfg(not(target_arch = "wasm32"))]
@@ -1037,7 +1039,10 @@ fn init_logging(log_level: Option<LogLevel>, dep_trace: bool, json_mode: bool) {
                         })
                     ));
                 } else {
-                    crate::render::write_stderr(format_args!("warning: {message}\n"));
+                    crate::render::write_stderr(format_args!(
+                        "warning: {}\n",
+                        crate::render::display_text(&message)
+                    ));
                 }
                 Targets::default()
             }
@@ -1085,7 +1090,15 @@ struct NativeLogWriter;
 #[cfg(not(target_arch = "wasm32"))]
 impl Write for NativeLogWriter {
     fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        crate::render::with_progress_suspended(|| io::stderr().write(buffer))
+        let record = String::from_utf8_lossy(buffer);
+        let (message, newline) = record
+            .strip_suffix('\n')
+            .map_or((record.as_ref(), ""), |message| (message, "\n"));
+        let message = crate::render::display_text(message);
+        crate::render::with_progress_suspended(|| {
+            io::stderr().write_all(format!("{message}{newline}").as_bytes())
+        })?;
+        Ok(buffer.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {

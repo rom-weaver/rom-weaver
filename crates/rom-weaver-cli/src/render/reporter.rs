@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use rom_weaver_core::{OperationStatus, ProgressEvent, ProgressSink, process_cancellation_token};
@@ -10,6 +10,11 @@ use rom_weaver_core::{OperationStatus, ProgressEvent, ProgressSink, process_canc
 use super::{
     HumanStyle, Surface, commands, display_text, terminal_supports_progress, write_stderr,
 };
+
+struct PlainProgress {
+    decile: Option<u8>,
+    printed_at: Instant,
+}
 
 static VISIBLE_PROGRESS: Mutex<Option<ProgressBar>> = Mutex::new(None);
 
@@ -22,13 +27,48 @@ struct ActiveBar {
 pub struct HumanReporter {
     surface: Surface,
     active: Mutex<Option<ActiveBar>>,
-    simple_deciles: Mutex<HashMap<String, Option<u8>>>,
+    simple_deciles: Mutex<HashMap<String, PlainProgress>>,
     progress_is_terminal: bool,
     quiet: bool,
+    verbose: bool,
+    selection: commands::OutputSelection,
 }
 
 impl HumanReporter {
-    pub fn new(style: HumanStyle, color_override: Option<bool>, quiet: bool) -> Self {
+    pub fn for_command(
+        style: HumanStyle,
+        color_override: Option<bool>,
+        quiet: bool,
+        verbose: bool,
+        command: &crate::Commands,
+    ) -> Self {
+        Self::with_selection(
+            style,
+            color_override,
+            quiet,
+            verbose,
+            commands::OutputSelection::for_command(command),
+        )
+    }
+
+    #[cfg(test)]
+    fn new(style: HumanStyle, color_override: Option<bool>, quiet: bool) -> Self {
+        Self::with_selection(
+            style,
+            color_override,
+            quiet,
+            false,
+            commands::OutputSelection::default(),
+        )
+    }
+
+    fn with_selection(
+        style: HumanStyle,
+        color_override: Option<bool>,
+        quiet: bool,
+        verbose: bool,
+        selection: commands::OutputSelection,
+    ) -> Self {
         if let Some(color) = color_override {
             dialoguer::console::set_colors_enabled_stderr(color);
         }
@@ -38,6 +78,8 @@ impl HumanReporter {
             simple_deciles: Mutex::new(HashMap::new()),
             progress_is_terminal: terminal_supports_progress(),
             quiet,
+            verbose: verbose && !quiet,
+            selection,
         }
     }
 
@@ -119,10 +161,23 @@ impl HumanReporter {
             self.surface.cancelled("cancelled");
             return;
         }
-        match event.status {
-            OperationStatus::Succeeded if commands::quiet_suppresses_success(self.quiet, event) => {
+        if let Some(warnings) = event
+            .details
+            .as_ref()
+            .and_then(|details| details.get("warnings"))
+            .and_then(serde_json::Value::as_array)
+        {
+            for warning in warnings.iter().filter_map(serde_json::Value::as_str) {
+                self.surface.warn(&format!("warning: {warning}"));
             }
-            OperationStatus::Succeeded => commands::render_success(&self.surface, event),
+        }
+        match event.status {
+            OperationStatus::Succeeded => {
+                commands::render_success(&self.surface, event, &self.selection);
+                if self.verbose {
+                    commands::render_verbose(&self.surface, event);
+                }
+            }
             OperationStatus::Failed => self.surface.error(&format!("error: {}", event.label)),
             OperationStatus::Unsupported if event.command == "save-identify" => {
                 for (index, line) in event.label.lines().enumerate() {
@@ -154,7 +209,16 @@ impl ProgressSink for HumanReporter {
             }
             OperationStatus::Pending => {}
             _ => {
+                let had_progress = self.lock().is_some()
+                    || !self
+                        .simple_deciles
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .is_empty();
                 self.finish_progress();
+                if had_progress && event.status == OperationStatus::Succeeded {
+                    write_stderr(format_args!("{}: complete\n", display_text(&event.command)));
+                }
                 self.render_terminal(&event);
             }
         }
@@ -199,19 +263,27 @@ fn progress_label(event: &ProgressEvent) -> String {
 }
 
 fn plain_progress_line(
-    deciles: &mut HashMap<String, Option<u8>>,
+    deciles: &mut HashMap<String, PlainProgress>,
     key: String,
     event: &ProgressEvent,
     percent: Option<f32>,
 ) -> Option<String> {
     let decile = percent.map(|value| value as u8 / 10);
-    if deciles
-        .get(&key)
-        .is_some_and(|previous| decile <= *previous)
-    {
+    let now = Instant::now();
+    if deciles.get(&key).is_some_and(|previous| {
+        decile <= previous.decile
+            || (percent != Some(100.0)
+                && now.duration_since(previous.printed_at) < Duration::from_secs(1))
+    }) {
         return None;
     }
-    deciles.insert(key, decile);
+    deciles.insert(
+        key,
+        PlainProgress {
+            decile,
+            printed_at: now,
+        },
+    );
     let label = progress_label(event);
     Some(match percent {
         Some(percent) => format!("{percent:>3.0}% {label}"),

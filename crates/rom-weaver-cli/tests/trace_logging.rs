@@ -205,28 +205,19 @@ fn verbose_reports_user_diagnostics_without_developer_trace() {
     let stdout = parse_json_lines(&output.stdout);
     assert!(stdout.iter().any(|event| event["status"] == "succeeded"));
     let diagnostics = parse_json_lines(&output.stderr);
-    assert!(diagnostics.iter().all(|event| event["level"] == "INFO"));
-    assert!(diagnostics.iter().any(|event| {
-        event["fields"]["message"] == "starting command"
-            && event["fields"]["command"] == "checksum"
-            && event["fields"]["version"] == env!("CARGO_PKG_VERSION")
-    }));
-    assert!(diagnostics.iter().any(|event| {
-        event["fields"]["option"] == "input"
-            && event["fields"]["value"]
-                .as_str()
-                .is_some_and(|value| value.contains(source.to_str().expect("path")))
-    }));
-    assert!(diagnostics.iter().any(|event| {
-        event["fields"]["message"] == "completed operation"
-            && event["fields"]["status"] == "Succeeded"
-            && event["fields"]["elapsed_ms"].as_u64().is_some()
-    }));
+    assert_eq!(stdout.len(), 1);
+    assert_eq!(diagnostics.len(), 1);
+    let diagnostic = &diagnostics[0];
+    assert_eq!(diagnostic["level"], "INFO");
+    assert_eq!(diagnostic["fields"]["command"], "checksum");
+    assert_eq!(diagnostic["fields"]["status"], "succeeded");
+    assert!(diagnostic["fields"]["elapsed_ms"].as_u64().is_some());
     assert!(
-        !diagnostics
-            .iter()
-            .any(|event| { event["fields"]["message"] == "running rom-weaver command" })
+        diagnostic["fields"]["message"]
+            .as_str()
+            .is_some_and(|message| { message.contains("crc32=") })
     );
+    assert!(diagnostic["fields"].get("option").is_none());
 }
 
 #[test]
@@ -253,8 +244,9 @@ fn verbose_plain_stderr_is_readable_without_terminal_controls() {
     let source = write_fixture_file(&temp, "input.bin", b"plain verbose diagnostics");
     let output = run_checksum_with_options(&source, &["--verbose"], &[]);
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    assert!(stderr.contains("INFO starting command"));
-    assert!(stderr.contains("completed operation"));
+    assert!(stderr.contains("crc32="));
+    assert!(stderr.contains("checksum: finished in "));
+    assert!(!stderr.contains("INFO"));
     assert!(!stderr.contains("rom_weaver_app::"));
     assert!(!stderr.contains('\x1b'));
     assert!(!stderr.contains('\r'));

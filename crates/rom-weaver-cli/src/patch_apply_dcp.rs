@@ -31,7 +31,7 @@ impl CliApp {
         &self,
         args: PatchApplyCommand,
         expected_rom_name: Option<&str>,
-    ) -> AppRunOutcome {
+    ) -> OperationReport {
         let context = self.context(args.threads);
         let single = context.single_thread_execution();
         let fail = |stage: &str, message: String| {
@@ -41,12 +41,9 @@ impl CliApp {
         // A `.dcp` rebuilds the whole data track, so the byte-level header /
         // checksum transforms and chaining do not apply.
         if args.patches.len() != 1 {
-            return self.finish(
-                "patch-apply",
-                fail(
-                    "validate",
-                    "a .dcp patch must be applied on its own (no patch chaining)".to_string(),
-                ),
+            return fail(
+                "validate",
+                "a .dcp patch must be applied on its own (no patch chaining)".to_string(),
             );
         }
         if args.patch_header.contains(&PatchApplyHeaderMode::Strip)
@@ -57,35 +54,26 @@ impl CliApp {
                 .iter()
                 .any(|mode| mode.target().is_some())
         {
-            return self.finish(
-                "patch-apply",
-                fail(
+            return fail(
                     "validate",
                     "a .dcp patch cannot be combined with --patch-header strip, --output-header, --repair-checksum, or --n64-byte-order".to_string(),
-                ),
-            );
+                );
         }
         // A `.dcp` rebuilds the GD-ROM filesystem rather than patching ROM bytes,
         // and it auto-selects the high-density data track. Cheats (which patch
         // byte offsets) and an explicit `--target` track have no effect here, so
         // reject them instead of silently dropping them.
         if !args.codes.is_empty() {
-            return self.finish(
-                "patch-apply",
-                fail(
+            return fail(
                     "validate",
                     "a .dcp patch cannot be combined with --code; cheats patch ROM byte offsets, not a rebuilt GD-ROM filesystem".to_string(),
-                ),
-            );
+                );
         }
         if args.target.is_some() {
-            return self.finish(
-                "patch-apply",
-                fail(
+            return fail(
                     "validate",
                     "a .dcp patch ignores --target; the GD-ROM high-density data track is selected automatically".to_string(),
-                ),
-            );
+                );
         }
 
         let dcp_path = args.patches[0].clone();
@@ -96,7 +84,7 @@ impl CliApp {
             &args.input,
             single.clone(),
         ) {
-            return self.finish("patch-apply", report);
+            return report;
         }
         if let Some(report) = self.require_readable_path(
             "patch-apply",
@@ -105,7 +93,7 @@ impl CliApp {
             &dcp_path,
             single.clone(),
         ) {
-            return self.finish("patch-apply", report);
+            return report;
         }
 
         let compression_options = match Self::parse_patch_apply_compression_options(
@@ -115,7 +103,7 @@ impl CliApp {
             args.compress_level,
         ) {
             Ok(options) => options,
-            Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
+            Err(error) => return fail("validate", error.to_string()),
         };
         if let Err(error) = self.validate_patch_apply_compression_plan(
             args.output
@@ -124,25 +112,22 @@ impl CliApp {
             &args.input,
             &compression_options,
         ) {
-            return self.finish("patch-apply", fail("validate", error.to_string()));
+            return fail("validate", error.to_string());
         }
 
         let disc = match self.build_dcp_disc_context(&args.input) {
             Ok(Some(disc)) => disc,
             Ok(None) => {
-                return self.finish(
-                    "patch-apply",
-                    fail(
-                        "validate",
-                        "a .dcp patch requires a disc-sheet (.cue/.gdi) input".to_string(),
-                    ),
+                return fail(
+                    "validate",
+                    "a .dcp patch requires a disc-sheet (.cue/.gdi) input".to_string(),
                 );
             }
-            Err(error) => return self.finish("patch-apply", fail("prepare", error.to_string())),
+            Err(error) => return fail("prepare", error.to_string()),
         };
-        warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
+        let name_warning = warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
 
-        let report = self.rebuild_and_emit_dcp(
+        let mut report = self.rebuild_and_emit_dcp(
             &args,
             &dcp_path,
             &disc,
@@ -150,7 +135,8 @@ impl CliApp {
             &context,
             single.clone(),
         );
-        self.finish("patch-apply", report)
+        Self::append_report_warnings(&mut report, name_warning);
+        report
     }
 
     /// Rebuild the data track from the `.dcp`, reassemble the disc, and emit it.
@@ -286,19 +272,26 @@ impl CliApp {
             match self.write_disc_output(disc, &staged_sheet, output) {
                 Ok(note) => {
                     label = format!("{label}; {note}");
-                    OperationReport::succeeded(
+                    let report = OperationReport::succeeded(
                         OperationFamily::Patch,
                         Some("dcp".to_string()),
                         "apply",
                         label,
                         Some(100.0),
                         single.clone(),
+                    );
+                    Self::attach_emitted_files_details(
+                        report,
+                        Self::disc_output_paths(disc, output),
+                        None,
                     )
                 }
                 Err(error) => fail("compat", error.to_string()),
             }
         };
 
+        let mut report = report;
+        Self::append_report_warnings(&mut report, disc.warnings.iter().cloned());
         Self::cleanup_temp_paths(&temp_paths);
         report
     }
@@ -360,14 +353,16 @@ impl CliApp {
             plan.format,
             plan.output_path.display()
         );
-        OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(plan.format.clone()),
             "compress",
             label.clone(),
             Some(100.0),
             compress_report.thread_execution,
-        )
+        );
+        Self::append_report_warnings(&mut report, plan.warning);
+        Self::attach_emitted_files_details(report, vec![plan.output_path], Some("archive"))
     }
 }
 

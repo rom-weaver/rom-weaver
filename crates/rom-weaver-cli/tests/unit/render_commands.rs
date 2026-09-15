@@ -5,9 +5,8 @@ use super::super::HumanStyle;
 use super::*;
 
 /// Every renderer writes through `Surface` to stdout, so these tests pin the
-/// pure formatting helpers directly and drive the dispatching entry points for
-/// the shapes they must survive: the module's contract is that any `details`
-/// value renders, falling back to the label when the expected shape is absent.
+/// pure formatting helpers directly and check that incomplete report details
+/// cannot panic the command dispatcher.
 fn surface() -> Surface {
     Surface::new(HumanStyle::Simple, Some(false))
 }
@@ -24,22 +23,20 @@ fn event(command: &str, label: &str, details: Option<Value>) -> ProgressEvent {
 }
 
 #[test]
-fn write_summary_commands_are_the_ones_quiet_drops() {
-    for command in [
-        "extract",
-        "compress",
-        "patch-apply",
-        "patch-create",
-        "trim",
-        "ingest",
-        "bundle-create",
-        "bundle-apply",
-    ] {
-        assert!(success_is_write_summary(command), "{command}");
-    }
-    for command in ["probe", "checksum", "patch-validate", "identify", "formats"] {
-        assert!(!success_is_write_summary(command), "{command}");
-    }
+fn explicit_outputs_are_silent_and_generated_names_remain_results() {
+    let file = json!({ "path": "game.bps" });
+    assert!(OutputSelection::default().shows_file(&file));
+    let explicit = OutputSelection {
+        explicit_output: Some("game.bps".into()),
+        ..OutputSelection::default()
+    };
+    assert!(!explicit.shows_file(&file));
+    assert!(explicit.shows_file(&json!({ "path": "game-patched.bps" })));
+    let in_place = OutputSelection {
+        suppress_files: true,
+        ..OutputSelection::default()
+    };
+    assert!(!in_place.shows_file(&file));
 }
 
 #[test]
@@ -126,15 +123,11 @@ fn emitted_file_rows_prefer_the_destination_path() {
         "kind": "rom",
     });
     assert_eq!(
-        emitted_file_row(&file),
-        vec![
-            "/roms/extracted/game.nes".to_string(),
-            humanize_bytes(2048),
-            "rom".to_string(),
-        ]
+        emitted_file_row(&file, false),
+        vec!["/roms/extracted/game.nes".to_string()]
     );
     assert_eq!(
-        emitted_file_row(&json!({ "file_name": "game.nes" }))[0],
+        emitted_file_row(&json!({ "file_name": "game.nes" }), false)[0],
         "game.nes",
         "the old file-name-only detail remains readable"
     );
@@ -250,53 +243,52 @@ fn dry_run_requires_the_explicit_detail_flag() {
 }
 
 #[test]
-fn quiet_keeps_dry_run_plans_visible() {
-    let ordinary_write = event("compress", "compressed", Some(json!({})));
-    let dry_run = event(
-        "compress",
-        "dry run: would write; nothing written",
-        Some(json!({ "dry_run": true })),
+fn emitted_file_results_keep_requested_checksums_and_probe_fields() {
+    let file = json!({
+        "path": " game.bin ",
+        "kind": "bin",
+        "platform": "nes",
+        "checksums": { "crc32": "deadbeef" },
+    });
+    assert_eq!(
+        emitted_file_row(&file, false),
+        vec![" game.bin ", "crc32=deadbeef"]
     );
-    assert!(quiet_suppresses_success(true, &ordinary_write));
-    assert!(!quiet_suppresses_success(true, &dry_run));
-    assert!(!quiet_suppresses_success(false, &ordinary_write));
+    assert_eq!(
+        emitted_file_row(&file, true),
+        vec![" game.bin ", "bin", "platform=nes", "crc32=deadbeef"]
+    );
 }
 
 #[test]
-fn quiet_keeps_patch_format_planning_visible() {
-    let planning = event(
-        "patch-create",
-        "recommended patch create format bps",
-        Some(json!({
-            "patch_create_format_candidates": {
-                "default": "bps",
-                "formats": ["bps", "ips"],
-            },
-        })),
+fn probe_results_exclude_recommendations_without_hiding_header_information() {
+    let details = json!({
+        "platform": "nes",
+        "rom_header": { "profile": "ines", "stripped_bytes": 16 },
+        "recommended_compress_format": "7z",
+        "reason": "generic archive",
+    });
+    assert_eq!(
+        probe_pairs(&details),
+        vec![
+            ("Platform".into(), "nes".into()),
+            ("Rom header / Profile".into(), "ines".into()),
+            ("Rom header / Stripped bytes".into(), humanize_bytes(16)),
+        ]
     );
-    assert!(!quiet_suppresses_success(true, &planning));
 }
 
 #[test]
-fn quiet_keeps_save_edit_previews_visible() {
+fn save_edit_preview_is_distinct_from_a_completed_write() {
     let preview = ProgressEvent {
         stage: "preview".to_string(),
-        ..event(
-            "save-set",
-            "Save edit preview is valid",
-            Some(json!({
-                "save_editor": { "result": { "preview": { "changed": true } } },
-            })),
-        )
+        ..event("save-set", "Save edit preview is valid", None)
     };
-    assert!(!quiet_suppresses_success(true, &preview));
-    assert!(quiet_suppresses_success(
-        true,
-        &ProgressEvent {
-            stage: "set".to_string(),
-            ..preview
-        }
-    ));
+    assert!(is_save_preview(&preview));
+    assert!(!is_save_preview(&ProgressEvent {
+        stage: "set".to_string(),
+        ..preview
+    }));
 }
 
 #[test]
@@ -417,28 +409,23 @@ fn collect_pairs_prefixes_nested_keys_for_uniqueness() {
 }
 
 #[test]
-fn identify_names_combine_primary_and_alternate_names() {
-    let identify = json!({
-        "matches": [
-            { "name": "OpenGood name", "alternate_names": ["Libretro name", "OpenGood name"] },
-            { "name": "Second name", "alternate_names": ["Libretro name"] },
-        ]
-    });
-    assert_eq!(
-        identify_names(identify.as_object().expect("identify object")),
-        vec![
-            "OpenGood name".to_string(),
-            "Libretro name".to_string(),
-            "Second name".to_string(),
-        ]
-    );
+fn identify_rows_keep_alternate_names_and_distinguish_dump_variants() {
+    let matches = json!([
+        { "name": "Game", "platform": "nes", "region": "USA", "revision": "1", "variant": "raw", "alternate_names": ["Alternate", "Game"], "expected_components": [{ "crc32": "deadbeef" }] },
+        { "name": "Game", "platform": "nes", "region": "USA", "revision": "2", "variant": "raw", "expected_components": [{ "crc32": "12345678" }] },
+    ]);
+    let rows = identify_rows(matches.as_array().expect("matches"));
+    assert_eq!(rows.len(), 2);
+    assert!(rows[0].contains(&"also=Alternate".to_string()));
+    assert!(rows[0].contains(&"revision=1".to_string()));
+    assert!(rows[1].contains(&"revision=2".to_string()));
+    assert!(rows[0].contains(&"crc32=deadbeef".to_string()));
+    assert!(rows[1].contains(&"crc32=12345678".to_string()));
 }
 
 #[test]
 fn every_success_shape_renders_without_the_expected_details() {
-    // These renderers consume a details value the app builds elsewhere; each
-    // one MUST degrade to the plain label rather than panicking when the shape
-    // it expects is missing, which is what this drives.
+    // Renderers MUST accept missing optional details without panicking.
     let surface = surface();
     let shapes = [
         event("probe", "probe label", None),
@@ -464,7 +451,7 @@ fn every_success_shape_renders_without_the_expected_details() {
         event("formats", "formats label", Some(json!([1, 2, 3]))),
     ];
     for shape in shapes {
-        render_success(&surface, &shape);
+        render_success(&surface, &shape, &OutputSelection::default());
     }
 }
 
@@ -531,6 +518,6 @@ fn every_success_shape_renders_with_its_expected_details() {
         },
     ];
     for shape in shapes {
-        render_success(&surface, &shape);
+        render_success(&surface, &shape, &OutputSelection::default());
     }
 }

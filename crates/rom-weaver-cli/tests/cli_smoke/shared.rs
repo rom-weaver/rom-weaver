@@ -226,11 +226,15 @@ pub(crate) fn emitted_file_entry<'a>(json: &'a Value, file_name: &str) -> &'a Va
         .unwrap_or_else(|| panic!("missing emitted file `{file_name}`"))
 }
 
+/// Build the `path` an emitted-file entry carries. This MUST reuse
+/// `emitted_path_key` rather than fold separators itself, or the expectation
+/// drifts from the shape the CLI actually writes.
 pub(crate) fn expected_event_path(path: &std::path::Path) -> String {
-    fs::canonicalize(path)
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .replace('\\', "/")
+    rom_weaver_core::emitted_path_key(
+        &fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy(),
+    )
 }
 
 pub(crate) fn assert_emitted_file(
@@ -837,7 +841,7 @@ pub(crate) fn build_test_nds_rom(
 }
 
 #[test]
-pub(crate) fn json_mode_emits_running_progress_before_terminal_status() {
+pub(crate) fn jsonl_mode_emits_running_progress_before_terminal_status() {
     let temp = setup_temp_dir();
     fs::write(temp.child("sample.bin").path(), b"progress-check").expect("fixture");
 
@@ -849,7 +853,7 @@ pub(crate) fn json_mode_emits_running_progress_before_terminal_status() {
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
-            "--json",
+            "--jsonl",
         ])
         .assert()
         .code(0)
@@ -942,7 +946,7 @@ pub(crate) fn progress_flag_enables_running_progress_without_json() {
 }
 
 #[test]
-pub(crate) fn no_progress_flag_suppresses_running_progress_in_json_mode() {
+pub(crate) fn no_progress_flag_suppresses_running_progress_in_jsonl_mode() {
     let temp = setup_temp_dir();
     fs::write(temp.child("sample.bin").path(), b"progress-check").expect("fixture");
 
@@ -955,7 +959,7 @@ pub(crate) fn no_progress_flag_suppresses_running_progress_in_json_mode() {
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
-            "--json",
+            "--jsonl",
         ])
         .assert()
         .code(0)

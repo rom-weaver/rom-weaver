@@ -1,6 +1,4 @@
-//! Human-facing rendering for the native CLI. The app emits a structured `ProgressEvent` stream;
-//! these modules turn that stream into a live progress bar plus a rich terminal summary (`Rich`) or
-//! plain piped output (`Simple`). `--json` bypasses all of this and prints the raw event stream.
+//! Native human results go to stdout; optional progress and diagnostics go to stderr.
 
 mod commands;
 mod prompt;
@@ -38,6 +36,7 @@ pub enum HumanStyle {
 pub struct Surface {
     color: bool,
     stderr_color: bool,
+    diagnostic: bool,
 }
 
 impl Surface {
@@ -48,23 +47,40 @@ impl Surface {
             color: color_override.unwrap_or(automatic_color && matches!(style, HumanStyle::Rich)),
             stderr_color: color_override
                 .unwrap_or(automatic_color && std::io::stderr().is_terminal()),
+            diagnostic: false,
+        }
+    }
+
+    fn diagnostics(&self) -> Self {
+        Self {
+            color: self.stderr_color,
+            stderr_color: self.stderr_color,
+            diagnostic: true,
+        }
+    }
+
+    fn write(&self, arguments: std::fmt::Arguments<'_>) {
+        if self.diagnostic {
+            write_stderr(arguments);
+        } else {
+            crate::stdout_output::write(arguments);
         }
     }
 
     /// A plain line (used for label-only summaries).
     pub fn line(&self, text: &str) {
         let text = display_text(text);
-        crate::stdout_output::write(format_args!("{text}\n"));
+        self.write(format_args!("{text}\n"));
     }
 
     /// A dimmed contextual note.
     pub fn note(&self, text: &str) {
         let text = display_text(text);
         if self.color {
-            crate::stdout_output::write(format_args!("{}\n", text.dimmed()));
+            self.write(format_args!("{}\n", text.dimmed()));
             return;
         }
-        crate::stdout_output::write(format_args!("{text}\n"));
+        self.write(format_args!("{text}\n"));
     }
 
     /// An error line on stderr, red when color is enabled.
@@ -115,12 +131,12 @@ impl Surface {
         for (key, value) in pairs {
             let pad = " ".repeat(width.saturating_sub(measure_text_width(&key)));
             if self.color {
-                crate::stdout_output::write(format_args!(
+                self.write(format_args!(
                     "{}{pad}  {value}\n",
                     key.truecolor(ACCENT.0, ACCENT.1, ACCENT.2)
                 ));
             } else {
-                crate::stdout_output::write(format_args!("{key}{pad}  {value}\n"));
+                self.write(format_args!("{key}{pad}  {value}\n"));
             }
         }
     }
@@ -161,7 +177,7 @@ impl Surface {
                     line.push_str(&" ".repeat(pad));
                 }
             }
-            crate::stdout_output::write(format_args!("{}\n", line.trim_end()));
+            self.write(format_args!("{}\n", line.trim_end()));
         }
     }
 }

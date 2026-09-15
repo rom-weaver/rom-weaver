@@ -260,9 +260,9 @@ impl CliApp {
         // path *inside* its immediate parent archive, rather than the accumulated full nested path.
         let step = ExtractStepDetails {
             depth,
-            source: source.to_string_lossy().replace('\\', "/"),
+            source: rom_weaver_core::emitted_path_key(&source.to_string_lossy()),
             source_name,
-            out_dir: out_dir.to_string_lossy().replace('\\', "/"),
+            out_dir: rom_weaver_core::emitted_path_key(&out_dir.to_string_lossy()),
             format: format.to_string(),
             status: step_status.to_string(),
             extract_time_ms: elapsed_ms,

@@ -424,6 +424,31 @@ fn identify_reports_database_required_for_an_uninstalled_platform() {
     let hint = identify["hint"].as_str().expect("hint");
     assert!(hint.contains("Sony PlayStation"));
     assert!(hint.contains("this install shipped no identify database"));
+    for flags in [vec![], vec!["--verbose"], vec!["--quiet"]] {
+        let result = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "identify",
+                "--input",
+                temp.child("game.bin").path().to_str().unwrap(),
+                "--system",
+                "ps1",
+                "--database-dir",
+                dir.to_str().unwrap(),
+            ])
+            .args(flags)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8(result.stderr).expect("diagnostics");
+        assert!(stderr.contains(hint), "{stderr}");
+        assert!(
+            !String::from_utf8(result.stdout)
+                .unwrap()
+                .contains("--database-dir")
+        );
+    }
 }
 
 /// A valid `rom-weaver-identify-data.tar.br`: the release tree under
