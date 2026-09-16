@@ -165,7 +165,12 @@ impl CliApp {
             // the probe path so platform identify lives with probe (no-op for archives
             // and other inputs with no on-disc signature).
             Self::attach_rom_identity_details(&mut report, &probe_source);
-            return self.finish_probe(report, extracted_archives, cleanup_paths);
+            return self.finish_probe(
+                report,
+                extracted_archives,
+                cleanup_paths,
+                probe_recommendation.as_ref(),
+            );
         }
 
         if let Some(handler) = self.patches.probe(&probe_source) {
@@ -199,6 +204,7 @@ impl CliApp {
                 Self::attach_patch_probe_details(report),
                 extracted_archives,
                 cleanup_paths,
+                probe_recommendation.as_ref(),
             );
         }
 
@@ -217,7 +223,12 @@ impl CliApp {
                 report =
                     Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
             }
-            return self.finish_probe(report, extracted_archives, cleanup_paths);
+            return self.finish_probe(
+                report,
+                extracted_archives,
+                cleanup_paths,
+                probe_recommendation.as_ref(),
+            );
         }
 
         if let Ok(Some(header_match)) = Self::detect_known_rom_header(&probe_source) {
@@ -242,12 +253,25 @@ impl CliApp {
                 report =
                     Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
             }
+            report.details = Some(json!({
+                "rom_header": {
+                    "profile": header_match.profile_name(),
+                    "stripped_bytes": header_match.stripped_bytes(),
+                    "headered_extension": header_match.header.headered_extension(),
+                    "headerless_extension": header_match.header.headerless_extension(),
+                },
+            }));
             // Same console/medium detection the container branch attaches, so a bare
             // cartridge ROM reports its platform too. Hosts use it to pick which
             // identify database to load before hashing, and a headered ROM whose
             // extension says nothing (`.bin`, `.rom`) has no other cheap signal.
             Self::attach_rom_identity_details(&mut report, &probe_source);
-            return self.finish_probe(report, extracted_archives, cleanup_paths);
+            return self.finish_probe(
+                report,
+                extracted_archives,
+                cleanup_paths,
+                probe_recommendation.as_ref(),
+            );
         }
 
         // A bare `.cue`/`.gdi` sheet: list its referenced track files and detect the
@@ -258,7 +282,12 @@ impl CliApp {
                 report =
                     Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
             }
-            return self.finish_probe(report, extracted_archives, cleanup_paths);
+            return self.finish_probe(
+                report,
+                extracted_archives,
+                cleanup_paths,
+                probe_recommendation.as_ref(),
+            );
         }
 
         // A bare file no handler claims can still carry a disc signature (a raw
@@ -283,7 +312,12 @@ impl CliApp {
                 report =
                     Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
             }
-            return self.finish_probe(report, extracted_archives, cleanup_paths);
+            return self.finish_probe(
+                report,
+                extracted_archives,
+                cleanup_paths,
+                probe_recommendation.as_ref(),
+            );
         }
 
         let mut report = OperationReport::failed(
@@ -296,7 +330,12 @@ impl CliApp {
         if !self.emit_progress_events {
             report = Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
         }
-        self.finish_probe(report, extracted_archives, cleanup_paths)
+        self.finish_probe(
+            report,
+            extracted_archives,
+            cleanup_paths,
+            probe_recommendation.as_ref(),
+        )
     }
 
     /// Probe a bare `.cue`/`.gdi` sheet: the referenced files become container-style
@@ -344,7 +383,21 @@ impl CliApp {
         mut report: OperationReport,
         extracted_archives: usize,
         cleanup_paths: Vec<PathBuf>,
+        recommendation: Option<&CompressFormatRecommendation>,
     ) -> AppRunOutcome {
+        if report.status == OperationStatus::Succeeded
+            && let Some(recommendation) = recommendation
+        {
+            let mut details = operation_report_details(&mut report);
+            if !details.contains_key("container") {
+                details.insert(
+                    "recommended_compress_format".to_string(),
+                    json!(recommendation.format_name),
+                );
+                details.insert("reason".to_string(), json!(recommendation.reason));
+            }
+            report.details = Some(Value::Object(details));
+        }
         if report.status == OperationStatus::Succeeded && extracted_archives > 0 {
             report.label = format!(
                 "{}; probe source resolved via {extracted_archives} container extract step(s)",

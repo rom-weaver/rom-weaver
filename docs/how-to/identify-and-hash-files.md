@@ -159,13 +159,13 @@ xz -dc game.iso.xz | rom-weaver probe --input - --json
 
 ## Get machine-readable output
 
-Add `--json` to a command for one JSON object per line:
+Add `--json` to a command for one complete JSON result document:
 
 ```bash
 rom-weaver probe --input game.sfc --json | jq
 ```
 
-JSON mode turns off interactive selection, so scripts never block on a prompt.
+JSON mode turns off interactive selection, so scripts never block on a prompt. Use `--jsonl` when a script needs progress and terminal events as JSON lines.
 
 ## Related
 

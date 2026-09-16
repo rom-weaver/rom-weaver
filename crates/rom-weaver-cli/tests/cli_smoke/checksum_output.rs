@@ -214,10 +214,17 @@ fn checksum_digest_rejects_invalid_output_combinations() {
             "--digest",
         ],
     ] {
-        assert!(
-            digest(&args, 2).is_empty(),
-            "invalid args must not write stdout"
-        );
+        let output = digest(&args, 2);
+        if args.contains(&"--json") {
+            let report: Value = serde_json::from_slice(&output).expect("JSON argument error");
+            assert_eq!(report["error"]["code"], "cli.invalid_arguments");
+            assert_eq!(report["exit_code"], 2);
+        } else {
+            assert!(
+                output.is_empty(),
+                "invalid plain args must not write stdout"
+            );
+        }
     }
 }
 

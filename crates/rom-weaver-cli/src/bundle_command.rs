@@ -121,7 +121,19 @@ impl CliApp {
                 match serde_json::to_value(&result) {
                     Ok(value) => {
                         report.details = Some(json!({ "bundle": value }));
-                        report
+                        Self::append_report_warnings(&mut report, result.warnings);
+                        let paths = result
+                            .rom_source
+                            .iter()
+                            .chain(result.patch_sources.iter().map(|patch| &patch.source))
+                            .filter_map(|source| match source {
+                                BundleSourceRef::ExtractedPath { extracted_path } => {
+                                    Some(PathBuf::from(extracted_path))
+                                }
+                                _ => None,
+                            })
+                            .collect();
+                        Self::attach_emitted_files_details(report, paths, None)
                     }
                     Err(error) => OperationReport::failed(
                         OperationFamily::Command,

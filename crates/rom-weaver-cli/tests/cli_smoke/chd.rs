@@ -53,7 +53,7 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -67,7 +67,7 @@ fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
             "--algo",
             "sha1",
             "--no-trim-fix",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -103,7 +103,7 @@ fn checksum_chd_reuses_raw_sha1_with_default_algorithms() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -113,7 +113,7 @@ fn checksum_chd_reuses_raw_sha1_with_default_algorithms() {
             "checksum",
             "--input",
             chd_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -163,7 +163,7 @@ fn checksum_chd_does_not_reuse_raw_sha1_after_nested_extract() {
             "zip",
             "--output",
             nested_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -180,7 +180,7 @@ fn checksum_chd_does_not_reuse_raw_sha1_after_nested_extract() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -190,7 +190,7 @@ fn checksum_chd_does_not_reuse_raw_sha1_after_nested_extract() {
             "checksum",
             "--input",
             chd_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -238,7 +238,7 @@ fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "cdlz",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -254,7 +254,7 @@ fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
             "--select",
             "disc.bin",
             "--no-trim-fix",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -286,7 +286,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "avhuff",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -309,7 +309,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -323,7 +323,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -373,7 +373,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
             alias_chd_path.path().to_str().expect("path"),
             "--codec",
             "avhu",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -407,7 +407,7 @@ fn probe_chd_reports_container_without_extracting() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "avhuff",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -417,7 +417,7 @@ fn probe_chd_reports_container_without_extracting() {
             "probe",
             "--input",
             chd_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -455,7 +455,7 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
             "chd",
             "--output",
             chd_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -466,7 +466,7 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -486,7 +486,7 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -513,7 +513,7 @@ fn chd_av_and_ld_overrides_force_av_media() {
                 format,
                 "--output",
                 chd_path.path().to_str().expect("path"),
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -524,7 +524,7 @@ fn chd_av_and_ld_overrides_force_av_media() {
                 "--input",
                 chd_path.path().to_str().expect("path"),
                 "--no-extract",
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -567,7 +567,7 @@ fn chd_compress_huffman_alias_emits_huff_label() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "huffman",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -582,7 +582,7 @@ fn chd_compress_huffman_alias_emits_huff_label() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -619,7 +619,7 @@ fn chd_compress_and_extract_cd_cue_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -638,7 +638,7 @@ fn chd_compress_and_extract_cd_cue_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -683,7 +683,7 @@ fn chd_compress_and_extract_cd_with_index00_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -696,7 +696,7 @@ fn chd_compress_and_extract_cd_with_index00_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -743,7 +743,7 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -755,7 +755,7 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -777,7 +777,7 @@ fn chd_compress_cd_pads_tracks_to_four_frame_boundary() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -814,7 +814,7 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -828,7 +828,7 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
             "--split-bin",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -892,7 +892,7 @@ fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -908,7 +908,7 @@ fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
             "disc.cue",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -945,7 +945,7 @@ fn chd_extract_split_bin_rejects_non_cd_media() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -959,7 +959,7 @@ fn chd_extract_split_bin_rejects_non_cd_media() {
             "--split-bin",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -997,7 +997,7 @@ fn chd_compress_and_extract_wave_audio_cue_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zlib",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1010,7 +1010,7 @@ fn chd_compress_and_extract_wave_audio_cue_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1039,7 +1039,7 @@ fn extract_split_bin_non_chd_is_ignored_with_warning() {
             "zip",
             "--output",
             archive.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1056,7 +1056,7 @@ fn extract_split_bin_non_chd_is_ignored_with_warning() {
             "disc.iso",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1107,7 +1107,7 @@ fn chd_compress_and_extract_gdi_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "lzma",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1120,7 +1120,7 @@ fn chd_compress_and_extract_gdi_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1175,7 +1175,7 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1186,7 +1186,7 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1208,7 +1208,7 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1255,7 +1255,7 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1266,7 +1266,7 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1297,7 +1297,7 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1340,7 +1340,7 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
             "chd-gd",
             "--output",
             gd_chd.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1350,7 +1350,7 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
             "--input",
             gd_chd.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1374,7 +1374,7 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
             "chd-gd",
             "--output",
             temp.child("cd.chd").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1412,7 +1412,7 @@ fn chd_compress_accepts_cd_codec_aliases() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "cdlz",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1423,7 +1423,7 @@ fn chd_compress_accepts_cd_codec_aliases() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1445,7 +1445,7 @@ fn chd_compress_accepts_cd_codec_aliases() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1480,7 +1480,7 @@ fn chd_compress_and_extract_cdfl_with_level_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "cdfl:9",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1493,7 +1493,7 @@ fn chd_compress_and_extract_cdfl_with_level_round_trip() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1532,7 +1532,7 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
             "cdzl",
             "--codec",
             "cdfl",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1547,7 +1547,7 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
             "--input",
             chd_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1569,7 +1569,7 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1600,7 +1600,7 @@ fn chd_compress_rejects_level_for_huffman_codec() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "huffman:3",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1634,7 +1634,7 @@ fn chd_compress_rejects_level_for_avhuff_codec() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "avhu:3",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1674,7 +1674,7 @@ fn chd_extract_selects_cd_outputs() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1689,7 +1689,7 @@ fn chd_extract_selects_cd_outputs() {
             "disc.bin",
             "--output",
             selected_bin_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1710,7 +1710,7 @@ fn chd_extract_selects_cd_outputs() {
             "disc.cue",
             "--output",
             selected_cue_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1742,7 +1742,7 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1757,7 +1757,7 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
             "disc.bin",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1775,7 +1775,7 @@ fn chd_extract_selects_raw_output_and_rejects_missing_selection() {
             "missing.bin",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1817,7 +1817,7 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "lzma",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1832,7 +1832,7 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
             "disc.gdi",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1861,7 +1861,7 @@ fn gcz_probe_reports_succeeded() {
             "--input",
             temp.child("disc.gcz").path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1895,7 +1895,7 @@ fn gcz_extract_round_trips_to_iso() {
             temp.child("disc.gcz").path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1930,7 +1930,7 @@ fn gcz_extract_supports_single_output_selection() {
             "disc.iso",
             "--output",
             selected_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1949,7 +1949,7 @@ fn gcz_extract_supports_single_output_selection() {
             "missing.iso",
             "--output",
             selected_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -1980,7 +1980,7 @@ fn wbfs_probe_reports_succeeded() {
             "--input",
             temp.child("disc.wbfs").path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2017,7 +2017,7 @@ fn wbfs_extract_round_trips_to_iso() {
             temp.child("disc.wbfs").path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2053,7 +2053,7 @@ fn wbfs_extract_supports_single_output_selection() {
             "disc.iso",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2072,7 +2072,7 @@ fn wbfs_extract_supports_single_output_selection() {
             "missing.iso",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2100,7 +2100,7 @@ fn wia_probe_reports_succeeded() {
             "--input",
             temp.child("disc.wia").path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2136,7 +2136,7 @@ fn wia_extract_supports_single_output_selection() {
             "disc.iso",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2155,7 +2155,7 @@ fn wia_extract_supports_single_output_selection() {
             "missing.iso",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -2196,7 +2196,7 @@ fn run_chd_round_trip_with_format(
             chd_path.path().to_str().expect("path"),
             "--codec",
             codec,
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -2217,7 +2217,7 @@ fn run_chd_round_trip_with_format(
             chd_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );

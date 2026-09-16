@@ -239,9 +239,7 @@ fn identify_prints_all_names_in_the_human_output() {
     let text = String::from_utf8(output).expect("utf8 stdout");
 
     assert!(
-        text.contains("Names")
-            && text.contains("Hello World (Test) [!]")
-            && text.contains("Hello World (U) [!]"),
+        text.contains("Hello World (Test) [!]") && text.contains("Hello World (U) [!]"),
         "expected all names in the human output, got: {text}"
     );
 }

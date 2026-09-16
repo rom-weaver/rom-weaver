@@ -17,6 +17,7 @@ use super::*;
 /// input-ROM requirements enforced after the CLI checksum flags parse, and
 /// the expected checksums of the final output for this selection.
 pub(super) struct BundleApplyResolution {
+    pub warnings: Vec<String>,
     /// Effective shared rule for the resolved bundle. Version 1 forces auto;
     /// version 2 supplies `patchBasis`; an explicit CLI shared rule wins.
     pub patch_basis: PatchBasisMode,
@@ -115,6 +116,7 @@ impl CliApp {
         for warning in &source.loaded.warnings {
             warn!(bundle = %source.archive_source.display(), "{warning}");
         }
+        let mut warnings = source.loaded.warnings.clone();
         trace!(
             bundle = %source.archive_source.display(),
             kind = ?source.loaded.kind,
@@ -271,6 +273,9 @@ impl CliApp {
                         entry = %entry_label,
                         "bundle chain mismatch: this patch's inputChecks differ from the previous selected patch's outputChecks"
                     );
+                    warnings.push(format!(
+                        "bundle chain mismatch at {entry_label}: this patch's inputChecks differ from the previous selected patch's outputChecks"
+                    ));
                 }
                 header_modes.push(entry.header.unwrap_or_default());
                 // A declared state gates only when every earlier entry in its
@@ -363,6 +368,7 @@ impl CliApp {
         }
 
         Ok(Some(BundleApplyResolution {
+            warnings,
             patch_basis,
             checks,
             expected_rom_name,

@@ -221,21 +221,23 @@ fn prepare_direct_patch_step_selectors(
 static INFERRED_PUBLISH_COUNTER: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 
-pub(super) fn warn_on_rom_name_mismatch(expected: Option<&str>, actual_path: &Path) {
-    let Some(expected) = expected else {
-        return;
-    };
-    let Some(actual) = actual_path.file_name().and_then(|name| name.to_str()) else {
-        return;
-    };
+pub(super) fn warn_on_rom_name_mismatch(
+    expected: Option<&str>,
+    actual_path: &Path,
+) -> Option<String> {
+    let expected = expected?;
+    let actual = actual_path.file_name().and_then(|name| name.to_str())?;
     if expected.to_lowercase() == actual.to_lowercase() {
-        return;
+        return None;
     }
     warn!(
         expected_rom_name = expected,
         actual_rom_name = actual,
         "bundle ROM name mismatch; continuing because file-name checks are advisory"
     );
+    Some(format!(
+        "bundle ROM name mismatch: expected `{expected}`, found `{actual}`; file-name checks are advisory"
+    ))
 }
 
 // same-file compares dev/inode on Unix and volume serial + file index on
@@ -370,7 +372,7 @@ impl CliApp {
             {
                 return outcome;
             }
-            return self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
+            let report = self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
                 args,
                 bundle_resolution: None,
                 original_input,
@@ -379,6 +381,7 @@ impl CliApp {
                 emit_bases: None,
                 applied_cheats: &mut Vec::new(),
             });
+            return self.finish("patch-apply", report);
         }
         let rom_filter = args.rom_filter();
         let patch_filter = args.patch_filter();
@@ -472,7 +475,11 @@ impl CliApp {
         });
         let mut final_output = None;
         let mut applied_cheats = Vec::new();
-        let outcome = if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
+        let bundle_warnings = bundle_resolution
+            .as_ref()
+            .map(|resolution| resolution.warnings.clone())
+            .unwrap_or_default();
+        let mut report = if args.patches.iter().any(|patch| Self::is_dcp_patch(patch)) {
             let expected_rom_name = bundle_resolution
                 .as_ref()
                 .and_then(|resolution| resolution.expected_rom_name.as_deref());
@@ -488,28 +495,48 @@ impl CliApp {
                 applied_cheats: &mut applied_cheats,
             })
         };
-        // --emit-bundle failures don't undo the already-written apply; warn
-        // rather than fail.
+        Self::append_report_warnings(&mut report, bundle_warnings);
+        // A failed sidecar MUST preserve the completed ROM and report its warning
+        // before the terminal result is emitted.
         if let (Some(emit_path), Some(mut inputs)) = (emit_bundle, emit_inputs)
-            && outcome.status == OperationStatus::Succeeded
+            && report.status == OperationStatus::Succeeded
         {
             inputs.output = final_output.or(inputs.output);
             inputs.cheats = applied_cheats;
-            if let Err(error) = self.emit_apply_bundle(&emit_path, inputs) {
-                tracing::warn!(
-                    %error,
-                    bundle = %emit_path.display(),
-                    "apply succeeded but --emit-bundle failed",
-                );
+            match self.emit_apply_bundle(&emit_path, inputs) {
+                Ok(result) => {
+                    Self::append_report_warnings(&mut report, result.warnings);
+                    let mut paths = Self::emitted_file_detail_paths(report.details.as_ref());
+                    paths.push(emit_path);
+                    report = Self::attach_emitted_files_details(report, paths, None);
+                }
+                Err(error) => {
+                    tracing::debug!(
+                        %error,
+                        bundle = %emit_path.display(),
+                        "apply succeeded but --emit-bundle failed",
+                    );
+                    Self::append_report_warnings(
+                        &mut report,
+                        [format!(
+                            "apply succeeded but --emit-bundle `{}` failed: {error}",
+                            emit_path.display()
+                        )],
+                    );
+                }
             }
         }
-        outcome
+        self.finish("patch-apply", report)
     }
 
     /// Write a bundle describing a just-completed apply. Reuses
     /// `bundle_create_inner`, so the emitted bundle is byte-for-byte what
     /// `bundle create` would write for the same inputs.
-    fn emit_apply_bundle(&self, emit_path: &Path, inputs: EmitBundleInputs) -> Result<()> {
+    fn emit_apply_bundle(
+        &self,
+        emit_path: &Path,
+        inputs: EmitBundleInputs,
+    ) -> Result<BundleCreateResult> {
         if inputs.patches.is_empty() && inputs.cheats.is_empty() {
             return Err(RomWeaverError::Validation(
                 "--emit-bundle needs at least one applied --patch or --cheat".to_string(),
@@ -556,9 +583,9 @@ impl CliApp {
             cheats: inputs.cheats,
             ..BundleCreateCommand::default()
         };
-        self.bundle_create_inner(&create, &context)?;
+        let result = self.bundle_create_inner(&create, &context)?;
         trace!(bundle = %emit_path.display(), "emitted bundle from apply");
-        Ok(())
+        Ok(result)
     }
 
     fn update_emit_bundle_bases(
@@ -618,7 +645,7 @@ impl CliApp {
 
     /// The body of `patch apply` after bundle resolution: `args` is a plain,
     /// fully-merged command.
-    fn run_patch_apply_resolved(&self, inputs: RunPatchApplyResolvedInputs<'_>) -> AppRunOutcome {
+    fn run_patch_apply_resolved(&self, inputs: RunPatchApplyResolvedInputs<'_>) -> OperationReport {
         let RunPatchApplyResolvedInputs {
             args,
             bundle_resolution,
@@ -749,13 +776,10 @@ impl CliApp {
         let any_explicit_strip = patch_header.contains(&PatchApplyHeaderMode::Strip);
         let output_header_mode = output_header.unwrap_or_default();
         if has_manual_cheats && (any_explicit_strip || any_explicit_n64_transform) {
-            return self.finish(
-                "patch-apply",
-                fail(
+            return fail(
                     "validate",
                     "--code cannot be combined with --patch-header strip or --n64-byte-order; cheat offsets are computed against the original ROM bytes".to_string(),
-                ),
-            );
+                );
         }
         let ParsedPatchApplyInputs {
             compression_options,
@@ -773,7 +797,7 @@ impl CliApp {
         ) {
             Ok(parsed) => parsed,
             Err(error) => {
-                return self.finish("patch-apply", fail("validate", error.to_string()));
+                return fail("validate", error.to_string());
             }
         };
         if let Some(report) = self.require_readable_path(
@@ -783,7 +807,7 @@ impl CliApp {
             &input,
             probe_threads.clone(),
         ) {
-            return self.finish("patch-apply", report);
+            return report;
         }
         if dry_run {
             let report = self.run_patch_apply_dry_run(
@@ -793,7 +817,7 @@ impl CliApp {
                 &compression_options,
                 probe_threads.clone(),
             );
-            return self.finish("patch-apply", report);
+            return report;
         }
         let disc_context = match self.resolve_patch_apply_disc(PatchApplyDiscInputs {
             input: &input,
@@ -808,7 +832,7 @@ impl CliApp {
             context: &context,
         }) {
             Ok(disc) => disc,
-            Err(report) => return self.finish("patch-apply", *report),
+            Err(report) => return *report,
         };
         let is_disc = disc_context.is_some();
         trace!(
@@ -825,19 +849,16 @@ impl CliApp {
             &context,
         ) {
             Ok(discovered) => discovered,
-            Err(error) => return self.finish("patch-apply", fail("prepare", error.to_string())),
+            Err(error) => return fail("prepare", error.to_string()),
         };
         if patches.is_empty() {
             patches = discovered_sidecars.patches.clone();
         }
         if patches.is_empty() && !has_cheats {
-            return self.finish(
-                "patch-apply",
-                fail(
+            return fail(
                     "validate",
                     "patch apply requires at least one --patch file, --code, or RetroArch-style sidecar patch inside the input archive".to_string(),
-                ),
-            );
+                );
         }
         let mut expected_input_size: Option<u64> = None;
         // Input-check precedence is CLI > bundle > file name; any conflict
@@ -854,7 +875,7 @@ impl CliApp {
                 probe_threads: probe_threads.clone(),
             })
         {
-            return self.finish("patch-apply", report);
+            return report;
         }
 
         // For a disc input the patch applies to the chosen track directly (no
@@ -884,7 +905,7 @@ impl CliApp {
                 ) {
                     Ok(resolved) => resolved,
                     Err(error) => {
-                        return self.finish("patch-apply", fail("prepare", error.to_string()));
+                        return fail("prepare", error.to_string());
                     }
                 };
                 let ResolvedChecksumSource {
@@ -894,7 +915,7 @@ impl CliApp {
                 } = resolved;
                 (source, extracted_archives, cleanup_paths)
             };
-        warn_on_rom_name_mismatch(
+        let name_warning = warn_on_rom_name_mismatch(
             bundle_resolution
                 .as_ref()
                 .and_then(|resolution| resolution.expected_rom_name.as_deref()),
@@ -908,7 +929,7 @@ impl CliApp {
             compress_format.as_deref(),
         ) {
             Ok(resolved) => resolved,
-            Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
+            Err(error) => return fail("validate", error.to_string()),
         };
         if let Some(message) = Self::patch_apply_output_alias_message(
             &input,
@@ -917,7 +938,7 @@ impl CliApp {
             local_bundle.as_deref(),
             &output,
         ) {
-            return self.finish("patch-apply", fail("validate", message));
+            return fail("validate", message);
         }
         let compression_options = match self.resolve_patch_apply_compression_options(
             no_compress,
@@ -928,17 +949,17 @@ impl CliApp {
             &resolved_input,
         ) {
             Ok(options) => options,
-            Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
+            Err(error) => return fail("validate", error.to_string()),
         };
         // Compressing can append an extension; the compression step re-checks
         // that resolved path after patch validation.
         if let Err(error) = ensure_output_available(&output, force) {
-            return self.finish("patch-apply", fail("validate", error.to_string()));
+            return fail("validate", error.to_string());
         }
         if let Some(report) =
             self.validate_patch_apply_access(&patches, &output, probe_threads.clone())
         {
-            return self.finish("patch-apply", report);
+            return report;
         }
         // Seed host-provided input checksums so handler source verification skips
         // a re-read. Keyed by the resolved path; header/N64 transforms write a
@@ -968,7 +989,7 @@ impl CliApp {
                         continue;
                     }
                     Err(error) => {
-                        return self.finish("patch-apply", fail("prepare", error.to_string()));
+                        return fail("prepare", error.to_string());
                     }
                 }
             }
@@ -996,16 +1017,13 @@ impl CliApp {
             ) {
                 Ok(resolved) => resolved,
                 Err(error) => {
-                    return self.finish("patch-apply", fail("prepare", error.to_string()));
+                    return fail("prepare", error.to_string());
                 }
             };
             if resolved.extracted_archives == 0 {
-                return self.finish(
-                    "patch-apply",
-                    fail(
-                        "prepare",
-                        format!("bundle ROM input has no extractable member `{member}`"),
-                    ),
+                return fail(
+                    "prepare",
+                    format!("bundle ROM input has no extractable member `{member}`"),
                 );
             }
             temp_paths.extend(resolved.cleanup_paths);
@@ -1034,7 +1052,7 @@ impl CliApp {
         ) {
             Ok(resolved) => resolved,
             Err(error) => {
-                return self.finish("patch-apply", fail("prepare", error.to_string()));
+                return fail("prepare", error.to_string());
             }
         };
         if (!bundle_step_inputs.is_empty() || !bundle_step_targets.is_empty())
@@ -1043,12 +1061,9 @@ impl CliApp {
                 || bundle_step_ids.len() != resolved_patches.len())
         {
             Self::cleanup_temp_paths(&temp_paths);
-            return self.finish(
-                "patch-apply",
-                fail(
-                    "prepare",
-                    "bundle patch targets require one resolved file per selected patch".to_string(),
-                ),
+            return fail(
+                "prepare",
+                "bundle patch targets require one resolved file per selected patch".to_string(),
             );
         }
         if (!bundle_step_inputs.is_empty() || !bundle_step_targets.is_empty())
@@ -1059,7 +1074,7 @@ impl CliApp {
             )
         {
             Self::cleanup_temp_paths(&temp_paths);
-            return self.finish("patch-apply", fail("validate", error.to_string()));
+            return fail("validate", error.to_string());
         }
 
         // Resolve the bundle's recorded cheats and `--cheat` against the
@@ -1080,7 +1095,7 @@ impl CliApp {
             }
             Err(error) => {
                 Self::cleanup_temp_paths(&temp_paths);
-                return self.finish("patch-apply", fail("prepare", error.to_string()));
+                return fail("prepare", error.to_string());
             }
         };
         // Now that the selection is resolved, the record list - not the flags -
@@ -1109,7 +1124,7 @@ impl CliApp {
                 }
                 Err(error) => {
                     Self::cleanup_temp_paths(&temp_paths);
-                    return self.finish("patch-apply", fail("prepare", error.to_string()));
+                    return fail("prepare", error.to_string());
                 }
             }
         }
@@ -1478,6 +1493,7 @@ impl CliApp {
                     for warning in &disc.warnings {
                         report.label = format!("{}; {}", report.label, warning);
                     }
+                    Self::append_report_warnings(&mut report, disc.warnings.iter().cloned());
                     if compression_options.enabled {
                         match self.disc_track_overrides(disc, &disc_track_replacements) {
                             Ok(track_overrides) => disc_track_overrides = track_overrides,
@@ -1604,20 +1620,21 @@ impl CliApp {
                 terminal_output_for_apply = (report.status == OperationStatus::Succeeded)
                     .then(|| terminal_output_path.clone());
 
-                if report.status == OperationStatus::Succeeded {
-                    let kind_hint = compression_options.enabled.then_some("archive");
-                    report = Self::attach_emitted_files_details(
-                        report,
-                        vec![terminal_output_path],
-                        kind_hint,
-                    );
-                }
+                let kind_hint = compression_options.enabled.then_some("archive");
+                let emitted_paths = match disc_context.as_ref() {
+                    Some(disc) if !compression_options.enabled => {
+                        Self::disc_output_paths(disc, &terminal_output_path)
+                    }
+                    _ => vec![terminal_output_path],
+                };
+                report = Self::attach_emitted_files_details(report, emitted_paths, kind_hint);
 
                 report
             })()
         };
 
         let mut report = report;
+        Self::append_report_warnings(&mut report, name_warning);
         if report.status == OperationStatus::Succeeded
             && let Some(summary) = cheat_summary
         {
@@ -1635,11 +1652,22 @@ impl CliApp {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
+            Self::append_report_warnings(
+                &mut report,
+                [format!(
+                    "skipped optional bundle cheats: {}",
+                    skipped_bundle_cheats
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )],
+            );
         }
 
         *final_output = terminal_output_for_apply;
         Self::cleanup_temp_paths(&temp_paths);
-        self.finish("patch-apply", report)
+        report
     }
 
     /// Fold the bundle's declared checks and then the first patch's file name
@@ -2279,6 +2307,7 @@ impl CliApp {
             extension_note,
             warning_note
         );
+        Self::append_report_warnings(report, compression_plan.warning);
         if output_was_inferred {
             *terminal_output_source = compression_plan.output_path;
         }
@@ -3661,6 +3690,7 @@ impl CliApp {
         }
         if let Some(repair_warning) = finalized.repair_warning {
             report.label = format!("{}; warning={repair_warning}", report.label);
+            Self::append_report_warnings(report, [repair_warning]);
         }
     }
 

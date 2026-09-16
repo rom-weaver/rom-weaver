@@ -22,7 +22,16 @@ pub(crate) fn write(arguments: fmt::Arguments<'_>) {
     }
 }
 
-pub(crate) fn finish(status: ExitCode) -> ExitCode {
+pub(crate) fn record_error(failure: io::Error) {
+    let mut error = OUTPUT_ERROR
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if error.is_none() {
+        *error = Some(failure);
+    }
+}
+
+pub(crate) fn finish(status: ExitCode, json: bool) -> ExitCode {
     let error = OUTPUT_ERROR
         .lock()
         .unwrap_or_else(|error| error.into_inner());
@@ -32,7 +41,12 @@ pub(crate) fn finish(status: ExitCode) -> ExitCode {
     if error.kind() == io::ErrorKind::BrokenPipe {
         return status;
     }
-    let _ = writeln!(io::stderr().lock(), "error: cannot write stdout: {error}");
+    crate::native_output::diagnostic(
+        json,
+        "ERROR",
+        "cli",
+        &format!("cannot write stdout: {error}"),
+    );
     if status == ExitCode::SUCCESS {
         return ExitCode::FAILURE;
     }

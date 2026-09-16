@@ -51,6 +51,7 @@ impl CliApp {
                 execution,
             ),
         };
+        let report = Self::attach_emitted_files_details(report, vec![args.output], Some("rom"));
         self.finish(command, report)
     }
 }

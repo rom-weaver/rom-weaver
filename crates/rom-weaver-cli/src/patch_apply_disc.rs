@@ -537,6 +537,20 @@ impl CliApp {
             .ok_or_else(|| RomWeaverError::Validation("disc has no sheet to stage".to_string()))
     }
 
+    pub(super) fn disc_output_paths(disc: &DiscContext, output: &Path) -> Vec<PathBuf> {
+        let out_dir = output.parent().unwrap_or_else(|| Path::new("."));
+        let mut paths = vec![output.to_path_buf()];
+        paths.extend(
+            disc.sheet_paths
+                .iter()
+                .skip(1)
+                .filter_map(|sheet| sheet.file_name())
+                .map(|name| out_dir.join(name)),
+        );
+        paths.extend(disc.files.iter().map(|file| out_dir.join(&file.name)));
+        paths
+    }
+
     /// Write the reassembled disc to disk for `--no-compress` output: the
     /// primary sheet is written to `output` (which must be a `.cue`/`.gdi`
     /// path) and every track (and any secondary sheet) is written beside it

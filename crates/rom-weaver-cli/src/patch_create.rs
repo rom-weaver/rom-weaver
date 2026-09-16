@@ -665,6 +665,7 @@ impl CliApp {
             && let Some(warning) = format_warning.as_deref()
         {
             report.label = format!("{}; warning: {warning}", report.label);
+            Self::append_report_warnings(&mut report, [warning.to_string()]);
         }
         if report.status == OperationStatus::Succeeded
             && let Some(summary) = cheat_summary.as_ref()
@@ -675,7 +676,7 @@ impl CliApp {
         if report.status == OperationStatus::Succeeded && native_cheat_selection {
             report = Self::annotate_patch_create_cheats(report, &create_output, &skipped_cheats);
         }
-        if report.status == OperationStatus::Succeeded && args.checksum_name {
+        if report.status == OperationStatus::Succeeded {
             report = Self::attach_emitted_files_details(report, vec![create_output.clone()], None);
         }
         self.finish("patch-create", report)

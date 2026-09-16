@@ -346,11 +346,11 @@ fn binary_stdout_rejects_json_and_dry_run_before_or_after_command() {
     ] {
         let output = binary()
             .current_dir(temp.path())
-            .args(args)
+            .args(&args)
             .output()
             .expect("run invalid stream command");
         assert!(!output.status.success());
-        assert!(output.stdout.is_empty(), "invalid command wrote stdout");
+        assert_invalid_stream_output(&args, &output);
         assert!(
             !temp.child("-").path().exists(),
             "created a literal dash file"
@@ -378,7 +378,7 @@ fn invalid_stdin_configuration_exits_without_reading_stdin() {
     ] {
         let mut child = binary()
             .current_dir(temp.path())
-            .args(args)
+            .args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -394,7 +394,7 @@ fn invalid_stdin_configuration_exits_without_reading_stdin() {
         }
         let output = child.wait_with_output().expect("collect child output");
         assert!(!output.status.success());
-        assert!(output.stdout.is_empty());
+        assert_invalid_stream_output(&args, &output);
     }
 }
 
@@ -826,8 +826,7 @@ fn binary_patch_output_rejects_ambiguous_formats_and_side_effects() {
             "{args:?}: {}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(output.stdout.is_empty(), "{args:?}");
-        assert!(!output.stderr.is_empty());
+        assert_invalid_stream_output(&args, &output);
     }
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
 }
@@ -928,4 +927,15 @@ fn trim_stdout_explains_when_no_input_is_eligible() {
     assert!(stderr.contains("output - produced no file"), "{stderr}");
     assert!(stderr.contains("no trim-eligible inputs found"), "{stderr}");
     assert_eq!(fs::read(input.path()).unwrap(), source);
+}
+
+fn assert_invalid_stream_output(args: &[&str], output: &std::process::Output) {
+    if args.contains(&"--json") || args.contains(&"--jsonl") {
+        let report: Value = serde_json::from_slice(&output.stdout).expect("JSON stream error");
+        assert_eq!(report["status"], "failed");
+        assert_eq!(report["details"]["error"]["exit_code"], 2);
+        assert!(output.stderr.is_empty(), "{args:?}: {output:?}");
+    } else {
+        assert!(output.stdout.is_empty(), "{args:?}");
+    }
 }

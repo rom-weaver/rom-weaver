@@ -24,6 +24,7 @@ struct TrimBatchState {
     irreversible_xiso: bool,
     irreversible_rvz_scrub: bool,
     planned_outputs: Vec<String>,
+    emitted_outputs: Vec<PathBuf>,
 }
 
 impl CliApp {
@@ -202,6 +203,7 @@ impl CliApp {
             );
             if let Some(warning) = format_warning.as_deref() {
                 report.label = format!("{}; warning: {warning}", report.label);
+                Self::append_report_warnings(&mut report, [warning.to_string()]);
             }
             return self.finish("compress", report);
         }
@@ -254,6 +256,7 @@ impl CliApp {
             && let Some(warning) = format_warning.as_deref()
         {
             report.label = format!("{}; warning: {warning}", report.label);
+            Self::append_report_warnings(&mut report, [warning.to_string()]);
         }
         if report.status == OperationStatus::Succeeded {
             let finalizing_percent = if handler.descriptor().name == "rvz" {
@@ -487,39 +490,6 @@ impl CliApp {
             self.process_trim_source(trim_source, &config, &mut state);
         }
 
-        if state.failed_count > 0 {
-            Self::cleanup_temp_paths(&cleanup_paths);
-            return self.finish(
-                "trim",
-                OperationReport::failed(
-                    OperationFamily::Command,
-                    Some(report_format.clone()),
-                    "trim",
-                    format!(
-                        "{} completed with failures; processed={} trimmed={} already_trimmed={} failed={} skipped_unsupported={}; first_error={}",
-                        if dry_run {
-                            if operation == TrimOperation::Trim {
-                                "trim simulation"
-                            } else {
-                                "trim revert simulation"
-                            }
-                        } else if operation == TrimOperation::Trim {
-                            "trim"
-                        } else {
-                            "trim revert"
-                        },
-                        trim_sources.len(),
-                        state.trimmed_count,
-                        state.already_trimmed_count,
-                        state.failed_count,
-                        skipped_unsupported,
-                        state.first_error.unwrap_or_else(|| "(none)".to_string()),
-                    ),
-                    thread_execution.clone(),
-                ),
-            );
-        }
-
         let irreversible_warning = if operation != TrimOperation::Trim {
             ""
         } else if state.irreversible_xiso && !state.irreversible_rvz_scrub {
@@ -531,6 +501,56 @@ impl CliApp {
         } else {
             ""
         };
+
+        if state.failed_count > 0 {
+            Self::cleanup_temp_paths(&cleanup_paths);
+            let mut report = OperationReport::failed(
+                OperationFamily::Command,
+                Some(report_format.clone()),
+                "trim",
+                format!(
+                    "{} completed with failures; processed={} trimmed={} already_trimmed={} failed={} skipped_unsupported={}; first_error={}",
+                    if dry_run {
+                        if operation == TrimOperation::Trim {
+                            "trim simulation"
+                        } else {
+                            "trim revert simulation"
+                        }
+                    } else if operation == TrimOperation::Trim {
+                        "trim"
+                    } else {
+                        "trim revert"
+                    },
+                    trim_sources.len(),
+                    state.trimmed_count,
+                    state.already_trimmed_count,
+                    state.failed_count,
+                    skipped_unsupported,
+                    state.first_error.unwrap_or_else(|| "(none)".to_string()),
+                ),
+                thread_execution.clone(),
+            );
+            report.details = Some(json!({
+                "processed": trim_sources.len(),
+                "changed": state.trimmed_count,
+                "already_target": state.already_trimmed_count,
+                "failed": state.failed_count,
+                "skipped_unsupported": skipped_unsupported,
+                "mode_counts": state.mode_counts,
+                "dry_run": dry_run,
+                "writes": state.planned_outputs,
+            }));
+            let emitted = Self::build_emitted_file_detail_values(
+                report.details.as_ref(),
+                &state.emitted_outputs,
+                None,
+            );
+            report = Self::set_emitted_files_detail(report, emitted);
+            if let Some(warning) = irreversible_warning.strip_prefix("; warning=") {
+                Self::append_report_warnings(&mut report, [warning.to_string()]);
+            }
+            return self.finish("trim", report);
+        }
 
         Self::cleanup_temp_paths(&cleanup_paths);
         let mut report = OperationReport::succeeded(
@@ -579,6 +599,18 @@ impl CliApp {
                 "already_target": state.already_trimmed_count,
                 "skipped_unsupported": skipped_unsupported,
             }));
+        } else {
+            report.details = Some(json!({
+                "processed": trim_sources.len(),
+                "changed": state.trimmed_count,
+                "already_target": state.already_trimmed_count,
+                "skipped_unsupported": skipped_unsupported,
+                "mode_counts": state.mode_counts,
+            }));
+            report = Self::attach_emitted_files_details(report, state.emitted_outputs, None);
+        }
+        if let Some(warning) = irreversible_warning.strip_prefix("; warning=") {
+            Self::append_report_warnings(&mut report, [warning.to_string()]);
         }
         self.finish("trim", report)
     }
@@ -666,17 +698,18 @@ impl CliApp {
         };
         match trim_result {
             Ok(outcome) => {
+                let destination = trim_source
+                    .archive_origin
+                    .as_ref()
+                    .filter(|_| repack_root.is_some())
+                    .unwrap_or(&outcome.output_path);
                 if config.dry_run {
-                    let destination = trim_source
-                        .archive_origin
-                        .as_ref()
-                        .filter(|_| repack_root.is_some())
-                        .unwrap_or(&output_path)
-                        .display()
-                        .to_string();
+                    let destination = destination.display().to_string();
                     if !state.planned_outputs.contains(&destination) {
                         state.planned_outputs.push(destination);
                     }
+                } else if !state.emitted_outputs.contains(destination) {
+                    state.emitted_outputs.push(destination.clone());
                 }
                 // A finished output must leave the cancel registry, or a later
                 // Ctrl-C in this batch would delete it along with the file in

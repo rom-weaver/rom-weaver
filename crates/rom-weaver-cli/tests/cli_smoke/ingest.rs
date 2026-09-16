@@ -860,7 +860,7 @@ fn ingest_rom_archive_extracts_and_checksums() {
             archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1548,7 +1548,7 @@ fn ingest_streams_patch_manifest_before_terminal_for_mixed_archive() {
             archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1601,12 +1601,16 @@ fn ingest_rejects_unsupported_checksum_algorithm() {
         ])
         .assert()
         .code(2);
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    let report: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("JSON argument error");
+    assert_eq!(report["exit_code"], 2);
+    let message = report["error"]["message"].as_str().expect("error message");
     assert!(
-        stderr.contains("invalid value 'not-a-real-algo'"),
-        "{stderr}"
+        message.contains("invalid value 'not-a-real-algo'"),
+        "{message}"
     );
-    assert!(stderr.contains("crc32"), "{stderr}");
+    assert!(message.contains("crc32"), "{message}");
+    assert!(assert.get_output().stderr.is_empty());
 }
 
 #[test]
@@ -1626,7 +1630,7 @@ fn ingest_streams_recommended_format_for_bare_disc_before_completion() {
             iso.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -1691,7 +1695,7 @@ fn ingest_streams_recommended_format_for_archived_disc_before_completion() {
             archive.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );

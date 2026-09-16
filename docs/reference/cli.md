@@ -96,16 +96,17 @@ Codecs are stricter. Each format accepts only the codec names in its own row of 
 
 Every command accepts these global flags, listed under `Global options` in its help:
 
-- `--json` prints operation reports as one JSON object per line instead of human-readable output. Asset generators such as `bundle schema`, `completions`, and `man` without `--install` keep their native output. `man --install --json` reports the installed page count and output directory as a JSON event.
-- `--progress` and `--no-progress` override the automatic choice. Human progress uses stderr: it appears automatically when stderr is a terminal and `TERM` is not `dumb`. Redirected stderr stays silent unless `--progress` is set; forced progress uses plain, throttled lines. JSON progress remains enabled by default.
-- `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. Logging is off unless you ask for it, and it is separate from the normal output.
-- `-v`/`--verbose` logs user diagnostics to stderr: the command, input and output options, format, thread use, result, and elapsed time. `-vv` and `-vvv` retain their debug and trace levels.
+- `--json` prints one complete JSON result document to stdout. It contains `schema_version: 1`, `exit_code`, `error`, `warnings`, and the usual report fields and `details`. Asset generators put their result in `details`; `formats --json` keeps its compatible top-level catalog object. `bundle schema`, `completions`, and `man` without `--install` use that asset result. `man --install --json` reports the installed page count and output directory.
+- `--jsonl` keeps the JSON event stream: it writes one event per line to stdout and includes progress by default. Use `--no-progress` or `--quiet` to suppress running events.
+- `--progress` writes progress to stderr. It is off by default in human and `--json` output. With `--json`, progress events and diagnostics are JSON lines on stderr. `--no-progress` hides progress.
+- `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. The default level is `warn`. Logging is separate from the normal output.
+- `-v`/`--verbose` writes concise command summaries to stderr. It is independent of `--progress`. `-vv` enables debug logging, and `-vvv` enables trace logging.
 - `--debug` logs developer diagnostics, including command configuration and internal trace events. It is equivalent to `--log-level trace`. It conflicts with `--verbose`, `--quiet`, and `--log-level`.
-- `-q`/`--quiet` logs errors only and hides successful write summaries and human progress, including forced `--progress`. Query results, format candidate plans, and dry-run previews remain visible. JSON reports retain their status and progress events.
+- `-q`/`--quiet` hides optional diagnostics and progress, including forced `--progress`. It overrides `--verbose`. It retains requested results, format candidate plans, dry-run previews, warnings, and errors. In JSONL mode it suppresses running events and retains terminal events.
 - `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
 - `--color` and `--no-color` override colored output, including help and argument errors. The flag wins over the `NO_COLOR` environment variable and the `TERM=dumb` setting. Otherwise, stdout and stderr each use their own terminal status to select colors. `--color` keeps color even when piped; live progress stays terminal-only.
 
-Human stdout contains command results. Progress, errors, and diagnostic logs use stderr. Elapsed time appears in verbose logs and JSON reports. Human output escapes terminal control characters in filenames and other values; JSON retains the original values through JSON escaping.
+Native human stdout contains only requested results. An explicit file output is silent. When rom-weaver infers an output name or writes additional files, it prints those names. Progress, errors, and diagnostic logs use stderr. Elapsed time appears in verbose logs and JSON reports. Human output escapes terminal control characters in filenames and other values; JSON retains the original values through JSON escaping.
 
 Explicit logging flags override `ROM_WEAVER_LOG` and `RUST_LOG` without an extra warning. An invalid environment log filter produces a warning on stderr; that warning is a JSON object in JSON mode.
 
@@ -121,9 +122,9 @@ In human output, a dry run shows the plan and a no-write notice. JSON plans carr
 
 `--force` overwrites an output that already exists on commands that support it. Without it, a command that would overwrite stops before writing anything. `-y`/`--yes` answers confirmations with yes; it does not choose between candidates.
 
-rom-weaver only asks interactive questions when stdin and stderr are both terminals and `--json` is off. Otherwise, it decides on its own or fails.
+rom-weaver only asks interactive questions when stdin and stderr are both terminals and neither JSON mode is active. Otherwise, it decides on its own or fails.
 
-`rom-weaver formats` prints the same support matrix as [Supported formats](formats.md), for the build you are running. Add `--json` for a machine-readable copy.
+`rom-weaver formats` prints the same support matrix as [Supported formats](formats.md), for the build you are running. Add `--json` for a machine-readable copy. Its JSON stays a top-level catalog object for compatibility, rather than a result document.
 
 ## Binary pipelines
 
@@ -140,7 +141,7 @@ Native `extract` and `compress` accept `-` as an input path or as `--output`. Na
 | `trim --output -` | Requires exactly one trim-eligible source. Conflicts with `--in-place` and `--extension`. Writes the trimmed or restored file. |
 | `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
 | `tools ppf-undo --output -` | Writes the restored ROM. |
-| Binary stdout | Refuses terminal output and conflicts with `--json` and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
+| Binary stdout | Refuses terminal output and conflicts with `--json`, `--jsonl`, and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
 | Stdin with `--dry-run` | Fails before reading stdin. Dry runs require an input file. |
 
 This is disk-backed pipeline support, not incremental streaming. Operations finish in private temporary storage before the CLI copies the result to stdout. It needs space for the input spool, intermediate files, and output. Normal completion and errors remove the private staging directory; forced termination can leave it behind. The copy uses bounded memory and checks cancellation between reads.
@@ -250,7 +251,7 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
 
-Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json` and `--dry-run`.
+Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json`, `--jsonl`, and `--dry-run`.
 
 `--digest` retains the normal input semantics: archives open automatically, `--no-extract` hashes the archive bytes, and `--start`/`--length` select a byte range. It is not a checksum-file verification mode.
 
@@ -422,7 +423,11 @@ The full support matrix - every patch format, container and compressed ROM or di
 ## JSON output
 
 
-Pass `--json` to make operation commands emit one JSON object per line, including progress, status, warnings, selected inputs, and emitted-file metadata where relevant. JSON mode disables interactive selection, making it the stable interface for scripts. Commands that generate an asset, such as `bundle schema`, `completions`, and `man` without `--install`, still write that asset in its native format.
+Pass `--json` to make an operation command write one complete JSON result document to stdout, on success or failure. `schema_version` is `1`. `exit_code` and the top-level terminal report describe the final exit status. `error` is `null` on success and an error object on failure. `warnings` collects unique warnings. Commands with more than one terminal report also include the complete `reports` array. Existing command-specific data stays under `details`.
+
+Use `--jsonl` when a consumer needs the event stream. It writes progress and terminal events as JSON lines to stdout. `--no-progress` and `--quiet` suppress running events. `--json --progress` instead keeps the single stdout document and writes JSON progress events to stderr. JSON diagnostics also use stderr as JSON lines.
+
+Both JSON modes disable interactive selection, making them stable interfaces for scripts. Commands that generate an asset, such as `bundle schema`, `completions`, and `man` without `--install`, return their result in `details`. `bundle schema` uses `details.schema`; help, man pages, and completions use `details.content` and `details.content_format`. Version output uses `details.name` and `details.version`. `formats --json` intentionally keeps the top-level catalog object.
 
 A closed stdout pipe does not cause a panic or interrupt file creation. The command finishes its work and retains its operation exit status. Other stdout write errors produce a diagnostic on stderr and a nonzero exit status.
 
@@ -448,7 +453,7 @@ error: i/o error: cannot open `/roms/game.iso`: Permission denied (os error 13)
 
 The message identifies what was refused, who owns it, and which identity made the request. Only a genuinely missing path is reported as `input path does not exist`. A file that exists but cannot be reached, including one behind a directory without search permission, is reported as a denial. [Fix a permission error](../how-to/fix-permission-errors.md) gives the corrective steps.
 
-Permission failures exit `1`. Under `--json` they arrive as a terminal event with `"status": "failed"`, carrying `"stage": "validate"` when the preflight caught them.
+Permission failures exit `1`. Under `--json`, the result document has `"status": "failed"` and `"exit_code": 1`, carrying `"stage": "validate"` when the preflight caught them. Under `--jsonl`, they arrive as a terminal event.
 
 ## Man pages
 

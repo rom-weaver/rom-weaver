@@ -38,7 +38,7 @@ This crate ships the `rom-weaver` binary and the shared `rom_weaver_app` command
 - **Checksum and verify.** CRC-32, CRC-32C, CRC-16, Adler-32, MD5, SHA-1, SHA-256, and BLAKE3, with copier-header detection and header-aware checksum variants.
 - **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS support padding restoration. An opt-in footer stores the original size and a fill byte; it does not store removed data.
 - **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
-- **Scriptable.** Operation commands can emit line-delimited JSON; schema and completion generators keep their native output formats.
+- **Scriptable.** `--json` emits one complete result document and `--jsonl` emits line-delimited events; generated assets use result details in JSON modes.
 
 Everything runs locally. Nothing is uploaded.
 

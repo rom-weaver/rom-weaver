@@ -103,7 +103,10 @@ impl CliApp {
                 match serde_json::to_value(&result) {
                     Ok(value) => {
                         report.details = Some(json!({ "bundle_create": value }));
-                        report
+                        Self::append_report_warnings(&mut report, result.warnings);
+                        let mut paths = vec![PathBuf::from(result.bundle_path)];
+                        paths.extend(result.archive_path.map(PathBuf::from));
+                        Self::attach_emitted_files_details(report, paths, None)
                     }
                     Err(error) => OperationReport::failed(
                         OperationFamily::Command,

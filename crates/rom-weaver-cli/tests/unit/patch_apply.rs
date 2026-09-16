@@ -1570,12 +1570,12 @@ fn a_target_flag_needs_a_disc_sheet_input() {
 
 #[test]
 fn a_rom_name_mismatch_is_advisory_and_never_stops_the_run() {
-    // The bundle's declared name is compared case-insensitively; a mismatch only
-    // warns, so the contract here is that no branch panics or returns.
-    warn_on_rom_name_mismatch(None, Path::new("game.sfc"));
-    warn_on_rom_name_mismatch(Some("GAME.SFC"), Path::new("game.sfc"));
-    warn_on_rom_name_mismatch(Some("other.sfc"), Path::new("game.sfc"));
-    warn_on_rom_name_mismatch(Some("game.sfc"), Path::new("/"));
+    assert!(warn_on_rom_name_mismatch(None, Path::new("game.sfc")).is_none());
+    assert!(warn_on_rom_name_mismatch(Some("GAME.SFC"), Path::new("game.sfc")).is_none());
+    let warning = warn_on_rom_name_mismatch(Some("other.sfc"), Path::new("game.sfc"))
+        .expect("advisory warning");
+    assert!(warning.contains("expected `other.sfc`, found `game.sfc`"));
+    assert!(warn_on_rom_name_mismatch(Some("game.sfc"), Path::new("/")).is_none());
 }
 
 fn requirements(pairs: &[(&str, &str)], size: Option<u64>) -> FilenameRequirements {
@@ -1593,6 +1593,7 @@ fn bundle_resolution(
     output_checks: Option<(String, FilenameRequirements)>,
 ) -> BundleApplyResolution {
     BundleApplyResolution {
+        warnings: Vec::new(),
         patch_basis: PatchBasisMode::Auto,
         cheats: Vec::new(),
         checks,

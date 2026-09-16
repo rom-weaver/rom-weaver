@@ -39,7 +39,7 @@ fn nes_game_genie_apply_bakes_byte() {
             "--output",
             &output_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -79,7 +79,7 @@ fn cheat_create_ips_round_trips_to_apply() {
             "AKE-LVS",
             "--output",
             &patch_s,
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -99,7 +99,7 @@ fn cheat_create_ips_round_trips_to_apply() {
             "--output",
             direct.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -115,7 +115,7 @@ fn cheat_create_ips_round_trips_to_apply() {
             "--output",
             via_patch.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -151,7 +151,7 @@ fn nes_action_replay_ram_code_is_rejected() {
             "--output",
             &output_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -190,7 +190,7 @@ fn snes_game_genie_apply_bakes_byte() {
             "--output",
             &output_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -222,7 +222,7 @@ fn game_boy_game_genie_apply_bakes_byte() {
             "--output",
             &output_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -251,7 +251,7 @@ fn gba_xploder_rom_patch_bakes_halfword() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -280,7 +280,7 @@ fn playstation_xploder_write_bakes_into_psx_exe() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -317,7 +317,7 @@ fn master_system_game_genie_apply_bakes_byte() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -345,7 +345,7 @@ fn master_system_action_replay_ram_code_is_rejected() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -445,7 +445,7 @@ fn cheat_list_matches_by_checksum_and_reports_delivery() {
             &input_s,
             "--cheat-database",
             &database,
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -489,7 +489,7 @@ fn cheat_list_falls_back_to_the_title() {
             &input_s,
             "--cheat-database",
             &database,
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -514,7 +514,7 @@ fn cheat_list_names_the_missing_shard() {
             &input_s,
             "--cheat-database",
             &empty_s,
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -550,7 +550,7 @@ fn patch_apply_bakes_database_cheats_and_refuses_unbakeable_ones() {
             "--output",
             &output_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -573,7 +573,7 @@ fn patch_apply_bakes_database_cheats_and_refuses_unbakeable_ones() {
             &output_s,
             "--no-compress",
             "--force",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -606,7 +606,7 @@ fn patch_create_lists_the_cheats_it_skipped() {
             CHEAT_RAM,
             "--output",
             &output_s,
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -640,7 +640,7 @@ fn conflicting_rom_cheats_fail_until_allowed() {
             "--output",
             &output_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ];
         args.extend_from_slice(extra);
         args
@@ -676,7 +676,7 @@ fn an_unknown_cheat_system_names_the_flag_that_set_it() {
             &input_s,
             "--cheat-system",
             "bogus",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -707,7 +707,7 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
             CHEAT_ROM,
             "--output",
             &bundle_s,
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -730,7 +730,7 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
             CHEAT_RAM,
             "--output",
             temp.child("refused.json").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -764,7 +764,7 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
             "--output",
             &via_bundle_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -785,7 +785,7 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
             "--output",
             &direct_s,
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -826,7 +826,7 @@ fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
             output_s.clone(),
             "--no-compress".to_owned(),
             "--force".to_owned(),
-            "--json".to_owned(),
+            "--jsonl".to_owned(),
         ]
     };
     fn borrowed(args: &[String]) -> Vec<&str> {
@@ -865,7 +865,7 @@ fn bundle_parse_lists_the_cheats_a_bundle_carries() {
     let (bundle, _) = write_cheat_bundle(&temp, &rom);
 
     let report = parse_single_json_line(&command_stdout(
-        &["bundle", "parse", "--input", &bundle, "--json"],
+        &["bundle", "parse", "--input", &bundle, "--jsonl"],
         0,
     ));
     assert_eq!(report["status"], "succeeded");
@@ -906,7 +906,7 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
             "--emit-bundle",
             emitted.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -970,7 +970,7 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -1022,7 +1022,7 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
             "--emit-bundle",
             emitted.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1066,7 +1066,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
     // Without --cheat the spec's own entries carry through.
     let kept = parse_single_json_line(&command_stdout(
         &[
-            "bundle", "create", "--from", &spec_s, "--output", &output_s, "--json",
+            "bundle", "create", "--from", &spec_s, "--output", &output_s, "--jsonl",
         ],
         0,
     ));
@@ -1090,7 +1090,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
             "--output",
             &output_s,
             "--force",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1125,7 +1125,7 @@ fn without_cheats_runs_the_bundle_patch_chain_alone() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         1,
     ));
@@ -1161,7 +1161,7 @@ fn cheat_codes_apply_after_explicit_patches() {
             modified.path().to_str().expect("path"),
             "--output",
             &patch_s,
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1181,7 +1181,7 @@ fn cheat_codes_apply_after_explicit_patches() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-compress",
-            "--json",
+            "--jsonl",
         ],
         0,
     ));
@@ -1214,7 +1214,7 @@ fn cheat_create_solid_comment_records_codes() {
             "--solid-extended",
             "--output",
             &patch_s,
-            "--json",
+            "--jsonl",
         ],
         0,
     ));

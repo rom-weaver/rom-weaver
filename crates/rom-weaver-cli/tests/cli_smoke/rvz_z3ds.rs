@@ -24,7 +24,7 @@ fn rvz_compress_succeeds_across_low_thread_counts() {
                 "zstd",
                 "--threads",
                 &threads.to_string(),
-                "--json",
+                "--jsonl",
             ],
             0,
         );
@@ -50,7 +50,7 @@ fn rvz_probe_reports_succeeded() {
             "--input",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -93,7 +93,7 @@ fn rvz_compress_and_extract_round_trips() {
             "zstd",
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -143,7 +143,7 @@ fn rvz_compress_and_extract_round_trips() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -183,7 +183,7 @@ fn rvz_compress_rejects_non_zstd_codec() {
             "store",
             "--level",
             "min",
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -216,7 +216,7 @@ fn rvz_extract_round_trips_to_iso() {
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -248,7 +248,7 @@ fn rvz_extract_probe_emits_platform_and_container_details() {
             "--output",
             out_dir.path().to_str().expect("path"),
             "--probe",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -282,7 +282,7 @@ fn rvz_extract_supports_single_output_selection() {
             "disc.iso",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -301,7 +301,7 @@ fn rvz_extract_supports_single_output_selection() {
             "missing.iso",
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -336,7 +336,7 @@ fn z3ds_compress_probe_and_extract_round_trip() {
             z3ds_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -355,7 +355,7 @@ fn z3ds_compress_probe_and_extract_round_trip() {
             "--input",
             z3ds_path.path().to_str().expect("path"),
             "--no-extract",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -382,7 +382,7 @@ fn z3ds_compress_probe_and_extract_round_trip() {
             z3ds_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -421,7 +421,7 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
             z3ds_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -434,7 +434,7 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
             z3ds_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -471,7 +471,7 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
             z3ds_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -486,7 +486,7 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
             out_dir.path().to_str().expect("path"),
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -526,7 +526,7 @@ fn z3ds_extract_supports_single_output_selection() {
             z3ds_path.path().to_str().expect("path"),
             "--codec",
             "zstd",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -541,7 +541,7 @@ fn z3ds_extract_supports_single_output_selection() {
             "disc.3ds",
             "--output",
             selected_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -560,7 +560,7 @@ fn z3ds_extract_supports_single_output_selection() {
             "missing.3ds",
             "--output",
             selected_out.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -597,7 +597,7 @@ fn z3ds_compress_reports_parallel_threads_for_large_file() {
             "zstd",
             "--threads",
             "8",
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -629,7 +629,7 @@ fn z3ds_extract_rejects_invalid_header() {
             invalid.path().to_str().expect("path"),
             "--output",
             temp.child("out").path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         1,
     );
@@ -696,7 +696,7 @@ fn rvz_compress_recovers_junk_seeds_when_game_id_differs() {
             "rvz",
             "--output",
             rvz_path.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
@@ -715,7 +715,7 @@ fn rvz_compress_recovers_junk_seeds_when_game_id_differs() {
             rvz_path.path().to_str().expect("path"),
             "--output",
             out_dir.path().to_str().expect("path"),
-            "--json",
+            "--jsonl",
         ],
         0,
     );
