@@ -865,20 +865,6 @@ function WebappRoot({
             previewRuntimeState={previewRuntimeState}
             previewPhoneOverlay={previewLayout === "edge" || previewLayout === "quiet"}
             previewVersionStatus={previewLayout === "title"}
-            updateNotice={
-              pageUpdate.ready && !updateDismissed ? (
-                <UpdateBanner
-                  onDismiss={() => {
-                    setUpdateDismissed(true);
-                    writeUpdateDismissed();
-                  }}
-                  onOpenWhatsNew={openWhatsNew}
-                  onReload={actions.onReloadUpdate}
-                  open
-                  title={pageUpdate.title}
-                />
-              ) : null
-            }
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
@@ -931,6 +917,16 @@ function WebappRoot({
               <span>Display only</span>
             </section>
           ) : null}
+          <UpdateBanner
+            onDismiss={() => {
+              setUpdateDismissed(true);
+              writeUpdateDismissed();
+            }}
+            onOpenWhatsNew={openWhatsNew}
+            onReload={actions.onReloadUpdate}
+            open={pageUpdate.ready && !updateDismissed}
+            title={pageUpdate.title}
+          />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>

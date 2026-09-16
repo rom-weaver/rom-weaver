@@ -272,7 +272,6 @@ const PhoneDock = ({
   navLabel,
   onSelect,
   onToggleMenu,
-  status,
   tabs,
   triggerRef,
 }: {
@@ -282,7 +281,6 @@ const PhoneDock = ({
   navLabel: string;
   onSelect: (id: string) => void;
   onToggleMenu: () => void;
-  status: ReactNode;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => (
@@ -312,7 +310,6 @@ const PhoneDock = ({
       <Menu aria-hidden="true" />
       <span>{menuLabel}</span>
     </button>
-    <div className="dock-runtime runtime-notice">{status}</div>
   </nav>
 );
 
@@ -1087,7 +1084,6 @@ const Masthead = ({
   donateHref,
   githubHref,
   updateReady = false,
-  updateNotice,
   version,
   versionTitle,
 }: {
@@ -1118,7 +1114,6 @@ const Masthead = ({
   donateHref?: string;
   githubHref?: string;
   updateReady?: boolean;
-  updateNotice?: ReactNode;
   version?: string;
   versionTitle?: string;
 }) => {
@@ -1516,7 +1511,6 @@ const Masthead = ({
             </div>
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
-          <div className="sidebar-runtime runtime-notice">{updateNotice}</div>
           <aside className="side-rail">
             <SideNav
               appearance={appearanceTiles("rail", true)}
@@ -1586,7 +1580,6 @@ const Masthead = ({
           setMenuMounted(true);
           setMenuOpen((open) => !open);
         }}
-        status={updateNotice}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />

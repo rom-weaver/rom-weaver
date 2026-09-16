@@ -160,10 +160,3 @@
   cursor: default;
   opacity: 0.45;
 }
-
-@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
-  .rw-app .updates .btn.slim {
-    height: 32px;
-    padding-inline: 9px;
-  }
-}

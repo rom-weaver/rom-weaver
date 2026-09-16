@@ -1282,6 +1282,7 @@
 @media (min-width: 1000px) {
   .rw-app .brand {
     grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 4px;
   }
   .rw-app .brand-mark {
     width: 44px;
@@ -1294,7 +1295,7 @@
   }
 
   .rw-app {
-    --rail-w: clamp(228px, 19vw, 256px);
+    --rail-w: 220px;
   }
   html[data-offline-layout="title"] .rw-app .sidebar-runtime {
     display: none;
