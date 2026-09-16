@@ -1498,8 +1498,9 @@ const Masthead = ({
                       <b>weaver</b>
                     </BrandHeading>
                   </a>
-                  {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : buildFacts}
+                  {previewVersionStatus ? null : buildFacts}
                 </span>
+                {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
               <div className="shell-head-tools">
                 {appearanceTiles("phone")}

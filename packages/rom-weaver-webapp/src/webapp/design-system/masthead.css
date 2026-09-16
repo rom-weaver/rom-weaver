@@ -32,9 +32,10 @@
 
 /* ── brand ── */
 .rw-app .brand {
-  display: flex;
-  gap: var(--sp-s);
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: var(--sp-s);
+  align-items: center;
   min-width: 0;
 }
 .rw-app .brand-mark-link {
@@ -44,7 +45,7 @@
 }
 .rw-app .brand-mark {
   display: block;
-  width: 38px;
+  width: 28px;
   height: auto;
   aspect-ratio: 1;
   color: var(--ink);
@@ -63,9 +64,7 @@
   outline-offset: -2px;
 }
 .rw-app .brand-copy {
-  display: flex;
-  flex-direction: column;
-  min-inline-size: 0;
+  display: contents;
 }
 .rw-app .brand-word {
   display: block;
@@ -101,12 +100,24 @@
   white-space: nowrap;
 }
 .rw-app .title-build-row .build-facts {
-  flex-wrap: wrap;
-  row-gap: 2px;
-  block-size: auto;
+  flex-wrap: nowrap;
 }
-.rw-app .title-build-row {
+.rw-app .title-build-row,
+.rw-app .brand-copy > .build-facts {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+.rw-app .title-build-row .build-tag {
+  min-inline-size: 0;
+}
+.rw-app .title-build-row .build-tag .sub-chip {
   display: block;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rw-app .title-build-row .sub-status-text {
+  color: var(--ink-3);
 }
 .rw-app .title-build-row .build-runtime {
   display: inline-flex;
@@ -461,11 +472,9 @@
   align-items: flex-start;
   min-block-size: 44px;
 }
-/* The wordmark keeps its own width; the glyph cluster beside it is what gives
-   way, so the brand is never ellipsized. */
 .rw-app .shell-head-top .brand {
   flex: 1 1 auto;
-  min-inline-size: min-content;
+  min-inline-size: 0;
 }
 
 /* ── desktop sidebar ──
@@ -1359,8 +1368,11 @@
     .rw-app .shell-head-tools > .tool-separator {
       display: none;
     }
+    .rw-app .brand {
+      grid-template-columns: 24px minmax(0, 1fr);
+    }
     .rw-app .brand-mark {
-      width: 32px;
+      width: 24px;
     }
     .rw-app .brand-word {
       font-size: 1.06rem;
@@ -1380,14 +1392,6 @@
   @media (max-width: 389px) {
     .rw-app .shell-head-top .brand {
       min-inline-size: 0;
-    }
-    .rw-app .title-build-row {
-      inline-size: calc(100vw - 2 * var(--gutter) - 38px);
-      margin-block-start: 7px;
-    }
-    .rw-app .title-build-row .sub-chip {
-      align-items: flex-start;
-      padding-block-start: 2px;
     }
     .rw-app .shell-head-tools .tool {
       width: 24px;
