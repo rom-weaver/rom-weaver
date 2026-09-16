@@ -1280,8 +1280,21 @@
 /* ── the layout threshold ──
    ▼ The single number that decides which of the two shells is on screen. */
 @media (min-width: 1000px) {
+  .rw-app .brand {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .rw-app .brand-mark {
+    width: 44px;
+  }
+  .rw-app .brand-word {
+    font-size: 1.44rem;
+  }
+  .rw-app .brand .build-facts {
+    font-size: 0.8rem;
+  }
+
   .rw-app {
-    --rail-w: clamp(198px, 17vw, 236px);
+    --rail-w: clamp(228px, 19vw, 256px);
   }
   html[data-offline-layout="title"] .rw-app .sidebar-runtime {
     display: none;
