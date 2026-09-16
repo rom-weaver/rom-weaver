@@ -220,7 +220,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <textarea
                 aria-label={localizer.message("ui.home.open")}
                 className="home-install-code"
-                defaultValue="https://rom-weaver.com/apply"
+                defaultValue="https://rom-weaver.com/apply-patch"
                 readOnly
                 rows={1}
               />
