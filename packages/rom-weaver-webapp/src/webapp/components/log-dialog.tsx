@@ -577,8 +577,20 @@ const OfflineCachedFiles = ({
  * privacy are now written in full. Three paragraphs of them under the status
  * rows made the tab a page about the project rather than a readout of it.
  */
-const AboutLink = ({ localizer }: { localizer: Localizer }) => (
+const AboutLink = ({ localizer, onOpenWhatsNew }: { localizer: Localizer; onOpenWhatsNew?: () => void }) => (
   <div className="status-about">
+    <a
+      className="about-link"
+      href="/whats-new"
+      onClick={(event) => {
+        if (!onOpenWhatsNew || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+          return;
+        event.preventDefault();
+        onOpenWhatsNew();
+      }}
+    >
+      {localizer.message("ui.update.whatsNew")}
+    </a>{" "}
     <a className="about-link" href={ABOUT_URL}>
       {localizer.message("ui.status.about")}
     </a>
@@ -1046,6 +1058,7 @@ const LogDialog = ({
   initialTab = "status",
   onRestoreDefaults,
   onSaveSettings,
+  onOpenWhatsNew,
   onTabChange,
   serviceWorkerStatus,
   offlineProgress = null,
@@ -1064,6 +1077,7 @@ const LogDialog = ({
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
+  onOpenWhatsNew?: () => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   offlineCopyEnabled?: boolean;
@@ -1302,7 +1316,7 @@ const LogDialog = ({
               localizer={localizer}
             />
             <OfflineLegend current={runtimeState} localizer={localizer} />
-            <AboutLink localizer={localizer} />
+            <AboutLink localizer={localizer} onOpenWhatsNew={onOpenWhatsNew} />
           </div>
         ) : null}
         {tab === "logs" || tab === "storage" ? (

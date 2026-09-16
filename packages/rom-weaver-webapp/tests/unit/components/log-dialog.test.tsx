@@ -118,10 +118,8 @@ describe("LogDialog", () => {
     expect(container.querySelector(".status-rows")).not.toBeNull();
     // the trace log belongs to the Logs tab, so it is not mounted on Status
     expect(container.querySelector(".tracelog")).toBeNull();
-    // licence, attribution and privacy are written out on the About guide; the
-    // tab is a readout of the build, so it carries one line out to that page
     const aboutLinks = Array.from(container.querySelectorAll<HTMLAnchorElement>(".status-about a"));
-    expect(aboutLinks.map((link) => link.getAttribute("href"))).toEqual(["/docs/about"]);
+    expect(aboutLinks.map((link) => link.getAttribute("href"))).toEqual(["/whats-new", "/docs/about"]);
     const branchLink = container.querySelector<HTMLAnchorElement>('.status-row a[href$="/tree/dev"]');
     expect(branchLink?.textContent).toBe("dev");
     expect(branchLink?.target).toBe("_blank");

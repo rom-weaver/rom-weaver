@@ -584,10 +584,20 @@ describe("development offline status", () => {
     for (const value of ["active", "ready", "update", "installing", "online", "disabled"]) {
       fireEvent.change(select, { target: { value } });
       expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(value);
+      expect(container.querySelector(".reveal.is-open .update-ready") !== null).toBe(value === "update");
+      if (value === "update") {
+        fireEvent.click(container.querySelector(".updates .banner-x") as HTMLButtonElement);
+        expect(container.querySelector(".reveal.is-open .update-ready")).toBeNull();
+        expect(window.localStorage.getItem("rom-weaver-update-dismissed-build")).toBeNull();
+      }
     }
     fireEvent.change(select, { target: { value: "actual" } });
     expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(actual);
     expect(called("onOfflineCopyEnabledChange")).not.toHaveBeenCalled();
+    fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('.status-about a[href="/whats-new"]') as HTMLAnchorElement);
+    expect(called("onSelectView")).toHaveBeenCalledWith("whats-new");
+    expect(container.querySelector("dialog.log-dlg")).toBeNull();
   });
 
   it("hides overrides and ignores their URL parameters in production", async () => {

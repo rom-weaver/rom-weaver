@@ -435,6 +435,7 @@ function WebappRoot({
   );
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [previewLayout, setPreviewLayout] = useState<PreviewLayout>("strip");
+  const [previewUpdateDismissed, setPreviewUpdateDismissed] = useState(false);
   const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
   useEffect(() => {
     if (!isReactWebappDevelopmentMode()) return;
@@ -452,6 +453,7 @@ function WebappRoot({
   const changePreviewRuntimeState = useCallback((state: RuntimeState | null) => {
     if (!isReactWebappDevelopmentMode()) return;
     setPreviewRuntimeState(state);
+    setPreviewUpdateDismissed(false);
     const url = new URL(window.location.href);
     if (state) url.searchParams.set("offline-state", state);
     else url.searchParams.delete("offline-state");
@@ -923,12 +925,20 @@ function WebappRoot({
           ) : null}
           <UpdateBanner
             onDismiss={() => {
+              if (previewRuntimeState !== null) {
+                setPreviewUpdateDismissed(true);
+                return;
+              }
               setUpdateDismissed(true);
               writeUpdateDismissed();
             }}
             onOpenWhatsNew={openWhatsNew}
             onReload={actions.onReloadUpdate}
-            open={pageUpdate.ready && !updateDismissed}
+            open={
+              previewRuntimeState === null
+                ? pageUpdate.ready && !updateDismissed
+                : previewRuntimeState === "update" && !previewUpdateDismissed
+            }
             title={pageUpdate.title}
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
@@ -1057,6 +1067,10 @@ function WebappRoot({
               onRestoreDefaults={actions.onRestoreDefaults}
               onSaveSettings={saveSettings}
               onTabChange={handleDialogTabChange}
+              onOpenWhatsNew={() => {
+                setLogOpen(false);
+                openWhatsNew();
+              }}
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
               offlineProgress={previewOfflineProgress}

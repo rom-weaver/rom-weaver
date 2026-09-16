@@ -865,11 +865,16 @@
 .rw-app .dock-runtime:empty {
   display: none;
 }
-.rw-app .header-runtime .sub-status-text,
-.rw-app .header-runtime .sub-status-percent {
+.rw-app .header-runtime .sub-status-text {
   display: none;
 }
+.rw-app .header-runtime .sub-status-percent {
+  font-size: 9px;
+  line-height: 1;
+}
 .rw-app .header-runtime .sub-status {
+  flex-direction: column;
+  gap: 1px;
   min-inline-size: 24px;
 }
 .rw-app .header-runtime .sub-status::after {
