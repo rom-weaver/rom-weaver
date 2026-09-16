@@ -153,9 +153,6 @@
   .rw-app .bundle-job-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .rw-app .updates {
-    gap: var(--sp-s);
-  }
   /* Override user-agent dialog limits with an edge-to-edge sheet on phones.
      The sheet itself - size, safe-area padding, square corners - is set once in
      dialogs.css beside the desktop frame it overrides. */

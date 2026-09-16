@@ -1,11 +1,4 @@
-/* ═══ shell chrome ═══
-   Two layouts, one threshold (▼ below), and one description of the navigation
-   behind both. Above the threshold a sidebar carries the brand, every
-   destination the app has, and the build facts, while a slim top bar carries
-   runtime status and browser tools. Below it the sidebar's
-   sections become the Menu sheet and three workflows keep a dock slot each.
-   Nothing is reachable in one layout and missing from the other, and no
-   destination hides behind an unlabelled glyph. */
+/* ═══ shell chrome ═══ */
 .rw-app {
   /* The top bar's height, shared so the Find palette can sit under it without
      repeating the number (find.css). */
@@ -42,6 +35,7 @@
   display: flex;
   flex: none;
   grid-row: 1 / span 2;
+  align-self: start;
   border-radius: 8px;
 }
 .rw-app .brand-mark {
@@ -285,7 +279,7 @@
   font-weight: 600;
   text-decoration: none;
 }
-.rw-app .topbar-tools .sub-status {
+.rw-app .sidebar-runtime .sub-status {
   block-size: 32px;
   padding-inline: 8px;
   background: var(--well);
@@ -909,6 +903,9 @@
   border: 1px solid var(--seam);
   border-radius: 999px;
 }
+.rw-app .sidebar-runtime {
+  margin-block-end: var(--sp-s);
+}
 .rw-app .phone-overlay-runtime {
   display: none;
 }
@@ -949,7 +946,8 @@
   html[data-offline-layout="title"] .rw-app .dock-runtime {
     display: none;
   }
-  html[data-offline-layout="title"] .rw-app .menu-sheet {
+  html[data-offline-layout="title"] .rw-app .menu-sheet,
+  html[data-offline-layout="strip"] .rw-app .menu-sheet {
     inset-block-end: var(--dock-h);
     max-block-size: calc(100dvh - var(--dock-h));
   }
@@ -1008,7 +1006,7 @@
     --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
   html[data-offline-layout="strip"] .rw-app {
-    --dock-h: calc(78px + max(3px, var(--safe-b)));
+    --dock-h: calc(86px + max(3px, var(--safe-b)));
   }
 
   html[data-offline-layout="tab"] .rw-app .dock {
@@ -1071,15 +1069,15 @@
     row-gap: 0;
   }
   html[data-offline-layout="strip"] .rw-app .dock-tab {
-    grid-row: 1;
+    grid-row: 2;
   }
   html[data-offline-layout="strip"] .rw-app .dock-runtime {
-    grid-row: 2;
-    min-block-size: 25px;
-    border-block-start: 1px solid var(--seam-soft);
+    grid-row: 1;
+    min-block-size: 32px;
+    border-block-end: 1px solid var(--seam-soft);
   }
   html[data-offline-layout="strip"] .rw-app .dock-runtime .sub-status {
-    block-size: 24px;
+    block-size: 32px;
     padding-inline: 4px;
     background: transparent;
     border: 0;
@@ -1291,7 +1289,7 @@
   .rw-app {
     --rail-w: clamp(198px, 17vw, 236px);
   }
-  html[data-offline-layout="title"] .rw-app .topbar-tools > .sub-status {
+  html[data-offline-layout="title"] .rw-app .sidebar-runtime {
     display: none;
   }
   /* The sidebar is a column of the app grid rather than a fixed overlay, so it
@@ -1334,6 +1332,7 @@
     --dock-h: calc(86px + max(3px, var(--safe-b)));
   }
   .rw-app .side-rail,
+  .rw-app .sidebar-runtime,
   .rw-app .topbar {
     display: none;
   }

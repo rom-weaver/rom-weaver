@@ -1302,7 +1302,7 @@ describe("webapp responsive navigation", () => {
       expect(host.querySelector(".menu-sheet .nav-group").getBoundingClientRect().top - sheet.top).toBeLessThan(24);
       expect(host.querySelector(".menu-sheet .sub-status")).toBeNull();
       expect(dock.querySelector(".dock-runtime .sub-status")?.getAttribute("aria-label")).toBe(
-        host.querySelector(".topbar .sub-status")?.getAttribute("aria-label"),
+        host.querySelector(".sidebar-runtime .sub-status")?.getAttribute("aria-label"),
       );
 
       // The brand and tools share one row without overlap.
@@ -1327,7 +1327,7 @@ describe("webapp responsive navigation", () => {
 
     expect(labels(".menu-sheet")).toEqual(labels(".side-nav").filter((label) => label !== "Status"));
     expect(host.querySelector(".dock-runtime .sub-status")?.getAttribute("aria-label")).toBe(
-      host.querySelector(".topbar .sub-status")?.getAttribute("aria-label"),
+      host.querySelector(".sidebar-runtime .sub-status")?.getAttribute("aria-label"),
     );
   });
 

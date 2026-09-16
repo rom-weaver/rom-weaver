@@ -31,44 +31,6 @@
     grid-area: 1 / 1;
   }
 
-  .rw-app .updates {
-    gap: var(--sp-s);
-    min-height: 44px;
-    padding: var(--sp-s);
-  }
-
-  .rw-app .updates-pulse {
-    width: 6px;
-    height: 6px;
-  }
-  .rw-app .updates-text {
-    display: flex;
-    gap: var(--sp-s);
-    align-items: center;
-    font-size: 0.78rem;
-    white-space: nowrap;
-  }
-
-  .rw-app .updates-ver {
-    height: 32px;
-    padding-inline: 9px;
-    margin-inline-start: 0;
-    font-size: 0.7rem;
-  }
-  .rw-app .updates .btn.slim {
-    height: 32px;
-    padding-inline: 9px;
-  }
-  .rw-app .updates .banner-x {
-    width: 32px;
-    height: 32px;
-  }
-
-  .rw-app .update-ready {
-    min-height: 38px;
-    background: var(--plate);
-  }
-
   /* the whole empty hero is the tap target - flash it on touch so taps
      anywhere in the panel visibly register */
   .rw-app .step.is-input.is-empty .drop.hero:active {

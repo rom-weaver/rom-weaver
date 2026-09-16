@@ -169,7 +169,7 @@ describe("Masthead", () => {
     expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")).filter((label) => label !== "Status"));
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".dock-runtime .sub-status-text")?.textContent).toBe(
-      container.querySelector(".topbar .sub-status-text")?.textContent,
+      container.querySelector(".sidebar-runtime .sub-status-text")?.textContent,
     );
   });
 
@@ -368,7 +368,7 @@ describe("Masthead", () => {
     }
     expect(container.querySelector(".menu-sheet .sub-status")).toBeNull();
     expect(container.querySelector(".dock-runtime .sub-status-text")?.textContent).toBe(
-      container.querySelector(".topbar .sub-status-text")?.textContent,
+      container.querySelector(".sidebar-runtime .sub-status-text")?.textContent,
     );
   });
 

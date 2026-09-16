@@ -1,6 +1,6 @@
 import { createElement, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { getDefaultBrowserThreadCount } from "../../src/platform/shared/compression-options.ts";
 import { createEmptyPageUpdateState } from "../../src/webapp/page-update-state.ts";
@@ -116,17 +116,17 @@ const createWebappState = (settings = getDefaultSettings(), currentView = "patch
   validation: createEmptyValidationState(),
 });
 
-function WebappRootHarness({ initialView = "patcher", settings, updateReady = false } = {}) {
+function WebappRootHarness({ initialView = "patcher", settings, updateReady = false, onReloadUpdate } = {}) {
   const [currentView, setCurrentView] = useState(initialView);
   const props = useMemo(
     () => ({
-      actions: { ...createNoopActions(), onSelectView: setCurrentView },
+      actions: { ...createNoopActions(), onSelectView: setCurrentView, onReloadUpdate },
       confirmationDialog: createEmptyConfirmationDialogState(),
       pageUpdate: { ...createEmptyPageUpdateState(), ready: updateReady },
       serviceWorkerCache: createServiceWorkerCacheState(),
       state: createWebappState(settings, currentView),
     }),
-    [currentView, settings, updateReady],
+    [currentView, settings, updateReady, onReloadUpdate],
   );
   return createElement(WebappRoot, props);
 }
@@ -143,7 +143,7 @@ const mountWebappRoot = (options = {}) => {
 };
 
 beforeEach(() => {
-  document.documentElement.dataset.offlineLayout = "title";
+  document.documentElement.dataset.offlineLayout = "strip";
   mountedRoot?.unmount?.();
   mountedRoot = null;
   rootElement = document.createElement("div");
@@ -289,15 +289,15 @@ test("WebappRoot reports the configured thread count before the workflow Setting
   expect(threadButton.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test("the wordmark keeps version and status below it while phone tools stay on one line", async () => {
+test("the wordmark keeps its version while persistent status sits beside navigation", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect
-    .poll(() => document.querySelector(".title-build-row .sub-status")?.getAttribute("aria-label") || "")
+    .poll(() => document.querySelector(".sidebar-runtime .sub-status")?.getAttribute("aria-label") || "")
     .not.toBe("");
   expect(document.querySelector(".masthead-threads")).toBeNull();
   expect(document.querySelector(".brand-copy .build-facts")).toBeTruthy();
-  expect(document.querySelector(".title-build-row .build-facts")).toBeTruthy();
+  expect(document.querySelector(".brand .sub-status")).toBeNull();
   await expect
     .poll(() => document.querySelector("#panel-patcher .panel-threads-btn")?.textContent || "")
     .toContain("10 threads");
@@ -309,26 +309,27 @@ test("the wordmark keeps version and status below it while phone tools stay on o
     [390, 844],
   ]) {
     await page.viewport(width, height);
-    const status = document.querySelector(".title-build-row .sub-status");
-    const version = document.querySelector(".title-build-row .build-tag");
-    expect(getComputedStyle(status).display).not.toBe("none");
+    const slot = width >= 1000 ? ".sidebar-runtime" : ".dock-runtime";
+    const status = document.querySelector(`${slot} .sub-status`);
+    expect(status.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(status.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
-    expect(status.getBoundingClientRect().top).toBeGreaterThanOrEqual(version.getBoundingClientRect().top);
-    expect(status.getBoundingClientRect().top).toBeLessThanOrEqual(version.getBoundingClientRect().bottom + 2);
-    expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(
-      document.querySelector(".side-col").getBoundingClientRect().right,
-    );
+    const version = document.querySelector(".brand .build-tag .sub-chip");
+    expect(version.scrollWidth).toBeLessThanOrEqual(version.clientWidth);
     if (width >= 1000) {
-      expect(getComputedStyle(document.querySelector(".topbar .sub-status")).display).toBe("none");
+      expect(document.querySelector(".topbar .sub-status")).toBeNull();
+      expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        document.querySelector(".side-nav").getBoundingClientRect().top,
+      );
     } else {
       expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
-      expect(document.querySelector(".dock-state-dot")).toBeNull();
-      expect(getComputedStyle(document.querySelector(".dock-runtime")).display).toBe("none");
+      expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        document.querySelector(".dock-tab").getBoundingClientRect().top,
+      );
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       const brand = document.querySelector(".brand").getBoundingClientRect();
       const tools = document.querySelector(".shell-head-tools").getBoundingClientRect();
       expect(brand.right).toBeLessThanOrEqual(tools.left);
-      expect(tools.bottom - tools.top).toBeLessThanOrEqual(32);
+      expect(tools.height).toBe(44);
     }
     // The wordmark still leads the block it heads.
     const titleSize = Number.parseFloat(getComputedStyle(document.querySelector(".brand-word")).fontSize);
@@ -587,7 +588,7 @@ test("the phone header carries appearance and the project links, and Menu carrie
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
   expect(document.querySelector(".dock-runtime .sub-status-text").textContent).toBe(
-    document.querySelector(".topbar .sub-status-text").textContent,
+    document.querySelector(".sidebar-runtime .sub-status-text").textContent,
   );
   expect(document.querySelector(".menu-sheet .sub-status")).toBeNull();
   expect(navRow("GitHub", ".menu-sheet").getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/");
@@ -706,4 +707,32 @@ test("the Menu sheet uses its content height and keeps its foot at the dock", as
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(foot.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
   await page.viewport(1280, 900);
+});
+
+test.each([
+  [320, ".dock-runtime"],
+  [1280, ".sidebar-runtime"],
+])("update prompt stays in persistent status at %ipx", async (width, selector) => {
+  const key = "rom-weaver-update-dismissed-build";
+  const dismissed = localStorage.getItem(key);
+  localStorage.removeItem(key);
+  const onReloadUpdate = vi.fn();
+  try {
+    await page.viewport(width, 900);
+    mountWebappRoot({ updateReady: true, onReloadUpdate });
+    await expect.poll(() => document.querySelector(`${selector} .updates`)).toBeTruthy();
+    const prompt = document.querySelector(`${selector} .updates`);
+    expect(document.querySelector(".app > .reveal > .update-ready")).toBeNull();
+    expect(document.querySelector(".brand .sub-status")).toBeNull();
+    expect(prompt.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(prompt.scrollWidth).toBeLessThanOrEqual(prompt.clientWidth);
+    await page.getByRole("button", { name: "Reload", exact: true }).click();
+    expect(onReloadUpdate).toHaveBeenCalledTimes(1);
+    await page.getByRole("button", { name: "Dismiss", exact: true }).click();
+    await expect.poll(() => document.querySelector(`${selector} .sub-status`)?.dataset.sw).toBe("update");
+    expect(document.querySelector(`${selector} .updates`)).toBeNull();
+  } finally {
+    if (dismissed === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, dismissed);
+  }
 });

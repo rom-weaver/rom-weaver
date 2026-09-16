@@ -29,10 +29,10 @@
       // accent field; madder = no attribute). theme.ts/accent.ts re-apply the same
       // values on boot, so this only moves the attribute earlier - keep in sync.
       (function () {
-        const layout = new URLSearchParams(location.search).get("offline-layout") || "title";
+        const layout = new URLSearchParams(location.search).get("offline-layout") || "strip";
         document.documentElement.dataset.offlineLayout = ["tab", "strip", "edge", "quiet", "title"].includes(layout)
           ? layout
-          : "title";
+          : "strip";
         try {
           const stored = localStorage.getItem("rom-weaver-theme");
           const preferred = stored === "light" || stored === "dark" ? stored : "";

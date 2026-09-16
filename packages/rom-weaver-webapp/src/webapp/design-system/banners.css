@@ -453,3 +453,73 @@
     mask-position: var(--drift, 0 20px);
   }
 }
+
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .updates {
+    gap: var(--sp-s);
+    min-height: 44px;
+    padding: var(--sp-s);
+  }
+
+  .rw-app .updates-pulse {
+    width: 6px;
+    height: 6px;
+  }
+  .rw-app .updates-text {
+    display: flex;
+    gap: var(--sp-s);
+    align-items: center;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .rw-app .updates-ver {
+    height: 32px;
+    padding-inline: 9px;
+    margin-inline-start: 0;
+    font-size: 0.7rem;
+  }
+  .rw-app .updates .banner-x {
+    width: 32px;
+    height: 32px;
+  }
+
+  .rw-app .update-ready {
+    min-height: 38px;
+    background: var(--plate);
+  }
+}
+
+.rw-app .runtime-notice .reveal {
+  inline-size: 100%;
+}
+.rw-app .runtime-notice .updates {
+  gap: 4px;
+  min-block-size: 32px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.rw-app .runtime-notice .updates-pulse {
+  display: none;
+}
+.rw-app .runtime-notice .updates-text {
+  gap: 4px;
+  font-size: 0.68rem;
+}
+.rw-app .runtime-notice .updates-ver {
+  padding-inline: 2px;
+  margin-inline-start: 2px;
+  font-size: inherit;
+}
+.rw-app .runtime-notice .banner-x::after {
+  inset: 0;
+}
+@media (min-width: 1000px) {
+  .rw-app .sidebar-runtime .updates {
+    flex-wrap: wrap;
+  }
+  .rw-app .sidebar-runtime .updates-text {
+    flex-basis: 100%;
+  }
+}

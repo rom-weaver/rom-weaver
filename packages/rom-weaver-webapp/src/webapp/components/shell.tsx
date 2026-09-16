@@ -321,7 +321,7 @@ const PhoneDock = ({
       <Menu aria-hidden="true" />
       <span>{menuLabel}</span>
     </button>
-    <span className="dock-runtime">{status}</span>
+    <div className="dock-runtime runtime-notice">{status}</div>
   </nav>
 );
 
@@ -1096,6 +1096,7 @@ const Masthead = ({
   donateHref,
   githubHref,
   updateReady = false,
+  updateNotice,
   version,
   versionTitle,
 }: {
@@ -1126,6 +1127,7 @@ const Masthead = ({
   donateHref?: string;
   githubHref?: string;
   updateReady?: boolean;
+  updateNotice?: ReactNode;
   version?: string;
   versionTitle?: string;
 }) => {
@@ -1421,6 +1423,18 @@ const Masthead = ({
       versionTitle={versionTitle}
     />
   ) : null;
+  const runtimeNotice = updateNotice ?? (
+    <StatusChip
+      label={runtimeLabel}
+      onOpenStatus={() => {
+        closeMenu();
+        onOpenStatus();
+      }}
+      percent={runtimePercent}
+      state={runtimeState}
+      title={runtimeTitle}
+    />
+  );
   const buildFacts = (
     <span className="build-facts">
       {buildTag}
@@ -1510,6 +1524,7 @@ const Masthead = ({
             </div>
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
+          <div className="sidebar-runtime runtime-notice">{runtimeNotice}</div>
           <aside className="side-rail">
             <SideNav
               appearance={appearanceTiles("rail", true)}
@@ -1538,13 +1553,6 @@ const Masthead = ({
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
           <div className="topbar-tools">
-            <StatusChip
-              label={runtimeLabel}
-              onOpenStatus={onOpenStatus}
-              percent={runtimePercent}
-              state={runtimeState}
-              title={runtimeTitle}
-            />
             {appearanceTiles("desktop")}
             <span aria-hidden="true" className="tool-separator" />
             {projectTiles}
@@ -1585,18 +1593,7 @@ const Masthead = ({
           setMenuMounted(true);
           setMenuOpen((open) => !open);
         }}
-        status={
-          <StatusChip
-            label={runtimeLabel}
-            onOpenStatus={() => {
-              closeMenu();
-              onOpenStatus();
-            }}
-            percent={runtimePercent}
-            state={runtimeState}
-            title={runtimeTitle}
-          />
-        }
+        status={runtimeNotice}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />

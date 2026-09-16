@@ -433,7 +433,7 @@ function WebappRoot({
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
   const [previewEnabled, setPreviewEnabled] = useState(false);
-  const [previewLayout, setPreviewLayout] = useState<PreviewLayout>("title");
+  const [previewLayout, setPreviewLayout] = useState<PreviewLayout>("strip");
   const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -865,21 +865,25 @@ function WebappRoot({
             previewRuntimeState={previewRuntimeState}
             previewPhoneOverlay={previewLayout === "edge" || previewLayout === "quiet"}
             previewVersionStatus={previewLayout === "title"}
+            updateNotice={
+              pageUpdate.ready && !updateDismissed ? (
+                <UpdateBanner
+                  onDismiss={() => {
+                    setUpdateDismissed(true);
+                    writeUpdateDismissed();
+                  }}
+                  onOpenWhatsNew={openWhatsNew}
+                  onReload={actions.onReloadUpdate}
+                  open
+                  title={pageUpdate.title}
+                />
+              ) : null
+            }
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
             onSelectTab={handleSelectTab}
             tabs={mastheadTabs}
-          />
-          <UpdateBanner
-            onDismiss={() => {
-              setUpdateDismissed(true);
-              writeUpdateDismissed();
-            }}
-            onOpenWhatsNew={openWhatsNew}
-            onReload={actions.onReloadUpdate}
-            open={pageUpdate.ready && !updateDismissed}
-            title={pageUpdate.title}
           />
           {previewEnabled && previewLayout ? (
             <section aria-label="Preview controls" className="status-prototype-bar">
