@@ -723,10 +723,7 @@ test("the Menu sheet uses its content height and keeps its foot at the dock", as
   await page.viewport(1280, 900);
 });
 
-test.each([
-  [320, ".dock-runtime"],
-  [1280, ".sidebar-runtime"],
-])("update prompt stays in persistent status at %ipx", async (width, selector) => {
+test.each([320, 1280])("update prompt stays above page content at %ipx", async (width) => {
   const key = "rom-weaver-update-dismissed-build";
   const dismissed = localStorage.getItem(key);
   localStorage.removeItem(key);
@@ -734,9 +731,9 @@ test.each([
   try {
     await page.viewport(width, 900);
     mountWebappRoot({ updateReady: true, onReloadUpdate });
-    await expect.poll(() => document.querySelector(`${selector} .updates`)).toBeTruthy();
-    const prompt = document.querySelector(`${selector} .updates`);
-    expect(document.querySelector(".app > .reveal > .update-ready")).toBeNull();
+    await expect.poll(() => document.querySelector(".app > .reveal.is-open > .update-ready")).toBeTruthy();
+    const prompt = document.querySelector(".app > .reveal.is-open > .update-ready");
+    expect(document.querySelector(".dock-runtime .updates, .desktop-runtime .updates")).toBeNull();
     expect(document.querySelector(".brand .sub-status")).toBeNull();
     expect(prompt.getBoundingClientRect().width).toBeGreaterThan(0);
     expect(prompt.scrollWidth).toBeLessThanOrEqual(prompt.clientWidth);
@@ -748,7 +745,7 @@ test.each([
         () => document.querySelector(`${width < 1000 ? ".phone-runtime" : ".desktop-runtime"} .sub-status`)?.dataset.sw,
       )
       .toBe("update");
-    expect(document.querySelector(`${selector} .updates`)).toBeNull();
+    await expect.poll(() => document.querySelector(".app > .reveal.is-open > .update-ready")).toBeNull();
   } finally {
     if (dismissed === null) localStorage.removeItem(key);
     else localStorage.setItem(key, dismissed);

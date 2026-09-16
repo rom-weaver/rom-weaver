@@ -112,7 +112,7 @@ const TransitionSide = ({ side }: { side: TransitionRef }) =>
 
 const UpdateHeader = ({ meta, title }: { meta: HeaderMeta; title: string }) => (
   <div className="changelog-update-head">
-    <b className="changelog-update-title">{title}</b>
+    <h2 className="changelog-update-title">{title}</h2>
     <div className="changelog-head-meta">
       <span className="changelog-head-transition mono">
         <TransitionSide side={meta.from} />

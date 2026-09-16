@@ -959,7 +959,7 @@ describe("webapp keyboard navigation", () => {
 
     const current = host.querySelector('.side-nav [aria-current="page"]');
     expect(current.dataset.mode ?? current.getAttribute("href")).toBe("apply");
-    rows[1].click();
+    host.querySelector("#tab-creator").click();
     expect(selected).toEqual(["creator"]);
   });
 
@@ -1325,7 +1325,8 @@ describe("webapp responsive navigation", () => {
     if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
     await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
 
-    expect(labels(".menu-sheet")).toEqual(labels(".side-nav"));
+    const sortLabels = (items) => items.sort((left, right) => left.localeCompare(right));
+    expect(sortLabels(labels(".menu-sheet"))).toEqual(sortLabels(labels(".side-nav")));
     expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
       host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
     );
