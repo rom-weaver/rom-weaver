@@ -126,6 +126,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 /** A nav row by its visible label, from whichever layout the test names. */
@@ -568,5 +569,36 @@ describe("the phone Menu sheet", () => {
     fireEvent.click(navRow(container, "Settings", ".menu-sheet"));
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("development offline status", () => {
+  it("forces every display state and restores the actual status", async () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("MODE", "development");
+    const { container, called } = await renderRoot({ settingsDialogOpen: true });
+    fireEvent.click(container.querySelector(".workflow-panel-head .panel-settings-btn") as HTMLButtonElement);
+    await waitFor(() => expect(container.querySelector("#dev-offline-state")).not.toBeNull());
+    const select = container.querySelector("#dev-offline-state") as HTMLSelectElement;
+    const actual = container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw");
+    for (const value of ["active", "ready", "update", "installing", "online", "disabled"]) {
+      fireEvent.change(select, { target: { value } });
+      expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(value);
+    }
+    fireEvent.change(select, { target: { value: "actual" } });
+    expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(actual);
+    expect(called("onOfflineCopyEnabledChange")).not.toHaveBeenCalled();
+  });
+
+  it("hides overrides and ignores their URL parameters in production", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("MODE", "production");
+    window.history.replaceState(null, "", "/?offline-layout=strip&offline-state=disabled");
+    const { container } = await renderRoot({ settingsDialogOpen: true, updateReady: true });
+    fireEvent.click(container.querySelector(".workflow-panel-head .panel-settings-btn") as HTMLButtonElement);
+    await waitFor(() => expect(container.querySelector(".settings-panel")).not.toBeNull());
+    expect(container.querySelector("#dev-offline-state")).toBeNull();
+    expect(container.querySelector(".status-prototype-bar")).toBeNull();
+    expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe("update");
   });
 });

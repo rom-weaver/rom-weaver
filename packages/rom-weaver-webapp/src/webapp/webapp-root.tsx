@@ -1,3 +1,4 @@
+import { isReactWebappDevelopmentMode } from "./development-defaults.ts";
 import {
   BookOpen,
   Gamepad2,
@@ -436,17 +437,20 @@ function WebappRoot({
   const [previewLayout, setPreviewLayout] = useState<PreviewLayout>("strip");
   const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
   useEffect(() => {
+    if (!isReactWebappDevelopmentMode()) return;
     const params = new URLSearchParams(window.location.search);
     const layout = params.get("offline-layout");
-    if (!PREVIEW_LAYOUTS.some((item) => item.id === layout)) return;
-    setPreviewEnabled(true);
-    setPreviewLayout(layout as PreviewLayout);
+    if (PREVIEW_LAYOUTS.some((item) => item.id === layout)) {
+      setPreviewEnabled(true);
+      setPreviewLayout(layout as PreviewLayout);
+    }
     const state = params.get("offline-state");
     if (state && (RUNTIME_STATES as readonly string[]).includes(state)) {
       setPreviewRuntimeState(state as RuntimeState);
     }
   }, []);
   const changePreviewRuntimeState = useCallback((state: RuntimeState | null) => {
+    if (!isReactWebappDevelopmentMode()) return;
     setPreviewRuntimeState(state);
     const url = new URL(window.location.href);
     if (state) url.searchParams.set("offline-state", state);
@@ -1062,6 +1066,41 @@ function WebappRoot({
               settingsFocusHint={settingsFocusHint}
               settingsPanel={
                 <Suspense fallback={null}>
+                  {isReactWebappDevelopmentMode() ? (
+                    <section aria-label="Development" className="setgroup">
+                      <div className="gtitle">Development</div>
+                      <div className="setrow">
+                        <label className="slabel" htmlFor="dev-offline-state">
+                          Offline status
+                        </label>
+                        <span className="sctl">
+                          <select
+                            aria-describedby="dev-offline-state-help"
+                            className="select"
+                            id="dev-offline-state"
+                            value={previewRuntimeState ?? "actual"}
+                            onChange={(event) => {
+                              const value = event.currentTarget.value;
+                              if (value === "actual") changePreviewRuntimeState(null);
+                              else if ((RUNTIME_STATES as readonly string[]).includes(value)) {
+                                changePreviewRuntimeState(value as RuntimeState);
+                              }
+                            }}
+                          >
+                            <option value="actual">Actual</option>
+                            {RUNTIME_STATES.map((value) => (
+                              <option key={value} value={value}>
+                                {PREVIEW_STATE_LABELS[value]}
+                              </option>
+                            ))}
+                          </select>
+                        </span>
+                      </div>
+                      <p id="dev-offline-state-help">
+                        Display only. Does not change the offline cache or service worker.
+                      </p>
+                    </section>
+                  ) : null}
                   <SettingsPanel
                     draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
                     onDraftChange={actions.onDraftChange}
