@@ -1301,7 +1301,7 @@ describe("webapp responsive navigation", () => {
       expect(sheet.top).toBeGreaterThanOrEqual(0);
       expect(host.querySelector(".menu-sheet .nav-group").getBoundingClientRect().top - sheet.top).toBeLessThan(24);
       expect(host.querySelector(".menu-sheet .sub-status")).toBeNull();
-      expect(dock.querySelector(".dock-runtime .sub-status")?.getAttribute("aria-label")).toBe(
+      expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
         host.querySelector(".sidebar-runtime .sub-status")?.getAttribute("aria-label"),
       );
 
@@ -1325,8 +1325,8 @@ describe("webapp responsive navigation", () => {
     if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
     await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
 
-    expect(labels(".menu-sheet")).toEqual(labels(".side-nav").filter((label) => label !== "Status"));
-    expect(host.querySelector(".dock-runtime .sub-status")?.getAttribute("aria-label")).toBe(
+    expect(labels(".menu-sheet")).toEqual(labels(".side-nav"));
+    expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
       host.querySelector(".sidebar-runtime .sub-status")?.getAttribute("aria-label"),
     );
   });

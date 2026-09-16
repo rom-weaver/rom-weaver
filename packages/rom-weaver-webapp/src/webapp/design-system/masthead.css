@@ -280,11 +280,21 @@
   text-decoration: none;
 }
 .rw-app .sidebar-runtime .sub-status {
-  block-size: 32px;
-  padding-inline: 8px;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-s);
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 32px;
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-align: start;
+}
+.rw-app .sidebar-runtime .sub-status-text {
+  flex: 1;
+  min-inline-size: 0;
+  color: var(--ink);
+}
+.rw-app .sidebar-runtime .sub-status svg {
+  width: 20px;
+  height: 20px;
 }
 .rw-app .sub-status svg {
   flex: none;
@@ -377,12 +387,7 @@
   min-inline-size: 0;
   overflow-wrap: anywhere;
 }
-.rw-app .nav-row-state {
-  display: block;
-  font-size: 0.68rem;
-  font-weight: 500;
-  color: var(--thread-text);
-}
+
 @media (hover: hover) {
   .rw-app .nav-row:not([aria-current="page"]):hover {
     color: var(--ink);
@@ -880,7 +885,7 @@
   z-index: 1000;
   display: none;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  row-gap: 2px;
+  row-gap: 0;
   padding: 3px max(var(--sp-s), var(--safe-r)) max(3px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
   background: color-mix(in oklab, var(--plate) 88%, transparent);
   border-block-start: 1px solid var(--seam-soft);
@@ -895,6 +900,19 @@
   justify-content: center;
   min-block-size: 30px;
 }
+.rw-app .dock-runtime:empty {
+  display: none;
+}
+.rw-app .phone-runtime .sub-status-text,
+.rw-app .phone-runtime .sub-status-percent {
+  display: none;
+}
+.rw-app .phone-runtime .sub-status {
+  min-inline-size: 24px;
+}
+.rw-app .phone-runtime .sub-status::after {
+  inset: 0;
+}
 .rw-app .dock-runtime .sub-status {
   block-size: 30px;
   padding-inline: 10px;
@@ -903,8 +921,13 @@
   border: 1px solid var(--seam);
   border-radius: 999px;
 }
+.rw-app .dock-runtime .sub-status::after {
+  inset: 0;
+}
 .rw-app .sidebar-runtime {
+  padding: 0 4px var(--sp-s);
   margin-block-end: var(--sp-s);
+  border-block-end: 1px solid var(--seam-strong);
 }
 .rw-app .phone-overlay-runtime {
   display: none;
@@ -913,7 +936,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  grid-row: 2;
+  grid-row: 1;
   gap: 2px;
   align-items: center;
   justify-content: center;
@@ -1006,6 +1029,9 @@
     --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
   html[data-offline-layout="strip"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="strip"] .rw-app:has(.dock-runtime .update-ready) {
     --dock-h: calc(86px + max(3px, var(--safe-b)));
   }
 
@@ -1069,15 +1095,18 @@
     row-gap: 0;
   }
   html[data-offline-layout="strip"] .rw-app .dock-tab {
+    grid-row: 1;
+  }
+  html[data-offline-layout="strip"] .rw-app .dock:has(.update-ready) .dock-tab {
     grid-row: 2;
   }
   html[data-offline-layout="strip"] .rw-app .dock-runtime {
     grid-row: 1;
-    min-block-size: 32px;
+    min-block-size: 24px;
     border-block-end: 1px solid var(--seam-soft);
   }
   html[data-offline-layout="strip"] .rw-app .dock-runtime .sub-status {
-    block-size: 32px;
+    block-size: 24px;
     padding-inline: 4px;
     background: transparent;
     border: 0;
@@ -1315,7 +1344,7 @@
   .rw-app .shell-head {
     flex: none;
     gap: var(--sp-s);
-    padding-block: var(--sp-m);
+    padding-block: var(--sp-m) 2px;
   }
   .rw-app .app > :not(.side-col) {
     grid-column: 2;
@@ -1329,7 +1358,7 @@
 }
 @media (max-width: 999px) {
   .rw-app {
-    --dock-h: calc(86px + max(3px, var(--safe-b)));
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
   .rw-app .side-rail,
   .rw-app .sidebar-runtime,
@@ -1338,6 +1367,13 @@
   }
   .rw-app .side-col {
     display: block;
+  }
+  .rw-app .shell-head {
+    padding-block: 8px;
+    padding-inline: max(0px, calc(16px - var(--gutter)));
+  }
+  .rw-app .shell-head-top {
+    align-items: center;
   }
   .rw-app .shell-head-tools .tool {
     width: 44px;
@@ -1392,14 +1428,22 @@
   }
   @media (max-width: 599px) {
     .rw-app .shell-head-tools {
-      gap: 0;
+      gap: 4px;
     }
     .rw-app .shell-head-tools .tool {
       width: 32px;
       height: 44px;
     }
   }
+  @media (max-width: 449px) {
+    .rw-app .shell-head-tools .tool {
+      width: 28px;
+    }
+  }
   @media (max-width: 389px) {
+    .rw-app .shell-head-tools {
+      gap: 2px;
+    }
     .rw-app .brand {
       grid-template-columns: 28px minmax(0, 1fr);
       column-gap: 4px;
@@ -1409,6 +1453,26 @@
     }
     .rw-app .shell-head-tools .tool {
       width: 28px;
+    }
+  }
+  @media (max-width: 359px) {
+    .rw-app .brand {
+      grid-template-columns: 24px minmax(0, 1fr);
+    }
+    .rw-app .brand-mark {
+      width: 24px;
+    }
+    .rw-app .shell-head {
+      padding-inline: 2px;
+    }
+    .rw-app .shell-head-top {
+      gap: 4px;
+    }
+    .rw-app .brand-word {
+      font-size: 1.02rem;
+    }
+    .rw-app .shell-head-tools .tool {
+      width: 24px;
     }
   }
   /* The trailing pair would paint its tooltip past the window edge and give

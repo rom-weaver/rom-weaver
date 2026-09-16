@@ -100,7 +100,6 @@ type NavEntry = {
   icon: ReactNode;
   id: string;
   label: string;
-  stateLabel?: string;
   /** Runs instead of following the href, for a row that routes or opens a dialog. */
   onSelect?: () => void;
   /** Runs before an external row opens, for the running-job guard. */
@@ -192,10 +191,7 @@ const NavRow = ({
   const body = (
     <>
       {entry.icon}
-      <span className="nav-row-label">
-        {entry.label}
-        {entry.stateLabel ? <span className="nav-row-state">{entry.stateLabel}</span> : null}
-      </span>
+      <span className="nav-row-label">{entry.label}</span>
       {entry.beta ? <span className="nav-beta">{localizer.message("ui.tools.beta")}</span> : null}
     </>
   );
@@ -269,11 +265,6 @@ const SideNav = ({
   </nav>
 );
 
-/**
- * Phone primary nav: the three workflows that carry the app, plus Menu. Menu
- * toggles the sheet that holds everything else. A status control spans the
- * dock above those four destinations so its full wording stays readable.
- */
 const PhoneDock = ({
   current,
   menuLabel,
@@ -376,17 +367,15 @@ const MenuSheet = ({
                 {/* Two columns: the heading carries the noun, so every label is
                 short enough to pair up and the whole index fits one screen. */}
                 <div className="nav-group-grid">
-                  {section.entries
-                    .filter((entry) => entry.id !== "status")
-                    .map((entry) => (
-                      <NavRow
-                        className="nav-row"
-                        entry={entry}
-                        key={entry.id}
-                        localizer={localizer}
-                        onNavigate={onClose}
-                      />
-                    ))}
+                  {section.entries.map((entry) => (
+                    <NavRow
+                      className="nav-row"
+                      entry={entry}
+                      key={entry.id}
+                      localizer={localizer}
+                      onNavigate={onClose}
+                    />
+                  ))}
                   {section.id === "device" ? appearance : null}
                 </div>
               </div>
@@ -926,12 +915,14 @@ const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?
  * rewrites, so both class names are load-bearing.
  */
 const StatusChip = ({
+  iconOnly = false,
   label,
   onOpenStatus,
   percent,
   state,
   title,
 }: {
+  iconOnly?: boolean;
   label: string;
   onOpenStatus: () => void;
   percent: number | null;
@@ -941,7 +932,7 @@ const StatusChip = ({
   <button
     aria-haspopup="dialog"
     aria-label={title}
-    className="sub-chip sub-status"
+    className={join("sub-chip sub-status", iconOnly && "tool")}
     data-sw={state}
     onClick={onOpenStatus}
     title={title}
@@ -1323,7 +1314,6 @@ const Masthead = ({
           id: "status",
           label: localizer.message("ui.log.tabStatus"),
           onSelect: onOpenStatus,
-          stateLabel: hydrated && runtimeState === "update" ? localizer.message("ui.runtime.update") : undefined,
         },
         {
           icon: <HardDrive aria-hidden="true" />,
@@ -1423,8 +1413,9 @@ const Masthead = ({
       versionTitle={versionTitle}
     />
   ) : null;
-  const runtimeNotice = updateNotice ?? (
+  const mobileStatus = (
     <StatusChip
+      iconOnly
       label={runtimeLabel}
       onOpenStatus={() => {
         closeMenu();
@@ -1517,6 +1508,7 @@ const Masthead = ({
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
               <div className="shell-head-tools">
+                <span className="phone-runtime">{mobileStatus}</span>
                 {appearanceTiles("phone")}
                 <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-project-tools">{projectTiles}</span>
@@ -1524,7 +1516,17 @@ const Masthead = ({
             </div>
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
-          <div className="sidebar-runtime runtime-notice">{runtimeNotice}</div>
+          <div className="sidebar-runtime runtime-notice">
+            {updateNotice ?? (
+              <StatusChip
+                label={runtimeLabel}
+                onOpenStatus={onOpenStatus}
+                percent={runtimePercent}
+                state={runtimeState}
+                title={runtimeTitle}
+              />
+            )}
+          </div>
           <aside className="side-rail">
             <SideNav
               appearance={appearanceTiles("rail", true)}
@@ -1593,7 +1595,7 @@ const Masthead = ({
           setMenuMounted(true);
           setMenuOpen((open) => !open);
         }}
-        status={runtimeNotice}
+        status={updateNotice}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />

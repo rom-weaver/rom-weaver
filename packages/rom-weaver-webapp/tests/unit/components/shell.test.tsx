@@ -166,9 +166,9 @@ describe("Masthead", () => {
 
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
 
-    expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")).filter((label) => label !== "Status"));
+    expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")));
     expect(sheet.querySelector(".sub-status")).toBeNull();
-    expect(container.querySelector(".dock-runtime .sub-status-text")?.textContent).toBe(
+    expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
       container.querySelector(".sidebar-runtime .sub-status-text")?.textContent,
     );
   });
@@ -180,7 +180,7 @@ describe("Masthead", () => {
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
     expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Menu"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
-    expect(dockNav.querySelector(".dock-runtime .sub-status")).toBeTruthy();
+    expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
 
     const menu = container.querySelector(".dock-menu") as HTMLButtonElement;
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
@@ -298,7 +298,7 @@ describe("Masthead", () => {
       Array.from(container.querySelectorAll(`${scope} .tool`)).map((tool) => tool.getAttribute("aria-label"));
     const expected = ["Theme: Match system", "Accent: Madder", "Docs", "View source on GitHub", "Support"];
     expect(names(".topbar-tools")).toEqual(expected);
-    expect(names(".shell-head-tools")).toEqual(expected);
+    expect(names(".shell-head-tools")).toEqual(["Installing offline copy", ...expected]);
     // Find belongs to the top bar, and no destination is listed twice there.
     expect(container.querySelector(".topbar .topbar-find")).toBeTruthy();
     expect(container.querySelector(".topbar .nav-row")).toBeNull();
@@ -360,14 +360,13 @@ describe("Masthead", () => {
       const device = Array.from(container.querySelectorAll(`${scope} .nav-group`)).find(
         (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
       );
-      const expected = ["Storage", "Logs", "Settings", "Theme", "Accent"];
-      if (scope === ".side-nav") expected.unshift("Status");
+      const expected = ["Status", "Storage", "Logs", "Settings", "Theme", "Accent"];
       expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual(
         expected,
       );
     }
     expect(container.querySelector(".menu-sheet .sub-status")).toBeNull();
-    expect(container.querySelector(".dock-runtime .sub-status-text")?.textContent).toBe(
+    expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
       container.querySelector(".sidebar-runtime .sub-status-text")?.textContent,
     );
   });
@@ -427,7 +426,11 @@ describe("Masthead", () => {
     fireEvent.click(buildTag);
     expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
 
-    const status = container.querySelector(".sub-status") as HTMLButtonElement;
+    const desktopStatus = container.querySelector(".sidebar-runtime .sub-status") as HTMLElement;
+    expect(desktopStatus.tagName).toBe("BUTTON");
+    expect(desktopStatus.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(desktopStatus.hasAttribute("tabindex")).toBe(false);
+    const status = container.querySelector(".phone-runtime .sub-status") as HTMLButtonElement;
     // a service worker controlling this page is `active`; `ready` is the cache
     // that is only standing by for the next load
     expect(status.dataset.sw).toBe("active");
@@ -468,7 +471,7 @@ describe("Masthead", () => {
       (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent === "Status",
     ) as HTMLButtonElement;
     expect(statusRow.querySelector(".nav-row-label")?.firstChild?.textContent).toBe("Status");
-    expect(statusRow.querySelector(".nav-row-state")?.textContent).toBe("Update available");
+    expect(statusRow.querySelector(".nav-row-state")).toBeNull();
     fireEvent.click(statusRow);
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
   });

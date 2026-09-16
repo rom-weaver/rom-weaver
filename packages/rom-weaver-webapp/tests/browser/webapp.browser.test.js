@@ -272,7 +272,7 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
-    if (width < 1000) expect(document.querySelector(".dock-runtime .sub-status")).toBeTruthy();
+    if (width < 1000) expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
     else expect(navRow("Status", scope)).toBeTruthy();
   }
   await page.viewport(1280, 900);
@@ -309,7 +309,7 @@ test("the wordmark keeps its version while persistent status sits beside navigat
     [390, 844],
   ]) {
     await page.viewport(width, height);
-    const slot = width >= 1000 ? ".sidebar-runtime" : ".dock-runtime";
+    const slot = width >= 1000 ? ".sidebar-runtime" : ".phone-runtime";
     const status = document.querySelector(`${slot} .sub-status`);
     expect(status.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(status.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
@@ -521,10 +521,12 @@ test("WebappRoot names diagnostics in the nav - the Log dialog owns them", async
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
 
-test("navigation Status shows the current update state and opens that Status view", async () => {
+test("navigation Status keeps a plain label and opens the current Status view", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ updateReady: true });
-  await expect.poll(() => navRow("Status")?.querySelector(".nav-row-state")?.textContent).toBe("Update available");
+  await expect.poll(() => navRow("Status")).toBeTruthy();
+  expect(navRow("Status").querySelector(".nav-row-label").textContent).toBe("Status");
+  expect(navRow("Status").querySelector(".nav-row-state")).toBeNull();
   navRow("Status").click();
   await expect
     .poll(() => document.querySelector(".log-dlg[open] #logpanel-status .sw-legend [data-current]"))
@@ -540,7 +542,7 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   mountWebappRoot();
 
   await openMenuSheet();
-  document.querySelector(".dock-runtime .sub-status")?.click();
+  navRow("Status", ".menu-sheet").click();
   await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
 
   const rail = document.querySelector(".log-dlg .dialog-subrail");
@@ -569,6 +571,7 @@ test("the phone header carries appearance and the project links, and Menu carrie
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
+    document.querySelector(".sidebar-runtime .sub-status").getAttribute("aria-label"),
     "Theme: Match system",
     "Accent: Madder",
     "Docs",
@@ -584,10 +587,21 @@ test("the phone header carries appearance and the project links, and Menu carrie
   }
 
   await openMenuSheet();
-  for (const name of ["Storage", "Logs", "Settings", "Theme", "Accent", "Home", "Docs", "GitHub", "Support"]) {
+  for (const name of [
+    "Status",
+    "Storage",
+    "Logs",
+    "Settings",
+    "Theme",
+    "Accent",
+    "Home",
+    "Docs",
+    "GitHub",
+    "Support",
+  ]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
-  expect(document.querySelector(".dock-runtime .sub-status-text").textContent).toBe(
+  expect(document.querySelector(".phone-runtime .sub-status-text").textContent).toBe(
     document.querySelector(".sidebar-runtime .sub-status-text").textContent,
   );
   expect(document.querySelector(".menu-sheet .sub-status")).toBeNull();
@@ -637,7 +651,7 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   const footTop = foot.getBoundingClientRect().top;
   body.scrollTop = 150;
   expect(foot.getBoundingClientRect().top).toBe(footTop);
-  expect(document.querySelector(".dock-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
+  expect(document.querySelector(".phone-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
   expect(foot.querySelector(".sub-status")).toBeNull();
 
   navRow("Logs", ".menu-sheet").click();
@@ -729,7 +743,9 @@ test.each([
     await page.getByRole("button", { name: "Reload", exact: true }).click();
     expect(onReloadUpdate).toHaveBeenCalledTimes(1);
     await page.getByRole("button", { name: "Dismiss", exact: true }).click();
-    await expect.poll(() => document.querySelector(`${selector} .sub-status`)?.dataset.sw).toBe("update");
+    await expect
+      .poll(() => document.querySelector(`${width < 1000 ? ".phone-runtime" : selector} .sub-status`)?.dataset.sw)
+      .toBe("update");
     expect(document.querySelector(`${selector} .updates`)).toBeNull();
   } finally {
     if (dismissed === null) localStorage.removeItem(key);
