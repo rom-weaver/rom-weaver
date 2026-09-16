@@ -33,7 +33,7 @@
 /* ── brand ── */
 .rw-app .brand {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 38px minmax(0, 1fr);
   column-gap: var(--sp-s);
   align-items: center;
   min-width: 0;
@@ -41,11 +41,12 @@
 .rw-app .brand-mark-link {
   display: flex;
   flex: none;
+  grid-row: 1 / span 2;
   border-radius: 8px;
 }
 .rw-app .brand-mark {
   display: block;
-  width: 28px;
+  width: 38px;
   height: auto;
   aspect-ratio: 1;
   color: var(--ink);
@@ -104,11 +105,11 @@
 }
 .rw-app .title-build-row,
 .rw-app .brand-copy > .build-facts {
-  grid-column: 1 / -1;
+  grid-column: 2;
   min-inline-size: 0;
 }
 .rw-app .title-build-row .build-tag {
-  min-inline-size: 0;
+  min-inline-size: 48px;
 }
 .rw-app .title-build-row .build-tag .sub-chip {
   display: block;
@@ -117,13 +118,21 @@
   text-overflow: ellipsis;
 }
 .rw-app .title-build-row .sub-status-text {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink-3);
 }
 .rw-app .title-build-row .build-runtime {
   display: inline-flex;
+  flex-shrink: 0;
+  min-inline-size: 0;
+  max-inline-size: calc(100% - 53px);
   margin-inline-start: 5px;
 }
 .rw-app .title-build-row .sub-status {
+  min-inline-size: 0;
+  max-inline-size: 100%;
   font-size: 0.68rem;
 }
 .rw-app .sub-link {
@@ -1329,6 +1338,14 @@
   .rw-app .side-col {
     display: block;
   }
+  .rw-app .shell-head-tools .tool {
+    width: 44px;
+    height: 44px;
+  }
+  .rw-app .shell-head-tools .tool svg {
+    width: 20px;
+    height: 20px;
+  }
   .rw-app .topbar-tools {
     display: none;
   }
@@ -1368,34 +1385,17 @@
     .rw-app .shell-head-tools > .tool-separator {
       display: none;
     }
-    .rw-app .brand {
-      grid-template-columns: 24px minmax(0, 1fr);
-    }
-    .rw-app .brand-mark {
-      width: 24px;
-    }
     .rw-app .brand-word {
       font-size: 1.06rem;
-    }
-    .rw-app .shell-head-tools .tool {
-      width: 28px;
-      height: 28px;
-    }
-    .rw-app .shell-head-tools .tool svg {
-      width: 16px;
-      height: 16px;
     }
     .rw-app .tool-separator {
       margin-inline: 3px;
     }
   }
-  @media (max-width: 389px) {
-    .rw-app .shell-head-top .brand {
-      min-inline-size: 0;
-    }
-    .rw-app .shell-head-tools .tool {
-      width: 24px;
-      height: 24px;
+  @media (max-width: 599px) {
+    .rw-app .phone-project-tools,
+    .rw-app .shell-head-tools > .tool-separator {
+      display: none;
     }
   }
   /* The trailing pair would paint its tooltip past the window edge and give
