@@ -1287,9 +1287,8 @@ const Masthead = ({
   const openStorage = onOpenStorage ?? onOpenLog;
 
   /* One description of the nav, rendered by the sidebar and by the phone menu.
-     Both layouts therefore carry every destination, in the same order, under
-     the same headings - there is no second, shorter navigation to fall out of
-     step with this one. */
+     Both layouts MUST carry every destination under the same headings.
+     Project comes first on desktop and last in the phone menu. */
   const sections: NavSectionData[] = useMemo(() => {
     const workflowGroup = (group: NavGroup): NavSectionData => ({
       entries: tabs
@@ -1381,7 +1380,7 @@ const Masthead = ({
         onExternalClick: (event) => guardExternalClick(event, donateHref, confirmExternalNavigation),
       });
     }
-    return [workflowGroup("patches"), workflowGroup("roms"), device, project];
+    return [project, workflowGroup("patches"), workflowGroup("roms"), device];
   }, [
     betaVisible,
     confirmExternalNavigation,
@@ -1606,7 +1605,10 @@ const Masthead = ({
         }}
         open={menuOpen}
         opened={menuMounted}
-        sections={sections}
+        sections={[
+          ...sections.filter((section) => section.id !== "project"),
+          ...sections.filter((section) => section.id === "project"),
+        ]}
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />

@@ -107,12 +107,17 @@ describe("Masthead", () => {
     // Nothing is filed under an unnamed overflow: the four headings are the
     // whole map, and every workflow appears exactly once.
     expect(Array.from(nav.querySelectorAll(".nav-group-label")).map((h) => h.textContent)).toEqual([
+      "Project",
       "Patches",
       "ROMs",
       "This device",
-      "Project",
     ]);
     expect(rowsOf(nav)).toEqual([
+      "Home",
+      "Docs",
+      "What\u2019s new",
+      "GitHub",
+      "Support",
       "Apply",
       "Create",
       "PPF undo",
@@ -125,11 +130,6 @@ describe("Masthead", () => {
       "Settings",
       "Theme",
       "Accent",
-      "Home",
-      "Docs",
-      "What\u2019s new",
-      "GitHub",
-      "Support",
     ]);
 
     // The brand and Home row both reach the app's base route.
@@ -153,7 +153,7 @@ describe("Masthead", () => {
     expect(apply.textContent).toBe("Apply");
     expect(apply.id).toBe("tab-patcher");
     expect(apply.getAttribute("aria-label")).toBe("Apply Patch");
-    fireEvent.click(rowsOf(nav).length ? (nav.querySelectorAll(".nav-row")[1] as HTMLAnchorElement) : apply);
+    fireEvent.click(nav.querySelector("#tab-creator") as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("creator");
   });
 
@@ -166,7 +166,13 @@ describe("Masthead", () => {
 
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
 
-    expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")));
+    expect(rowsOf(sheet).toSorted()).toEqual(rowsOf(container.querySelector(".side-nav")).toSorted());
+    expect(Array.from(sheet.querySelectorAll(".nav-group-label")).map((heading) => heading.textContent)).toEqual([
+      "Patches",
+      "ROMs",
+      "This device",
+      "Project",
+    ]);
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
       container.querySelector(".desktop-runtime .sub-status-text")?.textContent,
