@@ -279,23 +279,6 @@
   font-weight: 600;
   text-decoration: none;
 }
-.rw-app .sidebar-runtime .sub-status {
-  gap: 8px;
-  inline-size: 100%;
-  min-block-size: 32px;
-  font-size: 0.82rem;
-  font-weight: 650;
-  text-align: start;
-}
-.rw-app .sidebar-runtime .sub-status-text {
-  flex: 1;
-  min-inline-size: 0;
-  color: var(--ink);
-}
-.rw-app .sidebar-runtime .sub-status svg {
-  width: 20px;
-  height: 20px;
-}
 .rw-app .sub-status svg {
   flex: none;
   width: 14px;
@@ -903,14 +886,14 @@
 .rw-app .dock-runtime:empty {
   display: none;
 }
-.rw-app .phone-runtime .sub-status-text,
-.rw-app .phone-runtime .sub-status-percent {
+.rw-app .header-runtime .sub-status-text,
+.rw-app .header-runtime .sub-status-percent {
   display: none;
 }
-.rw-app .phone-runtime .sub-status {
+.rw-app .header-runtime .sub-status {
   min-inline-size: 24px;
 }
-.rw-app .phone-runtime .sub-status::after {
+.rw-app .header-runtime .sub-status::after {
   inset: 0;
 }
 .rw-app .dock-runtime .sub-status {
@@ -923,6 +906,9 @@
 }
 .rw-app .dock-runtime .sub-status::after {
   inset: 0;
+}
+.rw-app .sidebar-runtime:empty {
+  display: none;
 }
 .rw-app .sidebar-runtime {
   padding: 0 4px var(--sp-s);
@@ -1370,10 +1356,18 @@
   }
   .rw-app .shell-head {
     padding-block: 8px;
-    padding-inline: max(0px, calc(16px - var(--gutter)));
   }
   .rw-app .shell-head-top {
     align-items: center;
+  }
+  .rw-app .brand {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .rw-app .brand-mark {
+    width: 40px;
+  }
+  .rw-app .brand-word {
+    font-size: 1.26rem;
   }
   .rw-app .shell-head-tools .tool {
     width: 44px;
@@ -1420,7 +1414,7 @@
       gap: 0;
     }
     .rw-app .brand-word {
-      font-size: 1.06rem;
+      font-size: 1.12rem;
     }
     .rw-app .shell-head-tools > .tool-separator {
       margin-inline: 2px;
@@ -1445,11 +1439,11 @@
       gap: 2px;
     }
     .rw-app .brand {
-      grid-template-columns: 28px minmax(0, 1fr);
+      grid-template-columns: 32px minmax(0, 1fr);
       column-gap: 4px;
     }
     .rw-app .brand-mark {
-      width: 28px;
+      width: 32px;
     }
     .rw-app .shell-head-tools .tool {
       width: 28px;
@@ -1457,19 +1451,16 @@
   }
   @media (max-width: 359px) {
     .rw-app .brand {
-      grid-template-columns: 24px minmax(0, 1fr);
+      grid-template-columns: 28px minmax(0, 1fr);
     }
     .rw-app .brand-mark {
-      width: 24px;
-    }
-    .rw-app .shell-head {
-      padding-inline: 2px;
+      width: 28px;
     }
     .rw-app .shell-head-top {
-      gap: 4px;
+      gap: 0;
     }
     .rw-app .brand-word {
-      font-size: 1.02rem;
+      font-size: 1.06rem;
     }
     .rw-app .shell-head-tools .tool {
       width: 24px;

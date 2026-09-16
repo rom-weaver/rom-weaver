@@ -293,7 +293,7 @@ test("the wordmark keeps its version while persistent status sits beside navigat
   await page.viewport(1280, 900);
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 10 } });
   await expect
-    .poll(() => document.querySelector(".sidebar-runtime .sub-status")?.getAttribute("aria-label") || "")
+    .poll(() => document.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label") || "")
     .not.toBe("");
   expect(document.querySelector(".masthead-threads")).toBeNull();
   expect(document.querySelector(".brand-copy .build-facts")).toBeTruthy();
@@ -309,14 +309,14 @@ test("the wordmark keeps its version while persistent status sits beside navigat
     [390, 844],
   ]) {
     await page.viewport(width, height);
-    const slot = width >= 1000 ? ".sidebar-runtime" : ".phone-runtime";
+    const slot = width >= 1000 ? ".desktop-runtime" : ".phone-runtime";
     const status = document.querySelector(`${slot} .sub-status`);
     expect(status.getBoundingClientRect().height).toBeGreaterThan(0);
     expect(status.querySelector(".sub-status-text")?.textContent?.trim()).not.toBe("");
     const version = document.querySelector(".brand .build-tag .sub-chip");
     expect(version.scrollWidth).toBeLessThanOrEqual(version.clientWidth);
     if (width >= 1000) {
-      expect(document.querySelector(".topbar .sub-status")).toBeNull();
+      expect(document.querySelector(".topbar .sub-status")).toBe(status);
       expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         document.querySelector(".side-nav").getBoundingClientRect().top,
       );
@@ -571,7 +571,7 @@ test("the phone header carries appearance and the project links, and Menu carrie
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
-    document.querySelector(".sidebar-runtime .sub-status").getAttribute("aria-label"),
+    document.querySelector(".desktop-runtime .sub-status").getAttribute("aria-label"),
     "Theme: Match system",
     "Accent: Madder",
     "Docs",
@@ -602,7 +602,7 @@ test("the phone header carries appearance and the project links, and Menu carrie
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
   expect(document.querySelector(".phone-runtime .sub-status-text").textContent).toBe(
-    document.querySelector(".sidebar-runtime .sub-status-text").textContent,
+    document.querySelector(".desktop-runtime .sub-status-text").textContent,
   );
   expect(document.querySelector(".menu-sheet .sub-status")).toBeNull();
   expect(navRow("GitHub", ".menu-sheet").getAttribute("href")).toBe("https://github.com/rom-weaver/rom-weaver/");
@@ -744,7 +744,9 @@ test.each([
     expect(onReloadUpdate).toHaveBeenCalledTimes(1);
     await page.getByRole("button", { name: "Dismiss", exact: true }).click();
     await expect
-      .poll(() => document.querySelector(`${width < 1000 ? ".phone-runtime" : selector} .sub-status`)?.dataset.sw)
+      .poll(
+        () => document.querySelector(`${width < 1000 ? ".phone-runtime" : ".desktop-runtime"} .sub-status`)?.dataset.sw,
+      )
       .toBe("update");
     expect(document.querySelector(`${selector} .updates`)).toBeNull();
   } finally {

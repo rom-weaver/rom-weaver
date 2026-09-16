@@ -169,7 +169,7 @@ describe("Masthead", () => {
     expect(rowsOf(sheet)).toEqual(rowsOf(container.querySelector(".side-nav")));
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
-      container.querySelector(".sidebar-runtime .sub-status-text")?.textContent,
+      container.querySelector(".desktop-runtime .sub-status-text")?.textContent,
     );
   });
 
@@ -297,7 +297,7 @@ describe("Masthead", () => {
     const names = (scope: string) =>
       Array.from(container.querySelectorAll(`${scope} .tool`)).map((tool) => tool.getAttribute("aria-label"));
     const expected = ["Theme: Match system", "Accent: Madder", "Docs", "View source on GitHub", "Support"];
-    expect(names(".topbar-tools")).toEqual(expected);
+    expect(names(".topbar-tools")).toEqual(["Installing offline copy", ...expected]);
     expect(names(".shell-head-tools")).toEqual(["Installing offline copy", ...expected]);
     // Find belongs to the top bar, and no destination is listed twice there.
     expect(container.querySelector(".topbar .topbar-find")).toBeTruthy();
@@ -367,7 +367,7 @@ describe("Masthead", () => {
     }
     expect(container.querySelector(".menu-sheet .sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
-      container.querySelector(".sidebar-runtime .sub-status-text")?.textContent,
+      container.querySelector(".desktop-runtime .sub-status-text")?.textContent,
     );
   });
 
@@ -426,7 +426,7 @@ describe("Masthead", () => {
     fireEvent.click(buildTag);
     expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
 
-    const desktopStatus = container.querySelector(".sidebar-runtime .sub-status") as HTMLElement;
+    const desktopStatus = container.querySelector(".desktop-runtime .sub-status") as HTMLElement;
     expect(desktopStatus.tagName).toBe("BUTTON");
     expect(desktopStatus.getAttribute("aria-haspopup")).toBe("dialog");
     expect(desktopStatus.hasAttribute("tabindex")).toBe(false);

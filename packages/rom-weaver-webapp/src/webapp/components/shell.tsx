@@ -1413,7 +1413,7 @@ const Masthead = ({
       versionTitle={versionTitle}
     />
   ) : null;
-  const mobileStatus = (
+  const headerStatus = (
     <StatusChip
       iconOnly
       label={runtimeLabel}
@@ -1508,7 +1508,7 @@ const Masthead = ({
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
               <div className="shell-head-tools">
-                <span className="phone-runtime">{mobileStatus}</span>
+                <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}
                 <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-project-tools">{projectTiles}</span>
@@ -1516,17 +1516,7 @@ const Masthead = ({
             </div>
           </div>
           {/* Desktop: every destination the app has, named, in one column. */}
-          <div className="sidebar-runtime runtime-notice">
-            {updateNotice ?? (
-              <StatusChip
-                label={runtimeLabel}
-                onOpenStatus={onOpenStatus}
-                percent={runtimePercent}
-                state={runtimeState}
-                title={runtimeTitle}
-              />
-            )}
-          </div>
+          <div className="sidebar-runtime runtime-notice">{updateNotice}</div>
           <aside className="side-rail">
             <SideNav
               appearance={appearanceTiles("rail", true)}
@@ -1555,6 +1545,7 @@ const Masthead = ({
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
           <div className="topbar-tools">
+            <span className="desktop-runtime header-runtime">{headerStatus}</span>
             {appearanceTiles("desktop")}
             <span aria-hidden="true" className="tool-separator" />
             {projectTiles}
