@@ -10,7 +10,6 @@
 @import "./base.css" layer(foundation);
 @import "./masthead.css" layer(foundation);
 @import "./find.css" layer(foundation);
-@import "./footer.css" layer(foundation);
 @import "./banners.css" layer(foundation);
 @import "./workbench.css" layer(foundation);
 @import "./home.css" layer(foundation);

@@ -1,14 +1,16 @@
 import {
-  BookOpen,
+  Cloud,
   CloudCheck,
   CloudDownload,
   CloudOff,
   createLucideIcon,
   HardDrive,
   Heart,
+  House,
   LoaderCircle,
+  Menu,
+  MonitorCog,
   Moon,
-  MoreHorizontal,
   Newspaper,
   PackageCheck,
   Palette,
@@ -29,6 +31,7 @@ import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
+import type { ThemePreference } from "../theme.ts";
 import { useTheme } from "../theme.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 
@@ -57,74 +60,58 @@ const readPwaState = () => {
 };
 
 /**
- * One entry of the primary nav. `placement: "rail"` (the default) puts it in
- * the desktop rail and the phone dock; `placement: "more"` files it under the
- * named group of the More menu instead, on both layouts. A `beta` entry stays
- * behind the beta-tools setting and wears a chip while it is on.
+ * One entry of the primary nav. Every workflow is named and reachable in both
+ * layouts: `group` files it under a heading that carries the noun, so the entry
+ * itself only needs the verb. `dock: true` also gives it one of the phone
+ * dock's three workflow slots; everything else reaches the phone through Menu.
+ * A `beta` entry stays behind the beta-tools setting and wears a chip while it
+ * is on.
  */
 type WorkflowTab = {
   beta?: boolean;
-  group?: MoreMenuGroup;
+  dock?: boolean;
+  group: NavGroup;
   href: string;
   icon: ReactNode;
   id: string;
-  /** Full name: Find, the document title, and the More menu use it. */
+  /** Full name: Find, the document title, and the page heading use it. */
   label: string;
-  placement?: "rail" | "more";
-  /** Short name for the rail and the dock, where the icon carries the noun. */
+  /** Short name for the nav, where the group heading already carries the noun. */
   railLabel?: string;
 };
-type MoreMenuGroup = "tools" | "docs";
-const isMoreMenuTab = (tab: WorkflowTab) => tab.placement === "more";
-const supportsAnchoredThumb = () =>
-  typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
+type NavGroup = "patches" | "project" | "roms";
 
-/** One motion gate for every programmatic scroll in the chrome. */
-const prefersReducedMotion = () =>
-  typeof window !== "undefined" &&
-  typeof window.matchMedia === "function" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-const scrollTabIntoView = (tab: HTMLElement | null | undefined) => {
-  if (!tab?.offsetParent) return;
-  tab.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest", inline: "nearest" });
+const NAV_GROUP_TITLES: Record<NavGroup, MessageId> = {
+  patches: "ui.nav.groupPatches",
+  project: "ui.tools.project",
+  roms: "ui.nav.groupRoms",
 };
 
-/**
- * Tablist keyboard contract shared by the mode rail and the phone dock: arrows
- * and Home/End roam, and both Space and Enter activate. Anchors already fire on
- * Enter, so only Space needs intercepting.
- */
-const createTabListKeyDown =
-  (order: string[], current: string, onSelect: (id: string) => void, focusTab: (id: string) => void) =>
-  (event: React.KeyboardEvent) => {
-    if (order.length === 0) return;
-    const index = Math.max(0, order.indexOf(current));
-    if (event.key === " " || event.key === "Spacebar") {
-      event.preventDefault();
-      onSelect(order[index] as string);
-      return;
-    }
-    let next = -1;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % order.length;
-    if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + order.length - 1) % order.length;
-    if (event.key === "Home") next = 0;
-    if (event.key === "End") next = order.length - 1;
-    const nextId = next >= 0 ? order[next] : undefined;
-    if (nextId === undefined) return;
-    event.preventDefault();
-    onSelect(nextId);
-    focusTab(nextId);
-  };
-
-const activateTabOnClick = (event: React.MouseEvent, id: string, onSelect: (id: string) => void) => {
-  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-  event.preventDefault();
-  onSelect(id);
+/** One rendered nav row, shared by the desktop sidebar and the phone menu. */
+type NavEntry = {
+  beta?: boolean;
+  /** Rendered but not shown: a beta row before the client setting is known. */
+  hidden?: boolean;
+  className?: string;
+  current?: boolean;
+  /** Opens in a new tab: the row keeps its href and takes the external guard. */
+  external?: boolean;
+  href?: string;
+  icon: ReactNode;
+  id: string;
+  label: string;
+  stateLabel?: string;
+  /** Runs instead of following the href, for a row that routes or opens a dialog. */
+  onSelect?: () => void;
+  /** Runs before an external row opens, for the running-job guard. */
+  onExternalClick?: (event: React.MouseEvent) => void;
+  /** Extra accessible name where the visible label is deliberately short. */
+  title?: string;
 };
+type NavSectionData = { entries: NavEntry[]; id: string; title: string };
 
-/** Reveal light/dark changes from the theme control that caused them. */
-const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
+/** Reveal appearance changes from the choice that caused them. */
+const runAppearanceWipe = (update: () => void, source: HTMLElement | null, kind: "theme" | "accent") => {
   const root = document.documentElement;
   if (viewTransitionsUnsupported()) {
     update();
@@ -137,226 +124,445 @@ const runThemeWipe = (update: () => void, source: HTMLElement | null) => {
   root.style.setProperty("--wipe-x", `${cx}px`);
   root.style.setProperty("--wipe-y", `${cy}px`);
   root.style.setProperty("--wipe-r", `${radius}px`);
-  const release = holdTransitionClasses(["vt-theme"]);
+  const release = holdTransitionClasses([`vt-${kind}`]);
   const transition = document.startViewTransition(update);
   transition.ready.catch(() => undefined);
   transition.finished.then(release, release);
 };
 
+/** One motion gate for every programmatic scroll and animation in the chrome. */
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 /**
- * Workflow mode rail: tabs with a sliding thumb. Where CSS anchor positioning
- * exists the thumb pins itself to the selected tab; otherwise a layout-effect
- * measure positions it (and re-positions on resize / font swap).
+ * The full name, when it is safe to use as the accessible name of a row that
+ * shows the short one. WCAG 2.5.3 (Label in Name) requires the accessible name
+ * to contain the visible text, so a speech user saying what they can read
+ * actually activates the row: "Saves" is not contained in "Save Editor", and
+ * that row keeps its visible label as its name instead.
  */
-const ModeRail = ({
-  tabs,
-  current,
-  navLabel,
-  onSelect,
-  controlsPanels = true,
-  trailing,
-}: {
-  tabs: WorkflowTab[];
-  current: string;
-  navLabel: string;
-  onSelect: (id: string) => void;
-  controlsPanels?: boolean;
-  /** Menu slot inside the visual rail, but outside the tablist. */
-  trailing?: ReactNode;
-}) => {
-  const railRef = useRef<HTMLDivElement | null>(null);
-  const thumbRef = useRef<HTMLSpanElement | null>(null);
-  const measuredOnceRef = useRef(false);
-
-  useLayoutEffect(() => {
-    if (supportsAnchoredThumb()) return undefined;
-    const rail = railRef.current;
-    const thumb = thumbRef.current;
-    if (!(rail && thumb)) return undefined;
-    const position = (animate: boolean) => {
-      const selected = rail.querySelector<HTMLAnchorElement>('.mode[aria-selected="true"]');
-      if (!selected) return;
-      if (!animate) thumb.style.transition = "none";
-      thumb.style.left = `${selected.offsetLeft}px`;
-      thumb.style.width = `${selected.offsetWidth}px`;
-      if (!animate) requestAnimationFrame(() => thumb.style.removeProperty("transition"));
-    };
-    position(measuredOnceRef.current);
-    measuredOnceRef.current = true;
-    const reposition = () => position(false);
-    window.addEventListener("resize", reposition);
-    document.fonts?.ready?.then(reposition).catch(() => undefined);
-    return () => window.removeEventListener("resize", reposition);
-  }, []);
-
-  // A tablist needs exactly one tabIndex 0 to stay keyboard reachable, and the
-  // current view is not always one of these tabs - the 404 shell renders the
-  // rail with nothing selected. Roving focus falls back to the first tab.
-  const railTabs = tabs.filter((tab) => !isMoreMenuTab(tab));
-  const selectedIndex = railTabs.findIndex((tab) => tab.id === current);
-  const focusIndex = selectedIndex >= 0 ? selectedIndex : 0;
-  const focusedId = railTabs[focusIndex]?.id ?? "";
-
-  // The rail can be scrolled past its column in the snug 1000-1159px band, so
-  // the tab that just became current must never be left off-screen.
-  useEffect(() => {
-    scrollTabIntoView(railRef.current?.querySelector<HTMLAnchorElement>(`.mode[data-mode="${current}"]`));
-  }, [current]);
-
-  const handleKeyDown = createTabListKeyDown(
-    railTabs.map((tab) => tab.id),
-    focusedId,
-    onSelect,
-    (id) => railRef.current?.querySelector<HTMLAnchorElement>(`.mode[data-mode="${id}"]`)?.focus(),
-  );
-
-  return (
-    <nav aria-label={navLabel} className="modes">
-      <div className="mode-rail-shell">
-        <div className="mode-rail-scroll">
-          <div
-            aria-label={navLabel}
-            aria-orientation="horizontal"
-            className="mode-rail"
-            onKeyDown={handleKeyDown}
-            ref={railRef}
-            role="tablist"
-          >
-            <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
-            {railTabs.map((tab) => (
-              <a
-                aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-                aria-selected={tab.id === current}
-                className="mode"
-                data-mode={tab.id}
-                href={tab.href}
-                id={`tab-${tab.id}`}
-                key={tab.id}
-                onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-                role="tab"
-                tabIndex={tab.id === focusedId ? 0 : -1}
-              >
-                {tab.icon}
-                <span className="mode-label">{tab.railLabel ?? tab.label}</span>
-              </a>
-            ))}
-          </div>
-        </div>
-        {trailing}
-      </div>
-    </nav>
-  );
+const fullNameFor = (tab: WorkflowTab) => {
+  if (!tab.railLabel) return undefined;
+  return tab.label.toLowerCase().includes(tab.railLabel.toLowerCase()) ? tab.label : undefined;
 };
 
 /**
- * Phone primary nav. Same tablist semantics as the mode rail - roving tabindex,
- * arrows/Home/End, Space and Enter - inside a safe-area-aware fixed dock. The
- * selected tab carries a thread stitch along the dock's top seam, pinned with
- * CSS anchor positioning where it exists and drawn by the tab itself where it
- * does not (see phone dock rules in masthead.css).
+ * The first candidate the current layout actually shows, falling back to the
+ * first that exists. The chrome renders some controls twice and hides one copy
+ * with CSS, and `focus()` on a `display: none` element silently does nothing
+ * and drops focus to the body. The fallback matters where there is no layout
+ * to read - a test environment, or a control measured before first paint.
  */
-const PhoneDock = ({
-  controlsPanels = true,
-  current,
-  mobileActions,
-  navLabel,
-  onSelect,
-  tabs,
-}: {
-  controlsPanels?: boolean;
-  current: string;
-  mobileActions?: ReactNode;
-  navLabel: string;
-  onSelect: (id: string) => void;
-  tabs: WorkflowTab[];
-}) => {
-  const dockRef = useRef<HTMLDivElement | null>(null);
-  const dockTabs = tabs.filter((tab) => !isMoreMenuTab(tab));
-  const selectedIndex = dockTabs.findIndex((tab) => tab.id === current);
-  const focusedId = dockTabs[selectedIndex >= 0 ? selectedIndex : 0]?.id ?? "";
-  const handleKeyDown = createTabListKeyDown(
-    dockTabs.map((tab) => tab.id),
-    focusedId,
-    onSelect,
-    (id) => dockRef.current?.querySelector<HTMLAnchorElement>(`.dock-tab[data-mode="${id}"]`)?.focus(),
-  );
-  return (
-    <nav aria-label={navLabel} className="dock-nav">
-      <div className="dock">
-        <div
-          aria-label={navLabel}
-          aria-orientation="horizontal"
-          className="dock-tabs"
-          onKeyDown={handleKeyDown}
-          ref={dockRef}
-          role="tablist"
-        >
-          <span aria-hidden="true" className="dock-thumb" />
-          {dockTabs.map((tab) => (
-            <a
-              aria-controls={controlsPanels ? `panel-${tab.id}` : undefined}
-              aria-selected={tab.id === current}
-              className="dock-tab"
-              data-mode={tab.id}
-              href={tab.href}
-              id={`docktab-${tab.id}`}
-              key={tab.id}
-              onClick={(event) => activateTabOnClick(event, tab.id, onSelect)}
-              role="tab"
-              tabIndex={tab.id === focusedId ? 0 : -1}
-            >
-              {tab.icon}
-              <span>{tab.railLabel ?? tab.label}</span>
-            </a>
-          ))}
-        </div>
-        {mobileActions}
-      </div>
-    </nav>
-  );
+const visibleFirst = <T extends HTMLElement>(candidates: Iterable<T | null | undefined>): T | null => {
+  let fallback: T | null = null;
+  for (const node of candidates) {
+    if (node?.offsetParent) return node;
+    fallback ??= node ?? null;
+  }
+  return fallback;
 };
 
-/** Theme toggle with the loom circle-wipe, retained as a fast masthead action. */
-const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
-  const { theme, toggleTheme } = useTheme();
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
-  const handleClick = () => {
-    runThemeWipe(toggleTheme, buttonRef.current);
-  };
-  return (
-    <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
-      <Moon aria-hidden="true" className="ico-moon" />
-      <SunMedium aria-hidden="true" className="ico-sun" />
-      <span aria-hidden="true" className="tool-text">
-        {localizer.message("ui.tools.theme")}
+const activateOnClick = (event: React.MouseEvent, run: () => void) => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  run();
+};
+
+/**
+ * A nav row. A destination inside the app is a real link, so middle-click and
+ * "open in new tab" keep working and a plain activation routes in place; a
+ * surface that opens a dialog is a button, because it is not a URL.
+ */
+const NavRow = ({
+  entry,
+  className,
+  idPrefix,
+  localizer,
+  onNavigate,
+}: {
+  className: string;
+  entry: NavEntry;
+  /** Only the sidebar copy owns the `tab-<id>` ids the panels are labelled by. */
+  idPrefix?: string;
+  localizer: Localizer;
+  onNavigate?: () => void;
+}) => {
+  const body = (
+    <>
+      {entry.icon}
+      <span className="nav-row-label">
+        {entry.label}
+        {entry.stateLabel ? <span className="nav-row-state">{entry.stateLabel}</span> : null}
       </span>
+      {entry.beta ? <span className="nav-beta">{localizer.message("ui.tools.beta")}</span> : null}
+    </>
+  );
+  const rowClass = join(className, entry.className);
+  if (entry.href) {
+    return (
+      <a
+        aria-current={entry.current ? "page" : undefined}
+        aria-label={entry.title}
+        className={rowClass}
+        hidden={entry.hidden}
+        href={entry.href}
+        id={idPrefix ? `${idPrefix}${entry.id}` : undefined}
+        onClick={(event) => {
+          onNavigate?.();
+          if (entry.external) {
+            entry.onExternalClick?.(event);
+            return;
+          }
+          activateOnClick(event, () => entry.onSelect?.());
+        }}
+        rel={entry.external ? "noreferrer" : undefined}
+        target={entry.external ? "_blank" : undefined}
+      >
+        {body}
+      </a>
+    );
+  }
+  return (
+    <button
+      aria-label={entry.title}
+      className={rowClass}
+      hidden={entry.hidden}
+      onClick={() => {
+        onNavigate?.();
+        entry.onSelect?.();
+      }}
+      type="button"
+    >
+      {body}
     </button>
   );
 };
 
 /**
- * Accent quick picker: the button wears the live dye, and opening it drops the
- * six lots below the toolbar. Choosing one commits immediately - the picker
- * exists precisely to skip the settings panel's draft/Save round trip, and an
- * accent is self-evidently reversible.
- *
- * Same swatch radios as the settings panel's picker, so arrow-key roving comes
- * from the native radio group rather than a hand-rolled one.
+ * Desktop primary nav. Every destination the app has, named, under the heading
+ * that supplies its noun - there is no second navigation and nothing hides
+ * behind an overflow menu.
  */
-const AccentPicker = ({
+const SideNav = ({
+  appearance,
   localizer,
+  navLabel,
+  sections,
+}: {
+  appearance: ReactNode;
+  localizer: Localizer;
+  navLabel: string;
+  sections: NavSectionData[];
+}) => (
+  <nav aria-label={navLabel} className="side-nav">
+    {sections.map((section) => (
+      <div className="nav-group" key={section.id}>
+        <h2 className="nav-group-label">{section.title}</h2>
+        {section.entries.map((entry) => (
+          <NavRow className="nav-row" entry={entry} idPrefix="tab-" key={entry.id} localizer={localizer} />
+        ))}
+        {section.id === "device" ? appearance : null}
+      </div>
+    ))}
+  </nav>
+);
+
+/**
+ * Phone primary nav: the three workflows that carry the app, plus Menu. Menu
+ * toggles the sheet that holds everything else. A status control spans the
+ * dock above those four destinations so its full wording stays readable.
+ */
+const PhoneDock = ({
+  current,
+  menuLabel,
+  menuOpen,
+  navLabel,
+  onSelect,
+  onToggleMenu,
+  status,
+  tabs,
+  triggerRef,
+}: {
+  current: string;
+  menuLabel: string;
+  menuOpen: boolean;
+  navLabel: string;
+  onSelect: (id: string) => void;
+  onToggleMenu: () => void;
+  status: ReactNode;
+  tabs: WorkflowTab[];
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) => (
+  <nav aria-label={navLabel} className="dock">
+    {tabs.map((tab) => (
+      <a
+        aria-current={tab.id === current ? "page" : undefined}
+        className="dock-tab"
+        data-mode={tab.id}
+        href={tab.href}
+        key={tab.id}
+        onClick={(event) => activateOnClick(event, () => onSelect(tab.id))}
+      >
+        {tab.icon}
+        <span>{tab.railLabel ?? tab.label}</span>
+      </a>
+    ))}
+    <button
+      aria-controls="menu-sheet"
+      aria-expanded={menuOpen}
+      aria-label={menuLabel}
+      className="dock-tab dock-menu"
+      onClick={onToggleMenu}
+      ref={triggerRef}
+      type="button"
+    >
+      <Menu aria-hidden="true" />
+      <span>{menuLabel}</span>
+    </button>
+    <span className="dock-runtime">{status}</span>
+  </nav>
+);
+
+const MenuSheet = ({
+  appearance,
+  findRef,
+  localizer,
+  onClose,
+  onOpenFind,
+  open,
+  opened,
+  sections,
+  toolOpen,
+  triggerRef,
+}: {
+  /** Theme and accent rows join This Device after the sheet opens. */
+  appearance: ReactNode;
+  /** The sheet's own Find row, so Escape can return focus to it on the phone. */
+  findRef: RefObject<HTMLButtonElement | null>;
+  localizer: Localizer;
+  onClose: () => void;
+  onOpenFind: () => void;
+  open: boolean;
+  /** The secondary nav mounts after the first open, once hydration is complete. */
+  opened: boolean;
+  sections: NavSectionData[];
+  /** True while a popover inside THIS sheet is open; Escape closes that first.
+      A popover in the chrome must not count: it is inert behind the sheet, so
+      letting it claim the press would spend it on nothing. */
+  toolOpen: boolean;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+}) => {
+  useEffect(() => {
+    if (!open || toolOpen) return undefined;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [onClose, open, toolOpen, triggerRef]);
+
+  return (
+    <nav aria-label={localizer.message("ui.tools.menu")} className="menu-sheet" hidden={!open} id="menu-sheet">
+      <div className="menu-sheet-body">
+        {opened
+          ? sections.map((section) => (
+              <div className="nav-group" key={section.id}>
+                <h2 className="nav-group-label">{section.title}</h2>
+                {/* Two columns: the heading carries the noun, so every label is
+                short enough to pair up and the whole index fits one screen. */}
+                <div className="nav-group-grid">
+                  {section.entries
+                    .filter((entry) => entry.id !== "status")
+                    .map((entry) => (
+                      <NavRow
+                        className="nav-row"
+                        entry={entry}
+                        key={entry.id}
+                        localizer={localizer}
+                        onNavigate={onClose}
+                      />
+                    ))}
+                  {section.id === "device" ? appearance : null}
+                </div>
+              </div>
+            ))
+          : null}
+      </div>
+      <div className="menu-sheet-foot">
+        <button className="menu-find" onClick={onOpenFind} ref={findRef} type="button">
+          <Search aria-hidden="true" />
+          <span>{localizer.message("ui.find.placeholder")}</span>
+          <kbd>{FIND_SHORTCUT_HINT}</kbd>
+        </button>
+      </div>
+    </nav>
+  );
+};
+
+/** The Menu sheet's copy of the appearance pair, as its popover keys spell it. */
+const MENU_TOOL_SCOPE = "menu";
+
+const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: ThemePreference }> = [
+  { icon: <SunMedium aria-hidden="true" />, label: "ui.theme.light", value: "light" },
+  { icon: <Moon aria-hidden="true" />, label: "ui.theme.dark", value: "dark" },
+  { icon: <MonitorCog aria-hidden="true" />, label: "ui.theme.matchSystem", value: "auto" },
+];
+
+/** Nav panels MUST enter the top layer so the scroll boxes cannot clip them. */
+const useNavToolPopover = (
+  open: boolean,
+  navRow: boolean,
+  buttonRef: RefObject<HTMLButtonElement | null>,
+  panelRef: RefObject<HTMLDivElement | null>,
+) => {
+  useLayoutEffect(() => {
+    const button = buttonRef.current;
+    const panel = panelRef.current;
+    if (!(open && navRow && button && panel)) return undefined;
+
+    if (typeof panel.showPopover === "function") panel.showPopover();
+    else panel.removeAttribute("popover");
+
+    const position = () => {
+      const trigger = button.getBoundingClientRect();
+      const width = panel.offsetWidth;
+      const height = panel.offsetHeight;
+      const margin = 8;
+      const gap = 4;
+      const left = Math.max(margin, Math.min(trigger.left, window.innerWidth - width - margin));
+      const below = trigger.bottom + gap;
+      const above = trigger.top - height - gap;
+      let top = below;
+      if (below + height > window.innerHeight - margin) {
+        top = above >= margin ? above : Math.max(margin, Math.min(below, window.innerHeight - height - margin));
+      }
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+    };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+      if (typeof panel.hidePopover === "function" && panel.matches(":popover-open")) panel.hidePopover();
+    };
+  }, [open, navRow, buttonRef, panelRef]);
+};
+
+/**
+ * Theme as a menu, not a cycle: three named choices, each showing which one is
+ * on. A toggle could not say what "follow the system" was doing, and a second
+ * click on a cycle was the control users read as broken.
+ */
+const ThemeTile = ({
+  localizer,
+  navRow = false,
+  onToggle,
+  open,
+}: {
+  localizer: Localizer;
+  navRow?: boolean;
+  onToggle: (button: HTMLButtonElement | null) => void;
+  open: boolean;
+}) => {
+  const { preference, setPreference, theme } = useTheme();
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useNavToolPopover(open, navRow, buttonRef, panelRef);
+  const label = localizer.message("ui.tools.theme");
+  const current = THEME_CHOICES.find((choice) => choice.value === preference);
+  const currentName = localizer.message(current?.label ?? "ui.theme.matchSystem");
+  return (
+    <span className={navRow ? "tool-anchor nav-tool-anchor" : "tool-anchor"}>
+      <button
+        aria-expanded={open}
+        aria-label={`${label}: ${currentName}`}
+        className={navRow ? "tool nav-row nav-tool" : "tool"}
+        onClick={() => onToggle(buttonRef.current)}
+        ref={buttonRef}
+        type="button"
+      >
+        <Moon aria-hidden="true" className="ico-moon" />
+        <SunMedium aria-hidden="true" className="ico-sun" />
+        {navRow ? (
+          <span className="nav-row-label">{label}</span>
+        ) : (
+          <span aria-hidden="true" className="tip">
+            {label}
+          </span>
+        )}
+      </button>
+      {open ? (
+        <div
+          className={navRow ? "tool-pop nav-tool-pop" : "tool-pop"}
+          popover={navRow ? "manual" : undefined}
+          ref={panelRef}
+          role="menu"
+        >
+          <p className="tool-pop-head">{label}</p>
+          {THEME_CHOICES.map((choice) => (
+            <button
+              aria-checked={choice.value === preference}
+              className="tool-pop-item"
+              key={choice.value}
+              onClick={(event) => {
+                runAppearanceWipe(() => setPreference(choice.value), event.currentTarget, "theme");
+                onToggle(buttonRef.current);
+              }}
+              role="menuitemradio"
+              type="button"
+            >
+              {choice.icon}
+              {localizer.message(choice.label)}
+              {choice.value === "auto" ? (
+                <span className="tool-pop-note">
+                  {localizer.message(theme === "dark" ? "ui.theme.dark" : "ui.theme.light")}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </span>
+  );
+};
+
+/**
+ * Accent quick picker: the button wears the live dye, and opening it drops the
+ * six lots below it. Choosing one commits immediately - the picker exists
+ * precisely to skip the settings panel's draft/Save round trip, and an accent
+ * is self-evidently reversible. It stays open on pick so comparing two lots
+ * does not cost a reopen.
+ */
+const AccentTile = ({
+  localizer,
+  name,
+  navRow = false,
   onChange,
   onToggle,
   open,
 }: {
   localizer: Localizer;
+  /** Radio group name. Two pickers share the page, and one name would join them. */
+  name: string;
+  navRow?: boolean;
   onChange: (accent: string) => void;
-  onToggle: () => void;
+  onToggle: (button: HTMLButtonElement | null) => void;
   open: boolean;
 }) => {
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
+  useNavToolPopover(open, navRow, buttonRef, panelRef);
+  const accent = useAccent();
   const label = localizer.message("ui.tools.accent");
+  const currentLabel = ACCENTS.find((entry) => entry.value === accent)?.label ?? "";
 
   // Opening with the keyboard has to land somewhere; the current lot is the
   // only sensible anchor for the arrow keys that follow.
@@ -366,414 +572,134 @@ const AccentPicker = ({
   }, [open]);
 
   return (
-    <div className="tool-anchor mobile-utility-accent">
+    <span className={navRow ? "tool-anchor nav-tool-anchor" : "tool-anchor"}>
       <button
         aria-expanded={open}
-        aria-label={label}
-        className="tool accent-tool"
-        onClick={onToggle}
-        title={label}
+        aria-label={`${label}: ${currentLabel}`}
+        className={navRow ? "tool accent-tool nav-row nav-tool" : "tool accent-tool"}
+        onClick={() => onToggle(buttonRef.current)}
+        ref={buttonRef}
         type="button"
       >
         <Palette aria-hidden="true" />
         <span aria-hidden="true" className="accent-tool-dot" />
-      </button>
-      {open ? (
-        <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
-          <AccentChoices name="masthead-accent" onChange={onChange} />
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
-const AccentChoices = ({ name, onChange }: { name: string; onChange: (accent: string) => void }) => {
-  const accent = useAccent();
-  return (
-    <>
-      {ACCENTS.map((entry) => (
-        <label className="accent-chip" key={entry.value} title={entry.label}>
-          <input
-            aria-label={entry.label}
-            checked={entry.value === accent}
-            name={name}
-            onChange={() => onChange(entry.value)}
-            type="radio"
-            value={entry.value}
-          />
-          <span aria-hidden="true" className="accent-chip-dot" style={{ background: entry.swatch }} />
-        </label>
-      ))}
-    </>
-  );
-};
-
-const ThemeMenuItem = ({ localizer, onClose }: { localizer: Localizer; onClose: () => void }) => {
-  const { theme, toggleTheme } = useTheme();
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const label = localizer.message("ui.tools.theme");
-  return (
-    <button
-      onClick={() => {
-        runThemeWipe(toggleTheme, buttonRef.current);
-        onClose();
-      }}
-      ref={buttonRef}
-      role="menuitem"
-      type="button"
-    >
-      {theme === "dark" ? <SunMedium aria-hidden="true" /> : <Moon aria-hidden="true" />}
-      {label}
-    </button>
-  );
-};
-
-const AccentMenuItem = ({ localizer, onChange }: { localizer: Localizer; onChange?: (accent: string) => void }) => {
-  const [open, setOpen] = useState(false);
-  const trayRef = useRef<HTMLDivElement | null>(null);
-  const label = localizer.message("ui.tools.accent");
-
-  useEffect(() => {
-    if (!open) return;
-    trayRef.current?.querySelector<HTMLInputElement>("input:checked")?.focus();
-  }, [open]);
-
-  return (
-    <div className="more-accent">
-      <button aria-expanded={open} onClick={() => setOpen((isOpen) => !isOpen)} role="menuitem" type="button">
-        <Palette aria-hidden="true" />
-        {label}
-      </button>
-      {open ? (
-        <div aria-label={label} className="more-accent-tray" ref={trayRef} role="radiogroup">
-          <AccentChoices name="mobile-more-accent" onChange={(value) => onChange?.(value)} />
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
-type UtilityMenuProps = {
-  /** True only when the trigger was activated by keyboard. */
-  autoFocusFirst?: boolean;
-  confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  donateHref?: string;
-  githubHref?: string;
-  localizer: Localizer;
-  menuClassName?: string;
-  mobile?: boolean;
-  onAccentChange?: (accent: string) => void;
-  onOpenLog: () => void;
-  onOpenStatus: () => void;
-  onOpenSettings?: () => void;
-  onOpenStorage?: () => void;
-  /** Nav entries with `placement: "more"`, filed under their group. */
-  moreTabs?: readonly WorkflowTab[];
-  onOpenWorkflowTab?: (id: string) => void;
-  runtimeState: RuntimeState;
-  runtimePercent?: number | null;
-  toolsEnabled?: boolean;
-};
-
-const UtilityMenu = ({
-  autoFocusFirst = false,
-  confirmExternalNavigation,
-  donateHref,
-  githubHref,
-  localizer,
-  menuId,
-  mobile = false,
-  onClose,
-  onAccentChange,
-  onOpenLog,
-  onOpenSettings,
-  onOpenStatus,
-  onOpenStorage,
-  moreTabs,
-  onOpenWorkflowTab,
-  runtimeState,
-  runtimePercent = null,
-  toolsEnabled,
-  menuClassName,
-  open,
-  triggerRef,
-}: UtilityMenuProps & {
-  menuId: string;
-  onClose: () => void;
-  open: boolean;
-  triggerRef: RefObject<HTMLButtonElement | null>;
-}) => {
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  /* Rendered hidden and revealed here: the beta-tools setting is client-only, so
-     the prerendered shell must not disagree with the first hydration pass. Beta
-     entries share the Tools group with the always-on tools; the group itself
-     toggles only when every entry in it is beta, so an empty group never shows. */
-  useEffect(() => {
-    const enabled = !!(toolsEnabled && onOpenWorkflowTab);
-    const selector = "[data-more-beta-group], [data-more-beta-item]";
-    for (const node of menuRef.current?.querySelectorAll<HTMLElement>(selector) ?? []) {
-      node.hidden = !enabled;
-    }
-  }, [onOpenWorkflowTab, toolsEnabled]);
-
-  /* Only a keyboard open lands on the first item. A pointer or touch open parks
-     focus on the menu box instead: the browser paints a focus ring on whatever
-     it is given programmatically, and a highlighted first row reads as a
-     selection the user never made. The box takes no ring (see masthead.css) and
-     still receives Escape and the arrow keys, and ArrowDown from it steps onto
-     the first item exactly as it did before. */
-  useEffect(() => {
-    if (!open) return;
-    if (!autoFocusFirst) {
-      menuRef.current?.focus({ preventScroll: true });
-      return;
-    }
-    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
-    firstItem?.focus();
-  }, [autoFocusFirst, open]);
-
-  const menuItems = () =>
-    Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []).filter(
-      (item) => !item.closest("[hidden]"),
-    );
-  const focusItem = (offset: number) => {
-    const items = menuItems();
-    if (items.length === 0) return;
-    const current = items.indexOf(document.activeElement as HTMLElement);
-    const next = current < 0 ? 0 : (current + offset + items.length) % items.length;
-    items[next]?.focus();
-  };
-
-  const select = (action: () => void) => {
-    onClose();
-    action();
-  };
-
-  const groupTabs = (group: MoreMenuGroup) => (moreTabs ?? []).filter((tab) => (tab.group ?? "tools") === group);
-  const toolTabs = groupTabs("tools");
-  const docsTabs = groupTabs("docs");
-  const toolsAllBeta = toolTabs.length > 0 && toolTabs.every((tab) => tab.beta);
-  // A real link, so middle-click and "open in new tab" keep working; a plain
-  // activation routes through the same handler the rail uses.
-  const workflowItem = (tab: WorkflowTab) => (
-    <a
-      data-more-beta-item={tab.beta ? "" : undefined}
-      data-more-workflow={tab.id}
-      hidden={tab.beta}
-      href={tab.href}
-      key={tab.id}
-      onClick={(event) => {
-        if (!onOpenWorkflowTab) return;
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        select(() => onOpenWorkflowTab(tab.id));
-      }}
-      role="menuitem"
-    >
-      {tab.icon}
-      {tab.label}
-      {tab.beta ? <span className="more-beta">{localizer.message("ui.tools.beta")}</span> : null}
-    </a>
-  );
-
-  return (
-    <div
-      aria-label={localizer.message("ui.tools.more")}
-      className={`more-menu${menuClassName ? ` ${menuClassName}` : ""}`}
-      hidden={!open}
-      id={menuId}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          onClose();
-          triggerRef.current?.focus();
-        } else if (event.key === "ArrowDown") {
-          event.preventDefault();
-          focusItem(1);
-        } else if (event.key === "ArrowUp") {
-          event.preventDefault();
-          focusItem(-1);
-        } else if (event.key === "Home") {
-          event.preventDefault();
-          menuItems()[0]?.focus();
-        } else if (event.key === "End") {
-          event.preventDefault();
-          menuItems().at(-1)?.focus();
-        }
-      }}
-      ref={menuRef}
-      role="menu"
-      tabIndex={-1}
-    >
-      {/* The head row keeps the app's own surfaces one tap from More on both
-          layouts; the groups below it are the index of everything else. */}
-      <fieldset className="more-head">
-        <legend className="sr-only">{localizer.message("ui.tools.app")}</legend>
-        {onOpenSettings ? (
-          <button className="more-head-item" onClick={() => select(onOpenSettings)} role="menuitem" type="button">
-            <Settings aria-hidden="true" />
-            {localizer.message("ui.settings.title")}
-          </button>
-        ) : null}
-        {/* Each item wears the icon its tab wears inside the dialog it opens. */}
-        <button
-          className="more-head-item more-status"
-          data-sw={runtimeState}
-          onClick={() => select(onOpenStatus)}
-          role="menuitem"
-          type="button"
-        >
-          <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
-          {localizer.message("ui.log.tabStatus")}
-        </button>
-        <button
-          className="more-head-item"
-          onClick={() => select(onOpenStorage ?? onOpenLog)}
-          role="menuitem"
-          type="button"
-        >
-          <HardDrive aria-hidden="true" />
-          {localizer.message("ui.log.tabStorage")}
-        </button>
-        <button className="more-head-item" onClick={() => select(onOpenLog)} role="menuitem" type="button">
-          <ScrollText aria-hidden="true" />
-          {localizer.message("ui.log.tabLogs")}
-        </button>
-      </fieldset>
-      {mobile ? (
-        <>
-          <ThemeMenuItem localizer={localizer} onClose={onClose} />
-          <AccentMenuItem localizer={localizer} onChange={onAccentChange} />
-        </>
-      ) : null}
-      {toolTabs.length > 0 ? (
-        <fieldset className="more-group" data-more-beta-group={toolsAllBeta ? "" : undefined} hidden={toolsAllBeta}>
-          <legend className="more-group-label">{localizer.message("ui.tools.tools")}</legend>
-          {toolTabs.map((tab) => workflowItem(tab))}
-        </fieldset>
-      ) : null}
-      <fieldset className="more-group">
-        <legend className="more-group-label">{localizer.message("ui.tools.project")}</legend>
-        {docsTabs.map((tab) => workflowItem(tab))}
-        <a
-          data-more-workflow="whats-new"
-          href="whats-new"
-          onClick={(event) => {
-            if (!onOpenWorkflowTab) return;
-            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            event.preventDefault();
-            select(() => onOpenWorkflowTab("whats-new"));
-          }}
-          role="menuitem"
-        >
-          <Newspaper aria-hidden="true" />
-          {localizer.message("ui.update.whatsNew")}
-        </a>
-        {githubHref ? (
-          <a
-            href={githubHref}
-            onClick={(event) => {
-              onClose();
-              guardFooterExternalClick(event, githubHref, confirmExternalNavigation);
-            }}
-            rel="noreferrer"
-            role="menuitem"
-            target="_blank"
-          >
-            <Github aria-hidden="true" />
-            {localizer.message("ui.tools.github")}
-          </a>
-        ) : null}
-        {donateHref ? (
-          <a
-            className="more-support"
-            href={donateHref}
-            onClick={(event) => {
-              onClose();
-              guardFooterExternalClick(event, donateHref, confirmExternalNavigation);
-            }}
-            rel="noreferrer"
-            role="menuitem"
-            target="_blank"
-          >
-            <Heart aria-hidden="true" />
-            {localizer.message("ui.footer.donate")}
-          </a>
-        ) : null}
-      </fieldset>
-    </div>
-  );
-};
-
-const MoreMenu = ({
-  buttonClassName,
-  className,
-  current = false,
-  menuId,
-  moreLabel,
-  onClose,
-  onPreloadLog,
-  onToggle,
-  open,
-  renderMenu = true,
-  triggerRef,
-  ...menuProps
-}: UtilityMenuProps & {
-  buttonClassName: string;
-  className: string;
-  /** True when the selected workflow lives inside this menu, so More is "you are here". */
-  current?: boolean;
-  menuId: string;
-  moreLabel: string;
-  onClose: () => void;
-  onPreloadLog?: () => void;
-  onToggle: (viaKeyboard: boolean) => void;
-  open: boolean;
-  renderMenu?: boolean;
-  triggerRef: RefObject<HTMLButtonElement | null>;
-}) => {
-  /* Pointer input always fires `pointerdown` before `click`; a keyboard Enter or
-     Space fires only `click`. That gap is the whole modality test - it needs no
-     event details, and it reads the same for mouse, touch and pen. */
-  const viaPointer = useRef(false);
-  return (
-    <span className={className}>
-      <button
-        aria-controls={menuId}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={moreLabel}
-        className={join(buttonClassName, current && "is-current")}
-        onBlur={() => {
-          viaPointer.current = false;
-        }}
-        onClick={() => {
-          onToggle(!viaPointer.current);
-          viaPointer.current = false;
-        }}
-        onFocus={onPreloadLog}
-        onPointerDown={() => {
-          viaPointer.current = true;
-          onPreloadLog?.();
-        }}
-        onPointerEnter={onPreloadLog}
-        ref={triggerRef}
-        type="button"
-      >
-        <MoreHorizontal aria-hidden="true" />
-        <span className="tool-text">{moreLabel}</span>
-        {buttonClassName === "tool" ? (
+        {navRow ? (
+          <span className="nav-row-label">{label}</span>
+        ) : (
           <span aria-hidden="true" className="tip">
-            {moreLabel}
+            {label}
           </span>
-        ) : null}
+        )}
       </button>
-      {renderMenu ? (
-        <UtilityMenu menuId={menuId} onClose={onClose} open={open} triggerRef={triggerRef} {...menuProps} />
+      {open ? (
+        <div
+          className={navRow ? "tool-pop accent-pop nav-tool-pop" : "tool-pop accent-pop"}
+          popover={navRow ? "manual" : undefined}
+          ref={panelRef}
+        >
+          <p className="tool-pop-head">{`${label}: ${currentLabel}`}</p>
+          <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
+            {ACCENTS.map((entry) => (
+              <label className="accent-chip" key={entry.value} title={entry.label}>
+                <input
+                  aria-label={entry.label}
+                  checked={entry.value === accent}
+                  name={name}
+                  onChange={(event) =>
+                    runAppearanceWipe(() => onChange(entry.value), event.currentTarget.closest("label"), "accent")
+                  }
+                  type="radio"
+                  value={entry.value}
+                />
+                <span aria-hidden="true" className="accent-chip-dot" style={{ background: entry.swatch }} />
+              </label>
+            ))}
+          </div>
+        </div>
       ) : null}
     </span>
   );
 };
+
+/** Docs, source and support: the same three links, in the same order, in both layouts. */
+const ProjectTiles = ({
+  confirmExternalNavigation,
+  docsHref,
+  donateHref,
+  githubHref,
+  localizer,
+  onOpenDocs,
+}: {
+  confirmExternalNavigation?: (href: string) => Promise<boolean>;
+  docsHref: string;
+  donateHref?: string;
+  githubHref?: string;
+  localizer: Localizer;
+  onOpenDocs: () => void;
+}) => {
+  const docsLabel = localizer.message("ui.nav.docs");
+  const githubLabel = localizer.message("ui.tools.github");
+  const supportLabel = localizer.message("ui.footer.donate");
+  return (
+    <>
+      <a
+        aria-label={docsLabel}
+        className="tool"
+        href={docsHref}
+        onClick={(event) => activateOnClick(event, onOpenDocs)}
+      >
+        <BookOpenGlyph />
+        <span aria-hidden="true" className="tip">
+          {docsLabel}
+        </span>
+      </a>
+      {githubHref ? (
+        <a
+          aria-label={githubLabel}
+          className="tool"
+          href={githubHref}
+          onClick={(event) => guardExternalClick(event, githubHref, confirmExternalNavigation)}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Github aria-hidden="true" />
+          <span aria-hidden="true" className="tip">
+            {localizer.message("ui.tools.githubShort")}
+          </span>
+        </a>
+      ) : null}
+      {donateHref ? (
+        <a
+          aria-label={supportLabel}
+          className="tool tool-support"
+          href={donateHref}
+          onClick={(event) => guardExternalClick(event, donateHref, confirmExternalNavigation)}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Heart aria-hidden="true" />
+          <span aria-hidden="true" className="tip">
+            {supportLabel}
+          </span>
+        </a>
+      ) : null}
+    </>
+  );
+};
+
+const BookOpenGlyph = () => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    viewBox="0 0 24 24"
+  >
+    <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+  </svg>
+);
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -827,6 +753,14 @@ const RUNTIME_MESSAGES: Record<RuntimeState, { label: MessageId; description: Me
   online: { description: "ui.runtime.offlineDisabledDetail", label: "ui.runtime.offlineDisabled" },
   ready: { description: "ui.runtime.readyDesc", label: "ui.runtime.ready" },
   update: { description: "ui.runtime.updateDesc", label: "ui.runtime.update" },
+};
+const HEADER_RUNTIME_MESSAGES: Record<RuntimeState, MessageId> = {
+  active: "ui.runtime.headerReady",
+  ready: "ui.runtime.headerReady",
+  update: "ui.runtime.headerUpdate",
+  installing: "ui.runtime.headerDownloading",
+  online: "ui.runtime.headerDisabled",
+  disabled: "ui.runtime.headerUnsupported",
 };
 
 /** Byte progress of the background offline warm-up, when the page knows it. */
@@ -915,16 +849,27 @@ const resolveRuntimeState = (
   return "installing";
 };
 
+/**
+ * The install wording on its own. Callers that print the percent in their own
+ * element MUST use this rather than {@link installingRuntimeLabel}, or the page
+ * states the same percentage twice.
+ */
+const installingRuntimeWording = (
+  localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
+  offlineProgress: OfflineWarmupDisplayProgress | null,
+) => localizer.message(offlineProgress?.phase === "precache" ? "ui.runtime.installingApp" : "ui.runtime.installing");
+
+/** The install wording with the percent folded in, for a single-string caller. */
 const installingRuntimeLabel = (
   localizer: { message: (id: MessageId, values?: Record<string, unknown>) => string },
   offlineProgress: OfflineWarmupDisplayProgress | null,
 ) => {
   const percent = offlineWarmupPercent(offlineProgress);
-  const precache = offlineProgress?.phase === "precache";
-  if (percent === null) return localizer.message(precache ? "ui.runtime.installingApp" : "ui.runtime.installing");
-  return localizer.message(precache ? "ui.runtime.installingAppProgress" : "ui.runtime.installingProgress", {
-    percent,
-  });
+  if (percent === null) return installingRuntimeWording(localizer, offlineProgress);
+  return localizer.message(
+    offlineProgress?.phase === "precache" ? "ui.runtime.installingAppProgress" : "ui.runtime.installingProgress",
+    { percent },
+  );
 };
 
 const RUNTIME_ICONS = {
@@ -975,7 +920,40 @@ const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?
   return <Icon aria-hidden="true" strokeWidth={2.4} />;
 };
 
-const guardFooterExternalClick = (
+/**
+ * The offline state, as a word rather than a lone glyph. `.sub-status` and its
+ * inner `.sub-status-text` are what the parser-time resolver in `index.html`
+ * rewrites, so both class names are load-bearing.
+ */
+const StatusChip = ({
+  label,
+  onOpenStatus,
+  percent,
+  state,
+  title,
+}: {
+  label: string;
+  onOpenStatus: () => void;
+  percent: number | null;
+  state: RuntimeState;
+  title: string;
+}) => (
+  <button
+    aria-haspopup="dialog"
+    aria-label={title}
+    className="sub-chip sub-status"
+    data-sw={state}
+    onClick={onOpenStatus}
+    title={title}
+    type="button"
+  >
+    <RuntimeGlyph percent={percent} state={state} />
+    <span className="sub-status-text">{label}</span>
+    {percent === null ? null : <span className="sub-status-percent">{`${percent}%`}</span>}
+  </button>
+);
+
+const guardExternalClick = (
   event: { preventDefault: () => void },
   href: string,
   confirmExternalNavigation?: (href: string) => Promise<boolean>,
@@ -993,8 +971,7 @@ const guardFooterExternalClick = (
  * preview is the exception - the number IS the useful identity, so it links
  * straight to the pull request.
  */
-const CHANNEL_LETTERS: Record<string, string> = { beta: "B", dev: "D", nightly: "N", preview: "P" };
-const CHANNEL_PREFIXES: Record<string, string> = { beta: "beta", dev: "dev", nightly: "nightly" };
+const CHANNEL_SUFFIXES: Record<string, string> = { beta: "b", dev: "d", nightly: "n" };
 const CHANNEL_MESSAGES: Record<string, MessageId> = {
   beta: "ui.channel.beta",
   dev: "ui.channel.dev",
@@ -1023,7 +1000,8 @@ const BuildTag = ({
   version: string;
   versionTitle?: string;
 }) => {
-  const versionText = `v${version}${commitDistance ? `+${commitDistance}` : ""}${dirty ? "*" : ""}`;
+  const suffix = CHANNEL_SUFFIXES[channelBadge?.toLowerCase() ?? ""] ?? "";
+  const versionText = `v${version}${suffix}${commitDistance ? `+${commitDistance}` : ""}${dirty ? "*" : ""}`;
   const prNumber = channelBadge?.match(/^pr-(\d+)$/i)?.[1];
   if (prNumber) {
     const prHref = githubBaseHref ? `${githubBaseHref}pull/${prNumber}` : undefined;
@@ -1035,7 +1013,7 @@ const BuildTag = ({
           className="sub-chip channel-badge"
           data-channel="pr"
           href={prHref ?? "#"}
-          onClick={(event) => (prHref ? guardFooterExternalClick(event, prHref, confirmExternalNavigation) : undefined)}
+          onClick={(event) => (prHref ? guardExternalClick(event, prHref, confirmExternalNavigation) : undefined)}
           rel="noreferrer"
           target="_blank"
         >
@@ -1052,10 +1030,11 @@ const BuildTag = ({
   }
   if (channelBadge) {
     const key = channelBadge.toLowerCase();
-    const letter = CHANNEL_LETTERS[key] ?? channelBadge.slice(0, 1).toUpperCase();
-    const prefix = CHANNEL_PREFIXES[key];
+    const letter = channelBadge.slice(0, 1).toUpperCase();
     const nameId = CHANNEL_MESSAGES[key];
     const name = nameId ? localizer.message(nameId) : channelBadge;
+    let channelText: ReactNode = null;
+    if (!suffix) channelText = <b className="tag-letter">{letter}</b>;
     return (
       <span className="build-tag">
         <button
@@ -1066,10 +1045,12 @@ const BuildTag = ({
           onClick={onOpenWhatsNew}
           type="button"
         >
-          {prefix ? <span className="tag-channel">{prefix}</span> : <b className="tag-letter">{letter}</b>}
-          <span aria-hidden="true" className="tag-separator">
-            {" / "}
-          </span>
+          {channelText}
+          {suffix ? null : (
+            <span aria-hidden="true" className="tag-separator">
+              {" / "}
+            </span>
+          )}
           <span className="tag-version">{versionText}</span>
         </button>
       </span>
@@ -1106,15 +1087,14 @@ const Masthead = ({
   onPreloadLog,
   onOpenSettings,
   onOpenSettingsField,
-  onOpenThreads,
-  onPreloadSettings,
-  tabsControlPanels = true,
   serviceWorkerStatus,
   offlineProgress = null,
+  previewRuntimeState = null,
+  previewPhoneOverlay = false,
+  previewVersionStatus = false,
   confirmExternalNavigation,
   donateHref,
   githubHref,
-  threads,
   updateReady = false,
   version,
   versionTitle,
@@ -1126,7 +1106,7 @@ const Masthead = ({
   tabs: WorkflowTab[];
   currentTab: string;
   dirty?: boolean;
-  /** The workbench, as a route: a bare "/" maps to no route and so hard-reloads. */
+  /** Base URL of the app's Home route. */
   homeHref: string;
   onSelectTab: (id: string) => void;
   onOpenWhatsNew: () => void;
@@ -1137,16 +1117,14 @@ const Masthead = ({
   onOpenSettings: () => void;
   /** Find's deep link into one settings field; falls back to plain Settings. */
   onOpenSettingsField?: (fieldId: string) => void;
-  /** Deep link from the thread count into the Threads setting; falls back to plain Settings. */
-  onOpenThreads?: () => void;
-  onPreloadSettings?: () => void;
-  tabsControlPanels?: boolean;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
+  previewRuntimeState?: RuntimeState | null;
+  previewPhoneOverlay?: boolean;
+  previewVersionStatus?: boolean;
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
   donateHref?: string;
   githubHref?: string;
-  threads?: number;
   updateReady?: boolean;
   version?: string;
   versionTitle?: string;
@@ -1154,29 +1132,61 @@ const Masthead = ({
   const settings = useRomWeaverSettings();
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
-  const [accentOpen, setAccentOpen] = useState(false);
-  const [utilityOpen, setUtilityOpen] = useState(false);
-  const [utilityPlacement, setUtilityPlacement] = useState<"desktop" | "mobile">("desktop");
-  const [utilityViaKeyboard, setUtilityViaKeyboard] = useState(false);
-  const desktopMoreRef = useRef<HTMLButtonElement | null>(null);
-  const mobileMoreRef = useRef<HTMLButtonElement | null>(null);
+  /* Keyed by kind AND copy: the same viewport now shows the pair twice - the
+     chrome copy and the one inside the navigation - and a key of "theme" alone
+     would open both menus from one press. */
+  const [openTool, setOpenTool] = useState<string | null>(null);
+  /* The control that opened the popover, so Escape returns focus to it. Several
+     copies of the pair are in the DOM at once, so the DOM cannot say which one
+     the user actually used. */
+  const openToolRef = useRef<HTMLButtonElement | null>(null);
+  const toggleTool = (key: string, button: HTMLButtonElement | null) => {
+    openToolRef.current = button;
+    setOpenTool((open) => (open === key ? null : key));
+  };
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuMounted, setMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const [findPlacement, setFindPlacement] = useState<"desktop" | "mobile">("desktop");
-  const desktopFindRef = useRef<HTMLButtonElement | null>(null);
-  const mobileFindRef = useRef<HTMLButtonElement | null>(null);
-  const activeFindRef = findPlacement === "mobile" ? mobileFindRef : desktopFindRef;
-  const findLabel = localizerFindLabel(localizer);
-  // Find honours the beta-tools setting the way More does.
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const findTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuFindRef = useRef<HTMLButtonElement | null>(null);
+  /* Find opens from the top bar on desktop and from the Menu sheet's foot on
+     the phone. Escape restores focus to whichever of those the layout shows,
+     resolved at call time rather than stored, because the layout is CSS's
+     decision and this component never reads a breakpoint. */
+  const activeFindRef = useMemo(
+    () => ({
+      get current() {
+        return visibleFirst([findTriggerRef.current, menuFindRef.current, menuTriggerRef.current]);
+      },
+      set current(node: HTMLButtonElement | null) {
+        findTriggerRef.current = node;
+      },
+    }),
+    [],
+  );
+  const navLabel = localizer.message("ui.nav.primary");
+  const docsHref = tabs.find((tab) => tab.id === "docs")?.href ?? "docs";
+
+  /* The beta-tools setting is client-only, so the prerendered shell must not
+     disagree with the first hydration pass: every beta row is in the markup
+     from the start and is revealed once the client setting is known. */
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  const betaVisible = hydrated && betaToolsEnabled;
+  // Find honours the beta-tools setting the way the nav does. It never renders
+  // before hydration, so it can read the setting directly.
   const findSources = useMemo(
-    () => ({ baseHref: homeHref, donateHref, githubHref, tabs: tabs.filter((tab) => betaToolsEnabled || !tab.beta) }),
+    () => ({
+      baseHref: homeHref,
+      donateHref,
+      githubHref,
+      tabs: tabs.filter((tab) => betaToolsEnabled || !tab.beta),
+    }),
     [betaToolsEnabled, donateHref, githubHref, homeHref, tabs],
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
-  const toggleFind = (placement: "desktop" | "mobile") => {
-    setFindPlacement(placement);
-    setUtilityOpen(false);
-    setFindOpen((open) => !open);
-  };
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
   const onFindAction = (action: FindAction) => {
     if (action.type === "view") onSelectTab(action.view);
     else if (action.type === "settings") {
@@ -1188,9 +1198,7 @@ const Masthead = ({
     else if (action.type === "changelog") onSelectTab("whats-new");
     else if (action.type === "external") openExternalFromFind(action.href, confirmExternalNavigation);
   };
-  // `/` from anywhere outside a text field, plus ⌘K / Ctrl+K as the command-
-  // palette alias; the trigger that owns focus return is the one the current
-  // layout shows, which the dock threshold decides.
+  // `/` from anywhere outside a text field, plus the ⌘K / Ctrl+K alias.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.altKey) return;
@@ -1202,67 +1210,48 @@ const Masthead = ({
       // palette nobody can reach behind its backdrop.
       if (document.querySelector("dialog[open]")) return;
       event.preventDefault();
-      const desktopVisible = !!desktopFindRef.current?.offsetParent;
-      setFindPlacement(desktopVisible ? "desktop" : "mobile");
-      setUtilityOpen(false);
+      setMenuOpen(false);
       setFindOpen((open) => !open);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
-  const toolsRef = useRef<HTMLDivElement | null>(null);
-  // Docs and the landing page bring their own h1, so the brand steps down to a
-  // span there rather than giving the document two.
-  const BrandHeading = currentTab === "docs" || currentTab === "home" ? "span" : "h1";
-  const moreLabel = localizer.message("ui.tools.more");
-  const moreTabs = tabs.filter(isMoreMenuTab);
-  // What's new has no WorkflowTab entry; it lives in More's Project group.
-  const currentInMore = currentTab === "whats-new" || moreTabs.some((tab) => tab.id === currentTab);
-  const threadsLabel = localizer.message("ui.env.threads");
-  const navLabel = localizer.message("ui.nav.primary");
-  const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
-  const runtimeState = resolveRuntimeState(hydratedStatus, updateReady, offlineProgress, settings.offlineCopyEnabled);
-  const runtimeLabel =
-    runtimeState === "installing"
-      ? installingRuntimeLabel(localizer, offlineProgress)
-      : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
-  const runtimePercent = runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null;
-  const runtimeDetail = runtimeState === "installing" ? describeWarmupUnit(localizer, offlineProgress) : null;
-  const runtimeTitle = runtimeDetail ? `${runtimeLabel} — ${runtimeDetail}` : runtimeLabel;
-  const activeMoreRef = utilityPlacement === "mobile" ? mobileMoreRef : desktopMoreRef;
-  const toggleUtility = (placement: "desktop" | "mobile", viaKeyboard: boolean) => {
-    setUtilityPlacement(placement);
-    setUtilityViaKeyboard(viaKeyboard);
-    setFindOpen(false);
-    setUtilityOpen((open) => !open);
-  };
-  const closeUtility = () => {
-    setUtilityOpen(false);
-    activeMoreRef.current?.focus();
-  };
+
+  /* The sheet covers the page and its scrim blocks pointer input, so the
+     keyboard has to agree: what the sheet covers goes inert while it is open,
+     or Tab walks into controls nobody can see or click. The dock stays live
+     because its Menu button is what closes the sheet again, and the scrim is a
+     close control in its own right. Only attributes set here are cleared, so a
+     dialog that inerted the same node keeps its own. */
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const sheet = document.getElementById("menu-sheet");
+    const covered = Array.from(sheet?.parentElement?.children ?? []).filter(
+      (node) => node !== sheet && !node.matches(".dock, .scrim") && !node.hasAttribute("inert"),
+    );
+    for (const node of covered) node.setAttribute("inert", "");
+    return () => {
+      for (const node of covered) node.removeAttribute("inert");
+    };
+  }, [menuOpen]);
 
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
   useEffect(() => {
-    if (!(accentOpen || utilityOpen)) return undefined;
+    if (!openTool) return undefined;
+    /* Scoped to the anchor, not to one cluster: the appearance tiles render in
+       several places and a press inside the copy the current layout shows would
+       otherwise count as "outside", closing the popover on pointerdown so the
+       click never reached the choice. */
     const dismiss = (event: Event) => {
-      const tools = toolsRef.current;
       const target = event.target;
-      const moreAnchors = [desktopMoreRef.current?.parentElement, mobileMoreRef.current?.parentElement];
-      if (!(target instanceof Node)) return;
-      if (tools?.contains(target) || moreAnchors.some((anchor) => anchor?.contains(target))) return;
-      setAccentOpen(false);
-      setUtilityOpen(false);
+      if (target instanceof Element && target.closest(".tool-anchor")) return;
+      setOpenTool(null);
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (utilityOpen) {
-        setUtilityOpen(false);
-        activeMoreRef.current?.focus();
-      } else {
-        setAccentOpen(false);
-        toolsRef.current?.querySelector<HTMLButtonElement>('[aria-expanded="true"]')?.focus();
-      }
+      setOpenTool(null);
+      openToolRef.current?.focus();
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", dismissOnEscape);
@@ -1270,255 +1259,375 @@ const Masthead = ({
       document.removeEventListener("pointerdown", dismiss);
       document.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [accentOpen, activeMoreRef, utilityOpen]);
+  }, [openTool]);
+
+  const hydratedStatus = useHydratedServiceWorkerStatus(serviceWorkerStatus);
+  const runtimeState =
+    previewRuntimeState ??
+    resolveRuntimeState(hydratedStatus, updateReady, offlineProgress, settings.offlineCopyEnabled);
+  /* The chip prints the percent in its own tabular-numeral span, so the visible
+     wording stays percent-free; only the accessible name, which replaces the
+     whole chip rather than adding to it, carries the number. */
+  const runtimeLabel =
+    runtimeState === "installing"
+      ? installingRuntimeWording(localizer, offlineProgress)
+      : localizer.message(RUNTIME_MESSAGES[runtimeState].label);
+  const headerRuntimeLabel = localizer.message(HEADER_RUNTIME_MESSAGES[runtimeState]);
+  const runtimeSpokenLabel =
+    runtimeState === "installing" ? installingRuntimeLabel(localizer, offlineProgress) : runtimeLabel;
+  const runtimePercent = runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null;
+  const runtimeDetail = runtimeState === "installing" ? describeWarmupUnit(localizer, offlineProgress) : null;
+  /* A middle dot, not a second colon: the installing wording already ends in
+     ": <percent>%", and "copy: 25%: EmulatorJS file x" reads as one broken list. */
+  const runtimeTitle = runtimeDetail ? `${runtimeSpokenLabel} · ${runtimeDetail}` : runtimeSpokenLabel;
 
   const githubBaseHref = githubHref ? `${githubHref.replace(/\/$/, "")}/` : undefined;
   const commitDistance =
     typeof commitsSinceVersion === "number" && Number.isInteger(commitsSinceVersion) && commitsSinceVersion > 0
       ? commitsSinceVersion
       : 0;
+  const openStorage = onOpenStorage ?? onOpenLog;
+
+  /* One description of the nav, rendered by the sidebar and by the phone menu.
+     Both layouts therefore carry every destination, in the same order, under
+     the same headings - there is no second, shorter navigation to fall out of
+     step with this one. */
+  const sections: NavSectionData[] = useMemo(() => {
+    const workflowGroup = (group: NavGroup): NavSectionData => ({
+      entries: tabs
+        .filter((tab) => tab.group === group)
+        .map((tab) => ({
+          beta: tab.beta,
+          current: tab.id === currentTab,
+          // The page you are on is always in the nav, even a beta one reached
+          // by URL while the setting is off.
+          hidden: tab.beta && !betaVisible && tab.id !== currentTab,
+          href: tab.href,
+          icon: tab.icon,
+          id: tab.id,
+          label: tab.railLabel ?? tab.label,
+          onSelect: () => onSelectTab(tab.id),
+          title: fullNameFor(tab),
+        })),
+      id: group,
+      title: localizer.message(NAV_GROUP_TITLES[group]),
+    });
+    const device: NavSectionData = {
+      entries: [
+        {
+          /* The first client render MUST match the prerendered glyph. The
+             parser-time resolver only updates the identity status chips. */
+          icon: hydrated && runtimeState === "update" ? <RuntimeGlyph state="update" /> : <Cloud aria-hidden="true" />,
+          id: "status",
+          label: localizer.message("ui.log.tabStatus"),
+          onSelect: onOpenStatus,
+          stateLabel: hydrated && runtimeState === "update" ? localizer.message("ui.runtime.update") : undefined,
+        },
+        {
+          icon: <HardDrive aria-hidden="true" />,
+          id: "storage",
+          label: localizer.message("ui.log.tabStorage"),
+          onSelect: openStorage,
+        },
+        {
+          icon: <ScrollText aria-hidden="true" />,
+          id: "logs",
+          label: localizer.message("ui.log.tabLogs"),
+          onSelect: onOpenLog,
+        },
+        {
+          icon: <Settings aria-hidden="true" />,
+          id: "settings",
+          label: localizer.message("ui.settings.title"),
+          onSelect: onOpenSettings,
+        },
+      ],
+      id: "device",
+      title: localizer.message("ui.nav.groupDevice"),
+    };
+    const project = workflowGroup("project");
+    project.entries.unshift({
+      current: currentTab === "home",
+      href: homeHref,
+      icon: <House aria-hidden="true" />,
+      id: "home",
+      label: localizer.message("ui.nav.homeShort"),
+      onSelect: () => onSelectTab("home"),
+    });
+    project.entries.push({
+      current: currentTab === "whats-new",
+      href: "whats-new",
+      icon: <Newspaper aria-hidden="true" />,
+      id: "whats-new",
+      label: localizer.message("ui.update.whatsNew"),
+      onSelect: () => onSelectTab("whats-new"),
+    });
+    if (githubHref) {
+      project.entries.push({
+        external: true,
+        href: githubHref,
+        icon: <Github aria-hidden="true" />,
+        id: "github",
+        label: localizer.message("ui.tools.githubShort"),
+        onExternalClick: (event) => guardExternalClick(event, githubHref, confirmExternalNavigation),
+        title: localizer.message("ui.tools.github"),
+      });
+    }
+    if (donateHref) {
+      project.entries.push({
+        className: "nav-support",
+        external: true,
+        href: donateHref,
+        icon: <Heart aria-hidden="true" />,
+        id: "support",
+        label: localizer.message("ui.footer.donate"),
+        onExternalClick: (event) => guardExternalClick(event, donateHref, confirmExternalNavigation),
+      });
+    }
+    return [workflowGroup("patches"), workflowGroup("roms"), device, project];
+  }, [
+    betaVisible,
+    confirmExternalNavigation,
+    currentTab,
+    donateHref,
+    githubHref,
+    homeHref,
+    hydrated,
+    localizer,
+    onOpenLog,
+    onOpenSettings,
+    onOpenStatus,
+    onSelectTab,
+    openStorage,
+    runtimeState,
+    tabs,
+  ]);
+
+  // No beta workflow claims a dock slot, so the dock needs no reveal pass.
+  const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
+  // Docs and the landing page bring their own h1, so the brand steps down to a
+  // span there rather than giving the document two.
+  const BrandHeading = currentTab === "docs" || currentTab === "home" ? "span" : "h1";
+  const buildTag = version ? (
+    <BuildTag
+      channelBadge={channelBadge}
+      commitDistance={commitDistance}
+      confirmExternalNavigation={confirmExternalNavigation}
+      dirty={dirty}
+      githubBaseHref={githubBaseHref}
+      localizer={localizer}
+      onOpenWhatsNew={onOpenWhatsNew}
+      version={version}
+      versionTitle={versionTitle}
+    />
+  ) : null;
+  const buildFacts = (
+    <span className="build-facts">
+      {buildTag}
+      {previewVersionStatus ? (
+        <span className="build-runtime">
+          <StatusChip
+            label={headerRuntimeLabel}
+            onOpenStatus={() => {
+              closeMenu();
+              onOpenStatus();
+            }}
+            percent={runtimePercent}
+            state={runtimeState}
+            title={runtimeTitle}
+          />
+        </span>
+      ) : null}
+    </span>
+  );
+  /* Theme and accent appear in the chrome (the top bar on desktop, the brand
+     row on the phone) and again inside the navigation (the sidebar foot and the
+     Menu sheet), so each copy owns its own popover key and radio group name.
+     Everything about the app's identity below is rendered exactly once. */
+  const appearanceTiles = (scope: string, navRow = false) => (
+    <>
+      <ThemeTile
+        localizer={localizer}
+        navRow={navRow}
+        onToggle={(button) => toggleTool(`theme:${scope}`, button)}
+        open={openTool === `theme:${scope}`}
+      />
+      <AccentTile
+        localizer={localizer}
+        name={`shell-accent-${scope}`}
+        navRow={navRow}
+        onChange={(accent) => onAccentChange?.(accent)}
+        onToggle={(button) => toggleTool(`accent:${scope}`, button)}
+        open={openTool === `accent:${scope}`}
+      />
+    </>
+  );
+  const projectTiles = (
+    <ProjectTiles
+      confirmExternalNavigation={confirmExternalNavigation}
+      docsHref={docsHref}
+      donateHref={donateHref}
+      githubHref={githubHref}
+      localizer={localizer}
+      onOpenDocs={() => onSelectTab("docs")}
+    />
+  );
+
   return (
     <>
       <a className="skip-link" href="#main-content">
         {localizer.message("ui.common.skipToMain")}
       </a>
-      <header className="masthead">
-        <span className="brand">
-          <a aria-label={localizer.message("ui.nav.home")} className="brand-mark-link" href={homeHref}>
-            <BrandMark />
-          </a>
-          <span className="brand-copy">
-            <span className="brand-word-row">
-              <a className="brand-word-link" href={homeHref}>
-                <BrandHeading className="brand-word">
-                  rom<span className="brand-hy">-</span>
-                  <b>weaver</b>
-                </BrandHeading>
-              </a>
-            </span>
-            <span className="brand-sub-row">
-              {version ? (
-                <span className="sub-item">
-                  <BuildTag
-                    channelBadge={channelBadge}
-                    commitDistance={commitDistance}
-                    confirmExternalNavigation={confirmExternalNavigation}
-                    dirty={dirty}
-                    githubBaseHref={githubBaseHref}
-                    localizer={localizer}
-                    onOpenWhatsNew={onOpenWhatsNew}
-                    version={version}
-                    versionTitle={versionTitle}
-                  />
+      {/* One banner for the whole chrome. It is `display: contents` on desktop,
+          so the identity block and the top bar each land in their own grid cell
+          while staying inside a single landmark - two `header` elements at this
+          level would leave the page with two banners. */}
+      <header className="shell-banner">
+        {/* One column on desktop, one page header on the phone. */}
+        <div className="side-col">
+          <div className="shell-head">
+            <div className="shell-head-top">
+              <span className="brand">
+                <a aria-label={localizer.message("ui.nav.home")} className="brand-mark-link" href={homeHref}>
+                  <BrandMark />
+                </a>
+                <span className="brand-copy">
+                  <a className="brand-word-link" href={homeHref}>
+                    <BrandHeading className="brand-word">
+                      rom<span className="brand-hy">-</span>
+                      <b>weaver</b>
+                    </BrandHeading>
+                  </a>
+                  {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : buildFacts}
                 </span>
-              ) : null}
-              {version && threads ? (
-                <span aria-hidden="true" className="sub-separator">
-                  /
-                </span>
-              ) : null}
-              {threads ? (
-                <span className="sub-item">
-                  <button
-                    aria-haspopup="dialog"
-                    aria-label={`${threads} ${threadsLabel}`}
-                    className="sub-chip sub-link masthead-threads"
-                    data-thread-label={threadsLabel}
-                    onClick={onOpenThreads ?? onOpenSettings}
-                    onFocus={onPreloadSettings}
-                    onPointerDown={onPreloadSettings}
-                    onPointerEnter={onPreloadSettings}
-                    type="button"
-                  >
-                    <span className="masthead-threads-count">{threads}</span>
-                    <span aria-hidden="true" className="masthead-threads-space">
-                      {" "}
-                    </span>
-                    <span aria-hidden="true">Threads</span>
-                  </button>
-                </span>
-              ) : null}
-            </span>
-          </span>
-        </span>
-        <ModeRail
-          controlsPanels={tabsControlPanels}
-          current={currentTab}
-          navLabel={navLabel}
-          onSelect={onSelectTab}
-          tabs={tabs}
-          trailing={
-            <>
-              <MoreMenu
-                autoFocusFirst={utilityViaKeyboard}
-                buttonClassName="mode-more"
-                current={currentInMore}
-                className="desktop-more"
-                confirmExternalNavigation={confirmExternalNavigation}
-                donateHref={donateHref}
-                githubHref={githubHref}
-                localizer={localizer}
-                menuId="more-menu"
-                moreLabel={moreLabel}
-                onClose={closeUtility}
-                onOpenLog={onOpenLog}
-                onOpenStatus={onOpenStatus}
-                onOpenStorage={onOpenStorage ?? onOpenLog}
-                moreTabs={moreTabs}
-                onOpenWorkflowTab={onSelectTab}
-                onOpenSettings={onOpenSettings}
-                onPreloadLog={onPreloadLog}
-                onToggle={(viaKeyboard) => toggleUtility("desktop", viaKeyboard)}
-                open={utilityOpen && utilityPlacement === "desktop"}
-                renderMenu={utilityOpen && utilityPlacement === "desktop"}
-                runtimeState={runtimeState}
-                runtimePercent={runtimePercent}
-                toolsEnabled={betaToolsEnabled}
-                triggerRef={desktopMoreRef}
-              />
-            </>
-          }
-        />
-        <div className="masthead-tools" ref={toolsRef}>
-          {/* Desktop Find is a glyph like its neighbours, with its key beside
-              the icon; the name lives in the tooltip and the accessible label. */}
-          <span className="desktop-find">
-            <button
-              aria-controls="find-palette"
-              aria-expanded={findOpen && findPlacement === "desktop"}
-              aria-haspopup="dialog"
-              aria-keyshortcuts="/ Control+K Meta+K"
-              aria-label={findLabel}
-              className="tool find-trigger"
-              onClick={() => toggleFind("desktop")}
-              ref={desktopFindRef}
-              title={`${findLabel} (${FIND_SHORTCUT_HINT})`}
-              type="button"
-            >
-              <Search aria-hidden="true" />
-              <span aria-hidden="true" className="find-trigger-key">
-                {FIND_SHORTCUT_HINT}
               </span>
-            </button>
-          </span>
+              <div className="shell-head-tools">
+                {appearanceTiles("phone")}
+                <span aria-hidden="true" className="tool-separator" />
+                <span className="phone-project-tools">{projectTiles}</span>
+              </div>
+            </div>
+          </div>
+          {/* Desktop: every destination the app has, named, in one column. */}
+          <aside className="side-rail">
+            <SideNav
+              appearance={appearanceTiles("rail", true)}
+              localizer={localizer}
+              navLabel={navLabel}
+              sections={sections}
+            />
+          </aside>
+        </div>
+        {/* Desktop top bar: the one box that reaches everything, and the controls
+          that change this browser rather than the app. No destinations, so
+          nothing in the app is listed in two navigations. */}
+        <div className="topbar">
           <button
+            aria-controls="find-palette"
+            aria-expanded={findOpen}
             aria-haspopup="dialog"
-            aria-label={runtimeTitle}
-            className={join("tool masthead-status sub-status", runtimePercent !== null && "has-progress")}
-            data-sw={runtimeState}
-            onClick={onOpenStatus}
-            title={runtimeTitle}
+            aria-keyshortcuts="/ Control+K Meta+K"
+            className="topbar-find"
+            onClick={() => setFindOpen((open) => !open)}
+            ref={findTriggerRef}
             type="button"
           >
-            <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
-            {runtimePercent === null ? null : (
-              <span aria-hidden="true" className="masthead-status-percent">{`${runtimePercent}%`}</span>
-            )}
-            <span className="sr-only sub-status-text">{runtimeLabel}</span>
+            <Search aria-hidden="true" />
+            <span className="topbar-find-text">{localizer.message("ui.find.placeholder")}</span>
+            <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
-          <span className="mobile-utility-theme">
-            <ThemeToggle localizer={localizer} />
-          </span>
-          {/* stays open on pick: arrow keys walk the radio group, and comparing
-              two lots should not cost a reopen */}
-          <AccentPicker
-            localizer={localizer}
-            onChange={(accent) => onAccentChange?.(accent)}
-            onToggle={() => setAccentOpen((open) => !open)}
-            open={accentOpen}
-          />
-          {utilityOpen && utilityPlacement === "mobile" ? (
-            <UtilityMenu
-              autoFocusFirst={utilityViaKeyboard}
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
-              localizer={localizer}
-              menuClassName="shared-more-menu"
-              menuId="more-menu"
-              mobile
-              onClose={closeUtility}
-              onAccentChange={onAccentChange}
-              onOpenLog={onOpenLog}
-              onOpenSettings={onOpenSettings}
+          <div className="topbar-tools">
+            <StatusChip
+              label={runtimeLabel}
               onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              moreTabs={moreTabs}
-              onOpenWorkflowTab={onSelectTab}
-              open
-              runtimeState={runtimeState}
-              runtimePercent={runtimePercent}
-              toolsEnabled={betaToolsEnabled}
-              triggerRef={activeMoreRef}
+              percent={runtimePercent}
+              state={runtimeState}
+              title={runtimeTitle}
             />
-          ) : null}
+            {appearanceTiles("desktop")}
+            <span aria-hidden="true" className="tool-separator" />
+            {projectTiles}
+          </div>
         </div>
-        <FindPalette
-          localizer={localizer}
-          onAction={onFindAction}
-          onClose={closeFind}
-          open={findOpen}
-          sources={findSources}
-          triggerRef={activeFindRef}
-        />
-        {/* The parser-time resolver in index.html rewrites the thread count and
-            runtime status before the shell paints, and removes itself. Keep its
-            marker after the action group so both slots exist when it runs. */}
-        <span className="shell-identity" hidden />
       </header>
+      <FindPalette
+        localizer={localizer}
+        onAction={onFindAction}
+        onClose={closeFind}
+        open={findOpen}
+        sources={findSources}
+        triggerRef={activeFindRef}
+      />
+      {previewPhoneOverlay ? (
+        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || findOpen}>
+          <StatusChip
+            label={runtimeLabel}
+            onOpenStatus={() => {
+              closeMenu();
+              onOpenStatus();
+            }}
+            percent={runtimePercent}
+            state={runtimeState}
+            title={runtimeTitle}
+          />
+        </span>
+      ) : null}
       <PhoneDock
-        controlsPanels={tabsControlPanels}
         current={currentTab}
-        mobileActions={
-          <>
-            <button
-              aria-controls="find-palette"
-              aria-expanded={findOpen && findPlacement === "mobile"}
-              aria-haspopup="dialog"
-              className="dock-action dock-find"
-              onClick={() => toggleFind("mobile")}
-              ref={mobileFindRef}
-              type="button"
-            >
-              <Search aria-hidden="true" />
-              <span>{findLabel}</span>
-            </button>
-            <MoreMenu
-              buttonClassName="dock-action"
-              current={currentInMore}
-              className="mobile-more"
-              confirmExternalNavigation={confirmExternalNavigation}
-              donateHref={donateHref}
-              githubHref={githubHref}
-              localizer={localizer}
-              menuId="more-menu"
-              moreLabel={moreLabel}
-              onClose={closeUtility}
-              onOpenLog={onOpenLog}
-              onOpenStatus={onOpenStatus}
-              onOpenStorage={onOpenStorage ?? onOpenLog}
-              moreTabs={moreTabs}
-              onOpenWorkflowTab={onSelectTab}
-              onPreloadLog={onPreloadLog}
-              onToggle={(viaKeyboard) => toggleUtility("mobile", viaKeyboard)}
-              open={utilityOpen && utilityPlacement === "mobile"}
-              renderMenu={false}
-              runtimeState={runtimeState}
-              runtimePercent={runtimePercent}
-              toolsEnabled={betaToolsEnabled}
-              triggerRef={mobileMoreRef}
-            />
-          </>
-        }
+        menuLabel={localizer.message("ui.tools.menu")}
+        menuOpen={menuOpen}
         navLabel={navLabel}
         onSelect={onSelectTab}
-        tabs={tabs}
+        onToggleMenu={() => {
+          setFindOpen(false);
+          onPreloadLog?.();
+          setMenuMounted(true);
+          setMenuOpen((open) => !open);
+        }}
+        status={
+          <StatusChip
+            label={runtimeLabel}
+            onOpenStatus={() => {
+              closeMenu();
+              onOpenStatus();
+            }}
+            percent={runtimePercent}
+            state={runtimeState}
+            title={runtimeTitle}
+          />
+        }
+        tabs={dockTabs}
+        triggerRef={menuTriggerRef}
+      />
+      {/* The parser-time resolver runs here, after the identity slots exist. */}
+      <span className="shell-identity" hidden />
+      <MenuSheet
+        appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
+        localizer={localizer}
+        onClose={closeMenu}
+        findRef={menuFindRef}
+        onOpenFind={() => {
+          setMenuOpen(false);
+          setFindOpen(true);
+        }}
+        open={menuOpen}
+        opened={menuMounted}
+        sections={sections}
+        toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
+        triggerRef={menuTriggerRef}
+      />
+      {/* A real button, so the backdrop is dismissable by keyboard too and
+          carries a name rather than being an unlabelled click surface. */}
+      <button
+        aria-label={localizer.message("ui.common.close")}
+        className="scrim"
+        hidden={!menuOpen}
+        onClick={closeMenu}
+        type="button"
       />
     </>
   );
 };
-
-const localizerFindLabel = (localizer: Localizer) => localizer.message("ui.find.label");
 
 /** `/` MUST keep typing into a field; only a bare `/` on the page opens Find. */
 const isTextEntryTarget = (target: EventTarget | null) => {
@@ -1529,7 +1638,7 @@ const isTextEntryTarget = (target: EventTarget | null) => {
   );
 };
 
-/** Find's external rows open like the footer links: guarded when a job is running. */
+/** Find's external rows open like the nav links: guarded when a job is running. */
 const openExternalFromFind = (href: string, confirmExternalNavigation?: (href: string) => Promise<boolean>) => {
   if (!confirmExternalNavigation) {
     window.open(href, "_blank", "noopener,noreferrer");
@@ -1538,59 +1647,6 @@ const openExternalFromFind = (href: string, confirmExternalNavigation?: (href: s
   void confirmExternalNavigation(href).then((accepted) => {
     if (accepted) window.open(href, "_blank", "noopener,noreferrer");
   });
-};
-
-const SiteFooter = ({
-  confirmExternalNavigation,
-  docsHref,
-  donateHref,
-  githubHref,
-}: {
-  confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  /** The guides, as a plain link: the one crawlable path to Docs now that the rail has none. */
-  docsHref?: string;
-  donateHref?: string;
-  githubHref?: string;
-}) => {
-  const localizer = useUiLocalizer();
-  const githubLabel = localizer.message("ui.tools.github");
-  const supportLabel = localizer.message("ui.footer.donate");
-  return (
-    <footer className="site-footer">
-      <div className="site-footer-actions">
-        {docsHref ? (
-          <a className="footer-link footer-docs" href={docsHref}>
-            <BookOpen aria-hidden="true" />
-            <span>{localizer.message("ui.nav.docs")}</span>
-          </a>
-        ) : null}
-        {githubHref ? (
-          <a
-            className="footer-link"
-            href={githubHref}
-            onClick={(event) => guardFooterExternalClick(event, githubHref, confirmExternalNavigation)}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <Github aria-hidden="true" />
-            <span>{githubLabel}</span>
-          </a>
-        ) : null}
-        {donateHref ? (
-          <a
-            className="footer-link footer-support"
-            href={donateHref}
-            onClick={(event) => guardFooterExternalClick(event, donateHref, confirmExternalNavigation)}
-            rel="noreferrer"
-            target="_blank"
-          >
-            <Heart aria-hidden="true" />
-            <span>{supportLabel}</span>
-          </a>
-        ) : null}
-      </div>
-    </footer>
-  );
 };
 
 /** Update-ready banner inside a {@link Reveal}. */
@@ -1651,7 +1707,6 @@ export {
   installingRuntimeLabel,
   Masthead,
   offlineWarmupPercent,
-  SiteFooter,
   prefersReducedMotion,
   readPwaState,
   Reveal,

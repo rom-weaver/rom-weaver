@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
-  <title>rom-weaver — Make more of your ROMs</title>
+  <title>rom-weaver: Make more of your ROMs</title>
   <desc>A cartridge W logo beside the rom-weaver name, with tools to patch, convert, and inspect ROMs in your browser or CLI.</desc>
   <defs>
     <pattern id="weave" width="64" height="64" patternUnits="userSpaceOnUse">

@@ -172,7 +172,7 @@ const IdentifyDrawer = ({
                 <EvidenceRow
                   label={localizer.message("ui.identifyDrawer.platformCandidates")}
                   values={platformCandidates.map((candidate) =>
-                    [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" — "),
+                    [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" · "),
                   )}
                 />
               ) : null}

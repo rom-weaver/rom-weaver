@@ -215,7 +215,7 @@ class OpfsProxyServer {
     return previous === OPFS_PROXY_STATE_REQUESTED;
   }
 
-  // Mark the proxy dead and wake every consumer parked on a slot's STATE word — the poison flag alone
+  // Mark the proxy dead and wake every consumer parked on a slot's STATE word: the poison flag alone
   // is invisible to a consumer already blocked in Atomics.wait; the notify unblocks it to re-check
   // isPoisoned() and fail fast.
   private poisonAndWakeConsumers(): void {

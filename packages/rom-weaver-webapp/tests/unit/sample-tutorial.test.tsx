@@ -49,6 +49,9 @@ const TutorialSection = ({ children, id, label }: { children?: ReactNode; id: st
 const renderGuidedWorkbench = ({ onClose = vi.fn() }: { onClose?: () => void } = {}) => {
   const workbench = (guided: boolean) => (
     <div className="rw-app">
+      {/* The shell's top bar. The guide clamps the card below it, so a test that
+          leaves it out is testing a page whose chrome the card cannot cover. */}
+      <div className="topbar" />
       <TutorialSection id="tutorial-first" label="First drawer" />
       <TutorialSection id="tutorial-second" label="Second drawer" />
       {guided ? <SampleTutorial loadingBody="Loading." onClose={onClose} ready steps={STEPS} /> : null}
@@ -84,13 +87,23 @@ afterEach(() => scrolledTo(0));
 
 // happy-dom reports zero-sized rects, so the geometry has to be stubbed after
 // mount and a resize fired to re-measure. Viewport is 1024x768.
-const renderAnchored = async (row: { height: number; left: number; top: number; width: number }) => {
+const renderAnchored = async (row: { height: number; left: number; top: number; width: number }, topbarHeight = 0) => {
   renderGuidedWorkbench();
   const target = document.querySelector("#tutorial-first") as HTMLElement;
   const guide = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
   await waitFor(() => expect(target.classList.contains("sample-tutorial-target")).toBe(true));
   stubRect(target, row);
   stubRect(guide, { height: 200, left: 0, top: 0, width: 720 });
+  // A zero height is happy-dom's own answer for an unstubbed box, and the guide
+  // reads that as chrome owning no band - the default here keeps every other
+  // placement case measuring against a bare margin.
+  if (topbarHeight)
+    stubRect(document.querySelector(".topbar") as HTMLElement, {
+      height: topbarHeight,
+      left: 0,
+      top: 0,
+      width: 1024,
+    });
   fireEvent.resize(window);
   return guide;
 };
@@ -255,6 +268,22 @@ describe("sample tutorial", () => {
     const guide = await renderAnchored({ height: 100, left: 200, top: 600, width: 600 });
 
     await waitFor(() => expect(guide.style.top).toBe("386px"));
+  });
+
+  it("clamps the card below the top bar rather than onto its controls", async () => {
+    // A row too tall to fit the card below it anchors from its top, and the
+    // slot above (200 - 14 - 200) is off the top of the page, so the card is
+    // clamped. A bare 12px margin would park it over the top bar's theme and
+    // project controls; the clamp starts at the bar's bottom plus that margin.
+    const guide = await renderAnchored({ height: 400, left: 200, top: 200, width: 600 }, 46);
+
+    await waitFor(() => expect(guide.style.top).toBe("58px"));
+  });
+
+  it("ignores chrome that owns no band, so a scrolled-away top bar costs nothing", async () => {
+    const guide = await renderAnchored({ height: 400, left: 200, top: 200, width: 600 });
+
+    await waitFor(() => expect(guide.style.top).toBe("12px"));
   });
 
   it("places the pair in document coordinates so the page scrolls it along", async () => {

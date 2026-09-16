@@ -1,12 +1,15 @@
 /* ═══ Find ═══
    One box for tools, settings, app surfaces and guides. Its trigger is a
-   search-field button in the masthead actions on desktop and a dock action on
-   phones; the palette itself is one element that the dock threshold
-   repositions: a dropdown under the masthead on desktop, a sheet above the
-   dock on phones. */
+   search field in the desktop top bar and a row at the foot of the phone Menu
+   sheet; the palette itself is one element that the layout threshold
+   repositions: a panel under the top bar on desktop, a sheet above the dock on
+   phones. */
 .rw-app .find-palette {
-  position: absolute;
-  inset-block-start: calc(100% + var(--sp-xs));
+  position: fixed;
+  /* Under the top bar, which the shell offsets by the safe-area inset; a fixed
+     element that ignored it would open on top of the field that opened it in an
+     installed PWA. */
+  inset-block-start: calc(var(--safe-t) + var(--topbar-h) + var(--sp-s));
   inset-inline-start: 50%;
   z-index: 2000;
   display: flex;
@@ -122,41 +125,15 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
-/* The desktop trigger is a `.tool` glyph like status, theme and accent, so the
-   actions cluster stays one family; the key chip beside the icon is what says
-   "type this" without a word of label. */
-.rw-app .desktop-find {
-  position: relative;
-  display: inline-flex;
-}
-.rw-app .tool.find-trigger {
-  display: inline-flex;
-  gap: var(--sp-2xs);
-  align-items: center;
-  width: auto;
-  padding-inline: var(--sp-xs) 5px;
-}
-.rw-app .find-trigger-key {
-  padding: 0 5px;
-  font-size: 0.62rem;
-  font-weight: 600;
-  line-height: 1.5;
-  color: var(--ink-3);
-  border: 1px solid var(--seam);
-  border-radius: 4px;
-}
 @media (prefers-reduced-motion: reduce) {
   .rw-app .find-palette {
     animation: none;
   }
 }
-/* ▼ dock threshold, shared with masthead.css: the palette becomes a sheet. The
+/* ▼ layout threshold, shared with masthead.css: the palette becomes a sheet. The
    input sits at the sheet's bottom edge, in the thumb zone, and the results
    stack upward from it so the best match is the row touching the input. */
 @media (max-width: 999px) {
-  .rw-app .desktop-find {
-    display: none;
-  }
   .rw-app .find-palette {
     position: fixed;
     inset-block: auto calc(var(--dock-h) + var(--sp-xs));
@@ -183,21 +160,5 @@
   }
   .rw-app .find-option {
     flex-shrink: 0;
-  }
-  /* the dock keeps the tablist's DOM order; only the paint order changes so
-     Find lands dead center in the thumb zone */
-  .rw-app .dock .dock-find {
-    order: 1;
-  }
-  .rw-app .dock .dock-tab[data-mode="test"] {
-    order: 2;
-  }
-  .rw-app .dock .mobile-more {
-    order: 3;
-  }
-}
-@media (min-width: 1000px) {
-  .rw-app .dock-find {
-    display: none;
   }
 }

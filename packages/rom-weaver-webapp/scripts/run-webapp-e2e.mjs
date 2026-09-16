@@ -24,7 +24,7 @@ const EXPECTED_PATCHED_SHA256 = "43b1cc171d0b795e224072752effd13400f6392d0fab8d0
 const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"];
 // Derived from the route table, so a new guide is audited without a second edit.
 export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => source.slug);
-export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layout.footerInFirstViewport;
+export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layout.dockInFirstViewport;
 const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
@@ -152,6 +152,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
     Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: undefined });
     const audit = {
       identityResolved: false,
+      resolverCalls: 0,
       initialTheme: "",
       initialView: "",
       runtime: null,
@@ -161,10 +162,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
     };
     window.__romWeaverHydrationAudit = audit;
     const sample = () => {
-      const active = document.querySelector('[role="tab"][aria-selected="true"]');
-      if (!audit.initialView && active) audit.initialView = active.getAttribute("data-mode") || "";
+      const active = document.querySelector('.side-nav [aria-current="page"]');
+      if (!audit.initialView && active) audit.initialView = active.id.replace(/^tab-/, "");
       if (!audit.identityResolved) return;
-      const threads = document.querySelector(".masthead-threads");
+      const threads = document.querySelector(".panel-threads-btn");
       const runtime = document.querySelector(".sub-status");
       if (!(threads && runtime)) return;
       if (!audit.threads) {
@@ -184,7 +185,8 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       set: (resolver) => {
         resolveShellIdentity = (...args) => {
           const result = resolver(...args);
-          audit.identityResolved = true;
+          audit.resolverCalls += 1;
+          audit.identityResolved = audit.resolverCalls === 2;
           sample();
           return result;
         };
@@ -257,21 +259,21 @@ const runHydrationAudit = async (createContext, baseUrl) => {
             const root = document.getElementById("webapp-root");
             // The dock is the phone chrome the shell must paint inside the
             // first viewport now that the footer is gone.
-            const footer = document.querySelector(".dock")?.getBoundingClientRect();
+            const dock = document.querySelector(".dock")?.getBoundingClientRect();
             const links = document.querySelector(".dock-tab")?.getBoundingClientRect();
             const status = [...document.querySelectorAll(".dock-tab")].at(-1)?.getBoundingClientRect();
             const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
             return {
-              footerInFirstViewport:
-                !!footer &&
-                footer.top < window.innerHeight &&
-                footer.bottom <= window.innerHeight &&
+              dockInFirstViewport:
+                !!dock &&
+                dock.top < window.innerHeight &&
+                dock.bottom <= window.innerHeight &&
                 !!links &&
                 links.bottom <= window.innerHeight &&
                 !!status &&
                 status.bottom <= window.innerHeight,
               prerendered: root?.hasAttribute("aria-busy") === true,
-              footerTop: footer?.top ?? null,
+              dockTop: dock?.top ?? null,
               workflowTop: workflow?.top ?? null,
             };
           });
@@ -283,13 +285,13 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           releaseScripts();
         }
         await navigation;
-        // More-menu views (trim, ppf-undo) have no rail tab, so no tab is
-        // selected once they hydrate; their visible panel names the view.
+        // Every view has a named nav row, so the current page is always marked;
+        // the visible panel is the fallback while the nav is still hydrating.
         await page.waitForFunction((expectedView) => {
           const root = document.getElementById("webapp-root");
           if (root?.hasAttribute("aria-busy")) return false;
-          const active = document.querySelector('[role="tab"][aria-selected="true"]');
-          if (active) return active.getAttribute("data-mode") === expectedView;
+          const active = document.querySelector('.side-nav [aria-current="page"]');
+          if (active) return active.id === `tab-${expectedView}`;
           return !!document.querySelector(`#panel-${expectedView}:not([hidden])`);
         }, testCase.finalView);
         if (testCase.replayClick) await page.getByRole("dialog").waitFor({ state: "visible" });
@@ -300,24 +302,25 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         const result = await page.evaluate((initialLayout) => {
           const audit = window.__romWeaverHydrationAudit;
           const root = document.getElementById("webapp-root");
-          const footer = document.querySelector(".dock")?.getBoundingClientRect();
+          const dock = document.querySelector(".dock")?.getBoundingClientRect();
           const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
           return {
             finalTheme: document.documentElement.dataset.theme || "",
             finalView:
-              document.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-mode") ||
+              document.querySelector('.side-nav [aria-current="page"]')?.id.replace(/^tab-/, "") ||
               document.querySelector('[id^="panel-"]:not([hidden])')?.id.replace(/^panel-/, "") ||
               "",
             initialTheme: audit.initialTheme,
             initialView: audit.initialView,
             runtimeRetained: document.querySelector(".sub-status") === audit.runtime,
             runtimeTexts: audit.runtimeTexts,
-            threadRetained: document.querySelector(".masthead-threads") === audit.threads,
+            resolverCalls: audit.resolverCalls,
+            threadRetained: document.querySelector(".panel-threads-btn") === audit.threads,
             threadTexts: audit.threadTexts,
             shellHandoffStable:
               !initialLayout ||
-              (Math.abs((footer?.top ?? 0) - initialLayout.footerTop) <= 0.5 &&
+              (Math.abs((dock?.top ?? 0) - initialLayout.dockTop) <= 0.5 &&
                 Math.abs((workflow?.top ?? 0) - initialLayout.workflowTop) <= 0.5),
             shellSettled: root?.dataset.shellSettled === "true",
             panelAnimation: workflowStyle ? getComputedStyle(workflowStyle).animationName : "",
@@ -325,8 +328,11 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         }, initialShellLayout);
         const problems = [];
         if (!result.threadRetained) problems.push("thread node was replaced");
+        if (result.resolverCalls !== 2) problems.push(`shell resolver ran ${result.resolverCalls} times`);
         if (!result.runtimeRetained) problems.push("runtime node was replaced");
-        if (result.threadTexts.length !== 1 || !result.threadTexts[0]?.includes("3 Threads"))
+        // The chip's label is localized, so this audit owns the count and the
+        // word, never their capitalization.
+        if (result.threadTexts.length !== 1 || !/3\s*threads/i.test(result.threadTexts[0] ?? ""))
           problems.push(`thread text changed: ${JSON.stringify(result.threadTexts)}`);
         if (result.runtimeTexts.length !== 1)
           problems.push(`runtime text changed: ${JSON.stringify(result.runtimeTexts)}`);
@@ -475,17 +481,28 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     watched.on("pageerror", (error) => failures.push(`[${watched.url()}] ${error.stack || error.message}`));
   };
   watchPageErrors();
+  // Theme is a named menu rather than a cycle, so the choice is picked by name.
   const setTheme = async (theme) => {
-    if ((await page.locator("html").getAttribute("data-theme")) !== theme) {
-      const mastheadTheme = page.locator('button[aria-label^="Switch to "]:visible').first();
-      if (await mastheadTheme.count()) {
-        await mastheadTheme.click();
-      } else {
-        await page.getByRole("button", { exact: true, name: "More" }).click();
-        await page.getByRole("menuitem", { exact: true, name: "Theme" }).click();
-      }
-      await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected, theme);
-    }
+    if ((await page.locator("html").getAttribute("data-theme")) === theme) return;
+    await page.locator('.tool[aria-label^="Theme"]:visible').first().click();
+    await page
+      .locator('[role="menuitemradio"]:visible')
+      .filter({ hasText: theme === "dark" ? "Dark" : "Light" })
+      .first()
+      .click();
+    await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected, theme);
+  };
+  /** A nav row by name, from whichever layout the viewport shows. */
+  const navRow = (name) =>
+    page
+      .locator(".side-nav:visible .nav-row, .menu-sheet:visible .nav-row")
+      .filter({ has: page.locator(`.nav-row-label:text-is("${name}")`) })
+      .first();
+  /** Menu is the phone's index; the sidebar is always on screen on desktop. */
+  const openNav = async () => {
+    if (await page.locator(".side-nav:visible").count()) return;
+    if (!(await page.locator(".menu-sheet:visible").count())) await page.locator(".dock-menu").click();
+    await page.locator(".menu-sheet:visible").waitFor({ state: "visible" });
   };
   const scanVariants = async (label) => {
     const originalTheme = await page.locator("html").getAttribute("data-theme");
@@ -648,19 +665,20 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await docsChunkReleased;
         await route.continue();
       });
-      // Docs lives under More on both layouts now.
-      await docsNavigationPage.locator(".desktop-more .mode-more:visible").click();
-      await docsNavigationPage.locator('[data-more-workflow="docs"]:visible').click();
+      // Docs is a named row in the nav on both layouts now.
+      await docsNavigationPage.locator('.side-nav .nav-row[href="docs"]:visible').click();
       await docsChunkStarted;
       await docsNavigationPage
-        .locator('.mode[role="tab"][aria-selected="true"][data-mode="patcher"]')
+        .locator('.side-nav .nav-row[aria-current="page"][id="tab-patcher"]')
         .waitFor({ state: "visible" });
       if ((await docsNavigationPage.locator(".docs-rails .guide-nav").count()) !== 0) {
         throw new Error("Docs navigation mounted before its lazy route was ready");
       }
       releaseDocsChunk();
       await docsNavigationPage.locator(".docs-rails .guide-nav").waitFor({ state: "visible" });
-      await docsNavigationPage.locator(".desktop-more .mode-more.is-current").waitFor({ state: "visible" });
+      await docsNavigationPage.locator('.side-nav .nav-row[aria-current="page"][id="tab-docs"]').waitFor({
+        state: "visible",
+      });
     } finally {
       await docsNavigationContext.close();
     }
@@ -680,23 +698,27 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         if (!(await betaTools.isChecked())) await betaTools.check();
         await page.getByRole("button", { exact: true, name: "Save" }).click();
       }
-      for (const tab of ["patcher", "creator"]) {
-        await page.locator(`[role="tab"][data-mode="${tab}"]:visible`).first().click();
+      for (const [tab, label] of [
+        ["patcher", "Apply"],
+        ["creator", "Create"],
+      ]) {
+        await openNav();
+        await navRow(label).click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);
           await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
-      // Trim, PPF undo, and Save Editor live in the More menu, not the mode
-      // rail; their Beta chip is part of the accessible name.
+      // Trim, PPF undo and Save Editor are named rows under their own group
+      // heading, which is what supplies the noun their short label drops.
       for (const [label, panelId] of [
-        ["Trim ROM", "panel-trim"],
+        ["Trim", "panel-trim"],
         ["PPF undo", "panel-ppf-undo"],
-        ["Save Editor", "panel-save-editor"],
+        ["Saves", "panel-save-editor"],
       ]) {
-        await page.getByRole("button", { name: "More", exact: true }).click();
-        await page.getByRole("menuitem", { name: `${label} Beta`, exact: true }).click();
+        await openNav();
+        await navRow(label).click();
         await page.locator(`#${panelId}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);
@@ -707,7 +729,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="patcher"]:visible').first().click();
+    await openNav();
+    await navRow("Apply").click();
 
     const infoButton = page.locator(".info-btn").first();
     await infoButton.click();
@@ -725,8 +748,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.getByRole("button", { exact: true, name: "Save" }).click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
 
-    await page.getByRole("button", { name: "More", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Logs", exact: true }).click();
+    await openNav();
+    await navRow("Logs").click();
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
@@ -845,7 +868,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    await page.locator('[role="tab"][data-mode="creator"]:visible').first().click();
+    await openNav();
+    await navRow("Create").click();
     const createOnboardingChip = page.getByRole("button", { name: "New here?" });
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();

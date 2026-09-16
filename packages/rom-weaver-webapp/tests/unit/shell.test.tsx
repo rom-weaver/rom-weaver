@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import {
   describeWarmupUnit,
@@ -11,7 +11,6 @@ import {
   prefersReducedMotion,
   readPwaState,
   resolveRuntimeState,
-  SiteFooter,
 } from "../../src/webapp/components/shell.tsx";
 import type { WorkflowTab } from "../../src/webapp/components/shell.tsx";
 
@@ -20,27 +19,12 @@ const withSettings = (children: ReactNode) => (
 );
 
 const TABS = [
-  { href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
-  { href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
-  { href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
-  {
-    group: "tools",
-    href: "apply-patch#bundle",
-    icon: <svg aria-hidden="true" />,
-    id: "bundle",
-    label: "Bundles",
-    placement: "more",
-  },
-  {
-    beta: true,
-    group: "tools",
-    href: "trim",
-    icon: <svg aria-hidden="true" />,
-    id: "trim",
-    label: "Trim",
-    placement: "more",
-  },
+  { dock: true, group: "patches", href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
+  { dock: true, group: "patches", href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
+  { dock: true, group: "roms", href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
+  { group: "project", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { group: "patches", href: "apply-patch#bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  { beta: true, group: "roms", href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ] satisfies WorkflowTab[];
 
 const mastheadProps = {
@@ -53,19 +37,22 @@ const mastheadProps = {
   onOpenStatus: () => undefined,
   onSelectTab: () => undefined,
   tabs: TABS,
-  threads: 8,
   version: "1.2.3",
 };
 
-// A pointer open parks focus on the menu box itself, which is where the arrow keys start from.
-const openDesktopMore = (container: HTMLElement) => {
-  const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
-  fireEvent.pointerDown(more);
-  fireEvent.click(more);
-  return { menu: container.querySelector('[role="menu"]') as HTMLElement, more };
+/* The desktop sidebar and the phone Menu sheet render the same description.
+   The sheet fills in on its first open, so reaching it means opening Menu. */
+const navs = (container: HTMLElement) => {
+  fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+  return {
+    sheet: container.querySelector(".menu-sheet") as HTMLElement,
+    side: container.querySelector(".side-nav") as HTMLElement,
+  };
 };
-
-const menuItems = (menu: HTMLElement) => Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+const rowNamed = (scope: HTMLElement, name: string) =>
+  Array.from(scope.querySelectorAll<HTMLElement>(".nav-row")).find(
+    (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
+  ) as HTMLElement;
 
 afterEach(() => {
   cleanup();
@@ -74,225 +61,115 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe("More menu keyboard movement", () => {
-  it("walks the items with the arrow keys, Home and End", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const { menu } = openDesktopMore(container);
-    const items = menuItems(menu);
-    expect(items.length).toBeGreaterThan(2);
-
-    fireEvent.keyDown(menu, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(items[0]);
-
-    fireEvent.keyDown(menu, { key: "ArrowDown" });
-    expect(document.activeElement).toBe(items[1]);
-
-    fireEvent.keyDown(menu, { key: "ArrowUp" });
-    expect(document.activeElement).toBe(items[0]);
-
-    fireEvent.keyDown(menu, { key: "End" });
-    expect(document.activeElement).toBe(items.at(-1));
-
-    fireEvent.keyDown(menu, { key: "Home" });
-    expect(document.activeElement).toBe(items[0]);
-  });
-
-  it("wraps from the first item back to the last", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const { menu } = openDesktopMore(container);
-    const items = menuItems(menu);
-
-    fireEvent.keyDown(menu, { key: "Home" });
-    fireEvent.keyDown(menu, { key: "ArrowUp" });
-
-    expect(document.activeElement).toBe(items.at(-1));
-  });
-
-  it("closes on Escape and hands focus back to the trigger", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const { menu, more } = openDesktopMore(container);
-
-    fireEvent.keyDown(menu, { key: "Escape" });
-
-    expect(more.getAttribute("aria-expanded")).toBe("false");
-    expect(document.activeElement).toBe(more);
-  });
-
-  it("ignores a key it does not handle", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const { menu, more } = openDesktopMore(container);
-    const active = document.activeElement;
-
-    fireEvent.keyDown(menu, { key: "a" });
-
-    expect(document.activeElement).toBe(active);
-    expect(more.getAttribute("aria-expanded")).toBe("true");
-  });
-});
-
-describe("More menu destinations", () => {
-  it("routes each item to its handler and closes the menu", () => {
+describe("the navigation both layouts share", () => {
+  it("routes every row to its handler, from either layout", () => {
     const onOpenLog = vi.fn();
     const onOpenStatus = vi.fn();
     const onSelectTab = vi.fn();
-    const { container, getByRole } = render(
+    const { container } = render(
       withSettings(
-        <Masthead {...mastheadProps} onOpenLog={onOpenLog} onOpenStatus={onOpenStatus} onSelectTab={onSelectTab} />,
+        <Masthead
+          {...mastheadProps}
+          onOpenLog={onOpenLog}
+          onOpenStatus={onOpenStatus}
+          onSelectTab={onSelectTab}
+          previewVersionStatus
+        />,
       ),
     );
 
-    openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Status" }));
-    expect(onOpenStatus).toHaveBeenCalledTimes(1);
-
-    openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Logs" }));
-    expect(onOpenLog).toHaveBeenCalledTimes(1);
-
-    openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "What\u2019s new" }));
-    expect(onSelectTab).toHaveBeenCalledWith("whats-new");
-
-    openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Trim Beta" }));
-    expect(onSelectTab).toHaveBeenCalledWith("trim");
-
-    openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Docs" }));
-    expect(onSelectTab).toHaveBeenCalledWith("docs");
-
-    openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Bundles" }));
-    expect(onSelectTab).toHaveBeenCalledWith("bundle");
+    fireEvent.click(container.querySelector(".title-build-row .sub-status") as HTMLButtonElement);
+    for (const scope of Object.values(navs(container))) {
+      onSelectTab.mockClear();
+      if (scope.classList.contains("side-nav")) fireEvent.click(rowNamed(scope, "Status"));
+      fireEvent.click(rowNamed(scope, "Logs"));
+      fireEvent.click(rowNamed(scope, "What\u2019s new"));
+      expect(onSelectTab).toHaveBeenCalledWith("whats-new");
+      fireEvent.click(rowNamed(scope, "Trim"));
+      expect(onSelectTab).toHaveBeenCalledWith("trim");
+      fireEvent.click(rowNamed(scope, "Docs"));
+      expect(onSelectTab).toHaveBeenCalledWith("docs");
+      fireEvent.click(rowNamed(scope, "Bundles"));
+      expect(onSelectTab).toHaveBeenCalledWith("bundle");
+    }
+    expect(onOpenStatus).toHaveBeenCalledTimes(2);
+    expect(onOpenLog).toHaveBeenCalledTimes(2);
   });
 
   it("falls back to the Log dialog when no Storage handler is given", () => {
     const onOpenLog = vi.fn();
-    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onOpenLog={onOpenLog} />));
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenLog={onOpenLog} />));
 
-    openDesktopMore(container);
-    fireEvent.click(getByRole("menuitem", { name: "Storage" }));
+    fireEvent.click(rowNamed(navs(container).side, "Storage"));
 
     expect(onOpenLog).toHaveBeenCalledTimes(1);
   });
 
-  it("clears the pointer flag when the trigger loses focus", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const more = container.querySelector(".desktop-more .mode-more") as HTMLButtonElement;
-
-    fireEvent.pointerDown(more);
-    fireEvent.blur(more);
-    fireEvent.click(more);
-
-    // The blur dropped the "opened by pointer" flag, so this open behaves like a keyboard one.
-    expect(document.activeElement).toBe(container.querySelector('[role="menu"] [role="menuitem"]'));
-  });
-});
-
-describe("More menu on the phone layout", () => {
-  const mobileTrigger = (container: HTMLElement) =>
-    container.querySelector(".mobile-more .dock-action") as HTMLButtonElement;
-  const openMobileMore = (container: HTMLElement) => {
-    fireEvent.click(mobileTrigger(container));
-    return container.querySelector(".more-menu.shared-more-menu") as HTMLElement;
-  };
-
-  it("adds the settings, theme and accent rows the desktop rail already shows", () => {
+  it("keeps Settings, Storage and Logs in the nav rather than behind a glyph", () => {
     const onOpenSettings = vi.fn();
-    const onAccentChange = vi.fn();
-    const { container } = render(
-      withSettings(<Masthead {...mastheadProps} onAccentChange={onAccentChange} onOpenSettings={onOpenSettings} />),
-    );
-
-    const menu = openMobileMore(container);
-    expect(within(menu).getByRole("group", { name: "App" })).not.toBeNull();
-    expect(within(menu).getByRole("group", { name: "Tools" })).not.toBeNull();
-    expect(within(menu).getByRole("group", { name: "Project" })).not.toBeNull();
-    const labels = menuItems(menu).map((item) => item.textContent);
-    expect(labels[0]).toContain("Settings");
-    expect(labels.some((label) => label?.includes("Theme"))).toBe(true);
-    expect(labels.some((label) => label?.includes("Accent"))).toBe(true);
-
-    fireEvent.click(menuItems(menu)[0] as HTMLElement);
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
+    const { side } = navs(container);
+    // Each is a button, not a link: a dialog is not a URL.
+    for (const name of ["Status", "Storage", "Logs", "Settings"]) {
+      expect(rowNamed(side, name).tagName).toBe("BUTTON");
+    }
+    fireEvent.click(rowNamed(side, "Settings"));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
-
-  it("toggles the theme from its row and closes the menu", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const menu = openMobileMore(container);
-    const theme = menuItems(menu).find((item) => item.textContent?.includes("Theme")) as HTMLElement;
-
-    fireEvent.click(theme);
-
-    expect(mobileTrigger(container).getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("opens the accent tray and commits a choice", () => {
-    const onAccentChange = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onAccentChange={onAccentChange} />));
-    const menu = openMobileMore(container);
-    const accent = menuItems(menu).find((item) => item.textContent?.includes("Accent")) as HTMLElement;
-
-    fireEvent.click(accent);
-    const tray = container.querySelector(".more-accent-tray") as HTMLElement;
-    expect(tray).not.toBeNull();
-
-    const choice = tray.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1] as HTMLInputElement;
-    fireEvent.click(choice);
-
-    expect(onAccentChange).toHaveBeenCalledWith(choice.value);
-  });
 });
 
-describe("dismissing an open menu", () => {
-  it("closes on a pointer press outside the masthead", () => {
+describe("dismissing an open picker", () => {
+  const openAccent = (container: HTMLElement) => {
+    const tool = container.querySelector(".topbar-tools .accent-tool") as HTMLButtonElement;
+    fireEvent.click(tool);
+    return tool;
+  };
+
+  it("closes on a pointer press outside the tools cluster", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const { more } = openDesktopMore(container);
-    expect(more.getAttribute("aria-expanded")).toBe("true");
+    const tool = openAccent(container);
+    expect(tool.getAttribute("aria-expanded")).toBe("true");
 
     fireEvent.pointerDown(document.body);
 
-    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(tool.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("stays open for a press inside the menu's own anchor", () => {
+  it("stays open for a press inside the cluster itself", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const { menu, more } = openDesktopMore(container);
+    const tool = openAccent(container);
 
-    fireEvent.pointerDown(menu);
+    fireEvent.pointerDown(container.querySelector(".topbar-tools .accent-tray") as HTMLElement);
 
-    expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(tool.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("closes on a document-level Escape", () => {
+  it("closes on a document-level Escape and hands focus back", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const { more } = openDesktopMore(container);
+    const tool = openAccent(container);
 
     fireEvent.keyDown(document, { key: "Escape" });
 
-    expect(more.getAttribute("aria-expanded")).toBe("false");
-    expect(document.activeElement).toBe(more);
+    expect(tool.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(tool);
   });
 });
 
 describe("dock tabs", () => {
-  it("selects a tab on click and moves focus with the arrow keys", () => {
+  it("selects a tab on click", () => {
     const onSelectTab = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
-    const dock = container.querySelector(".dock-tabs") as HTMLElement;
+    const dock = container.querySelector(".dock") as HTMLElement;
 
     fireEvent.click(dock.querySelectorAll<HTMLAnchorElement>(".dock-tab")[1] as HTMLAnchorElement);
-    expect(onSelectTab).toHaveBeenCalledWith("creator");
 
-    fireEvent.keyDown(dock, { key: "ArrowRight" });
-    expect(onSelectTab).toHaveBeenLastCalledWith("creator");
-    expect(document.activeElement).toBe(dock.querySelector('.dock-tab[data-mode="creator"]'));
+    expect(onSelectTab).toHaveBeenCalledWith("creator");
   });
 
   it("leaves a modified click to the browser so the link opens normally", () => {
     const onSelectTab = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
-    const dock = container.querySelector(".dock-tabs") as HTMLElement;
+    const dock = container.querySelector(".dock") as HTMLElement;
 
     fireEvent.click(dock.querySelectorAll<HTMLAnchorElement>(".dock-tab")[1] as HTMLAnchorElement, { metaKey: true });
 
@@ -300,81 +177,12 @@ describe("dock tabs", () => {
   });
 });
 
-describe("the rail thumb without CSS anchor positioning", () => {
-  beforeEach(() => {
-    vi.stubGlobal("CSS", { supports: () => false });
-  });
-
-  it("measures the selected tab and follows a resize", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const thumb = container.querySelector(".mode-thumb") as HTMLElement;
-
-    expect(thumb.style.left).toBe("0px");
-    expect(thumb.style.width).toBe("0px");
-    expect(thumb.style.transition).toBe("none");
-
-    fireEvent(window, new Event("resize"));
-
-    expect(thumb.style.left).toBe("0px");
-  });
-});
-
 describe("external links", () => {
-  it("asks before leaving from the footer and opens the page once accepted", async () => {
+  it("confirms before leaving from either layout, and opens the page once accepted", async () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
     const confirmExternalNavigation = vi.fn(async () => true);
     const { container } = render(
-      withSettings(
-        <SiteFooter
-          confirmExternalNavigation={confirmExternalNavigation}
-          donateHref="https://example.com/donate"
-          githubHref="https://example.com/repo"
-        />,
-      ),
-    );
-
-    fireEvent.click(container.querySelectorAll<HTMLAnchorElement>(".footer-link")[0] as HTMLAnchorElement);
-    await vi.waitFor(() =>
-      expect(open).toHaveBeenCalledWith("https://example.com/repo", "_blank", "noopener,noreferrer"),
-    );
-
-    fireEvent.click(container.querySelector(".footer-support") as HTMLAnchorElement);
-    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/donate"));
-  });
-
-  it("does not open the page when the reader declines", async () => {
-    const open = vi.fn();
-    vi.stubGlobal("open", open);
-    const confirmExternalNavigation = vi.fn(async () => false);
-    const { container } = render(
-      withSettings(
-        <SiteFooter confirmExternalNavigation={confirmExternalNavigation} githubHref="https://example.com/repo" />,
-      ),
-    );
-
-    fireEvent.click(container.querySelector(".footer-link") as HTMLAnchorElement);
-    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledTimes(1));
-
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it("leaves the link alone when there is nothing to confirm", () => {
-    const open = vi.fn();
-    vi.stubGlobal("open", open);
-    const { container } = render(withSettings(<SiteFooter githubHref="https://example.com/repo" />));
-
-    const defaultAllowed = fireEvent.click(container.querySelector(".footer-link") as HTMLAnchorElement);
-
-    expect(defaultAllowed).toBe(true);
-    expect(open).not.toHaveBeenCalled();
-  });
-
-  it("confirms before leaving from the More menu on every layout", async () => {
-    const open = vi.fn();
-    vi.stubGlobal("open", open);
-    const confirmExternalNavigation = vi.fn(async () => true);
-    const { container, getByRole } = render(
       withSettings(
         <Masthead
           {...mastheadProps}
@@ -384,22 +192,61 @@ describe("external links", () => {
       ),
     );
 
-    // Desktop More.
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-    fireEvent.click(getByRole("menuitem", { name: "View source on GitHub" }));
-    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/repo"));
-    fireEvent.click(container.querySelector(".desktop-more .mode-more") as HTMLButtonElement);
-    fireEvent.click(getByRole("menuitem", { name: "Support" }));
-    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/donate"));
+    for (const scope of Object.values(navs(container))) {
+      confirmExternalNavigation.mockClear();
+      fireEvent.click(rowNamed(scope, "GitHub"));
+      await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/repo"));
+      fireEvent.click(rowNamed(scope, "Support"));
+      await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/donate"));
+    }
+    await vi.waitFor(() =>
+      expect(open).toHaveBeenCalledWith("https://example.com/donate", "_blank", "noopener,noreferrer"),
+    );
+  });
 
-    // Phone More.
-    confirmExternalNavigation.mockClear();
-    fireEvent.click(container.querySelector(".dock .mobile-more button") as HTMLButtonElement);
-    fireEvent.click(getByRole("menuitem", { name: "View source on GitHub" }));
+  it("confirms before leaving from the top bar tiles too", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    const confirmExternalNavigation = vi.fn(async () => true);
+    const { container } = render(
+      withSettings(
+        <Masthead
+          {...mastheadProps}
+          confirmExternalNavigation={confirmExternalNavigation}
+          donateHref="https://example.com/donate"
+        />,
+      ),
+    );
+    const tiles = within(container.querySelector(".topbar-tools") as HTMLElement);
+
+    fireEvent.click(tiles.getByRole("link", { name: "View source on GitHub" }));
+
     await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/repo"));
-    fireEvent.click(container.querySelector(".dock .mobile-more button") as HTMLButtonElement);
-    fireEvent.click(getByRole("menuitem", { name: "Support" }));
-    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledWith("https://example.com/donate"));
+  });
+
+  it("does not open the page when the reader declines", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    const confirmExternalNavigation = vi.fn(async () => false);
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} confirmExternalNavigation={confirmExternalNavigation} />),
+    );
+
+    fireEvent.click(rowNamed(navs(container).side, "GitHub"));
+    await vi.waitFor(() => expect(confirmExternalNavigation).toHaveBeenCalledTimes(1));
+
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("leaves the link alone when there is nothing to confirm", () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+
+    const defaultAllowed = fireEvent.click(rowNamed(navs(container).side, "GitHub"));
+
+    expect(defaultAllowed).toBe(true);
+    expect(open).not.toHaveBeenCalled();
   });
 });
 
@@ -573,16 +420,15 @@ describe("the pull request build tag", () => {
   });
 });
 
-describe("the desktop theme control", () => {
-  it("flips the label it offers when the theme is toggled", () => {
+describe("the theme control", () => {
+  it("names the choice that is on, and changes it when another is picked", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    const themeTool = Array.from(container.querySelectorAll<HTMLButtonElement>(".masthead-tools .tool")).find((tool) =>
-      /theme|dark|light/i.test(tool.getAttribute("aria-label") ?? ""),
-    ) as HTMLButtonElement;
-    const before = themeTool.getAttribute("aria-label");
+    const themeTool = container.querySelector('.topbar-tools .tool[aria-label^="Theme"]') as HTMLButtonElement;
+    expect(themeTool.getAttribute("aria-label")).toBe("Theme: Match system");
 
     fireEvent.click(themeTool);
+    fireEvent.click(container.querySelectorAll('.topbar-tools [role="menuitemradio"]')[1] as HTMLButtonElement);
 
-    expect(themeTool.getAttribute("aria-label")).not.toBe(before);
+    expect(themeTool.getAttribute("aria-label")).toBe("Theme: Dark");
   });
 });

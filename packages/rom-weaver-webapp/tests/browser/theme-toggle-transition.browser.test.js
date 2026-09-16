@@ -6,13 +6,15 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
+import { applyAccent } from "../../src/webapp/accent.ts";
 import { Masthead } from "../../src/webapp/components/shell.tsx";
 
 const noop = () => undefined;
 const PAGE_TABS = [
-  { href: "/apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
-  { href: "/create-patch", icon: null, id: "creator", label: "Create Patch" },
+  { group: "patches", href: "/apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
+  { group: "patches", href: "/create-patch", icon: null, id: "creator", label: "Create Patch" },
 ];
+const THEME_CHOICE = { auto: 2, dark: 1, light: 0 };
 
 let host;
 let root;
@@ -75,30 +77,42 @@ const renderMasthead = async () => {
         onOpenLog: noop,
         onOpenSettings: noop,
         onOpenStatus: noop,
+        onAccentChange: applyAccent,
         onSelectTab: noop,
         tabs: PAGE_TABS,
       }),
     ),
   );
-  const find = () =>
-    [...host.querySelectorAll("button.tool")].find((button) =>
-      /theme|light|dark/i.test(button.getAttribute("aria-label") ?? ""),
-    );
+  const find = () => host.querySelector('.topbar-tools .tool[aria-label^="Theme"]');
   let toggle = find();
   for (let attempt = 0; !toggle && attempt < 50; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 20));
     toggle = find();
   }
-  if (!toggle) throw new Error("theme toggle never rendered");
+  if (!toggle) throw new Error("theme control never rendered");
   return toggle;
+};
+
+/* The wipe starts at the chosen row in the theme menu. */
+const pickTheme = async (toggle, value) => {
+  toggle.click();
+  const anchor = toggle.closest(".tool-anchor");
+  const rows = () => [...anchor.querySelectorAll('[role="menuitemradio"]')];
+  for (let attempt = 0; rows().length === 0 && attempt < 50; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  const choice = rows()[THEME_CHOICE[value]];
+  const rect = choice.getBoundingClientRect();
+  choice.click();
+  return rect;
 };
 
 const clickThemeToggle = async () => {
   const toggle = await renderMasthead();
   // The store owns the current theme; read it rather than assuming a direction.
   const before = document.documentElement.getAttribute("data-theme");
-  toggle.click();
-  return { before, toggle };
+  const rect = await pickTheme(toggle, before === "dark" ? "light" : "dark");
+  return { before, rect, toggle };
 };
 
 describe("theme toggle view-transition gate", () => {
@@ -122,15 +136,35 @@ describe("theme toggle view-transition gate", () => {
     expect(document.documentElement.getAttribute("data-theme")).not.toBe(before);
   });
 
-  test("feeds the wipe its origin from the button", async () => {
+  test("feeds the wipe its origin from the clicked choice", async () => {
     pretendIosWebKit();
-    const { toggle } = await clickThemeToggle();
+    const { rect } = await clickThemeToggle();
 
-    const rect = toggle.getBoundingClientRect();
     const root_ = document.documentElement;
     expect(root_.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
     expect(root_.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
     expect(Number.parseFloat(root_.style.getPropertyValue("--wipe-r"))).toBeGreaterThan(0);
+  });
+
+  test("sweeps an accent change from the chosen swatch", async () => {
+    pretendIosWebKit();
+    await renderMasthead();
+    const toggle = host.querySelector(".topbar-tools .accent-tool");
+    toggle.click();
+    const findChoice = () => host.querySelector('.topbar-tools .accent-chip:has(input[value="woad"])');
+    let choice = findChoice();
+    for (let attempt = 0; !choice && attempt < 50; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      choice = findChoice();
+    }
+    if (!choice) throw new Error("accent choice never rendered");
+    const rect = choice.getBoundingClientRect();
+    choice.querySelector("input").click();
+
+    expect(startCalls).toHaveLength(1);
+    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
+    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
+    expect(document.documentElement.getAttribute("data-accent")).toBe("woad");
   });
 
   test("keeps vt-theme held when a second toggle overlaps the first", async () => {
@@ -138,8 +172,8 @@ describe("theme toggle view-transition gate", () => {
     const settlers = stubDeferredViewTransitions();
     const toggle = await renderMasthead();
 
-    toggle.click();
-    toggle.click();
+    await pickTheme(toggle, "light");
+    await pickTheme(toggle, "dark");
     expect(startCalls).toHaveLength(2);
 
     // The first run settles while the second is still animating; its release

@@ -67,7 +67,7 @@ describe("DocsPage", () => {
 
     rerender(<DocsPage active={false} slug="docs" />);
     setSeoMetadata(
-      "rom-weaver — Create ROM patches online",
+      "rom-weaver: Create ROM patches online",
       "Create ROM patches locally in your browser.",
       "https://rom-weaver.com/create-patch",
     );
