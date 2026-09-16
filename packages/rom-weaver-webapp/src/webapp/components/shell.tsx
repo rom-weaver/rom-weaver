@@ -110,15 +110,20 @@ type NavEntry = {
 type NavSectionData = { entries: NavEntry[]; id: string; title: string };
 
 /** Reveal appearance changes from the choice that caused them. */
-const runAppearanceWipe = (update: () => void, source: HTMLElement | null, kind: "theme" | "accent") => {
+const runAppearanceWipe = (
+  update: () => void,
+  source: HTMLElement | null,
+  kind: "theme" | "accent",
+  pointer?: { x: number; y: number },
+) => {
   const root = document.documentElement;
   if (viewTransitionsUnsupported()) {
     update();
     return;
   }
   const rect = source?.getBoundingClientRect();
-  const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-  const cy = rect ? rect.top + rect.height / 2 : 0;
+  const cx = pointer?.x ?? (rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
+  const cy = pointer?.y ?? (rect ? rect.top + rect.height / 2 : 0);
   const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
   root.style.setProperty("--wipe-x", `${cx}px`);
   root.style.setProperty("--wipe-y", `${cy}px`);
@@ -498,7 +503,12 @@ const ThemeTile = ({
               className="tool-pop-item"
               key={choice.value}
               onClick={(event) => {
-                runAppearanceWipe(() => setPreference(choice.value), event.currentTarget, "theme");
+                runAppearanceWipe(
+                  () => setPreference(choice.value),
+                  event.currentTarget,
+                  "theme",
+                  event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined,
+                );
                 onToggle(buttonRef.current);
               }}
               role="menuitemradio"

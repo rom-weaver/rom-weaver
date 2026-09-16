@@ -726,13 +726,16 @@
   navigation: auto;
 }
 /* JS supplies the clicked choice as the origin for both appearance sweeps. */
+:root:is(.vt-theme, .vt-accent)::view-transition-group(root) {
+  animation-duration: 0.24s;
+}
 :root:is(.vt-theme, .vt-accent)::view-transition-old(root) {
   mix-blend-mode: normal;
   animation: none;
 }
 :root:is(.vt-theme, .vt-accent)::view-transition-new(root) {
   mix-blend-mode: normal;
-  animation: theme-wipe 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: theme-wipe 0.24s cubic-bezier(0, 0, 0.2, 1) both;
 }
 @keyframes theme-wipe {
   from {
