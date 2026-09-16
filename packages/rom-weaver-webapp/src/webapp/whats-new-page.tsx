@@ -15,6 +15,7 @@ const WhatsNewPage = ({ active, onReload, updateReady = false }: WhatsNewPagePro
   const localizer = useUiLocalizer();
   return (
     <div className="status-panel whats-new-page">
+      <h1 className="whats-new-title">{localizer.message("ui.update.whatsNew")}</h1>
       <ChangelogPanel active={active} localizer={localizer} onReload={onReload} updateReady={updateReady} />
     </div>
   );

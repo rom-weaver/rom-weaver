@@ -1403,7 +1403,7 @@ const Masthead = ({
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
   // Docs and the landing page bring their own h1, so the brand steps down to a
   // span there rather than giving the document two.
-  const BrandHeading = currentTab === "docs" || currentTab === "home" ? "span" : "h1";
+  const BrandHeading = currentTab === "docs" || currentTab === "home" || currentTab === "whats-new" ? "span" : "h1";
   const buildTag = version ? (
     <BuildTag
       channelBadge={channelBadge}

@@ -453,3 +453,11 @@
     mask-position: var(--drift, 0 20px);
   }
 }
+
+.rw-app .whats-new-title {
+  margin: 0 0 var(--sp-m);
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--ink);
+}
