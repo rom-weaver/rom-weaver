@@ -1322,7 +1322,11 @@
   .rw-app .shell-head {
     flex: none;
     gap: var(--sp-s);
-    padding-block: var(--sp-m) 2px;
+    padding-block: var(--sp-m);
+  }
+  .rw-app .side-rail .nav-row {
+    min-block-size: 32px;
+    padding-block: 6px;
   }
   .rw-app .app > :not(.side-col) {
     grid-column: 2;
