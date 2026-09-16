@@ -9,7 +9,7 @@ const generatedAssets = new URL("../../../dist/generated-assets/", import.meta.u
 
 test("the masthead reuses the source SVG shapes", () => {
   const component = fs.readFileSync(new URL("../src/webapp/components/brand-mark.tsx", import.meta.url), "utf8");
-  assert.ok(component.includes("/logo.svg#brand-${name}"));
+  assert.ok(component.includes("../../assets/app/root/logo.svg?raw"));
   for (const name of ["cartridge", "r", "w"]) assert.ok(logo.includes(`id="brand-${name}"`));
 });
 
