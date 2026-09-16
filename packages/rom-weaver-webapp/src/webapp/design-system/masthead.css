@@ -108,32 +108,29 @@
   grid-column: 2;
   min-inline-size: 0;
 }
-.rw-app .title-build-row .build-tag {
-  min-inline-size: 48px;
+.rw-app .title-build-row {
+  container-type: inline-size;
 }
-.rw-app .title-build-row .build-tag .sub-chip {
-  display: block;
-  max-inline-size: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rw-app .title-build-row .build-tag {
+  flex: none;
 }
 .rw-app .title-build-row .sub-status-text {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--ink-3);
 }
 .rw-app .title-build-row .build-runtime {
   display: inline-flex;
-  flex-shrink: 0;
-  min-inline-size: 0;
-  max-inline-size: calc(100% - 53px);
   margin-inline-start: 5px;
 }
 .rw-app .title-build-row .sub-status {
-  min-inline-size: 0;
-  max-inline-size: 100%;
   font-size: 0.68rem;
+}
+@container (max-width: 220px) {
+  .rw-app .title-build-row .sub-status-text,
+  .rw-app .title-build-row .sub-status-percent,
+  .rw-app .title-build-row .tag-pr,
+  .rw-app .title-build-row .tag-extra > .tag-separator {
+    display: none;
+  }
 }
 .rw-app .sub-link {
   position: relative;
@@ -575,6 +572,11 @@
 }
 .rw-app .phone-project-tools {
   display: contents;
+}
+.rw-app .shell-head-tools > .tool-separator {
+  align-self: center;
+  block-size: 24px;
+  background: var(--seam-strong);
 }
 /* Appearance, then the project links: the same pair and the same order in both
    layouts, so one teaches the other. */
@@ -1382,20 +1384,32 @@
     .rw-app .shell-head-tools {
       gap: 0;
     }
-    .rw-app .shell-head-tools > .tool-separator {
-      display: none;
-    }
     .rw-app .brand-word {
       font-size: 1.06rem;
     }
-    .rw-app .tool-separator {
-      margin-inline: 3px;
+    .rw-app .shell-head-tools > .tool-separator {
+      margin-inline: 2px;
     }
   }
   @media (max-width: 599px) {
-    .rw-app .phone-project-tools,
-    .rw-app .shell-head-tools > .tool-separator {
-      display: none;
+    .rw-app .shell-head-tools {
+      gap: 0;
+    }
+    .rw-app .shell-head-tools .tool {
+      width: 32px;
+      height: 44px;
+    }
+  }
+  @media (max-width: 389px) {
+    .rw-app .brand {
+      grid-template-columns: 28px minmax(0, 1fr);
+      column-gap: 4px;
+    }
+    .rw-app .brand-mark {
+      width: 28px;
+    }
+    .rw-app .shell-head-tools .tool {
+      width: 28px;
     }
   }
   /* The trailing pair would paint its tooltip past the window edge and give

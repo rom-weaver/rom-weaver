@@ -1017,7 +1017,7 @@ const BuildTag = ({
           rel="noreferrer"
           target="_blank"
         >
-          {`PR-#${prNumber}`}
+          <span className="tag-pr">{`PR-#${prNumber}`}</span>
           <span className="tag-extra">
             <span aria-hidden="true" className="tag-separator">
               {" / "}
