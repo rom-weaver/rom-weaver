@@ -296,6 +296,9 @@
 .rw-app .sub-status[data-sw="update"] {
   color: var(--care-text);
 }
+.rw-app .sub-status[data-sw="update"] svg {
+  animation: update-nudge 2.4s ease-in-out infinite;
+}
 .rw-app .sub-status[data-sw="installing"] {
   color: var(--ink-3);
 }
@@ -311,7 +314,7 @@
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sub-status svg {
+  .rw-app .sub-status[data-sw] svg {
     animation: none;
   }
 }
@@ -416,14 +419,9 @@
 .rw-app .nav-support svg {
   color: var(--thread-text);
 }
-.rw-app .nav-support svg {
-  transform-origin: center;
-  animation: heartbeat 6s var(--ease) infinite 2s;
-}
 @media (hover: hover) {
   .rw-app .nav-support:hover svg {
     fill: currentcolor;
-    animation: heartbeat-fast 0.9s ease-in-out infinite;
   }
 }
 .rw-app .nav-support:active svg {
@@ -431,13 +429,6 @@
 }
 .rw-app .nav-support:focus-visible svg {
   fill: currentcolor;
-  animation: heartbeat-fast 0.9s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .nav-support svg,
-  .rw-app .nav-support:focus-visible svg {
-    animation: none;
-  }
 }
 
 /* The banner is the whole chrome: identity, navigation and the top bar. It
@@ -615,14 +606,9 @@
 .rw-app .tool-support svg {
   color: var(--thread-text);
 }
-.rw-app .tool-support svg {
-  transform-origin: center;
-  animation: heartbeat 6s var(--ease) infinite 2s;
-}
 @media (hover: hover) {
   .rw-app .tool-support:hover svg {
     fill: currentcolor;
-    animation: heartbeat-fast 0.9s ease-in-out infinite;
   }
 }
 .rw-app .tool-support:active svg {
@@ -630,13 +616,6 @@
 }
 .rw-app .tool-support:focus-visible svg {
   fill: currentcolor;
-  animation: heartbeat-fast 0.9s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .tool-support svg,
-  .rw-app .tool-support:focus-visible svg {
-    animation: none;
-  }
 }
 
 /* real tooltips - localizable text, not title="" */
