@@ -294,27 +294,21 @@
 .rw-app .reset-btn:active {
   color: var(--fault);
 }
-@media (hover: hover) {
-  .rw-app .panel-settings-btn:hover {
-    color: var(--thread-ink);
-  }
-}
-.rw-app .panel-settings-btn:active {
-  color: var(--thread-ink);
-}
+.rw-app .panel-settings-btn,
 .rw-app .panel-threads-btn {
   text-decoration: underline dotted;
   text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
   text-underline-offset: 2px;
+  transition: text-decoration-color 0.18s;
 }
 @media (hover: hover) {
+  .rw-app .panel-settings-btn:hover,
   .rw-app .panel-threads-btn:hover {
-    color: var(--thread-ink);
     text-decoration-color: currentColor;
   }
 }
+.rw-app .panel-settings-btn:active,
 .rw-app .panel-threads-btn:active {
-  color: var(--thread-ink);
   text-decoration-color: currentColor;
 }
 @media (max-width: 359px) {
