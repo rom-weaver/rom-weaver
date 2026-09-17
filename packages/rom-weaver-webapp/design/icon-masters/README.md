@@ -14,13 +14,13 @@ Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. T
 
 The cartridge occupies 48 × 56 units, with an accent-colored W, a recessed top edge, and three centered contact cuts at the bottom. The standalone SVG and ICO master use a tight `8 4 48 56` viewBox. They fill the available height without stretching or clipping the cartridge. The inline webapp mark keeps its 64 × 64 viewBox. The top-right corner uses the cartridge color. The paths contain no fonts, strokes, masks, or clip paths.
 
-The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon uses a cream cartridge on a transparent background, with no surrounding tile.
+The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon uses a cream cartridge on an opaque charcoal tile.
 
 | Master | Output | Scale | Offset (x and y) | Background |
 | --- | --- | --- | --- | --- |
 | icon-maskable.svg | icon-maskable-{192,512}.png | 0.72 | 8.96 | `#31343a` |
 | apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.80 | 6.4 | `#31343a` |
-| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | Fit cropped viewBox | Centered | Transparent |
+| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | Fit cropped viewBox | Centered | `#20282d` tile |
 
 For launcher icons, `offset = 32 * (1 - scale)`. The maskable master keeps the mark inside the central 80%-diameter safe circle.
 
