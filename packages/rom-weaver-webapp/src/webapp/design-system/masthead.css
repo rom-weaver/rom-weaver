@@ -370,6 +370,7 @@
 /* Wraps rather than truncating: the rail is a fixed width and a locale with
    longer words must still be able to show the whole name. */
 .rw-app .nav-row-label {
+  flex: 1 1 auto;
   min-inline-size: 0;
   overflow-wrap: anywhere;
 }

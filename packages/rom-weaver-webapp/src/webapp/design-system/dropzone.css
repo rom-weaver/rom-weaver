@@ -825,7 +825,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   }
   .rw-app .step.is-input.is-empty.simple-hero .drop.hero {
     gap: 16px;
-    min-height: 0;
+    min-height: max(300px, calc(100vh - var(--hero-chrome)));
     padding: 16px;
   }
   .rw-app .simple-hero .hero-lead .lead-description {
