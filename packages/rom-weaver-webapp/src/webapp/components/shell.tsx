@@ -23,14 +23,13 @@ import {
 import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
-import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
+import { runAppearanceTransition } from "../appearance-transition.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import type { ThemePreference } from "../theme.ts";
 import { useTheme } from "../theme.ts";
@@ -109,57 +108,6 @@ type NavEntry = {
   title?: string;
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string };
-
-const APPEARANCE_TRANSITION_DURATION_MS = 340;
-
-/** Theme changes reveal from the choice; accent changes dissolve in place. */
-const runAppearanceTransition = (
-  update: () => void,
-  kind: "theme" | "accent",
-  source: HTMLElement | null = null,
-  pointer?: { x: number; y: number },
-) => {
-  const root = document.documentElement;
-  if (viewTransitionsUnsupported()) {
-    update();
-    return;
-  }
-  const rect = source?.getBoundingClientRect();
-  const cx = pointer?.x ?? (rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
-  const cy = pointer?.y ?? (rect ? rect.top + rect.height / 2 : 0);
-  const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-  const release = holdTransitionClasses([`vt-${kind}`]);
-  const transition = document.startViewTransition(() => flushSync(update));
-  let animation: Animation | undefined;
-  transition.ready.then(
-    () => {
-      if (typeof root.animate !== "function") return;
-      const origin = `${cx}px ${cy}px`;
-      try {
-        animation = root.animate(
-          kind === "theme"
-            ? [{ clipPath: `circle(0px at ${origin})` }, { clipPath: `circle(${radius}px at ${origin})` }]
-            : [{ opacity: 0 }, { opacity: 1 }],
-          {
-            duration: APPEARANCE_TRANSITION_DURATION_MS,
-            easing: kind === "theme" ? "linear" : "ease-out",
-            fill: "both",
-            pseudoElement: "::view-transition-new(root)",
-          },
-        );
-        animation.finished.catch(() => undefined);
-      } catch {
-        // A browser may expose view transitions but reject pseudo-element WAAPI.
-      }
-    },
-    () => undefined,
-  );
-  const finish = () => {
-    animation?.cancel();
-    release();
-  };
-  transition.finished.then(finish, finish);
-};
 
 /** One motion gate for every programmatic scroll and animation in the chrome. */
 const prefersReducedMotion = () =>
