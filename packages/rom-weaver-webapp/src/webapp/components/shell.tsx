@@ -874,7 +874,7 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
       strokeWidth={2.4}
       viewBox="0 0 24 24"
     >
-      <circle cx="12" cy="12" opacity="0.25" r={PROGRESS_RING_RADIUS} />
+      <circle cx="12" cy="12" opacity="0.5" r={PROGRESS_RING_RADIUS} />
       <circle
         cx="12"
         cy="12"

@@ -748,7 +748,7 @@
 .rw-app .accent-tool-dot {
   position: absolute;
   inset-block-start: auto;
-  inset-block-end: calc(50% - 12px);
+  inset-block-end: calc(50% - 13px);
   inset-inline-start: 7px;
   inset-inline-end: auto;
   width: 8px;
