@@ -281,7 +281,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     : storedBundlePackage;
   const defaultBundleContents = storedBundleContents === "rom" ? "rom" : "patches";
   const defaultBundleFormat = resolveBundleArchiveFormat(
-    getDefaultCompressionArchive(getDefaultCompressionMode(traceSettings.defaultCompression)),
+    getDefaultCompressionArchive(getDefaultCompressionMode(traceSettings)),
   );
   const emitApplyFormInputTrace = useCallback(
     (message: string, details?: Record<string, unknown>) => {

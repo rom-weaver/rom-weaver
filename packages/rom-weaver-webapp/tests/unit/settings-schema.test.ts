@@ -14,6 +14,7 @@ import {
   serializeSettingsForStorage,
   validateSettingsDraft,
 } from "../../src/webapp/settings/settings-schema.ts";
+import { getDefaultCompressionMode } from "../../src/public/react/settings-context.tsx";
 
 // A complete draft built from the real defaults so each invalid-branch test can mutate a
 // single field in isolation; the unmodified draft must validate with zero messages.
@@ -91,6 +92,13 @@ describe("getDefaultSettings", () => {
     expect(a).not.toBe(b);
     a.fixChecksum = true;
     expect(b.fixChecksum).toBe(false);
+  });
+});
+
+describe("getDefaultCompressionMode", () => {
+  it("reads the mode from the settings object", () => {
+    expect(getDefaultCompressionMode({ defaultCompression: "7z only" })).toBe("7z only");
+    expect(getDefaultCompressionMode("7z only")).toBe("auto");
   });
 });
 
