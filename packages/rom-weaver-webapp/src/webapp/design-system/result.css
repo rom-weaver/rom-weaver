@@ -48,7 +48,6 @@
   flex: 0 1 auto;
   overflow-wrap: anywhere;
 }
-/* Full opacity preserves 4.5:1 contrast on the orange button. */
 .rw-app .download-btn .dl-delta {
   min-width: 0;
   font-size: 0.88rem;
@@ -69,6 +68,7 @@
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0.01em;
+  opacity: 1;
 }
 .rw-app .download-btn .dl-size::before {
   margin-inline-end: 9px;
