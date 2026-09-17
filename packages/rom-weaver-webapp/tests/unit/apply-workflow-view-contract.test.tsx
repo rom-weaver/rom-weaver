@@ -134,11 +134,10 @@ const patchItem = (fileName: string): PatchStackItemState =>
     validationValues: [],
   }) as unknown as PatchStackItemState;
 
-// The only production caller (apply-patch-form) always supplies the 0x04
-// cheats step, so the harness supplies a stand-in to keep the step numbering
-// the same as the real bench.
+// The only production caller (apply-patch-form) supplies the cheat card inside
+// the ROM step, so the harness supplies a stand-in for that card.
 const cheatsStep = (
-  <StepSection num="0x04" title="Cheats">
+  <StepSection num="0x02" title="Cheats">
     <p>cheats</p>
   </StepSection>
 );
@@ -305,7 +304,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero")).toBeNull();
     expect(container.querySelector(".ghost-steps")).toBeNull();
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
-    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04", "0x05"]);
+    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",
     );

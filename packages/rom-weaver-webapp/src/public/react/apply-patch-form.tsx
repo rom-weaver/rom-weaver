@@ -258,7 +258,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
-  // Mirrors the cheat step's On switches so the header controls in 0x03 and 0x05 can refuse a strip.
+  // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
@@ -1736,6 +1736,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [getCheatSource, workflowHandle],
   );
 
+  useEffect(() => {
+    if (cheatUiState.romInputs.length === 1) return;
+    // The ROM-scoped card unmounts while several ROMs are staged. Clear the
+    // controller state as well, so a later single-ROM run cannot reuse its
+    // previous ROM's offsets.
+    handleCheatSelection([]);
+  }, [cheatUiState.romInputs.length, handleCheatSelection]);
+
   // "Share this setup" (secondary job after the output card): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
   const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
@@ -1842,18 +1850,16 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     <>
       <ApplyWorkflowFormView
         mode={mode}
-        cheats={({ headerStripConflict, onNeedsRom, woven }) => (
+        cheats={({ headerStripConflict }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
-            onNeedsRom={onNeedsRom}
             onSaveAsPatch={saveCheatsAsPatch}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
             rom={cheatRom}
             title={localizer.message("ui.step.cheats")}
             validationMessage={cheatConflictMessage || headerStripConflict}
-            woven={woven}
           />
         )}
         cheatsOn={cheatsOn}

@@ -1835,10 +1835,10 @@ function ApplyWorkflowFormView({
   startup = { message: "", status: "ready" },
 }: {
   /**
-   * The 0x04 cheats step; receives the same finished-stage accent as the ROM and
-   * patch steps, plus the header-strip guard the header controls derive.
+   * The optional cheat patch card attached to the ROM step. It receives the
+   * header-strip guard the patch controls derive.
    */
-  cheats?: (state: { headerStripConflict: string; onNeedsRom: () => void; woven: boolean }) => ReactNode;
+  cheats?: (state: { headerStripConflict: string }) => ReactNode;
   /** At least one cheat card's switch is On. */
   cheatsOn?: boolean;
   controllers: {
@@ -1929,8 +1929,8 @@ function ApplyWorkflowFormView({
     ) ||
     null;
   // The per-patch header state in 0x03 decides the cheat guard; neither the
-  // Cheats step nor the header select keeps a copy of it. The output header in
-  // 0x05 is applied after the cheats bake, so it never moves a write.
+  // cheat card nor the header select keeps a copy of it. The output header in
+  // 0x04 is applied after the cheats bake, so it never moves a write.
   // The request sends a decided auto resolution as an explicit mode, so the
   // guard reads the same value the controller will send.
   const cheatHeaderStripConflict = getCheatHeaderStripConflict({
@@ -2225,13 +2225,12 @@ function ApplyWorkflowFormView({
           steps={[
             { num: "0x02", title: localizer.message("ui.step.rom") },
             { num: "0x03", title: localizer.message("ui.step.patches") },
-            { num: "0x04", title: localizer.message("ui.step.cheats") },
             ...(bundlePage
               ? [
-                  { num: "0x05", title: localizer.message("ui.bundleExport.shareTitle") },
-                  { num: "0x06", title: localizer.message("ui.step.apply") },
+                  { num: "0x04", title: localizer.message("ui.bundleExport.shareTitle") },
+                  { num: "0x05", title: localizer.message("ui.step.apply") },
                 ]
-              : [{ num: "0x05", title: localizer.message("ui.step.apply") }]),
+              : [{ num: "0x04", title: localizer.message("ui.step.apply") }]),
           ]}
         />
       ) : (
@@ -2283,6 +2282,13 @@ function ApplyWorkflowFormView({
                 : renderRomInputRow(group.row, group.index, romRowDeps),
             )}
             listId="rom-weaver-list-input-stack"
+            afterItems={
+              romInputs.length === 1
+                ? cheats?.({
+                    headerStripConflict: cheatHeaderStripConflict,
+                  })
+                : null
+            }
             notice={
               <>
                 {baseConflict ? (
@@ -2333,12 +2339,6 @@ function ApplyWorkflowFormView({
             }
             woven={wovenSteps}
           />
-
-          {cheats?.({
-            headerStripConflict: cheatHeaderStripConflict,
-            onNeedsRom: openUnifiedPicker,
-            woven: wovenSteps,
-          })}
 
           {bundlePage ? bundleSecondaryJob : null}
 
@@ -2404,7 +2404,7 @@ function ApplyWorkflowFormView({
                 state={uiState.outputNotice}
               />
             }
-            num={bundlePage ? "0x06" : "0x05"}
+            num={bundlePage ? "0x05" : "0x04"}
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
             secondary={bundlePage ? undefined : bundleSecondaryJob}

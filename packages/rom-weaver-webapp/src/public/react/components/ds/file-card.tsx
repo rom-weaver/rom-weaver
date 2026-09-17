@@ -101,6 +101,7 @@ const FileCard = ({
   children?: ReactNode;
 }) => {
   const localizer = useUiLocalizer();
+  const hasActions = Boolean(handle || menu || onRemove);
   const actions = (
     <div className="card-actions">
       <div className="card-btns">
@@ -144,7 +145,7 @@ const FileCard = ({
           {/* Patch cards float the actions on the right and let the name wrap
               under them - the float must precede the text it wraps, so the
               actions render first there. */}
-          {patch ? actions : null}
+          {patch && hasActions ? actions : null}
           <div className="card-name">
             {typeof index === "number" ? <span className="sr-only">{index}</span> : null}
             {name}

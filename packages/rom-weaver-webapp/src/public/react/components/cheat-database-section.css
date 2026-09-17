@@ -1,6 +1,87 @@
 @layer style, foundation, drawers, controls, readouts, docs, overrides;
 
 @layer controls {
+  /* The database is an optional patch card attached to the ROM step, so its
+     header follows the same float-and-wrap contract as patch cards. */
+  .rw-app .cheat-card-row > .cheat-database-card > .card-top {
+    display: flow-root;
+  }
+
+  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-name {
+    display: block;
+    min-width: 0;
+  }
+
+  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-name > .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    margin-block-start: var(--sp-xs);
+  }
+
+  .rw-app .cheat-card-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-s);
+    min-width: 0;
+  }
+
+  .rw-app .cheat-card-body > .workflow-file-list {
+    margin-block: var(--sp-xs);
+  }
+
+  .rw-app .cheat-database-picker {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-s);
+    min-width: 0;
+    padding: var(--sp-s);
+    border: 1px solid var(--seam-soft);
+  }
+
+  .rw-app .cheat-database-options {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--seam);
+    border-radius: var(--r-m);
+  }
+
+  .rw-app .cheat-database-option {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-s);
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 0.65rem 0.75rem;
+    text-align: start;
+    background: var(--plate-2);
+  }
+
+  .rw-app .cheat-database-option > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .rw-app .cheat-database-option .rb {
+    white-space: normal;
+  }
+
+  .rw-app .cheat-database-option + .cheat-database-option {
+    border-block-start: 1px solid var(--seam-soft);
+  }
+
+  .rw-app .cheat-database-option:active {
+    filter: brightness(0.9);
+  }
+
+  @media (hover: hover) {
+    .rw-app .cheat-database-option:hover {
+      filter: brightness(1.08);
+    }
+  }
+
   /* Float the cheat card actions so long descriptions wrap beneath them - the
      same treatment the patch stack gets, restated because those rules are
      scoped to #rom-weaver-list-patch-stack. */
@@ -63,7 +144,18 @@
   }
 
   .rw-app .cheat-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-s);
+    align-items: center;
+    justify-content: center;
     width: 100%;
+  }
+
+  .rw-app .cheat-add > span {
+    min-width: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
   }
 
   .rw-app .cheat-add svg {
@@ -234,6 +326,12 @@
   .rw-app .manual-cheat form,
   .rw-app .manual-cheat form > label,
   .rw-app .manual-cheat-options > label {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .rw-app .cheat-game-picker > label {
     display: grid;
     gap: 0.35rem;
     min-width: 0;

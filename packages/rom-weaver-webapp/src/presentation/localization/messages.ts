@@ -778,7 +778,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.validationMismatchOverride": msg({
     id: "ui.patch.validationMismatchOverride",
-    message: "Choose the ROM that this patch was made for, or use the override in 0x05.",
+    message: "Choose the ROM that this patch was made for, or use the override in 0x04.",
   }),
   "ui.patch.version": msg({ id: "ui.patch.version", message: "Version" }),
   "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "Available actions" }),
