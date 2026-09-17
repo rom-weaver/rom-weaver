@@ -597,6 +597,14 @@
   width: 17px;
   height: 17px;
 }
+.rw-app .topbar-tools .tool svg {
+  width: 20px;
+  height: 20px;
+}
+.rw-app .sw-progress-ring-text {
+  fill: currentColor;
+  stroke: none;
+}
 .rw-app .tool[aria-expanded="true"] {
   color: var(--ink);
   background: var(--well);
@@ -869,8 +877,7 @@
   display: none;
 }
 .rw-app .header-runtime .sub-status-percent {
-  font-size: 9px;
-  line-height: 1;
+  display: none;
 }
 .rw-app .header-runtime .sub-status {
   flex-direction: column;

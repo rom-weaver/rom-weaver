@@ -901,6 +901,18 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
         strokeDashoffset={PROGRESS_RING_CIRCUMFERENCE / 4}
         strokeLinecap="round"
       />
+      <text
+        className="sw-progress-ring-text"
+        dominantBaseline="central"
+        fontFamily="inherit"
+        fontSize="8.5"
+        fontWeight="800"
+        textAnchor="middle"
+        x="12"
+        y="12"
+      >
+        {Math.round(percent)}
+      </text>
     </svg>
   );
 };

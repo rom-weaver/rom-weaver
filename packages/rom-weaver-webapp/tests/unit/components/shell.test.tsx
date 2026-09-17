@@ -457,6 +457,7 @@ describe("Masthead", () => {
       ),
     );
     expect(container.querySelector(".sub-status-percent")?.textContent).toBe("25%");
+    expect(container.querySelector(".header-runtime .sw-progress-ring-text")?.textContent).toBe("25");
     // The chip owns the percent; the wording beside it MUST NOT repeat it.
     expect(container.querySelector(".sub-status-text")?.textContent).toBe("Installing offline copy");
     // The accessible name replaces the chip rather than adding to it, so it is
