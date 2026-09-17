@@ -61,6 +61,9 @@ const waitForText = async (text) => {
 };
 const buttonMatching = (pattern) =>
   [...host.querySelectorAll("button")].find((button) => pattern.test(button.textContent));
+const submitSearch = () => {
+  host.querySelector(".identify-search")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+};
 
 const mountIdentifyForm = async () => {
   host = document.createElement("div");
@@ -310,7 +313,7 @@ test("a pasted checksum raises the expected-ROM card without a file", async () =
   lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Metroid Fusion (USA)")], status: "matched" });
   await mountIdentifyForm();
   setHashInput("3610A686");
-  buttonMatching(/^\s*Search\s*$/).click();
+  submitSearch();
   await chooseRelease("Metroid Fusion (USA)");
   await waitFor(() => host.querySelector("#identify-container-expected-rom"));
 
@@ -329,7 +332,7 @@ test("text that is not a checksum searches the titles, and no title is not an an
   searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [] });
   await mountIdentifyForm();
   setHashInput("not-a-hash");
-  buttonMatching(/^\s*Search\s*$/).click();
+  submitSearch();
   await waitForText("No game in the identification data");
 
   expect(lookupExpectedRom).not.toHaveBeenCalled();
@@ -343,7 +346,7 @@ test("text that is not a checksum searches the titles, and no title is not an an
 test("a wrong-length checksum names the accepted lengths", async () => {
   await mountIdentifyForm();
   setHashInput("abc123abc123");
-  buttonMatching(/^\s*Search\s*$/).click();
+  submitSearch();
   await waitForText("40 (SHA-1)");
 
   expect(lookupExpectedRom).not.toHaveBeenCalled();
@@ -360,7 +363,7 @@ test("staging a file keeps the expectation and verifies the ROM against it", asy
   await mountIdentifyForm();
   // The staged candidate carries crc32 abcd1234, so this is the matching paste.
   setHashInput("abcd1234");
-  buttonMatching(/^\s*Search\s*$/).click();
+  submitSearch();
   await chooseRelease("Metroid Fusion (USA)");
   await waitFor(() => host.querySelector("#identify-container-expected-rom"));
 
@@ -383,7 +386,7 @@ test("a staged ROM that misses the pasted checksum faults the step", async () =>
   });
   await mountIdentifyForm();
   setHashInput("deadbeef");
-  buttonMatching(/^\s*Search\s*$/).click();
+  submitSearch();
   await chooseRelease("Metroid Fusion (USA)");
   await waitFor(() => host.querySelector("#identify-container-expected-rom"));
 

@@ -37,6 +37,10 @@
     background: color-mix(in oklab, var(--thread) 6%, transparent);
   }
 
+  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-search--hero) .drop.hero {
+    min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
+  }
+
   .rw-app .sample-tutorial-start-chip {
     font-size: 0.74rem;
   }
