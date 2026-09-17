@@ -188,6 +188,12 @@ type ControllerOptions = {
   storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
 };
 
+type ViewSelectionOptions = {
+  allowDisabledBeta?: boolean;
+  fallbackOnError?: boolean;
+  historyMode?: RouteHistoryMode;
+};
+
 const emptyValidation = (): ValidationState => createEmptyValidationState();
 
 type DraftSettingsField = Extract<keyof SettingsDraftState, string>;
@@ -247,7 +253,10 @@ const createWebappRootController = (options: ControllerOptions) => {
   const settings = loadSettings(options.storage);
   // Before the React tree renders, so the accent tokens resolve on first paint.
   applyAccent(settings.accent);
-  const initialView = normalizeWorkflowViewForSettings(readWorkflowViewFromPath() || DEFAULT_WORKFLOW_VIEW, settings);
+  // A direct route MUST keep its requested view through the first render. The
+  // server emitted that route's shell, while beta settings only control later
+  // navigation from the app chrome.
+  const initialView = readWorkflowViewFromPath() || DEFAULT_WORKFLOW_VIEW;
   writeWorkflowViewToPath(initialView, options.initialHistoryMode ?? "replace");
   const store = createStore<WebappState>(() => ({
     creatorSession: createEmptyCreatorSessionState(),
@@ -297,8 +306,14 @@ const createWebappRootController = (options: ControllerOptions) => {
       validation?: ValidationState;
     },
   ) => {
+    const previousSettings = store.getState().settings;
     const currentView = store.getState().currentView;
-    const nextCurrentView = normalizeWorkflowViewForSettings(currentView, nextSettings);
+    // A direct beta route MUST survive unrelated settings changes. Leave it
+    // only when the user actually disables beta tools from an enabled state.
+    const betaToolsDisabled = previousSettings.betaToolsEnabled && !nextSettings.betaToolsEnabled;
+    const nextCurrentView = betaToolsDisabled
+      ? normalizeWorkflowViewForSettings(currentView, nextSettings)
+      : currentView;
     const nextState: Partial<WebappState> = {
       settings: copySettings(nextSettings),
     };
@@ -348,11 +363,8 @@ const createWebappRootController = (options: ControllerOptions) => {
   };
 
   return {
-    activateInitialView(
-      mode: string,
-      optionsForSelection?: { fallbackOnError?: boolean; historyMode?: RouteHistoryMode },
-    ) {
-      return this.selectView(mode, optionsForSelection);
+    activateInitialView(mode: string, optionsForSelection?: ViewSelectionOptions) {
+      return this.selectView(mode, { ...optionsForSelection, allowDisabledBeta: true });
     },
     closeSettings() {
       if (!store.getState().settingsDialogOpen) return;
@@ -438,10 +450,12 @@ const createWebappRootController = (options: ControllerOptions) => {
       setState({ settingsDialogOpen: false });
       return true;
     },
-    selectView(mode: string, optionsForSelection?: { fallbackOnError?: boolean; historyMode?: RouteHistoryMode }) {
+    selectView(mode: string, optionsForSelection?: ViewSelectionOptions) {
       const state = store.getState();
       let nextView = normalizeWorkflowView(mode) || DEFAULT_WORKFLOW_VIEW;
-      nextView = normalizeWorkflowViewForSettings(nextView, state.settings);
+      if (!optionsForSelection?.allowDisabledBeta) {
+        nextView = normalizeWorkflowViewForSettings(nextView, state.settings);
+      }
       if (
         nextView !== state.currentView &&
         typeof options.onConfirmViewLeave === "function" &&

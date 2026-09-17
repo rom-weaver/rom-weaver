@@ -490,10 +490,9 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim, PPF undo, and Save Editor tabs are still beta - they navigate in production but must
-// not be indexed, and they inherit the Weave page's markup, so strip the shared
-// index directive to noindex and point their canonical at themselves (rather
-// than leaking a /apply canonical that would fold them into the patcher page).
+// The Trim, PPF undo, and Save Editor tabs are still beta - they navigate in
+// production but must not be indexed, so strip the shared index directive to
+// noindex and point their canonical at themselves.
 const makeBetaRouteNoindex = (html, slug) =>
   html
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
@@ -717,6 +716,19 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ),
         WORKFLOW_SEO_ROUTES.test,
       );
+      const trimHtml = withRoutePreloadLinks(
+        makeBetaRouteNoindex(withShell("trim"), "trim-rom"),
+        routePreloadLinks.get("trim"),
+      );
+      const ppfUndoHtml = withRoutePreloadLinks(
+        makeBetaRouteNoindex(withShell("ppf-undo"), "ppf-undo"),
+        routePreloadLinks.get("ppf-undo"),
+      );
+      const saveEditorHtml = withRoutePreloadLinks(
+        makeBetaRouteNoindex(withShell("save-editor"), "save-editor"),
+        routePreloadLinks.get("save-editor"),
+      );
+      const whatsNewHtml = withRoutePreloadLinks(withShell("whats-new"), routePreloadLinks.get("whats-new"));
       for (const route of DOC_ROUTES) {
         const routeShellHtml = withRoutePreloadLinks(withShell(route.slug), routePreloadLinks.get("docs"));
         const docsHtml = createDocsRouteHtml(routeShellHtml, route, channel, channelLabel);
@@ -734,30 +746,15 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         ["create-patch", createHtml],
         ["identify-rom", identifyHtml],
         ["test-rom", testHtml],
-        [
-          "trim-rom",
-          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "trim-rom"), routePreloadLinks.get("trim")),
-        ],
-        [
-          "ppf-undo",
-          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
-        ],
+        ["trim-rom", trimHtml],
+        ["ppf-undo", ppfUndoHtml],
         // What's new needs a document of its own or the host serves 404.html,
         // whose not-found flag hides the route on a direct load or reload. Its
         // content is fetched release notes, so it stays out of the index.
-        [
-          "whats-new",
-          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "whats-new"), routePreloadLinks.get("whats-new")),
-        ],
-        [
-          "save-editor",
-          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "save-editor"), routePreloadLinks.get("save-editor")),
-        ],
+        ["whats-new", makeBetaRouteNoindex(whatsNewHtml, "whats-new")],
+        ["save-editor", saveEditorHtml],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
-        [
-          "tools",
-          withRoutePreloadLinks(makeBetaRouteNoindex(patcherHtml, "ppf-undo"), routePreloadLinks.get("ppf-undo")),
-        ],
+        ["tools", ppfUndoHtml],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });
@@ -1049,6 +1046,14 @@ const devPrerenderRoute = (url) => {
   // No route segment is the app base itself, which serves the landing page.
   if (!slug) return { docsSlug: "docs", view: "home" };
   const routeSlug = slug.replace(/\.html$/, "");
+  const directView = {
+    "ppf-undo": "ppf-undo",
+    "save-editor": "save-editor",
+    tools: "ppf-undo",
+    "trim-rom": "trim",
+    "whats-new": "whats-new",
+  }[routeSlug];
+  if (directView) return { docsSlug: "docs", view: directView };
   const canonical = Object.hasOwn(LEGACY_WORKFLOW_ROUTES, routeSlug) ? LEGACY_WORKFLOW_ROUTES[routeSlug] : routeSlug;
   const view = Object.entries(WORKFLOW_SEO_ROUTES).find(([, route]) => route.slug === canonical)?.[0] ?? "patcher";
   return { docsSlug: "docs", view };
@@ -1111,7 +1116,11 @@ const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("patcher", await render("patcher"));
         prerenderedShells.set("creator", await render("creator"));
         prerenderedShells.set("identify", await render("identify"));
+        prerenderedShells.set("trim", await render("trim"));
+        prerenderedShells.set("ppf-undo", await render("ppf-undo"));
+        prerenderedShells.set("save-editor", await render("save-editor"));
         prerenderedShells.set("test", await render("test"));
+        prerenderedShells.set("whats-new", await render("whats-new"));
         prerenderedShells.set("notFound", await render("patcher", true));
         for (const route of DOC_ROUTES) {
           prerenderedShells.set(route.slug, await render("docs", false, route.slug));

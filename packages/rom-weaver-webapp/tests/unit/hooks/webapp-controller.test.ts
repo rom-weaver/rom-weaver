@@ -86,11 +86,21 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().currentView).toBe("patcher");
   });
 
-  it("falls back from a disabled beta route in the initial path", () => {
+  it("keeps a direct beta route in the initial path", () => {
     window.history.replaceState({}, "", "/tools");
     const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply-patch");
+    expect(controller.getState().currentView).toBe("ppf-undo");
+    expect(window.location.pathname).toBe("/ppf-undo");
+  });
+
+  it("keeps a direct beta route when an unrelated setting changes", () => {
+    window.history.replaceState({}, "", "/trim-rom");
+    const controller = createController();
+
+    controller.setOnboardingEnabled(false);
+
+    expect(controller.getState().currentView).toBe("trim");
+    expect(window.location.pathname).toBe("/trim-rom");
   });
 
   it("loads the create workflow from its path", () => {
@@ -105,8 +115,8 @@ describe("createWebappRootController over the vanilla store", () => {
     const storage = createStorage();
     window.history.replaceState({}, "", "/identify-rom");
     const controller = createController(storage);
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply-patch");
+    expect(controller.getState().currentView).toBe("identify");
+    expect(window.location.pathname).toBe("/identify-rom");
 
     controller.updateDraftSetting("betaToolsEnabled", true);
     expect(controller.saveDraftSettings()).toBe(true);

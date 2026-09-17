@@ -245,10 +245,24 @@ describe("boot", () => {
     expect(document.getElementById("webapp-root")?.dataset.shellSettled).toBe("true");
   });
 
-  it("hydrates a view without a prerendered shell as the patcher", async () => {
-    await loadWebapp({ prerendered: true, url: "/trim-rom" });
+  it("hydrates the What's new document instead of falling back to the patcher", async () => {
+    await loadWebapp({ prerendered: true, url: "/whats-new" });
 
-    expect(mocks.renders[0]?.state.currentView).toBe("patcher");
+    expect(mocks.preloadWorkflowRoute).toHaveBeenCalledWith("whats-new");
+    expect(latest().state.currentView).toBe("whats-new");
+    expect(document.getElementById("webapp-root")?.dataset.shellSettled).toBe("true");
+  });
+
+  it.each([
+    ["/identify-rom", "identify"],
+    ["/trim-rom", "trim"],
+    ["/ppf-undo", "ppf-undo"],
+    ["/save-editor", "save-editor"],
+  ] as const)("hydrates %s with its own prerendered shell", async (url, view) => {
+    await loadWebapp({ prerendered: true, url });
+
+    expect(mocks.preloadWorkflowRoute).toHaveBeenCalledWith(view);
+    expect(mocks.renders[0]?.state.currentView).toBe(view);
   });
 
   it("hydrates in the document language before applying the saved language", async () => {

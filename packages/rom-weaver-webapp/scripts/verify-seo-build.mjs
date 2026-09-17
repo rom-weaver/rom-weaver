@@ -384,6 +384,23 @@ for (const beta of ["trim-rom", "ppf-undo", "whats-new", "save-editor"]) {
     `${beta} self canonical`,
   );
 }
+for (const [route, panel] of Object.entries({
+  "apply-patch": "panel-patcher",
+  "create-patch": "panel-creator",
+  "identify-rom": "panel-identify",
+  "ppf-undo": "panel-ppf-undo",
+  "save-editor": "panel-save-editor",
+  "test-rom": "panel-test",
+  "trim-rom": "panel-trim",
+  "whats-new": "panel-whats-new",
+  tools: "panel-ppf-undo",
+})) {
+  for (const file of [`${route}.html`, `${route}/index.html`]) {
+    const html = read(file);
+    assertIncludes(html, `id="${panel}"`, `${file} prerendered route panel`);
+    if (panel !== "panel-patcher") assertExcludes(html, 'id="panel-patcher"', `${file} patcher fallback panel`);
+  }
+}
 for (const [legacy, canonical] of Object.entries({
   apply: "apply-patch",
   create: "create-patch",

@@ -56,10 +56,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
 });
 
 const renderLandingShellHtml = async (
-  currentView: Extract<
-    WebappRootProps["state"]["currentView"],
-    "patcher" | "creator" | "docs" | "home" | "identify" | "test"
-  > = "home",
+  currentView: WebappRootProps["state"]["currentView"] = "home",
   notFound = false,
   docsSlug = "docs",
 ): Promise<string> => {

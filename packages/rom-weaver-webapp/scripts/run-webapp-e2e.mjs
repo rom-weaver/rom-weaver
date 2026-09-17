@@ -200,10 +200,10 @@ const runHydrationAudit = async (createContext, baseUrl) => {
     for (const testCase of [
       { finalView: "patcher", initialView: "patcher", path: "apply-patch/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create-patch/" },
-      { finalView: "trim", initialView: "patcher", path: "trim-rom/" },
+      { finalView: "trim", initialView: "trim", path: "trim-rom/" },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
-      { finalView: "trim", initialView: "patcher", path: "trim/" },
+      { finalView: "trim", initialView: "trim", path: "trim/" },
       { finalView: "patcher", initialView: "patcher", path: "weave?guide=bundle" },
     ]) {
       const page = await context.newPage();
