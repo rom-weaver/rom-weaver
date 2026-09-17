@@ -806,6 +806,32 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     padding-block-start: 60px;
   }
 }
+@media (max-width: 720px) and (max-height: 800px) {
+  html:not([data-onboarding-enabled="false"]) .rw-app .simple-hero .step-body:has(> .first-weave-demo) .drop.hero {
+    padding-block-start: 48px;
+  }
+  .rw-app .simple-hero .drop.hero > .hero-lead {
+    gap: 6px;
+  }
+  .rw-app .step.is-input.is-empty.simple-hero .drop.hero {
+    gap: 8px;
+    min-height: 0;
+    padding: 8px;
+  }
+  .rw-app .simple-hero .hero-lead .lead-description {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .rw-app .simple-hero .hero-help {
+    margin-block-start: 4px;
+  }
+  .rw-app .workflow-body:has(.simple-hero.is-empty) .ghost-steps {
+    margin-block-start: 4px;
+  }
+  .rw-app .workflow-body:has(.simple-hero.is-empty) .ghost-next {
+    padding-block: 4px;
+  }
+}
 @keyframes tutorial-bell-shake {
   0%,
   100% {

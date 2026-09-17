@@ -17,6 +17,15 @@
   border-block-start: 1px solid var(--seam-soft);
 }
 
+@media (max-width: 720px) and (max-height: 800px) {
+  .rw-app .workbench:has(.simple-hero.is-empty) {
+    padding-block-end: 2px;
+  }
+  .rw-app .workbench:has(.simple-hero.is-empty) + .page-footer {
+    padding-block: 6px;
+  }
+}
+
 /* Form sections */
 .rw-app .panel {
   overflow: clip;

@@ -640,6 +640,12 @@
   border-end-start-radius: var(--r-l);
   border-end-end-radius: var(--r-l);
 }
+@media (max-width: 720px) and (max-height: 800px) {
+  .rw-app .simple-hero.is-empty .identify-search--hero {
+    gap: 4px;
+    padding-block: 6px;
+  }
+}
 /* Apply's hero hands its bottom corners to the shared footer. */
 .rw-app .step.is-input:has(> .step-body > .identify-search--hero) .drop.hero {
   border-end-start-radius: 0;
