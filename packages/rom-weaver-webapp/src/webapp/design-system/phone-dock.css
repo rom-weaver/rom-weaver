@@ -46,10 +46,6 @@
     height: 40px;
     font-size: 16px;
   }
-  .rw-app .identify-search-island {
-    width: 100%;
-    margin-top: var(--sp-m);
-  }
   /* The keyboard covers everything under the focused box, so on a phone the
      answer lists above it: results head, list, then the "more" button, all
      ahead of the label and row. Status and error keep their place under the

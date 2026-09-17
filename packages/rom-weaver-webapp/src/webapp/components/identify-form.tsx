@@ -346,13 +346,7 @@ const IdentifyForm = ({
           if (selected) selectFile(selected);
         }}
         supported={IDENTIFY_SUPPORTED_FILES}
-        afterDropZone={
-          heroShown ? (
-            <div className="identify-search-island">
-              <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} />
-            </div>
-          ) : null
-        }
+        afterDropZone={heroShown ? <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} /> : null}
       />
       {file ? (
         <WorkflowRomInputStep

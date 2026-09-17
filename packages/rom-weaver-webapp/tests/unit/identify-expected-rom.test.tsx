@@ -59,7 +59,7 @@ it("offers the optional ROM drop zone beside a checksum match", async () => {
   const { container } = render(<IdentifyForm />);
 
   const hashSearch = container.querySelector(".identify-search");
-  expect(hashSearch?.parentElement?.classList.contains("identify-search-island")).toBe(true);
+  expect(hashSearch?.parentElement?.classList.contains("step-body")).toBe(true);
   expect(hashSearch?.closest(".unified-drop-step")).not.toBeNull();
   expect(hashSearch?.closest(".drop.hero")).toBeNull();
 
