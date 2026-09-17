@@ -636,7 +636,7 @@ const ProjectTiles = ({
       {githubHref ? (
         <a
           aria-label={githubLabel}
-          className="tool"
+          className="tool tool-project"
           href={githubHref}
           onClick={(event) => guardExternalClick(event, githubHref, confirmExternalNavigation)}
           rel="noreferrer"
@@ -651,7 +651,7 @@ const ProjectTiles = ({
       {donateHref ? (
         <a
           aria-label={supportLabel}
-          className="tool tool-support"
+          className="tool tool-project tool-support"
           href={donateHref}
           onClick={(event) => guardExternalClick(event, donateHref, confirmExternalNavigation)}
           rel="noreferrer"

@@ -35,7 +35,7 @@
   grid-template-areas: "head" "loom" "body";
   gap: var(--sp-xl);
   align-items: center;
-  padding-block: clamp(6px, 1.6vw, 20px) clamp(40px, 6vw, 72px);
+  padding-block: clamp(6px, 0.625vw, 8px) clamp(40px, 6vw, 72px);
 }
 .rw-app .home-hero-head {
   grid-area: head;
@@ -46,7 +46,7 @@
   gap: var(--sp-l);
 }
 .rw-app .home-hero h1 {
-  margin-top: 10px;
+  margin-top: var(--sp-s);
   font-size: clamp(30px, 6.4vw, 72px);
   font-weight: 800;
   line-height: 1.02;
