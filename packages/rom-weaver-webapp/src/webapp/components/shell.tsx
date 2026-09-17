@@ -109,6 +109,8 @@ type NavEntry = {
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string };
 
+const APPEARANCE_WIPE_DURATION_MS = 340;
+
 /** Reveal appearance changes from the choice that caused them. */
 const runAppearanceWipe = (
   update: () => void,
@@ -125,12 +127,29 @@ const runAppearanceWipe = (
   const cx = pointer?.x ?? (rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
   const cy = pointer?.y ?? (rect ? rect.top + rect.height / 2 : 0);
   const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-  root.style.setProperty("--wipe-x", `${cx}px`);
-  root.style.setProperty("--wipe-y", `${cy}px`);
-  root.style.setProperty("--wipe-r", `${radius}px`);
   const release = holdTransitionClasses([`vt-${kind}`]);
   const transition = document.startViewTransition(update);
-  transition.ready.catch(() => undefined);
+  transition.ready.then(
+    () => {
+      if (typeof root.animate !== "function") return;
+      const origin = `${cx}px ${cy}px`;
+      try {
+        const animation = root.animate(
+          [{ clipPath: `circle(0px at ${origin})` }, { clipPath: `circle(${radius}px at ${origin})` }],
+          {
+            duration: APPEARANCE_WIPE_DURATION_MS,
+            easing: "linear",
+            fill: "both",
+            pseudoElement: "::view-transition-new(root)",
+          },
+        );
+        animation.finished.catch(() => undefined);
+      } catch {
+        // A browser may expose view transitions but reject pseudo-element WAAPI.
+      }
+    },
+    () => undefined,
+  );
   transition.finished.then(release, release);
 };
 
@@ -465,6 +484,9 @@ const ThemeTile = ({
   const { preference, setPreference, theme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Touch browsers can synthesize a click with detail=0, so capture the
+  // pointer before the click and keep keyboard activation centered.
+  const themePointerRef = useRef<{ x: number; y: number } | null>(null);
   useNavToolPopover(open, navRow, buttonRef, panelRef);
   const label = localizer.message("ui.tools.theme");
   const current = THEME_CHOICES.find((choice) => choice.value === preference);
@@ -502,14 +524,27 @@ const ThemeTile = ({
               aria-checked={choice.value === preference}
               className="tool-pop-item"
               key={choice.value}
+              onPointerCancel={() => {
+                themePointerRef.current = null;
+              }}
+              onPointerDown={(event) => {
+                themePointerRef.current = { x: event.clientX, y: event.clientY };
+              }}
               onClick={(event) => {
+                const pointer = themePointerRef.current;
+                themePointerRef.current = null;
                 runAppearanceWipe(
-                  () => setPreference(choice.value),
+                  () => {
+                    setPreference(choice.value);
+                    onToggle(buttonRef.current);
+                  },
                   event.currentTarget,
                   "theme",
-                  event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined,
+                  pointer ?? (event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined),
                 );
-                onToggle(buttonRef.current);
+              }}
+              onKeyDown={() => {
+                themePointerRef.current = null;
               }}
               role="menuitemradio"
               type="button"
@@ -555,6 +590,9 @@ const AccentTile = ({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
+  // Change events have no pointer coordinates, so keep the preceding pointer
+  // point for pointer activation while leaving keyboard activation centered.
+  const accentPointerRef = useRef<{ x: number; y: number } | null>(null);
   useNavToolPopover(open, navRow, buttonRef, panelRef);
   const accent = useAccent();
   const label = localizer.message("ui.tools.accent");
@@ -596,14 +634,34 @@ const AccentTile = ({
           <p className="tool-pop-head">{`${label}: ${currentLabel}`}</p>
           <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
             {ACCENTS.map((entry) => (
-              <label className="accent-chip" key={entry.value} title={entry.label}>
+              <label
+                className="accent-chip"
+                key={entry.value}
+                onPointerCancel={() => {
+                  accentPointerRef.current = null;
+                }}
+                onPointerDown={(event) => {
+                  accentPointerRef.current = { x: event.clientX, y: event.clientY };
+                }}
+                title={entry.label}
+              >
                 <input
                   aria-label={entry.label}
                   checked={entry.value === accent}
                   name={name}
-                  onChange={(event) =>
-                    runAppearanceWipe(() => onChange(entry.value), event.currentTarget.closest("label"), "accent")
-                  }
+                  onChange={(event) => {
+                    const pointer = accentPointerRef.current;
+                    accentPointerRef.current = null;
+                    runAppearanceWipe(
+                      () => onChange(entry.value),
+                      event.currentTarget.closest("label"),
+                      "accent",
+                      pointer ?? undefined,
+                    );
+                  }}
+                  onKeyDown={() => {
+                    accentPointerRef.current = null;
+                  }}
                   type="radio"
                   value={entry.value}
                 />
