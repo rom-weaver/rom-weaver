@@ -562,6 +562,107 @@
   min-height: 0;
 }
 
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .hero-lead .lead-title {
+    font-size: clamp(1.5rem, 6.8vw, 2rem);
+    line-height: 1.2;
+  }
+  .rw-app .step.is-input.is-empty .drop.hero {
+    padding-inline: 0;
+  }
+  .rw-app .drop.hero {
+    gap: clamp(14px, calc(5.3svh - 16px), 28px);
+  }
+}
+
+/* The file picker and drop gesture MUST share one surface. */
+.rw-app .step.is-input.is-empty.simple-hero .drop.hero {
+  gap: 28px;
+  min-height: 340px;
+  padding: 40px 24px;
+  background: var(--plate);
+  border-style: dashed;
+}
+.rw-app .simple-hero .hero-lead .lead-title {
+  font-size: clamp(1.6rem, 3vw, 2.3rem);
+  line-height: 1.2;
+}
+.rw-app .simple-hero .hero-lead .lead-description {
+  max-width: 52ch;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.rw-app .simple-hero .drop.hero .fell {
+  justify-content: center;
+  padding: 0;
+}
+.rw-app .simple-hero .drop.hero .fell-thread {
+  display: none;
+}
+.rw-app .simple-hero .drop.hero .main.bead {
+  gap: 10px;
+  width: auto;
+  min-height: 48px;
+  aspect-ratio: auto;
+  padding: 12px 24px;
+  color: var(--thread-ink);
+  background: var(--thread);
+  border-radius: var(--r-m);
+  box-shadow: none;
+  transform: none;
+}
+.rw-app .simple-hero .drop.hero .main.bead::before {
+  display: none;
+}
+.rw-app .simple-hero .drop.hero:focus-within .main.bead {
+  outline: 3px solid var(--thread-text);
+  outline-offset: 4px;
+}
+.rw-app .simple-hero .drop.hero:active .main.bead {
+  background: color-mix(in oklab, var(--thread) 85%, var(--ink));
+}
+@media (hover: hover) {
+  .rw-app .simple-hero .drop.hero:hover .main.bead {
+    background: color-mix(in oklab, var(--thread) 85%, var(--ink));
+  }
+}
+.rw-app .simple-hero .drop.hero .main.bead svg {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+  transform: none;
+}
+.rw-app .simple-hero .drop.hero .drop-belowlabel {
+  font-size: 0.88rem;
+  font-weight: 400;
+}
+.rw-app .simple-hero .hero-privacy {
+  margin: 20px 16px 8px;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  text-align: center;
+}
+.rw-app .simple-hero .hero-guide {
+  display: block;
+  width: fit-content;
+  padding: 12px 8px;
+  font-size: 0.8rem;
+  color: var(--thread-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rw-app .simple-hero .hero-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  align-items: start;
+  justify-content: center;
+}
+.rw-app .simple-hero .hero-formats-help {
+  max-width: 100%;
+  padding: 0;
+}
+
 /* Input step */
 .rw-app .step.is-input .drop.hero {
   background: var(--warp-lines) var(--empty-fill);

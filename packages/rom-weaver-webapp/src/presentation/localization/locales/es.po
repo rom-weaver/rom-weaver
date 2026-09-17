@@ -426,7 +426,7 @@ msgstr "Aplicar un parche"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Aplica parches a cualquier ROM, comprimida o sin comprimir,"
+msgstr "Aplica un parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -481,7 +481,7 @@ msgstr "Herramienta Aplicar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.lede"
-msgstr "Aplica traducciones, combina parches y crea tus propios parches. Trabaja con ROM e imágenes de disco, comprimidas o sin comprimir, en el navegador o en el terminal. Guarda el orden de los parches y las sumas de verificación en un paquete reutilizable para que otros apliquen los mismos cambios."
+msgstr "Aplica un parche, crea el tuyo o prueba una ROM. Tus archivos permanecen en tu dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1296,7 +1296,7 @@ msgstr "Editar posición del parche, actualmente {position} de {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo de una partida guardada,"
+msgstr "Edita una partida guardada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1756,7 +1756,7 @@ msgstr "Conservar encabezado: la salida parcheada conserva el encabezado de la R
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
-msgstr "Elimina relleno y bloques basura de tus volcados de ROM,"
+msgstr "Recorta una ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1766,7 +1766,7 @@ msgstr "Mantener sin conexión. Las bases de datos no marcadas se descargan a pe
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Relaciona una ROM con su juego, su región, su revisión y el nombre exacto de su volcado,"
+msgstr "Identifica una ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1881,7 +1881,7 @@ msgstr "y redúcelos para almacenarlos."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
-msgstr "Convierte una ROM original y su versión modificada, comprimidas o sin comprimir,"
+msgstr "Crea un parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3436,7 +3436,7 @@ msgstr "Herramienta Recortar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
-msgstr "Juega una ROM parcheada en un emulador, directamente en el navegador,"
+msgstr "Prueba una ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3470,7 +3470,7 @@ msgstr "Sin cambios"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis"
-msgstr "Revierte una ROM parcheada a su volcado original,"
+msgstr "Deshaz un parche PPF."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -37,15 +37,6 @@
     background: color-mix(in oklab, var(--thread) 6%, transparent);
   }
 
-  .rw-app .step.is-input.is-empty .drop.hero {
-    /* Mobile browsers keep 100vh on the stable layout viewport while their
-       visible chrome expands and contracts. The hero MUST not resize during
-       that scroll-driven chrome change. */
-    min-height: max(300px, calc(100vh - var(--hero-chrome)));
-  }
-  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-search--hero) .drop.hero {
-    min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
-  }
   /* On the apply page the New here? chip rides the seam between hero and
      footer: half above, half below. Both sides pad for it only while the chip
      is there - the identify page has no chip and keeps the plain seam. */
