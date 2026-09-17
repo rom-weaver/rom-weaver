@@ -1083,6 +1083,7 @@ type LogDialogProps = {
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
   updateReady?: boolean;
+  previewRuntimeState?: RuntimeState | null;
   /** Render the console as the More route instead of a modal dialog. */
   page?: boolean;
 };
@@ -1100,6 +1101,7 @@ const LogDialog = ({
   onDiscardSettings,
   onSaveSettings,
   onTabChange,
+  onOpenWhatsNew,
   serviceWorkerStatus,
   offlineProgress = null,
   offlineCopyEnabled = true,

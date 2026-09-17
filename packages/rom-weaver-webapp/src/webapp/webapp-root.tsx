@@ -178,6 +178,47 @@ const PREVIEW_STATE_LABELS: Record<RuntimeState, string> = {
   disabled: "Offline disabled",
 };
 
+const DevelopmentOfflineStatus = ({
+  onChange,
+  value,
+}: {
+  onChange: (state: RuntimeState | null) => void;
+  value: RuntimeState | null;
+}) => {
+  if (!isReactWebappDevelopmentMode()) return null;
+  return (
+    <section aria-label="Development" className="setgroup">
+      <div className="gtitle">Development</div>
+      <div className="setrow">
+        <label className="slabel" htmlFor="dev-offline-state">
+          Offline status
+        </label>
+        <span className="sctl">
+          <select
+            aria-describedby="dev-offline-state-help"
+            className="select"
+            id="dev-offline-state"
+            value={value ?? "actual"}
+            onChange={(event) => {
+              const next = event.currentTarget.value;
+              if (next === "actual") onChange(null);
+              else if ((RUNTIME_STATES as readonly string[]).includes(next)) onChange(next as RuntimeState);
+            }}
+          >
+            <option value="actual">Actual</option>
+            {RUNTIME_STATES.map((state) => (
+              <option key={state} value={state}>
+                {PREVIEW_STATE_LABELS[state]}
+              </option>
+            ))}
+          </select>
+        </span>
+      </div>
+      <p id="dev-offline-state-help">Display only. Does not change the offline cache or service worker.</p>
+    </section>
+  );
+};
+
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
 const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
@@ -1067,6 +1108,7 @@ function WebappRoot({
                     level={state.settings.logLevel}
                     onLevelChange={actions.onLogLevelChange}
                     onDiscardSettings={actions.onDiscardSettings}
+                    onOpenWhatsNew={openWhatsNew}
                     onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
                     onRestoreDefaults={actions.onRestoreDefaults}
                     onSaveSettings={saveSettings}
@@ -1077,6 +1119,7 @@ function WebappRoot({
                     settingsFocusHint={settingsFocusHint}
                     settingsPanel={
                       <Suspense fallback={null}>
+                        <DevelopmentOfflineStatus onChange={changePreviewRuntimeState} value={previewRuntimeState} />
                         <SettingsPanel
                           draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
                           onDraftChange={actions.onDraftChange}
@@ -1154,41 +1197,7 @@ function WebappRoot({
               settingsFocusHint={settingsFocusHint}
               settingsPanel={
                 <Suspense fallback={null}>
-                  {isReactWebappDevelopmentMode() ? (
-                    <section aria-label="Development" className="setgroup">
-                      <div className="gtitle">Development</div>
-                      <div className="setrow">
-                        <label className="slabel" htmlFor="dev-offline-state">
-                          Offline status
-                        </label>
-                        <span className="sctl">
-                          <select
-                            aria-describedby="dev-offline-state-help"
-                            className="select"
-                            id="dev-offline-state"
-                            value={previewRuntimeState ?? "actual"}
-                            onChange={(event) => {
-                              const value = event.currentTarget.value;
-                              if (value === "actual") changePreviewRuntimeState(null);
-                              else if ((RUNTIME_STATES as readonly string[]).includes(value)) {
-                                changePreviewRuntimeState(value as RuntimeState);
-                              }
-                            }}
-                          >
-                            <option value="actual">Actual</option>
-                            {RUNTIME_STATES.map((value) => (
-                              <option key={value} value={value}>
-                                {PREVIEW_STATE_LABELS[value]}
-                              </option>
-                            ))}
-                          </select>
-                        </span>
-                      </div>
-                      <p id="dev-offline-state-help">
-                        Display only. Does not change the offline cache or service worker.
-                      </p>
-                    </section>
-                  ) : null}
+                  <DevelopmentOfflineStatus onChange={changePreviewRuntimeState} value={previewRuntimeState} />
                   <SettingsPanel
                     draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
                     onDraftChange={actions.onDraftChange}
