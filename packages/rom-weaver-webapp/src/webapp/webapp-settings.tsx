@@ -5,6 +5,7 @@ import { CompressInfoContent } from "../public/react/components/ds/compress-pane
 import { DropdownSelect } from "../public/react/components/ds/dropdown-select.tsx";
 import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options.ts";
 import { ACCENTS } from "./accent.ts";
+import { runAppearanceTransition } from "./appearance-transition.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import type { IdentifyPackGroupState } from "../platform/browser/identify-packs.ts";
@@ -205,7 +206,10 @@ const ThemeSetting = () => {
         <DropdownSelect
           className="select"
           id="settings-theme"
-          onChange={(event) => setPreference(event.currentTarget.value as ThemePreference)}
+          onChange={(event) => {
+            const preference = event.currentTarget.value as ThemePreference;
+            runAppearanceTransition(() => setPreference(preference), "theme", event.currentTarget);
+          }}
           value={preference}
         >
           {themeOptions.map((option) => (

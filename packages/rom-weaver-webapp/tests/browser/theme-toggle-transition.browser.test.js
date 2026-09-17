@@ -7,6 +7,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { applyAccent } from "../../src/webapp/accent.ts";
+import "../../src/webapp/design-system/index.css";
+import "../../src/webapp/design-system/deferred.css";
 import { Masthead } from "../../src/webapp/components/shell.tsx";
 
 const noop = () => undefined;
@@ -53,9 +55,6 @@ const pretendIosWebKit = () => {
 /** Like the stub above, but the caller decides when each run finishes. */
 const stubDeferredViewTransitions = () => {
   startCalls = [];
-  // The original method is restored after the deferred test double runs.
-  // oxlint-disable-next-line typescript/unbound-method
-  originalStart = document.startViewTransition;
   const settlers = [];
   document.startViewTransition = (update) => {
     startCalls.push(update);
@@ -152,8 +151,16 @@ describe("theme toggle view-transition gate", () => {
 
     const [keyframes, options] = animationCalls.at(-1);
     expect(options.pseudoElement).toBe("::view-transition-new(root)");
+    const radiusPercent = Number(keyframes[1].clipPath.match(/^circle\(([\d.]+)%/)[1]);
+    const radius = ((radiusPercent / 100) * Math.hypot(window.innerWidth, window.innerHeight)) / Math.SQRT2;
+    expect(radius).toBeCloseTo(
+      Math.hypot(
+        Math.max(rect.left + rect.width / 2, window.innerWidth - rect.left - rect.width / 2),
+        Math.max(rect.top + rect.height / 2, window.innerHeight - rect.top - rect.height / 2),
+      ),
+    );
     expect(keyframes[0].clipPath).toBe(
-      `circle(0px at ${rect.left + rect.width / 2}px ${rect.top + rect.height / 2}px)`,
+      `circle(0% at ${((rect.left + rect.width / 2) / window.innerWidth) * 100}% ${((rect.top + rect.height / 2) / window.innerHeight) * 100}%)`,
     );
   });
 
@@ -183,10 +190,12 @@ describe("theme toggle view-transition gate", () => {
     await Promise.resolve();
 
     const [keyframes] = animationCalls.at(-1);
-    expect(keyframes[0].clipPath).toBe(`circle(0px at ${clickX}px ${clickY}px)`);
+    expect(keyframes[0].clipPath).toBe(
+      `circle(0% at ${(clickX / window.innerWidth) * 100}% ${(clickY / window.innerHeight) * 100}%)`,
+    );
   });
 
-  test("sweeps an accent change from the chosen swatch", async () => {
+  test("dissolves an accent change without a circular wipe", async () => {
     pretendIosWebKit();
     await renderMasthead();
     const toggle = host.querySelector(".topbar-tools .accent-tool");
@@ -215,12 +224,13 @@ describe("theme toggle view-transition gate", () => {
     await Promise.resolve();
 
     expect(startCalls).toHaveLength(1);
-    const [keyframes] = animationCalls.at(-1);
-    expect(keyframes[0].clipPath).toBe(`circle(0px at ${clickX}px ${clickY}px)`);
+    const [keyframes, options] = animationCalls.at(-1);
+    expect(keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+    expect(options.duration).toBe(340);
     expect(document.documentElement.getAttribute("data-accent")).toBe("woad");
   });
 
-  test("does not reuse a touch origin after keyboard accent navigation", async () => {
+  test("uses the same accent dissolve after keyboard navigation", async () => {
     pretendIosWebKit();
     await renderMasthead();
     const toggle = host.querySelector(".topbar-tools .accent-tool");
@@ -248,11 +258,8 @@ describe("theme toggle view-transition gate", () => {
     target.click();
     await Promise.resolve();
 
-    const targetRect = target.closest("label").getBoundingClientRect();
     const [keyframes] = animationCalls.at(-1);
-    expect(keyframes[0].clipPath).toBe(
-      `circle(0px at ${targetRect.left + targetRect.width / 2}px ${targetRect.top + targetRect.height / 2}px)`,
-    );
+    expect(keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
   });
 
   test("keeps vt-theme held when a second toggle overlaps the first", async () => {
@@ -283,5 +290,45 @@ describe("theme toggle view-transition gate", () => {
 
     expect(document.documentElement.getAttribute("data-theme")).not.toBe(before);
     expect(document.documentElement.classList.contains("vt-theme")).toBe(false);
+  });
+});
+
+describe("rendered appearance snapshots", () => {
+  afterEach(() => {
+    root?.unmount();
+    host?.remove();
+  });
+
+  test("reveals settled theme colors from the control with native snapshots", async () => {
+    const toggle = await renderMasthead();
+    const surface = document.createElement("div");
+    surface.style.cssText = "background-color: var(--chassis); transition: background-color 10s";
+    host.append(surface);
+    const before = getComputedStyle(surface).backgroundColor;
+    const rect = await pickTheme(toggle, document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    const findAnimation = () =>
+      document.getAnimations().find((animation) => animation.effect?.pseudoElement === "::view-transition-new(root)");
+    await expect.poll(findAnimation).toBeTruthy();
+    const animation = findAnimation();
+    animation.pause();
+    animation.currentTime = 100;
+    try {
+      expect(getComputedStyle(surface).backgroundColor).not.toBe(before);
+      expect(getComputedStyle(surface).transitionDuration).toBe("0s");
+      expect(getComputedStyle(surface).backgroundColor).toBe(
+        document.documentElement.dataset.theme === "dark" ? "rgb(12, 15, 19)" : "rgb(236, 233, 225)",
+      );
+      const frames = animation.effect.getKeyframes();
+      const origin = frames[0].clipPath.match(/at ([\d.]+)% ([\d.]+)%/);
+      expect((Number(origin[1]) / 100) * window.innerWidth).toBeCloseTo(rect.left + rect.width / 2, 1);
+      expect((Number(origin[2]) / 100) * window.innerHeight).toBeCloseTo(rect.top + rect.height / 2, 1);
+      expect(getComputedStyle(document.documentElement).clipPath).toBe("none");
+      expect(host.querySelector('[role="menu"]')).toBeNull();
+    } finally {
+      animation.finish();
+      await animation.finished;
+      await expect.poll(() => document.documentElement.classList.contains("vt-theme")).toBe(false);
+      expect(findAnimation()).toBeUndefined();
+    }
   });
 });

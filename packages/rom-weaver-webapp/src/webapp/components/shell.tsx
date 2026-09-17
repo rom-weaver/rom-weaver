@@ -30,7 +30,7 @@ import type { FindAction } from "../find-index.ts";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
-import { holdTransitionClasses, viewTransitionsUnsupported } from "../../public/react/components/ds/flat-transition.ts";
+import { runAppearanceTransition } from "../appearance-transition.ts";
 import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import type { ThemePreference } from "../theme.ts";
 import { useTheme } from "../theme.ts";
@@ -109,50 +109,6 @@ type NavEntry = {
   title?: string;
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string };
-
-const APPEARANCE_WIPE_DURATION_MS = 340;
-
-/** Reveal appearance changes from the choice that caused them. */
-const runAppearanceWipe = (
-  update: () => void,
-  source: HTMLElement | null,
-  kind: "theme" | "accent",
-  pointer?: { x: number; y: number },
-) => {
-  const root = document.documentElement;
-  if (viewTransitionsUnsupported()) {
-    update();
-    return;
-  }
-  const rect = source?.getBoundingClientRect();
-  const cx = pointer?.x ?? (rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
-  const cy = pointer?.y ?? (rect ? rect.top + rect.height / 2 : 0);
-  const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-  const release = holdTransitionClasses([`vt-${kind}`]);
-  const transition = document.startViewTransition(update);
-  transition.ready.then(
-    () => {
-      if (typeof root.animate !== "function") return;
-      const origin = `${cx}px ${cy}px`;
-      try {
-        const animation = root.animate(
-          [{ clipPath: `circle(0px at ${origin})` }, { clipPath: `circle(${radius}px at ${origin})` }],
-          {
-            duration: APPEARANCE_WIPE_DURATION_MS,
-            easing: "linear",
-            fill: "both",
-            pseudoElement: "::view-transition-new(root)",
-          },
-        );
-        animation.finished.catch(() => undefined);
-      } catch {
-        // A browser may expose view transitions but reject pseudo-element WAAPI.
-      }
-    },
-    () => undefined,
-  );
-  transition.finished.then(release, release);
-};
 
 /** One motion gate for every programmatic scroll and animation in the chrome. */
 const prefersReducedMotion = () =>
@@ -534,13 +490,13 @@ const ThemeTile = ({
               onClick={(event) => {
                 const pointer = themePointerRef.current;
                 themePointerRef.current = null;
-                runAppearanceWipe(
+                runAppearanceTransition(
                   () => {
                     setPreference(choice.value);
                     onToggle(buttonRef.current);
                   },
-                  event.currentTarget,
                   "theme",
+                  event.currentTarget,
                   pointer ?? (event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined),
                 );
               }}
@@ -591,9 +547,6 @@ const AccentTile = ({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
-  // Change events have no pointer coordinates, so keep the preceding pointer
-  // point for pointer activation while leaving keyboard activation centered.
-  const accentPointerRef = useRef<{ x: number; y: number } | null>(null);
   useNavToolPopover(open, navRow, buttonRef, panelRef);
   const accent = useAccent();
   const label = localizer.message("ui.tools.accent");
@@ -635,33 +588,13 @@ const AccentTile = ({
           <p className="tool-pop-head">{`${label}: ${currentLabel}`}</p>
           <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
             {ACCENTS.map((entry) => (
-              <label
-                className="accent-chip"
-                key={entry.value}
-                onPointerCancel={() => {
-                  accentPointerRef.current = null;
-                }}
-                onPointerDown={(event) => {
-                  accentPointerRef.current = { x: event.clientX, y: event.clientY };
-                }}
-                title={entry.label}
-              >
+              <label className="accent-chip" key={entry.value} title={entry.label}>
                 <input
                   aria-label={entry.label}
                   checked={entry.value === accent}
                   name={name}
-                  onChange={(event) => {
-                    const pointer = accentPointerRef.current;
-                    accentPointerRef.current = null;
-                    runAppearanceWipe(
-                      () => onChange(entry.value),
-                      event.currentTarget.closest("label"),
-                      "accent",
-                      pointer ?? undefined,
-                    );
-                  }}
-                  onKeyDown={() => {
-                    accentPointerRef.current = null;
+                  onChange={() => {
+                    runAppearanceTransition(() => onChange(entry.value), "accent");
                   }}
                   type="radio"
                   value={entry.value}

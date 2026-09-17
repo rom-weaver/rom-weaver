@@ -729,7 +729,16 @@
 @view-transition {
   navigation: auto;
 }
-/* JS supplies the clicked choice as the origin for both appearance sweeps. */
+/* Snapshots MUST contain settled colors before the reveal starts. */
+html.vt-theme *,
+html.vt-accent *,
+html.vt-theme *::before,
+html.vt-accent *::before,
+html.vt-theme *::after,
+html.vt-accent *::after {
+  transition: none !important;
+}
+/* JS supplies the theme origin and the accent dissolve. */
 :root:is(.vt-theme, .vt-accent)::view-transition-group(root) {
   animation: none;
 }
