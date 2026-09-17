@@ -418,16 +418,13 @@
   text-align: center;
 }
 .rw-app .hero-formats-help > summary {
-  position: relative;
   width: fit-content;
-  min-height: 44px;
-  padding: 12px 16px;
+  min-height: 24px;
+  padding: 3px 4px;
   margin-inline: auto;
-  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
-  background: var(--plate);
-  border: 1px solid var(--seam-strong);
-  border-radius: var(--r-s);
 }
 .rw-app .hero-formats-help > summary:active {
   color: var(--thread-text);
@@ -789,6 +786,25 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   color: var(--thread-text);
   transform-origin: 50% 15%;
   animation: tutorial-bell-shake 0.9s ease-in-out 1;
+}
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .first-weave-demo {
+    top: 8px;
+  }
+  .rw-app .sample-tutorial-start-chip {
+    gap: 5px;
+    padding-inline: 4px;
+    font-weight: 400;
+    background: transparent;
+    border: 0;
+  }
+  .rw-app .sample-tutorial-start-bell {
+    width: 14px;
+    height: 14px;
+  }
+  html:not([data-onboarding-enabled="false"]) .rw-app .simple-hero .step-body:has(> .first-weave-demo) .drop.hero {
+    padding-block-start: 60px;
+  }
 }
 @keyframes tutorial-bell-shake {
   0%,
