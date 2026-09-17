@@ -2178,7 +2178,6 @@ function ApplyWorkflowFormView({
           line1: "ui.hero.thesis",
           line2: "ui.hero.thesis2",
           description: "ui.hero.applyDescription",
-          guide: { href: "/docs/apply-rom-patches", label: "ui.hero.applyGuide" },
         }}
         info={
           <ul className="info-list">

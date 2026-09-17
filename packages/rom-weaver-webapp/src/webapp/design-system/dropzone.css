@@ -668,32 +668,6 @@
   max-width: 100%;
   padding: 0;
 }
-@media (min-width: 1100px) {
-  .rw-app .step.is-input.is-empty.simple-hero .drop.hero {
-    display: grid;
-    grid-template-areas: "lead action" "lead hint";
-    grid-template-rows: 1fr 1fr;
-    grid-template-columns: minmax(0, 1.25fr) minmax(240px, 1fr);
-    gap: 16px 48px;
-    min-height: 280px;
-    padding: 40px 48px;
-  }
-  .rw-app .simple-hero .drop.hero > .hero-lead {
-    grid-area: lead;
-    align-items: flex-start;
-    align-self: center;
-    padding: 0;
-    text-align: start;
-  }
-  .rw-app .simple-hero .drop.hero .fell {
-    grid-area: action;
-    align-self: end;
-  }
-  .rw-app .simple-hero .drop.hero .drop-base {
-    grid-area: hint;
-    align-self: start;
-  }
-}
 
 /* Input step */
 .rw-app .step.is-input .drop.hero {
@@ -838,33 +812,8 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     transform: rotate(3deg);
   }
 }
-.rw-app .hero-formats-help > summary::after {
-  position: absolute;
-  inset: -3px;
-  pointer-events: none;
-  content: "";
-  border: 2px solid var(--thread-text);
-  border-radius: inherit;
-  opacity: 0;
-  animation: hero-help-intro 1.4s ease-out 1;
-}
-@keyframes hero-help-intro {
-  0% {
-    opacity: 0;
-    scale: 1;
-  }
-  25% {
-    opacity: 0.65;
-    scale: 1;
-  }
-  100% {
-    opacity: 0;
-    scale: 1.14;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sample-tutorial-start-bell,
-  .rw-app .hero-formats-help > summary::after {
+  .rw-app .sample-tutorial-start-bell {
     animation: none;
   }
 }
@@ -897,17 +846,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .sample-tutorial-start-pop[hidden] {
   display: none;
-}
-@media (min-width: 1100px) {
-  .rw-app .sample-tutorial-start-pop {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 520px;
-  }
-  .rw-app .sample-tutorial-start-head,
-  .rw-app .sample-tutorial-start-pop > [role="status"],
-  .rw-app .sample-tutorial-start-dismiss {
-    grid-column: 1 / -1;
-  }
 }
 .rw-app .sample-tutorial-start-head {
   padding: var(--sp-2xs) var(--sp-s);
