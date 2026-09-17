@@ -48,14 +48,20 @@ import {
   toPatchStageInfo,
   toStagedInputInfos,
 } from "./apply-workflow-staging-model.ts";
-import { useBundleExport } from "./bundle-export.tsx";
+import { resolveBundleArchiveFormat, useBundleExport } from "./bundle-export.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type { ApplyPatchFormProps, CandidateSelectionPrompt } from "./public-types.ts";
-import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
+import {
+  getDefaultCompressionArchive,
+  getDefaultCompressionMode,
+  useApplySettings,
+  useRomWeaverAssetBaseUrl,
+  useUiLocalizer,
+} from "./settings-context.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { addEntry } from "./emulator-session-store.ts";
 import { shouldRetainEmulatorOutput } from "./emulator-retention-policy.ts";
@@ -269,10 +275,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     settings: props.settings,
   };
   const traceSettings = props.settings || props.defaultSettings || providerSettings;
-  const [storedBundleFormat = "", defaultBundleContents = ""] = String(
-    traceSettings.output?.bundlePackage || traceSettings.bundlePackage || "",
-  ).split(":");
-  const defaultBundleFormat = storedBundleFormat === "7z" ? "7z" : "zip";
+  const storedBundlePackage = String(traceSettings.output?.bundlePackage || traceSettings.bundlePackage || "");
+  const storedBundleContents = storedBundlePackage.includes(":")
+    ? storedBundlePackage.split(":")[1]
+    : storedBundlePackage;
+  const defaultBundleContents = storedBundleContents === "rom" ? "rom" : "patches";
+  const defaultBundleFormat = resolveBundleArchiveFormat(
+    getDefaultCompressionArchive(getDefaultCompressionMode(traceSettings.defaultCompression)),
+  );
   const emitApplyFormInputTrace = useCallback(
     (message: string, details?: Record<string, unknown>) => {
       emitTraceLog(
@@ -1607,6 +1617,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const resolvedUiController = localUiController;
   const resolvedStackController = localStackController;
   const resolvedOutputController = localOutputController;
+  const outputState = useSyncExternalStore(
+    resolvedOutputController.subscribe,
+    resolvedOutputController.getState,
+    resolvedOutputController.getState,
+  );
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
   const cheatUiState = useSyncExternalStore(
@@ -1759,19 +1774,23 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     ready: bundleExportReady,
     ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
   });
+  const { setFormat: setBundleExportFormat } = bundleExport;
 
-  // The bundle package controls live in the separate sharing job. The archive
-  // type and ROM-inclusion choice mirror the persisted bundle setting.
-  const { setBundleRom: setBundleExportRom, setFormat: setBundleExportFormat } = bundleExport;
+  useEffect(() => {
+    setBundleExportFormat(resolveBundleArchiveFormat(outputState.compressionFormat));
+  }, [outputState.compressionFormat, setBundleExportFormat]);
+
+  // The bundle package controls live in the separate sharing job. Compression
+  // type selects the archive format; this callback persists only ROM inclusion.
+  const { setBundleRom: setBundleExportRom } = bundleExport;
   const { onBundlePackageChange } = props;
   const changeBundlePackage = useCallback(
     (value: string) => {
-      const [format = "", contents = ""] = value.split(":");
-      setBundleExportFormat(format);
+      const contents = value === "rom" || value.endsWith(":rom") ? "rom" : "patches";
       setBundleExportRom(contents === "rom");
-      onBundlePackageChange?.(value);
+      onBundlePackageChange?.(contents);
     },
-    [onBundlePackageChange, setBundleExportFormat, setBundleExportRom],
+    [onBundlePackageChange, setBundleExportRom],
   );
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide

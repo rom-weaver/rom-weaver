@@ -104,6 +104,13 @@ const isSingleCodecField = (fieldKey: SettingsFieldKey): boolean =>
 const readStoredField = <T>(schema: StoredSchema<T>, value: unknown): T | undefined =>
   schema(value) ? value : undefined;
 
+const normalizeStoredBundlePackage = (value: string, fallback: string): string => {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "patches" || normalized === "rom") return normalized;
+  const contents = normalized.split(":")[1];
+  return contents === "patches" || contents === "rom" ? contents : fallback;
+};
+
 const copyObject = <T extends Record<string, unknown>>(source: T): T => Object.assign({}, source);
 
 const getFieldChoiceValues = (fieldKey: SettingsFieldKey): readonly string[] => getSettingsChoiceValues(fieldKey);
@@ -480,8 +487,13 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
 
     const bundlePackage = readStoredField(storedStringSchema, loadedSettings.bundlePackage);
-    if (bundlePackage !== undefined)
-      settings.bundlePackage = normalizeChoiceField("bundlePackage", bundlePackage, settings.bundlePackage);
+    if (bundlePackage !== undefined) {
+      settings.bundlePackage = normalizeChoiceField(
+        "bundlePackage",
+        normalizeStoredBundlePackage(bundlePackage, settings.bundlePackage),
+        settings.bundlePackage,
+      );
+    }
 
     const postApplyDownloadBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyDownloadBehavior);
     const postApplyTestBehavior = readStoredField(storedStringSchema, loadedSettings.postApplyTestBehavior);

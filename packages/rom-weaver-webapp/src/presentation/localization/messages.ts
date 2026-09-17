@@ -324,7 +324,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.archive.type": msg({ id: "ui.apply.archive.type", message: "Archive type" }),
   "ui.apply.bundleTutorial.bundlePatches": msg({
     id: "ui.apply.bundleTutorial.bundlePatches",
-    message: "Bundle + patches (.zip)",
+    message: "Bundle + patches",
   }),
   "ui.apply.bundleTutorial.download.body": msg({
     id: "ui.apply.bundleTutorial.download.body",
@@ -357,7 +357,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.bundleTutorial.safeBundle.body": msg({
     id: "ui.apply.bundleTutorial.safeBundle.body",
     message:
-      "The bundle download is separate from Apply. Bundle + patches (.zip) shares the recipe and patches without putting a copyrighted ROM in the download.",
+      "The bundle download is separate from Apply. Bundle + patches shares the recipe and patches without putting a copyrighted ROM in the download.",
   }),
   "ui.apply.bundleTutorial.safeBundle.title": msg({
     id: "ui.apply.bundleTutorial.safeBundle.title",

@@ -52,7 +52,7 @@ describe("getDefaultSettings", () => {
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
     expect(settings.byteUnits).toBe("decimal");
-    expect(settings.bundlePackage).toBe("zip:patches");
+    expect(settings.bundlePackage).toBe("patches");
     expect(settings.postApplyDownloadBehavior).toBe("auto-show");
     expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);
@@ -108,9 +108,16 @@ describe("validateSettingsDraft", () => {
   });
 
   it("accepts a bundle package default", () => {
-    const result = validateSettingsDraft(validDraft({ bundlePackage: "ZIP:ROM" }));
-    expect(result.settings.bundlePackage).toBe("zip:rom");
+    const result = validateSettingsDraft(validDraft({ bundlePackage: "ROM" }));
+    expect(result.settings.bundlePackage).toBe("rom");
     expect(result.invalidFields).not.toContain(getSettingsFieldId("bundlePackage"));
+  });
+
+  it("migrates an archived bundle package to its ROM-inclusion choice", () => {
+    const storage = makeStorage(
+      JSON.stringify({ version: SETTINGS_STORAGE_VERSION, apply: { output: { bundlePackage: "7z:rom" } } }),
+    );
+    expect(loadSettings(storage).bundlePackage).toBe("rom");
   });
 
   it("accepts binary file size units", () => {

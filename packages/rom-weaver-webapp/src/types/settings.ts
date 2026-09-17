@@ -18,7 +18,7 @@ type SevenZipCodec = (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["se
 
 type StringNumber = number | string;
 
-type BundlePackage = "" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
+type BundlePackage = "" | "patches" | "rom" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
 type PostApplyActionBehavior = "auto-show" | "show" | "hide";
 

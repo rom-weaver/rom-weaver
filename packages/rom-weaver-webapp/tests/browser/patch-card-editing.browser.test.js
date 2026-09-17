@@ -84,9 +84,7 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; sha
   expect(document.getElementById("rom-weaver-patch-name-0")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
   expect(document.getElementById("rom-weaver-rom-bundle-crc32")).toBeNull();
-  const bundleFormat = document.getElementById("rom-weaver-bundle-export-format");
-  expect(bundleFormat).not.toBeNull();
-  expect(bundleFormat.value).toBe("zip");
+  expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
   expect(document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 
   // Compact patch cards must let the open menu escape the card's paint boundary.
@@ -121,8 +119,8 @@ test("pencil opens the inline meta editors; checks add/remove in the drawer; sha
   document.querySelector("#rom-weaver-list-patch-stack .ck-remove")?.click();
   await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0")).toBeNull();
 
-  // The archive dropdown has no hide option, and the share action stays visible.
-  expect(Array.from(bundleFormat.options, (option) => option.value)).toEqual(["zip", "7z"]);
+  // The sharing job stays visible without an archive-format dropdown.
+  expect(document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 });
 
 test("the open patch menu stays reachable above the next card", async () => {
