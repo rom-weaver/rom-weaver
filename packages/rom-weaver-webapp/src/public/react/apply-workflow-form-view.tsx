@@ -1897,7 +1897,7 @@ function ApplyWorkflowFormView({
   const dismissSectionNotice = (key: PatcherSectionNoticeKey) => () => uiController.dismissNotice?.(key);
   const localizer = useUiLocalizer();
   const bundlePage = mode === "bundle";
-  const unifiedInputId = bundlePage ? "rom-weaver-input-file-unified-bundle" : "rom-weaver-input-file-unified";
+  const unifiedInputId = "rom-weaver-input-file-unified";
   const [applySectionCollapsed, setApplySectionCollapsed] = useState(bundlePage);
   useEffect(() => {
     setApplySectionCollapsed(bundlePage);
