@@ -468,7 +468,8 @@ test("the New here? control has a touch target and its popover carries every sta
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(4);
+  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe("/docs/apply-rom-patches");
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
     "/apply-patch?guide=apply",
   );

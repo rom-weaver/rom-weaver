@@ -1,6 +1,7 @@
 import {
   Archive,
   Bell,
+  BookOpen,
   Download,
   EllipsisVertical,
   Gamepad2,
@@ -260,6 +261,7 @@ const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, prefer:
 };
 
 const SampleTutorialStart = ({
+  documentation,
   downloadHref,
   downloadLabel,
   downloadName,
@@ -274,6 +276,7 @@ const SampleTutorialStart = ({
   startAction = "apply",
   secondaryAction = "package",
 }: {
+  documentation?: { href: string; label: string };
   downloadHref: string;
   downloadLabel: string;
   downloadName: string;
@@ -389,6 +392,12 @@ const SampleTutorialStart = ({
                 <SecondaryIcon />
               </span>
               {loading ? localizer.message("ui.tutorial.loading") : secondaryLabel}
+            </a>
+          ) : null}
+          {documentation ? (
+            <a className="sample-tutorial-start-action sample-tutorial-start-guide" href={documentation.href}>
+              <BookOpen aria-hidden="true" />
+              {documentation.label}
             </a>
           ) : null}
           <a className="sample-tutorial-start-action sample-tutorial-start-download" download href={href}>
