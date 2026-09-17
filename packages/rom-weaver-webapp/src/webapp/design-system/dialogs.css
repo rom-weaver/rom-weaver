@@ -739,15 +739,7 @@
 }
 :root:is(.vt-theme, .vt-accent)::view-transition-new(root) {
   mix-blend-mode: normal;
-  animation: theme-wipe 0.58s linear both;
-}
-@keyframes theme-wipe {
-  from {
-    clip-path: circle(0px at var(--wipe-x, 50%) var(--wipe-y, 0%));
-  }
-  to {
-    clip-path: circle(var(--wipe-r, 150vmax) at var(--wipe-x, 50%) var(--wipe-y, 0%));
-  }
+  animation: none;
 }
 ::view-transition-old(root) {
   z-index: 0;

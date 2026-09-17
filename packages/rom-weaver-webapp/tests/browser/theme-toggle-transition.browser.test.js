@@ -19,15 +19,23 @@ const THEME_CHOICE = { auto: 2, dark: 1, light: 0 };
 let host;
 let root;
 let startCalls;
+let animationCalls;
 let originalStart;
+let originalAnimate;
 let originalSupports;
 
 /** Minimal stand-in: the real API is absent in this engine. */
 const stubViewTransitions = () => {
   startCalls = [];
+  animationCalls = [];
   // The original method is restored after the test double runs.
   // oxlint-disable-next-line typescript/unbound-method
   originalStart = document.startViewTransition;
+  originalAnimate = document.documentElement.animate.bind(document.documentElement);
+  document.documentElement.animate = (...args) => {
+    animationCalls.push(args);
+    return originalAnimate(...args);
+  };
   document.startViewTransition = (update) => {
     startCalls.push(update);
     update();
@@ -123,6 +131,7 @@ describe("theme toggle view-transition gate", () => {
     root?.unmount();
     host?.remove();
     document.startViewTransition = originalStart;
+    document.documentElement.animate = originalAnimate;
     if (originalSupports) CSS.supports = originalSupports;
     originalSupports = undefined;
     document.documentElement.classList.remove("vt-theme");
@@ -139,11 +148,13 @@ describe("theme toggle view-transition gate", () => {
   test("feeds the wipe its origin from the clicked choice", async () => {
     pretendIosWebKit();
     const { rect } = await clickThemeToggle();
+    await Promise.resolve();
 
-    const root_ = document.documentElement;
-    expect(root_.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
-    expect(root_.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
-    expect(Number.parseFloat(root_.style.getPropertyValue("--wipe-r"))).toBeGreaterThan(0);
+    const [keyframes, options] = animationCalls.at(-1);
+    expect(options.pseudoElement).toBe("::view-transition-new(root)");
+    expect(keyframes[0].clipPath).toBe(
+      `circle(0px at ${rect.left + rect.width / 2}px ${rect.top + rect.height / 2}px)`,
+    );
   });
 
   test("keeps a touch origin when the browser reports a detail-zero click", async () => {
@@ -169,9 +180,10 @@ describe("theme toggle view-transition gate", () => {
       }),
     );
     choice.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: clickX, clientY: clickY, detail: 0 }));
+    await Promise.resolve();
 
-    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${clickX}px`);
-    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${clickY}px`);
+    const [keyframes] = animationCalls.at(-1);
+    expect(keyframes[0].clipPath).toBe(`circle(0px at ${clickX}px ${clickY}px)`);
   });
 
   test("sweeps an accent change from the chosen swatch", async () => {
@@ -200,10 +212,11 @@ describe("theme toggle view-transition gate", () => {
     choice
       .querySelector("input")
       .dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: clickX, clientY: clickY, detail: 0 }));
+    await Promise.resolve();
 
     expect(startCalls).toHaveLength(1);
-    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${clickX}px`);
-    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${clickY}px`);
+    const [keyframes] = animationCalls.at(-1);
+    expect(keyframes[0].clipPath).toBe(`circle(0px at ${clickX}px ${clickY}px)`);
     expect(document.documentElement.getAttribute("data-accent")).toBe("woad");
   });
 
@@ -233,13 +246,12 @@ describe("theme toggle view-transition gate", () => {
     );
     selected.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" }));
     target.click();
+    await Promise.resolve();
 
     const targetRect = target.closest("label").getBoundingClientRect();
-    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(
-      `${targetRect.left + targetRect.width / 2}px`,
-    );
-    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(
-      `${targetRect.top + targetRect.height / 2}px`,
+    const [keyframes] = animationCalls.at(-1);
+    expect(keyframes[0].clipPath).toBe(
+      `circle(0px at ${targetRect.left + targetRect.width / 2}px ${targetRect.top + targetRect.height / 2}px)`,
     );
   });
 

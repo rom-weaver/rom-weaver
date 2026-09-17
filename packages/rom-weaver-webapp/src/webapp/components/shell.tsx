@@ -109,6 +109,8 @@ type NavEntry = {
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string };
 
+const APPEARANCE_WIPE_DURATION_MS = 340;
+
 /** Reveal appearance changes from the choice that caused them. */
 const runAppearanceWipe = (
   update: () => void,
@@ -125,12 +127,29 @@ const runAppearanceWipe = (
   const cx = pointer?.x ?? (rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
   const cy = pointer?.y ?? (rect ? rect.top + rect.height / 2 : 0);
   const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
-  root.style.setProperty("--wipe-x", `${cx}px`);
-  root.style.setProperty("--wipe-y", `${cy}px`);
-  root.style.setProperty("--wipe-r", `${radius}px`);
   const release = holdTransitionClasses([`vt-${kind}`]);
   const transition = document.startViewTransition(update);
-  transition.ready.catch(() => undefined);
+  transition.ready.then(
+    () => {
+      if (typeof root.animate !== "function") return;
+      const origin = `${cx}px ${cy}px`;
+      try {
+        const animation = root.animate(
+          [{ clipPath: `circle(0px at ${origin})` }, { clipPath: `circle(${radius}px at ${origin})` }],
+          {
+            duration: APPEARANCE_WIPE_DURATION_MS,
+            easing: "linear",
+            fill: "both",
+            pseudoElement: "::view-transition-new(root)",
+          },
+        );
+        animation.finished.catch(() => undefined);
+      } catch {
+        // A browser may expose view transitions but reject pseudo-element WAAPI.
+      }
+    },
+    () => undefined,
+  );
   transition.finished.then(release, release);
 };
 
@@ -515,12 +534,14 @@ const ThemeTile = ({
                 const pointer = themePointerRef.current;
                 themePointerRef.current = null;
                 runAppearanceWipe(
-                  () => setPreference(choice.value),
+                  () => {
+                    setPreference(choice.value);
+                    onToggle(buttonRef.current);
+                  },
                   event.currentTarget,
                   "theme",
                   pointer ?? (event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined),
                 );
-                onToggle(buttonRef.current);
               }}
               onKeyDown={() => {
                 themePointerRef.current = null;
