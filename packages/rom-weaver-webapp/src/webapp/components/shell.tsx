@@ -23,6 +23,7 @@ import {
 import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
@@ -111,11 +112,11 @@ type NavSectionData = { entries: NavEntry[]; id: string; title: string };
 
 const APPEARANCE_WIPE_DURATION_MS = 340;
 
-/** Reveal appearance changes from the choice that caused them. */
-const runAppearanceWipe = (
+/** Theme changes reveal from the choice; accent changes dissolve in place. */
+const runAppearanceTransition = (
   update: () => void,
-  source: HTMLElement | null,
   kind: "theme" | "accent",
+  source: HTMLElement | null = null,
   pointer?: { x: number; y: number },
 ) => {
   const root = document.documentElement;
@@ -128,17 +129,20 @@ const runAppearanceWipe = (
   const cy = pointer?.y ?? (rect ? rect.top + rect.height / 2 : 0);
   const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
   const release = holdTransitionClasses([`vt-${kind}`]);
-  const transition = document.startViewTransition(update);
+  const transition = document.startViewTransition(() => flushSync(update));
+  let animation: Animation | undefined;
   transition.ready.then(
     () => {
       if (typeof root.animate !== "function") return;
       const origin = `${cx}px ${cy}px`;
       try {
-        const animation = root.animate(
-          [{ clipPath: `circle(0px at ${origin})` }, { clipPath: `circle(${radius}px at ${origin})` }],
+        animation = root.animate(
+          kind === "theme"
+            ? [{ clipPath: `circle(0px at ${origin})` }, { clipPath: `circle(${radius}px at ${origin})` }]
+            : [{ opacity: 0 }, { opacity: 1 }],
           {
-            duration: APPEARANCE_WIPE_DURATION_MS,
-            easing: "linear",
+            duration: kind === "theme" ? APPEARANCE_WIPE_DURATION_MS : 220,
+            easing: kind === "theme" ? "linear" : "ease-out",
             fill: "both",
             pseudoElement: "::view-transition-new(root)",
           },
@@ -150,7 +154,11 @@ const runAppearanceWipe = (
     },
     () => undefined,
   );
-  transition.finished.then(release, release);
+  const finish = () => {
+    animation?.cancel();
+    release();
+  };
+  transition.finished.then(finish, finish);
 };
 
 /** One motion gate for every programmatic scroll and animation in the chrome. */
@@ -533,13 +541,13 @@ const ThemeTile = ({
               onClick={(event) => {
                 const pointer = themePointerRef.current;
                 themePointerRef.current = null;
-                runAppearanceWipe(
+                runAppearanceTransition(
                   () => {
                     setPreference(choice.value);
                     onToggle(buttonRef.current);
                   },
-                  event.currentTarget,
                   "theme",
+                  event.currentTarget,
                   pointer ?? (event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined),
                 );
               }}
@@ -590,9 +598,6 @@ const AccentTile = ({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
-  // Change events have no pointer coordinates, so keep the preceding pointer
-  // point for pointer activation while leaving keyboard activation centered.
-  const accentPointerRef = useRef<{ x: number; y: number } | null>(null);
   useNavToolPopover(open, navRow, buttonRef, panelRef);
   const accent = useAccent();
   const label = localizer.message("ui.tools.accent");
@@ -634,33 +639,13 @@ const AccentTile = ({
           <p className="tool-pop-head">{`${label}: ${currentLabel}`}</p>
           <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
             {ACCENTS.map((entry) => (
-              <label
-                className="accent-chip"
-                key={entry.value}
-                onPointerCancel={() => {
-                  accentPointerRef.current = null;
-                }}
-                onPointerDown={(event) => {
-                  accentPointerRef.current = { x: event.clientX, y: event.clientY };
-                }}
-                title={entry.label}
-              >
+              <label className="accent-chip" key={entry.value} title={entry.label}>
                 <input
                   aria-label={entry.label}
                   checked={entry.value === accent}
                   name={name}
-                  onChange={(event) => {
-                    const pointer = accentPointerRef.current;
-                    accentPointerRef.current = null;
-                    runAppearanceWipe(
-                      () => onChange(entry.value),
-                      event.currentTarget.closest("label"),
-                      "accent",
-                      pointer ?? undefined,
-                    );
-                  }}
-                  onKeyDown={() => {
-                    accentPointerRef.current = null;
+                  onChange={() => {
+                    runAppearanceTransition(() => onChange(entry.value), "accent");
                   }}
                   type="radio"
                   value={entry.value}

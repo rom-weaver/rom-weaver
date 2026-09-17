@@ -110,7 +110,7 @@
     --thread 0.45s var(--ease),
     --thread-hi 0.45s var(--ease);
 }
-:root.vt-accent.accent-anim {
+:root:is(.vt-theme, .vt-accent).accent-anim {
   transition: none;
 }
 
