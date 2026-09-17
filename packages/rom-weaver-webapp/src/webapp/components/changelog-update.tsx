@@ -72,7 +72,10 @@ const headerMeta = (data: UpdateData): HeaderMeta => {
   // No version bump, so the transition is between builds of the same version.
   // With nothing newer at all there is no transition either - fall back to the
   // build id, the one thing that differs between same-commit rebuilds.
-  const incoming = data.entries[0]?.hash;
+  // Release builds put their own release commit first in changelog.json. The
+  // update view MUST skip it because it describes the running build, not an
+  // incoming one.
+  const incoming = data.entries.find((entry) => entry.hash !== COMMIT_HASH)?.hash;
   if (!incoming) {
     return { from: { label: `version ${APP_VERSION}, build ${APP_BUILD_VERSION}`, text: APP_BUILD_VERSION }, moreUrl };
   }
