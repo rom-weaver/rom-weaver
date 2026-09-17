@@ -1083,43 +1083,6 @@
     border-radius: 0;
   }
 }
-.rw-app .status-prototype-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  align-items: end;
-  padding: 8px var(--gutter);
-  background: var(--plate-2);
-  border-block-end: 1px solid var(--seam);
-}
-.rw-app .status-prototype-bar label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.66rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.rw-app .status-prototype-bar select {
-  max-inline-size: 140px;
-  min-block-size: 36px;
-  padding: 4px 8px;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--ink);
-  text-transform: none;
-  letter-spacing: normal;
-  background: var(--plate);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-s);
-}
-.rw-app .status-prototype-bar > span {
-  padding-block-end: 10px;
-  font-size: 0.66rem;
-  color: var(--ink-3);
-}
 .rw-app .dock-tab svg {
   width: 20px;
   height: 20px;
@@ -1392,26 +1355,6 @@
     display: block;
   }
   @media (max-width: 449px) {
-    .rw-app .status-prototype-bar {
-      gap: 8px;
-      align-items: center;
-      padding-block: 5px;
-    }
-    .rw-app .status-prototype-bar .status-prototype-layout {
-      display: none;
-    }
-    .rw-app .status-prototype-bar label:not(.status-prototype-layout) {
-      flex-direction: row;
-      gap: 6px;
-      align-items: center;
-    }
-    .rw-app .status-prototype-bar select {
-      min-block-size: 32px;
-    }
-    .rw-app .status-prototype-bar > span {
-      padding: 0;
-      margin-inline-start: auto;
-    }
     .rw-app .shell-head-tools {
       gap: 0;
     }
