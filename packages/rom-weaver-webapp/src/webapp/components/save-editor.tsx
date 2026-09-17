@@ -703,7 +703,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
 
   const sramList = (
     <div className="save-editor-stash">
-      <p className="save-editor-stash-title">Or open SRAM saved by the emulator in this browser</p>
+      <p className="save-editor-stash-title">Emulator saves</p>
       {sramSaves.length ? (
         <div className="save-editor-emulator-list">
           {sramSaves.map((record) => (
@@ -720,7 +720,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
           ))}
         </div>
       ) : (
-        <p className="save-editor-empty">No stored SRAM records.</p>
+        <p className="save-editor-empty">No emulator saves yet. Save a game in Test to open its SRAM here.</p>
       )}
     </div>
   );

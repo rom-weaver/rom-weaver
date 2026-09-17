@@ -443,13 +443,21 @@
 .rw-app .save-editor-stash {
   display: grid;
   gap: var(--sp-s);
+  padding: var(--sp-m);
   margin-block-start: var(--sp-l);
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
 }
 .rw-app .save-editor-stash-title {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--ink);
+}
+.rw-app .save-editor-stash .save-editor-empty {
+  line-height: 1.5;
+  color: var(--ink-2);
 }
 .rw-app .save-editor-empty,
 .rw-app .save-editor-description {

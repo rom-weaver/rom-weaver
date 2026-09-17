@@ -241,7 +241,9 @@ describe("SaveEditor", () => {
       },
     ]);
     render(<SaveEditor onSessionChange={vi.fn()} />);
-    await waitFor(() => expect(screen.getByText("No stored SRAM records.")).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("No emulator saves yet. Save a game in Test to open its SRAM here.")).toBeTruthy(),
+    );
     expect(screen.queryByRole("button", { name: /State only/ })).toBeNull();
   });
 
