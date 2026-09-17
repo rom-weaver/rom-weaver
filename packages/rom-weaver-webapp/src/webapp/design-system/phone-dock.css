@@ -59,26 +59,11 @@
   .rw-app .sample-tutorial-start-chip {
     font-size: 0.74rem;
   }
-  /* The phone's 48px control size would make the checksum island too tall, so
-     both controls sit at 40px and the button keeps only its glyph. */
   /* 16px is the iOS floor: a smaller focused input makes Safari zoom the page
      and leave it clipped on the right. */
   .rw-app .identify-search-input {
     height: 40px;
     font-size: 16px;
-  }
-  .rw-app .identify-search-submit {
-    width: 44px;
-    height: 40px;
-    padding: 0;
-  }
-  .rw-app .identify-search-submit-text {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    white-space: nowrap;
-    clip-path: inset(50%);
   }
   .rw-app .identify-search-island {
     width: 100%;

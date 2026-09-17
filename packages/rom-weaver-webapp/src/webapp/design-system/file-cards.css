@@ -691,8 +691,6 @@
   font-weight: 600;
   color: var(--ink-3);
 }
-/* Input and button stay on one line: a SHA-1 is 40 characters, so the input
-   MUST get every pixel the short button leaves. */
 .rw-app .identify-search-row {
   display: flex;
   flex: 1 1 20rem;
@@ -702,9 +700,6 @@
 .rw-app .identify-search-input {
   flex: 1 1 8rem;
   min-width: 0;
-}
-.rw-app .identify-search-submit {
-  flex: none;
 }
 .rw-app .identify-search-error {
   flex-basis: 100%;
