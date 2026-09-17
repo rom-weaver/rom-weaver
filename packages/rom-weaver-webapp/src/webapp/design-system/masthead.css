@@ -551,8 +551,8 @@
   block-size: 24px;
   background: var(--seam-strong);
 }
-/* Appearance, then the project links: the same pair and the same order in both
-   layouts, so one teaches the other. */
+/* Project links stay left of the separator; browser status and controls stay
+   together on its right in both layouts. */
 .rw-app .tool-separator {
   flex: none;
   align-self: stretch;
@@ -600,6 +600,10 @@
 .rw-app .topbar-tools .tool svg {
   width: 20px;
   height: 20px;
+}
+.rw-app .topbar-tools .sub-status svg {
+  width: 22px;
+  height: 22px;
 }
 .rw-app .sw-progress-ring-text {
   fill: currentColor;
@@ -746,8 +750,8 @@
 /* the tool wears the live dye so the current lot is readable without opening */
 .rw-app .accent-tool-dot {
   position: absolute;
-  inset-block-end: 4px;
-  inset-inline-end: 4px;
+  inset-block-end: 7px;
+  inset-inline-end: 2px;
   width: 8px;
   height: 8px;
   background: var(--thread);

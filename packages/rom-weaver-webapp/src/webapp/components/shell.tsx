@@ -617,38 +617,22 @@ const AccentTile = ({
   );
 };
 
-/** Docs, source and support: the same three links, in the same order, in both layouts. */
+/** Source and support: the project links shared by the desktop and phone chrome. */
 const ProjectTiles = ({
   confirmExternalNavigation,
-  docsHref,
   donateHref,
   githubHref,
   localizer,
-  onOpenDocs,
 }: {
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  docsHref: string;
   donateHref?: string;
   githubHref?: string;
   localizer: Localizer;
-  onOpenDocs: () => void;
 }) => {
-  const docsLabel = localizer.message("ui.nav.docs");
   const githubLabel = localizer.message("ui.tools.github");
   const supportLabel = localizer.message("ui.footer.donate");
   return (
     <>
-      <a
-        aria-label={docsLabel}
-        className="tool"
-        href={docsHref}
-        onClick={(event) => activateOnClick(event, onOpenDocs)}
-      >
-        <BookOpenGlyph />
-        <span aria-hidden="true" className="tip">
-          {docsLabel}
-        </span>
-      </a>
       {githubHref ? (
         <a
           aria-label={githubLabel}
@@ -683,19 +667,17 @@ const ProjectTiles = ({
   );
 };
 
-const BookOpenGlyph = () => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
-    viewBox="0 0 24 24"
-  >
-    <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
-  </svg>
-);
+const SettingsTile = ({ localizer, onOpenSettings }: { localizer: Localizer; onOpenSettings: () => void }) => {
+  const label = localizer.message("ui.settings.title");
+  return (
+    <button aria-label={label} className="tool" onClick={onOpenSettings} type="button">
+      <Settings aria-hidden="true" />
+      <span aria-hidden="true" className="tip">
+        {label}
+      </span>
+    </button>
+  );
+};
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -877,7 +859,7 @@ const RUNTIME_ICONS = {
   update: CloudDownload,
 } satisfies Record<RuntimeState, typeof CloudCheck>;
 
-const PROGRESS_RING_RADIUS = 9;
+const PROGRESS_RING_RADIUS = 10;
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_RADIUS;
 
 /** Determinate ring on the Lucide 24-box: the arc fills clockwise from 12 o'clock. */
@@ -1176,7 +1158,6 @@ const Masthead = ({
     [],
   );
   const navLabel = localizer.message("ui.nav.primary");
-  const docsHref = tabs.find((tab) => tab.id === "docs")?.href ?? "docs";
 
   /* The beta-tools setting is client-only, so the prerendered shell must not
      disagree with the first hydration pass: every beta row is in the markup
@@ -1461,10 +1442,9 @@ const Masthead = ({
       ) : null}
     </span>
   );
-  /* Theme and accent appear in the chrome (the top bar on desktop, the brand
-     row on the phone) and again inside the navigation (the sidebar foot and the
-     Menu sheet), so each copy owns its own popover key and radio group name.
-     Everything about the app's identity below is rendered exactly once. */
+  /* Theme, accent, and settings appear in the chrome (the top bar on desktop,
+     the brand row on the phone) and again inside navigation, so each copy owns
+     its own popover key and radio group name. */
   const appearanceTiles = (scope: string, navRow = false) => (
     <>
       <ThemeTile
@@ -1483,14 +1463,21 @@ const Masthead = ({
       />
     </>
   );
+  const settingsTile = (
+    <SettingsTile
+      localizer={localizer}
+      onOpenSettings={() => {
+        closeMenu();
+        onOpenSettings();
+      }}
+    />
+  );
   const projectTiles = (
     <ProjectTiles
       confirmExternalNavigation={confirmExternalNavigation}
-      docsHref={docsHref}
       donateHref={donateHref}
       githubHref={githubHref}
       localizer={localizer}
-      onOpenDocs={() => onSelectTab("docs")}
     />
   );
 
@@ -1524,10 +1511,11 @@ const Masthead = ({
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
               <div className="shell-head-tools">
+                <span className="phone-project-tools">{projectTiles}</span>
+                <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}
-                <span aria-hidden="true" className="tool-separator" />
-                <span className="phone-project-tools">{projectTiles}</span>
+                {settingsTile}
               </div>
             </div>
           </div>
@@ -1560,10 +1548,11 @@ const Masthead = ({
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
           <div className="topbar-tools">
+            {projectTiles}
+            <span aria-hidden="true" className="tool-separator" />
             <span className="desktop-runtime header-runtime">{headerStatus}</span>
             {appearanceTiles("desktop")}
-            <span aria-hidden="true" className="tool-separator" />
-            {projectTiles}
+            {settingsTile}
           </div>
         </div>
       </header>
