@@ -352,10 +352,20 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
-// Views the build emits a prerendered shell for. Trim and Tools deliberately
-// inherit the patcher's markup, so they hydrate as "patcher" - that is what is
-// actually in the document.
-const PRERENDERED_VIEWS = new Set<WebappView>(["creator", "docs", "home", "identify", "test"]);
+// Every direct route gets a shell for its own view. A route shell MUST match
+// the view used for hydration or React discards the server-rendered content.
+const PRERENDERED_VIEWS = new Set<WebappView>([
+  "creator",
+  "docs",
+  "home",
+  "identify",
+  "patcher",
+  "ppf-undo",
+  "save-editor",
+  "test",
+  "trim",
+  "whats-new",
+]);
 
 // Hydration has to start from the view the *served document* was rendered as,
 // or React discards the whole shell - never from controller state, which may
