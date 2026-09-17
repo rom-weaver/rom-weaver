@@ -71,10 +71,8 @@ const RASTER_TARGETS = [
   { master: "apple-touch-icon.svg", output: "apple-touch-icon.png", size: 180 },
 ];
 
-// The social card renders at 2x its 1280x640 master so it matches the
-// dimensions index.html advertises to crawlers. It is one image for every
-// channel, as the deployed og:image URL is the same on all of them.
-const SOCIAL_PREVIEW = { height: 1280, master: "social-preview.svg", width: 2560 };
+// Social cards MUST match the dimensions index.html advertises to crawlers.
+const SOCIAL_PREVIEW = { height: 1280, width: 2560 };
 
 const digest = (buffer) => createHash("sha256").update(buffer).digest("hex").slice(0, 12);
 
@@ -189,11 +187,13 @@ const main = async () => {
       emit(path.join(channelDir, "favicon.ico"), encodeFavicon(images));
     }
 
-    console.log("social preview");
-    const socialMaster = fs.readFileSync(path.join(designRoot, SOCIAL_PREVIEW.master), "utf8");
-    const social = await renderSocialPreview(page, socialMaster);
-    for (const [format, buffer] of Object.entries(social)) {
-      emit(path.join(outputDir, `social-preview.${format}`), buffer);
+    for (const name of ["social-preview", "social-preview-dark"]) {
+      console.log(name);
+      const socialMaster = fs.readFileSync(path.join(designRoot, `${name}.svg`), "utf8");
+      const social = await renderSocialPreview(page, socialMaster);
+      for (const [format, buffer] of Object.entries(social)) {
+        emit(path.join(outputDir, `${name}.${format}`), buffer);
+      }
     }
 
     const logo = fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8");
