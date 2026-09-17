@@ -958,6 +958,15 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 .rw-app .sample-tutorial-start-dismiss {
   min-height: 44px;
 }
+.rw-app .sample-tutorial-start-dismiss-copy {
+  display: grid;
+  gap: 3px;
+}
+.rw-app .sample-tutorial-start-dismiss-copy small {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--ink-3);
+}
 
 /* Guided samples trace the same numbered loom stages as the workbench. The
    dimmer never traps input: each live section remains available while its

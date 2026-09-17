@@ -1171,7 +1171,12 @@ msgstr "Does not match the ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.dismiss"
-msgstr "Don't show this again (re-enable in Settings)"
+msgstr "Don't show this again"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.reenable"
+msgstr "Re-enable in Settings"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

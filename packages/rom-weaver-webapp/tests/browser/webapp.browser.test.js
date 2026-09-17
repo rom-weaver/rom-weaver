@@ -472,6 +472,12 @@ test("the New here? control has a touch target and its popover carries every sta
     document.querySelector(".sample-tutorial-start-dismiss")?.classList.contains("sample-tutorial-start-action"),
   ).toBe(true);
   expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe("/docs/apply-rom-patches");
+  expect(document.querySelector(".sample-tutorial-start-dismiss-copy > span")?.textContent).toBe(
+    "Don't show this again",
+  );
+  expect(document.querySelector(".sample-tutorial-start-dismiss-copy > small")?.textContent).toBe(
+    "Re-enable in Settings",
+  );
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
     "/apply-patch?guide=apply",
   );

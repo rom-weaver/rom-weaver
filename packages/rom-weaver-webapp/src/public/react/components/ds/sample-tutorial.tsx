@@ -416,7 +416,10 @@ const SampleTutorialStart = ({
             type="button"
           >
             <X aria-hidden="true" />
-            {localizer.message("ui.tutorial.dismiss")}
+            <span className="sample-tutorial-start-dismiss-copy">
+              <span>{localizer.message("ui.tutorial.dismiss")}</span>
+              <small>{localizer.message("ui.tutorial.reenable")}</small>
+            </span>
           </button>
         </div>
       ) : null}

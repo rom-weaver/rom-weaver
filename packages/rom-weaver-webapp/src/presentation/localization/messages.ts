@@ -784,7 +784,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "Available actions" }),
   "ui.tutorial.back": msg({ id: "ui.tutorial.back", message: "Back" }),
   "ui.tutorial.continue": msg({ id: "ui.tutorial.continue", message: "Continue" }),
-  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Don't show this again (re-enable in Settings)" }),
+  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Don't show this again" }),
+  "ui.tutorial.reenable": msg({ id: "ui.tutorial.reenable", message: "Re-enable in Settings" }),
   "ui.tutorial.done": msg({ id: "ui.tutorial.done", message: "Done" }),
   "ui.tutorial.endHint": msg({
     id: "ui.tutorial.endHint",
