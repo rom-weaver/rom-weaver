@@ -1058,9 +1058,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.createThesis2",
     message: "Share your changes.",
   }),
-  "ui.hero.local": msg({
-    id: "ui.hero.local",
-    message: "Runs in your browser. Your files stay on this device.",
+  "ui.footer.local": msg({
+    id: "ui.footer.local",
+    message: "Runs in your browser. Your files stay on this device. Offline support. No telemetry.",
   }),
   "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply a patch." }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "Change how you play." }),

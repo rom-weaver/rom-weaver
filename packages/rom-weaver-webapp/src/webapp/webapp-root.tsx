@@ -360,6 +360,11 @@ const PanelThreadCount = ({
   );
 };
 
+const PageFooter = () => {
+  const localizer = useUiLocalizer();
+  return <footer className="page-footer">{localizer.message("ui.footer.local")}</footer>;
+};
+
 const DropVeil = () => {
   const localizer = useUiLocalizer();
   return (
@@ -970,6 +975,7 @@ function WebappRoot({
               </>
             )}
           </main>
+          <PageFooter />
           <span className="shell-threads-identity" hidden />
           {/* the dock is fixed, so the column reserves its height through the one
               variable masthead.css raises below the dock threshold */}

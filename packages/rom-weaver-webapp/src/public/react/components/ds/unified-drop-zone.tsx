@@ -140,7 +140,6 @@ const UnifiedDropZone = ({
         onFiles={emit}
       />
       {afterDropZone}
-      {big ? <p className="hero-privacy">{localizer.message("ui.hero.local")}</p> : null}
       {big ? (
         <div className="hero-help">
           {lead.guide ? (

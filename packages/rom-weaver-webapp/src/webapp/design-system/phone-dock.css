@@ -37,25 +37,6 @@
     background: color-mix(in oklab, var(--thread) 6%, transparent);
   }
 
-  /* On the apply page the New here? chip rides the seam between hero and
-     footer: half above, half below. Both sides pad for it only while the chip
-     is there - the identify page has no chip and keeps the plain seam. */
-  html:not([data-onboarding-enabled="false"])
-    .rw-app
-    .step.is-input.is-empty:has(> .step-body > .identify-search--hero):has(> .step-body > .first-weave-demo)
-    .drop.hero {
-    padding-block-end: 24px;
-  }
-  html:not([data-onboarding-enabled="false"])
-    .rw-app
-    .step.is-input.is-empty:has(> .step-body > .first-weave-demo)
-    > .step-body
-    > .identify-search--hero {
-    padding-block-start: 20px;
-  }
-  .rw-app .step.is-input.is-empty:has(> .step-body > .identify-search--hero) .sample-tutorial-start-chip {
-    bottom: -14px;
-  }
   .rw-app .sample-tutorial-start-chip {
     font-size: 0.74rem;
   }

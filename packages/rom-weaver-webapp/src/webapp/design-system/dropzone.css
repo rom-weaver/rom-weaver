@@ -642,12 +642,6 @@
   font-size: 0.88rem;
   font-weight: 400;
 }
-.rw-app .simple-hero .hero-privacy {
-  margin: 20px 16px 8px;
-  font-size: 0.8rem;
-  color: var(--ink-2);
-  text-align: center;
-}
 .rw-app .simple-hero .hero-guide {
   display: block;
   width: fit-content;
@@ -663,6 +657,7 @@
   gap: 0 16px;
   align-items: start;
   justify-content: center;
+  margin-block-start: 16px;
 }
 .rw-app .simple-hero .hero-formats-help {
   max-width: 100%;
@@ -753,10 +748,16 @@
 }
 /* The tutorial popover MUST stay outside the file-picker label. */
 .rw-app .first-weave-demo {
+  position: absolute;
+  top: 20px;
+  left: calc(var(--pad) + 12px);
+  z-index: 3;
+}
+.rw-app .step-body:has(> .first-weave-demo) {
   position: relative;
-  display: flex;
-  justify-content: flex-end;
-  height: 0;
+}
+html:not([data-onboarding-enabled="false"]) .rw-app .simple-hero .step-body:has(> .first-weave-demo) .drop.hero {
+  padding-block-start: 76px;
 }
 /* Pre-hydration twin of the index.html head rule: the prerendered shell always
    carries the chip, so a visitor who disabled onboarding must not see it while
@@ -766,9 +767,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   display: none;
 }
 .rw-app .sample-tutorial-start-chip {
-  position: absolute;
-  right: calc(var(--sp-m) + 10px);
-  bottom: calc(var(--sp-m) + 10px);
+  position: relative;
   z-index: 3;
   display: inline-flex;
   gap: 7px;
@@ -832,8 +831,8 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .sample-tutorial-start-pop {
   position: absolute;
-  right: calc(var(--sp-m) + 10px);
-  bottom: calc(var(--sp-m) + 54px);
+  top: calc(100% + 8px);
+  left: 0;
   z-index: 4;
   display: grid;
   gap: var(--sp-2xs);

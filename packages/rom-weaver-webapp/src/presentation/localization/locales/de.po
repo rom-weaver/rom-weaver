@@ -2825,8 +2825,8 @@ msgstr "RomWeaver entpackt ein kleines ROM und zwei Patches und prüft dann jede
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.local"
-msgstr "Alles lokal in deinem Browser. Deine Dateien verlassen nie deinen Rechner."
+msgid "ui.footer.local"
+msgstr "Läuft in deinem Browser. Deine Dateien bleiben auf diesem Gerät. Offline-Unterstützung. Keine Telemetrie."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -8,6 +8,15 @@
   padding-block-end: clamp(8px, 2.9vw - 8px, 16px);
 }
 
+.rw-app .page-footer {
+  padding: 20px var(--pad);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  text-align: center;
+  border-block-start: 1px solid var(--seam-soft);
+}
+
 /* Form sections */
 .rw-app .panel {
   overflow: clip;
