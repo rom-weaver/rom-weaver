@@ -570,6 +570,7 @@
   place-items: center;
   width: 32px;
   height: 32px;
+  padding: 0;
   color: var(--ink-2);
   appearance: none;
   cursor: pointer;
