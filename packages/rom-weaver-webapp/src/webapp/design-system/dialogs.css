@@ -704,6 +704,10 @@
   font-weight: 650;
   color: var(--thread-text);
 }
+.rw-app .srange > input[type="range"] {
+  /* Native range controls add a 2px margin, shifting the bar from its scale. */
+  margin: 0;
+}
 .rw-app .srange-scale {
   display: flex;
   justify-content: space-between;
