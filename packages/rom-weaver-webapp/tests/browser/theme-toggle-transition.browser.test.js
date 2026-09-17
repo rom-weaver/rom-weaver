@@ -146,6 +146,34 @@ describe("theme toggle view-transition gate", () => {
     expect(Number.parseFloat(root_.style.getPropertyValue("--wipe-r"))).toBeGreaterThan(0);
   });
 
+  test("keeps a touch origin when the browser reports a detail-zero click", async () => {
+    pretendIosWebKit();
+    const toggle = await renderMasthead();
+    toggle.click();
+    const anchor = toggle.closest(".tool-anchor");
+    let rows = [...anchor.querySelectorAll('[role="menuitemradio"]')];
+    for (let attempt = 0; rows.length === 0 && attempt < 50; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      rows = [...anchor.querySelectorAll('[role="menuitemradio"]')];
+    }
+    const choice = rows[THEME_CHOICE.dark];
+    const rect = choice.getBoundingClientRect();
+    const clickX = Math.round(rect.left + 9);
+    const clickY = Math.round(rect.top + 11);
+    choice.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientX: clickX,
+        clientY: clickY,
+        pointerType: "touch",
+      }),
+    );
+    choice.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: clickX, clientY: clickY, detail: 0 }));
+
+    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${clickX}px`);
+    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${clickY}px`);
+  });
+
   test("sweeps an accent change from the chosen swatch", async () => {
     pretendIosWebKit();
     await renderMasthead();
@@ -161,14 +189,58 @@ describe("theme toggle view-transition gate", () => {
     const rect = choice.getBoundingClientRect();
     const clickX = Math.round(rect.left + 7);
     const clickY = Math.round(rect.top + 9);
+    choice.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientX: clickX,
+        clientY: clickY,
+        pointerType: "touch",
+      }),
+    );
     choice
       .querySelector("input")
-      .dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: clickX, clientY: clickY, detail: 1 }));
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: clickX, clientY: clickY, detail: 0 }));
 
     expect(startCalls).toHaveLength(1);
     expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${clickX}px`);
     expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${clickY}px`);
     expect(document.documentElement.getAttribute("data-accent")).toBe("woad");
+  });
+
+  test("does not reuse a touch origin after keyboard accent navigation", async () => {
+    pretendIosWebKit();
+    await renderMasthead();
+    const toggle = host.querySelector(".topbar-tools .accent-tool");
+    toggle.click();
+    let inputs = [...host.querySelectorAll(".topbar-tools .accent-chip input")];
+    for (let attempt = 0; inputs.length === 0 && attempt < 50; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      inputs = [...host.querySelectorAll(".topbar-tools .accent-chip input")];
+    }
+    const selected = inputs.find((input) => input.checked);
+    const target = inputs.find((input) => !input.checked);
+    if (!(selected && target)) throw new Error("accent choices never rendered");
+    const selectedRect = selected.closest("label").getBoundingClientRect();
+    const staleX = Math.round(selectedRect.left + 3);
+    const staleY = Math.round(selectedRect.top + 3);
+    selected.closest("label").dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        clientX: staleX,
+        clientY: staleY,
+        pointerType: "touch",
+      }),
+    );
+    selected.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" }));
+    target.click();
+
+    const targetRect = target.closest("label").getBoundingClientRect();
+    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(
+      `${targetRect.left + targetRect.width / 2}px`,
+    );
+    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(
+      `${targetRect.top + targetRect.height / 2}px`,
+    );
   });
 
   test("keeps vt-theme held when a second toggle overlaps the first", async () => {

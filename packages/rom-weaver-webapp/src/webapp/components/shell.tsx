@@ -465,6 +465,9 @@ const ThemeTile = ({
   const { preference, setPreference, theme } = useTheme();
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // Touch browsers can synthesize a click with detail=0, so capture the
+  // pointer before the click and keep keyboard activation centered.
+  const themePointerRef = useRef<{ x: number; y: number } | null>(null);
   useNavToolPopover(open, navRow, buttonRef, panelRef);
   const label = localizer.message("ui.tools.theme");
   const current = THEME_CHOICES.find((choice) => choice.value === preference);
@@ -502,14 +505,25 @@ const ThemeTile = ({
               aria-checked={choice.value === preference}
               className="tool-pop-item"
               key={choice.value}
+              onPointerCancel={() => {
+                themePointerRef.current = null;
+              }}
+              onPointerDown={(event) => {
+                themePointerRef.current = { x: event.clientX, y: event.clientY };
+              }}
               onClick={(event) => {
+                const pointer = themePointerRef.current;
+                themePointerRef.current = null;
                 runAppearanceWipe(
                   () => setPreference(choice.value),
                   event.currentTarget,
                   "theme",
-                  event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined,
+                  pointer ?? (event.detail > 0 ? { x: event.clientX, y: event.clientY } : undefined),
                 );
                 onToggle(buttonRef.current);
+              }}
+              onKeyDown={() => {
+                themePointerRef.current = null;
               }}
               role="menuitemradio"
               type="button"
@@ -555,7 +569,7 @@ const AccentTile = ({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
-  // Change events have no pointer coordinates, so keep the preceding click
+  // Change events have no pointer coordinates, so keep the preceding pointer
   // point for pointer activation while leaving keyboard activation centered.
   const accentPointerRef = useRef<{ x: number; y: number } | null>(null);
   useNavToolPopover(open, navRow, buttonRef, panelRef);
@@ -599,7 +613,17 @@ const AccentTile = ({
           <p className="tool-pop-head">{`${label}: ${currentLabel}`}</p>
           <div aria-label={label} className="accent-tray" ref={trayRef} role="radiogroup">
             {ACCENTS.map((entry) => (
-              <label className="accent-chip" key={entry.value} title={entry.label}>
+              <label
+                className="accent-chip"
+                key={entry.value}
+                onPointerCancel={() => {
+                  accentPointerRef.current = null;
+                }}
+                onPointerDown={(event) => {
+                  accentPointerRef.current = { x: event.clientX, y: event.clientY };
+                }}
+                title={entry.label}
+              >
                 <input
                   aria-label={entry.label}
                   checked={entry.value === accent}
@@ -614,8 +638,8 @@ const AccentTile = ({
                       pointer ?? undefined,
                     );
                   }}
-                  onClick={(event) => {
-                    accentPointerRef.current = event.detail > 0 ? { x: event.clientX, y: event.clientY } : null;
+                  onKeyDown={() => {
+                    accentPointerRef.current = null;
                   }}
                   type="radio"
                   value={entry.value}
