@@ -69,7 +69,6 @@
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0.01em;
-  opacity: 0.92;
 }
 .rw-app .download-btn .dl-size::before {
   margin-inline-end: 9px;

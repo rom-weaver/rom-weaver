@@ -87,10 +87,10 @@
   --warp-a: #43505f;
   --warp-b: #6b7684;
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
-  --thread-text: #b03a0a;
+  --thread-text: #a63609;
   /* Readouts also sit on the fault-tinted checksum row, which is lighter than
-     any plate --thread-text is verified against; on paper the bare accent text
-     lands at 4.49:1 there. Deepening it keeps the accent and clears 4.5:1. */
+     any plate --thread-text is verified against. Deepening it also keeps the
+     tutorial beacon readable on the thread-tinted well. */
   --weft: color-mix(in oklab, var(--thread-text) 85%, #000);
   --verified: #365d82;
   --fault: #b91c1c;
