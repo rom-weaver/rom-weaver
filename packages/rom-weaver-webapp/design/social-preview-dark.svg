@@ -6,14 +6,14 @@
       <path d="M0 16h64M0 48h64M16 0v64M48 0v64" fill="none" stroke="#f6ecda" stroke-width="1" opacity=".05"/>
     </pattern>
   </defs>
-  <rect width="1280" height="640" fill="#f4f0e8"/>
-  <rect x="928" width="352" height="640" fill="#20282d"/>
+  <rect width="1280" height="640" fill="#28313b"/>
+  <rect x="928" width="352" height="640" fill="#0c0f13"/>
   <rect x="928" width="352" height="640" fill="url(#weave)"/>
   <g font-family="Arial, Helvetica, sans-serif">
-    <text x="60" y="160" fill="#20282d" font-size="112" font-weight="700" letter-spacing="-3.4">rom<tspan fill="#77766d" font-weight="400">-</tspan><tspan fill="#b03a0a">weaver</tspan></text>
-    <text x="64" y="300" fill="#20282d" font-size="64" font-weight="600" letter-spacing="-1">A browser &amp; CLI toolkit</text>
-    <text x="64" y="386" fill="#20282d" font-size="48">ROMs · Patches · Cheats · Saves</text>
-    <text x="64" y="548" fill="#505851" font-size="48">rom-weaver.com</text>
+    <text x="60" y="160" fill="#edf0f5" font-size="112" font-weight="700" letter-spacing="-3.4">rom<tspan fill="#939cab" font-weight="400">-</tspan><tspan fill="#ef8534">weaver</tspan></text>
+    <text x="64" y="300" fill="#edf0f5" font-size="64" font-weight="600" letter-spacing="-1">A browser &amp; CLI toolkit</text>
+    <text x="64" y="386" fill="#edf0f5" font-size="48">ROMs · Patches · Cheats · Saves</text>
+    <text x="64" y="548" fill="#b3bbc8" font-size="48">rom-weaver.com</text>
   </g>
   <svg x="950" y="170" width="300" height="300" viewBox="0 0 64 64" fill="none" aria-hidden="true">
     <path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/>

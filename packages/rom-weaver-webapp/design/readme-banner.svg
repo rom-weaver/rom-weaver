@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-labelledby="title desc">
+  <title id="title">rom-weaver — A browser &amp; CLI toolkit for ROMs, patches, cheats, and game saves.</title>
+  <desc id="desc">The cartridge W logo and rom-weaver wordmark on a cream and charcoal woven background.</desc>
+  <defs>
+    <pattern id="weave" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M0 8h32M0 24h32M8 0v32M24 0v32" fill="none" stroke="#f6ecda" opacity=".05"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="300" rx="20" fill="#f4f0e8"/>
+  <path d="M960 0h300a20 20 0 0 1 20 20v260a20 20 0 0 1-20 20H960Z" fill="#20282d"/>
+  <path d="M960 0h300a20 20 0 0 1 20 20v260a20 20 0 0 1-20 20H960Z" fill="url(#weave)"/>
+  <path d="M0 276h960" stroke="#d9690f" stroke-width="4"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="68" y="126" fill="#20282d" font-size="100" font-weight="700" letter-spacing="-3">rom<tspan fill="#77766d" font-weight="400">-</tspan><tspan fill="#b03a0a">weaver</tspan></text>
+    <text x="72" y="200" fill="#20282d" font-size="30" font-weight="600" letter-spacing="-.6">A browser &amp; CLI toolkit for ROMs,</text>
+    <text x="72" y="244" fill="#20282d" font-size="30" font-weight="600" letter-spacing="-.6">patches, cheats, and game saves.</text>
+    <text x="1120" y="264" fill="#f6ecda" font-size="24" text-anchor="middle">rom-weaver.com</text>
+  </g>
+  <svg x="1025" y="30" width="190" height="190" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+    <path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/>
+    <path fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/>
+  </svg>
+</svg>

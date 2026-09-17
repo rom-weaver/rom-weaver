@@ -3,7 +3,7 @@
   "version": "0.15.1",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
-  "description": "Local-first toolkit for ROMs and disc images: inspect, extract, compress, and apply, create, or bundle patches. Offline via a browser service-worker PWA or CLI.",
+  "description": "Offline ROM toolkit: patch, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry.",
   "keywords": [
     "rom",
     "rom-hack",

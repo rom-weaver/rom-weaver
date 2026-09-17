@@ -1,7 +1,7 @@
 {
   "name": "@rom-weaver/webapp",
   "version": "0.15.1",
-  "description": "Local-first toolkit for ROMs and disc images: inspect, extract, compress, and apply, create, or bundle patches. Offline via a browser service-worker PWA or CLI.",
+  "description": "Patch ROMs, convert disc images, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
   "keywords": [
     "rom",
     "rom-hack",
