@@ -292,6 +292,7 @@
   margin-block-end: var(--sp-s);
 }
 .rw-app .changelog-update-title {
+  margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -350,7 +351,8 @@
     transition: none;
   }
 }
-.rw-app .rel-summary b {
+.rw-app .rel-summary h2 {
+  margin: 0;
   color: var(--thread-text);
 }
 .rw-app .rel-summary-count {
@@ -452,4 +454,12 @@
   to {
     mask-position: var(--drift, 0 20px);
   }
+}
+
+.rw-app .whats-new-title {
+  margin: 0 0 var(--sp-m);
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--ink);
 }

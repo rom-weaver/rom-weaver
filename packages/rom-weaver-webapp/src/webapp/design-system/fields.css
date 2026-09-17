@@ -560,6 +560,11 @@
 .rw-app .patch-menu-list[hidden] {
   display: none;
 }
+@media (min-width: 641px) {
+  .rw-app .patch-menu-list {
+    inset-inline-end: calc(100% + 12px);
+  }
+}
 .rw-app .patch-menu-item {
   display: flex;
   gap: var(--sp-s);

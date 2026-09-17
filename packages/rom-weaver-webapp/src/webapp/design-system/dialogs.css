@@ -725,14 +725,17 @@
 @view-transition {
   navigation: auto;
 }
-/* JS supplies the theme-wipe origin; CSS owns the transition. */
-:root.vt-theme::view-transition-old(root) {
+/* JS supplies the clicked choice as the origin for both appearance sweeps. */
+:root:is(.vt-theme, .vt-accent)::view-transition-group(root) {
+  animation-duration: 0.24s;
+}
+:root:is(.vt-theme, .vt-accent)::view-transition-old(root) {
   mix-blend-mode: normal;
   animation: none;
 }
-:root.vt-theme::view-transition-new(root) {
+:root:is(.vt-theme, .vt-accent)::view-transition-new(root) {
   mix-blend-mode: normal;
-  animation: theme-wipe 0.42s cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: theme-wipe 0.24s cubic-bezier(0, 0, 0.2, 1) both;
 }
 @keyframes theme-wipe {
   from {
@@ -766,6 +769,7 @@
 }
 /* Suppress unrelated morphs during theme wipes and mode switches. */
 html.vt-theme [style*="view-transition-name"],
+html.vt-accent [style*="view-transition-name"],
 html.vt-flat [style*="view-transition-name"] {
   view-transition-name: none !important;
 }
@@ -794,8 +798,8 @@ html.vt-flat [style*="view-transition-name"] {
 .rw-app .unified-drop-step:has(#ppf-undo-input-picker) > .step-head {
   view-transition-name: vt-input-head-ppf-undo;
 }
-html.vt-theme .unified-drop-step .drop,
-html.vt-theme .unified-drop-step .step-head {
+html:is(.vt-theme, .vt-accent) .unified-drop-step .drop,
+html:is(.vt-theme, .vt-accent) .unified-drop-step .step-head {
   view-transition-name: none !important;
 }
 /* Flatten mode switches into one root crossfade. */

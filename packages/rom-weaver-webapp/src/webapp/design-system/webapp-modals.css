@@ -297,11 +297,13 @@ html:has(.rw-modal) {
   .rw-app .info-btn {
     position: relative;
   }
-  /* Expand masthead targets vertically to avoid overlapping neighbors. */
-  .rw-app .masthead-tools .tool {
+  /* Expand the chrome's glyph targets vertically to avoid overlapping neighbors. */
+  .rw-app .topbar-tools .tool,
+  .rw-app .shell-head-tools .tool {
     position: relative;
   }
-  .rw-app .masthead-tools .tool::after {
+  .rw-app .topbar-tools .tool::after,
+  .rw-app .shell-head-tools .tool::after {
     position: absolute;
     inset-inline: 0;
     top: 50%;

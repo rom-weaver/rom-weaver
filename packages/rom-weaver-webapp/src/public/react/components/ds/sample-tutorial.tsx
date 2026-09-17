@@ -189,17 +189,30 @@ const clampBetween = (value: number, floor: number, limit: number) =>
   Math.min(Math.max(value, floor), Math.max(floor, limit));
 
 /**
- * The highest the card may sit. A bare margin from the viewport top is not it:
- * the masthead owns that band, and a card tall enough to be clamped there lands
- * on the toolbar - covering controls the reader can still see and reach for.
- * Measured rather than assumed, so it costs nothing once the masthead has
- * scrolled away and follows the masthead through every width it changes at.
+ * The top chrome the guide card must stay clear of, by the selector of every
+ * layout that owns that band. The card only anchors on desktop, where the top
+ * bar spans its column; the identity block is listed for the phone header and
+ * for a route that renders one without the other. Each entry MUST name an
+ * element in normal flow, so a limit measured here drops away once the chrome
+ * scrolls off.
  */
-const guideTopLimit = () => {
-  const masthead = document.querySelector(".rw-app .masthead");
-  if (!masthead) return GUIDE_MARGIN;
-  return Math.max(GUIDE_MARGIN, masthead.getBoundingClientRect().bottom + GUIDE_MARGIN);
-};
+const GUIDE_TOP_CHROME = [".rw-app .topbar", ".rw-app .shell-head"];
+
+/**
+ * The highest the card may sit. A bare margin from the viewport top is not it:
+ * the top bar owns that band, and a card tall enough to be clamped there lands
+ * on the theme and project controls - covering controls the reader can still
+ * see and reach for. Measured rather than assumed, so it costs nothing once the
+ * chrome has scrolled away and follows it through every width it changes at.
+ */
+const guideTopLimit = () =>
+  GUIDE_TOP_CHROME.reduce((limit, selector) => {
+    const rect = document.querySelector(selector)?.getBoundingClientRect();
+    // A `display: contents` or hidden layout reports an empty box; it owns no
+    // band and must not push the card down.
+    if (!rect?.height) return limit;
+    return Math.max(limit, rect.bottom + GUIDE_MARGIN);
+  }, GUIDE_MARGIN);
 
 /**
  * Which side of the row the card sits on. A row taller than a chunk of the

@@ -241,6 +241,7 @@ const StatusRows = ({
   localizer,
   offlineProgress,
   runtimeState,
+  previewActive = false,
   downloadRequested,
   downloadUnavailable,
   onDownload,
@@ -259,6 +260,7 @@ const StatusRows = ({
   onRemove: () => void;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   runtimeState: RuntimeState;
+  previewActive?: boolean;
 }) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
@@ -284,7 +286,7 @@ const StatusRows = ({
             : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
         </span>
         {/* Remove MUST precede changing download controls and progress so updates cannot move a pressed button. */}
-        {runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
+        {!previewActive && runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
           <>
             <button className="btn slim ghost" disabled={removing} onClick={onRemove} type="button">
               <Trash2 aria-hidden="true" size={14} />
@@ -298,7 +300,7 @@ const StatusRows = ({
             ) : null}
           </>
         ) : null}
-        {runtimeState === "installing" || runtimeState === "online" ? (
+        {!previewActive && (runtimeState === "installing" || runtimeState === "online") ? (
           <>
             <button
               className="btn slim ghost"
@@ -575,8 +577,20 @@ const OfflineCachedFiles = ({
  * privacy are now written in full. Three paragraphs of them under the status
  * rows made the tab a page about the project rather than a readout of it.
  */
-const AboutLink = ({ localizer }: { localizer: Localizer }) => (
+const AboutLink = ({ localizer, onOpenWhatsNew }: { localizer: Localizer; onOpenWhatsNew?: () => void }) => (
   <div className="status-about">
+    <a
+      className="about-link"
+      href="/whats-new"
+      onClick={(event) => {
+        if (!onOpenWhatsNew || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+          return;
+        event.preventDefault();
+        onOpenWhatsNew();
+      }}
+    >
+      {localizer.message("ui.update.whatsNew")}
+    </a>{" "}
     <a className="about-link" href={ABOUT_URL}>
       {localizer.message("ui.status.about")}
     </a>
@@ -1044,6 +1058,7 @@ const LogDialog = ({
   initialTab = "status",
   onRestoreDefaults,
   onSaveSettings,
+  onOpenWhatsNew,
   onTabChange,
   serviceWorkerStatus,
   offlineProgress = null,
@@ -1052,6 +1067,7 @@ const LogDialog = ({
   settingsFocusHint,
   settingsPanel,
   updateReady = false,
+  previewRuntimeState = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1061,6 +1077,7 @@ const LogDialog = ({
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
+  onOpenWhatsNew?: () => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   offlineCopyEnabled?: boolean;
@@ -1069,6 +1086,7 @@ const LogDialog = ({
   /** The lazy settings panel, mounted only while its tab is showing. */
   settingsPanel?: ReactNode;
   updateReady?: boolean;
+  previewRuntimeState?: RuntimeState | null;
 }) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -1092,7 +1110,8 @@ const LogDialog = ({
     [onTabChange],
   );
   useSettingsFieldFocus(open && tab === "settings", settingsFocusHint);
-  const runtimeState = resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress, offlineCopyEnabled);
+  const runtimeState =
+    previewRuntimeState ?? resolveRuntimeState(serviceWorkerStatus, updateReady, offlineProgress, offlineCopyEnabled);
   const offlineCopy = useSyncExternalStore(subscribeOfflineCopyState, getOfflineCopyState, getInitialOfflineCopyState);
   const [opfsEntries, setOpfsEntries] = useState<StorageEntry[]>([]);
   const [opfsLoading, setOpfsLoading] = useState(false);
@@ -1288,6 +1307,7 @@ const LogDialog = ({
               offlineProgress={offlineProgress}
               onDownload={requestDownload}
               runtimeState={runtimeState}
+              previewActive={previewRuntimeState !== null}
             />
             <OfflineCachedFiles
               error={cachedFilesError}
@@ -1296,7 +1316,7 @@ const LogDialog = ({
               localizer={localizer}
             />
             <OfflineLegend current={runtimeState} localizer={localizer} />
-            <AboutLink localizer={localizer} />
+            <AboutLink localizer={localizer} onOpenWhatsNew={onOpenWhatsNew} />
           </div>
         ) : null}
         {tab === "logs" || tab === "storage" ? (

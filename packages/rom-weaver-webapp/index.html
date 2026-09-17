@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>rom-weaver — Local-first ROM and disc image toolkit</title>
+    <title>rom-weaver: Local-first ROM and disc image toolkit</title>
     <meta name="theme-color" content="#0c0f13" />
     <meta name="color-scheme" content="dark light" />
     <style>
@@ -29,6 +29,10 @@
       // accent field; madder = no attribute). theme.ts/accent.ts re-apply the same
       // values on boot, so this only moves the attribute earlier - keep in sync.
       (function () {
+        const layout = new URLSearchParams(location.search).get("offline-layout") || "strip";
+        document.documentElement.dataset.offlineLayout = ["tab", "strip", "edge", "quiet", "title"].includes(layout)
+          ? layout
+          : "strip";
         try {
           const stored = localStorage.getItem("rom-weaver-theme");
           const preferred = stored === "light" || stored === "dark" ? stored : "";
@@ -76,7 +80,7 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://rom-weaver.com/" />
     <meta property="og:site_name" content="rom-weaver" />
-    <meta property="og:title" content="rom-weaver — Local-first ROM and disc image toolkit" />
+    <meta property="og:title" content="rom-weaver: Local-first ROM and disc image toolkit" />
     <meta
       property="og:description"
       content="Patch, pack, and identify ROMs and disc images locally - in your browser or from the CLI. Nothing is uploaded, and every workflow saves as a replayable bundle."
@@ -108,7 +112,7 @@
       content="rom-weaver cartridge W logo. Patch, convert, and inspect ROMs in your browser or CLI."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="rom-weaver — Local-first ROM and disc image toolkit" />
+    <meta name="twitter:title" content="rom-weaver: Local-first ROM and disc image toolkit" />
     <meta
       name="twitter:description"
       content="Patch, pack, and identify ROMs and disc images locally - in your browser or from the CLI. Nothing is uploaded, and every workflow saves as a replayable bundle."
@@ -143,16 +147,16 @@
       })();
     </script>
     <script>
-      // Called by the tiny parser-blocking script injected immediately after
-      // the prerendered masthead metadata. It resolves both slots before the
-      // rest of the shell can paint, and produces the exact text React hydrates.
+      // The parser calls this after the masthead and again after the workflow
+      // heading. The first call resolves status; the second resolves threads.
       window.ROM_WEAVER_RESOLVE_SHELL_IDENTITY = function () {
-        const threadSlot = document.querySelector(".masthead-threads");
-        const threadCount = threadSlot?.querySelector(".masthead-threads-count");
-        const statusSlot = document.querySelector(".sub-status");
-        const statusIcon = statusSlot?.querySelector("svg");
-        const statusText = statusSlot?.querySelector(".sub-status-text");
-        if (!(threadSlot && threadCount && statusSlot && statusIcon && statusText)) return;
+        // The runtime buttons in both layouts render before hydration.
+        // The resolver MUST update every runtime-dependent prerendered node.
+        // A stale "installing" state makes React discard the prerendered page.
+        const threadSlots = [...document.querySelectorAll(".panel-threads-btn")];
+        const statusSlots = [...document.querySelectorAll(".sub-status")];
+        if (statusSlots.length === 0) return;
+        if (!statusSlots.every((slot) => slot.querySelector("svg") && slot.querySelector(".sub-status-text"))) return;
 
         const hardwareConcurrency = navigator.hardwareConcurrency;
         const hardwareThreads =
@@ -164,8 +168,10 @@
             ? Math.min(64, Math.max(4, hardwareThreads))
             : 1;
 
+        let offlineCopyEnabled = true;
         try {
           const stored = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
+          offlineCopyEnabled = stored?.common?.offlineCopyEnabled !== false;
           const applyCompression = stored?.apply?.compression;
           const createCompression = stored?.create?.compression;
           // No version gate - see the theme/accent script above. The parse
@@ -185,9 +191,14 @@
           // Fall back to the browser default; the app does the same for bad storage.
         }
 
-        const label = threadSlot.dataset.threadLabel || "threads";
-        threadCount.textContent = String(threads);
-        threadSlot.setAttribute("aria-label", `${threads} ${label}`);
+        for (const slot of threadSlots) {
+          const count = slot.querySelector(".panel-threads-count");
+          const word = slot.querySelector(".panel-threads-word");
+          if (!(count && word)) continue;
+          count.textContent = String(threads);
+          word.textContent =
+            threads === 1 ? slot.dataset.threadSingular || "thread" : slot.dataset.threadPlural || "threads";
+        }
 
         // Same glyphs and wording as RuntimeGlyph/RUNTIME_MESSAGES in shell.tsx -
         // React hydrates against exactly what is written here.
@@ -195,6 +206,8 @@
           active:
             '<path d="m17 15-5.5 5.5L9 18"></path><path d="M5.516 16.07A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 3.501 7.327"></path>',
           disabled:
+            '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path>',
+          online:
             '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path>',
           installing: '<path d="M21 12a9 9 0 1 1-6.219-8.56"></path>',
           ready:
@@ -205,14 +218,23 @@
         const wording = {
           active: "Offline active",
           disabled: "Offline support off",
+          online: "Offline copy disabled",
           installing: "Installing offline copy",
           ready: "Offline ready",
+        };
+        const shortWording = {
+          active: "Ready",
+          disabled: "Unsupported",
+          online: "Disabled",
+          installing: "Downloading",
+          ready: "Ready",
         };
         // Lucide class names for the same glyphs, so React finds the class it
         // renders on the svg and does not report a hydration mismatch on it.
         const iconClasses = {
           active: "lucide-cloud-check",
           disabled: "lucide-cloud-off",
+          online: "lucide-cloud-off",
           installing: "lucide-loader-circle",
           ready: "lucide-package-check",
           update: "lucide-cloud-download",
@@ -223,13 +245,18 @@
         // early - both are locale-independent.
         const english = (document.documentElement.lang || "en").indexOf("en") === 0;
         const setRuntimeStatus = (state) => {
-          statusSlot.dataset.sw = state;
-          statusIcon.setAttribute("class", `lucide ${iconClasses[state]}`);
-          statusIcon.innerHTML = glyphs[state];
-          if (!english) return;
-          statusSlot.setAttribute("aria-label", wording[state]);
-          statusSlot.setAttribute("title", wording[state]);
-          statusText.textContent = wording[state];
+          for (const slot of statusSlots) {
+            slot.dataset.sw = state;
+            const icon = slot.querySelector("svg");
+            icon.setAttribute("class", `lucide ${iconClasses[state]}`);
+            icon.innerHTML = glyphs[state];
+            if (!english) continue;
+            slot.setAttribute("aria-label", wording[state]);
+            slot.setAttribute("title", wording[state]);
+            slot.querySelector(".sub-status-text").textContent = slot.closest(".title-build-row")
+              ? shortWording[state]
+              : wording[state];
+          }
         };
 
         // A controller means a service worker controls this page; it does not
@@ -242,6 +269,7 @@
           warmupReady = false;
         }
         if (!(serviceWorkerEnabled && navigator.serviceWorker)) setRuntimeStatus("disabled");
+        else if (!offlineCopyEnabled) setRuntimeStatus("online");
         else if (navigator.serviceWorker.controller && warmupReady)
           setRuntimeStatus(typeof MessageChannel === "function" ? "active" : "ready");
         else setRuntimeStatus("installing");

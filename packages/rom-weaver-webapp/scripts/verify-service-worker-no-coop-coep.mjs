@@ -19,22 +19,16 @@ const OFFLINE_PAGES = [
   { expectedView: "creator", label: "create slashless", path: "create.html" },
   { expectedView: "creator", label: "create directory", path: "create/" },
   { expectedView: "creator", label: "create directory document", path: "create/index.html" },
-  // Trim moved into the More menu, so it has no rail/dock tab either.
-  { expectedView: "trim", label: "trim directory", path: "trim/", tabless: true },
-  { expectedView: "trim", label: "trim directory document", path: "trim/index.html", tabless: true },
-  // PPF undo has no rail/dock tab since it lives in the More menu (#427), so its
-  // readiness is asserted through the visible tabpanel instead of a selected tab.
-  { expectedView: "ppf-undo", label: "ppf-undo directory", path: "ppf-undo/", tabless: true },
-  { expectedView: "ppf-undo", label: "ppf-undo directory document", path: "ppf-undo/index.html", tabless: true },
-  { expectedView: "save-editor", label: "save-editor directory", path: "save-editor/", tabless: true },
-  {
-    expectedView: "save-editor",
-    label: "save-editor directory document",
-    path: "save-editor/index.html",
-    tabless: true,
-  },
+  // Every view has a named nav row now, beta ones included, so readiness is
+  // the same assertion for all of them.
+  { expectedView: "trim", label: "trim directory", path: "trim/" },
+  { expectedView: "trim", label: "trim directory document", path: "trim/index.html" },
+  { expectedView: "ppf-undo", label: "ppf-undo directory", path: "ppf-undo/" },
+  { expectedView: "ppf-undo", label: "ppf-undo directory document", path: "ppf-undo/index.html" },
+  { expectedView: "save-editor", label: "save-editor directory", path: "save-editor/" },
+  { expectedView: "save-editor", label: "save-editor directory document", path: "save-editor/index.html" },
   // The retired /tools/ slug still serves the PPF undo page.
-  { expectedView: "ppf-undo", label: "tools legacy directory", path: "tools/", tabless: true },
+  { expectedView: "ppf-undo", label: "tools legacy directory", path: "tools/" },
   { expectedView: "test", label: "test directory", path: "test/" },
   { expectedView: "test", label: "test directory document", path: "test/index.html" },
   { expectedNotFound: true, label: "not found", path: "404.html" },
@@ -151,9 +145,8 @@ const collectPageState = async (page, { probeHeaders = true } = {}) =>
       : null;
     const root = document.getElementById("webapp-root");
     return {
-      activePanel: document.querySelector('section[role="tabpanel"]:not([hidden])')?.id || null,
-      activeView:
-        document.querySelector('[role="tab"][aria-selected="true"][data-mode]')?.getAttribute("data-mode") || null,
+      activePanel: document.querySelector("main.workbench section.panel:not([hidden])")?.id || null,
+      activeView: document.querySelector('.side-nav [aria-current="page"]')?.id.replace(/^tab-/, "") || null,
       controller: Boolean(navigator.serviceWorker?.controller),
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       headers: {
@@ -187,13 +180,13 @@ const waitForPageReady = async (page, pageCase) => {
 
 const waitForPageReadyInner = async (page, pageCase) => {
   await page.waitForFunction(
-    ({ expectedNotFound, expectedView, tabless }) => {
+    ({ expectedNotFound, expectedView }) => {
       const root = document.getElementById("webapp-root");
       if (!root || root.hasAttribute("aria-busy")) return false;
       if (expectedNotFound) return document.documentElement.dataset.page === "not-found";
       const panel = document.getElementById(`panel-${expectedView}`);
       return (
-        (tabless || document.querySelector(`[role="tab"][aria-selected="true"][data-mode="${expectedView}"]`)) &&
+        document.querySelector('.side-nav [aria-current="page"]')?.id === `tab-${expectedView}` &&
         panel &&
         !panel.hasAttribute("hidden") &&
         Boolean(panel.querySelector(".workflow-body")?.textContent?.trim())
@@ -231,13 +224,8 @@ const assertPageState = (pageCase, response, state, phase) => {
     throw new Error(`${phase} ${pageCase.label} had the wrong not-found state: ${JSON.stringify(state)}`);
   }
   if (pageCase.expectedNotFound) return;
-  if (pageCase.tabless) {
-    if (state.activePanel !== `panel-${pageCase.expectedView}`) {
-      throw new Error(
-        `${phase} ${pageCase.label} showed ${state.activePanel}, expected panel-${pageCase.expectedView}`,
-      );
-    }
-    return;
+  if (state.activePanel !== `panel-${pageCase.expectedView}`) {
+    throw new Error(`${phase} ${pageCase.label} showed ${state.activePanel}, expected panel-${pageCase.expectedView}`);
   }
   if (state.activeView !== pageCase.expectedView) {
     throw new Error(`${phase} ${pageCase.label} selected ${state.activeView}, expected ${pageCase.expectedView}`);

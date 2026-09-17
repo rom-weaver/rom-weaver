@@ -166,7 +166,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
-msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu — entferne sie, um einen doppelten Namen zu vermeiden."
+msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -226,7 +226,7 @@ msgstr "{count} Warnung(en)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.identified"
-msgstr "{title} — {platform}"
+msgstr "{title}: {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -385,6 +385,11 @@ msgstr "App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.appearance"
+msgstr "Darstellung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "wird nach Patch {n} angewendet"
 
@@ -460,13 +465,13 @@ msgstr "Diesen Patch anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Anwenden auf — {input}"
+msgid "ui.patch.applyToAll"
+msgstr "Auf alle anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.applyToAll"
-msgstr "Auf alle anwenden"
+msgid "ui.patchChecks.execution"
+msgstr "Anwenden auf: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,13 +520,13 @@ msgstr "Autor"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.input"
-msgstr "Erstellte Eingabeprüfungen — {basis}"
+msgid "ui.patchChecks.explanation"
+msgstr "Erstellte Eingabeprüfungen beschreiben die Patch-Quelle. Jeder Patch läuft auf der aktuellen Stapel-Eingabe."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.explanation"
-msgstr "Erstellte Eingabeprüfungen beschreiben die Patch-Quelle. Jeder Patch läuft auf der aktuellen Stapel-Eingabe."
+msgid "ui.patchChecks.input"
+msgstr "Erstellte Eingabeprüfungen: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -577,6 +582,16 @@ msgstr "Automatisch"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.automatic"
 msgstr "Automatische Erkennung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabledDetail"
+msgstr "Automatische Offline-Downloads sind deaktiviert."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyHelp"
+msgstr "Lädt die App für die Offline-Nutzung automatisch herunter, außer wenn der Datensparmodus aktiviert ist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -671,7 +686,7 @@ msgstr "Bundle + Patches (.zip)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.bundlesApplyPatch"
-msgstr "Bundles — Apply Patch"
+msgstr "Bundles: Apply Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -745,6 +760,11 @@ msgstr "Dieses ROM kann nicht mit EmulatorJS getestet werden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.cliFoot"
+msgstr "Cargo, cargo-binstall und mise installieren nur die ausführbare Datei, daher benötigen sie rom-weaver setup, um die Identify- und Cheat-Datenbanken herunterzuladen. Alle Installationsmethoden, mit Prüfsummen und Shell-Vervollständigungen, stehen in der Installationsanleitung."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdCd"
 msgstr "CD"
 
@@ -756,7 +776,7 @@ msgstr "CD-Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "und das Ergebnis oder ein teilbares Bundle herunterladen —"
+msgstr "und das Ergebnis oder ein teilbares Bundle herunterladen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -801,7 +821,7 @@ msgstr "Prüfungen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.deferred"
-msgstr "Prüft beim Anwenden — {input}"
+msgstr "Prüft beim Anwenden: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1005,6 +1025,11 @@ msgstr "Die Ausgabe konnte nicht für EmulatorJS vorbereitet werden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeUnavailable"
+msgstr "Die Offline-Kopie konnte nicht entfernt werden. Versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "{format}-Bundle erstellen"
 
@@ -1105,6 +1130,11 @@ msgstr "Diagnose"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDisabled"
+msgstr "Deaktiviert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.disc"
 msgstr "Disc"
 
@@ -1190,8 +1220,28 @@ msgstr "Test-Bundle herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Offline-Kopie herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Download angefordert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.trimCert"
 msgstr "Download-Play-Zertifikat erhalten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDownloading"
+msgstr "Lädt herunter"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Lädt die fehlenden Dateien auch bei aktiviertem Datensparmodus herunter."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1251,7 +1301,7 @@ msgstr "Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spielstand be
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
-msgstr "Eingebettete Ausgabeprüfungen — Einzelnes Patch-Ergebnis"
+msgstr "Eingebettete Ausgabeprüfungen: Einzelnes Patch-Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1287,11 +1337,6 @@ msgstr "Jeder Befehl kann zeilengetrenntes JSON für Skripte ausgeben."
 #: src/presentation/localization/messages.ts
 msgid "ui.home.formatsTitle"
 msgstr "Jede Konsolengeneration brachte eigene Formate. Bring sie alle mit."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.cliFoot"
-msgstr "Cargo, cargo-binstall und mise installieren nur die ausführbare Datei, daher benötigen sie rom-weaver setup, um die Identify- und Cheat-Datenbanken herunterzuladen. Alle Installationsmethoden, mit Prüfsummen und Shell-Vervollständigungen, stehen in der Installationsanleitung."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1436,7 +1481,7 @@ msgstr "Werkzeug, Anleitung oder Einstellung finden"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
-msgstr "per Prüfsumme, direkt in diesem Browser —"
+msgstr "per Prüfsumme, direkt in diesem Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1532,6 +1577,11 @@ msgstr "Ohne Header: Die gepatchte Ausgabe hat keinen ROM-Header."
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.hideVariants"
 msgstr "Verstecke {count} weitere {count, plural, one {Variante} other {Varianten}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.homeShort"
+msgstr "Startseite"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1646,7 +1696,7 @@ msgstr "App wird installiert"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingAppProgress"
-msgstr "App wird installiert — {percent} %"
+msgstr "App wird installiert: {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1656,7 +1706,7 @@ msgstr "Offline-Kopie wird installiert"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingProgress"
-msgstr "Offline-Kopie wird installiert — {percent} %"
+msgstr "Offline-Kopie wird installiert: {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1682,6 +1732,11 @@ msgstr "behalten"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.keepHeader"
 msgstr "{header} behalten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyEnabled"
+msgstr "Offline-Kopie behalten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1821,7 +1876,7 @@ msgstr "Dieses ROM wird in der Titeldatenbank gesucht. Die Zeilen werden gefüll
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis2"
-msgstr "und die Dateien fürs Archiv verkleinern —"
+msgstr "und die Dateien fürs Archiv verkleinern."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1832,6 +1887,11 @@ msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimier
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionOptional"
 msgstr "Alle optional machen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.matchSystem"
+msgstr "System folgen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1877,6 +1937,11 @@ msgstr "Medienprofil nicht unterstützt"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMember"
 msgstr "Dateipfad im Container"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.menu"
+msgstr "Menü"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2051,7 +2116,7 @@ msgstr "Keine wählbare Datei gefunden."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unknown"
-msgstr "Noch nicht geprüft — {input}"
+msgstr "Noch nicht geprüft: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2087,6 +2152,16 @@ msgstr "Offline"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.active"
 msgstr "Offline aktiv"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabled"
+msgstr "Offline-Kopie deaktiviert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Offline-Downloads sind nicht verfügbar. Lade die Seite neu und versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2365,6 +2440,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupPatches"
+msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
 
@@ -2520,8 +2600,13 @@ msgstr "liest und schreibt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerReady"
+msgstr "Bereit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis2"
-msgstr "mit den Undo-Daten des Patches —"
+msgstr "mit den Undo-Daten des Patches."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2580,6 +2665,11 @@ msgstr "Disc entfernen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOffline"
+msgstr "Offline-Kopie entfernen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.removeRom"
 msgstr "ROM-Eingabe entfernen"
 
@@ -2587,6 +2677,16 @@ msgstr "ROM-Eingabe entfernen"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
 msgstr "Entferne ungenutzte Fülldaten aus unterstützten ROMs und Disc-Images, um Speicherplatz zu sparen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOfflineHint"
+msgstr "Entfernt heruntergeladene App-Dateien. Deine Dateien, Spielstände und Einstellungen bleiben auf diesem Gerät."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removingOffline"
+msgstr "Offline-Kopie wird entfernt…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2715,13 +2815,18 @@ msgstr "ROMs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupRoms"
+msgstr "ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.loading"
 msgstr "RomWeaver entpackt ein kleines ROM und zwei Patches und prüft dann jede Datei."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
-msgstr "Alles lokal in deinem Browser — deine Dateien verlassen nie deinen Rechner."
+msgstr "Alles lokal in deinem Browser. Deine Dateien verlassen nie deinen Rechner."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2771,7 +2876,7 @@ msgstr "Bereiche"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
-msgstr "mit Spielständen, die auf diesem Gerät bleiben —"
+msgstr "mit Spielständen, die auf diesem Gerät bleiben."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2816,12 +2921,12 @@ msgstr "Dieses Patch-Rezept teilen (für Patch-Ersteller)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können —"
+msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Gemeinsame Eingabeprüfungen — {input}"
+msgstr "Gemeinsame Eingabeprüfungen: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2842,16 +2947,6 @@ msgstr "Details zu {label} anzeigen"
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
 msgstr "Schnellstart-Tipps („New here?“) anzeigen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyEnabled"
-msgstr "Offline-Kopie behalten"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyHelp"
-msgstr "Lädt die App für die Offline-Nutzung automatisch herunter, außer wenn der Datensparmodus aktiviert ist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2881,7 +2976,7 @@ msgstr "Quelle"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
-msgstr "Stapel-Ausgabeprüfungen — Kombiniertes Ergebnis"
+msgstr "Stapel-Ausgabeprüfungen: Kombiniertes Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2996,7 +3091,7 @@ msgstr "Tippen, um Dateien zu wählen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.targetRom"
-msgstr "Ziel-ROM — {target}"
+msgstr "Ziel-ROM: {target}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3205,13 +3300,13 @@ msgstr "Der gewählte Quelltyp wird nicht unterstützt."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.disabledDesc"
-msgstr "Der Service Worker ist aus — rom-weaver braucht bei jedem Besuch das Netz. Das Patchen läuft trotzdem komplett auf diesem Gerät."
+msgid "ui.runtime.activeDesc"
+msgstr "Der Service Worker ist aktiv und die Offline-Kopie ist bereit. Solange du online bist, sind weiterhin Netzwerkanfragen möglich."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.activeDesc"
-msgstr "Der Service Worker ist aktiv und die Offline-Kopie ist bereit. Solange du online bist, sind weiterhin Netzwerkanfragen möglich."
+msgid "ui.runtime.disabledDesc"
+msgstr "Der Service Worker ist aus, sodass rom-weaver bei jedem Besuch das Netz braucht. Das Patchen läuft trotzdem komplett auf diesem Gerät."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3260,8 +3355,18 @@ msgstr "Dieser Build"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupDevice"
+msgstr "Dieses Gerät"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectedMismatchDetails"
 msgstr "Name oder Prüfsummen dieser ROM stimmen nicht mit den Erwartungen dieses Durchlaufs überein. Siehe die Zeilen unter Erwartet."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.env.thread"
+msgstr "Thread"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3307,56 +3412,6 @@ msgstr "GESAMT"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Übertragen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadOffline"
-msgstr "Offline-Kopie herunterladen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadOfflineHint"
-msgstr "Lädt die fehlenden Dateien auch bei aktiviertem Datensparmodus herunter."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadRequested"
-msgstr "Download angefordert"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadUnavailable"
-msgstr "Offline-Downloads sind nicht verfügbar. Lade die Seite neu und versuche es erneut."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeOffline"
-msgstr "Offline-Kopie entfernen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removingOffline"
-msgstr "Offline-Kopie wird entfernt…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineDisabled"
-msgstr "Offline-Kopie deaktiviert"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineDisabledDetail"
-msgstr "Automatische Offline-Downloads sind deaktiviert."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeOfflineHint"
-msgstr "Entfernt heruntergeladene App-Dateien. Deine Dateien, Spielstände und Einstellungen bleiben auf diesem Gerät."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeUnavailable"
-msgstr "Die Offline-Kopie konnte nicht entfernt werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3434,8 +3489,18 @@ msgstr "Unbekannte Patch-Ausgabe ({patch})"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUnsupported"
+msgstr "Nicht unterstützt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.unusedInputs"
 msgstr "Nicht verwendete Eingaben: {names}{count, plural, =0 {} one { und eine weitere} other { und # weitere}}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUpdate"
+msgstr "Update"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3484,13 +3549,13 @@ msgstr "Variantenklasse"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Geprüft — {input}"
+msgid "ui.chain.verifiedDuringWeave"
+msgstr "wird beim Anwenden überprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "wird beim Anwenden überprüft"
+msgid "ui.patchChecks.verified"
+msgstr "Geprüft: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3570,7 +3635,7 @@ msgstr "mit Erkennung und Reparatur von Kopier-Headern"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis2"
-msgstr "mit jeder Prüfsumme neu berechnet vor dem Download —"
+msgstr "mit jeder Prüfsumme neu berechnet vor dem Download."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -98,38 +98,19 @@
     margin-inline-start: 100%;
   }
 }
-/* masthead chrome: the support heartbeat, the service-worker spinner, and the
-   update arrow's double tap. Every one is gated by prefers-reduced-motion where
-   it is applied (masthead.css). */
-@keyframes heartbeat {
+@keyframes update-nudge {
   0%,
-  12%,
+  30%,
   100% {
-    scale: 1;
+    translate: 0 0;
   }
-  3% {
-    scale: 1.22;
+  10%,
+  20% {
+    translate: 0 -3px;
   }
-  6% {
-    scale: 0.95;
-  }
-  9% {
-    scale: 1.12;
-  }
-}
-@keyframes heartbeat-fast {
-  0%,
-  100% {
-    scale: 1;
-  }
+  15%,
   25% {
-    scale: 1.22;
-  }
-  50% {
-    scale: 0.95;
-  }
-  75% {
-    scale: 1.12;
+    translate: 0 0;
   }
 }
 @keyframes sw-spin {

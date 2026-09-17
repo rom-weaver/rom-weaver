@@ -91,7 +91,7 @@ describe("searchFind", () => {
       hint: "Apply Patch owns bundles and runs their saved patch sequence.",
       href: "apply-patch#bundle",
       id: "tool:bundle",
-      label: "Bundles — Apply Patch",
+      label: "Bundles: Apply Patch",
     });
     expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-patch" });
     expect(searchFind(index, "play emulator")[0]?.entry).toMatchObject({ id: "tool:test" });

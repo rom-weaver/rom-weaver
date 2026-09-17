@@ -49,7 +49,7 @@ const ReleaseSection = ({
 }) => (
   <details className="rel" open={defaultOpen}>
     <summary className="rel-summary">
-      <b className="mono">{title}</b>
+      <h2 className="mono">{title}</h2>
       {note ? <span className="rel-summary-count">{note}</span> : null}
     </summary>
     <div className="rel-body">

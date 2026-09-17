@@ -58,7 +58,7 @@ describe("ApplyPatchListStep identified check titles", () => {
     );
 
     await waitFor(() =>
-      expect(container.querySelector(".ck-group-title")?.textContent).toBe("Two Track Quest (USA) — Test Disc System"),
+      expect(container.querySelector(".ck-group-title")?.textContent).toBe("Two Track Quest (USA): Test Disc System"),
     );
   });
 
@@ -88,7 +88,7 @@ describe("ApplyPatchListStep identified check titles", () => {
     );
 
     await waitFor(() =>
-      expect(container.querySelector(".ck-group-title")?.textContent).toBe("Two Track Quest (USA) — Test Disc System"),
+      expect(container.querySelector(".ck-group-title")?.textContent).toBe("Two Track Quest (USA): Test Disc System"),
     );
   });
 });

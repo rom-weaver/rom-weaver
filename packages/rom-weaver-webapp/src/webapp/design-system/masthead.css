@@ -1,12 +1,10 @@
-/* ═══ masthead ═══
-   One fixed-breakpoint grid: brand | centered rail | actions. Roomy desktop
-   mirrors the side tracks so the rail centers on the masthead rather than on
-   the leftover space between the brand and the action group; the snug band
-   protects the rail's remaining space. There is exactly one layout decision
-   ("does the rail fit?") and it lives in the media queries marked ▼ below - no
-   ResizeObserver, no data-masthead-layout, no measuring. A tab label is never
-   clipped or hidden at any width. Below the dock threshold the primary nav
-   moves to a fixed bottom dock, so the masthead never wraps. */
+/* ═══ shell chrome ═══ */
+.rw-app {
+  /* The top bar's height, shared so the Find palette can sit under it without
+     repeating the number (find.css). */
+  --topbar-h: 46px;
+}
+
 .rw-app .skip-link {
   position: fixed;
   inset-block-start: var(--sp-s);
@@ -25,42 +23,24 @@
   transform: none;
 }
 
-/* brand and actions always keep their intrinsic width; the rail gets the
-   leftover, centers itself, and scrolls when squeezed - collision-free at every
-   width and locale. The brand's min-content floor is what keeps the wordmark
-   whole. */
-.rw-app .masthead {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(min-content, max-content) minmax(0, 1fr) auto;
-  column-gap: var(--sp-l);
-  align-items: center;
-  padding-block: clamp(8px, 2vw - 3px, 12px) clamp(6px, 2vw - 5px, 10px);
-}
-
-/* stretch, not start: the brand's box IS its track, so it can never paint into
-   the rail or the actions. `clip` with a margin rather than `hidden` - a plain
-   `overflow: hidden` also clips the sub-line's invisible touch halos, halving
-   those targets. 14px is under the column gap, so the guard still holds. */
+/* ── brand ── */
 .rw-app .brand {
-  grid-column: 1;
-  justify-self: stretch;
-  display: flex;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  column-gap: var(--sp-s);
   align-items: center;
-  gap: var(--sp-m);
   min-width: 0;
-  overflow: clip;
-  overflow-clip-margin: 14px;
 }
 .rw-app .brand-mark-link {
   display: flex;
   flex: none;
+  grid-row: 1 / span 2;
+  align-self: start;
   border-radius: 8px;
 }
-/* brand sizes ride one fluid scale: 30px @360 → ~40px @720 → 46px cap */
 .rw-app .brand-mark {
   display: block;
-  width: clamp(32px, 2.6vw + 21px, 46px);
+  width: 38px;
   height: auto;
   aspect-ratio: 1;
   color: var(--ink);
@@ -70,37 +50,25 @@
 .rw-app .brand-mark-accent {
   fill: var(--thread);
 }
-.rw-app .brand-copy {
-  display: block;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-/* `line-height: 0` zeroes the row's own strut - a 1rem body leading that is
-   taller than the wordmark it wraps, and that would otherwise, not the type, be
-   what decides how tall the brand block is. The wordmark's own line-height still
-   sizes the line box. */
-.rw-app .brand-word-row {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 0;
-  white-space: nowrap;
-}
 .rw-app .brand-word-link {
-  display: inline;
+  min-width: 0;
   color: inherit;
   border-radius: var(--r-s);
 }
 .rw-app .brand-word-link:focus-visible {
   outline-offset: -2px;
 }
+.rw-app .brand-copy {
+  display: contents;
+}
 .rw-app .brand-word {
-  display: inline;
+  display: block;
   margin: 0;
-  font-size: clamp(1.18rem, 1.02rem + 0.8vw, 1.5rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 1.24rem;
   font-weight: 650;
-  line-height: 1;
-  vertical-align: middle;
+  line-height: 1.1;
   color: var(--ink);
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -114,37 +82,50 @@
   color: var(--ink-4);
 }
 
-/* the sub-line never clips: version and threads each have a compact form chosen
-   by breakpoint, and build identity remains complete on phones */
-/* The row is as tall as its ink, not as tall as its targets: the controls keep
-   the 24px box the target-size floor needs (see the block below) and overflow
-   this row symmetrically, so a preview build wearing three of them is no taller
-   in the masthead than a production build wearing none. Nothing is painted on
-   that box, so the overflow never shows at the masthead's edge. */
-.rw-app .brand-sub-row {
+/* The controls keep their 26px target box while this row stays as tall as its text. */
+.rw-app .build-facts {
   display: flex;
   column-gap: 0;
   align-items: center;
   block-size: 16px;
-  font-size: clamp(0.64rem, 0.58rem + 0.25vw, 0.76rem);
+  font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-  color: var(--ink-4);
+  color: var(--ink-3);
   white-space: nowrap;
 }
-.rw-app .sub-item {
+.rw-app .title-build-row .build-facts {
+  flex-wrap: nowrap;
+}
+.rw-app .title-build-row,
+.rw-app .brand-copy > .build-facts {
+  grid-column: 2;
+  min-inline-size: 0;
+}
+.rw-app .title-build-row {
+  container-type: inline-size;
+}
+.rw-app .title-build-row .build-tag {
+  flex: none;
+}
+.rw-app .title-build-row .sub-status-text {
+  color: var(--ink-3);
+}
+.rw-app .title-build-row .build-runtime {
   display: inline-flex;
-  flex: none;
-  gap: var(--sp-xs);
-  align-items: center;
+  margin-inline-start: 5px;
 }
-.rw-app .sub-separator {
-  flex: none;
-  margin-inline: 0.08em;
-  color: var(--ink-4);
+.rw-app .title-build-row .sub-status {
+  font-size: 0.68rem;
 }
-/* the version opens the changelog and the thread count opens settings; the
-   underline in the `.sub-chip` block below is the affordance both wear */
+@container (max-width: 220px) {
+  .rw-app .title-build-row .sub-status-text,
+  .rw-app .title-build-row .sub-status-percent,
+  .rw-app .title-build-row .tag-pr,
+  .rw-app .title-build-row .tag-extra > .tag-separator {
+    display: none;
+  }
+}
 .rw-app .sub-link {
   position: relative;
   display: inline-flex;
@@ -165,7 +146,6 @@
 .rw-app .sub-link:active {
   color: var(--ink-2);
 }
-
 .rw-app .channel-badge {
   display: inline-flex;
   flex: none;
@@ -205,8 +185,8 @@
 .rw-app button.channel-badge {
   appearance: none;
 }
-/* The sub-line's copy of the channel is a link, not a badge - the pill belongs
-   to the status rows, where the channel is a value being reported. */
+/* The build facts' copy of the channel is a link, not a badge - the pill
+   belongs to the status rows, where the channel is a value being reported. */
 .rw-app .build-tag .channel-badge {
   padding: 0 2px;
   font-size: 0.6rem;
@@ -215,7 +195,7 @@
   border: 0;
   border-radius: 0;
 }
-.rw-app .brand-sub-row .build-tag .channel-badge {
+.rw-app .build-facts .build-tag .channel-badge {
   color: inherit;
 }
 @media (hover: hover) {
@@ -235,11 +215,6 @@
   text-transform: none;
   letter-spacing: 0;
 }
-.rw-app .build-tag .tag-channel {
-  font-weight: 800;
-  text-transform: none;
-  letter-spacing: 0;
-}
 .rw-app .build-tag .tag-letter {
   font-weight: 800;
 }
@@ -254,84 +229,19 @@
   background: color-mix(in oklab, currentColor 22%, transparent);
 }
 
-/* the runtime status is a state-coloured button in the top-right action group */
-.rw-app .sub-status[data-sw="active"] {
-  color: var(--verified);
-}
-.rw-app .sub-status[data-sw="ready"] {
-  color: var(--ink-2);
-}
-.rw-app .sub-status[data-sw="update"] {
-  color: var(--care-text);
-}
-.rw-app .sub-status[data-sw="installing"] {
-  color: var(--ink-3);
-}
-.rw-app .sub-status[data-sw="installing"] svg {
-  animation: sw-spin 1.1s linear infinite;
-}
-.rw-app .sub-status[data-sw="disabled"] {
-  color: var(--ink-4);
-}
-.rw-app .more-status[data-sw] {
-  color: var(--ink-2);
-}
-.rw-app .more-status[data-sw="active"] {
-  color: var(--verified);
-}
-.rw-app .more-status[data-sw="update"] {
-  color: var(--care-text);
-}
-.rw-app .more-status[data-sw="installing"] {
-  color: var(--ink-3);
-}
-.rw-app .more-status[data-sw="disabled"] {
-  color: var(--ink-4);
-}
-.rw-app .more-status[data-sw="active"] svg {
-  color: inherit;
-}
-.rw-app .more-status[data-sw="ready"] svg {
-  color: inherit;
-}
-.rw-app .more-status[data-sw="update"] svg {
-  color: inherit;
-}
-.rw-app .more-status[data-sw="installing"] svg {
-  color: inherit;
-  animation: sw-spin 1.1s linear infinite;
-}
-/* A determinate percent ring reports progress by arc length; only the
-   indeterminate loader spins. */
-.rw-app .sub-status[data-sw="installing"] svg.sw-progress-ring,
-.rw-app .more-status[data-sw="installing"] svg.sw-progress-ring {
-  animation: none;
-}
-.rw-app .more-status[data-sw="disabled"] svg {
-  color: inherit;
-}
-/* ── the sub-line control ──
-   These are links under a wordmark, not badges on it: two pills stacked under
-   the brand read as decoration on the logo rather than as three places to go.
-   Each one keeps its own colour, which is the state or the channel talking, and
-   wears the dotted underline this app uses everywhere for "this goes somewhere".
-
-   Both carry `.sub-chip`, so the rules below name one class rather than two
-   selectors four times over - the CSS budget notices the difference.
-
-   The box stays 24px for the target-size floor, and nothing is painted on it -
+/* ── the chip control ──
+   The box stays 26px for the target-size floor, and nothing is painted on it:
    axe measures the target on the element, not on a halo over it, and an
-   unpainted box can overflow the row without anything showing at the edge. */
+   unpainted box can overflow its row without anything showing at the edge. */
 .rw-app .sub-chip {
   position: relative;
-  /* 26, not the 24px floor: the sub-row packs two of these 4px apart, and a
-     target sitting exactly on the minimum leaves no room for rounding. */
   min-inline-size: 26px;
   block-size: 26px;
   padding: 0 2px;
   text-decoration: underline dotted;
   text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
   text-underline-offset: 2px;
+  cursor: pointer;
   background: transparent;
   border: 0;
   transition:
@@ -355,447 +265,311 @@
 .rw-app .sub-chip:active {
   text-decoration-color: currentColor;
 }
-.rw-app .masthead-threads-space {
-  flex: none;
-  inline-size: 0.28em;
-  font-size: inherit;
-}
-/* The worker state lands after hydration and recolors the status button. Its
-   color transition is disabled in the action-group rule below because Lighthouse
-   flags that load-time main-thread animation. */
-@media (min-width: 1160px) {
-  .rw-app .brand-word {
-    font-size: clamp(1.18rem, 1.08rem + 0.5vw, 1.75rem);
-  }
-  .rw-app .brand-sub-row {
-    column-gap: 0;
-    block-size: 20px;
-    margin-block-start: 2px;
-    font-size: clamp(0.68rem, 0.62rem + 0.15vw, 0.8rem);
-    color: var(--ink-3);
-  }
-  .rw-app .brand-sub-row .build-tag .channel-badge {
-    font-size: inherit;
-  }
-}
 
-/* The status keeps only its glyph while the rail is compact, but retains the
-   same top-right action target and accessible name at every width. */
-@media (max-width: 1159px) {
-  .rw-app .masthead-status {
-    width: clamp(30px, 22px + 1.2vw, 38px);
-    padding-inline: 0;
-  }
+/* ── the offline state, as a word ──
+   A lone cloud glyph was the clearest case of chrome a new user could not
+   read, so the state says what it is. `.sub-status` and `.sub-status-text` are
+   rewritten by the parser-time resolver in index.html: keep both names. */
+.rw-app .sub-status {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: none;
 }
-@media (max-width: 719px) {
-  .rw-app .masthead-status svg {
-    width: 13px;
-    height: 13px;
-  }
+.rw-app .sub-status svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.rw-app .sub-status-percent {
+  font-variant-numeric: tabular-nums;
+}
+.rw-app .sub-status[data-sw="active"] {
+  color: var(--verified);
+}
+.rw-app .sub-status[data-sw="ready"] {
+  color: var(--ink-2);
+}
+.rw-app .sub-status[data-sw="update"] {
+  color: var(--care-text);
+}
+.rw-app .sub-status[data-sw="update"] svg {
+  animation: update-nudge 2.4s ease-in-out infinite;
+}
+.rw-app .sub-status[data-sw="installing"] {
+  color: var(--ink-3);
+}
+.rw-app .sub-status[data-sw="installing"] svg {
+  animation: sw-spin 1.1s linear infinite;
+}
+.rw-app .sub-status[data-sw="disabled"] {
+  color: var(--ink-3);
+}
+/* A determinate percent ring reports progress by arc length; only the
+   indeterminate loader spins. */
+.rw-app .sub-status[data-sw="installing"] svg.sw-progress-ring {
+  animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sub-status svg {
+  .rw-app .sub-status[data-sw] svg {
     animation: none;
   }
 }
 
-/* ── primary rail ──
-   The rail can never collide with its neighbours: the centre column may shrink
-   and the rail scrolls (scrollbar hidden) as the floor. In the snug 1000-1159px
-   band a long locale with all five tabs really can overflow, so selecting a tab
-   always scrolls it into view. */
-.rw-app .modes {
-  display: inline-flex;
-  grid-column: 2;
-  align-items: center;
-  justify-self: center;
-  min-width: 0;
-  max-width: 100%;
-}
-.rw-app .mode-rail-shell {
-  display: inline-flex;
-  gap: var(--sp-2xs);
-  min-width: 0;
-  padding: 3px;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
-}
-/* Only the tabs scroll. The menu remains visible so its popup is not clipped. */
-.rw-app .mode-rail-scroll {
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.rw-app .mode-rail-scroll::-webkit-scrollbar {
-  display: none;
-}
-.rw-app .mode-rail {
-  position: relative;
-  display: inline-flex;
-  gap: var(--sp-2xs);
-}
-.rw-app .mode-thumb {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 0;
-  background: var(--thread);
-  border-radius: var(--r-s);
-  transition:
-    left 0.3s var(--ease),
-    width 0.3s var(--ease);
-  /* the slide between tabs rides the mode-switch view transition (the name is
-     in the STYLESHEET, so the vt-flat inline-name suppression leaves it alone) */
-  view-transition-name: vt-thumb;
-}
-html.vt-theme .mode-thumb {
-  view-transition-name: none !important;
-}
-/* No workflow is selected while a guide is open, so the thumb has nothing to
-   sit under. Hidden rather than parked on a tab that is not current. */
-.rw-app .mode-rail:not(:has(.mode[aria-selected="true"])) .mode-thumb {
-  opacity: 0;
-}
-/* the tab labels get their own groups so they PAINT ABOVE the sliding thumb
-   during the mode-switch transition */
-.rw-app .mode-rail .mode:nth-of-type(1) {
-  view-transition-name: vt-tab-1;
-}
-.rw-app .mode-rail .mode:nth-of-type(2) {
-  view-transition-name: vt-tab-2;
-}
-.rw-app .mode-rail .mode:nth-of-type(3) {
-  view-transition-name: vt-tab-3;
-}
-.rw-app .mode-rail .mode:nth-of-type(4) {
-  view-transition-name: vt-tab-4;
-}
-.rw-app .mode-rail .mode:nth-of-type(5) {
-  view-transition-name: vt-tab-5;
-}
-html.vt-theme .mode-rail .mode {
-  view-transition-name: none !important;
-}
-/* where CSS anchors exist, the thumb pins itself to the selected tab -
-   placement survives resize/font-swap with no JS measuring at all */
-@supports (anchor-name: --rw-tab) {
-  .rw-app .mode[aria-selected="true"] {
-    anchor-name: --rw-tab;
-  }
-  .rw-app .mode-thumb {
-    position-anchor: --rw-tab;
-    left: anchor(left);
-    width: anchor-size(width);
-    transition: none;
-  }
-}
-.rw-app .mode {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  gap: var(--sp-xs);
-  align-items: center;
-  padding: var(--sp-s);
-  font-size: 0.8rem;
-  font-weight: 650;
-  color: var(--ink-2);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  text-decoration: none;
-  appearance: none;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-s);
-  transition: color 0.25s var(--ease);
-}
-.rw-app .mode svg {
-  flex: none;
-  width: 17px;
-  height: 17px;
-}
-.rw-app .mode[aria-selected="true"] {
-  color: var(--thread-ink);
-}
-@media (hover: hover) {
-  .rw-app .mode:not([aria-selected="true"]):hover {
-    color: var(--ink);
-  }
-}
-/* Touch devices need active feedback because they lack hover. */
-.rw-app .mode:not([aria-selected="true"]):active {
-  color: var(--ink);
-}
-@media (forced-colors: active) {
-  .rw-app .mode[aria-selected="true"] {
-    color: SelectedItemText;
-    background: SelectedItem;
-  }
-  .rw-app .mode-thumb {
-    display: none;
-  }
-}
-
-/* ── top-right actions ── */
-.rw-app .masthead-tools {
-  position: relative;
-  display: inline-flex;
-  grid-column: 3;
-  gap: var(--sp-2xs);
-  align-items: center;
-  justify-self: end;
-}
-.rw-app .desktop-more {
-  position: relative;
-  display: inline-flex;
-}
-/* The menu button shares the rail, but its popup semantics keep it out of the
-   tablist and the sliding selected-state thumb. */
-.rw-app .mode-more {
-  display: inline-flex;
-  gap: var(--sp-xs);
-  align-items: center;
-  padding: var(--sp-s);
-  font-size: 0.8rem;
-  font-weight: 650;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-  appearance: none;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-s);
-  transition:
-    color 0.2s var(--ease),
-    background 0.2s var(--ease);
-}
-.rw-app .mode-more svg {
-  flex: none;
-  width: 17px;
-  height: 17px;
-}
-@media (hover: hover) {
-  .rw-app .mode-more:hover {
-    color: var(--ink);
-    background: var(--well);
-  }
-}
-.rw-app .mode-more:active,
-.rw-app .mode-more[aria-expanded="true"] {
-  color: var(--ink);
-  background: var(--well);
-}
-/* "you are here" when the selected workflow (Docs, a beta tool) lives inside More */
-.rw-app .mode-more.is-current,
-.rw-app .dock-action.is-current {
-  color: var(--thread-text);
-}
-.rw-app .mobile-more {
-  position: relative;
-  display: none;
-}
-.rw-app .more-menu {
-  position: absolute;
-  inset-block-start: calc(100% + var(--sp-xs));
-  inset-inline-end: 0;
-  z-index: 2000;
-  display: flex;
-  flex-direction: column;
-  min-inline-size: 264px;
-  max-inline-size: calc(100vw - 24px);
-  padding: var(--sp-xs);
-  background: var(--plate);
-  border: 1px solid var(--seam-strong);
-  border-radius: var(--r-m);
-  box-shadow: var(--overlay-shadow);
-  animation: drop-in 0.16s var(--ease);
-}
-.rw-app .shared-more-menu {
-  inset-block-start: calc(100% + var(--sp-xs));
-  animation: none;
-}
-.rw-app .more-menu[hidden] {
-  display: none;
-}
-/* The box is only ever focused programmatically, to hold the keyboard contract
-   when a pointer open must not highlight a row (shell.tsx). Same reasoning as
-   the dialog rule in base.css: never draw a ring on it. The items themselves
-   keep theirs. */
-.rw-app .more-menu:focus,
-.rw-app .more-menu:focus-visible {
-  outline: none;
-}
-.rw-app .more-menu button,
-.rw-app .more-menu a,
-.rw-app .more-accent > button {
-  display: flex;
-  gap: var(--sp-s);
-  align-items: center;
-  min-block-size: 44px;
-  padding: 7px 10px;
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  text-align: start;
-  white-space: nowrap;
-  text-decoration: none;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r-s);
-}
-.rw-app .more-accent {
-  display: flex;
-  flex-direction: column;
-}
-.rw-app .more-menu svg {
-  flex: none;
-  width: 17px;
-  height: 17px;
-  color: var(--ink-2);
-}
-@media (hover: hover) {
-  .rw-app .more-menu button:hover,
-  .rw-app .more-menu a:hover,
-  .rw-app .more-accent > button:hover {
-    color: var(--ink);
-    background: var(--well);
-  }
-}
-.rw-app .more-menu button:active,
-.rw-app .more-menu a:active,
-.rw-app .more-accent > button:active {
-  color: var(--ink);
-  background: var(--plate-2);
-}
-/* Support wears the footer donate color; the icon inherits it (see footer.css). */
-.rw-app .more-menu .more-support,
-.rw-app .more-menu .more-support svg {
-  color: var(--thread-text);
-}
-@media (hover: hover) {
-  .rw-app .more-menu .more-support:hover,
-  .rw-app .more-menu .more-support:hover svg {
-    color: var(--thread-text);
-  }
-  .rw-app .more-menu .more-support:hover svg {
-    fill: currentcolor;
-  }
-}
-.rw-app .more-menu .more-support:active,
-.rw-app .more-menu .more-support:active svg {
-  color: var(--thread-text);
-}
-.rw-app .more-menu .more-support:active svg {
-  fill: currentcolor;
-}
-/* The head row: the app's own surfaces as four equal tiles, one tap from More
-   on both layouts. Tiles stack icon over label, unlike the rows below. */
-.rw-app .more-head,
-.rw-app .more-group {
-  min-inline-size: 0;
-  padding: 0;
-  margin: 0;
-  border: 0;
-}
-.rw-app .more-head {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  gap: var(--sp-xs);
-  padding-block-end: var(--sp-xs);
-  margin-block-end: var(--sp-xs);
-  border-block-end: 1px solid var(--seam);
-}
-.rw-app .more-menu .more-head-item {
-  flex-direction: column;
-  gap: 3px;
-  justify-content: center;
-  min-block-size: 56px;
-  padding: 6px 4px;
-  font-size: 0.62rem;
-  text-align: center;
-  background: var(--well);
-}
-.rw-app .more-group {
+/* ── the nav row, shared by the sidebar and the phone Menu sheet ── */
+.rw-app .nav-group {
   display: block;
+  min-inline-size: 0;
 }
-.rw-app .more-group + .more-group {
-  padding-block-start: var(--sp-xs);
-  margin-block-start: var(--sp-xs);
-  border-block-start: 1px solid var(--seam);
+.rw-app .nav-group + .nav-group {
+  margin-block-start: var(--sp-m);
 }
-.rw-app .more-group-label {
-  inline-size: 100%;
-  padding: 4px 10px 2px;
+.rw-app .nav-group-label {
+  padding: 0 8px 4px;
+  margin: 0;
   font-size: 0.62rem;
   font-weight: 650;
-  color: var(--ink-3);
+  color: var(--ink-4);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-/* On the phone sheet the head row sits at the bottom, in the thumb zone; the
-   groups scroll above it. DOM order is unchanged, so the arrow keys still start
-   on Settings. */
-.rw-app .shared-more-menu .more-head {
-  order: 1;
-  padding-block: var(--sp-xs) 0;
-  margin-block: var(--sp-xs) 0;
-  border-block-start: 1px solid var(--seam);
-  border-block-end: 0;
+.rw-app .nav-row[hidden] {
+  display: none;
 }
-.rw-app .more-beta {
+.rw-app .nav-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: 36px;
+  padding: 8px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: start;
+  text-decoration: none;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+  transition:
+    color 0.18s,
+    background 0.18s;
+}
+.rw-app .nav-row svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  opacity: 0.85;
+}
+/* Wraps rather than truncating: the rail is a fixed width and a locale with
+   longer words must still be able to show the whole name. */
+.rw-app .nav-row-label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .rw-app .nav-row:not([aria-current="page"]):hover {
+    color: var(--ink);
+    background: var(--well);
+  }
+}
+.rw-app .nav-row:not([aria-current="page"]):active {
+  color: var(--ink);
+  background: var(--plate-2);
+}
+.rw-app .nav-row[aria-current="page"] {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--thread) 12%, var(--well));
+}
+.rw-app .nav-row[aria-current="page"] svg {
+  color: var(--thread-text);
+  opacity: 1;
+}
+@media (forced-colors: active) {
+  .rw-app .nav-row[aria-current="page"] {
+    color: SelectedItemText;
+    background: SelectedItem;
+  }
+}
+/* The chip sits with the name it qualifies rather than at the far edge of the
+   row, where it read as a column of its own. */
+.rw-app .nav-beta {
+  flex: none;
   padding: 1px 6px;
-  margin-inline-start: auto;
-  font-size: 0.58rem;
+  margin-inline-start: 7px;
+  font-size: 0.56rem;
+  font-weight: 650;
   color: var(--thread-text);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   border: 1px solid currentcolor;
   border-radius: 999px;
 }
-.rw-app .more-accent-tray {
+.rw-app .nav-row[aria-current="page"] .nav-beta {
+  color: inherit;
+}
+.rw-app .nav-support,
+.rw-app .nav-support svg {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .nav-support:hover svg {
+    fill: currentcolor;
+  }
+}
+.rw-app .nav-support:active svg {
+  fill: currentcolor;
+}
+.rw-app .nav-support:focus-visible svg {
+  fill: currentcolor;
+}
+
+/* The banner is the whole chrome: identity, navigation and the top bar. It
+   carries no box of its own, so each part lands in the grid cell the layout
+   gives it. */
+.rw-app .shell-banner {
+  display: contents;
+}
+
+/* ── the identity block ──
+   The sidebar's head on desktop, the page header on the phone. */
+.rw-app .shell-head {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.rw-app .shell-head-top {
   display: flex;
   gap: var(--sp-s);
-  padding: var(--sp-s) var(--sp-xs);
-  margin: 0 10px 6px;
+  align-items: flex-start;
+  min-block-size: 44px;
+}
+.rw-app .shell-head-top .brand {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* ── desktop sidebar ──
+   The identity block heads the column and the nav scrolls under it, so the
+   brand and the build facts stay put however long the list of destinations
+   grows. On the phone the column is just the page header: the rail is gone and
+   its sections live in the Menu sheet instead. */
+.rw-app .side-rail {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  padding-block-end: var(--sp-m);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* ── desktop top bar ──
+   Find, runtime status, and browser tools sit here. Everything that
+   is a destination lives in the sidebar, so nothing is listed twice. */
+.rw-app .topbar {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  min-block-size: var(--topbar-h);
+  padding-block: var(--sp-xs);
+}
+.rw-app .topbar-find {
+  display: flex;
+  /* The one box that reaches everything spans the bar: it grows into whatever
+     the tool cluster leaves, and `min-inline-size: 0` lets it shrink past the
+     label's intrinsic width so a narrow bar ellipsizes instead of overflowing. */
+  flex: 1 1 auto;
+  gap: var(--sp-s);
+  align-items: center;
+  min-inline-size: 0;
+  block-size: 32px;
+  padding-inline: 10px;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  appearance: none;
+  cursor: text;
   background: var(--well);
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
+  transition:
+    color 0.18s,
+    border-color 0.18s;
 }
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .more-menu {
-    animation: none;
+.rw-app .topbar-find svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+.rw-app .topbar-find-text {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: start;
+  white-space: nowrap;
+}
+.rw-app .topbar-find kbd {
+  flex: none;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 0.68rem;
+  color: var(--ink-3);
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: 4px;
+}
+@media (hover: hover) {
+  .rw-app .topbar-find:hover {
+    color: var(--ink-2);
+    border-color: var(--seam-strong);
   }
 }
-@media (max-width: 719px) {
-  .rw-app .masthead-tools {
-    gap: 0;
-  }
-  .rw-app .brand {
-    gap: var(--sp-s);
-  }
-  .rw-app .brand-word {
-    font-size: 1.1rem;
-  }
-  .rw-app .brand-mark {
-    width: 30px;
-  }
+.rw-app .topbar-find:active {
+  color: var(--ink-2);
+  border-color: var(--seam-strong);
 }
-/* ghost tools at every width: the buttons drop their box chrome at rest, so the
-   cluster stops reading as a second nav beside the mode rail. Fluid so it cedes
-   width smoothly as the viewport tightens. */
+.rw-app .topbar-tools,
+.rw-app .shell-head-tools {
+  position: relative;
+  display: flex;
+  flex: none;
+  gap: var(--sp-2xs);
+  align-items: center;
+}
+.rw-app .phone-project-tools {
+  display: contents;
+}
+.rw-app .shell-head-tools > .tool-separator {
+  align-self: center;
+  block-size: 24px;
+  background: var(--seam-strong);
+}
+/* Appearance, then the project links: the same pair and the same order in both
+   layouts, so one teaches the other. */
+.rw-app .tool-separator {
+  flex: none;
+  align-self: stretch;
+  inline-size: 1px;
+  margin-inline: 5px;
+  background: var(--seam);
+}
+
+/* ── ghost tools ──
+   The buttons drop their box chrome at rest, so the cluster stops reading as a
+   second nav. Every one of them carries a tooltip and an accessible name. */
 .rw-app .tool {
   position: relative;
   display: grid;
   place-items: center;
-  width: clamp(30px, 22px + 1.2vw, 38px);
-  height: clamp(32px, 26px + 1vw, 38px);
+  width: 32px;
+  height: 32px;
   color: var(--ink-2);
   appearance: none;
   cursor: pointer;
@@ -820,49 +594,28 @@ html.vt-theme .mode-rail .mode {
   border-color: var(--seam);
 }
 .rw-app .tool svg {
-  width: clamp(15px, 13.8px + 0.25vw, 17px);
-  height: clamp(15px, 13.8px + 0.25vw, 17px);
+  width: 17px;
+  height: 17px;
 }
 .rw-app .tool[aria-expanded="true"] {
   color: var(--ink);
   background: var(--well);
   border-color: var(--seam);
 }
-.rw-app .masthead-status {
-  display: inline-flex;
-  gap: var(--sp-xs);
-  align-items: center;
-  justify-content: center;
-  width: clamp(30px, 22px + 1.2vw, 38px);
-  padding-inline: 0;
-  font-size: 0.78rem;
-  font-weight: 650;
-  transition: none;
+.rw-app .tool-support,
+.rw-app .tool-support svg {
+  color: var(--thread-text);
 }
-.rw-app .masthead-status svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
+@media (hover: hover) {
+  .rw-app .tool-support:hover svg {
+    fill: currentcolor;
+  }
 }
-.rw-app .masthead-status.has-progress {
-  width: auto;
-  min-width: clamp(54px, 46px + 1.2vw, 62px);
-  padding-inline: var(--sp-s);
+.rw-app .tool-support:active svg {
+  fill: currentcolor;
 }
-.rw-app .masthead-status-percent {
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-/* The stateful controls (runtime status, theme, accent) stay glyph-only; the
-   tooltip and aria-label carry their names. */
-.rw-app .tool-text {
-  display: none;
-}
-/* `.mode-more` is nav level, so it is named like the tabs beside it rather than
-   tooltipped like the actions cluster it left. */
-.rw-app .dock-action .tool-text,
-.rw-app .mode-more .tool-text {
-  display: inline;
+.rw-app .tool-support:focus-visible svg {
+  fill: currentcolor;
 }
 
 /* real tooltips - localizable text, not title="" */
@@ -902,45 +655,153 @@ html.vt-theme .mode-rail .mode {
   opacity: 0;
 }
 
-/* ── accent quick picker ──
-   The tray is anchored rather than inline: unrolling six dots into the toolbar
-   reflows every tool to its right. */
+/* ── theme and accent popovers ──
+   Both were cycling buttons; neither could say what it was about to do, and
+   "follow the system" had no way to report which theme that currently meant.
+   A named menu answers both. */
 .rw-app .tool-anchor {
   position: relative;
   display: inline-flex;
 }
-.rw-app .accent-tray {
+.rw-app .tool-pop {
   position: absolute;
   inset-block-start: calc(100% + var(--sp-xs));
   inset-inline-end: 0;
-  z-index: 30;
+  z-index: 2000;
   display: flex;
-  gap: var(--sp-s);
-  padding: var(--sp-s) var(--sp-m);
+  flex-direction: column;
+  min-inline-size: 210px;
+  padding: var(--sp-xs);
   background: var(--plate);
-  border: 1px solid var(--seam);
+  border: 1px solid var(--seam-strong);
   border-radius: var(--r-m);
   box-shadow: var(--overlay-shadow);
   animation: drop-in 0.16s var(--ease);
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .accent-tray {
+  .rw-app .tool-pop {
     animation: none;
   }
 }
-/* the tool wears the live dye so the current lot is readable without opening */
-.rw-app .accent-tool {
-  position: relative;
+.rw-app .tool-pop-head {
+  padding: 4px 8px 6px;
+  margin: 0;
+  font-size: 0.62rem;
+  font-weight: 650;
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
+.rw-app .tool-pop-item {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  min-block-size: 36px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: start;
+  white-space: nowrap;
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+}
+.rw-app .tool-pop-item svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+}
+@media (hover: hover) {
+  .rw-app .tool-pop-item:hover {
+    color: var(--ink);
+    background: var(--well);
+  }
+}
+.rw-app .tool-pop-item:active {
+  color: var(--ink);
+  background: var(--plate-2);
+}
+.rw-app .tool-pop-item[aria-checked="true"] {
+  color: var(--thread-text);
+}
+.rw-app .tool-pop-note {
+  padding-inline-start: var(--sp-m);
+  margin-inline-start: auto;
+  font-size: 0.68rem;
+  font-weight: 550;
+  color: var(--ink-4);
+}
+/* the tool wears the live dye so the current lot is readable without opening */
 .rw-app .accent-tool-dot {
   position: absolute;
-  inset-block-end: 5px;
-  inset-inline-end: 5px;
+  inset-block-end: 4px;
+  inset-inline-end: 4px;
   width: 8px;
   height: 8px;
   background: var(--thread);
   border-radius: 50%;
   box-shadow: 0 0 0 1.5px var(--chassis);
+}
+.rw-app .accent-tray {
+  display: flex;
+  gap: var(--sp-s);
+  padding: 2px 8px 6px;
+}
+/* Inside This Device, the same pickers use named rows. Their choices expand
+   in the scroll box, so neither picker needs a floating panel outside it. */
+.rw-app .nav-tool-anchor {
+  display: block;
+  inline-size: 100%;
+}
+.rw-app .nav-tool-anchor .tool.nav-tool {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  justify-items: start;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 36px;
+  padding: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: start;
+  border: 0;
+}
+.rw-app .nav-tool-anchor .tool.nav-tool svg {
+  grid-area: 1 / 1;
+  width: 18px;
+  height: 18px;
+}
+.rw-app .nav-tool-anchor .nav-row-label {
+  grid-area: 1 / 2;
+}
+.rw-app .nav-tool-anchor .accent-tool-dot {
+  inset-block-end: 7px;
+  inset-inline-start: 19px;
+  inset-inline-end: auto;
+}
+.rw-app .nav-tool-anchor .nav-tool-pop {
+  position: fixed;
+  inset: auto;
+  min-inline-size: min(210px, calc(100vw - 16px));
+  max-inline-size: calc(100vw - 16px);
+  max-block-size: calc(100dvh - 16px);
+  margin: 0;
+  overflow-y: auto;
+}
+.rw-app .nav-tool-pop[popover]:not(:popover-open) {
+  display: none;
+}
+.rw-app .nav-tool-pop .tool-pop-item {
+  white-space: normal;
+}
+.rw-app .nav-tool-pop .accent-tray {
+  flex-wrap: wrap;
 }
 @media (hover: hover) {
   .rw-app .accent-tray .accent-chip:hover .accent-chip-dot {
@@ -976,103 +837,81 @@ html.vt-theme .mode-rail .mode {
   transform: rotate(-90deg) scale(0.5);
 }
 
-/* ── the responsive ladder: two ranges, one threshold ──
-   Every tab keeps its icon + label pairing at every width: a label is never
-   clipped, ellipsized or hidden. Below the dock threshold the rail is the
-   bottom dock. Above it, brand | rail | link group share the top row. The side
-   tracks are mirrors: both grow to the widest side, so the rail centers on the
-   masthead rather than on the gap between the brand and the link group. They
-   MUST floor at their content - a `0` floor lets a wide rail starve them and
-   the brand paints under it - so on a narrow desktop the rail is what gives
-   way, scrolling while the mirrored tracks stay centered on what room is left. */
-@media (min-width: 1000px) {
-  .rw-app .masthead {
-    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
-    column-gap: var(--sp-s);
-  }
-  .rw-app .brand {
-    grid-row: 1;
-    grid-column: 1;
-    justify-self: start;
-  }
-  .rw-app .modes {
-    grid-row: 1;
-    grid-column: 2;
-  }
-  .rw-app .masthead-tools {
-    grid-row: 1;
-    grid-column: 3;
-  }
-}
-/* ▼ dock threshold: the single number that replaced data-masthead-layout */
-@media (max-width: 999px) {
-  .rw-app .modes {
-    display: none;
-  }
-  .rw-app {
-    --dock-h: calc(64px + var(--safe-b));
-  }
-}
-@media (min-width: 1000px) {
-  .rw-app .dock-nav {
-    display: none;
-  }
-}
-@media (max-width: 999px) {
-  .rw-app .desktop-more {
-    display: none;
-  }
-  .rw-app .mobile-more {
-    display: inline-flex;
-  }
-  .rw-app .dock .mobile-more {
-    position: relative;
-    display: flex;
-  }
-  .rw-app .dock .mobile-more .dock-action {
-    width: 100%;
-  }
-  .rw-app .shared-more-menu {
-    position: fixed;
-    inset-block-start: auto;
-    inset-block-end: calc(var(--dock-h) + var(--sp-xs));
-    inset-inline-end: max(var(--sp-s), var(--safe-r));
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: max-content;
-    align-content: start;
-    max-block-size: calc(100svh - var(--dock-h) - 2 * var(--sp-xs));
-    overflow-y: auto;
-  }
-}
-
-/* ── the dock (phone primary nav) ── */
+/* ── the phone dock ──
+   Runtime status spans the top row, so its wording stays readable above the
+   three workflows and Menu. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
   inset-inline: 0;
   z-index: 1000;
-  display: grid;
-  grid-auto-columns: 1fr;
-  grid-auto-flow: column;
-  padding: 4px max(var(--sp-s), var(--safe-r)) max(4px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
+  display: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  row-gap: 0;
+  padding: 3px max(var(--sp-s), var(--safe-r)) max(3px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
   background: color-mix(in oklab, var(--plate) 88%, transparent);
   border-block-start: 1px solid var(--seam-soft);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
-.rw-app .dock-tabs {
-  display: contents;
+.rw-app .dock-runtime {
+  display: flex;
+  grid-row: 1;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 30px;
 }
-.rw-app .dock-tab,
-.rw-app .dock-action {
+.rw-app .dock-runtime:empty {
+  display: none;
+}
+.rw-app .header-runtime .sub-status-text {
+  display: none;
+}
+.rw-app .header-runtime .sub-status-percent {
+  font-size: 9px;
+  line-height: 1;
+}
+.rw-app .header-runtime .sub-status {
+  flex-direction: column;
+  gap: 1px;
+  min-inline-size: 24px;
+}
+.rw-app .header-runtime .sub-status::after {
+  inset: 0;
+}
+.rw-app .dock-runtime .sub-status {
+  block-size: 30px;
+  padding-inline: 10px;
+  font-size: 0.68rem;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: 999px;
+}
+.rw-app .dock-runtime .sub-status::after {
+  inset: 0;
+}
+.rw-app .sidebar-runtime:empty {
+  display: none;
+}
+.rw-app .sidebar-runtime {
+  padding: 0 4px var(--sp-s);
+  margin-block-end: var(--sp-s);
+  border-block-end: 1px solid var(--seam-strong);
+}
+.rw-app .phone-overlay-runtime {
+  display: none;
+}
+.rw-app .dock-tab {
   position: relative;
   display: flex;
   flex-direction: column;
+  grid-row: 1;
   gap: 2px;
   align-items: center;
-  min-height: 48px;
-  padding: 6px 2px 4px;
+  justify-content: center;
+  min-height: 49px;
+  padding: 5px 2px;
   font-family: inherit;
   font-size: 0.62rem;
   font-weight: 650;
@@ -1086,68 +925,236 @@ html.vt-theme .mode-rail .mode {
   border: 0;
   border-radius: var(--r-s);
 }
-.rw-app .dock-tab svg,
-.rw-app .dock-action svg {
+
+@media (max-width: 999px) {
+  html[data-offline-layout="title"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="title"] .rw-app .dock {
+    row-gap: 0;
+  }
+  html[data-offline-layout="title"] .rw-app .dock-tab {
+    grid-row: 1;
+  }
+  html[data-offline-layout="title"] .rw-app .dock-runtime {
+    display: none;
+  }
+  html[data-offline-layout="title"] .rw-app .menu-sheet,
+  html[data-offline-layout="strip"] .rw-app .menu-sheet {
+    inset-block-end: var(--dock-h);
+    max-block-size: calc(100dvh - var(--dock-h));
+  }
+  html[data-offline-layout="edge"] .rw-app,
+  html[data-offline-layout="quiet"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="edge"] .rw-app .dock,
+  html[data-offline-layout="quiet"] .rw-app .dock {
+    row-gap: 0;
+  }
+  html[data-offline-layout="edge"] .rw-app .dock-tab,
+  html[data-offline-layout="quiet"] .rw-app .dock-tab {
+    grid-row: 1;
+  }
+  html[data-offline-layout="edge"] .rw-app .dock-runtime,
+  html[data-offline-layout="quiet"] .rw-app .dock-runtime {
+    display: none;
+  }
+  html[data-offline-layout="edge"] .rw-app .phone-overlay-runtime:not([hidden]) {
+    position: fixed;
+    inset-block-end: calc(var(--dock-h) + 10px);
+    inset-inline-end: max(12px, var(--safe-r));
+    z-index: 998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime:not([hidden])[data-sw="installing"],
+  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime:not([hidden])[data-sw="update"] {
+    display: flex;
+    align-items: center;
+    min-block-size: 42px;
+    padding: 4px var(--gutter);
+    background: var(--plate-2);
+    border-block-end: 1px solid var(--seam);
+  }
+  html[data-offline-layout="edge"] .rw-app .phone-overlay-runtime .sub-status {
+    min-block-size: 36px;
+    padding-inline: 12px;
+    font-size: 0.68rem;
+    background: var(--plate);
+    border: 1px solid var(--seam-strong);
+    border-radius: 999px;
+    box-shadow: 0 2px 10px color-mix(in oklab, var(--chassis) 30%, transparent);
+  }
+  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime .sub-status {
+    min-block-size: 34px;
+    padding-inline: 4px;
+    font-size: 0.68rem;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-s);
+  }
+  html[data-offline-layout="tab"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="strip"] .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  html[data-offline-layout="strip"] .rw-app:has(.dock-runtime .update-ready) {
+    --dock-h: calc(86px + max(3px, var(--safe-b)));
+  }
+
+  html[data-offline-layout="tab"] .rw-app .dock {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    row-gap: 0;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-tab,
+  html[data-offline-layout="tab"] .rw-app .dock-runtime {
+    grid-row: 1;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime {
+    grid-column: 5;
+    min-block-size: 49px;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    justify-content: center;
+    inline-size: 100%;
+    block-size: 49px;
+    padding: 5px 2px;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-s);
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status svg {
+    width: 20px;
+    height: 20px;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status-text,
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status-percent {
+    display: none;
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status::before {
+    order: 3;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    content: "STATUS";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="active"]::before,
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="ready"]::before {
+    content: "OFFLINE";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="update"]::before {
+    content: "UPDATE";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="installing"]::before {
+    content: "LOADING";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="online"]::before {
+    content: "ONLINE";
+  }
+  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="disabled"]::before {
+    content: "OFF";
+  }
+
+  html[data-offline-layout="strip"] .rw-app .dock {
+    row-gap: 0;
+  }
+  html[data-offline-layout="strip"] .rw-app .dock-tab {
+    grid-row: 1;
+  }
+  html[data-offline-layout="strip"] .rw-app .dock:has(.update-ready) .dock-tab {
+    grid-row: 2;
+  }
+  html[data-offline-layout="strip"] .rw-app .dock-runtime {
+    grid-row: 1;
+    min-block-size: 24px;
+    border-block-end: 1px solid var(--seam-soft);
+  }
+  html[data-offline-layout="strip"] .rw-app .dock-runtime .sub-status {
+    block-size: 24px;
+    padding-inline: 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+}
+.rw-app .status-prototype-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: end;
+  padding: 8px var(--gutter);
+  background: var(--plate-2);
+  border-block-end: 1px solid var(--seam);
+}
+.rw-app .status-prototype-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rw-app .status-prototype-bar select {
+  max-inline-size: 140px;
+  min-block-size: 36px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: normal;
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .status-prototype-bar > span {
+  padding-block-end: 10px;
+  font-size: 0.66rem;
+  color: var(--ink-3);
+}
+.rw-app .dock-tab svg {
   width: 20px;
   height: 20px;
 }
-.rw-app .dock-tab span,
-.rw-app .dock-action span {
+.rw-app .dock-tab span {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rw-app .dock-tab[aria-selected="true"],
-.rw-app .dock-action[aria-expanded="true"] {
+.rw-app .dock-tab[aria-current="page"] {
+  color: var(--ink);
+}
+.rw-app .dock-menu[aria-expanded="true"] {
   color: var(--thread-text);
 }
 @media (hover: hover) {
-  .rw-app .dock-tab:not([aria-selected="true"]):hover,
-  .rw-app .dock-action:not([aria-expanded="true"]):hover {
+  .rw-app .dock-tab:not([aria-current="page"]):hover {
     color: var(--ink);
   }
 }
-.rw-app .dock-tab:not([aria-selected="true"]):active,
-.rw-app .dock-action:not([aria-expanded="true"]):active {
+.rw-app .dock-tab:not([aria-current="page"]):active {
   color: var(--ink);
 }
-/* the shuttle stitch: a thread carried along the dock's top seam */
-.rw-app .dock-thumb {
-  display: none;
-}
-@supports (anchor-name: --rw-dock) {
-  .rw-app .dock-tab[aria-selected="true"] {
-    anchor-name: --rw-dock;
-  }
-  .rw-app .dock-thumb {
-    display: block;
-    position: absolute;
-    top: -1px;
-    height: 2px;
-    border-radius: 1px;
-    background: var(--thread);
-    position-anchor: --rw-dock;
-    left: anchor(left);
-    width: anchor-size(width);
-    transition:
-      left 0.3s var(--ease),
-      width 0.3s var(--ease);
-  }
-}
-@supports not (anchor-name: --rw-dock) {
-  .rw-app .dock-tab[aria-selected="true"]::before {
-    position: absolute;
-    inset-inline: 8px;
-    top: -1px;
-    height: 2px;
-    content: "";
-    background: var(--thread);
-    border-radius: 1px;
-  }
+.rw-app .dock-tab[aria-current="page"]::before {
+  position: absolute;
+  inset-inline: 12px;
+  top: -1px;
+  height: 2px;
+  content: "";
+  background: color-mix(in oklab, var(--thread) 45%, var(--seam));
+  border-radius: 0 0 2px 2px;
 }
 @media (forced-colors: active) {
-  .rw-app .dock-tab[aria-selected="true"] {
+  .rw-app .dock-tab[aria-current="page"] {
     color: SelectedItemText;
     background: SelectedItem;
   }
@@ -1156,4 +1163,317 @@ html.vt-theme .mode-rail .mode {
 .rw-app .dock-pad {
   flex: none;
   height: var(--dock-h);
+}
+
+/* ── the Menu sheet ──
+   The panel grows from the dock and scrolls its navigation on short screens. */
+.rw-app .scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: none;
+  appearance: none;
+  cursor: default;
+  background: color-mix(in oklab, var(--chassis) 55%, transparent);
+  border: 0;
+}
+.rw-app .menu-sheet {
+  position: fixed;
+  inset: auto 0 calc(var(--dock-h) - 1px);
+  z-index: 1001;
+  display: none;
+  flex-direction: column;
+  max-block-size: calc(100dvh - var(--dock-h) + 1px);
+  background: var(--plate);
+  border-block-start: 1px solid var(--seam-strong);
+}
+.rw-app .menu-sheet[hidden] {
+  display: none;
+}
+.rw-app .menu-sheet-body {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+  padding: var(--sp-s) var(--gutter) var(--sp-m);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+:root:has(.rw-app .menu-sheet:not([hidden])) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.rw-app:has(.menu-sheet:not([hidden])) .dock {
+  background: var(--plate);
+}
+.rw-app .menu-sheet .nav-group-label {
+  padding-block: 10px 3px;
+  padding-inline: 3px;
+}
+.rw-app .menu-sheet .nav-group + .nav-group {
+  margin-block-start: 0;
+}
+.rw-app .nav-group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px 4px;
+}
+@media (max-width: 359px) {
+  .rw-app .nav-group-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.rw-app .menu-sheet .nav-row {
+  min-block-size: 41px;
+  padding: 10px 8px;
+}
+/* Find sits at the bottom edge, in the thumb zone, where the phone layout
+   already puts the palette it opens. */
+.rw-app .menu-sheet-foot {
+  flex: none;
+  padding: var(--sp-xs) var(--gutter);
+  border-block-start: 1px solid var(--seam);
+}
+.rw-app .menu-find {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  inline-size: 100%;
+  block-size: 42px;
+  padding-inline: 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  text-align: start;
+  appearance: none;
+  cursor: text;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .menu-find svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.rw-app .menu-find span {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-app .menu-find kbd {
+  flex: none;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 0.68rem;
+  color: var(--ink-3);
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: 4px;
+}
+.rw-app .menu-find:active {
+  border-color: var(--seam-strong);
+}
+@media (hover: hover) {
+  .rw-app .menu-find:hover {
+    border-color: var(--seam-strong);
+  }
+}
+
+/* ── the layout threshold ──
+   ▼ The single number that decides which of the two shells is on screen. */
+@media (min-width: 1000px) {
+  .rw-app .brand {
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 4px;
+  }
+  .rw-app .brand-mark {
+    width: 44px;
+  }
+  .rw-app .brand-word {
+    font-size: 1.44rem;
+  }
+  .rw-app .brand .build-facts {
+    font-size: 0.8rem;
+  }
+
+  .rw-app {
+    --rail-w: 220px;
+  }
+  html[data-offline-layout="title"] .rw-app .sidebar-runtime {
+    display: none;
+  }
+  /* The sidebar is a column of the app grid rather than a fixed overlay, so it
+     scrolls with nothing and the content column keeps its own max width. */
+  .rw-app .app {
+    display: grid;
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    column-gap: var(--sp-l);
+    align-items: start;
+    max-width: calc(var(--app-max) + var(--rail-w) + var(--sp-l));
+  }
+  .rw-app .side-col {
+    position: sticky;
+    inset-block-start: 0;
+    display: flex;
+    flex-direction: column;
+    grid-row: 1 / span 100;
+    grid-column: 1;
+    block-size: 100svh;
+    padding-inline-end: var(--sp-m);
+    border-inline-end: 1px solid var(--seam);
+  }
+  .rw-app .shell-head {
+    flex: none;
+    gap: var(--sp-s);
+    padding-block: var(--sp-m);
+  }
+  .rw-app .side-rail .nav-row {
+    min-block-size: 32px;
+    padding-block: 6px;
+  }
+  .rw-app .app > :not(.side-col) {
+    grid-column: 2;
+  }
+  .rw-app .shell-head-tools {
+    display: none;
+  }
+  .rw-app .app:has(#panel-docs:not([hidden])) {
+    max-width: calc(var(--app-max-docs) + var(--rail-w) + var(--sp-l));
+  }
+}
+@media (max-width: 999px) {
+  .rw-app {
+    --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  .rw-app .side-rail,
+  .rw-app .sidebar-runtime,
+  .rw-app .topbar {
+    display: none;
+  }
+  .rw-app .side-col {
+    display: block;
+  }
+  .rw-app .shell-head {
+    padding-block: 8px;
+  }
+  .rw-app .shell-head-top {
+    align-items: center;
+  }
+  .rw-app .brand {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .rw-app .brand-mark {
+    width: 40px;
+  }
+  .rw-app .brand-word {
+    font-size: 1.34rem;
+  }
+  .rw-app .shell-head-tools .tool {
+    width: 44px;
+    height: 44px;
+  }
+  .rw-app .shell-head-tools .tool svg {
+    width: 20px;
+    height: 20px;
+  }
+  .rw-app .topbar-tools {
+    display: none;
+  }
+  .rw-app .dock {
+    display: grid;
+  }
+  .rw-app .menu-sheet:not([hidden]) {
+    display: flex;
+  }
+  .rw-app .scrim:not([hidden]) {
+    display: block;
+  }
+  @media (max-width: 449px) {
+    .rw-app .status-prototype-bar {
+      gap: 8px;
+      align-items: center;
+      padding-block: 5px;
+    }
+    .rw-app .status-prototype-bar .status-prototype-layout {
+      display: none;
+    }
+    .rw-app .status-prototype-bar label:not(.status-prototype-layout) {
+      flex-direction: row;
+      gap: 6px;
+      align-items: center;
+    }
+    .rw-app .status-prototype-bar select {
+      min-block-size: 32px;
+    }
+    .rw-app .status-prototype-bar > span {
+      padding: 0;
+      margin-inline-start: auto;
+    }
+    .rw-app .shell-head-tools {
+      gap: 0;
+    }
+    .rw-app .brand-word {
+      font-size: 1.2rem;
+    }
+    .rw-app .shell-head-tools > .tool-separator {
+      margin-inline: 2px;
+    }
+  }
+  @media (max-width: 599px) {
+    .rw-app .shell-head-tools {
+      gap: 4px;
+    }
+    .rw-app .shell-head-tools .tool {
+      width: 32px;
+      height: 44px;
+    }
+  }
+  @media (max-width: 449px) {
+    .rw-app .shell-head-tools .tool {
+      width: 28px;
+    }
+  }
+  @media (max-width: 389px) {
+    .rw-app .brand-word {
+      font-size: 1.16rem;
+    }
+    .rw-app .shell-head-tools {
+      gap: 2px;
+    }
+    .rw-app .brand {
+      grid-template-columns: 32px minmax(0, 1fr);
+      column-gap: 4px;
+    }
+    .rw-app .brand-mark {
+      width: 32px;
+    }
+    .rw-app .shell-head-tools .tool {
+      width: 28px;
+    }
+  }
+  @media (max-width: 359px) {
+    .rw-app .brand {
+      grid-template-columns: 28px minmax(0, 1fr);
+    }
+    .rw-app .brand-mark {
+      width: 28px;
+    }
+    .rw-app .shell-head-top {
+      gap: 0;
+    }
+    .rw-app .brand-word {
+      font-size: 1.08rem;
+    }
+    .rw-app .shell-head-tools .tool {
+      width: 24px;
+    }
+  }
+  /* The trailing pair would paint its tooltip past the window edge and give
+     the page a phantom horizontal scrollbar. */
+  .rw-app .shell-head-tools .tool:nth-last-child(-n + 2) .tip {
+    inset-inline: auto 0;
+  }
 }

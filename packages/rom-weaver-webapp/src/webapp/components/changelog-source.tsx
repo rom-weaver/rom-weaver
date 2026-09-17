@@ -161,7 +161,7 @@ const EntryGroups = ({
   <>
     {groups.map((group) => (
       <div className="release-changelog" key={`${keyPrefix}:${group.title}`}>
-        {group.title ? <h4 className="release-changelog-group">{group.title}</h4> : null}
+        {group.title ? <h3 className="release-changelog-group">{group.title}</h3> : null}
         <ul className="release-changelog-entries">
           {group.entries.map((entry) => (
             <li key={`${entry.pr || entry.commit || ""}:${entry.summary}`}>

@@ -242,7 +242,7 @@ describe("ChangelogPanel pending update", () => {
 
     const update = await renderUpdate();
 
-    const headings = await update.findAllByRole("heading");
+    const headings = await update.findAllByRole("heading", { level: 3 });
     expect(headings.map((heading) => heading.textContent)).toEqual(["Features", "Bug Fixes", "Other Changes"]);
     expect(update.getByText("center the swap control")).toBeTruthy();
     expect(update.getByText("webapp:")).toBeTruthy();

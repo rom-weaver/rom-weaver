@@ -95,6 +95,10 @@ afterEach(async () => {
 
 // two RAFs so React's commit + layout settle before reading styles / running axe
 const settle = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+/** Wait for a React state update that a raw `.click()` scheduled. */
+const settleUntil = async (ready) => {
+  for (let attempt = 0; attempt < 50 && !ready(); attempt += 1) await settle();
+};
 
 /** A representative input card: name + meta, an OPEN checksum drawer, a CLOSED one. */
 const Sample = () =>
@@ -410,22 +414,42 @@ const stagedPatchItem = (fileName) => ({
 });
 
 const PAGE_TABS = [
-  { href: "apply", icon: createElement("span", { "aria-hidden": "true" }), id: "patcher", label: "Apply" },
-  { href: "create", icon: createElement("span", { "aria-hidden": "true" }), id: "creator", label: "Create" },
-  { href: "test", icon: createElement("span", { "aria-hidden": "true" }), id: "test", label: "Test" },
+  {
+    dock: true,
+    group: "patches",
+    href: "apply",
+    icon: createElement("span", { "aria-hidden": "true" }),
+    id: "patcher",
+    label: "Apply",
+  },
+  {
+    dock: true,
+    group: "patches",
+    href: "create",
+    icon: createElement("span", { "aria-hidden": "true" }),
+    id: "creator",
+    label: "Create",
+  },
+  {
+    dock: true,
+    group: "roms",
+    href: "test",
+    icon: createElement("span", { "aria-hidden": "true" }),
+    id: "test",
+    label: "Test",
+  },
   {
     beta: true,
-    group: "tools",
+    group: "roms",
     href: "trim",
     icon: createElement("span", { "aria-hidden": "true" }),
     id: "trim",
     label: "Trim",
-    placement: "more",
   },
 ];
 
-// Production page chrome (single <main className="workbench"> + one tabpanel)
-// around an arbitrary workflow form node, mirroring webapp-root.tsx.
+// Production page chrome (single <main className="workbench"> + one named
+// section) around an arbitrary workflow form node, mirroring webapp-root.tsx.
 const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
   createElement(
     RomWeaverSettingsProvider,
@@ -458,7 +482,6 @@ const Shell = (currentTab, panelView, formNode, mastheadProps = {}) =>
               "aria-labelledby": `tab-${panelView}`,
               className: "panel workflow",
               id: `panel-${panelView}`,
-              role: "tabpanel",
             },
             createElement("div", { className: "workflow-body" }, formNode),
           ),
@@ -884,9 +907,9 @@ describe("webapp surface accessibility", () => {
 });
 
 // ── Keyboard navigation ──────────────────────────────────────────────────────
-// axe can't verify focus movement / roving tabindex, so this drives the real
-// masthead tablist (ModeRail) with arrow / Home / End keys and asserts focus
-// lands on the right tab and the select callback fires. (Theme-independent.)
+// axe can't verify focus movement, so this drives the real chrome by keyboard
+// and asserts the skip link, the nav's tab order, and the Menu sheet's own
+// Escape contract. (Theme-independent.)
 describe("webapp keyboard navigation", () => {
   const renderMasthead = async (onSelectTab) => {
     document.documentElement.dataset.betaToolsEnabled = "true";
@@ -918,36 +941,90 @@ describe("webapp keyboard navigation", () => {
     await renderMasthead(noop);
     const skipLink = host.querySelector(".skip-link");
     expect(skipLink?.getAttribute("href")).toBe("#main-content");
-    expect(host.querySelector(".skip-link + .masthead")).toBeTruthy();
+    expect(host.querySelector(".skip-link + .shell-banner")).toBeTruthy();
     skipLink.focus();
     expect(document.activeElement).toBe(skipLink);
   });
 
-  test("mode rail: arrow / Home / End move roving focus and select the tab", async () => {
+  test("the nav is a plain list of links, so Tab reaches every destination", async () => {
     const selected = [];
     await renderMasthead((id) => selected.push(id));
-    const tablist = host.querySelector(".mode-rail");
-    const tabAt = (id) => host.querySelector(`.mode[data-mode="${id}"]`);
+    const rows = [...host.querySelectorAll(".side-nav .nav-row")];
 
-    // roving tabindex: only the current tab is in the tab order
-    expect(tabAt("patcher").getAttribute("tabindex")).toBe("0");
-    expect(tabAt("creator").getAttribute("tabindex")).toBe("-1");
+    // No roving tabindex to trap the keyboard: this is a nav, not a tablist,
+    // so every row is reachable with Tab and none is removed from the order.
+    expect(rows.length).toBeGreaterThan(4);
+    expect(rows.some((row) => row.getAttribute("tabindex") === "-1")).toBe(false);
+    expect(host.querySelector('.side-nav [role="tab"]')).toBeNull();
 
-    tabAt("patcher").focus();
-    const press = (key) =>
-      tablist.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+    const current = host.querySelector('.side-nav [aria-current="page"]');
+    expect(current.dataset.mode ?? current.getAttribute("href")).toBe("apply");
+    host.querySelector("#tab-creator").click();
+    expect(selected).toEqual(["creator"]);
+  });
 
-    // currentTab stays "patcher" in isolation, so each key resolves from there
-    press("ArrowRight");
-    expect(document.activeElement).toBe(tabAt("creator"));
-    press("End");
-    expect(document.activeElement).toBe(tabAt("test"));
-    press("Home");
-    expect(document.activeElement).toBe(tabAt("patcher"));
-    press("ArrowLeft"); // wraps to the last tab
-    expect(document.activeElement).toBe(tabAt("test"));
+  test("Escape from Find returns focus to the trigger the layout shows", async () => {
+    // `.topbar-find` is display:none below the threshold, and focusing a hidden
+    // button silently drops focus to the body.
+    await setViewport(VIEWPORTS[0]);
+    await renderMasthead(noop);
+    if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
+    await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
+    host.querySelector(".menu-find").click();
+    await settleUntil(() => !!host.querySelector(".find-input"));
 
-    expect(selected).toEqual(["creator", "test", "patcher", "test"]);
+    host
+      .querySelector(".find-input")
+      .dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await settleUntil(() => !host.querySelector(".find-input"));
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement.closest(".menu-find, .dock-menu")).toBeTruthy();
+  });
+
+  test("the Menu sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
+    await setViewport(VIEWPORTS[0]);
+    await renderMasthead(noop);
+    const banner = host.querySelector(".shell-banner");
+    const covered = host.querySelector('.shell-head-tools .tool[aria-label="Docs"]');
+    expect(banner.hasAttribute("inert")).toBe(false);
+
+    if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
+    await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
+
+    // The scrim blocks the pointer here, so the keyboard must not get through.
+    expect(banner.hasAttribute("inert")).toBe(true);
+    covered.focus();
+    expect(document.activeElement).not.toBe(covered);
+    // The dock stays reachable: Menu is what closes the sheet again.
+    const menu = host.querySelector(".dock-menu");
+    expect(host.querySelector(".dock").hasAttribute("inert")).toBe(false);
+    menu.focus();
+    expect(document.activeElement).toBe(menu);
+
+    menu.click();
+    await settleUntil(() => host.querySelector(".menu-sheet").hidden);
+    expect(banner.hasAttribute("inert")).toBe(false);
+    covered.focus();
+    expect(document.activeElement).toBe(covered);
+  });
+
+  test("Menu closes on Escape and hands focus back to its trigger", async () => {
+    // The dock only exists below the layout threshold, and focus cannot return
+    // to a control the current layout does not show.
+    await setViewport(VIEWPORTS[0]);
+    await renderMasthead(noop);
+    const trigger = host.querySelector(".dock-menu");
+    const sheet = host.querySelector(".menu-sheet");
+
+    trigger.click();
+    await settleUntil(() => !sheet.hidden);
+    expect(sheet.hidden).toBe(false);
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    await settleUntil(() => sheet.hidden);
+
+    expect(sheet.hidden).toBe(true);
+    expect(document.activeElement).toBe(trigger);
   });
 
   test("modal wraps Tab focus, restores the opener, and isolates the page", async () => {
@@ -1009,10 +1086,10 @@ const ACCENT_VIEWPORTS = [
   VIEWPORTS[6], // 1280w desktop
 ];
 
-// The masthead is the only place the channel badge renders, and it is the one
-// surface where a thread-tinted fill sits behind thread-tinted text. Mounted as
-// a full page (not a lone masthead) so the tabs' aria-controls resolve to the
-// tabpanel they name, exactly as they do in production.
+// The identity block is the only place the channel badge renders, and it is the
+// one surface where a thread-tinted fill sits behind thread-tinted text.
+// Mounted as a full page so the nav rows resolve against the panels they name,
+// exactly as they do in production.
 const badgedMastheadPage = () =>
   Shell(
     "patcher",
@@ -1023,7 +1100,7 @@ const badgedMastheadPage = () =>
 
 // Curated to cover every design-system file that reads a thread token:
 // dropzone/hero, file-cards + drawers + fields + workbench, result + weave-meter,
-// dialogs, banners, and masthead (incl. the badge).
+// dialogs, banners, and the shell chrome (incl. the badge).
 const ACCENT_SURFACES = [
   { factory: emptyApplyPage, name: "empty apply (hero + dropzone)", page: true },
   { dense: true, factory: disabledPatchApplyPage, name: "dense apply (cards, drawers, verdicts)", page: true },
@@ -1031,7 +1108,7 @@ const ACCENT_SURFACES = [
   { factory: () => ModalHost(DIALOGS.settings()), name: "settings dialog" },
   { factory: () => ModalHost(DIALOGS.log()), name: "log dialog" },
   { factory: () => createElement(Banners), name: "banners" },
-  { badge: true, factory: badgedMastheadPage, name: "masthead + channel badge", page: true },
+  { badge: true, factory: badgedMastheadPage, name: "shell chrome + channel badge", page: true },
 ];
 
 describe("accent dye-lot accessibility", () => {
@@ -1075,27 +1152,24 @@ describe("accent dye-lot accessibility", () => {
 });
 
 describe("webapp responsive navigation", () => {
-  // The ladder is fixed breakpoints and nothing else: mirrored side tracks
-  // center the rail on the masthead >= 1000px, bottom dock below 1000px. No
-  // measurement, no data-masthead-layout.
+  // One threshold and nothing else: sidebar + top bar at 1000px and up, page
+  // header + bottom dock + Menu sheet below it. No measurement, no layout flag.
   const ALL_TABS = [
     ...PAGE_TABS,
     {
-      group: "docs",
+      group: "project",
       href: "docs",
       icon: createElement("span", { "aria-hidden": "true" }),
       id: "docs",
       label: "Docs",
-      placement: "more",
     },
     {
       beta: true,
-      group: "tools",
+      group: "patches",
       href: "ppf-undo",
       icon: createElement("span", { "aria-hidden": "true" }),
       id: "ppf-undo",
       label: "PPF undo",
-      placement: "more",
     },
   ];
 
@@ -1134,7 +1208,12 @@ describe("webapp responsive navigation", () => {
     for (const width of [1280, 390]) {
       await setViewport({ height: 430, width });
       await renderMastheadOnly(ALL_TABS);
-      host.querySelector(width > 999 ? ".desktop-find button" : ".dock-find").click();
+      if (width > 999) host.querySelector(".topbar-find").click();
+      else {
+        host.querySelector(".dock-menu").click();
+        await settle();
+        host.querySelector(".menu-find").click();
+      }
       await settle();
       const input = host.querySelector(".find-input");
       const options = host.querySelectorAll(".find-option");
@@ -1149,45 +1228,34 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the rail shares the top row with the brand and the link group", async () => {
+  test("the sidebar is a column beside the content, with the top bar above it", async () => {
     for (const width of [1000, 1100, 1280, 1600]) {
       await setViewport({ height: 900, width });
       for (const tabs of [PAGE_TABS, ALL_TABS]) {
         await renderMastheadOnly(tabs);
 
-        const brand = host.querySelector(".brand").getBoundingClientRect();
-        const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
-        const modes = host.querySelector(".modes").getBoundingClientRect();
+        const head = host.querySelector(".shell-head").getBoundingClientRect();
+        const nav = host.querySelector(".side-nav").getBoundingClientRect();
+        const topbar = host.querySelector(".topbar").getBoundingClientRect();
 
-        // one row: all three share the top edge
-        expect(Math.abs(modes.top - brand.top)).toBeLessThanOrEqual(Math.max(modes.height, brand.height));
-        // brand left of the rail, rail left of the link group
-        expect(brand.right).toBeLessThanOrEqual(modes.left + 1);
-        expect(modes.right).toBeLessThanOrEqual(tools.left + 1);
-        // the dock never shares the screen with the rail
-        expect(getComputedStyle(host.querySelector(".dock-nav")).display).toBe("none");
+        // The identity block heads the column and the nav runs below it.
+        expect(head.bottom).toBeLessThanOrEqual(nav.top + 1);
+        // The top bar sits beside the column, never over it.
+        expect(nav.right).toBeLessThanOrEqual(topbar.left + 1);
+        // The dock never shares the screen with the sidebar.
+        expect(getComputedStyle(host.querySelector(".dock")).display).toBe("none");
+        expect(getComputedStyle(host.querySelector(".menu-sheet")).display).toBe("none");
       }
     }
   });
 
-  test("tab order follows the masthead left to right", async () => {
-    await setViewport({ height: 900, width: 1280 });
-    await renderMastheadOnly(ALL_TABS);
-    const focusables = [...host.querySelectorAll("a[href], button")].filter(
-      (node) => node.tabIndex >= 0 && node.offsetParent !== null,
-    );
-    const lefts = focusables.map((node) => node.getBoundingClientRect().left);
-    for (let i = 1; i < lefts.length; i += 1) {
-      expect(lefts[i]).toBeGreaterThanOrEqual(lefts[i - 1] - 1);
-    }
-  });
-
-  test("every tab keeps its full label at every rail width", async () => {
+  test("every nav row keeps its full label at every sidebar width", async () => {
     for (const width of [1000, 1100, 1200, 1280, 1600]) {
       await setViewport({ height: 900, width });
       await renderMastheadOnly(ALL_TABS);
-      for (const label of host.querySelectorAll(".mode .mode-label")) {
-        // painted in full: never clipped to a glyph, never ellipsized
+      for (const label of host.querySelectorAll(".side-nav .nav-row-label")) {
+        // painted in full: never clipped to a glyph, never ellipsized. A locale
+        // with longer words wraps the row instead of truncating the name.
         expect(label.getBoundingClientRect().width).toBeGreaterThan(20);
         expect(label.scrollWidth).toBeLessThanOrEqual(label.getBoundingClientRect().width + 1);
         expect(getComputedStyle(label).textOverflow).not.toBe("ellipsis");
@@ -1196,55 +1264,72 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the desktop rail centers on the masthead across top-row widths", async () => {
-    for (const width of [1000, 1100, 1280, 1600]) {
-      await setViewport({ height: 900, width });
-      await renderMastheadOnly(PAGE_TABS);
-
-      const masthead = host.querySelector(".masthead").getBoundingClientRect();
-      const modes = host.querySelector(".modes").getBoundingClientRect();
-      const mastheadCenter = masthead.left + masthead.width / 2;
-      const modesCenter = modes.left + modes.width / 2;
-
-      expect(Math.abs(modesCenter - mastheadCenter)).toBeLessThanOrEqual(1);
-    }
-  });
-
-  test("the rail is never clipped: it scrolls instead of colliding", async () => {
-    await setViewport({ height: 900, width: 1000 });
+  test("no destination is listed twice in one layout", async () => {
+    await setViewport({ height: 900, width: 1280 });
     await renderMastheadOnly(ALL_TABS);
-    const modes = host.querySelector(".modes");
-    // Only the tabs scroll. The menu popup remains outside the overflow box.
-    expect(getComputedStyle(host.querySelector(".mode-rail-scroll")).overflowX).toBe("auto");
-    expect(modes.getBoundingClientRect().width).toBeLessThanOrEqual(
-      host.querySelector(".masthead").getBoundingClientRect().width,
-    );
+    const hrefs = [...host.querySelectorAll(".side-nav .nav-row[href]")].map((row) => row.getAttribute("href"));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+    // The top bar carries controls and outbound links, never an app destination.
+    expect(host.querySelector(".topbar .nav-row")).toBeNull();
   });
 
-  test("below the dock threshold the primary nav is the bottom dock", async () => {
+  test("below the threshold the primary nav is the dock, and Menu holds the rest", async () => {
     for (const viewport of [VIEWPORTS[0], { height: 900, width: 999 }]) {
       await setViewport(viewport);
       await renderMastheadOnly(ALL_TABS);
 
-      expect(getComputedStyle(host.querySelector(".modes")).display).toBe("none");
+      expect(getComputedStyle(host.querySelector(".side-rail")).display).toBe("none");
+      expect(getComputedStyle(host.querySelector(".topbar")).display).toBe("none");
       const dock = host.querySelector(".dock");
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
-      // same tablist semantics as the rail
-      const dockTabs = host.querySelector(".dock-tabs");
-      expect(dockTabs.getAttribute("role")).toBe("tablist");
-      const tabs = [...dockTabs.querySelectorAll('[role="tab"]')].filter(
-        (tab) => getComputedStyle(tab).display !== "none",
+      // Three workflows plus Menu, each with a word under its glyph.
+      const slots = [...dock.querySelectorAll(".dock-tab")];
+      expect(slots.length).toBe(4);
+      for (const slot of slots) {
+        const label = slot.lastElementChild;
+        expect(label.textContent.trim().length).toBeGreaterThan(0);
+        expect(label.scrollWidth).toBeLessThanOrEqual(label.getBoundingClientRect().width + 1);
+      }
+
+      // Menu toggles, and re-rendering the same tree keeps its open state.
+      if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
+      await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
+      const sheet = host.querySelector(".menu-sheet").getBoundingClientRect();
+      expect(sheet.height).toBeGreaterThan(0);
+      expect(Math.abs(sheet.bottom - dock.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
+      expect(sheet.top).toBeGreaterThanOrEqual(0);
+      expect(host.querySelector(".menu-sheet .nav-group").getBoundingClientRect().top - sheet.top).toBeLessThan(24);
+      expect(host.querySelector(".menu-sheet .sub-status")).toBeNull();
+      expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
+        host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
       );
-      expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
-      // the masthead keeps its single row: brand and the stateful controls
+
+      // The brand and tools share one row without overlap.
       const brand = host.querySelector(".brand").getBoundingClientRect();
-      const tools = host.querySelector(".masthead-tools").getBoundingClientRect();
+      const tools = host.querySelector(".shell-head-tools").getBoundingClientRect();
       expect(brand.right).toBeLessThanOrEqual(tools.left + 1);
-      expect(host.querySelector(".masthead").getBoundingClientRect().height).toBeLessThanOrEqual(
-        Math.max(brand.height, tools.height) + 24,
-      );
+      expect(host.querySelector(".brand-copy .build-facts")).toBeTruthy();
+
+      host.querySelector(".dock-menu").click();
+      await settleUntil(() => host.querySelector(".menu-sheet").hidden);
     }
+  });
+
+  test("the dock keeps Status and Menu lists the other sidebar rows", async () => {
+    await setViewport(VIEWPORTS[0]);
+    await renderMastheadOnly(ALL_TABS);
+    const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
+
+    // Menu toggles, and re-rendering the same tree keeps its open state.
+    if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
+    await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
+
+    const sortLabels = (items) => items.sort((left, right) => left.localeCompare(right));
+    expect(sortLabels(labels(".menu-sheet"))).toEqual(sortLabels(labels(".side-nav")));
+    expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
+      host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
+    );
   });
 
   test("the wordmark is never truncated by the brand's min-content floor", async () => {
@@ -1275,7 +1360,10 @@ describe("webapp responsive navigation", () => {
       const hero = host.querySelector(".drop.hero");
       const appRect = app.getBoundingClientRect();
       const heroRect = hero.getBoundingClientRect();
-      const gutter = heroRect.left - appRect.left;
+      // Measured from the content column, which the sidebar column precedes on
+      // desktop; the app box itself starts at the rail.
+      const column = host.querySelector(".workbench").getBoundingClientRect();
+      const gutter = heroRect.left - column.left;
 
       // The scrollbar may consume a narrow strip, but the app should not fall
       // back to the old 880px cap while the 1220px wide layout still fits.

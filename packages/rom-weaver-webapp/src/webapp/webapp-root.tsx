@@ -1,3 +1,4 @@
+import { isReactWebappDevelopmentMode } from "./development-defaults.ts";
 import {
   BookOpen,
   Gamepad2,
@@ -46,8 +47,8 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
-import { Masthead, SiteFooter, UpdateBanner } from "./components/shell.tsx";
-import type { OfflineWarmupDisplayProgress, WorkflowTab } from "./components/shell.tsx";
+import { Masthead, RUNTIME_STATES, UpdateBanner } from "./components/shell.tsx";
+import type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
@@ -85,6 +86,8 @@ import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 const WORKFLOW_TABS: WorkflowTab[] = [
   // "Apply Patch": the tab both applies patch chains and edits/exports them as bundles.
   {
+    dock: true,
+    group: "patches",
     href: "apply-patch",
     icon: <ApplyBandaidIcon className="apply-tab-icon" />,
     id: "patcher",
@@ -92,62 +95,87 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Apply",
   },
   {
+    dock: true,
+    group: "patches",
     href: "create-patch",
     icon: <GitCompare aria-hidden="true" />,
     id: "creator",
     label: "Create Patch",
     railLabel: "Create",
   },
-  { href: "test-rom", icon: <Gamepad2 aria-hidden="true" />, id: "test", label: "Test ROM", railLabel: "Test" },
-  // Reference rather than a workflow: a More entry under Project.
-  { group: "docs", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs", placement: "more" },
   {
-    group: "tools",
+    group: "patches",
     href: "apply-patch#bundle",
     icon: <Package aria-hidden="true" />,
     id: "bundle",
     label: "Bundle Patches",
-    placement: "more",
-  },
-  // Beta utility routes. They stay behind the beta-tools setting and show up
-  // under Tools in More once it is on.
-  {
-    beta: true,
-    group: "tools",
-    href: "identify-rom",
-    icon: <ScanSearch aria-hidden="true" />,
-    id: "identify",
-    label: "Identify ROM",
-    placement: "more",
+    railLabel: "Bundle",
   },
   {
     beta: true,
-    group: "tools",
-    href: "trim-rom",
-    icon: <Scissors aria-hidden="true" />,
-    id: "trim",
-    label: "Trim ROM",
-    placement: "more",
-  },
-  {
-    beta: true,
-    group: "tools",
+    group: "patches",
     href: "ppf-undo",
     icon: <RotateCcw aria-hidden="true" />,
     id: "ppf-undo",
     label: "PPF undo",
-    placement: "more",
   },
   {
     beta: true,
-    group: "tools",
+    group: "roms",
+    href: "identify-rom",
+    icon: <ScanSearch aria-hidden="true" />,
+    id: "identify",
+    label: "Identify ROM",
+    railLabel: "Identify",
+  },
+  {
+    beta: true,
+    group: "roms",
+    href: "trim-rom",
+    icon: <Scissors aria-hidden="true" />,
+    id: "trim",
+    label: "Trim ROM",
+    railLabel: "Trim",
+  },
+  {
+    dock: true,
+    group: "roms",
+    href: "test-rom",
+    icon: <Gamepad2 aria-hidden="true" />,
+    id: "test",
+    label: "Test ROM",
+    railLabel: "Test",
+  },
+  {
+    beta: true,
+    group: "roms",
     href: "save-editor",
     icon: <SaveIcon aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
-    placement: "more",
+    railLabel: "Saves",
   },
+  // Reference rather than a workflow, so it sits with the project links.
+  { group: "project", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
 ];
+
+const PREVIEW_LAYOUTS = [
+  { id: "title", label: "Beside version" },
+  { id: "edge", label: "Edge badge" },
+  { id: "quiet", label: "Attention only" },
+  { id: "tab", label: "Dock tab" },
+  { id: "strip", label: "Dock strip" },
+] as const;
+type PreviewLayout = (typeof PREVIEW_LAYOUTS)[number]["id"];
+
+const PREVIEW_STATE_LABELS: Record<RuntimeState, string> = {
+  active: "Offline active",
+  ready: "Offline ready",
+  update: "Update ready",
+  installing: "Installing 40%",
+  online: "Online only",
+  disabled: "Offline disabled",
+};
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -272,7 +300,7 @@ const selectViewWithTransition = (select: () => void) => runFlatViewTransition(s
 const ResetButton = ({ onReset }: { onReset: () => void }) => {
   const localizer = useUiLocalizer();
   return (
-    <button className="reset-btn" onClick={onReset} type="button">
+    <button aria-label={localizer.message("ui.settings.reset")} className="reset-btn" onClick={onReset} type="button">
       <RotateCcw aria-hidden="true" />
       <span>{localizer.message("ui.settings.reset")}</span>
     </button>
@@ -293,6 +321,7 @@ const PanelSettingsButton = ({
   const label = localizer.message("ui.settings.title");
   return (
     <button
+      aria-label={label}
       aria-expanded={settingsOpen}
       aria-haspopup="dialog"
       className="panel-settings-btn"
@@ -304,6 +333,38 @@ const PanelSettingsButton = ({
     >
       <Settings aria-hidden="true" />
       <span>{label}</span>
+    </button>
+  );
+};
+
+const PanelThreadCount = ({
+  count,
+  onOpenThreads,
+  onPreloadSettings,
+}: {
+  count: number;
+  onOpenThreads: () => void;
+  onPreloadSettings?: () => void;
+}) => {
+  const localizer = useUiLocalizer();
+  const singular = localizer.message("ui.env.thread");
+  const plural = localizer.message("ui.env.threads");
+  return (
+    <button
+      aria-haspopup="dialog"
+      className="panel-threads-btn"
+      data-thread-plural={plural}
+      data-thread-singular={singular}
+      onClick={onOpenThreads}
+      onFocus={onPreloadSettings}
+      onPointerDown={onPreloadSettings}
+      onPointerEnter={onPreloadSettings}
+      type="button"
+    >
+      <span className="panel-threads-text">
+        <span className="panel-threads-count">{count}</span>{" "}
+        <span className="panel-threads-word">{count === 1 ? singular : plural}</span>
+      </span>
     </button>
   );
 };
@@ -372,6 +433,39 @@ function WebappRoot({
   const [offlineProgress, setOfflineProgress] = useState<OfflineWarmupDisplayProgress | null>(() =>
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
+  const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewLayout, setPreviewLayout] = useState<PreviewLayout>("strip");
+  const [previewUpdateDismissed, setPreviewUpdateDismissed] = useState(false);
+  const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
+  useEffect(() => {
+    if (!isReactWebappDevelopmentMode()) return;
+    const params = new URLSearchParams(window.location.search);
+    const layout = params.get("offline-layout");
+    if (PREVIEW_LAYOUTS.some((item) => item.id === layout)) {
+      setPreviewEnabled(true);
+      setPreviewLayout(layout as PreviewLayout);
+    }
+    const state = params.get("offline-state");
+    if (state && (RUNTIME_STATES as readonly string[]).includes(state)) {
+      setPreviewRuntimeState(state as RuntimeState);
+    }
+  }, []);
+  const changePreviewRuntimeState = useCallback((state: RuntimeState | null) => {
+    if (!isReactWebappDevelopmentMode()) return;
+    setPreviewRuntimeState(state);
+    setPreviewUpdateDismissed(false);
+    const url = new URL(window.location.href);
+    if (state) url.searchParams.set("offline-state", state);
+    else url.searchParams.delete("offline-state");
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+  const changePreviewLayout = useCallback((layout: PreviewLayout) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("offline-layout", layout);
+    window.location.assign(url);
+  }, []);
+  const previewOfflineProgress =
+    previewRuntimeState === "installing" ? { cachedBytes: 40, ready: false, totalBytes: 100 } : offlineProgress;
   const onWarmupProgress = useCallback((progress: OfflineWarmupDisplayProgress) => {
     const next = { ...progress, ready: getOfflineCopyState().enabled && progress.ready };
     setOfflineProgress(next);
@@ -425,6 +519,7 @@ function WebappRoot({
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
   const threads = state.settings.threads;
+  const threadCount = resolveThreads(threads);
   useLayoutEffect(() => notifyGuidedSampleView(state.currentView), [state.currentView]);
   useLayoutEffect(() => {
     document.documentElement.dataset.betaToolsEnabled = state.settings.betaToolsEnabled ? "true" : "false";
@@ -550,8 +645,12 @@ function WebappRoot({
   const handleSelectTab = useCallback(
     (id: string) => {
       if (notFound) {
-        // Not-found's More menu can also reach a tab with no rail entry
-        // (What's new), so it falls back to the id itself as the slug.
+        if (id === "home") {
+          window.location.assign(resolvedAssetBaseUrl);
+          return;
+        }
+        // The nav can also reach a view with no WorkflowTab entry (What's
+        // new), so it falls back to the id itself as the slug.
         const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
         if (href) window.location.assign(`/${href}`);
         return;
@@ -580,7 +679,7 @@ function WebappRoot({
       pendingViewRef.current = null;
       selectViewWithTransition(() => actions.onSelectView(view));
     },
-    [actions, notFound],
+    [actions, notFound, resolvedAssetBaseUrl],
   );
 
   // URL-session sources land in the apply tab's drop pipeline exactly like a
@@ -698,15 +797,26 @@ function WebappRoot({
 
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
+      /* A named section is already a region; it takes its name from the nav
+         row that reaches it, since the sidebar is a nav rather than a tablist. */
       <section
         aria-labelledby={`tab-${view}`}
         className="panel workflow"
         hidden={state.currentView !== view}
         id={`panel-${view}`}
-        role="tabpanel"
       >
         {view === "docs" || view === "whats-new" ? null : (
-          <div className="workflow-panel-head">
+          <div
+            className="workflow-panel-head"
+            data-threads={view === "patcher" || view === "creator" || view === "trim" ? "" : undefined}
+          >
+            {view === "patcher" || view === "creator" || view === "trim" ? (
+              <PanelThreadCount
+                count={threadCount}
+                onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
+                onPreloadSettings={preloadSettingsPanel}
+              />
+            ) : null}
             <PanelSettingsButton
               onOpenSettings={() => openSettingsTab()}
               onPreloadSettings={preloadSettingsPanel}
@@ -756,26 +866,79 @@ function WebappRoot({
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenSettingsField={openSettingsTab}
-            onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
-            onPreloadSettings={preloadSettingsPanel}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-            offlineProgress={offlineProgress}
-            threads={resolveThreads(threads)}
+            offlineProgress={previewOfflineProgress}
+            previewRuntimeState={previewRuntimeState}
+            previewPhoneOverlay={previewLayout === "edge" || previewLayout === "quiet"}
+            previewVersionStatus={previewLayout === "title"}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
             onSelectTab={handleSelectTab}
             tabs={mastheadTabs}
-            tabsControlPanels={!notFound}
           />
+          {previewEnabled && previewLayout ? (
+            <section aria-label="Preview controls" className="status-prototype-bar">
+              <label className="status-prototype-layout" htmlFor="status-prototype-layout">
+                Layout
+                <select
+                  id="status-prototype-layout"
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    if (PREVIEW_LAYOUTS.some((item) => item.id === next)) changePreviewLayout(next as PreviewLayout);
+                  }}
+                  value={previewLayout}
+                >
+                  {PREVIEW_LAYOUTS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label htmlFor="status-prototype-state">
+                State
+                <select
+                  id="status-prototype-state"
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    if (next === "actual") {
+                      changePreviewRuntimeState(null);
+                      return;
+                    }
+                    if ((RUNTIME_STATES as readonly string[]).includes(next)) {
+                      changePreviewRuntimeState(next as RuntimeState);
+                    }
+                  }}
+                  value={previewRuntimeState ?? "actual"}
+                >
+                  <option value="actual">Actual</option>
+                  {RUNTIME_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {PREVIEW_STATE_LABELS[state]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span>Display only</span>
+            </section>
+          ) : null}
           <UpdateBanner
             onDismiss={() => {
+              if (previewRuntimeState !== null) {
+                setPreviewUpdateDismissed(true);
+                return;
+              }
               setUpdateDismissed(true);
               writeUpdateDismissed();
             }}
             onOpenWhatsNew={openWhatsNew}
             onReload={actions.onReloadUpdate}
-            open={pageUpdate.ready && !updateDismissed}
+            open={
+              previewRuntimeState === null
+                ? pageUpdate.ready && !updateDismissed
+                : previewRuntimeState === "update" && !previewUpdateDismissed
+            }
             title={pageUpdate.title}
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
@@ -888,12 +1051,7 @@ function WebappRoot({
               </>
             )}
           </main>
-          <SiteFooter
-            confirmExternalNavigation={actions.onConfirmExternalNavigation}
-            docsHref={notFound ? "/docs" : "docs"}
-            donateHref={DONATE_URL}
-            githubHref={GITHUB_URL}
-          />
+          <span className="shell-threads-identity" hidden />
           {/* the dock is fixed, so the column reserves its height through the one
               variable masthead.css raises below the dock threshold */}
           <div aria-hidden="true" className="dock-pad" />
@@ -909,14 +1067,54 @@ function WebappRoot({
               onRestoreDefaults={actions.onRestoreDefaults}
               onSaveSettings={saveSettings}
               onTabChange={handleDialogTabChange}
+              onOpenWhatsNew={() => {
+                setLogOpen(false);
+                openWhatsNew();
+              }}
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
-              offlineProgress={offlineProgress}
+              offlineProgress={previewOfflineProgress}
+              previewRuntimeState={previewRuntimeState}
               offlineCopyEnabled={state.settings.offlineCopyEnabled}
               onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
               settingsFocusHint={settingsFocusHint}
               settingsPanel={
                 <Suspense fallback={null}>
+                  {isReactWebappDevelopmentMode() ? (
+                    <section aria-label="Development" className="setgroup">
+                      <div className="gtitle">Development</div>
+                      <div className="setrow">
+                        <label className="slabel" htmlFor="dev-offline-state">
+                          Offline status
+                        </label>
+                        <span className="sctl">
+                          <select
+                            aria-describedby="dev-offline-state-help"
+                            className="select"
+                            id="dev-offline-state"
+                            value={previewRuntimeState ?? "actual"}
+                            onChange={(event) => {
+                              const value = event.currentTarget.value;
+                              if (value === "actual") changePreviewRuntimeState(null);
+                              else if ((RUNTIME_STATES as readonly string[]).includes(value)) {
+                                changePreviewRuntimeState(value as RuntimeState);
+                              }
+                            }}
+                          >
+                            <option value="actual">Actual</option>
+                            {RUNTIME_STATES.map((value) => (
+                              <option key={value} value={value}>
+                                {PREVIEW_STATE_LABELS[value]}
+                              </option>
+                            ))}
+                          </select>
+                        </span>
+                      </div>
+                      <p id="dev-offline-state-help">
+                        Display only. Does not change the offline cache or service worker.
+                      </p>
+                    </section>
+                  ) : null}
                   <SettingsPanel
                     draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
                     onDraftChange={actions.onDraftChange}

@@ -226,7 +226,7 @@ msgstr "{count} aviso(s)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.identified"
-msgstr "{title} — {platform}"
+msgstr "{title}: {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -385,6 +385,11 @@ msgstr "App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tools.appearance"
+msgstr "Apariencia"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.appliesAfter"
 msgstr "se aplica después del parche {n}"
 
@@ -460,13 +465,13 @@ msgstr "Aplicar este parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Aplicar a — {input}"
+msgid "ui.patch.applyToAll"
+msgstr "Aplicar a todos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.applyToAll"
-msgstr "Aplicar a todos"
+msgid "ui.patchChecks.execution"
+msgstr "Aplicar a: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -515,13 +520,13 @@ msgstr "Autor"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.input"
-msgstr "Comprobaciones de entrada creadas — {basis}"
+msgid "ui.patchChecks.explanation"
+msgstr "Las comprobaciones de entrada creadas describen una fuente del parche. Cada parche se ejecuta sobre la entrada actual de la pila."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.explanation"
-msgstr "Las comprobaciones de entrada creadas describen una fuente del parche. Cada parche se ejecuta sobre la entrada actual de la pila."
+msgid "ui.patchChecks.input"
+msgstr "Comprobaciones de entrada creadas: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -577,6 +582,16 @@ msgstr "Automático"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.automatic"
 msgstr "Detección automática"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabledDetail"
+msgstr "Las descargas automáticas sin conexión están desactivadas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyHelp"
+msgstr "Descarga la aplicación automáticamente para usarla sin conexión, salvo si el ahorro de datos está activado."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -671,7 +686,7 @@ msgstr "Paquete + parches (.zip)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.bundlesApplyPatch"
-msgstr "Bundles — Apply Patch"
+msgstr "Bundles: Apply Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -745,6 +760,11 @@ msgstr "No se puede probar esta ROM con EmulatorJS"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.cliFoot"
+msgstr "Cargo, cargo-binstall y mise instalan solo el ejecutable, por lo que necesitan rom-weaver setup para descargar las bases de datos de identify y de cheats. Todos los métodos de instalación, con sumas de verificación y completado de shell, están en la guía de instalación."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.chdCd"
 msgstr "CD"
 
@@ -756,7 +776,7 @@ msgstr "Códecs CD"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "y descarga el resultado o un paquete compartible —"
+msgstr "y descarga el resultado o un paquete compartible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -801,7 +821,7 @@ msgstr "Comprobaciones"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.deferred"
-msgstr "Se comprueba al aplicar — {input}"
+msgstr "Se comprueba al aplicar: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1005,6 +1025,11 @@ msgstr "No se pudo preparar la salida para EmulatorJS."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeUnavailable"
+msgstr "No se pudo eliminar la copia sin conexión. Inténtalo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.create"
 msgstr "Crear bundle {format}"
 
@@ -1105,6 +1130,11 @@ msgstr "Diagnóstico"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDisabled"
+msgstr "Desactivada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.disc"
 msgstr "Disco"
 
@@ -1190,8 +1220,28 @@ msgstr "Descargar un paquete de prueba"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOffline"
+msgstr "Descargar copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadRequested"
+msgstr "Descarga solicitada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.trimCert"
 msgstr "certificado de descarga y juego conservado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerDownloading"
+msgstr "Descargando"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadOfflineHint"
+msgstr "Descarga los archivos restantes, incluso con el ahorro de datos activado."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1251,7 +1301,7 @@ msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo de una
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
-msgstr "Comprobaciones de salida integradas — Resultado del parche independiente"
+msgstr "Comprobaciones de salida integradas: Resultado del parche independiente"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1287,11 +1337,6 @@ msgstr "Cada comando puede imprimir JSON delimitado por líneas para scripts."
 #: src/presentation/localization/messages.ts
 msgid "ui.home.formatsTitle"
 msgstr "Cada generación de consolas trajo su propio formato. Tráelos todos."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.cliFoot"
-msgstr "Cargo, cargo-binstall y mise instalan solo el ejecutable, por lo que necesitan rom-weaver setup para descargar las bases de datos de identify y de cheats. Todos los métodos de instalación, con sumas de verificación y completado de shell, están en la guía de instalación."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1436,7 +1481,7 @@ msgstr "Buscar una herramienta, guía o ajuste"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
-msgstr "por suma de verificación, aquí mismo en este navegador —"
+msgstr "por suma de verificación, aquí mismo en este navegador."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1532,6 +1577,11 @@ msgstr "Sin encabezado: la salida parcheada no tiene encabezado de ROM."
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.hideVariants"
 msgstr "Ocultar {count} {count, plural, one {variante más} other {variantes más}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.homeShort"
+msgstr "Inicio"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1646,7 +1696,7 @@ msgstr "Instalando la aplicación"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingAppProgress"
-msgstr "Instalando la aplicación — {percent} %"
+msgstr "Instalando la aplicación: {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1656,7 +1706,7 @@ msgstr "Instalando la copia sin conexión"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.installingProgress"
-msgstr "Instalando la copia sin conexión — {percent} %"
+msgstr "Instalando la copia sin conexión: {percent} %"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1682,6 +1732,11 @@ msgstr "conservar"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.keepHeader"
 msgstr "conservar {header}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.offlineCopyEnabled"
+msgstr "Mantener una copia sin conexión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1821,7 +1876,7 @@ msgstr "Buscando esta ROM en la base de datos de títulos. Las filas se completa
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis2"
-msgstr "y redúcelos para almacenarlos —"
+msgstr "y redúcelos para almacenarlos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1832,6 +1887,11 @@ msgstr "Convierte una ROM original y su versión modificada, comprimidas o sin c
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionOptional"
 msgstr "Hacer todos opcionales"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.theme.matchSystem"
+msgstr "Seguir el sistema"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1877,6 +1937,11 @@ msgstr "Perfil de medio no compatible"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMember"
 msgstr "Ruta del archivo interno"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.menu"
+msgstr "Menú"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2051,7 +2116,7 @@ msgstr "No se encontró ningún archivo seleccionable."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unknown"
-msgstr "Aún no comprobado — {input}"
+msgstr "Aún no comprobado: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2087,6 +2152,16 @@ msgstr "Sin conexión"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.active"
 msgstr "Sin conexión activo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.offlineDisabled"
+msgstr "Copia sin conexión desactivada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.downloadUnavailable"
+msgstr "Las descargas sin conexión no están disponibles. Recarga la página e inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2365,6 +2440,11 @@ msgstr "Parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupPatches"
+msgstr "Parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Parches"
 
@@ -2520,8 +2600,13 @@ msgstr "lee y escribe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerReady"
+msgstr "Lista"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis2"
-msgstr "usando los datos de deshacer del propio parche —"
+msgstr "usando los datos de deshacer del propio parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2580,6 +2665,11 @@ msgstr "Eliminar disco"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOffline"
+msgstr "Eliminar copia sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.removeRom"
 msgstr "Eliminar entrada de ROM"
 
@@ -2587,6 +2677,16 @@ msgstr "Eliminar entrada de ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimDescription"
 msgstr "Elimina el relleno sin usar de ROMs e imágenes de disco compatibles para ahorrar espacio."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removeOfflineHint"
+msgstr "Elimina los archivos descargados de la aplicación. Tus archivos, partidas guardadas y ajustes permanecen en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.removingOffline"
+msgstr "Eliminando copia sin conexión…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2715,13 +2815,18 @@ msgstr "ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupRoms"
+msgstr "ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.loading"
 msgstr "RomWeaver descomprime una pequeña ROM y dos parches, y luego comprueba cada archivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.local"
-msgstr "Todo local, en tu navegador — tus archivos nunca salen de tu equipo."
+msgstr "Todo local, en tu navegador. Tus archivos nunca salen de tu equipo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2771,7 +2876,7 @@ msgstr "Secciones"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
-msgstr "con partidas guardadas que permanecen en este dispositivo —"
+msgstr "con partidas guardadas que permanecen en este dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2816,12 +2921,12 @@ msgstr "Comparte esta receta de parches (para creadores de parches)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis2"
-msgstr "en un parche comprimido y compartible que otros puedan aplicar —"
+msgstr "en un parche comprimido y compartible que otros puedan aplicar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Comprobaciones de entrada compartidas — {input}"
+msgstr "Comprobaciones de entrada compartidas: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2842,16 +2947,6 @@ msgstr "Mostrar detalles de {label}"
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
 msgstr "Mostrar los consejos de inicio rápido («New here?»)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyEnabled"
-msgstr "Mantener una copia sin conexión"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "settings.offlineCopyHelp"
-msgstr "Descarga la aplicación automáticamente para usarla sin conexión, salvo si el ahorro de datos está activado."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2881,7 +2976,7 @@ msgstr "Fuente"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
-msgstr "Comprobaciones de salida de la pila — Resultado combinado"
+msgstr "Comprobaciones de salida de la pila: Resultado combinado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2996,7 +3091,7 @@ msgstr "Toca para elegir archivos"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.targetRom"
-msgstr "ROM objetivo — {target}"
+msgstr "ROM objetivo: {target}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3205,13 +3300,13 @@ msgstr "El tipo de fuente seleccionado no es compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.disabledDesc"
-msgstr "El service worker está desactivado, así que rom-weaver necesita la red en cada visita. El parcheo sigue ejecutándose por completo en este dispositivo."
+msgid "ui.runtime.activeDesc"
+msgstr "El service worker está activo y la copia sin conexión está lista. Puede haber solicitudes de red mientras tengas conexión."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.runtime.activeDesc"
-msgstr "El service worker está activo y la copia sin conexión está lista. Puede haber solicitudes de red mientras tengas conexión."
+msgid "ui.runtime.disabledDesc"
+msgstr "El service worker está desactivado, así que rom-weaver necesita la red en cada visita. El parcheo sigue ejecutándose por completo en este dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3260,8 +3355,18 @@ msgstr "Esta compilación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupDevice"
+msgstr "Este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectedMismatchDetails"
 msgstr "El nombre o las comprobaciones de esta ROM no coinciden con lo que espera esta ejecución. Consulta las filas de Esperado a continuación."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.env.thread"
+msgstr "hilo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3307,56 +3412,6 @@ msgstr "TOTAL"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Transferido"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadOffline"
-msgstr "Descargar copia sin conexión"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadOfflineHint"
-msgstr "Descarga los archivos restantes, incluso con el ahorro de datos activado."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadRequested"
-msgstr "Descarga solicitada"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.downloadUnavailable"
-msgstr "Las descargas sin conexión no están disponibles. Recarga la página e inténtalo de nuevo."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeOffline"
-msgstr "Eliminar copia sin conexión"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removingOffline"
-msgstr "Eliminando copia sin conexión…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineDisabled"
-msgstr "Copia sin conexión desactivada"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.offlineDisabledDetail"
-msgstr "Las descargas automáticas sin conexión están desactivadas."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeOfflineHint"
-msgstr "Elimina los archivos descargados de la aplicación. Tus archivos, partidas guardadas y ajustes permanecen en este dispositivo."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.runtime.removeUnavailable"
-msgstr "No se pudo eliminar la copia sin conexión. Inténtalo de nuevo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3434,8 +3489,18 @@ msgstr "Salida de parche desconocida ({patch})"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUnsupported"
+msgstr "No compatible"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.unusedInputs"
 msgstr "Entradas sin usar: {names}{count, plural, =0 {} one { y una más} other { y # más}}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.runtime.headerUpdate"
+msgstr "Actualización"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3484,13 +3549,13 @@ msgstr "Clase de variante"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Comprobado — {input}"
+msgid "ui.chain.verifiedDuringWeave"
+msgstr "se verifica durante la aplicación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "se verifica durante la aplicación"
+msgid "ui.patchChecks.verified"
+msgstr "Comprobado: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3570,7 +3635,7 @@ msgstr "con detección y reparación de encabezados de copiadora"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis2"
-msgstr "con cada suma de verificación recalculada antes de descargar —"
+msgstr "con cada suma de verificación recalculada antes de descargar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
