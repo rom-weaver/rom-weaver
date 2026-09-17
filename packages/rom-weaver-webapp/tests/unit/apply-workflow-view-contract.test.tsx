@@ -232,11 +232,14 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
   });
 
-  it("keeps the shared file input hook on the bundle page", () => {
-    const { container } = renderView({ mode: "bundle", ui: createEmptyPatcherUiState() });
+  it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {
+    const apply = renderView({ ui: createEmptyPatcherUiState() });
+    const bundle = renderView({ mode: "bundle", ui: createEmptyPatcherUiState() });
 
-    expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-input-file-unified-bundle")).toBeNull();
+    expect(apply.container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
+    expect(bundle.container.querySelector("#rom-weaver-input-file-unified-bundle")).toBeTruthy();
+    expect(document.querySelectorAll("#rom-weaver-input-file-unified")).toHaveLength(1);
+    expect(document.querySelectorAll("#rom-weaver-input-file-unified-bundle")).toHaveLength(1);
   });
 
   it("shows checksum search immediately, then fills the bench on a match", async () => {
