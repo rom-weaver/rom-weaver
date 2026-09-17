@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider, useUiLocalizer } from "../../../src/public/react/settings-context.tsx";
-import { APP_VERSION } from "../../../src/webapp/build-version.ts";
+import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../../../src/webapp/build-version.ts";
 import { ChangelogPanel } from "../../../src/webapp/components/changelog-panel.tsx";
 
 /**
@@ -203,6 +203,23 @@ describe("ChangelogPanel pending update", () => {
       `${REPOSITORY_URL}/commit/nightly`,
     );
     expect(update.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(COMMIT_LOG_URL);
+  });
+
+  it("does not present the running release commit as an incoming build", async () => {
+    mockChangelog([
+      {
+        date: "2026-09-07T00:00:00Z",
+        hash: COMMIT_HASH,
+        release: releaseOf(APP_VERSION, [noteOf(APP_VERSION, [{ summary: "Already running" }])]),
+        subject: "chore(main): release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+
+    expect(update.queryByRole("link", { name: `updating to build ${COMMIT_HASH}` })).toBeNull();
+    expect(update.getByText(APP_BUILD_VERSION)).toBeTruthy();
+    expect(update.queryByText("Already running")).toBeNull();
   });
 
   it("repeats the full-changelog link at the end of a truncated release", async () => {
