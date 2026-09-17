@@ -47,7 +47,6 @@
 }
 
 :root[data-theme="dark"] {
-  --thread-fill: var(--thread-text);
   --chassis: #0c0f13; /* console shell */
   --plate: #161b21; /* mounted plate */
   --plate-2: #1c222a; /* raised plate */
@@ -63,7 +62,7 @@
      over/under reads without an outline. */
   --warp-a: #2c333c;
   --warp-b: #4a5563;
-  --thread-text: #ef8534; /* contrast-safe accent text */
+  --thread-text: #f08439; /* contrast-safe accent text */
   --verified: #88a9cb;
   --fault: #e0606a;
   --care: #d8a64f;
@@ -87,7 +86,7 @@
   --warp-a: #43505f;
   --warp-b: #6b7684;
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
-  --thread-text: #a63609;
+  --thread-text: #954600;
   /* Readouts also sit on the fault-tinted checksum row, which is lighter than
      any plate --thread-text is verified against. Deepening it also keeps the
      tutorial beacon readable on the thread-tinted well. */

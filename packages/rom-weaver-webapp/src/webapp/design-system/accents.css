@@ -27,10 +27,10 @@
   --thread-hi: #c5cbf6;
 }
 :root[data-accent="woad"][data-theme="dark"] {
-  --thread-text: #9aa6ff;
+  --thread-text: #9ba6ff;
 }
 :root[data-accent="woad"][data-theme="light"] {
-  --thread-text: #4149c4;
+  --thread-text: #4947c3;
 }
 
 /* ── violet ── */
@@ -40,10 +40,10 @@
   --thread-hi: #d7c3f3;
 }
 :root[data-accent="violet"][data-theme="dark"] {
-  --thread-text: #c3a4ff;
+  --thread-text: #caa2fb;
 }
 :root[data-accent="violet"][data-theme="light"] {
-  --thread-text: #6b3fb5;
+  --thread-text: #773aae;
 }
 
 /* ── verdigris: green ── */
@@ -53,10 +53,10 @@
   --thread-hi: #aee1c6;
 }
 :root[data-accent="verdigris"][data-theme="dark"] {
-  --thread-text: #58c795;
+  --thread-text: #71c582;
 }
 :root[data-accent="verdigris"][data-theme="light"] {
-  --thread-text: #0b6b46;
+  --thread-text: #296a39;
 }
 
 /* ── teal ── */
@@ -66,10 +66,10 @@
   --thread-hi: #9fe2e7;
 }
 :root[data-accent="teal"][data-theme="dark"] {
-  --thread-text: #45c3cb;
+  --thread-text: #45c3cd;
 }
 :root[data-accent="teal"][data-theme="light"] {
-  --thread-text: #06696f;
+  --thread-text: #066970;
 }
 
 /* ── plum ── */
@@ -79,10 +79,10 @@
   --thread-hi: #eac1db;
 }
 :root[data-accent="plum"][data-theme="dark"] {
-  --thread-text: #e58ac0;
+  --thread-text: #e68abe;
 }
 :root[data-accent="plum"][data-theme="light"] {
-  --thread-text: #a3266f;
+  --thread-text: #a12876;
 }
 
 /* ── accent switch dissolve ──
