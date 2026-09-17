@@ -321,7 +321,7 @@ msgstr "ROM hinzufügen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
-msgstr "Füge eine ROM mit BPS-, IPS-, UPS-, xdelta- oder anderen Patches hinzu. Lade die gepatchte ROM oder ein wiederverwendbares Bundle herunter."
+msgstr "Patche ROMs und Disc-Images mit einem oder mehreren Patches, Cheats oder einem Bundle. Öffne komprimierte Dateien direkt und lade das Ergebnis herunter oder teile ein wiederverwendbares Bundle."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

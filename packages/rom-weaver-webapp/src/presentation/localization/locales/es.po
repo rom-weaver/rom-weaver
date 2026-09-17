@@ -321,7 +321,7 @@ msgstr "Añadir una ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
-msgstr "Añade una ROM con parches BPS, IPS, UPS, xdelta u otros. Descarga la ROM parcheada o un paquete reutilizable."
+msgstr "Aplica uno o varios parches, trucos o un paquete a ROMs e imágenes de disco. Abre archivos comprimidos directamente y descarga el resultado o comparte un paquete reutilizable."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

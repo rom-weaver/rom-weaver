@@ -1020,7 +1020,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.applyDescription": msg({
     id: "ui.hero.applyDescription",
-    message: "Add a ROM with BPS, IPS, UPS, xdelta, or other patches. Download the patched ROM or a reusable bundle.",
+    message:
+      "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle.",
   }),
   "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
   "ui.hero.createDescription": msg({
