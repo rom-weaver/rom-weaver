@@ -919,23 +919,28 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   color: var(--fault);
 }
 .rw-app .sample-tutorial-start-dismiss {
-  padding: var(--sp-xs) var(--sp-s) var(--sp-2xs);
-  margin-top: var(--sp-2xs);
-  font-size: 0.7rem;
-  color: var(--ink-4);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--sp-s) var(--sp-m);
+  margin-top: var(--sp-m);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-2);
   text-align: center;
   cursor: pointer;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--seam-soft);
+  background: var(--well);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
 }
 @media (hover: hover) {
   .rw-app .sample-tutorial-start-dismiss:hover {
-    color: var(--ink-2);
+    color: var(--ink);
+    border-color: var(--ink-3);
   }
 }
 .rw-app .sample-tutorial-start-dismiss:active {
-  color: var(--ink-2);
+  color: var(--ink);
+  border-color: var(--ink-3);
 }
 
 /* Guided samples trace the same numbered loom stages as the workbench. The

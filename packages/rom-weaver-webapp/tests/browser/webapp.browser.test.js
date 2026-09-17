@@ -452,14 +452,15 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
   await page.viewport(1280, 900);
 });
 
-test("the New here? beacon stays compact and its popover carries every start action", async () => {
+test("the New here? control has a touch target and its popover carries every start action", async () => {
   await page.viewport(1024, 900);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
   const chip = document.querySelector(".sample-tutorial-start-chip");
   const chipBox = chip.getBoundingClientRect();
-  expect(chipBox.height).toBeLessThan(40);
+  expect(chipBox.height).toBeGreaterThanOrEqual(44);
+  expect(chipBox.height).toBeLessThanOrEqual(48);
   // The chip rides the hero's lower corner instead of spending a band below it.
   const hero = document.querySelector(".drop.hero").getBoundingClientRect();
   expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
