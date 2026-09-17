@@ -306,8 +306,14 @@ const createWebappRootController = (options: ControllerOptions) => {
       validation?: ValidationState;
     },
   ) => {
+    const previousSettings = store.getState().settings;
     const currentView = store.getState().currentView;
-    const nextCurrentView = normalizeWorkflowViewForSettings(currentView, nextSettings);
+    // A direct beta route MUST survive unrelated settings changes. Leave it
+    // only when the user actually disables beta tools from an enabled state.
+    const betaToolsDisabled = previousSettings.betaToolsEnabled && !nextSettings.betaToolsEnabled;
+    const nextCurrentView = betaToolsDisabled
+      ? normalizeWorkflowViewForSettings(currentView, nextSettings)
+      : currentView;
     const nextState: Partial<WebappState> = {
       settings: copySettings(nextSettings),
     };

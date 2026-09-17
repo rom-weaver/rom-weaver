@@ -93,6 +93,16 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/ppf-undo");
   });
 
+  it("keeps a direct beta route when an unrelated setting changes", () => {
+    window.history.replaceState({}, "", "/trim-rom");
+    const controller = createController();
+
+    controller.setOnboardingEnabled(false);
+
+    expect(controller.getState().currentView).toBe("trim");
+    expect(window.location.pathname).toBe("/trim-rom");
+  });
+
   it("loads the create workflow from its path", () => {
     window.history.replaceState({}, "", "/create-patch");
     const controller = createController();
