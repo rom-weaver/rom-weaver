@@ -1368,10 +1368,11 @@
     display: block;
   }
   .rw-app .shell-head {
-    padding-block: 8px;
+    padding-block: 4px;
   }
   .rw-app .shell-head-top {
     align-items: center;
+    margin-inline: -4px;
   }
   .rw-app .brand {
     grid-template-columns: 40px minmax(0, 1fr);
