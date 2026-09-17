@@ -216,7 +216,7 @@ describe("theme toggle view-transition gate", () => {
     expect(startCalls).toHaveLength(1);
     const [keyframes, options] = animationCalls.at(-1);
     expect(keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
-    expect(options.duration).toBe(220);
+    expect(options.duration).toBe(340);
     expect(document.documentElement.getAttribute("data-accent")).toBe("woad");
   });
 

@@ -110,7 +110,7 @@ type NavEntry = {
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string };
 
-const APPEARANCE_WIPE_DURATION_MS = 340;
+const APPEARANCE_TRANSITION_DURATION_MS = 340;
 
 /** Theme changes reveal from the choice; accent changes dissolve in place. */
 const runAppearanceTransition = (
@@ -141,7 +141,7 @@ const runAppearanceTransition = (
             ? [{ clipPath: `circle(0px at ${origin})` }, { clipPath: `circle(${radius}px at ${origin})` }]
             : [{ opacity: 0 }, { opacity: 1 }],
           {
-            duration: kind === "theme" ? APPEARANCE_WIPE_DURATION_MS : 220,
+            duration: APPEARANCE_TRANSITION_DURATION_MS,
             easing: kind === "theme" ? "linear" : "ease-out",
             fill: "both",
             pseudoElement: "::view-transition-new(root)",
