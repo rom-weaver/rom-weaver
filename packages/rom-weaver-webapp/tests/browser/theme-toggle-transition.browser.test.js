@@ -159,11 +159,15 @@ describe("theme toggle view-transition gate", () => {
     }
     if (!choice) throw new Error("accent choice never rendered");
     const rect = choice.getBoundingClientRect();
-    choice.querySelector("input").click();
+    const clickX = Math.round(rect.left + 7);
+    const clickY = Math.round(rect.top + 9);
+    choice
+      .querySelector("input")
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: clickX, clientY: clickY, detail: 1 }));
 
     expect(startCalls).toHaveLength(1);
-    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${rect.left + rect.width / 2}px`);
-    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${rect.top + rect.height / 2}px`);
+    expect(document.documentElement.style.getPropertyValue("--wipe-x")).toBe(`${clickX}px`);
+    expect(document.documentElement.style.getPropertyValue("--wipe-y")).toBe(`${clickY}px`);
     expect(document.documentElement.getAttribute("data-accent")).toBe("woad");
   });
 

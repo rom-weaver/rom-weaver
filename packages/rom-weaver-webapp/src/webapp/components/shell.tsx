@@ -555,6 +555,9 @@ const AccentTile = ({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const trayRef = useRef<HTMLDivElement | null>(null);
+  // Change events have no pointer coordinates, so keep the preceding click
+  // point for pointer activation while leaving keyboard activation centered.
+  const accentPointerRef = useRef<{ x: number; y: number } | null>(null);
   useNavToolPopover(open, navRow, buttonRef, panelRef);
   const accent = useAccent();
   const label = localizer.message("ui.tools.accent");
@@ -601,9 +604,19 @@ const AccentTile = ({
                   aria-label={entry.label}
                   checked={entry.value === accent}
                   name={name}
-                  onChange={(event) =>
-                    runAppearanceWipe(() => onChange(entry.value), event.currentTarget.closest("label"), "accent")
-                  }
+                  onChange={(event) => {
+                    const pointer = accentPointerRef.current;
+                    accentPointerRef.current = null;
+                    runAppearanceWipe(
+                      () => onChange(entry.value),
+                      event.currentTarget.closest("label"),
+                      "accent",
+                      pointer ?? undefined,
+                    );
+                  }}
+                  onClick={(event) => {
+                    accentPointerRef.current = event.detail > 0 ? { x: event.clientX, y: event.clientY } : null;
+                  }}
                   type="radio"
                   value={entry.value}
                 />
