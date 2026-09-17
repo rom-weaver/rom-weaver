@@ -1,6 +1,6 @@
 # Contributing to rom-weaver
 
-Bug reports, documentation fixes, and focused code contributions are welcome. Participation in this project is governed by the [code of conduct](.github/CODE_OF_CONDUCT.md).
+Bug reports, documentation fixes, and focused code contributions are welcome. Participation in this project is governed by the [code of conduct](https://github.com/rom-weaver/rom-weaver?tab=coc-ov-file#readme).
 
 <!-- START doctoc -->
 ## Table of contents
