@@ -199,3 +199,20 @@
   font-size: 0.82rem;
   color: var(--ink-2);
 }
+
+/* Settings rows are packed with full-height controls above and below this
+   picker. Keep the draft swatch and its selection treatment inside the row's
+   vertical space so the ring cannot cover those controls. */
+.rw-app .accent-picker .accent-chip-dot {
+  width: 16px;
+  height: 16px;
+}
+.rw-app .accent-picker .accent-chip input:checked + .accent-chip-dot {
+  box-shadow:
+    0 0 0 1px var(--plate),
+    0 0 0 3px var(--ink);
+  scale: 1.05;
+}
+.rw-app .accent-picker .accent-chip input:focus-visible + .accent-chip-dot {
+  outline-offset: 2px;
+}
