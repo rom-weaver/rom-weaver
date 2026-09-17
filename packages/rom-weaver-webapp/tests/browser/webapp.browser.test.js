@@ -567,10 +567,11 @@ test("the phone header carries device controls and project links, and Menu carri
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".shell-head-tools")).toBeTruthy();
-  // The footer is gone: project links stay in the header, and Docs stays in Menu.
+  // The footer is gone: project links and Docs stay in the header.
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
+    "Docs",
     "View source on GitHub",
     "Support",
     document.querySelector(".desktop-runtime .sub-status").getAttribute("aria-label"),
@@ -578,7 +579,7 @@ test("the phone header carries device controls and project links, and Menu carri
     "Accent: Madder",
     "Settings",
   ]);
-  expect(document.querySelector('.shell-head-tools [aria-label="Docs"]')).toBeNull();
+  expect(document.querySelector('.shell-head-tools [aria-label="Docs"]')).toBeTruthy();
   for (const tile of tiles) expect(getComputedStyle(tile).display).not.toBe("none");
   for (const [label, href] of [
     ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
