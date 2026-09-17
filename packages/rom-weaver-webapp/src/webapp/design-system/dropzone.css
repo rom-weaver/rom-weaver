@@ -762,17 +762,16 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   position: relative;
   z-index: 3;
   display: inline-flex;
-  gap: 7px;
+  gap: 5px;
   align-items: center;
   min-height: 44px;
-  padding: 8px 14px;
+  padding: 8px 4px;
   font-size: 0.82rem;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--ink-2);
   cursor: pointer;
-  background: var(--plate);
-  border: 1px solid var(--seam-strong);
-  border-radius: var(--r-s);
+  background: transparent;
+  border: 0;
 }
 .rw-app .sample-tutorial-start-bell {
   flex: none;
@@ -815,13 +814,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   margin-inline-start: calc(-100% - 12px);
 }
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
-  .rw-app .sample-tutorial-start-chip {
-    gap: 5px;
-    padding-inline: 4px;
-    font-weight: 400;
-    background: transparent;
-    border: 0;
-  }
   .rw-app .sample-tutorial-start-bell {
     width: 14px;
     height: 14px;
