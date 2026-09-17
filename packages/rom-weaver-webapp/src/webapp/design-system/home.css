@@ -35,7 +35,7 @@
   grid-template-areas: "head" "loom" "body";
   gap: var(--sp-xl);
   align-items: center;
-  padding-block: clamp(6px, 0.625vw, 8px) clamp(40px, 6vw, 72px);
+  padding-block: var(--gutter) clamp(40px, 6vw, 72px);
 }
 .rw-app .home-hero-head {
   grid-area: head;

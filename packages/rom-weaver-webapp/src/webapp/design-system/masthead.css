@@ -1444,6 +1444,15 @@
       width: 28px;
     }
   }
+  @media (min-width: 400px) and (max-width: 599px) {
+    .rw-app .shell-head-tools {
+      gap: 2px;
+    }
+    .rw-app .shell-head-tools .tool {
+      width: 32px;
+      height: 40px;
+    }
+  }
   @media (max-width: 389px) {
     .rw-app .brand-word {
       font-size: 1.16rem;
