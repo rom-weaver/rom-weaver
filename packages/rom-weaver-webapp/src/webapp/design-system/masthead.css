@@ -540,7 +540,7 @@
   position: relative;
   display: flex;
   flex: none;
-  gap: var(--sp-2xs);
+  gap: 0;
   align-items: center;
 }
 .rw-app .phone-project-tools {
@@ -557,7 +557,7 @@
   flex: none;
   align-self: stretch;
   inline-size: 1px;
-  margin-inline: 5px;
+  margin-inline: 4px;
   background: var(--seam);
 }
 
@@ -598,8 +598,8 @@
   height: 17px;
 }
 .rw-app .topbar-tools .tool svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 .rw-app .sw-progress-ring-text {
   fill: currentColor;
@@ -746,8 +746,10 @@
 /* the tool wears the live dye so the current lot is readable without opening */
 .rw-app .accent-tool-dot {
   position: absolute;
-  inset-block-start: calc(50% - 11px);
+  inset-block-start: auto;
+  inset-block-end: calc(50% - 12px);
   inset-inline-start: 7px;
+  inset-inline-end: auto;
   width: 8px;
   height: 8px;
   background: var(--thread);
@@ -789,8 +791,8 @@
   grid-area: 1 / 2;
 }
 .rw-app .nav-tool-anchor .accent-tool-dot {
-  inset-block-start: 9px;
-  inset-block-end: auto;
+  inset-block-start: auto;
+  inset-block-end: 9px;
   inset-inline-start: 8px;
   inset-inline-end: auto;
 }
@@ -1293,9 +1295,6 @@
 /* ── the layout threshold ──
    ▼ The single number that decides which of the two shells is on screen. */
 @media (min-width: 1000px) {
-  .rw-app .topbar-tools .tool-project + .tool-project {
-    margin-inline-start: -2px;
-  }
   .rw-app .brand {
     grid-template-columns: 44px minmax(0, 1fr);
     column-gap: 4px;
@@ -1387,8 +1386,8 @@
     height: 44px;
   }
   .rw-app .shell-head-tools .tool svg {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
   }
   .rw-app .topbar-tools {
     display: none;
@@ -1434,9 +1433,6 @@
     }
   }
   @media (max-width: 599px) {
-    .rw-app .shell-head-tools {
-      gap: 4px;
-    }
     .rw-app .shell-head-tools .tool {
       width: 32px;
       height: 44px;
@@ -1450,9 +1446,6 @@
   @media (max-width: 389px) {
     .rw-app .brand-word {
       font-size: 1.16rem;
-    }
-    .rw-app .shell-head-tools {
-      gap: 2px;
     }
     .rw-app .brand {
       grid-template-columns: 32px minmax(0, 1fr);
