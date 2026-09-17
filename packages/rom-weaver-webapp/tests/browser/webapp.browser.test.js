@@ -462,7 +462,7 @@ test("the New here? control has a touch target and its popover carries every sta
   expect(chipBox.height).toBeGreaterThanOrEqual(44);
   expect(chipBox.height).toBeLessThanOrEqual(48);
   const hero = document.querySelector(".drop.hero").getBoundingClientRect();
-  expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
+  expect(chipBox.top).toBeGreaterThanOrEqual(hero.bottom);
   // Closed popover is not mounted at all - it must stay out of the prerendered shell.
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
@@ -487,6 +487,16 @@ test("the New here? control has a touch target and its popover carries every sta
     .poll(() => document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().right)
     .toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+
+  const summary = document.querySelector(".hero-formats-help > summary");
+  const before = summary.getBoundingClientRect();
+  summary.click();
+  await expect.poll(() => document.querySelector(".hero-formats-help").open).toBe(true);
+  const after = summary.getBoundingClientRect();
+  expect(after.top).toBeCloseTo(before.top, 0);
+  expect(after.left).toBeCloseTo(before.left, 0);
+  summary.click();
+  if (!document.querySelector(".sample-tutorial-start-pop")) chip.click();
 
   // Dismissal hides the beacon in place.
   document.querySelector(".sample-tutorial-start-dismiss").click();
