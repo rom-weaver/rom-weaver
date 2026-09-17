@@ -159,15 +159,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   { group: "project", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
 ];
 
-const PREVIEW_LAYOUTS = [
-  { id: "title", label: "Beside version" },
-  { id: "edge", label: "Edge badge" },
-  { id: "quiet", label: "Attention only" },
-  { id: "tab", label: "Dock tab" },
-  { id: "strip", label: "Dock strip" },
-] as const;
-type PreviewLayout = (typeof PREVIEW_LAYOUTS)[number]["id"];
-
 const PREVIEW_STATE_LABELS: Record<RuntimeState, string> = {
   active: "Offline active",
   ready: "Offline ready",
@@ -433,36 +424,12 @@ function WebappRoot({
   const [offlineProgress, setOfflineProgress] = useState<OfflineWarmupDisplayProgress | null>(() =>
     readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
   );
-  const [previewEnabled, setPreviewEnabled] = useState(false);
-  const [previewLayout, setPreviewLayout] = useState<PreviewLayout>("strip");
   const [previewUpdateDismissed, setPreviewUpdateDismissed] = useState(false);
   const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
-  useEffect(() => {
-    if (!isReactWebappDevelopmentMode()) return;
-    const params = new URLSearchParams(window.location.search);
-    const layout = params.get("offline-layout");
-    if (PREVIEW_LAYOUTS.some((item) => item.id === layout)) {
-      setPreviewEnabled(true);
-      setPreviewLayout(layout as PreviewLayout);
-    }
-    const state = params.get("offline-state");
-    if (state && (RUNTIME_STATES as readonly string[]).includes(state)) {
-      setPreviewRuntimeState(state as RuntimeState);
-    }
-  }, []);
   const changePreviewRuntimeState = useCallback((state: RuntimeState | null) => {
     if (!isReactWebappDevelopmentMode()) return;
     setPreviewRuntimeState(state);
     setPreviewUpdateDismissed(false);
-    const url = new URL(window.location.href);
-    if (state) url.searchParams.set("offline-state", state);
-    else url.searchParams.delete("offline-state");
-    window.history.replaceState(window.history.state, "", url);
-  }, []);
-  const changePreviewLayout = useCallback((layout: PreviewLayout) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("offline-layout", layout);
-    window.location.assign(url);
   }, []);
   const previewOfflineProgress =
     previewRuntimeState === "installing" ? { cachedBytes: 40, ready: false, totalBytes: 100 } : offlineProgress;
@@ -869,60 +836,12 @@ function WebappRoot({
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             offlineProgress={previewOfflineProgress}
             previewRuntimeState={previewRuntimeState}
-            previewPhoneOverlay={previewLayout === "edge" || previewLayout === "quiet"}
-            previewVersionStatus={previewLayout === "title"}
             updateReady={pageUpdate.ready}
             version={APP_VERSION}
             versionTitle={`v${APP_BUILD_VERSION}`}
             onSelectTab={handleSelectTab}
             tabs={mastheadTabs}
           />
-          {previewEnabled && previewLayout ? (
-            <section aria-label="Preview controls" className="status-prototype-bar">
-              <label className="status-prototype-layout" htmlFor="status-prototype-layout">
-                Layout
-                <select
-                  id="status-prototype-layout"
-                  onChange={(event) => {
-                    const next = event.currentTarget.value;
-                    if (PREVIEW_LAYOUTS.some((item) => item.id === next)) changePreviewLayout(next as PreviewLayout);
-                  }}
-                  value={previewLayout}
-                >
-                  {PREVIEW_LAYOUTS.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label htmlFor="status-prototype-state">
-                State
-                <select
-                  id="status-prototype-state"
-                  onChange={(event) => {
-                    const next = event.currentTarget.value;
-                    if (next === "actual") {
-                      changePreviewRuntimeState(null);
-                      return;
-                    }
-                    if ((RUNTIME_STATES as readonly string[]).includes(next)) {
-                      changePreviewRuntimeState(next as RuntimeState);
-                    }
-                  }}
-                  value={previewRuntimeState ?? "actual"}
-                >
-                  <option value="actual">Actual</option>
-                  {RUNTIME_STATES.map((state) => (
-                    <option key={state} value={state}>
-                      {PREVIEW_STATE_LABELS[state]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <span>Display only</span>
-            </section>
-          ) : null}
           <UpdateBanner
             onDismiss={() => {
               if (previewRuntimeState !== null) {

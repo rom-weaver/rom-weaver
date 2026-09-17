@@ -576,11 +576,14 @@ describe("development offline status", () => {
   it("forces every display state and restores the actual status", async () => {
     vi.stubEnv("DEV", true);
     vi.stubEnv("MODE", "development");
+    window.history.replaceState(null, "", "/?offline-layout=title&offline-state=disabled");
     const { container, called } = await renderRoot({ settingsDialogOpen: true });
     fireEvent.click(container.querySelector(".workflow-panel-head .panel-settings-btn") as HTMLButtonElement);
     await waitFor(() => expect(container.querySelector("#dev-offline-state")).not.toBeNull());
     const select = container.querySelector("#dev-offline-state") as HTMLSelectElement;
     const actual = container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw");
+    expect(select.value).toBe("actual");
+    expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(actual);
     for (const value of ["active", "ready", "update", "installing", "online", "disabled"]) {
       fireEvent.change(select, { target: { value } });
       expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(value);
@@ -593,6 +596,7 @@ describe("development offline status", () => {
     }
     fireEvent.change(select, { target: { value: "actual" } });
     expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(actual);
+    expect(window.location.search).toBe("?offline-layout=title&offline-state=disabled");
     expect(called("onOfflineCopyEnabledChange")).not.toHaveBeenCalled();
     fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
     fireEvent.click(container.querySelector('.status-about a[href="/whats-new"]') as HTMLAnchorElement);
@@ -608,7 +612,6 @@ describe("development offline status", () => {
     fireEvent.click(container.querySelector(".workflow-panel-head .panel-settings-btn") as HTMLButtonElement);
     await waitFor(() => expect(container.querySelector(".settings-panel")).not.toBeNull());
     expect(container.querySelector("#dev-offline-state")).toBeNull();
-    expect(container.querySelector(".status-prototype-bar")).toBeNull();
     expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe("update");
   });
 });
