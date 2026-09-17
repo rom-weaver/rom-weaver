@@ -976,9 +976,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.find.empty": msg({ id: "ui.find.empty", message: "Nothing matches" }),
   "ui.find.bundleHint": msg({
     id: "ui.find.bundleHint",
-    message: "Apply Patch owns bundles and runs their saved patch sequence.",
+    message: "Build patch bundles and optionally apply them.",
   }),
-  "ui.find.bundlesApplyPatch": msg({ id: "ui.find.bundlesApplyPatch", message: "Bundles: Apply Patch" }),
+  "ui.find.bundlesApplyPatch": msg({ id: "ui.find.bundlesApplyPatch", message: "Bundle Patches" }),
   "ui.find.cliArchiveHint": msg({
     id: "ui.find.cliArchiveHint",
     message: "The CLI can extract and compress archives.",
@@ -1025,6 +1025,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle.",
   }),
   "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
+  "ui.hero.bundleDescription": msg({
+    id: "ui.hero.bundleDescription",
+    message: "Stage a ROM and its patches, describe the recipe, and share a reusable bundle.",
+  }),
+  "ui.hero.bundleGuide": msg({ id: "ui.hero.bundleGuide", message: "Read the Bundle guide" }),
+  "ui.hero.bundleThesis": msg({ id: "ui.hero.bundleThesis", message: "Bundle your patches." }),
+  "ui.hero.bundleThesis2": msg({ id: "ui.hero.bundleThesis2", message: "Share a reusable recipe." }),
   "ui.hero.createDescription": msg({
     id: "ui.hero.createDescription",
     message:

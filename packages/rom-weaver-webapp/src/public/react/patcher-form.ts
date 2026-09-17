@@ -6,6 +6,7 @@ import type { PatcherOutputState, PatchStackItemState, PatchStackState } from ".
 import type { NoticeState, PatcherSectionNoticeKey, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
 
 type ApplyPatchFormSettings = ApplySettings;
+type ApplyPatchFormMode = "apply" | "bundle";
 type BinarySource = File | FileSystemFileHandle;
 type PageFileDrop = {
   files: File[];
@@ -74,6 +75,7 @@ type NoticeController = StoreController<NoticeState> & {
 
 type ApplyPatchFormProps = {
   assetBaseUrl?: string;
+  mode?: ApplyPatchFormMode;
   inputs?: BinarySource[];
   patches?: BinarySource[];
   settings?: ApplyPatchFormSettings;

@@ -455,11 +455,6 @@ msgstr "Patch anwenden auf"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.find.bundleHint"
-msgstr "Apply Patch verwaltet Bundles und führt deren gespeicherte Patch-Reihenfolge aus."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.related.applyThisPatch"
 msgstr "Diesen Patch anwenden"
 
@@ -665,6 +660,11 @@ msgstr "Erstellen und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.bundleHint"
+msgstr "Patch-Bundles erstellen und optional anwenden."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.patches.title"
 msgstr "Patch-Stapel erstellen"
 
@@ -686,7 +686,12 @@ msgstr "Bundle + Patches (.zip)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.bundlesApplyPatch"
-msgstr "Bundles: Apply Patch"
+msgstr "Patches bündeln"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleThesis"
+msgstr "Patches bündeln."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2570,6 +2575,11 @@ msgstr "Lies die Apply-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleGuide"
+msgstr "Bundle-Anleitung lesen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.createGuide"
 msgstr "Lies die Create-Anleitung"
 
@@ -2915,6 +2925,11 @@ msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleThesis2"
+msgstr "Ein wiederverwendbares Rezept teilen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.share"
 msgstr "Bundle teilen"
 
@@ -2982,6 +2997,11 @@ msgstr "Quelle"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
 msgstr "Stapel-Ausgabeprüfungen: Kombiniertes Ergebnis"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleDescription"
+msgstr "ROM und Patches zusammenstellen, das Rezept beschreiben und ein wiederverwendbares Bundle teilen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -122,6 +122,12 @@ const capture = async () => {
             if ((await options.getAttribute("aria-expanded")) === "false") await options.click();
             await output.locator("#rom-weaver-bundle-export-format").waitFor({ state: "visible" });
           }
+          if (captureCase.openApplyStep) {
+            const output = page.locator("#rom-weaver-row-output-file-name");
+            const collapse = output.locator(".step-collapse");
+            if ((await collapse.getAttribute("aria-expanded")) === "false") await collapse.click();
+            await output.locator("#rom-weaver-input-output-file-name").waitFor({ state: "visible" });
+          }
           await waitForStableContent(page);
           await assertNoDevBadge(page);
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));

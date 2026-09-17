@@ -1601,24 +1601,28 @@ const BundleOutputFields = ({
 };
 
 /**
- * Bundle export is a separate job from Apply. It follows the primary action so
- * a normal Apply run stays focused on producing the patched ROM, while a saved
- * bundle preference or the guided Bundle tour can reveal it before that run.
+ * Bundle export is a separate job from Apply. The Bundle route presents it
+ * first, while the Apply route keeps it after the primary action.
  */
 const BundleSecondaryJob = ({
   bundleActionLabel,
   bundleExport,
   bundleTools,
   disabled,
+  primary = false,
 }: {
   bundleActionLabel: string;
   bundleExport: BundleExportState;
   bundleTools: BundleToolsState;
   disabled: boolean;
+  primary?: boolean;
 }) => {
   const localizer = useUiLocalizer();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(primary);
   const headingRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (primary && !disabled) setOpen(true);
+  }, [disabled, primary]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     let frameId: number | undefined;
@@ -1647,7 +1651,9 @@ const BundleSecondaryJob = ({
         label={localizer.message("ui.bundleExport.shareTitle")}
         onToggle={setOpen}
         open={open}
-        readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
+        readouts={
+          primary ? undefined : <DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>
+        }
       >
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
         {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
@@ -1716,6 +1722,7 @@ const resolveOutputHeaderOptions = (romInputs: RomInputRowState[]) => {
 /** Fetches the bundled sample and hands it to the drop path, for both guided tutorials. */
 const useGuidedSampleLoader = (input: {
   assetBaseUrl: string | undefined;
+  mode: "apply" | "bundle";
   onDrop: (files: File[]) => void;
   onStartBundle: () => void;
 }) => {
@@ -1751,8 +1758,8 @@ const useGuidedSampleLoader = (input: {
     setSampleTutorial("bundle");
     void loadFirstWeave();
   };
-  useGuidedSampleStart("apply", startApplySample, () => setSampleTutorial(null));
-  useGuidedSampleStart("bundle", startBundleSample, () => setSampleTutorial(null));
+  useGuidedSampleStart("apply", startApplySample, () => setSampleTutorial(null), input.mode === "apply");
+  useGuidedSampleStart("bundle", startBundleSample, () => setSampleTutorial(null), input.mode === "bundle");
   const closeSampleTutorial = () => setSampleTutorial(null);
   return { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample };
 };
@@ -1820,6 +1827,7 @@ function ApplyWorkflowFormView({
   onSelectTab,
   onSelectView,
   onUnifiedDrop,
+  mode = "apply",
   patchEnablement,
   patchInputBasis,
   onPatchInputBasisChange,
@@ -1859,6 +1867,7 @@ function ApplyWorkflowFormView({
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[]) => void;
+  mode?: "apply" | "bundle";
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
   onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
@@ -1887,6 +1896,12 @@ function ApplyWorkflowFormView({
   const fileInputAccept = getFileInputAcceptAttributes();
   const dismissSectionNotice = (key: PatcherSectionNoticeKey) => () => uiController.dismissNotice?.(key);
   const localizer = useUiLocalizer();
+  const bundlePage = mode === "bundle";
+  const unifiedInputId = bundlePage ? "rom-weaver-input-file-unified-bundle" : "rom-weaver-input-file-unified";
+  const [applySectionCollapsed, setApplySectionCollapsed] = useState(bundlePage);
+  useEffect(() => {
+    setApplySectionCollapsed(bundlePage);
+  }, [bundlePage]);
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
@@ -2057,6 +2072,7 @@ function ApplyWorkflowFormView({
   const { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample } =
     useGuidedSampleLoader({
       assetBaseUrl,
+      mode,
       onDrop: handleUnifiedDrop,
       onStartBundle: () => bundleTools?.setBundlePackage("patches"),
     });
@@ -2085,7 +2101,7 @@ function ApplyWorkflowFormView({
   const workflowEmpty = useFlatTransitionFlag(workflowActuallyEmpty);
   usePendingCardMorph(pendingDrops.length, romInputs.length + patches.length);
   // "Needs input" directives forward to the unified picker.
-  const openUnifiedPicker = () => document.getElementById("rom-weaver-input-file-unified")?.click();
+  const openUnifiedPicker = () => document.getElementById(unifiedInputId)?.click();
   // Each section keeps its empty fixture whenever its own list is empty - not
   // just when the whole workflow is - so loading only a ROM (or only patches)
   // still shows the other section's prompt instead of a bare
@@ -2127,8 +2143,8 @@ function ApplyWorkflowFormView({
       uiState={uiState}
     />
   );
-  // Keep the sharing job after Apply's primary action and result recovery. It
-  // remains available once the bench has content for direct bundle authoring.
+  // Keep the sharing job available once the bench has content. Its position is
+  // route-specific: Bundle presents it before Apply, while Apply follows it.
   const bundleSecondaryJob =
     bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone) ? (
       <BundleSecondaryJob
@@ -2136,6 +2152,7 @@ function ApplyWorkflowFormView({
         bundleExport={bundleExport}
         bundleTools={bundleTools}
         disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+        primary={bundlePage}
       />
     ) : null;
 
@@ -2174,11 +2191,6 @@ function ApplyWorkflowFormView({
         heroLabel={localizer.message("ui.apply.drop.hero")}
         heroLabelCoarse={localizer.message("ui.apply.drop.heroCoarse")}
         id="rom-weaver-row-unified-drop"
-        lead={{
-          line1: "ui.hero.thesis",
-          line2: "ui.hero.thesis2",
-          description: "ui.hero.applyDescription",
-        }}
         info={
           <ul className="info-list">
             <li>{localizer.message("ui.apply.drop.info.nested")}</li>
@@ -2187,7 +2199,22 @@ function ApplyWorkflowFormView({
             <li>{localizer.message("ui.apply.drop.info.retroArch")}</li>
           </ul>
         }
-        inputId="rom-weaver-input-file-unified"
+        inputId={unifiedInputId}
+        lead={
+          bundlePage
+            ? {
+                line1: "ui.hero.bundleThesis",
+                line2: "ui.hero.bundleThesis2",
+                description: "ui.hero.bundleDescription",
+                guide: { href: "/docs/create-bundles", label: "ui.hero.bundleGuide" },
+              }
+            : {
+                line1: "ui.hero.thesis",
+                line2: "ui.hero.thesis2",
+                description: "ui.hero.applyDescription",
+                guide: { href: "/docs/apply-rom-patches", label: "ui.hero.applyGuide" },
+              }
+        }
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDrop}
         supported={getApplySupportedFiles(localizer)}
@@ -2198,7 +2225,12 @@ function ApplyWorkflowFormView({
             { num: "0x02", title: localizer.message("ui.step.rom") },
             { num: "0x03", title: localizer.message("ui.step.patches") },
             { num: "0x04", title: localizer.message("ui.step.cheats") },
-            { num: "0x05", title: localizer.message("ui.step.apply") },
+            ...(bundlePage
+              ? [
+                  { num: "0x05", title: localizer.message("ui.bundleExport.shareTitle") },
+                  { num: "0x06", title: localizer.message("ui.step.apply") },
+                ]
+              : [{ num: "0x05", title: localizer.message("ui.step.apply") }]),
           ]}
         />
       ) : (
@@ -2307,6 +2339,8 @@ function ApplyWorkflowFormView({
             woven: wovenSteps,
           })}
 
+          {bundlePage ? bundleSecondaryJob : null}
+
           <WorkflowOutputStep
             action={renderOutputAction}
             compress={buildOutputCompressionPanel({
@@ -2324,6 +2358,15 @@ function ApplyWorkflowFormView({
               readouts: null,
               timing: outputState.compressTiming || undefined,
             })}
+            {...(bundlePage
+              ? {
+                  collapse: {
+                    collapsed: applySectionCollapsed,
+                    label: localizer.message("ui.step.apply"),
+                    onToggle: () => setApplySectionCollapsed((collapsed) => !collapsed),
+                  },
+                }
+              : {})}
             disabled={outputDisabled}
             fault={applyFailed}
             fileName={outputState.displayFileName}
@@ -2360,10 +2403,10 @@ function ApplyWorkflowFormView({
                 state={uiState.outputNotice}
               />
             }
-            num="0x05"
+            num={bundlePage ? "0x06" : "0x05"}
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
-            secondary={bundleSecondaryJob}
+            secondary={bundlePage ? undefined : bundleSecondaryJob}
             title={localizer.message("ui.step.apply")}
             woven={applyDone || running}
           />

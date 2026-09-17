@@ -219,6 +219,7 @@ const setWorkflowSettingsIfChanged = async ({
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
+  const mode = props.mode ?? "apply";
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -249,7 +250,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const selectFileRef = useRef(selectFile);
   selectFileRef.current = selectFile;
   // id matches webapp-root's `currentView` so root routing targets the active tab.
-  useInputSelectionHandler("patcher", selectFile);
+  useInputSelectionHandler(mode === "bundle" ? "bundle" : "patcher", selectFile);
   const lastInputsRef = useRef<BinarySource[]>([]);
   const forceInputWorkflowRefreshRef = useRef(false);
   const lastPatchOrderRef = useRef("");
@@ -1840,6 +1841,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   return (
     <>
       <ApplyWorkflowFormView
+        mode={mode}
         cheats={({ headerStripConflict, onNeedsRom, woven }) => (
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}

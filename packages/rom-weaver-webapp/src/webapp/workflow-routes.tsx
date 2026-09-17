@@ -16,6 +16,7 @@ import type { WebappView } from "./webapp-state-types.ts";
 const logger = createLogger("workflow-routes");
 
 type WorkflowRouteProps = {
+  bundle: ApplyPatchFormProps;
   creator: CreatePatchFormProps;
   docs: {
     active: boolean;
@@ -94,6 +95,9 @@ const DocsRoute = createWorkflowRoute("docs", () =>
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
+const BundleWorkflowRoute = createWorkflowRoute("bundle", () =>
+  import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
+);
 const HomeRoute = createWorkflowRoute("home", () =>
   import("./components/home-page.tsx").then((module) => ({ default: module.HomePage })),
 );
@@ -117,6 +121,7 @@ const WhatsNewRoute = createWorkflowRoute("whats-new", () =>
 );
 
 const WORKFLOW_ROUTES = {
+  bundle: BundleWorkflowRoute,
   creator: CreatorRoute,
   docs: DocsRoute,
   home: HomeRoute,
@@ -132,6 +137,7 @@ const WORKFLOW_ROUTES = {
 const CreatePatchRoute = CreatorRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
+const BundleRoute = BundleWorkflowRoute.Component;
 const EmulatorTestRoute = TestRoute.Component;
 const HomePageRoute = HomeRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
@@ -153,6 +159,7 @@ const preloadDocsRouteHtml = (slug?: string): Promise<unknown> =>
 
 export {
   ApplyPatchRoute,
+  BundleRoute,
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,

@@ -324,6 +324,22 @@ describe("boot", () => {
     expect(latest().state.currentView).toBe("patcher");
   });
 
+  it("moves bundle sessions to the Bundle route", async () => {
+    await loadWebapp({ url: "/apply-patch?bundle=/bundles/first-weave.zip" });
+
+    expect(window.location.pathname).toBe("/bundle");
+    expect(window.location.search).toBe("?bundle=/bundles/first-weave.zip");
+    expect(latest().state.currentView).toBe("bundle");
+  });
+
+  it("moves the legacy bundle guide to Bundle and keeps its guide query", async () => {
+    await loadWebapp({ url: "/apply-patch?guide=bundle" });
+
+    expect(window.location.pathname).toBe("/bundle");
+    expect(window.location.search).toBe("?guide=bundle");
+    expect(latest().state.currentView).toBe("bundle");
+  });
+
   it("reports the browser storage estimate it could not read", async () => {
     mocks.getBrowserStorageEstimateState.mockRejectedValue(new Error("estimate blocked"));
 

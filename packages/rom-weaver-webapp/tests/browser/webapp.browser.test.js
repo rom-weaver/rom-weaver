@@ -481,9 +481,7 @@ test("the New here? control has a touch target and its popover carries every sta
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
     "/apply-patch?guide=apply",
   );
-  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe(
-    "/apply-patch?guide=bundle",
-  );
+  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe("/bundle?guide=bundle");
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);

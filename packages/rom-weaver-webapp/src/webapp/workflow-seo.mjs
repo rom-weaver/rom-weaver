@@ -2,6 +2,12 @@ const SITE_NAME = "rom-weaver";
 const SITE_ALTERNATE_NAMES = Object.freeze(["RomWeaver", "Rom Weaver", "rom weaver"]);
 
 const WORKFLOW_SEO_ROUTES = Object.freeze({
+  bundle: Object.freeze({
+    description:
+      "Bundle ordered ROM patch workflows locally in your browser, then optionally apply the bundle with checksum validation. No uploads or account required.",
+    slug: "bundle",
+    title: `${SITE_NAME}: Bundle ROM patches online`,
+  }),
   creator: Object.freeze({
     description:
       "Create BPS, IPS, UPS, xdelta, and other ROM patches locally in your browser with checksums and distributable bundles. No uploads or account required.",

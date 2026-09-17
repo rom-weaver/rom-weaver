@@ -4,6 +4,11 @@ import { StepSection } from "./layout.tsx";
 import { OutputCard, type OutputCardProps } from "./output-card.tsx";
 
 type WorkflowOutputStepProps = OutputCardProps & {
+  collapse?: {
+    collapsed: boolean;
+    label: string;
+    onToggle: () => void;
+  };
   fault?: boolean;
   id?: string;
   info?: ReactNode;
@@ -28,6 +33,7 @@ type OutputRunActionProps = {
 
 const WorkflowOutputStep = ({
   fault,
+  collapse,
   id,
   info,
   meta,
@@ -38,7 +44,7 @@ const WorkflowOutputStep = ({
   woven,
   ...output
 }: WorkflowOutputStepProps) => (
-  <StepSection fault={fault} id={id} info={info} meta={meta} num={num} title={title} woven={woven}>
+  <StepSection collapse={collapse} fault={fault} id={id} info={info} meta={meta} num={num} title={title} woven={woven}>
     <OutputCard {...output} />
     {notice}
     {secondary}

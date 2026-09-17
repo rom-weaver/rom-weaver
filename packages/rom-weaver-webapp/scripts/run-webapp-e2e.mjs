@@ -204,7 +204,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "trim", path: "trim/" },
-      { finalView: "patcher", initialView: "patcher", path: "weave?guide=bundle" },
+      { finalView: "bundle", initialView: "bundle", path: "bundle?guide=bundle" },
     ]) {
       const page = await context.newPage();
       const failures = [];
@@ -799,7 +799,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-button-apply").waitFor({ state: "visible", timeout: 60_000 });
     await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
-    await page.goto(new URL("weave?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
+    await page.goto(new URL("bundle?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await installAuditTools();
     await tutorial.waitFor({ state: "visible" });

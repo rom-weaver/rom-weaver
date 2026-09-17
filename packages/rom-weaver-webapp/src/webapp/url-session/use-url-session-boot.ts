@@ -32,7 +32,7 @@ const IDLE_STATE: UrlSessionBootState = {
 
 /**
  * Boot-time URL-session loader: fetches the request's sources once per attempt
- * and delivers them as `File`s into the apply tab's drop pipeline. The direct
+ * and delivers them as `File`s into the matching workflow's drop pipeline. The direct
  * `rom=`/`patch=` shape fetches verbatim; the `bundle=` shape parses the
  * rom-weaver-bundle.json through the wasm runtime first, acquires its sources, and surfaces
  * the decorated session via `onBundleSession` for the apply form to consume.
