@@ -87,7 +87,7 @@
   text-transform: none;
   letter-spacing: 0.01em;
   white-space: nowrap;
-  opacity: 0.92;
+  opacity: 1;
 }
 .rw-app .download-btn .dl-total b {
   font-weight: 750;
