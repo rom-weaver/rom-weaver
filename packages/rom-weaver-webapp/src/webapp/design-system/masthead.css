@@ -746,8 +746,8 @@
 /* the tool wears the live dye so the current lot is readable without opening */
 .rw-app .accent-tool-dot {
   position: absolute;
-  inset-block-end: 7px;
-  inset-inline-end: 2px;
+  inset-block-start: calc(50% - 11px);
+  inset-inline-start: 7px;
   width: 8px;
   height: 8px;
   background: var(--thread);
@@ -789,8 +789,9 @@
   grid-area: 1 / 2;
 }
 .rw-app .nav-tool-anchor .accent-tool-dot {
-  inset-block-end: 7px;
-  inset-inline-start: 19px;
+  inset-block-start: 9px;
+  inset-block-end: auto;
+  inset-inline-start: 8px;
   inset-inline-end: auto;
 }
 .rw-app .nav-tool-anchor .nav-tool-pop {
