@@ -598,10 +598,6 @@
   height: 17px;
 }
 .rw-app .topbar-tools .tool svg {
-  width: 20px;
-  height: 20px;
-}
-.rw-app .topbar-tools .sub-status svg {
   width: 22px;
   height: 22px;
 }
@@ -1299,10 +1295,6 @@
   .rw-app .topbar-tools .tool-project + .tool-project {
     margin-inline-start: -2px;
   }
-  .rw-app .topbar-tools .tool-project svg {
-    width: 22px;
-    height: 22px;
-  }
   .rw-app .brand {
     grid-template-columns: 44px minmax(0, 1fr);
     column-gap: 4px;
@@ -1394,8 +1386,8 @@
     height: 44px;
   }
   .rw-app .shell-head-tools .tool svg {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
   .rw-app .topbar-tools {
     display: none;
