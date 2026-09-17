@@ -22,7 +22,7 @@
 
 /* ── woad: indigo ── */
 :root[data-accent="woad"] {
-  --thread: #6d7ce8;
+  --thread: #6875df;
   --thread-ink: #0b1030;
   --thread-hi: #c5cbf6;
 }
@@ -35,8 +35,8 @@
 
 /* ── violet ── */
 :root[data-accent="violet"] {
-  --thread: #9a6ae0;
-  --thread-ink: #16092c;
+  --thread: #9462d5;
+  --thread-ink: #0b0516;
   --thread-hi: #d7c3f3;
 }
 :root[data-accent="violet"][data-theme="dark"] {
@@ -48,8 +48,8 @@
 
 /* ── verdigris: green ── */
 :root[data-accent="verdigris"] {
-  --thread: #3faa72;
-  --thread-ink: #04180e;
+  --thread: #278955;
+  --thread-ink: #020c07;
   --thread-hi: #aee1c6;
 }
 :root[data-accent="verdigris"][data-theme="dark"] {
@@ -61,8 +61,8 @@
 
 /* ── teal ── */
 :root[data-accent="teal"] {
-  --thread: #2aa0a8;
-  --thread-ink: #03181a;
+  --thread: #16878e;
+  --thread-ink: #020c0d;
   --thread-hi: #9fe2e7;
 }
 :root[data-accent="teal"][data-theme="dark"] {
@@ -74,8 +74,8 @@
 
 /* ── plum ── */
 :root[data-accent="plum"] {
-  --thread: #cb63a5;
-  --thread-ink: #2a0620;
+  --thread: #bd5397;
+  --thread-ink: #10020c;
   --thread-hi: #eac1db;
 }
 :root[data-accent="plum"][data-theme="dark"] {
@@ -97,7 +97,7 @@
 @property --thread {
   syntax: "<color>";
   inherits: true;
-  initial-value: #d9690f;
+  initial-value: #cf6414;
 }
 @property --thread-hi {
   syntax: "<color>";

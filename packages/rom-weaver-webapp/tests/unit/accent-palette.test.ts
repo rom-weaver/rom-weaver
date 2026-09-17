@@ -28,7 +28,7 @@ const readRootToken = (property: string): string | undefined =>
 
 describe("accent palette", () => {
   test("madder is the tokens.css baseline and has no accent block", () => {
-    expect(readRootToken("--thread")).toBe("#d9690f");
+    expect(readRootToken("--thread")).toBe("#cf6414");
     expect(readRootToken("--thread-hi")).toBe("#fccb90");
     expect(ACCENTS_CSS).not.toContain('data-accent="madder"');
   });

@@ -48,9 +48,9 @@ describe("accent favicon", () => {
     const initialUrl = favicon.href;
     applyAccent("teal");
     expect(favicon.href).not.toBe(initialUrl);
-    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#2aa0a8");
+    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#16878e");
     applyAccent("chartreuse");
-    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#d9690f");
+    expect(readFavicon().querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe("#cf6414");
   });
 
   test("applies the accent when the host page has no favicon link", () => {

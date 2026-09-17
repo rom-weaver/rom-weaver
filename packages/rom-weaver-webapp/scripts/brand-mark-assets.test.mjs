@@ -8,7 +8,7 @@ const logo = fs.readFileSync(new URL("../src/assets/app/root/logo.svg", import.m
 const generatedAssets = new URL("../../../dist/generated-assets/", import.meta.url);
 
 test("rejects a source missing the accent color", () => {
-  assert.throws(() => tintBrandMark(logo.replaceAll("#d9690f", "#000000"), ACCENTS[1]), /missing the accent color/);
+  assert.throws(() => tintBrandMark(logo.replaceAll("#cf6414", "#000000"), ACCENTS[1]), /missing the accent color/);
 });
 
 for (const [channel, accentName] of Object.entries({

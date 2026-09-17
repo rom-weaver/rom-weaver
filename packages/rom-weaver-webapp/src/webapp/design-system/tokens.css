@@ -1,6 +1,7 @@
 /* Tokens and themes */
 :root {
-  --thread: #d9690f;
+  --thread: #cf6414;
+  --thread-fill: var(--thread);
   --thread-ink: #1c1206; /* text on a thread-colored surface */
   --thread-hi: #fccb90; /* light accent fill */
   /* Reusable 20px plain-weave alpha mask. */
@@ -46,6 +47,7 @@
 }
 
 :root[data-theme="dark"] {
+  --thread-fill: var(--thread-text);
   --chassis: #0c0f13; /* console shell */
   --plate: #161b21; /* mounted plate */
   --plate-2: #1c222a; /* raised plate */
@@ -117,7 +119,7 @@
 @property --loom-weft-1 {
   syntax: "<color>";
   inherits: true;
-  initial-value: #d9690f;
+  initial-value: #cf6414;
 }
 @property --loom-weft-2 {
   syntax: "<color>";
