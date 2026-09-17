@@ -800,7 +800,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
     await page.goto(new URL("bundle?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
-    await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
+    await page.locator("#rom-weaver-input-file-unified-bundle").waitFor({ state: "attached" });
     await installAuditTools();
     await tutorial.waitFor({ state: "visible" });
     await scanLiveApp(page, "guided Bundle loading (desktop, light)");
