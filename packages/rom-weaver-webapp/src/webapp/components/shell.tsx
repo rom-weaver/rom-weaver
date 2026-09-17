@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Cloud,
   CloudCheck,
   CloudDownload,
@@ -675,7 +676,7 @@ const AccentTile = ({
   );
 };
 
-/** Docs, source and support: the same three links, in the same order, in both layouts. */
+/** Source and support: the project links shared by the desktop and phone chrome. */
 const ProjectTiles = ({
   confirmExternalNavigation,
   docsHref,
@@ -702,7 +703,7 @@ const ProjectTiles = ({
         href={docsHref}
         onClick={(event) => activateOnClick(event, onOpenDocs)}
       >
-        <BookOpenGlyph />
+        <BookOpen aria-hidden="true" />
         <span aria-hidden="true" className="tip">
           {docsLabel}
         </span>
@@ -710,7 +711,7 @@ const ProjectTiles = ({
       {githubHref ? (
         <a
           aria-label={githubLabel}
-          className="tool"
+          className="tool tool-project"
           href={githubHref}
           onClick={(event) => guardExternalClick(event, githubHref, confirmExternalNavigation)}
           rel="noreferrer"
@@ -725,7 +726,7 @@ const ProjectTiles = ({
       {donateHref ? (
         <a
           aria-label={supportLabel}
-          className="tool tool-support"
+          className="tool tool-project tool-support"
           href={donateHref}
           onClick={(event) => guardExternalClick(event, donateHref, confirmExternalNavigation)}
           rel="noreferrer"
@@ -741,19 +742,17 @@ const ProjectTiles = ({
   );
 };
 
-const BookOpenGlyph = () => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth={2}
-    viewBox="0 0 24 24"
-  >
-    <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
-  </svg>
-);
+const SettingsTile = ({ localizer, onOpenSettings }: { localizer: Localizer; onOpenSettings: () => void }) => {
+  const label = localizer.message("ui.settings.title");
+  return (
+    <button aria-label={label} className="tool" onClick={onOpenSettings} type="button">
+      <Settings aria-hidden="true" />
+      <span aria-hidden="true" className="tip">
+        {label}
+      </span>
+    </button>
+  );
+};
 
 /**
  * The prerendered shells ship a placeholder runtime status that the parser-time
@@ -935,7 +934,7 @@ const RUNTIME_ICONS = {
   update: CloudDownload,
 } satisfies Record<RuntimeState, typeof CloudCheck>;
 
-const PROGRESS_RING_RADIUS = 9;
+const PROGRESS_RING_RADIUS = 10;
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_RADIUS;
 
 /** Determinate ring on the Lucide 24-box: the arc fills clockwise from 12 o'clock. */
@@ -950,7 +949,7 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
       strokeWidth={2.4}
       viewBox="0 0 24 24"
     >
-      <circle cx="12" cy="12" opacity="0.25" r={PROGRESS_RING_RADIUS} />
+      <circle cx="12" cy="12" opacity="0.5" r={PROGRESS_RING_RADIUS} />
       <circle
         cx="12"
         cy="12"
@@ -959,6 +958,18 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
         strokeDashoffset={PROGRESS_RING_CIRCUMFERENCE / 4}
         strokeLinecap="round"
       />
+      <text
+        className="sw-progress-ring-text"
+        dominantBaseline="central"
+        fontFamily="inherit"
+        fontSize="8.5"
+        fontWeight="800"
+        textAnchor="middle"
+        x="12"
+        y="12"
+      >
+        {Math.round(percent)}
+      </text>
     </svg>
   );
 };
@@ -1507,10 +1518,9 @@ const Masthead = ({
       ) : null}
     </span>
   );
-  /* Theme and accent appear in the chrome (the top bar on desktop, the brand
-     row on the phone) and again inside the navigation (the sidebar foot and the
-     Menu sheet), so each copy owns its own popover key and radio group name.
-     Everything about the app's identity below is rendered exactly once. */
+  /* Theme, accent, and settings appear in the chrome (the top bar on desktop,
+     the brand row on the phone) and again inside navigation, so each copy owns
+     its own popover key and radio group name. */
   const appearanceTiles = (scope: string, navRow = false) => (
     <>
       <ThemeTile
@@ -1528,6 +1538,15 @@ const Masthead = ({
         open={openTool === `accent:${scope}`}
       />
     </>
+  );
+  const settingsTile = (
+    <SettingsTile
+      localizer={localizer}
+      onOpenSettings={() => {
+        closeMenu();
+        onOpenSettings();
+      }}
+    />
   );
   const projectTiles = (
     <ProjectTiles
@@ -1570,10 +1589,11 @@ const Masthead = ({
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
               <div className="shell-head-tools">
+                <span className="phone-project-tools">{projectTiles}</span>
+                <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}
-                <span aria-hidden="true" className="tool-separator" />
-                <span className="phone-project-tools">{projectTiles}</span>
+                {settingsTile}
               </div>
             </div>
           </div>
@@ -1606,10 +1626,11 @@ const Masthead = ({
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
           <div className="topbar-tools">
+            {projectTiles}
+            <span aria-hidden="true" className="tool-separator" />
             <span className="desktop-runtime header-runtime">{headerStatus}</span>
             {appearanceTiles("desktop")}
-            <span aria-hidden="true" className="tool-separator" />
-            {projectTiles}
+            {settingsTile}
           </div>
         </div>
       </header>

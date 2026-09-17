@@ -298,13 +298,38 @@ describe("Masthead", () => {
     }
   });
 
-  it("puts appearance and the project links in the top bar and the phone header, in one order", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+  it("puts project links before the separator and device controls after it", () => {
+    const onOpenSettings = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
     const names = (scope: string) =>
       Array.from(container.querySelectorAll(`${scope} .tool`)).map((tool) => tool.getAttribute("aria-label"));
-    const expected = ["Theme: Match system", "Accent: Madder", "Docs", "View source on GitHub", "Support"];
-    expect(names(".topbar-tools")).toEqual(["Installing offline copy", ...expected]);
-    expect(names(".shell-head-tools")).toEqual(["Installing offline copy", ...expected]);
+    const expected = [
+      "Docs",
+      "View source on GitHub",
+      "Support",
+      "Installing offline copy",
+      "Theme: Match system",
+      "Accent: Madder",
+      "Settings",
+    ];
+    expect(names(".topbar-tools")).toEqual(expected);
+    expect(names(".shell-head-tools")).toEqual(expected);
+    for (const scope of [".topbar-tools", ".shell-head-tools"]) {
+      const tools = container.querySelector(scope) as HTMLElement;
+      const separator = tools.querySelector(".tool-separator");
+      const previous = separator?.previousElementSibling;
+      const previousTools = previous?.matches(".tool")
+        ? [previous]
+        : Array.from(previous?.querySelectorAll(".tool") ?? []);
+      const previousTool = previousTools.at(-1);
+      expect(previousTool?.getAttribute("aria-label")).toBe("Support");
+      expect(separator?.nextElementSibling?.querySelector(".tool")?.getAttribute("aria-label")).toBe(
+        "Installing offline copy",
+      );
+      expect(tools.querySelector('[aria-label="Docs"]')).toBeTruthy();
+    }
+    fireEvent.click(container.querySelector('.topbar-tools .tool[aria-label="Settings"]') as HTMLButtonElement);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
     // Find belongs to the top bar, and no destination is listed twice there.
     expect(container.querySelector(".topbar .topbar-find")).toBeTruthy();
     expect(container.querySelector(".topbar .nav-row")).toBeNull();
@@ -457,6 +482,7 @@ describe("Masthead", () => {
       ),
     );
     expect(container.querySelector(".sub-status-percent")?.textContent).toBe("25%");
+    expect(container.querySelector(".header-runtime .sw-progress-ring-text")?.textContent).toBe("25");
     // The chip owns the percent; the wording beside it MUST NOT repeat it.
     expect(container.querySelector(".sub-status-text")?.textContent).toBe("Installing offline copy");
     // The accessible name replaces the chip rather than adding to it, so it is
