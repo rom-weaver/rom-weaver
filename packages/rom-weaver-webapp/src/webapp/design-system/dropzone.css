@@ -768,6 +768,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   bottom: calc(var(--sp-m) + 10px);
   z-index: 3;
   display: inline-flex;
+  gap: 7px;
   align-items: center;
   min-height: 44px;
   padding: 8px 14px;
@@ -779,7 +780,35 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   border: 1px solid var(--seam-strong);
   border-radius: var(--r-s);
 }
-.rw-app .sample-tutorial-start-chip::after,
+.rw-app .sample-tutorial-start-bell {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--thread-text);
+  transform-origin: 50% 15%;
+  animation: tutorial-bell-shake 0.9s ease-in-out 1;
+}
+@keyframes tutorial-bell-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(18deg);
+  }
+  30% {
+    transform: rotate(-15deg);
+  }
+  45% {
+    transform: rotate(11deg);
+  }
+  60% {
+    transform: rotate(-7deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
+}
 .rw-app .hero-formats-help > summary::after {
   position: absolute;
   inset: -3px;
@@ -805,7 +834,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sample-tutorial-start-chip::after,
+  .rw-app .sample-tutorial-start-bell,
   .rw-app .hero-formats-help > summary::after {
     animation: none;
   }

@@ -634,9 +634,9 @@
 .rw-app .identify-search--hero {
   padding: var(--sp-m);
   margin-block-start: -1px;
-  background: var(--warp-lines) var(--empty-fill);
-  border: 1px solid var(--seam);
-  border-block-start-style: dashed;
+  background: var(--plate);
+  border: 1px dashed var(--seam);
+  border-block-start-style: solid;
   border-end-start-radius: var(--r-l);
   border-end-end-radius: var(--r-l);
 }
@@ -658,23 +658,14 @@
   width: min(100%, 760px);
   margin: var(--sp-m) 0 0 auto;
   overflow: clip;
-  background: var(--empty-fill);
+  background: var(--plate);
   border: 1px solid var(--seam);
   border-radius: var(--r-l);
-}
-.rw-app .identify-search-island::before {
-  position: absolute;
-  inset: 0 var(--sp-l) auto;
-  height: 2px;
-  pointer-events: none;
-  content: "";
-  background: linear-gradient(90deg, transparent, var(--thread) 32% 68%, transparent);
-  opacity: 0.65;
 }
 .rw-app .identify-search-island .identify-search--hero {
   padding: var(--sp-m) var(--sp-l);
   margin: 0;
-  background: var(--warp-lines), var(--empty-fill);
+  background: var(--plate);
   border: 0;
   border-radius: inherit;
 }
@@ -683,7 +674,7 @@
 }
 .rw-app .identify-search--section {
   margin-block-start: var(--sp-m);
-  background: var(--warp-lines) var(--empty-fill);
+  background: var(--plate);
   border: 1px solid var(--seam);
   border-radius: var(--r-l);
 }

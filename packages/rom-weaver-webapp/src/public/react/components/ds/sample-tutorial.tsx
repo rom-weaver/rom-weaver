@@ -1,5 +1,6 @@
 import {
   Archive,
+  Bell,
   Download,
   EllipsisVertical,
   Gamepad2,
@@ -346,6 +347,7 @@ const SampleTutorialStart = ({
         ref={chipRef}
         type="button"
       >
+        <Bell aria-hidden="true" className="sample-tutorial-start-bell" />
         {localizer.message("ui.tutorial.new")}
       </button>
       {/* Mounted only while open: the closed popover would otherwise ship in
