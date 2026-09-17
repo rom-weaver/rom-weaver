@@ -418,13 +418,16 @@
   text-align: center;
 }
 .rw-app .hero-formats-help > summary {
+  position: relative;
   width: fit-content;
   min-height: 44px;
-  padding: 12px 8px;
+  padding: 12px 16px;
   margin-inline: auto;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  font-weight: 600;
   cursor: pointer;
+  background: var(--plate);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
 }
 .rw-app .hero-formats-help > summary:active {
   color: var(--thread-text);
@@ -745,9 +748,7 @@
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;
 }
-/* The New here? beacon: a small dismissible chip riding the hero's lower-right
-   corner; its popover carries the guided runs and the practice download. The
-   wrapper spends no flow height - the chip lifts up into the hero above it. */
+/* The tutorial popover MUST stay outside the file-picker label. */
 .rw-app .first-weave-demo {
   position: relative;
   display: flex;
@@ -763,61 +764,59 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .sample-tutorial-start-chip {
   position: absolute;
-  /* Clear of the hero's corner so the pulse halo renders in full. */
   right: calc(var(--sp-m) + 10px);
   bottom: calc(var(--sp-m) + 10px);
   z-index: 3;
   display: inline-flex;
-  gap: 7px;
   align-items: center;
-  padding: 6px 14px 6px 8px;
+  min-height: 44px;
+  padding: 8px 14px;
   font-size: 0.82rem;
-  font-weight: 650;
-  color: var(--thread-ink);
+  font-weight: 600;
+  color: var(--ink-2);
   cursor: pointer;
-  background: var(--thread-fill);
-  border: 1px solid var(--thread-fill);
-  border-radius: 999px;
-  transition: background 0.15s var(--ease);
+  background: var(--plate);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-s);
+}
+.rw-app .sample-tutorial-start-chip::after,
+.rw-app .hero-formats-help > summary::after {
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  content: "";
+  border: 2px solid var(--thread-text);
+  border-radius: inherit;
+  opacity: 0;
+  animation: hero-help-intro 1.4s ease-out 1;
+}
+@keyframes hero-help-intro {
+  0% {
+    opacity: 0;
+    scale: 1;
+  }
+  25% {
+    opacity: 0.65;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.14;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .sample-tutorial-start-chip::after,
+  .rw-app .hero-formats-help > summary::after {
+    animation: none;
+  }
 }
 @media (hover: hover) {
   .rw-app .sample-tutorial-start-chip:hover {
-    background: color-mix(in oklab, var(--thread-fill) 88%, #fff);
+    color: var(--ink);
   }
 }
 .rw-app .sample-tutorial-start-chip:active {
-  background: color-mix(in oklab, var(--thread-fill) 88%, #fff);
-}
-/* The chip breathes until it is engaged, so a first visit notices it. The
-   halo is a ring pseudo-element animated on scale/opacity rather than a
-   box-shadow spread, so the pulse runs on the compositor (Lighthouse's
-   non-composited-animations audit). */
-.rw-app .sample-tutorial-start-chip[aria-expanded="false"]::after {
-  position: absolute;
-  inset: -3px;
-  /* The ring hit-tests as part of the button and rides the scale animation -
-     without this, mid-pulse it steals hero-dropzone clicks near the chip. */
-  pointer-events: none;
-  content: "";
-  border: 2px solid color-mix(in oklab, var(--thread) 45%, transparent);
-  border-radius: 999px;
-  animation: onboarding-beacon-pulse 2.6s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .sample-tutorial-start-chip[aria-expanded="false"]::after {
-    content: none;
-  }
-}
-@keyframes onboarding-beacon-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    scale: 1;
-  }
-  60% {
-    opacity: 0;
-    scale: 1.6;
-  }
+  color: var(--ink);
 }
 /* A drag gesture owns the hero - the chip yields until the files land. */
 .rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip {
@@ -884,24 +883,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 .rw-app .sample-tutorial-start-action-icon {
   display: inline-flex;
   flex: none;
-}
-/* The quest marker: a bold ! on a round badge, the way a game flags the NPC
-   with something to offer. */
-.rw-app .sample-tutorial-start-beacon {
-  position: relative;
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  font-family: var(--mono);
-  font-size: 0.88rem;
-  font-weight: 850;
-  line-height: 1;
-  color: var(--thread-text);
-  background: color-mix(in oklab, var(--thread) 12%, var(--plate));
-  border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong));
-  border-radius: 50%;
 }
 .rw-app .sample-tutorial-start [role="status"] {
   padding-inline: var(--sp-s);

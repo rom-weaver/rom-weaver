@@ -340,15 +340,12 @@ const SampleTutorialStart = ({
         aria-expanded={open}
         className="sample-tutorial-start-chip"
         onClick={() => {
-          startLogger.trace("onboarding beacon toggled", { open: !open });
+          startLogger.trace("tutorial help toggled", { open: !open });
           setOpen((current) => !current);
         }}
         ref={chipRef}
         type="button"
       >
-        <span aria-hidden="true" className="sample-tutorial-start-beacon">
-          !
-        </span>
         {localizer.message("ui.tutorial.new")}
       </button>
       {/* Mounted only while open: the closed popover would otherwise ship in
