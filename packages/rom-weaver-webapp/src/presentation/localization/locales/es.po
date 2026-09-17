@@ -2826,7 +2826,7 @@ msgstr "RomWeaver descomprime una pequeña ROM y dos parches, y luego comprueba 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.footer.local"
-msgstr "Funciona en tu navegador. Tus archivos permanecen en este dispositivo. Compatibilidad sin conexión. Sin telemetría."
+msgstr "En tu dispositivo. Sin conexión. Sin telemetría."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

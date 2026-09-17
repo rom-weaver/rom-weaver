@@ -158,9 +158,7 @@ describe("the workbench shell", () => {
     const { container } = await renderRoot({ currentView });
     const footers = container.querySelectorAll("footer.page-footer");
     expect(footers).toHaveLength(1);
-    expect(footers[0]?.textContent).toBe(
-      "Runs in your browser. Your files stay on this device. Offline support. No telemetry.",
-    );
+    expect(footers[0]?.textContent).toBe("On-device. Offline support. No telemetry.");
     expect(container.querySelector("main footer.page-footer")).toBeNull();
     expect(container.querySelector(".hero-privacy")).toBeNull();
   });
