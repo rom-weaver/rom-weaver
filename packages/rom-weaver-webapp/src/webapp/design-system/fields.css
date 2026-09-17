@@ -114,7 +114,7 @@
   translate: var(--sw-travel) -50%;
 }
 .rw-app input[type="checkbox"]:focus-visible {
-  outline: 2px solid color-mix(in oklab, var(--thread) 55%, transparent);
+  outline: 2px solid var(--thread-text);
   outline-offset: 2px;
 }
 .rw-app input[type="checkbox"]:disabled {
@@ -676,7 +676,7 @@
   border-radius: 5px;
 }
 .rw-app .patch-checks-body .verification-row .ck-open:focus-visible {
-  outline: 2px solid var(--thread);
+  outline: 2px solid var(--thread-text);
   outline-offset: 1px;
 }
 .rw-app .patch-checks-body .verification-row .ck-open .ck-v {

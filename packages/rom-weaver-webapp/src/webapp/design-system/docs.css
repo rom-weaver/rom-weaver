@@ -955,7 +955,7 @@ html:has(.docs-workbench) {
 .rw-app .docs-step:focus-visible,
 .rw-app .docs-to-top:focus-visible,
 .rw-app .docs-source-link:focus-visible {
-  outline: 2px solid var(--thread);
+  outline: 2px solid var(--thread-text);
   outline-offset: 3px;
 }
 @media (hover: hover) {

@@ -15,12 +15,12 @@
 
 /** @type {readonly AccentDefinition[]} */
 const ACCENTS = Object.freeze([
-  Object.freeze({ highlight: "#fccb90", label: "Madder", swatch: "#cf6414", value: "madder" }),
-  Object.freeze({ highlight: "#c5cbf6", label: "Woad", swatch: "#6875df", value: "woad" }),
-  Object.freeze({ highlight: "#d7c3f3", label: "Violet", swatch: "#9462d5", value: "violet" }),
-  Object.freeze({ highlight: "#aee1c6", label: "Verdigris", swatch: "#278955", value: "verdigris" }),
-  Object.freeze({ highlight: "#9fe2e7", label: "Teal", swatch: "#16878e", value: "teal" }),
-  Object.freeze({ highlight: "#eac1db", label: "Plum", swatch: "#bd5397", value: "plum" }),
+  Object.freeze({ highlight: "#fccb90", label: "Madder", swatch: "#e87208", value: "madder" }),
+  Object.freeze({ highlight: "#c5cbf6", label: "Woad", swatch: "#747bfa", value: "woad" }),
+  Object.freeze({ highlight: "#d7c3f3", label: "Violet", swatch: "#a45bea", value: "violet" }),
+  Object.freeze({ highlight: "#aee1c6", label: "Verdigris", swatch: "#149c46", value: "verdigris" }),
+  Object.freeze({ highlight: "#9fe2e7", label: "Teal", swatch: "#009ba5", value: "teal" }),
+  Object.freeze({ highlight: "#eac1db", label: "Plum", swatch: "#d548a0", value: "plum" }),
 ]);
 
 /** @type {Accent} */

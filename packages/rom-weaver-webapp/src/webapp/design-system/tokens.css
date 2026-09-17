@@ -1,6 +1,6 @@
 /* Tokens and themes */
 :root {
-  --thread: #cf6414;
+  --thread: #e87208;
   --thread-fill: var(--thread);
   --thread-ink: #1c1206; /* text on a thread-colored surface */
   --thread-hi: #fccb90; /* light accent fill */
@@ -119,7 +119,7 @@
 @property --loom-weft-1 {
   syntax: "<color>";
   inherits: true;
-  initial-value: #cf6414;
+  initial-value: #e87208;
 }
 @property --loom-weft-2 {
   syntax: "<color>";

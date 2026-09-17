@@ -22,7 +22,7 @@
 
 /* ── woad: indigo ── */
 :root[data-accent="woad"] {
-  --thread: #6875df;
+  --thread: #747bfa;
   --thread-ink: #0b1030;
   --thread-hi: #c5cbf6;
 }
@@ -35,7 +35,7 @@
 
 /* ── violet ── */
 :root[data-accent="violet"] {
-  --thread: #9462d5;
+  --thread: #a45bea;
   --thread-ink: #0b0516;
   --thread-hi: #d7c3f3;
 }
@@ -48,7 +48,7 @@
 
 /* ── verdigris: green ── */
 :root[data-accent="verdigris"] {
-  --thread: #278955;
+  --thread: #149c46;
   --thread-ink: #020c07;
   --thread-hi: #aee1c6;
 }
@@ -61,7 +61,7 @@
 
 /* ── teal ── */
 :root[data-accent="teal"] {
-  --thread: #16878e;
+  --thread: #009ba5;
   --thread-ink: #020c0d;
   --thread-hi: #9fe2e7;
 }
@@ -74,7 +74,7 @@
 
 /* ── plum ── */
 :root[data-accent="plum"] {
-  --thread: #bd5397;
+  --thread: #d548a0;
   --thread-ink: #10020c;
   --thread-hi: #eac1db;
 }
@@ -97,7 +97,7 @@
 @property --thread {
   syntax: "<color>";
   inherits: true;
-  initial-value: #cf6414;
+  initial-value: #e87208;
 }
 @property --thread-hi {
   syntax: "<color>";
@@ -186,7 +186,7 @@
   scale: 1.1;
 }
 .rw-app .accent-chip input:focus-visible + .accent-chip-dot {
-  outline: 2px solid var(--thread);
+  outline: 2px solid var(--thread-text);
   outline-offset: 4px;
 }
 .rw-app .accent-chip input:disabled {
