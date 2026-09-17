@@ -406,7 +406,7 @@ const SampleTutorialStart = ({
           </a>
           {error ? <span role="status">{error}</span> : null}
           <button
-            className="sample-tutorial-start-dismiss"
+            className="sample-tutorial-start-action sample-tutorial-start-dismiss"
             onClick={() => {
               startLogger.debug("onboarding beacon dismissed");
               setOpen(false);
@@ -415,6 +415,7 @@ const SampleTutorialStart = ({
             }}
             type="button"
           >
+            <X aria-hidden="true" />
             {localizer.message("ui.tutorial.dismiss")}
           </button>
         </div>

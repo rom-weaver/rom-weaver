@@ -827,15 +827,15 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 @media (max-width: 720px) and (max-height: 800px) {
   html:not([data-onboarding-enabled="false"]) .rw-app .simple-hero .step-body:has(> .first-weave-demo) .drop.hero {
-    padding-block-start: 8px;
+    padding-block-start: 16px;
   }
   .rw-app .simple-hero .drop.hero > .hero-lead {
     gap: 6px;
   }
   .rw-app .step.is-input.is-empty.simple-hero .drop.hero {
-    gap: 8px;
+    gap: 16px;
     min-height: 0;
-    padding: 8px;
+    padding: 16px;
   }
   .rw-app .simple-hero .hero-lead .lead-description {
     font-size: 0.9rem;
@@ -965,28 +965,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   color: var(--fault);
 }
 .rw-app .sample-tutorial-start-dismiss {
-  width: 100%;
   min-height: 44px;
-  padding: var(--sp-s) var(--sp-m);
-  margin-top: var(--sp-m);
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  text-align: center;
-  cursor: pointer;
-  background: var(--well);
-  border: 1px solid var(--seam-strong);
-  border-radius: var(--r-s);
-}
-@media (hover: hover) {
-  .rw-app .sample-tutorial-start-dismiss:hover {
-    color: var(--ink);
-    border-color: var(--ink-3);
-  }
-}
-.rw-app .sample-tutorial-start-dismiss:active {
-  color: var(--ink);
-  border-color: var(--ink-3);
 }
 
 /* Guided samples trace the same numbered loom stages as the workbench. The

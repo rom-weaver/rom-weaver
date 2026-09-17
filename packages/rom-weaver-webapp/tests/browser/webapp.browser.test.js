@@ -461,14 +461,16 @@ test("the New here? control has a touch target and its popover carries every sta
   const chipBox = chip.getBoundingClientRect();
   expect(chipBox.height).toBeGreaterThanOrEqual(44);
   expect(chipBox.height).toBeLessThanOrEqual(48);
-  // The chip rides the hero's lower corner instead of spending a band below it.
   const hero = document.querySelector(".drop.hero").getBoundingClientRect();
   expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
   // Closed popover is not mounted at all - it must stay out of the prerendered shell.
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(4);
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(5);
+  expect(
+    document.querySelector(".sample-tutorial-start-dismiss")?.classList.contains("sample-tutorial-start-action"),
+  ).toBe(true);
   expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe("/docs/apply-rom-patches");
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
     "/apply-patch?guide=apply",
