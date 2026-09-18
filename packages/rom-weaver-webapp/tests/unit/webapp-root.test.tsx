@@ -158,9 +158,11 @@ describe("the workbench shell", () => {
     const { container } = await renderRoot({ currentView });
     const footers = container.querySelectorAll("footer.page-footer");
     expect(footers).toHaveLength(1);
-    expect(footers[0]?.textContent).toBe("On-device. Offline support. No telemetry. About Privacy");
+    expect(footers[0]?.textContent).toBe("On-device. Offline support. No telemetry.AboutPrivacy");
     expect(footers[0]?.querySelector('a[href="/docs/about"]')?.textContent).toBe("About");
     expect(footers[0]?.querySelector('a[href="/docs/privacy"]')?.textContent).toBe("Privacy");
+    expect(footers[0]?.querySelector(".page-footer-links")?.className).toBe("page-footer-links");
+    expect(footers[0]?.querySelectorAll(".page-footer-link")).toHaveLength(2);
     expect(container.querySelector("main footer.page-footer")).toBeNull();
     expect(container.querySelector(".hero-privacy")).toBeNull();
   });

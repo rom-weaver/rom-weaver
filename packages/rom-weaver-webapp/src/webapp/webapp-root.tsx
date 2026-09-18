@@ -364,8 +364,15 @@ const PageFooter = () => {
   const localizer = useUiLocalizer();
   return (
     <footer className="page-footer">
-      <span>{localizer.message("ui.footer.local")}</span> <a href={ABOUT_URL}>{localizer.message("ui.footer.about")}</a>{" "}
-      <a href={PRIVACY_URL}>{localizer.message("ui.footer.privacy")}</a>
+      <span>{localizer.message("ui.footer.local")}</span>
+      <span className="page-footer-links">
+        <a className="page-footer-link" href={ABOUT_URL}>
+          {localizer.message("ui.footer.about")}
+        </a>
+        <a className="page-footer-link" href={PRIVACY_URL}>
+          {localizer.message("ui.footer.privacy")}
+        </a>
+      </span>
     </footer>
   );
 };

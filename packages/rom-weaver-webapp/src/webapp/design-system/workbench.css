@@ -16,6 +16,15 @@
   text-align: center;
   border-block-start: 1px solid var(--seam-soft);
 }
+.rw-app .page-footer-links {
+  display: inline-flex;
+  gap: var(--sp-m);
+  margin-inline-start: var(--sp-l);
+}
+.rw-app .page-footer-link {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
 
 @media (max-width: 720px) and (max-height: 800px) {
   .rw-app .workbench:has(.simple-hero.is-empty) {
