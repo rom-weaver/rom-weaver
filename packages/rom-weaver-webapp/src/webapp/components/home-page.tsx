@@ -57,10 +57,10 @@ const PATCH_FORMATS = ["IPS", "BPS", "UPS", "xdelta", "PPF", "RUP", "BDF", "APS"
 const CHECKSUMS = ["CRC32", "MD5", "SHA-1", "SHA-256", "BLAKE3"];
 
 /**
- * The four stable workflows, and only those. This list MUST NOT depend on
+ * The four featured workflows. This list MUST NOT depend on
  * settings: the page is prerendered into index.html with defaults, so anything
  * read from storage here renders a different tree on the client and fails
- * hydration. Identify, Trim and Undo PPF are beta and reached from More.
+ * hydration. Utility tools are reached from More.
  */
 const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow[] => [
   {

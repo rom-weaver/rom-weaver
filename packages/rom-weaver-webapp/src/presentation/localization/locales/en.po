@@ -1321,7 +1321,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Enable beta tools (Identify, Trim, and PPF undo)"
+msgstr "Enable beta tools (Trim and PPF undo)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

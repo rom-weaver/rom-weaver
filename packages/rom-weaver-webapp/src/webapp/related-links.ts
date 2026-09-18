@@ -3,7 +3,7 @@ import type { WebappView } from "./webapp-state-types.ts";
 
 /** One tool pointer: a tab to switch to, plus the beta gate it lives behind. */
 type RelatedToolLink = {
-  /** True for a tool that stays behind the beta-tools setting (Identify, Trim). */
+  /** True for a tool that stays behind the beta-tools setting (Trim). */
   beta?: boolean;
   labelId: MessageId;
   view: WebappView;
@@ -44,7 +44,7 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     tools: [{ labelId: "ui.related.createTool", view: "creator" }],
   },
   "docs/fix-checksum-errors": {
-    tools: [{ beta: true, labelId: "ui.related.identifyTool", view: "identify" }],
+    tools: [{ labelId: "ui.related.identifyTool", view: "identify" }],
   },
   "docs/test-roms": {
     tools: [{ labelId: "ui.related.testTool", view: "test" }],
@@ -64,7 +64,7 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     guide: { slug: "docs/fix-checksum-errors" },
     tools: [
       { labelId: "ui.related.testRom", view: "test" },
-      { beta: true, labelId: "ui.related.identifyFile", view: "identify" },
+      { labelId: "ui.related.identifyFile", view: "identify" },
     ],
   },
   trim: {

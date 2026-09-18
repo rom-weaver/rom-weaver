@@ -120,7 +120,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     label: "PPF undo",
   },
   {
-    beta: true,
     group: "roms",
     href: "identify-rom",
     icon: <ScanSearch aria-hidden="true" />,

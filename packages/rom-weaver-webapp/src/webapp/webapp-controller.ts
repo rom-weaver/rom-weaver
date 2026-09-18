@@ -52,7 +52,7 @@ const normalizeWorkflowView = (value: unknown): WebappView | null => {
 };
 
 const isBetaWorkflowView = (view: WebappView): boolean =>
-  view === "identify" || view === "trim" || view === "ppf-undo" || view === "save-editor";
+  view === "trim" || view === "ppf-undo" || view === "save-editor";
 
 const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsState): WebappView =>
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;

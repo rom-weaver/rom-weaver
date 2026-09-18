@@ -29,7 +29,6 @@ describe("RelatedStrip", () => {
   it("renders the Apply result's tool and guide rows with the right kinds", () => {
     const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />));
     const rows = container.querySelectorAll(".related-row");
-    // Test this ROM (tool), Identify this file (beta tool, enabled by default), guide.
     expect(rows).toHaveLength(3);
     const kinds = [...rows].map((row) => row.querySelector(".related-kind")?.textContent);
     expect(kinds).toEqual(["Tool", "Tool", "Guide"]);
@@ -47,12 +46,12 @@ describe("RelatedStrip", () => {
     expect(readLabels({})).toEqual(["Test this ROM", "Identify this file"]);
   });
 
-  it("marks only the beta tool row for the CSS gate", () => {
+  it("keeps Identify outside the beta CSS gate", () => {
     const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />));
     const betaLabels = [...container.querySelectorAll('li[data-beta="true"] .related-label')].map(
       (el) => el.textContent,
     );
-    expect(betaLabels).toEqual(["Identify this file"]);
+    expect(betaLabels).toEqual([]);
   });
 
   it("resolves a tool row through onSelectTab with the target view id, not a link", () => {
