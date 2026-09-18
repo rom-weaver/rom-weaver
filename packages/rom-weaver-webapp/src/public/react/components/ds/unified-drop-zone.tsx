@@ -87,7 +87,6 @@ const UnifiedDropZone = ({
     });
     onFiles(files);
   };
-  const formats = [...new Set(supported?.flatMap((group) => group.extensions) || [])];
   const supportedFormats = supported?.length ? (
     <div className="info-support">
       {supported.map((group) => (
@@ -106,22 +105,15 @@ const UnifiedDropZone = ({
     ) : undefined;
   const heroLead = big ? (
     <div className="hero-lead">
-      <span className="lead-title">
-        <span className="lead-line">{localizer.message(lead.line1)}</span>{" "}
-        <span className="lead-line lead-accent">{localizer.message(lead.line2)}</span>
-      </span>
+      <span className="lead-title">{localizer.message(lead.line1)}</span>
       <span className="lead-description">{localizer.message(lead.description)}</span>
-      {lead.guide ? (
-        <a className="lead-guide" href={lead.guide.href}>
-          {localizer.message(lead.guide.label)}
-        </a>
-      ) : null}
-      <span className="lead-sub mono">{localizer.message("ui.hero.local")}</span>
     </div>
   ) : undefined;
   return (
     <StepSection
-      className={big ? "is-input is-empty unified-drop-step unified-drop-step--hero" : "is-input unified-drop-step"}
+      className={
+        big ? "is-input is-empty unified-drop-step unified-drop-step--hero simple-hero" : "is-input unified-drop-step"
+      }
       headerAction={{
         disabled: dropZoneProps.disabled,
         label: localizer.message("ui.drop.addFiles"),
@@ -136,7 +128,7 @@ const UnifiedDropZone = ({
       <DropZone
         {...dropZoneProps}
         bare
-        formats={formats}
+        heroAction={localizer.message("ui.drop.addFiles")}
         hintCoarse={big ? undefined : localizer.message("ui.drop.tap")}
         inputRef={inputRef}
         label={big ? heroLabel : addLabel}
@@ -148,11 +140,20 @@ const UnifiedDropZone = ({
         onFiles={emit}
       />
       {afterDropZone}
-      {big && supportedFormats ? (
-        <details className="hero-formats-help">
-          <summary>{localizer.message("ui.hero.supportedFormats")}</summary>
-          {supportedFormats}
-        </details>
+      {big ? (
+        <div className="hero-help">
+          {lead.guide ? (
+            <a className="hero-guide" href={lead.guide.href}>
+              {localizer.message(lead.guide.label)}
+            </a>
+          ) : null}
+          {supportedFormats ? (
+            <details className="hero-formats-help">
+              <summary>{localizer.message("ui.hero.supportedFormats")}</summary>
+              {supportedFormats}
+            </details>
+          ) : null}
+        </div>
       ) : null}
     </StepSection>
   );

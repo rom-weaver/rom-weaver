@@ -328,6 +328,7 @@ const ApplyDropAfter = ({
   if (!workflowEmpty) return null;
   return (
     <SampleTutorialStart
+      documentation={{ href: "/docs/apply-rom-patches", label: localizer.message("ui.hero.applyGuide") }}
       downloadHref={downloadHref}
       downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}
       downloadName={FIRST_WEAVE_ASSET}
@@ -2177,7 +2178,6 @@ function ApplyWorkflowFormView({
           line1: "ui.hero.thesis",
           line2: "ui.hero.thesis2",
           description: "ui.hero.applyDescription",
-          guide: { href: "/docs/apply-rom-patches", label: "ui.hero.applyGuide" },
         }}
         info={
           <ul className="info-list">

@@ -131,6 +131,7 @@ const InfoPopover = ({ title, children }: { title?: string; children: ReactNode 
  */
 const DropZone = ({
   lead,
+  heroAction,
   label,
   labelCoarse,
   hint,
@@ -151,6 +152,7 @@ const DropZone = ({
 }: {
   /** Intro content rendered inside the hero drop surface. */
   lead?: ReactNode;
+  heroAction?: ReactNode;
   label: ReactNode;
   /** Touch-device label shown instead of `label` on coarse pointers. */
   labelCoarse?: ReactNode;
@@ -227,13 +229,10 @@ const DropZone = ({
     ) : (
       <span>{label}</span>
     );
-  // In the hero the glyph is the shuttle bead that rides the fell line (no
-  // label - that drops below); in the compact add-row it is the plain button
-  // with its label inline.
   const mainNode = (
     <span className={join("main", big ? "bead" : "btnish")}>
       {reading ? <span aria-hidden="true" className="spinner" /> : <Upload aria-hidden="true" />}
-      {big ? null : renderLabelBody()}
+      {big ? heroAction : renderLabelBody()}
     </span>
   );
   const formatsNode =

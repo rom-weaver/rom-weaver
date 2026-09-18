@@ -215,7 +215,8 @@ describe("apply workflow view - empty bench", () => {
     // 0x01 hero with the stable unified-input id
     expect(container.querySelector("section.step.is-input.is-empty")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
-    expect(container.querySelector(".drop.hero .formats .fmt")).toBeTruthy();
+    expect(container.querySelector(".drop.hero .formats")).toBeNull();
+    expect(container.querySelector(".hero-formats-help .info-support")).toBeTruthy();
     const chip = container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement;
     expect(chip.textContent).toContain("New here?");
     fireEvent.click(chip);

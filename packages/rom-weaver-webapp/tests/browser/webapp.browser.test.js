@@ -452,22 +452,32 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
   await page.viewport(1280, 900);
 });
 
-test("the New here? beacon stays compact and its popover carries every start action", async () => {
+test("the New here? control has a touch target and its popover carries every start action", async () => {
   await page.viewport(1024, 900);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
   const chip = document.querySelector(".sample-tutorial-start-chip");
   const chipBox = chip.getBoundingClientRect();
-  expect(chipBox.height).toBeLessThan(40);
-  // The chip rides the hero's lower corner instead of spending a band below it.
+  expect(chipBox.height).toBeGreaterThanOrEqual(44);
+  expect(chipBox.height).toBeLessThanOrEqual(48);
   const hero = document.querySelector(".drop.hero").getBoundingClientRect();
-  expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
+  expect(chipBox.top).toBeGreaterThanOrEqual(hero.bottom);
   // Closed popover is not mounted at all - it must stay out of the prerendered shell.
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(5);
+  expect(
+    document.querySelector(".sample-tutorial-start-dismiss")?.classList.contains("sample-tutorial-start-action"),
+  ).toBe(true);
+  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe("/docs/apply-rom-patches");
+  expect(document.querySelector(".sample-tutorial-start-dismiss-copy > span")?.textContent).toBe(
+    "Don't show this again",
+  );
+  expect(document.querySelector(".sample-tutorial-start-dismiss-copy > small")?.textContent).toBe(
+    "Re-enable in Settings",
+  );
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
     "/apply-patch?guide=apply",
   );
@@ -483,6 +493,16 @@ test("the New here? beacon stays compact and its popover carries every start act
     .poll(() => document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().right)
     .toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+
+  const summary = document.querySelector(".hero-formats-help > summary");
+  const before = summary.getBoundingClientRect();
+  summary.click();
+  await expect.poll(() => document.querySelector(".hero-formats-help").open).toBe(true);
+  const after = summary.getBoundingClientRect();
+  expect(after.top).toBeCloseTo(before.top, 0);
+  expect(after.left).toBeCloseTo(before.left, 0);
+  summary.click();
+  if (!document.querySelector(".sample-tutorial-start-pop")) chip.click();
 
   // Dismissal hides the beacon in place.
   document.querySelector(".sample-tutorial-start-dismiss").click();

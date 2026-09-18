@@ -8,6 +8,24 @@
   padding-block-end: clamp(8px, 2.9vw - 8px, 16px);
 }
 
+.rw-app .page-footer {
+  padding: 20px var(--pad);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  text-align: center;
+  border-block-start: 1px solid var(--seam-soft);
+}
+
+@media (max-width: 720px) and (max-height: 800px) {
+  .rw-app .workbench:has(.simple-hero.is-empty) {
+    padding-block-end: 2px;
+  }
+  .rw-app .workbench:has(.simple-hero.is-empty) + .page-footer {
+    padding-block: 6px;
+  }
+}
+
 /* Form sections */
 .rw-app .panel {
   overflow: clip;
@@ -425,13 +443,21 @@
 .rw-app .save-editor-stash {
   display: grid;
   gap: var(--sp-s);
+  padding: var(--sp-m);
   margin-block-start: var(--sp-l);
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
 }
 .rw-app .save-editor-stash-title {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--ink-3);
+  color: var(--ink);
+}
+.rw-app .save-editor-stash .save-editor-empty {
+  line-height: 1.5;
+  color: var(--ink-2);
 }
 .rw-app .save-editor-empty,
 .rw-app .save-editor-description {

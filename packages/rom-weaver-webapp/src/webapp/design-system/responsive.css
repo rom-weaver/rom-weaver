@@ -1,22 +1,8 @@
 /* Viewport breakpoints only handle structural changes. */
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
-  /* No banner treatment here: the lead only ever renders inside `.drop.hero`, which
-     strips the border/background in dropzone.css. Under plain imports specificity
-     kept that reset winning, so a boxed rule at this weight was dead; layer order
-     would hand it the win instead and box the headline. */
-  .rw-app .hero-lead .lead-title {
-    font-size: clamp(1.5rem, 6.8vw, 2rem);
-    line-height: 1.2;
-  }
   .rw-app .hero-lead .lead-sub {
     padding: 1px 7px;
     font-size: 0.65rem;
-  }
-  /* The lead keeps only its side padding here: the hero's own row gap sets the
-     distance to the bead, so the headline sits as far above the bead as the
-     drop instruction sits below it. */
-  .rw-app .drop.hero > .hero-lead {
-    padding: 0 8px;
   }
   :root:has(.rw-app) {
     scrollbar-gutter: auto;
@@ -116,12 +102,6 @@
   }
   .rw-app .cards > .prog-panel {
     border-radius: var(--r-s);
-  }
-  .rw-app .step.is-input.is-empty .drop.hero {
-    padding-inline: 0;
-  }
-  .rw-app .drop.hero {
-    gap: clamp(14px, calc(5.3svh - 16px), 28px);
   }
   .rw-app .drop.hero .drop-base {
     gap: clamp(12px, calc(2.9svh - 4px), 20px);

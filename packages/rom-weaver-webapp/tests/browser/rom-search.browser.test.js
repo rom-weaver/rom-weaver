@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import "../../src/webapp/design-system/index.css";
 // deferred.css ships lazily in production (webapp.ts loads it at boot); the
@@ -118,12 +118,12 @@ test("one box takes a checksum or a name, with no platform to choose first", asy
   expect(getInput().placeholder).toBe("Game, system, or checksum");
   expect(getInput().disabled).toBe(false);
   expect(document.querySelector("select")).toBeNull();
+  expect(getForm().querySelector('button[type="submit"]')).toBeNull();
 });
 
 test("typing searches after a pause without submitting the form", async () => {
   searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION] });
-  // The idle box says so, then reports the search the moment typing pauses.
-  expect(getStatus().textContent).toContain("as you type");
+  expect(getStatus()).toBeNull();
   expect(getInput().enterKeyHint).toBe("search");
   type(getInput(), "metroid gba");
   expect(getStatus().textContent).toBe("Searching…");
@@ -133,6 +133,22 @@ test("typing searches after a pause without submitting the form", async () => {
   expect(searchExpectedRomTitles).toHaveBeenCalledExactlyOnceWith("metroid gba", expect.anything());
   expect(getResults()[0]).toContain("Metroid Fusion");
   expect(getInput().disabled).toBe(false);
+});
+
+test("Enter retries the same query after a failed automatic search", async () => {
+  searchExpectedRomTitles
+    .mockRejectedValueOnce(new Error("Lookup unavailable"))
+    .mockResolvedValueOnce({ status: "ok", titles: [FUSION] });
+  type(getInput(), "metroid");
+  await waitFor(() => getError() !== null);
+  expect(getError().textContent).toContain("Lookup unavailable");
+
+  getInput().focus();
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => getResults().length === 1);
+  expect(searchExpectedRomTitles).toHaveBeenCalledTimes(2);
+  expect(searchExpectedRomTitles.mock.calls[1][0]).toBe("metroid");
+  expect(getError()).toBeNull();
 });
 
 test("a name search lists titles across every platform", async () => {

@@ -1,4 +1,3 @@
-import { Search } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
@@ -333,15 +332,9 @@ const RomSearch = ({
   const visibleTitleCount = titlePage.titles === lookup.titles ? titlePage.count : 50;
   const inputId = `${idPrefix}-search`;
   const compact = variant === "compact";
-  // The button keeps its name while a typed query waits out the pause: pressing
-  // it then is how the user skips the wait, so it MUST still read as Search.
   const searching = lookup.busy || lookup.pending;
   const searchingLabel = lookup.stage || localizer.message("ui.identify.searching");
-  const submitLabel = lookup.busy
-    ? searchingLabel
-    : localizer.message(compact ? "ui.identify.searchAgain" : "ui.identify.search");
   const chosen = lookup.title;
-  const hasResults = lookup.titles.length > 0 || lookup.versions.length > 0;
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   useKeepInputVisible(inputRef, formRef);
@@ -352,6 +345,7 @@ const RomSearch = ({
       id={`${inputId}-form`}
       onSubmit={(event) => {
         event.preventDefault();
+        if (lookup.busy) return;
         void lookup.search();
       }}
       ref={formRef}
@@ -375,27 +369,10 @@ const RomSearch = ({
           type="text"
           value={lookup.text}
         />
-        {/* A plain primary button, not the run button: this is one control in
-            a row, not the step's action, so it MUST NOT take the row's width. */}
-        <button
-          aria-label={submitLabel}
-          className={compact ? "btn identify-search-submit" : "btn primary identify-search-submit"}
-          disabled={lookup.busy || !lookup.text.trim()}
-          type="submit"
-        >
-          <Search aria-hidden="true" />
-          {/* A phone keeps only the glyph (phone-dock.css); the name stays on the button. */}
-          <span className="identify-search-submit-text">{submitLabel}</span>
-        </button>
       </div>
-      {/* The status line is what tells a typist the box searches on its own:
-          the hint while idle, the accepted checksum lengths while a hex string
-          is still short of one, then the live stage the moment the pause ends. */}
-      {searching || !(lookup.error || hasResults) ? (
+      {searching || (lookup.incompleteHash && !lookup.error) ? (
         <p aria-live="polite" className="identify-search-status" role="status">
-          {searching
-            ? searchingLabel
-            : localizer.message(lookup.incompleteHash ? "ui.identify.hashInvalid" : "ui.identify.searchAsYouType")}
+          {searching ? searchingLabel : localizer.message("ui.identify.hashInvalid")}
         </p>
       ) : null}
       {lookup.error ? (

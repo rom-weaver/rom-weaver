@@ -419,8 +419,8 @@
 }
 .rw-app .hero-formats-help > summary {
   width: fit-content;
-  min-height: 44px;
-  padding: 12px 8px;
+  min-height: 24px;
+  padding: 3px 4px;
   margin-inline: auto;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -562,6 +562,105 @@
   min-height: 0;
 }
 
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .drop.hero > .hero-lead {
+    padding: 0 8px;
+  }
+  .rw-app .hero-lead .lead-title {
+    font-size: clamp(1.5rem, 6.8vw, 2rem);
+    line-height: 1.2;
+  }
+  .rw-app .step.is-input.is-empty .drop.hero {
+    padding-inline: 0;
+  }
+  .rw-app .drop.hero {
+    gap: clamp(14px, calc(5.3svh - 16px), 28px);
+  }
+}
+
+/* The file picker and drop gesture MUST share one surface. */
+.rw-app .step.is-input.is-empty.simple-hero .drop.hero {
+  gap: 28px;
+  min-height: 340px;
+  padding: 40px 24px;
+  background: var(--plate);
+  border-style: dashed;
+}
+.rw-app .simple-hero .hero-lead .lead-title {
+  font-size: clamp(1.6rem, 3vw, 2.3rem);
+  line-height: 1.2;
+}
+.rw-app .simple-hero .hero-lead .lead-description {
+  max-width: 52ch;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.rw-app .simple-hero .drop.hero .fell {
+  justify-content: center;
+  padding: 0;
+}
+.rw-app .simple-hero .drop.hero .fell-thread {
+  display: none;
+}
+.rw-app .simple-hero .drop.hero .main.bead {
+  gap: 10px;
+  width: auto;
+  min-height: 48px;
+  aspect-ratio: auto;
+  padding: 12px 24px;
+  color: var(--thread-ink);
+  background: var(--thread);
+  border-radius: var(--r-m);
+  box-shadow: none;
+  transform: none;
+}
+.rw-app .simple-hero .drop.hero .main.bead::before {
+  display: none;
+}
+.rw-app .simple-hero .drop.hero:focus-within .main.bead {
+  outline: 3px solid var(--thread-text);
+  outline-offset: 4px;
+}
+.rw-app .simple-hero .drop.hero:active .main.bead {
+  background: color-mix(in oklab, var(--thread) 85%, var(--ink));
+}
+@media (hover: hover) {
+  .rw-app .simple-hero .drop.hero:hover .main.bead {
+    background: color-mix(in oklab, var(--thread) 85%, var(--ink));
+  }
+}
+.rw-app .simple-hero .drop.hero .main.bead svg {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+  transform: none;
+}
+.rw-app .simple-hero .drop.hero .drop-belowlabel {
+  font-size: 0.88rem;
+  font-weight: 400;
+}
+.rw-app .simple-hero .hero-guide {
+  display: block;
+  width: fit-content;
+  padding: 12px 8px;
+  font-size: 0.8rem;
+  color: var(--thread-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.rw-app .simple-hero .hero-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  align-items: start;
+  justify-content: center;
+  margin-block-start: 16px;
+}
+.rw-app .simple-hero .hero-formats-help {
+  max-width: 100%;
+  padding: 0;
+}
+
 /* Input step */
 .rw-app .step.is-input .drop.hero {
   background: var(--warp-lines) var(--empty-fill);
@@ -644,14 +743,13 @@
 .rw-app .step.is-input.is-empty .step-body {
   padding-block-end: 0;
 }
-/* The New here? beacon: a small dismissible chip riding the hero's lower-right
-   corner; its popover carries the guided runs and the practice download. The
-   wrapper spends no flow height - the chip lifts up into the hero above it. */
+/* The tutorial popover MUST stay outside the file-picker label. */
 .rw-app .first-weave-demo {
   position: relative;
-  display: flex;
-  justify-content: flex-end;
-  height: 0;
+  z-index: 3;
+}
+.rw-app .step-body:has(> .first-weave-demo) {
+  position: relative;
 }
 /* Pre-hydration twin of the index.html head rule: the prerendered shell always
    carries the chip, so a visitor who disabled onboarding must not see it while
@@ -661,62 +759,122 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   display: none;
 }
 .rw-app .sample-tutorial-start-chip {
-  position: absolute;
-  /* Clear of the hero's corner so the pulse halo renders in full. */
-  right: calc(var(--sp-m) + 10px);
-  bottom: calc(var(--sp-m) + 10px);
+  position: relative;
   z-index: 3;
   display: inline-flex;
-  gap: 7px;
+  gap: 5px;
   align-items: center;
-  padding: 6px 14px 6px 8px;
+  min-height: 44px;
+  padding: 8px 4px;
   font-size: 0.82rem;
-  font-weight: 650;
-  color: var(--thread-ink);
+  font-weight: 400;
+  color: var(--ink-2);
   cursor: pointer;
-  background: var(--thread-fill);
-  border: 1px solid var(--thread-fill);
-  border-radius: 999px;
-  transition: background 0.15s var(--ease);
+  background: transparent;
+  border: 0;
+}
+.rw-app .sample-tutorial-start-bell {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--thread-text);
+  transform-origin: 50% 15%;
+  animation: tutorial-bell-shake 0.9s ease-in-out 1;
+}
+.rw-app .simple-hero .step-body:has(> .first-weave-demo) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+}
+.rw-app .simple-hero .step-body:has(> .first-weave-demo) > * {
+  grid-column: 1 / -1;
+}
+.rw-app .simple-hero .step-body > .first-weave-demo,
+.rw-app .simple-hero .step-body:has(> .first-weave-demo) > .hero-help {
+  order: 1;
+  max-width: 100%;
+  margin-block-start: 4px;
+}
+.rw-app .simple-hero .step-body > .first-weave-demo {
+  grid-column: 1;
+  justify-self: end;
+}
+.rw-app .simple-hero .step-body:has(> .first-weave-demo) > .hero-help {
+  display: block;
+  grid-column: 2;
+  min-width: 0;
+  padding-block-start: 10px;
+}
+.rw-app .step-body:has(> .first-weave-demo) .hero-formats-help > summary {
+  margin-inline: 0;
+}
+.rw-app .step-body:has(> .first-weave-demo) .hero-formats-help > .info-support {
+  width: calc(200% + 12px);
+  margin-inline-start: calc(-100% - 12px);
+}
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .sample-tutorial-start-bell {
+    width: 14px;
+    height: 14px;
+  }
+}
+@media (max-width: 720px) and (max-height: 800px) {
+  .rw-app .simple-hero .drop.hero > .hero-lead {
+    gap: 6px;
+  }
+  .rw-app .step.is-input.is-empty.simple-hero .drop.hero {
+    gap: 16px;
+    min-height: max(300px, calc(100vh - var(--hero-chrome)));
+    padding: 16px;
+  }
+  .rw-app .simple-hero .hero-lead .lead-description {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .rw-app .simple-hero .hero-help {
+    margin-block-start: 4px;
+  }
+  .rw-app .workflow-body:has(.simple-hero.is-empty) .ghost-steps {
+    margin-block-start: 4px;
+  }
+  .rw-app .workflow-body:has(.simple-hero.is-empty) .ghost-next {
+    padding-block: 4px;
+  }
+}
+@keyframes tutorial-bell-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(18deg);
+  }
+  30% {
+    transform: rotate(-15deg);
+  }
+  45% {
+    transform: rotate(11deg);
+  }
+  60% {
+    transform: rotate(-7deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .sample-tutorial-start-bell {
+    animation: none;
+  }
 }
 @media (hover: hover) {
   .rw-app .sample-tutorial-start-chip:hover {
-    background: color-mix(in oklab, var(--thread-fill) 88%, #fff);
+    color: var(--ink);
   }
 }
 .rw-app .sample-tutorial-start-chip:active {
-  background: color-mix(in oklab, var(--thread-fill) 88%, #fff);
-}
-/* The chip breathes until it is engaged, so a first visit notices it. The
-   halo is a ring pseudo-element animated on scale/opacity rather than a
-   box-shadow spread, so the pulse runs on the compositor (Lighthouse's
-   non-composited-animations audit). */
-.rw-app .sample-tutorial-start-chip[aria-expanded="false"]::after {
-  position: absolute;
-  inset: -3px;
-  /* The ring hit-tests as part of the button and rides the scale animation -
-     without this, mid-pulse it steals hero-dropzone clicks near the chip. */
-  pointer-events: none;
-  content: "";
-  border: 2px solid color-mix(in oklab, var(--thread) 45%, transparent);
-  border-radius: 999px;
-  animation: onboarding-beacon-pulse 2.6s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rw-app .sample-tutorial-start-chip[aria-expanded="false"]::after {
-    content: none;
-  }
-}
-@keyframes onboarding-beacon-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    scale: 1;
-  }
-  60% {
-    opacity: 0;
-    scale: 1.6;
-  }
+  color: var(--ink);
 }
 /* A drag gesture owns the hero - the chip yields until the files land. */
 .rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip {
@@ -725,8 +883,8 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .sample-tutorial-start-pop {
   position: absolute;
-  right: calc(var(--sp-m) + 10px);
-  bottom: calc(var(--sp-m) + 54px);
+  bottom: calc(100% + 8px);
+  left: 0;
   z-index: 4;
   display: grid;
   gap: var(--sp-2xs);
@@ -739,6 +897,14 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .sample-tutorial-start-pop[hidden] {
   display: none;
+}
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .sample-tutorial-start-pop {
+    top: auto;
+    bottom: calc(100% + 8px);
+    width: min(280px, calc(100vw - 96px));
+    min-width: 0;
+  }
 }
 .rw-app .sample-tutorial-start-head {
   padding: var(--sp-2xs) var(--sp-s);
@@ -784,47 +950,22 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   display: inline-flex;
   flex: none;
 }
-/* The quest marker: a bold ! on a round badge, the way a game flags the NPC
-   with something to offer. */
-.rw-app .sample-tutorial-start-beacon {
-  position: relative;
-  display: inline-grid;
-  flex: none;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  font-family: var(--mono);
-  font-size: 0.88rem;
-  font-weight: 850;
-  line-height: 1;
-  color: var(--thread-text);
-  background: color-mix(in oklab, var(--thread) 12%, var(--plate));
-  border: 1px solid color-mix(in oklab, var(--thread) 65%, var(--seam-strong));
-  border-radius: 50%;
-}
 .rw-app .sample-tutorial-start [role="status"] {
   padding-inline: var(--sp-s);
   font-size: 0.72rem;
   color: var(--fault);
 }
 .rw-app .sample-tutorial-start-dismiss {
-  padding: var(--sp-xs) var(--sp-s) var(--sp-2xs);
-  margin-top: var(--sp-2xs);
-  font-size: 0.7rem;
-  color: var(--ink-4);
-  text-align: center;
-  cursor: pointer;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--seam-soft);
+  min-height: 44px;
 }
-@media (hover: hover) {
-  .rw-app .sample-tutorial-start-dismiss:hover {
-    color: var(--ink-2);
-  }
+.rw-app .sample-tutorial-start-dismiss-copy {
+  display: grid;
+  gap: 3px;
 }
-.rw-app .sample-tutorial-start-dismiss:active {
-  color: var(--ink-2);
+.rw-app .sample-tutorial-start-dismiss-copy small {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--ink-3);
 }
 
 /* Guided samples trace the same numbered loom stages as the workbench. The

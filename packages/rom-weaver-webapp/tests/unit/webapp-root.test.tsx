@@ -154,6 +154,15 @@ describe("selectViewWithTransition", () => {
 });
 
 describe("the workbench shell", () => {
+  it.each(["patcher", "home", "docs"] as const)("shows one shared privacy footer on %s", async (currentView) => {
+    const { container } = await renderRoot({ currentView });
+    const footers = container.querySelectorAll("footer.page-footer");
+    expect(footers).toHaveLength(1);
+    expect(footers[0]?.textContent).toBe("On-device. Offline support. No telemetry.");
+    expect(container.querySelector("main footer.page-footer")).toBeNull();
+    expect(container.querySelector(".hero-privacy")).toBeNull();
+  });
+
   it("mounts the requested workflow panel and names the page for it", async () => {
     const { container } = await renderRoot();
 
@@ -168,6 +177,7 @@ describe("the workbench shell", () => {
     const { container } = await renderRoot({ notFound: true });
 
     expect(container.querySelector(".not-found-page")).not.toBeNull();
+    expect(container.querySelector("footer.page-footer")).not.toBeNull();
     expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-patch");
     expect(container.querySelector("#panel-patcher")).toBeNull();
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");

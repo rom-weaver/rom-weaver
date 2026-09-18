@@ -12,7 +12,7 @@ afterEach(() => {
   container?.remove();
 });
 
-test.each([393, 1280])("the ticker fits a %ipx viewport and keeps moving during interaction", async (width) => {
+test.each([393, 1280])("the simple hero fits a %ipx viewport and discloses its formats", async (width) => {
   await page.viewport(width, 900);
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -29,22 +29,18 @@ test.each([393, 1280])("the ticker fits a %ipx viewport and keeps moving during 
       }),
     ),
   );
-  await expect.poll(() => container.querySelector(".formats")).toBeTruthy();
-  const formats = container.querySelector(".formats");
-  const track = container.querySelector(".formats-track");
-  const sets = container.querySelectorAll(".formats-set");
-  expect(formats.getBoundingClientRect().width).toBeLessThanOrEqual(width);
-  expect(container.querySelectorAll(".formats-lane")).toHaveLength(2);
-  expect(sets[0].offsetWidth).toBe(sets[1].offsetWidth);
-  expect(getComputedStyle(track).animationName).toBe("formats-ticker");
-  expect(getComputedStyle(track).animationDuration).toBe("120s");
-  expect(getComputedStyle(container.querySelectorAll(".formats-track")[1]).animationDirection).toBe("reverse");
-  expect(getComputedStyle(track).animationPlayState).toBe("running");
-  container.querySelector("input[type=file]").focus();
-  expect(getComputedStyle(track).animationPlayState).toBe("running");
-  container.querySelector(".drop.hero").classList.add("dragging");
-  expect(getComputedStyle(track).animationPlayState).toBe("running");
+  await expect.poll(() => container.querySelector(".drop.hero")).toBeTruthy();
+  const hero = container.querySelector(".drop.hero");
+  expect(hero.getBoundingClientRect().width).toBeLessThanOrEqual(width);
+  expect(container.querySelector(".formats")).toBeNull();
+  expect(container.querySelector(".main").textContent).toContain("Add files");
+  const input = container.querySelector("input[type=file]");
+  input.focus();
+  expect(document.activeElement).toBe(input);
   const disclosure = container.querySelector("details");
   expect(disclosure.closest("label")).toBeNull();
+  expect(disclosure.open).toBe(false);
+  await page.getByText("Supported formats", { exact: true }).click();
+  expect(disclosure.open).toBe(true);
   expect(disclosure.textContent).toContain("nes, sfc");
 });

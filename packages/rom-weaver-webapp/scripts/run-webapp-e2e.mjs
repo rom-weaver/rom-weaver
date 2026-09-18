@@ -115,7 +115,7 @@ export const shouldRejectUnauthorized = (url) => {
   }
 };
 
-const waitForServer = (url, timeoutMs = 30_000) =>
+const waitForServer = (url, timeoutMs = 60_000) =>
   new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
     const attempt = () => {

@@ -32,7 +32,7 @@
 /* ─── hero ─── */
 .rw-app .home-hero {
   display: grid;
-  grid-template-areas: "head" "loom" "body";
+  grid-template-areas: "head" "body" "loom";
   gap: var(--sp-xl);
   align-items: center;
   padding-block: var(--gutter) clamp(40px, 6vw, 72px);
@@ -46,8 +46,8 @@
   gap: var(--sp-l);
 }
 .rw-app .home-hero h1 {
-  margin-top: var(--sp-s);
-  font-size: clamp(30px, 6.4vw, 72px);
+  margin-top: 10px;
+  font-size: clamp(30px, 4.5vw, 52px);
   font-weight: 800;
   line-height: 1.02;
 }

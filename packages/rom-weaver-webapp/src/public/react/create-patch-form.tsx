@@ -1242,6 +1242,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             </Notice>
           ) : null}
           <SampleTutorialStart
+            documentation={{ href: "/docs/create-rom-patches", label: localizer.message("ui.hero.createGuide") }}
             downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
             downloadName={CREATE_SAMPLE_ARCHIVE}
             downloadLabel="Download the sample ROMs"

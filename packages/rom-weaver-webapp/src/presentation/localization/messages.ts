@@ -784,7 +784,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "Available actions" }),
   "ui.tutorial.back": msg({ id: "ui.tutorial.back", message: "Back" }),
   "ui.tutorial.continue": msg({ id: "ui.tutorial.continue", message: "Continue" }),
-  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Don't show this again (re-enable in Settings)" }),
+  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Don't show this again" }),
+  "ui.tutorial.reenable": msg({ id: "ui.tutorial.reenable", message: "Re-enable in Settings" }),
   "ui.tutorial.done": msg({ id: "ui.tutorial.done", message: "Done" }),
   "ui.tutorial.endHint": msg({
     id: "ui.tutorial.endHint",
@@ -1020,7 +1021,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.applyDescription": msg({
     id: "ui.hero.applyDescription",
-    message: "Add a ROM with BPS, IPS, UPS, xdelta, or other patches. Download the patched ROM or a reusable bundle.",
+    message:
+      "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle.",
   }),
   "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
   "ui.hero.createDescription": msg({
@@ -1058,9 +1060,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.createThesis2",
     message: "Share your changes.",
   }),
-  "ui.hero.local": msg({
-    id: "ui.hero.local",
-    message: "Runs in your browser. Your files stay on this device.",
+  "ui.footer.local": msg({
+    id: "ui.footer.local",
+    message: "On-device. Offline support. No telemetry.",
   }),
   "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply a patch." }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "Change how you play." }),

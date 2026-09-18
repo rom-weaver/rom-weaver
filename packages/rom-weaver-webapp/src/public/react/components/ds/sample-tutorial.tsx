@@ -1,5 +1,7 @@
 import {
   Archive,
+  Bell,
+  BookOpen,
   Download,
   EllipsisVertical,
   Gamepad2,
@@ -259,6 +261,7 @@ const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, prefer:
 };
 
 const SampleTutorialStart = ({
+  documentation,
   downloadHref,
   downloadLabel,
   downloadName,
@@ -273,6 +276,7 @@ const SampleTutorialStart = ({
   startAction = "apply",
   secondaryAction = "package",
 }: {
+  documentation?: { href: string; label: string };
   downloadHref: string;
   downloadLabel: string;
   downloadName: string;
@@ -340,15 +344,13 @@ const SampleTutorialStart = ({
         aria-expanded={open}
         className="sample-tutorial-start-chip"
         onClick={() => {
-          startLogger.trace("onboarding beacon toggled", { open: !open });
+          startLogger.trace("tutorial help toggled", { open: !open });
           setOpen((current) => !current);
         }}
         ref={chipRef}
         type="button"
       >
-        <span aria-hidden="true" className="sample-tutorial-start-beacon">
-          !
-        </span>
+        <Bell aria-hidden="true" className="sample-tutorial-start-bell" />
         {localizer.message("ui.tutorial.new")}
       </button>
       {/* Mounted only while open: the closed popover would otherwise ship in
@@ -392,13 +394,19 @@ const SampleTutorialStart = ({
               {loading ? localizer.message("ui.tutorial.loading") : secondaryLabel}
             </a>
           ) : null}
+          {documentation ? (
+            <a className="sample-tutorial-start-action sample-tutorial-start-guide" href={documentation.href}>
+              <BookOpen aria-hidden="true" />
+              {documentation.label}
+            </a>
+          ) : null}
           <a className="sample-tutorial-start-action sample-tutorial-start-download" download href={href}>
             <Download aria-hidden="true" />
             {downloadLabel}
           </a>
           {error ? <span role="status">{error}</span> : null}
           <button
-            className="sample-tutorial-start-dismiss"
+            className="sample-tutorial-start-action sample-tutorial-start-dismiss"
             onClick={() => {
               startLogger.debug("onboarding beacon dismissed");
               setOpen(false);
@@ -407,7 +415,11 @@ const SampleTutorialStart = ({
             }}
             type="button"
           >
-            {localizer.message("ui.tutorial.dismiss")}
+            <X aria-hidden="true" />
+            <span className="sample-tutorial-start-dismiss-copy">
+              <span>{localizer.message("ui.tutorial.dismiss")}</span>
+              <small>{localizer.message("ui.tutorial.reenable")}</small>
+            </span>
           </button>
         </div>
       ) : null}

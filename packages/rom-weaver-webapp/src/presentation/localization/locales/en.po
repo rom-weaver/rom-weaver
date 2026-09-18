@@ -321,7 +321,7 @@ msgstr "Add a ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
-msgstr "Add a ROM with BPS, IPS, UPS, xdelta, or other patches. Download the patched ROM or a reusable bundle."
+msgstr "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -481,7 +481,7 @@ msgstr "Apply tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.lede"
-msgstr "Apply translations, combine patches, and create patches of your own. Work with ROMs and disc images, compressed or raw, in your browser or terminal. Save your patch order and checksums in a reusable bundle so others can apply the same changes."
+msgstr "Apply a patch, create your own, or test a ROM. Your files stay on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1171,7 +1171,12 @@ msgstr "Does not match the ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.dismiss"
-msgstr "Don't show this again (re-enable in Settings)"
+msgstr "Don't show this again"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.reenable"
+msgstr "Re-enable in Settings"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1296,7 +1301,7 @@ msgstr "Edit patch position, currently {position} of {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
+msgstr "Edit a game save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1756,7 +1761,7 @@ msgstr "Keep header: the patched output carries the ROM header."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
-msgstr "Keep the game."
+msgstr "Trim a ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1766,7 +1771,7 @@ msgstr "Keep these offline. Unticked databases are still downloaded on demand wh
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Know your ROM."
+msgstr "Identify a ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2825,8 +2830,8 @@ msgstr "RomWeaver is unpacking one tiny ROM and two patches, then checking what 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.local"
-msgstr "Runs in your browser. Your files stay on this device."
+msgid "ui.footer.local"
+msgstr "On-device. Offline support. No telemetry."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3436,7 +3441,7 @@ msgstr "Trim tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
-msgstr "Try your ROM."
+msgstr "Test a ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3470,7 +3475,7 @@ msgstr "Unchanged"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis"
-msgstr "Undo the patch."
+msgstr "Undo a PPF patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

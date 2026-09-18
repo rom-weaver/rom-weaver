@@ -321,7 +321,7 @@ msgstr "ROM hinzufügen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
-msgstr "Füge eine ROM mit BPS-, IPS-, UPS-, xdelta- oder anderen Patches hinzu. Lade die gepatchte ROM oder ein wiederverwendbares Bundle herunter."
+msgstr "Patche ROMs und Disc-Images mit einem oder mehreren Patches, Cheats oder einem Bundle. Öffne komprimierte Dateien direkt und lade das Ergebnis herunter oder teile ein wiederverwendbares Bundle."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -426,7 +426,7 @@ msgstr "Ein Patch anwenden"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Patches auf jede ROM anwenden, komprimiert oder unkomprimiert,"
+msgstr "Einen Patch anwenden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -481,7 +481,7 @@ msgstr "Anwenden-Tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.lede"
-msgstr "Wende Übersetzungen an, kombiniere Patches und erstelle eigene Patches. Arbeite mit ROMs und Disc-Images, komprimiert oder roh, im Browser oder im Terminal. Speichere Patch-Reihenfolge und Prüfsummen in einem wiederverwendbaren Bündel, damit andere dieselben Änderungen anwenden können."
+msgstr "Wende einen Patch an, erstelle einen eigenen oder teste eine ROM. Deine Dateien bleiben auf deinem Gerät."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1171,7 +1171,12 @@ msgstr "Stimmt nicht mit dem ROM überein"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.dismiss"
-msgstr "Nicht mehr anzeigen (in den Einstellungen wieder aktivieren)"
+msgstr "Nicht mehr anzeigen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.reenable"
+msgstr "In Einstellungen wieder aktivieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1296,7 +1301,7 @@ msgstr "Patch-Position bearbeiten, derzeit {position} von {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spielstand bearbeiten,"
+msgstr "Einen Spielstand bearbeiten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1756,7 +1761,7 @@ msgstr "Header behalten: Die gepatchte Ausgabe enthält den ROM-Header."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
-msgstr "Füllbytes und Junk-Blöcke aus ROM-Dumps entfernen,"
+msgstr "Eine ROM trimmen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1766,7 +1771,7 @@ msgstr "Diese offline vorhalten. Nicht angehakte Datenbanken werden weiterhin be
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Ordne eine ROM ihrem Spiel, ihrer Region, ihrer Revision und ihrem genauen Dump-Namen zu,"
+msgstr "Eine ROM identifizieren."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1881,7 +1886,7 @@ msgstr "und die Dateien fürs Archiv verkleinern."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createThesis"
-msgstr "Verwandle eine Original-ROM und ihre modifizierte Version, ob komprimiert oder unkomprimiert,"
+msgstr "Einen Patch erstellen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2825,8 +2830,8 @@ msgstr "RomWeaver entpackt ein kleines ROM und zwei Patches und prüft dann jede
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.local"
-msgstr "Alles lokal in deinem Browser. Deine Dateien verlassen nie deinen Rechner."
+msgid "ui.footer.local"
+msgstr "Lokal. Offline nutzbar. Keine Telemetrie."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3436,7 +3441,7 @@ msgstr "Trimmen-Tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
-msgstr "Eine gepatchte ROM im Emulator spielen, direkt im Browser,"
+msgstr "Eine ROM testen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3470,7 +3475,7 @@ msgstr "Unverändert"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis"
-msgstr "Eine gepatchte ROM auf den Original-Dump zurücksetzen,"
+msgstr "Einen PPF-Patch rückgängig machen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
