@@ -538,7 +538,7 @@ test("navigation Status keeps a plain label and opens the current Status view", 
   await expect
     .poll(() => document.querySelector(".log-dlg[open] #logpanel-status .sw-legend [data-current]"))
     .toBeTruthy();
-  expect(document.querySelector(".log-dlg #logpanel-status .sw-legend [data-current] .sw-chip")?.textContent).toContain(
+  expect(document.querySelector(".log-dlg #logpanel-status .sw-legend [data-current] .sw-legend-label")?.textContent).toContain(
     "Update available",
   );
 });

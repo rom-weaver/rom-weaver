@@ -593,6 +593,7 @@ describe("development offline status", () => {
     window.history.replaceState(null, "", "/?offline-layout=title&offline-state=disabled");
     const { container, called } = await renderRoot({ settingsDialogOpen: true });
     fireEvent.click(container.querySelector(".workflow-panel-head .panel-settings-btn") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
     await waitFor(() => expect(container.querySelector("#dev-offline-state")).not.toBeNull());
     const select = container.querySelector("#dev-offline-state") as HTMLSelectElement;
     const actual = container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw");

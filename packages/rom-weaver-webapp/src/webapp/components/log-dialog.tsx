@@ -457,7 +457,6 @@ const OfflineLegend = ({
                 }
                 state={state}
               />
-              <span className="sr-only">{localizer.message(RUNTIME_MESSAGES[state].label)}</span>
             </span>
             <div className="sw-legend-details">
               <span className="sw-legend-label">{localizer.message(RUNTIME_MESSAGES[state].label)}</span>
