@@ -553,45 +553,49 @@ Fixture description.
     "expands Docs from %s without marking a guide current",
     async (currentTab) => {
       render(docsShell("docs", currentTab));
-      const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLDetailsElement;
-      expect(disclosure.open).toBe(false);
+      const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
+      const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
       expect(disclosure.querySelector(".guide-nav")).toBeNull();
-      fireEvent.click(disclosure.querySelector("summary") as HTMLElement);
+      fireEvent.click(toggle);
       await vi.waitFor(() => expect(disclosure.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length));
       expect(disclosure.querySelector('a[aria-current="page"]')).toBeNull();
       fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-      const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLDetailsElement;
-      expect(phoneDisclosure.open).toBe(true);
-      fireEvent.click(phoneDisclosure.querySelector("summary") as HTMLElement);
-      await vi.waitFor(() => expect(disclosure.open).toBe(false));
-      expect(phoneDisclosure.open).toBe(false);
+      const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLElement;
+      const phoneToggle = phoneDisclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
+      expect(phoneToggle.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(phoneToggle);
+      await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
+      expect(phoneToggle.getAttribute("aria-expanded")).toBe("false");
     },
   );
 
   it("collapses the complete Docs group and shares the choice with the phone menu", async () => {
     renderDocsShell("docs/cli");
-    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLDetailsElement;
-    expect(disclosure.open).toBe(true);
-    fireEvent.click(disclosure.querySelector("summary") as HTMLElement);
-    await vi.waitFor(() => expect(disclosure.open).toBe(false));
+    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
+    const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(toggle);
+    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
     expect(document.querySelector(".side-nav #tab-docs")?.getAttribute("href")).toBe("/docs");
     fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-    const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLDetailsElement;
-    expect(phoneDisclosure.open).toBe(false);
-    fireEvent.click(phoneDisclosure.querySelector("summary") as HTMLElement);
-    await vi.waitFor(() => expect(phoneDisclosure.open).toBe(true));
-    expect(disclosure.open).toBe(true);
+    const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLElement;
+    const phoneToggle = phoneDisclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
+    expect(phoneToggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(phoneToggle);
+    await vi.waitFor(() => expect(phoneDisclosure.dataset.expanded).toBe("true"));
+    expect(disclosure.dataset.expanded).toBe("true");
   });
 
   it("opens Docs and the active shelf when the current guide changes", async () => {
     const { rerender } = renderDocsShell("docs/cli");
-    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLDetailsElement;
-    fireEvent.click(disclosure.querySelector("summary") as HTMLElement);
-    await vi.waitFor(() => expect(disclosure.open).toBe(false));
+    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
+    fireEvent.click(disclosure.querySelector(".nav-docs-toggle") as HTMLElement);
+    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
     rerender(docsShell("docs/cli"));
-    expect(disclosure.open).toBe(false);
+    expect(disclosure.dataset.expanded).toBe("false");
     rerender(docsShell("docs/apply-rom-patches"));
-    await vi.waitFor(() => expect(disclosure.open).toBe(true));
+    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("true"));
     const currentLink = document.querySelector('.side-nav .guide-nav a[aria-current="page"]');
     expect(currentLink?.getAttribute("href")).toBe("/docs/apply-rom-patches");
     expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true);

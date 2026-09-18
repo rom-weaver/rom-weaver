@@ -214,7 +214,10 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);
   // Docs is a named row rather than something behind a glyph.
-  expect(navRow("Docs")).toBeTruthy();
+  const docsLink = navRow("Docs");
+  expect(docsLink).toBeTruthy();
+  expect(docsLink.closest("summary")).toBeNull();
+  expect(document.querySelector(".nav-docs-toggle")?.getAttribute("aria-expanded")).toBe("false");
   expect(navRow("Home")).toBeTruthy();
 });
 

@@ -364,37 +364,52 @@
 .rw-app .nav-docs-entry {
   grid-column: 1 / -1;
 }
+.rw-app .nav-docs-disclosure {
+  inline-size: 100%;
+}
 .rw-app .nav-docs-summary {
   display: flex;
   align-items: center;
-  cursor: pointer;
-  list-style: none;
   border-radius: var(--r-s);
-}
-.rw-app .nav-docs-summary::-webkit-details-marker {
-  display: none;
 }
 .rw-app .nav-docs-summary .nav-row {
   flex: 1;
   min-inline-size: 0;
 }
-.rw-app .nav-docs-summary > svg {
+.rw-app .nav-docs-toggle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+}
+.rw-app .nav-docs-toggle > svg {
   flex: none;
   width: 18px;
   height: 18px;
-  margin-inline: 10px;
-  color: var(--ink-3);
   transform: rotate(-90deg);
 }
-.rw-app .nav-docs-disclosure[open] > .nav-docs-summary > svg {
+.rw-app .nav-docs-disclosure[data-expanded="true"] .nav-docs-toggle > svg {
   transform: none;
 }
 @media (hover: hover) {
   .rw-app .nav-docs-summary:hover {
     background: var(--well);
   }
+  .rw-app .nav-docs-toggle:hover {
+    background: var(--plate-2);
+  }
 }
 .rw-app .nav-docs-summary:active {
+  background: var(--plate-2);
+}
+.rw-app .nav-docs-toggle:active {
   background: var(--plate-2);
 }
 

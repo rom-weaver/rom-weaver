@@ -206,17 +206,21 @@ const NavRow = ({
     );
     if (!entry.children) return row;
     return (
-      <details
-        className="nav-docs-disclosure"
-        open={entry.expanded}
-        onToggle={(event) => entry.onToggle?.(event.currentTarget.open)}
-      >
-        <summary className="nav-docs-summary">
+      <div className="nav-docs-disclosure" data-expanded={entry.expanded ? "true" : "false"}>
+        <div className="nav-docs-summary">
           {row}
-          <ChevronDown aria-hidden="true" />
-        </summary>
-        {entry.children}
-      </details>
+          <button
+            aria-expanded={entry.expanded}
+            aria-label={`${entry.label} navigation`}
+            className="nav-docs-toggle"
+            onClick={() => entry.onToggle?.(!entry.expanded)}
+            type="button"
+          >
+            <ChevronDown aria-hidden="true" />
+          </button>
+        </div>
+        {entry.expanded ? entry.children : null}
+      </div>
     );
   }
   return (
