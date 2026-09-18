@@ -663,7 +663,7 @@
 
 /* Input step */
 .rw-app .step.is-input .drop.hero {
-  background: var(--warp-lines) var(--empty-fill);
+  background: var(--empty-fill);
   border: 1px solid var(--seam);
   border-radius: var(--r-l);
   transition:
@@ -671,22 +671,22 @@
     background 0.2s;
 }
 .rw-app .step.is-input .drop.hero:focus-visible {
-  background: var(--warp-lines) var(--empty-fill-hover);
+  background: var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }
 @media (hover: hover) {
   .rw-app .step.is-input .drop.hero:hover {
-    background: var(--warp-lines) var(--empty-fill-hover);
+    background: var(--empty-fill-hover);
     border-color: var(--empty-border-hover);
   }
 }
 .rw-app .step.is-input .drop.hero:active {
-  background: var(--warp-lines) var(--empty-fill-hover);
+  background: var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }
 .rw-app .step.is-input .drop:not(.hero) {
   padding: var(--sp-l);
-  background: var(--warp-lines) var(--empty-fill);
+  background: var(--empty-fill);
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
   transition:
@@ -694,17 +694,17 @@
     background 0.2s;
 }
 .rw-app .step.is-input .drop:not(.hero):focus-within {
-  background: var(--warp-lines) var(--empty-fill-hover);
+  background: var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }
 @media (hover: hover) {
   .rw-app .step.is-input .drop:not(.hero):hover {
-    background: var(--warp-lines) var(--empty-fill-hover);
+    background: var(--empty-fill-hover);
     border-color: var(--empty-border-hover);
   }
 }
 .rw-app .step.is-input .drop:not(.hero):active {
-  background: var(--warp-lines) var(--empty-fill-hover);
+  background: var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }
 .rw-app .step.is-input .drop:not(.hero) .main.btnish {
@@ -1373,7 +1373,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   white-space: nowrap;
   appearance: none;
   cursor: pointer;
-  background: var(--warp-lines) var(--empty-fill);
+  background: var(--empty-fill);
   border: 1px solid var(--seam);
   border-radius: var(--r-l);
   transition:
@@ -1383,19 +1383,19 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .needs-input:focus-visible {
   color: var(--ink-2);
-  background: var(--warp-lines) var(--empty-fill-hover);
+  background: var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }
 @media (hover: hover) {
   .rw-app .needs-input:hover {
     color: var(--ink-2);
-    background: var(--warp-lines) var(--empty-fill-hover);
+    background: var(--empty-fill-hover);
     border-color: var(--empty-border-hover);
   }
 }
 .rw-app .needs-input:active {
   color: var(--ink-2);
-  background: var(--warp-lines) var(--empty-fill-hover);
+  background: var(--empty-fill-hover);
   border-color: var(--empty-border-hover);
 }
 .rw-app .needs-input svg {
