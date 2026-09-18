@@ -16,6 +16,49 @@ type HomePageProps = {
   baseUrl: string;
 };
 
+const INSTALL_METHODS = [
+  { name: "npm", slug: "npm", command: "npm install --global rom-weaver" },
+  {
+    name: "Homebrew",
+    slug: "homebrew-macos-arm64intel-linux-arm64x86-64",
+    command: "brew install rom-weaver/tap/rom-weaver",
+  },
+  {
+    name: "Scoop",
+    slug: "scoop-windows",
+    command: "scoop bucket add rom-weaver https://github.com/rom-weaver/scoop-bucket\nscoop install rom-weaver",
+  },
+  {
+    name: "install.sh",
+    slug: "install-script-macos-linux",
+    command:
+      "curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh",
+  },
+  {
+    name: "install.ps1",
+    slug: "install-script-windows",
+    command: "irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex",
+  },
+  {
+    name: "cargo-binstall",
+    slug: "cargo-binstall",
+    command: "cargo binstall rom-weaver-cli\nrom-weaver man --install\nrom-weaver setup",
+  },
+  {
+    name: "mise",
+    slug: "mise",
+    command:
+      "mise use 'github:rom-weaver/rom-weaver[minimum_release_age=0s]'\nrom-weaver man --install\nrom-weaver setup",
+  },
+  {
+    name: "Cargo",
+    slug: "source-install",
+    command:
+      "git clone https://github.com/rom-weaver/rom-weaver.git\ncd rom-weaver\ncargo install --path crates/rom-weaver-cli --locked\nrom-weaver man --install\nrom-weaver setup",
+  },
+  { name: "Docker", slug: "run-in-docker", command: "docker run --rm ghcr.io/rom-weaver/rom-weaver-cli:latest --help" },
+];
+
 const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
   const localizer = useUiLocalizer();
   const route = (slug: string) => {
@@ -115,13 +158,20 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
       <section aria-labelledby="home-cli-title" className="home-wrap home-section home-cli" id="home-cli">
         <h2 id="home-cli-title">{localizer.message("ui.home.commandLine")}</h2>
         <p className="home-blurb">{localizer.message("ui.home.cliItem1")}</p>
-        <textarea
-          aria-label={localizer.message("ui.home.commandLine")}
-          className="home-install-code"
-          defaultValue="npm install --global rom-weaver"
-          readOnly
-          rows={1}
-        />
+        <div className="home-installs">
+          {INSTALL_METHODS.map((method) => (
+            <div className="home-install" key={method.name}>
+              <a href={`${route("docs")}/install#${method.slug}`}>{method.name}</a>
+              <textarea
+                aria-label={method.name}
+                className="home-install-code"
+                defaultValue={method.command}
+                readOnly
+                rows={method.command.split("\n").length}
+              />
+            </div>
+          ))}
+        </div>
         <div className="home-actions">
           <a className="btn ghost" href={`${route("docs")}/install`}>
             <Download aria-hidden="true" />

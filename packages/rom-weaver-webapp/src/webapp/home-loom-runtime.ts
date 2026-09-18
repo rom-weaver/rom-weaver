@@ -72,8 +72,6 @@ const readPalette = (): LoomPalette => ({
 
 const measure = (canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): LoomLayout => {
   const cssWidth = canvas.clientWidth || 560;
-  // A tall swatch beside the headline on desktop, a short band under it on
-  // phones so the hero still clears the fixed dock.
   const aspect = window.innerWidth < NARROW_MAX_WIDTH ? NARROW_ASPECT : WIDE_ASPECT;
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   const width = cssWidth;
