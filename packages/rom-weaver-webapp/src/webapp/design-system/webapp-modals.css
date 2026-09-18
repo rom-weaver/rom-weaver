@@ -516,16 +516,17 @@ html:has(.rw-modal) {
   border: 0;
 }
 
-/* Status seams span the same inset as their cards. */
+/* Idle stages use a quiet divider; woven and fault stages use the animated
+   status seam from workbench.css. */
 .rw-app .panel.workflow .step:not(.is-woven):not(.is-fault)::before,
 .rw-app .panel.workflow .step ~ .ghost-steps::before {
   position: absolute;
   inset-inline: 0;
   top: 0;
-  height: 3px;
+  height: 1px;
   pointer-events: none;
   content: "";
-  background: repeating-linear-gradient(-55deg, transparent 0 2px, var(--seam-strong) 2px 5px, transparent 5px 7px);
+  background: var(--seam-strong);
 }
 .rw-app .panel.workflow .ghost-steps {
   position: relative;
