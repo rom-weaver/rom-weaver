@@ -205,10 +205,9 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       link(token) {
         defaultRenderer.parser = this.parser;
         const linked = defaultRenderer.link(token);
-        const html = linked.replaceAll(DOCS_COPY_BUTTON_COMPACT, "");
-        return linked.includes(DOCS_COPY_BUTTON_COMPACT)
-          ? `<span class="docs-inline-code" data-docs-copy-container>${html}</span>`
-          : html;
+        const match = linked.match(/^<a([^>]*)><span class="docs-inline-code" data-docs-copy-container>([\s\S]*)<\/span><\/a>$/);
+        if (!match) return linked;
+        return `<span class="docs-inline-code" data-docs-copy-container><a${match[1]}>${match[2]}</a></span>`;
       },
       // Note markers are authored as Unicode superscripts so the Markdown still
       // reads on GitHub, but that glyph is a fixed half-height and hairline
