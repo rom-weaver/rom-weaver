@@ -320,11 +320,6 @@ msgstr "Añadir una ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyDescription"
-msgstr "Aplica uno o varios parches, trucos o un paquete a ROMs e imágenes de disco. Abre archivos comprimidos directamente y descarga el resultado o comparte un paquete reutilizable."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.testDescription"
 msgstr "Añade una ROM compatible, sin comprimir o en un archivo comprimido, para probar el juego en el emulador del navegador."
 
@@ -1180,11 +1175,6 @@ msgstr "No volver a mostrar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.reenable"
-msgstr "Reactivar en Ajustes"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.done"
 msgstr "Listo"
 
@@ -1580,6 +1570,11 @@ msgstr "Opciones de encabezado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.headeredRom"
+msgstr "ROM con cabecera"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.stripInfo"
 msgstr "Sin encabezado: la salida parcheada no tiene encabezado de ROM."
 
@@ -1587,6 +1582,11 @@ msgstr "Sin encabezado: la salida parcheada no tiene encabezado de ROM."
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.hideVariants"
 msgstr "Ocultar {count} {count, plural, one {variante más} other {variantes más}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hideChecksums"
+msgstr "Ocultar sumas de comprobación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2190,6 +2190,11 @@ msgstr "Activado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.local"
+msgstr "En tu dispositivo. Sin conexión. Sin telemetría."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.frontendsEyebrow"
 msgstr "Un motor, dos interfaces"
 
@@ -2435,6 +2440,11 @@ msgstr "Posición del parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyDescription"
+msgstr "Aplica uno o varios parches, trucos o un paquete a ROMs e imágenes de disco. Abre archivos comprimidos directamente y descarga el resultado o comparte un paquete reutilizable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.patchedFormat"
 msgstr "Parcheado: {format}"
 
@@ -2567,6 +2577,11 @@ msgstr "Vista previa del pull request"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality"
 msgstr "Calidad"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.reenable"
+msgstr "Reactivar en Ajustes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2835,11 +2850,6 @@ msgstr "RomWeaver descomprime una pequeña ROM y dos parches, y luego comprueba 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.footer.local"
-msgstr "En tu dispositivo. Sin conexión. Sin telemetría."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.rvzCodec"
 msgstr "RVZ"
 
@@ -2957,6 +2967,11 @@ msgstr "Mostrar {count} {count, plural, one {variante más} other {variantes má
 #: src/presentation/localization/messages.ts
 msgid "ui.output.showDetails"
 msgstr "Mostrar detalles de {label}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.showChecksums"
+msgstr "Mostrar sumas de comprobación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3499,6 +3514,11 @@ msgstr "Inesperados"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.unheaderedRom"
+msgstr "ROM sin cabecera"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unidentified"
 msgstr "Sin identificar"
 
@@ -3716,13 +3736,3 @@ msgstr "ZIP"
 #: src/presentation/localization/messages.ts
 msgid "settings.zipCodec"
 msgstr "Códec ZIP"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.headeredRom"
-msgstr "ROM con cabecera"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.unheaderedRom"
-msgstr "ROM sin cabecera"

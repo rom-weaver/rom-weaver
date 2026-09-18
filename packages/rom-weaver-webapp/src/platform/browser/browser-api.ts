@@ -131,7 +131,11 @@ const identifyRom = async (
     identifyAllRomEntries: true,
   });
   try {
-    const candidates: ParsedIdentifyCandidate[] = result.assets.map((asset) => {
+    // Disc sheets are metadata sidecars. They do not contain ROM bytes and the
+    // ingest result cannot calculate checksums for them, so showing one as a
+    // candidate creates an empty Checks drawer before the real track rows.
+    const romAssets = result.assets.filter((asset) => asset.kind !== "cue" && asset.kind !== "gdi");
+    const candidates: ParsedIdentifyCandidate[] = romAssets.map((asset) => {
       const identification = identifyUnavailable ? undefined : asset.identification;
       return {
         checksumVariants: asset.checksumVariants || [],
@@ -152,7 +156,7 @@ const identifyRom = async (
     });
     // An archive that yielded extracted leaves names itself so the UI can show
     // "Archive: x.zip / ROM: Games/y.gba" rather than implying the zip matched.
-    const archiveName = result.assets.some((asset) => !asset.copiedInPlace) ? fileName : undefined;
+    const archiveName = romAssets.some((asset) => !asset.copiedInPlace) ? fileName : undefined;
     return {
       ...(archiveName ? { archiveName } : {}),
       candidates,

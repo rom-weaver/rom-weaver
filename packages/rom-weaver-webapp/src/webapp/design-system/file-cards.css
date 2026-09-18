@@ -742,6 +742,9 @@
   border: 0;
   border-radius: 0;
 }
+.rw-app .identify-search-result-btn--selected {
+  background: var(--plate-2);
+}
 .rw-app .identify-search-result-btn--version {
   flex-wrap: wrap;
   align-items: flex-start;
@@ -754,7 +757,7 @@
   font-size: 0.8rem;
   color: var(--ink-3);
 }
-.rw-app .identify-search-result-checks {
+.rw-app .identify-search-result-components {
   display: grid;
   flex: 1 0 100%;
   gap: var(--sp-2xs);
@@ -774,6 +777,24 @@
   font-weight: 650;
   color: var(--ink-2);
   overflow-wrap: anywhere;
+}
+.rw-app .identify-search-result-checks-toggle {
+  display: block;
+  width: 100%;
+  padding: var(--sp-2xs) var(--sp-s);
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  text-align: start;
+  cursor: pointer;
+  background: color-mix(in oklab, var(--chassis) 55%, var(--well));
+  border: 0;
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .identify-search-result-checksum-details {
+  display: grid;
+  gap: var(--sp-2xs);
+  padding: var(--sp-s);
+  border-block-start: 1px solid var(--seam);
 }
 .rw-app .identify-search-result-checksum-values {
   display: flex;
@@ -801,8 +822,16 @@
   .rw-app .identify-search-result-btn:hover {
     background: var(--plate-2);
   }
+  .rw-app .identify-search-result-checks-toggle:hover {
+    color: var(--ink);
+    background: var(--plate-2);
+  }
 }
 /* Touch browsers get no hover, so the press itself supplies the feedback. */
 .rw-app .identify-search-result-btn:active {
+  background: var(--plate-2);
+}
+.rw-app .identify-search-result-checks-toggle:active {
+  color: var(--ink);
   background: var(--plate-2);
 }

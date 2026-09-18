@@ -320,11 +320,6 @@ msgstr "Add a ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyDescription"
-msgstr "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.testDescription"
 msgstr "Add a supported ROM, raw or in an archive, to test the game in the browser emulator."
 
@@ -1180,11 +1175,6 @@ msgstr "Don't show this again"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.reenable"
-msgstr "Re-enable in Settings"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.done"
 msgstr "Done"
 
@@ -1580,6 +1570,11 @@ msgstr "Header options"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.headeredRom"
+msgstr "Headered ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.stripInfo"
 msgstr "Headerless: the patched output has no ROM header."
 
@@ -1587,6 +1582,11 @@ msgstr "Headerless: the patched output has no ROM header."
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.hideVariants"
 msgstr "Hide {count} more {count, plural, one {variant} other {variants}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.hideChecksums"
+msgstr "Hide checksums"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2190,6 +2190,11 @@ msgstr "On"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.local"
+msgstr "On-device. Offline support. No telemetry."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.frontendsEyebrow"
 msgstr "One engine, two frontends"
 
@@ -2435,6 +2440,11 @@ msgstr "Patch position"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyDescription"
+msgstr "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.patchedFormat"
 msgstr "Patched {format}"
 
@@ -2567,6 +2577,11 @@ msgstr "Pull request preview"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality"
 msgstr "Quality"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.reenable"
+msgstr "Re-enable in Settings"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2835,11 +2850,6 @@ msgstr "RomWeaver is unpacking one tiny ROM and two patches, then checking what 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.footer.local"
-msgstr "On-device. Offline support. No telemetry."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.rvzCodec"
 msgstr "RVZ"
 
@@ -2957,6 +2967,11 @@ msgstr "Show {count} more {count, plural, one {variant} other {variants}}"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.showDetails"
 msgstr "Show {label} details"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.showChecksums"
+msgstr "Show checksums"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3499,6 +3514,11 @@ msgstr "Unexpected"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.unheaderedRom"
+msgstr "Unheadered ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unidentified"
 msgstr "Unidentified"
 
@@ -3716,13 +3736,3 @@ msgstr "ZIP"
 #: src/presentation/localization/messages.ts
 msgid "settings.zipCodec"
 msgstr "ZIP codec"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.headeredRom"
-msgstr "Headered ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.unheaderedRom"
-msgstr "Unheadered ROM"

@@ -169,6 +169,54 @@ test("a name search lists titles across every platform", async () => {
   expect(document.querySelector(".identify-search-results-label").textContent).toBe("Choose the game you need");
 });
 
+test("the first result is selected and arrows choose a release", async () => {
+  searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION, ZERO_MISSION] });
+  searchExpectedRomByName.mockResolvedValue({
+    matches: [FUSION_USA, FUSION_EUROPE],
+    status: "matched",
+  });
+
+  submit("metroid");
+  await waitFor(() => getResults().length === 2);
+  expect(document.querySelectorAll(".identify-search-result-btn")[0].getAttribute("aria-current")).toBe("true");
+
+  getInput().focus();
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => getResults()[0]?.includes("(USA)"));
+  expect(document.querySelectorAll(".identify-search-result-btn")[0].getAttribute("aria-current")).toBe("true");
+
+  await userEvent.keyboard("{ArrowDown}");
+  expect(document.querySelectorAll(".identify-search-result-btn")[0].getAttribute("aria-current")).toBeNull();
+  expect(document.querySelectorAll(".identify-search-result-btn")[1].getAttribute("aria-current")).toBe("true");
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
+  expect(document.querySelector("#rom-weaver-bundle-rom-expectation").textContent).toContain("Metroid Fusion (Europe)");
+});
+
+test("returning to title results resets the keyboard selection", async () => {
+  const fusionJapan = match("Metroid Fusion (Japan)", { region: "Japan" });
+  searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION] });
+  searchExpectedRomByName.mockResolvedValue({
+    matches: [FUSION_USA, FUSION_EUROPE, fusionJapan],
+    status: "matched",
+  });
+
+  submit("fusion");
+  await waitFor(() => getResults().length === 1);
+  getInput().focus();
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => getResults().length === 3 && getResults()[0]?.includes("(USA)"));
+
+  await userEvent.keyboard("{ArrowDown}");
+  await userEvent.keyboard("{ArrowDown}");
+  document.querySelector(".identify-search-back").click();
+  await waitFor(() => getResults().length === 1 && getResults()[0]?.includes("Metroid Fusion"));
+
+  getInput().focus();
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => getResults().length === 3 && getResults()[0]?.includes("(USA)"));
+});
+
 test("a checksum still short of a full length says which lengths are accepted", async () => {
   type(getInput(), "deadbeef123");
   await new Promise((resolve) => setTimeout(resolve, 400));
@@ -214,10 +262,12 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   expect(getResults()[0]).not.toContain("!");
   expect(getResults()[1]).toContain("Metroid Fusion (Europe)");
 
+  for (const toggle of document.querySelectorAll(".identify-search-result-checks-toggle")) toggle.click();
+  await waitFor(() => document.querySelectorAll(".identify-search-result-checksum").length === 4);
   host.style.width = "350px";
-  for (const button of document.querySelectorAll(".identify-search-result-btn--version")) {
-    const bounds = button.getBoundingClientRect();
-    for (const checksum of button.querySelectorAll(".identify-search-result-checksum")) {
+  for (const row of document.querySelectorAll(".identify-search-result")) {
+    const bounds = row.getBoundingClientRect();
+    for (const checksum of row.querySelectorAll(".identify-search-result-checksum")) {
       const checkBounds = checksum.getBoundingClientRect();
       expect(checkBounds.top).toBeGreaterThanOrEqual(bounds.top);
       expect(checkBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
@@ -251,7 +301,9 @@ test("a title with one release stays selectable", async () => {
   document.querySelector(".identify-search-result-btn").click();
 
   await waitFor(() => getResults().length === 1 && getResults()[0]?.includes("Metroid Fusion (USA)"));
-  expect(getResults()[0]).toContain("d7ae93df");
+  expect(getResults()[0]).not.toContain("d7ae93df");
+  await page.getByRole("button", { name: "Show checksums" }).click();
+  expect(document.querySelector(".identify-search-result-checksum-details").textContent).toContain("d7ae93df");
   expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
   document.querySelector(".identify-search-result-btn").click();
 
@@ -282,10 +334,14 @@ test("a NES release names its header variants without showing the DAT extension"
 
   expect(getResults()).toHaveLength(1);
   expect(getResults()[0]).toContain("Headered ROM");
-  expect(getResults()[0]).toContain("abcd1234");
-  expect(getResults()[0]).toContain("deadbeef");
+  expect(getResults()[0]).not.toContain("abcd1234");
+  expect(getResults()[0]).not.toContain("deadbeef");
   expect(getResults()[0]).not.toContain(".unh");
   expect(getResults()[0]).not.toContain(".nes");
+
+  await page.getByRole("button", { name: "Show checksums" }).click();
+  expect(document.querySelector(".identify-search-result-checksum-details").textContent).toContain("abcd1234");
+  expect(document.querySelector(".identify-search-result-checksum-details").textContent).toContain("deadbeef");
 
   const previousTheme = document.documentElement.getAttribute("data-theme");
   document.documentElement.setAttribute("data-theme", "dark");
