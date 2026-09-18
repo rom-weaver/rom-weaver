@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StepSection } from "../../src/public/react/components/ds/layout.tsx";
 import { shouldIdentifySource } from "../../src/lib/input/input-identification-policy.ts";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
@@ -134,14 +133,9 @@ const patchItem = (fileName: string): PatchStackItemState =>
     validationValues: [],
   }) as unknown as PatchStackItemState;
 
-// The only production caller (apply-patch-form) always supplies the 0x04
-// cheats step, so the harness supplies a stand-in to keep the step numbering
-// the same as the real bench.
-const cheatsStep = (
-  <StepSection num="0x04" title="Cheats">
-    <p>cheats</p>
-  </StepSection>
-);
+// The only production caller (apply-patch-form) supplies the cheat card inside
+// the Patches step, so the harness supplies a stand-in for that card.
+const cheatsStep = <div data-testid="cheats-step">cheats</div>;
 
 const renderView = ({
   bundleMetaById,
@@ -305,7 +299,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero")).toBeNull();
     expect(container.querySelector(".ghost-steps")).toBeNull();
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
-    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04", "0x05"]);
+    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",
     );
@@ -804,7 +798,7 @@ describe("apply workflow view - staged bench", () => {
     const rom = romRow("game.bin");
     rom.info.romType = { platform: "Nintendo Entertainment System" };
     const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
-    const { container } = renderView({ patches: [patchItem("change.ips")], ui });
+    const { container } = renderView({ patches: [patchItem("change.ips")], settings: { betaToolsEnabled: true }, ui });
     // ROM card in the input stack
     const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
     expect(romCard).toBeTruthy();
@@ -837,10 +831,18 @@ describe("apply workflow view - staged bench", () => {
     expect(patchPosition.textContent).toContain("1");
     expect(patchPosition.disabled).toBe(true);
     expect(patchPosition.getAttribute("aria-label")).toBe("Patch 1 of 1. Reordering unavailable.");
+    expect(container.querySelector("#rom-weaver-row-patch-stack [data-testid=cheats-step]")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-row-file-rom [data-testid=cheats-step]")).toBeNull();
     // the patches step header counts staged files
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
     // no needs-input directives once content is staged
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
+  });
+
+  it.each([false, undefined])("hides cheats when beta tools are %s", (betaToolsEnabled) => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({ settings: { betaToolsEnabled }, ui });
+    expect(container.querySelector("[data-testid=cheats-step]")).toBeNull();
   });
 
   it("uses a matched title on the ROM card and keeps it out of Checks", () => {

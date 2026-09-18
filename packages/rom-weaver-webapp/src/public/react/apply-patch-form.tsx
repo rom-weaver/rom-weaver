@@ -60,6 +60,7 @@ import {
   getDefaultCompressionMode,
   useApplySettings,
   useRomWeaverAssetBaseUrl,
+  useRomWeaverSettings,
   useUiLocalizer,
 } from "./settings-context.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -221,6 +222,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
   const mode = props.mode ?? "apply";
   const providerSettings = useApplySettings();
+  const cheatsEnabled = useRomWeaverSettings().betaToolsEnabled === true;
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const { startup } = props;
@@ -258,7 +260,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
-  // Mirrors the cheat step's On switches so the header controls in 0x03 and 0x05 can refuse a strip.
+  // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
@@ -1736,6 +1738,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [getCheatSource, workflowHandle],
   );
 
+  useEffect(() => {
+    if (cheatsEnabled && cheatUiState.romInputs.length === 1) return;
+    // Hidden cheats MUST be cleared so Apply cannot reuse their ROM writes.
+    handleCheatSelection([]);
+  }, [cheatUiState.romInputs.length, cheatsEnabled, handleCheatSelection]);
+
   // "Share this setup" (secondary job after the output card): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
   const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
@@ -1842,20 +1850,22 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     <>
       <ApplyWorkflowFormView
         mode={mode}
-        cheats={({ headerStripConflict, onNeedsRom, woven }) => (
-          <CheatDatabaseSection
-            classifyDatabaseCheats={classifyDatabaseCheats}
-            classifyManualCode={classifyManualCode}
-            onNeedsRom={onNeedsRom}
-            onSaveAsPatch={saveCheatsAsPatch}
-            onSelectionChange={handleCheatSelection}
-            outputSummary={completedCheats}
-            rom={cheatRom}
-            title={localizer.message("ui.step.cheats")}
-            validationMessage={cheatConflictMessage || headerStripConflict}
-            woven={woven}
-          />
-        )}
+        cheats={
+          cheatsEnabled
+            ? ({ headerStripConflict }) => (
+                <CheatDatabaseSection
+                  classifyDatabaseCheats={classifyDatabaseCheats}
+                  classifyManualCode={classifyManualCode}
+                  onSaveAsPatch={saveCheatsAsPatch}
+                  onSelectionChange={handleCheatSelection}
+                  outputSummary={completedCheats}
+                  rom={cheatRom}
+                  title={localizer.message("ui.step.cheats")}
+                  validationMessage={cheatConflictMessage || headerStripConflict}
+                />
+              )
+            : undefined
+        }
         cheatsOn={cheatsOn}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}

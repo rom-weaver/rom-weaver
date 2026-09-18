@@ -41,12 +41,15 @@ type CheatDatabaseRecordsState = {
   loadError: string;
   loading: boolean;
   manualGameId: string;
+  /** A user-selected database system used when ROM identification has no platform. */
+  manualEntrySlug: string;
   /** Set only when no shard covers the ROM's system but the decoder does. */
   manualOnlySystem?: CheatManualOnlySystem;
   /** Every system a hand-entered code may be classified against for this ROM. */
   manualSystem?: CheatManualSystem;
   match: CheatGameMatch;
   records: ClassifiedCheatRecord[];
+  setManualEntrySlug: (slug: string) => void;
   setManualGameId: (id: string) => void;
   shard?: CheatSystemShard;
   system?: CheatDatabaseSystem;
@@ -63,8 +66,8 @@ const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : und
 
 /**
  * Loads the cheat database for one ROM, matches its game, and classifies that
- * game's cheats through the Rust decoder. Shared by the apply workflow's Cheats
- * step and the create workflow's cheat-codes mode so both see the same rows.
+ * game's cheats through the Rust decoder. Shared by the apply workflow's cheat
+ * card and the create workflow's cheat-codes mode so both see the same rows.
  */
 const useCheatDatabaseRecords = ({
   rom,
@@ -80,16 +83,23 @@ const useCheatDatabaseRecords = ({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [manualGameId, setManualGameId] = useState("");
+  const [manualEntrySlug, setManualEntrySlug] = useState("");
   const [records, setRecords] = useState<ClassifiedCheatRecord[]>([]);
   const [classificationError, setClassificationError] = useState("");
   const [classifying, setClassifying] = useState(false);
 
   const activeIndex = index ?? loadedIndex;
   const activeCatalog = catalog ?? loadedCatalog;
-  const entry = useMemo(
+  const automaticEntry = useMemo(
     () => resolveCheatDatabaseEntry(activeIndex, activeCatalog, rom),
     [activeCatalog, activeIndex, rom],
   );
+  const entry = useMemo(
+    () =>
+      manualEntrySlug ? activeIndex?.entries.find((candidate) => candidate.slug === manualEntrySlug) : automaticEntry,
+    [activeIndex, automaticEntry, manualEntrySlug],
+  );
+  const entrySlug = entry?.slug;
   const system = entry?.cheatSystem;
   // The decoder covers systems no shard does (PlayStation). Those keep manual
   // entry, without a game list to browse.
@@ -98,6 +108,7 @@ const useCheatDatabaseRecords = ({
 
   // Nothing loads until a ROM is staged: the step is idle without one.
   const hasRom = !!rom;
+  const romKey = rom?.key;
   useEffect(() => {
     if (index || !hasRom) return;
     let active = true;
@@ -115,6 +126,30 @@ const useCheatDatabaseRecords = ({
       active = false;
     };
   }, [hasRom, index]);
+
+  useEffect(() => {
+    if (!romKey) {
+      setManualEntrySlug("");
+      setManualGameId("");
+      return;
+    }
+    setManualEntrySlug("");
+    setManualGameId("");
+  }, [romKey]);
+
+  useEffect(() => {
+    if (manualEntrySlug && !activeIndex?.entries.some((candidate) => candidate.slug === manualEntrySlug)) {
+      setManualEntrySlug("");
+    }
+  }, [activeIndex, manualEntrySlug]);
+
+  useEffect(() => {
+    if (!entrySlug) {
+      setManualGameId("");
+      return;
+    }
+    setManualGameId("");
+  }, [entrySlug]);
 
   useEffect(() => {
     if (suppliedShard || !entry) {
@@ -184,11 +219,13 @@ const useCheatDatabaseRecords = ({
     ...(game ? { game } : {}),
     loadError,
     loading,
+    manualEntrySlug,
     manualGameId,
     ...(manualOnlySystem ? { manualOnlySystem } : {}),
     ...(manualSystem ? { manualSystem } : {}),
     match,
     records,
+    setManualEntrySlug,
     setManualGameId,
     ...(shard ? { shard } : {}),
     ...(system ? { system } : {}),

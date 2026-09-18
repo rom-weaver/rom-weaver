@@ -48,14 +48,15 @@
         "maxBrotliBytes": 11500
       },
       {
+        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow.",
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 234500,
-        "maxRawBytes": 244000,
-        "expectedBrotliBytes": 37300,
-        "maxBrotliBytes": 38800
+        "expectedRawBytes": 245000,
+        "maxRawBytes": 255000,
+        "expectedBrotliBytes": 38600,
+        "maxBrotliBytes": 40100
       },
       {
         "name": "WASM",

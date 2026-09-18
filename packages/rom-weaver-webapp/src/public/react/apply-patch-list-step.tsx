@@ -129,7 +129,7 @@ const toFaultDetail = (message: string, localizer: Localizer): string => {
 };
 
 /** Failed dry-run verdict: an inset fault well with the verdict, the detail,
- * and what to do next (naming the 0x05 override toggle when it is offered). */
+ * and what to do next (naming the 0x04 override toggle when it is offered). */
 const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => {
   const localizer = useUiLocalizer();
   return (
@@ -1928,6 +1928,7 @@ const SharedPatchMetaEditor = ({
 };
 
 const ApplyPatchListStep = ({
+  afterItems,
   bundleOutputCheckHint,
   bundleSessionMatches,
   disabledFlags,
@@ -1949,6 +1950,7 @@ const ApplyPatchListStep = ({
   stripDisabled,
   woven,
 }: {
+  afterItems?: ReactNode;
   /** The run has optional/skipped patches: hint on the chain-output card that its
    * expected output only describes the full chain. */
   bundleOutputCheckHint?: boolean;
@@ -1964,7 +1966,7 @@ const ApplyPatchListStep = ({
   onBundleMetaBulkChange?: (updates: Partial<BundlePatchMeta>) => void;
   onTogglePatch?: (index: number) => void;
   notice?: ReactNode;
-  /** The 0x05 "Apply anyway…" override toggle is on offer - fault hints name it. */
+  /** The 0x04 "Apply anyway…" override toggle is on offer - fault hints name it. */
   overrideAvailable?: boolean;
   /** ROM id → its computed checks, for verifying user-entered input checks against
    * the real ROM (the chain-input patch's target). */
@@ -2122,6 +2124,7 @@ const ApplyPatchListStep = ({
           />
         ))}
       </div>
+      {afterItems ? <div className="workflow-step-after-items">{afterItems}</div> : null}
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it
         // does not follow. Fixing one link re-plans the chain; any remaining break surfaces next.

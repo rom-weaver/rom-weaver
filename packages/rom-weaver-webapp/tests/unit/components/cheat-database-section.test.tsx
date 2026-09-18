@@ -121,12 +121,10 @@ const addButton = (view: ReturnType<typeof render>, description: string) =>
   view.getByRole("button", { name: `Add ${description}` });
 
 describe("CheatDatabaseSection", () => {
-  it("renders the numbered step, the match line, and the database credit", async () => {
+  it("renders a patch card, the match line, and the database credit", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
-    await waitFor(() => expect(view.container.querySelector(".step-num")?.textContent).toBe("0x04"));
-    expect(view.container.querySelector(".step-title")?.textContent).toBe("Cheats");
-    // Like the ROM and patch steps, the header carries no count chips while the stack is empty.
-    expect(view.container.querySelector(".step-meta")).toBeNull();
+    await waitFor(() => expect(view.container.querySelector(".card.patch")).toBeTruthy());
+    expect(view.container.querySelector(".step")).toBeNull();
     expect(view.getByRole("button", { name: "Cheats" })).toBeTruthy();
     expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("Exact checksum match");
     expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("2 database cheats");
@@ -156,26 +154,22 @@ describe("CheatDatabaseSection", () => {
 
   it("waits for a ROM before it offers anything", () => {
     const view = render(<CheatDatabaseSection {...props} rom={null} />);
+    expect(view.container.firstElementChild).toBeNull();
     expect(view.queryByRole("button", { name: /Search the cheat database/u })).toBeNull();
     expect(view.queryByRole("checkbox", { name: "Use cheats" })).toBeNull();
-    expect(view.queryByRole("button", { name: /Collapse cheats/u })).toBeNull();
-    expect(view.getByRole("button", { name: "Choose your original ROM" })).toBeTruthy();
   });
 
-  it("collapses the body from the header chevron", async () => {
+  it("keeps the patch card body visible while the card is switched off", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await openDialog(view);
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
     expect(view.getByText("1 cheat")).toBeTruthy();
 
-    fireEvent.click(view.getByRole("button", { name: "Collapse cheats" }));
-    expect(view.container.querySelector(".step-body")).toBeNull();
-    expect(view.container.querySelector(".step.is-collapsed")).toBeTruthy();
-    expect(view.getByText("1 cheat")).toBeTruthy();
-
-    fireEvent.click(view.getByRole("button", { name: "Expand cheats" }));
-    expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
+    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
+    expect(view.container.querySelector(".card.cheat-database-card.is-off")).toBeTruthy();
+    expect(view.container.querySelector(".cheat-card-body")?.hasAttribute("inert")).toBe(true);
+    expect(view.getByText("0 cheats")).toBeTruthy();
   });
 
   it("a new ROM starts the step On and open again", async () => {
@@ -183,16 +177,11 @@ describe("CheatDatabaseSection", () => {
     await openDialog(view);
     fireEvent.click(view.getByRole("button", { name: "Close" }));
     fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
-    fireEvent.click(view.getByRole("button", { name: "Collapse cheats" }));
-    expect(view.container.querySelector(".step.is-off.is-collapsed")).toBeTruthy();
-
     view.rerender(<CheatDatabaseSection {...props} rom={null} />);
-    const needsRom = view.getByRole("button", { name: "Choose your original ROM" });
-    expect(needsRom.closest("[inert]")).toBeNull();
-    expect(view.container.querySelector(".step.is-off")).toBeNull();
+    expect(view.container.firstElementChild).toBeNull();
 
     view.rerender(<CheatDatabaseSection {...props} rom={{ ...props.rom, key: "rom-b" }} />);
-    expect(view.container.querySelector(".step.is-collapsed")).toBeNull();
+    expect(view.container.querySelector(".card.cheat-database-card.is-off")).toBeNull();
     expect((view.getByRole("checkbox", { name: "Use cheats" }) as HTMLInputElement).checked).toBe(true);
   });
 
@@ -208,8 +197,8 @@ describe("CheatDatabaseSection", () => {
 
     fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
     expect(onSelectionChange.mock.lastCall?.[0]).toEqual([]);
-    expect(view.container.querySelector(".step.is-off")).toBeTruthy();
-    expect(view.container.querySelector(".step-body")?.hasAttribute("inert")).toBe(true);
+    expect(view.container.querySelector(".card.cheat-database-card.is-off")).toBeTruthy();
+    expect(view.container.querySelector(".cheat-card-body")?.hasAttribute("inert")).toBe(true);
     expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
     expect(view.getByText("0 cheats")).toBeTruthy();
     expect(view.getByText("1 off")).toBeTruthy();
@@ -224,7 +213,7 @@ describe("CheatDatabaseSection", () => {
     expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
       "cheat-1",
     ]);
-    expect(view.container.querySelector(".step.is-off")).toBeNull();
+    expect(view.container.querySelector(".card.cheat-database-card.is-off")).toBeNull();
   });
 
   it("searches the picker by description and by raw code", async () => {
@@ -439,6 +428,24 @@ describe("CheatDatabaseSection", () => {
     expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("Game selected manually");
     expect(view.container.querySelectorAll(".cheat-pick")).toHaveLength(2);
   });
+
+  it("searches database systems when the ROM platform is unknown", async () => {
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        rom={{ key: "unknown-platform", title: "Unknown ROM", checksums: { sha1: "no-match" } }}
+      />,
+    );
+    const search = await view.findByPlaceholderText("Search cheat databases by system…");
+    fireEvent.change(search, { target: { value: "Super Nintendo" } });
+    const option = view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u });
+    expect(option.textContent).toContain("1 game · 2 cheats");
+    fireEvent.click(option);
+    await waitFor(() => expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull());
+
+    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
+  });
 });
 
 describe("CheatDatabaseSection platform resolution", () => {
@@ -449,6 +456,7 @@ describe("CheatDatabaseSection platform resolution", () => {
     await waitFor(() =>
       expect(view.container.querySelector(".cheat-add-note")?.textContent).toContain("Unsupported system"),
     );
+    expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
     fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
     expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
   });
@@ -462,6 +470,7 @@ describe("CheatDatabaseSection platform resolution", () => {
         "No cheat database for PlayStation",
       ),
     );
+    expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
     expect(view.container.querySelector(".cheat-add-note")?.textContent).not.toContain("Unsupported system");
 
     fireEvent.click(view.getByRole("button", { name: /Add cheat codes/u }));
