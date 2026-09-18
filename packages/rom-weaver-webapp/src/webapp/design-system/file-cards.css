@@ -660,6 +660,10 @@
   border-end-start-radius: var(--r-m);
   border-end-end-radius: var(--r-m);
 }
+.rw-app .identify-search--section,
+.rw-app .identify-search--compact {
+  margin-block-end: var(--sp-m);
+}
 .rw-app .identify-search-label {
   flex: 1 1 14rem;
   min-width: 0;
