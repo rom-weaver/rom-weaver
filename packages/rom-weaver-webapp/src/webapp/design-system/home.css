@@ -77,11 +77,6 @@
   height: 16px;
   color: var(--thread-text);
 }
-.rw-app .home-details a {
-  color: var(--ink-2);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
 .rw-app .home-loom {
   display: none;
   grid-area: loom;
@@ -159,6 +154,10 @@
   padding-block: 24px;
   border-top: 1px solid var(--seam-soft);
 }
+.rw-app .home-webapp {
+  display: grid;
+  gap: 16px;
+}
 .rw-app .home-flows {
   display: grid;
   gap: 12px;
@@ -226,6 +225,7 @@
 .rw-app .home-cli {
   justify-content: space-between;
 }
+.rw-app .home-webapp h2,
 .rw-app .home-cli h2 {
   font-size: 1.125rem;
 }
