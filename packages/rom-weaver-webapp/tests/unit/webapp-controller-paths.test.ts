@@ -160,6 +160,7 @@ describe("the landing route at the app base", () => {
     for (const [route, view] of [
       ["/apply", "patcher"],
       ["/apply-patch", "patcher"],
+      ["/bundle", "bundle"],
       ["/create", "creator"],
       ["/create-patch", "creator"],
       ["/identify", "identify"],

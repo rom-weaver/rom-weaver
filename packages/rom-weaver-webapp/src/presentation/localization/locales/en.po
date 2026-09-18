@@ -455,11 +455,6 @@ msgstr "Apply patch into"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.find.bundleHint"
-msgstr "Apply Patch owns bundles and runs their saved patch sequence."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.related.applyThisPatch"
 msgstr "Apply this patch"
 
@@ -665,6 +660,11 @@ msgstr "Build and download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.find.bundleHint"
+msgstr "Build patch bundles and optionally apply them."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.patches.title"
 msgstr "Build the patch stack"
 
@@ -686,7 +686,12 @@ msgstr "Bundle + patches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.bundlesApplyPatch"
-msgstr "Bundles: Apply Patch"
+msgstr "Bundle Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleThesis"
+msgstr "Bundle your patches."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2570,6 +2575,11 @@ msgstr "Read the Apply guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleGuide"
+msgstr "Read the Bundle guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.createGuide"
 msgstr "Read the Create guide"
 
@@ -2915,6 +2925,11 @@ msgstr "Settings"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleThesis2"
+msgstr "Share a reusable recipe."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.share"
 msgstr "Share bundle"
 
@@ -2982,6 +2997,11 @@ msgstr "Source"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
 msgstr "Stack output checks: Combined result"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.bundleDescription"
+msgstr "Stage a ROM and its patches, describe the recipe, and share a reusable bundle."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

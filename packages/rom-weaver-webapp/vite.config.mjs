@@ -530,6 +530,7 @@ const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/</loc></url>
   <url><loc>https://rom-weaver.com/apply-patch</loc></url>
+  <url><loc>https://rom-weaver.com/bundle</loc></url>
   <url><loc>https://rom-weaver.com/create-patch</loc></url>
   <url><loc>https://rom-weaver.com/identify-rom</loc></url>
   <url><loc>https://rom-weaver.com/test-rom</loc></url>
@@ -689,6 +690,15 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         createWorkflowRouteHtml(patcherHtml, WORKFLOW_SEO_ROUTES.patcher, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.patcher,
       );
+      const bundleHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("bundle"), routePreloadLinks.get("bundle")),
+          WORKFLOW_SEO_ROUTES.bundle,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.bundle,
+      );
       fs.writeFileSync(
         path.join(distDir, "404.html"),
         createNotFoundHtml(withShell("notFound"), channel, channelLabel),
@@ -743,6 +753,7 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
       }
       for (const [slug, html] of [
         ["apply-patch", applyHtml],
+        ["bundle", bundleHtml],
         ["create-patch", createHtml],
         ["identify-rom", identifyHtml],
         ["test-rom", testHtml],
@@ -1114,6 +1125,7 @@ const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("home", await render("home"));
         assertShellLoomCanvas(prerenderedShells.get("home"));
         prerenderedShells.set("patcher", await render("patcher"));
+        prerenderedShells.set("bundle", await render("bundle"));
         prerenderedShells.set("creator", await render("creator"));
         prerenderedShells.set("identify", await render("identify"));
         prerenderedShells.set("trim", await render("trim"));
@@ -1148,6 +1160,7 @@ const ROUTE_PRELOAD_MARKER_START = "<!--rw-route-preload-->";
 const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 
 const WORKFLOW_ROUTE_MODULES = {
+  bundle: "src/public/react/apply-patch-form.tsx",
   creator: "src/public/react/create-patch-form.tsx",
   docs: "src/webapp/docs-page.tsx",
   identify: "src/webapp/components/identify-form.tsx",

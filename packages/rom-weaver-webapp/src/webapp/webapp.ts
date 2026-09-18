@@ -177,17 +177,6 @@ if (typeof window !== "undefined") {
   };
 }
 
-// `?bundle=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
-// params stay in the address bar so the session URL remains shareable; only
-// this boot-time read consumes them.
-const urlSessionParse =
-  typeof window === "undefined"
-    ? { request: null, warnings: [] }
-    : readUrlSessionRequest(window.location.search, readAppBaseUrl());
-for (const warning of urlSessionParse.warnings) {
-  logger.warn(`url session: ${warning}`);
-}
-
 const applySettingsToRuntime = (settings: SettingsState) => {
   setByteUnitSystem(settings.byteUnits);
   setOfflineWarmupEnabled(settings.offlineCopyEnabled);
@@ -201,9 +190,41 @@ const applySettingsToRuntime = (settings: SettingsState) => {
 };
 
 const isNotFoundPage = document.documentElement.dataset.page === "not-found";
-// Which static document the host actually served, captured before the
-// controller normalizes the app root to its canonical workflow route.
+// Old bundle links used the Apply route's query/hash state. Keep guided
+// samples and URL sessions shareable, but replace their route before React
+// chooses a workflow. Direct ROM/patch sessions remain on Apply.
+const replaceLegacyBundleRoute = (): boolean => {
+  if (isNotFoundPage) return false;
+  const currentUrl = new URL(window.location.href);
+  const params = currentUrl.searchParams;
+  const currentView = readWorkflowViewFromPath(currentUrl.pathname);
+  const hasBundleSession = params.has("bundle");
+  const hasDirectSession = !hasBundleSession && (params.has("rom") || params.has("patch"));
+  const hasLegacyBundleGuide = currentView === "patcher" && params.get("guide") === "bundle";
+  const hasLegacyBundleHash = currentView === "patcher" && currentUrl.hash.toLowerCase() === "#bundle";
+  const targetView =
+    hasBundleSession || hasLegacyBundleGuide || hasLegacyBundleHash ? "bundle" : hasDirectSession ? "patcher" : null;
+  if (!targetView || currentView === targetView) return false;
+  const nextUrl = new URL(targetView === "bundle" ? "bundle" : "apply-patch", readAppBaseUrl());
+  nextUrl.search = currentUrl.search;
+  window.history.replaceState(window.history.state, "", nextUrl);
+  return true;
+};
+const bundleRouteWasReplaced = replaceLegacyBundleRoute();
+// Which static document the host actually served, captured after legacy bundle
+// links have been normalized but before the controller writes its route.
 const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "home";
+
+// `?bundle=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
+// params stay in the address bar so the session URL remains shareable; only
+// this boot-time read consumes them.
+const urlSessionParse =
+  typeof window === "undefined"
+    ? { request: null, warnings: [] }
+    : readUrlSessionRequest(window.location.search, readAppBaseUrl());
+for (const warning of urlSessionParse.warnings) {
+  logger.warn(`url session: ${warning}`);
+}
 const webappController = createWebappRootController({
   initialHistoryMode: isNotFoundPage ? "none" : "replace",
   onApplySettings: applySettingsToRuntime,
@@ -355,6 +376,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // Every direct route gets a shell for its own view. A route shell MUST match
 // the view used for hydration or React discards the server-rendered content.
 const PRERENDERED_VIEWS = new Set<WebappView>([
+  "bundle",
   "creator",
   "docs",
   "home",
@@ -392,7 +414,7 @@ const renderWebappRoot = (): undefined => {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
       // Always drained, shell or not, so the inline capture listener stops here.
       captureShellClicks();
-      shouldHydrate = hadPrerenderedShell;
+      shouldHydrate = hadPrerenderedShell && !bundleRouteWasReplaced;
       if (!shouldHydrate) appRoot = createRoot(appRootElement);
     }
   }
@@ -574,6 +596,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
       event.preventDefault();
     });
     const syncRouteFromUrl = (scrollTo?: () => void) => {
+      replaceLegacyBundleRoute();
       const view = readWorkflowViewFromPath();
       if (!view) return;
       const guide = readGuidedSampleFromSearch(window.location.search);
@@ -638,8 +661,8 @@ const initializeWebapp = () => {
   webappController.setStartupState("loading");
   renderWebappRoot();
 
-  // A URL session always lands on the apply tab, whatever the route says.
-  const initialMode = urlSessionParse.request ? "patcher" : readWorkflowViewFromPath() || "patcher";
+  // Bundle sessions open the bundle workflow. Direct ROM/patch sessions use Apply.
+  const initialMode = urlSessionParse.request?.kind === "bundle" ? "bundle" : readWorkflowViewFromPath() || "patcher";
   webappController.setStartupState("ready");
   webappController.activateInitialView(initialMode, {
     fallbackOnError: true,

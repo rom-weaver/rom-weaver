@@ -70,6 +70,7 @@ import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import {
   ApplyPatchRoute,
+  BundleRoute,
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
@@ -84,7 +85,6 @@ import {
 import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
-  // "Apply Patch": the tab both applies patch chains and edits/exports them as bundles.
   {
     dock: true,
     group: "patches",
@@ -105,7 +105,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "patches",
-    href: "apply-patch#bundle",
+    href: "bundle",
     icon: <Package aria-hidden="true" />,
     id: "bundle",
     label: "Bundle Patches",
@@ -188,6 +188,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   }
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
+  else if (view === "bundle") route = WORKFLOW_SEO_ROUTES.bundle;
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
   else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
   else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
@@ -627,13 +628,6 @@ function WebappRoot({
         if (href) window.location.assign(`/${href}`);
         return;
       }
-      if (id === "bundle") {
-        if (window.location.hash.toLowerCase() === "#bundle") window.dispatchEvent(new Event("hashchange"));
-        else window.location.hash = "bundle";
-        pendingViewRef.current = null;
-        selectViewWithTransition(() => actions.onSelectView("patcher"));
-        return;
-      }
       const view = id as WebappRootProps["state"]["currentView"];
       if (view === "test") requestEmulatorStartFromUserAction();
       if (view === "docs") {
@@ -654,21 +648,22 @@ function WebappRoot({
     [actions, notFound, resolvedAssetBaseUrl],
   );
 
-  // URL-session sources land in the apply tab's drop pipeline exactly like a
-  // page-level drop (classification and routing stay Rust/extension-driven).
+  // URL-session sources land in the matching workflow's drop pipeline exactly
+  // like a page-level drop (classification and routing stay Rust-driven).
   const deliverUrlSessionFiles = useCallback(
     (files: File[]) => {
-      actions.onSelectView("patcher");
+      const sessionView = urlSession?.request?.kind === "bundle" ? "bundle" : "patcher";
+      actions.onSelectView(sessionView);
       pageDropIdRef.current += 1;
       setPageDrop({
         drop: {
           files,
           id: pageDropIdRef.current,
         },
-        view: "patcher",
+        view: sessionView,
       });
     },
-    [actions],
+    [actions, urlSession?.request?.kind],
   );
   useEffect(
     () =>
@@ -780,9 +775,11 @@ function WebappRoot({
         {view === "docs" || view === "whats-new" ? null : (
           <div
             className="workflow-panel-head"
-            data-threads={view === "patcher" || view === "creator" || view === "trim" ? "" : undefined}
+            data-threads={
+              view === "bundle" || view === "patcher" || view === "creator" || view === "trim" ? "" : undefined
+            }
           >
-            {view === "patcher" || view === "creator" || view === "trim" ? (
+            {view === "bundle" || view === "patcher" || view === "creator" || view === "trim" ? (
               <PanelThreadCount
                 count={threadCount}
                 onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
@@ -916,6 +913,21 @@ function WebappRoot({
                     onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={pageDropFor("patcher")}
+                    startup={state.startup}
+                  />,
+                )}
+                {workflowPanel(
+                  "bundle",
+                  <BundleRoute
+                    mode="bundle"
+                    bundleSession={bundleSession}
+                    onBundlePackageChange={actions.onPatcherBundlePackageChange}
+                    onInputsChange={actions.onPatcherInputsChange}
+                    onPatchesChange={actions.onPatcherPatchesChange}
+                    onSelectTab={handleSelectTab}
+                    onSelectView={() => actions.onSelectView("test")}
+                    onSettingsChange={actions.onPatcherSettingsChange}
+                    pageDrop={pageDropFor("bundle")}
                     startup={state.startup}
                   />,
                 )}

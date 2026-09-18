@@ -21,7 +21,7 @@ const TABS = [
     id: "patcher",
     label: "Apply Patch",
   },
-  { group: "patches", href: "apply-patch#bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
   {
     dock: true,
     group: "patches",
@@ -150,14 +150,14 @@ describe("Find", () => {
     expect(container.querySelector(".find-palette")).toBeNull();
   });
 
-  it("opens the bundle drawer through Apply Patch", () => {
+  it("opens the bundle page", () => {
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
     fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     fireEvent.change(findInput(container), { target: { value: "bundle" } });
 
     const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
-    expect(first?.textContent).toContain("Bundles: Apply Patch");
+    expect(first?.textContent).toContain("Bundle Patches");
     fireEvent.keyDown(findInput(container), { key: "Enter" });
 
     expect(onSelectTab).toHaveBeenCalledWith("bundle");

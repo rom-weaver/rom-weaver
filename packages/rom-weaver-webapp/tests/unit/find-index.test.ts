@@ -4,7 +4,7 @@ import { createFindIndex, searchFind } from "../../src/webapp/find-index.ts";
 
 const TABS = [
   { href: "apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
-  { href: "apply-patch#bundle", icon: null, id: "bundle", label: "Bundles" },
+  { href: "bundle", icon: null, id: "bundle", label: "Bundles" },
   { href: "create-patch", icon: null, id: "creator", label: "Create Patch" },
   {
     beta: true,
@@ -88,10 +88,10 @@ describe("searchFind", () => {
     expect(searchFind(index, "weave")[0]?.entry).toMatchObject({ id: "tool:patcher", href: "apply-patch" });
     expect(searchFind(index, "bundle")[0]?.entry).toMatchObject({
       action: { type: "view", view: "bundle" },
-      hint: "Apply Patch owns bundles and runs their saved patch sequence.",
-      href: "apply-patch#bundle",
+      hint: "Build patch bundles and optionally apply them.",
+      href: "bundle",
       id: "tool:bundle",
-      label: "Bundles: Apply Patch",
+      label: "Bundle Patches",
     });
     expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-patch" });
     expect(searchFind(index, "play emulator")[0]?.entry).toMatchObject({ id: "tool:test" });

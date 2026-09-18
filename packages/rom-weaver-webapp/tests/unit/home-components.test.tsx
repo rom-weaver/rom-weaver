@@ -155,12 +155,7 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     const links = Array.from(container.querySelectorAll("a.home-flow")).map((link) => link.getAttribute("href"));
-    expect(links).toEqual([
-      "/tools/apply-patch",
-      "/tools/apply-patch?guide=bundle",
-      "/tools/create-patch",
-      "/tools/test-rom",
-    ]);
+    expect(links).toEqual(["/tools/apply-patch", "/tools/bundle", "/tools/create-patch", "/tools/test-rom"]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
     expect(container.querySelectorAll(".home-flow")).toHaveLength(4);
     expect(container.textContent).toContain("All on your device.");

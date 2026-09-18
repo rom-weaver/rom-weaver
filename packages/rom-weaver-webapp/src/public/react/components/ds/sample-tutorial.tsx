@@ -55,7 +55,7 @@ type SampleTutorialAction =
   | "swap"
   | "toggle";
 
-const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismiss: () => void) => {
+const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismiss: () => void, enabled = true) => {
   const onDismissRef = useRef(onDismiss);
   const onStartRef = useRef(onStart);
   onDismissRef.current = onDismiss;
@@ -63,22 +63,24 @@ const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismis
   useEffect(() => {
     const ownerView = GUIDED_SAMPLE_VIEWS[guide];
     const startRequestedGuide = (event: Event) => {
+      if (!enabled) return;
       if (!(event instanceof CustomEvent) || event.detail !== guide) return;
       onStartRef.current();
     };
     const dismissHiddenGuide = (event: Event) => {
+      if (!enabled) return;
       if (!(event instanceof CustomEvent) || event.detail === ownerView) return;
       clearGuidedSampleQuery();
       onDismissRef.current();
     };
     window.addEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
     window.addEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
-    if (readGuidedSampleFromSearch(window.location.search) === guide) onStartRef.current();
+    if (enabled && readGuidedSampleFromSearch(window.location.search) === guide) onStartRef.current();
     return () => {
       window.removeEventListener(GUIDED_SAMPLE_START_EVENT, startRequestedGuide);
       window.removeEventListener(GUIDED_SAMPLE_VIEW_EVENT, dismissHiddenGuide);
     };
-  }, [guide]);
+  }, [enabled, guide]);
 };
 
 type SampleTutorialStep = {

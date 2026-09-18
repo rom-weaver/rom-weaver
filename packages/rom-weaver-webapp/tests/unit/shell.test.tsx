@@ -23,7 +23,7 @@ const TABS = [
   { dock: true, group: "patches", href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
   { dock: true, group: "roms", href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
   { group: "project", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
-  { group: "patches", href: "apply-patch#bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
   { beta: true, group: "roms", href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ] satisfies WorkflowTab[];
 

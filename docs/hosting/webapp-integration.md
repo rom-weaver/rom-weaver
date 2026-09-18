@@ -15,7 +15,7 @@ Hosts can preload the rom-weaver webapp with remote URLs or files already stored
 Use `?bundle=<url>` to load a bundle, or combine `?rom=<url>` with one or more `patch=<url>` parameters (repeat them with `&patch=`):
 
 ```text
-https://rom-weaver.com/apply-patch?bundle=https://example.com/release.zip
+https://rom-weaver.com/bundle?bundle=https://example.com/release.zip
 https://rom-weaver.com/apply-patch?rom=https://example.com/game.bin&patch=https://example.com/change.ips
 ```
 

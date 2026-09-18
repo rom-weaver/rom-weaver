@@ -150,6 +150,7 @@ const renderView = ({
   onBundleMetaChange,
   onBundleMetaBulkChange,
   onUnifiedDrop,
+  mode,
   outputControllerOverrides,
   outputOverrides,
   notice,
@@ -166,6 +167,7 @@ const renderView = ({
   onBundleMetaChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaChange"];
   onBundleMetaBulkChange?: Parameters<typeof ApplyWorkflowFormView>[0]["onBundleMetaBulkChange"];
   onUnifiedDrop?: Parameters<typeof ApplyWorkflowFormView>[0]["onUnifiedDrop"];
+  mode?: Parameters<typeof ApplyWorkflowFormView>[0]["mode"];
   outputOverrides?: Partial<PatcherOutputState>;
   outputControllerOverrides?: Partial<PatcherOutputController>;
   notice?: Parameters<typeof ApplyWorkflowFormView>[0]["controllers"]["notice"];
@@ -198,6 +200,7 @@ const renderView = ({
         onBundleMetaBulkChange={onBundleMetaBulkChange}
         onBundleMetaChange={onBundleMetaChange}
         onUnifiedDrop={onUnifiedDrop}
+        mode={mode}
         patchEnablement={patchEnablement}
         pendingDrops={pendingDrops}
         startup={startup}
@@ -221,12 +224,41 @@ describe("apply workflow view - empty bench", () => {
     expect(chip.textContent).toContain("New here?");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
-    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Create a sharable bundle");
+    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Create a sharable bundle");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
     expect(numbers).toEqual(["0x01"]);
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
+  });
+
+  it.each([
+    ["apply", "/apply-patch?guide=apply", "Start guided Apply"],
+    ["bundle", "/bundle?guide=bundle", "Create a sharable bundle"],
+  ] as const)("offers the %s guide, documentation, and the test bundle download", (mode, href, label) => {
+    const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
+    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    const actions = container.querySelectorAll(".sample-tutorial-start-action");
+    expect(actions).toHaveLength(4);
+    expect(actions[0].getAttribute("href")).toBe(href);
+    expect(actions[0].textContent).toContain(label);
+    expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(
+      "/docs/apply-rom-patches",
+    );
+    expect(container.querySelector(".sample-tutorial-start-download")?.getAttribute("href")).toContain(
+      "first-weave.zip",
+    );
+    expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
+  });
+
+  it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {
+    const apply = renderView({ ui: createEmptyPatcherUiState() });
+    const bundle = renderView({ mode: "bundle", ui: createEmptyPatcherUiState() });
+
+    expect(apply.container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
+    expect(bundle.container.querySelector("#rom-weaver-input-file-unified-bundle")).toBeTruthy();
+    expect(document.querySelectorAll("#rom-weaver-input-file-unified")).toHaveLength(1);
+    expect(document.querySelectorAll("#rom-weaver-input-file-unified-bundle")).toHaveLength(1);
   });
 
   it("shows checksum search immediately, then fills the bench on a match", async () => {
@@ -392,7 +424,7 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it("starts the bundle tutorial and selects a patch-only ZIP from a guided Bundle URL", async () => {
-    window.history.replaceState(null, "", "/apply-patch?guide=bundle");
+    window.history.replaceState(null, "", "/bundle?guide=bundle");
     const onUnifiedDrop = vi.fn();
     const setBundlePackage = vi.fn();
     vi.stubGlobal(
@@ -431,6 +463,7 @@ describe("apply workflow view - empty bench", () => {
             setBundlePackage,
           }}
           controllers={controllers}
+          mode="bundle"
           onUnifiedDrop={onUnifiedDrop}
         />
       </RomWeaverSettingsProvider>,
@@ -1452,6 +1485,53 @@ describe("apply workflow view - bundle controls", () => {
     );
     expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+  });
+
+  it("leads bundle pages with an open export job and keeps Apply collapsed", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+          mode="bundle"
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    const job = container.querySelector("#rom-weaver-bundle-job");
+    const applyStep = container.querySelector("#rom-weaver-row-output-file-name");
+    expect(job?.querySelector(".bundle-job")?.classList).toContain("is-open");
+    expect(job?.compareDocumentPosition(applyStep || container)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(applyStep?.classList).toContain("is-collapsed");
+    expect(container.querySelector("#rom-weaver-button-apply")).toBeNull();
+  });
+
+  it("opens the optional Apply section on bundle pages", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          bundleExport={bundleExport()}
+          bundleTools={bundleTools(() => undefined)}
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
+            ui: storeOf(ui) as unknown as PatcherUiController,
+          }}
+          mode="bundle"
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    fireEvent.click(container.querySelector("#rom-weaver-row-output-file-name .step-collapse") as HTMLButtonElement);
+    expect(container.querySelector("#rom-weaver-row-output-file-name")?.classList).not.toContain("is-collapsed");
+    expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
   });
 
   it("opens and focuses the bundle step for a direct hash URL", async () => {

@@ -56,6 +56,7 @@ const countVisibleWords = (source) =>
 // index.html is the apex landing page; the patcher lives at apply-patch.html.
 const homeHtml = read("index.html");
 const applyHtml = read("apply-patch.html");
+const bundleHtml = read("bundle.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create-patch.html");
 const identifyHtml = read("identify-rom.html");
@@ -74,6 +75,7 @@ for (const route of DOC_ROUTES) {
 
 for (const route of [
   "apply-patch",
+  "bundle",
   "create-patch",
   "identify-rom",
   "test-rom",
@@ -195,6 +197,9 @@ if (currentHomeRows.length !== 1 || currentHomeRows[0] !== "tab-home") {
 }
 assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
 assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
+assertIncludes(bundleHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.bundle.slug}"`, "bundle canonical");
+assertIncludes(bundleHtml, WORKFLOW_SEO_ROUTES.bundle.description, "bundle description");
+assertIncludes(read("bundle/index.html"), WORKFLOW_SEO_ROUTES.bundle.description, "static-host bundle description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
@@ -218,6 +223,11 @@ assertIncludes(
   "apply prerendered workflow",
 );
 assertIncludes(
+  bundleHtml,
+  'aria-current="page" aria-label="Bundle Patches" class="nav-row" href="bundle" id="tab-bundle"',
+  "bundle prerendered workflow",
+);
+assertIncludes(
   createHtml,
   'aria-current="page" aria-label="Create Patch" class="nav-row" href="create-patch" id="tab-creator"',
   "create prerendered workflow",
@@ -235,10 +245,12 @@ const threadResolver =
 for (const route of [
   "index.html",
   "apply.html",
+  "bundle.html",
   "create.html",
   "identify.html",
   "404.html",
   "apply/index.html",
+  "bundle/index.html",
   "create/index.html",
   "identify/index.html",
   "test/index.html",
@@ -327,7 +339,7 @@ for (const route of DOC_ROUTES) {
   if (route.slug === "docs") {
     assertIncludes(docsHtml, 'href="/apply-patch?guide=apply"', `${route.slug} guided Apply link`);
     assertIncludes(docsHtml, 'href="/create-patch?guide=create"', `${route.slug} guided Create link`);
-    assertIncludes(docsHtml, 'href="/apply-patch?guide=bundle"', `${route.slug} guided Bundle link`);
+    assertIncludes(docsHtml, 'href="/bundle?guide=bundle"', `${route.slug} guided Bundle link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
     assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);

@@ -84,7 +84,7 @@ To see the sample files for yourself, choose **Download a test bundle** from the
 The same practice files drive two more guided runs:
 
 - [Guided Create](https://rom-weaver.com/create-patch?guide=create) makes a patch from two homebrew ROMs.
-- [Guided Bundle](https://rom-weaver.com/apply-patch?guide=bundle) turns the Apply sample into a patch-only release archive.
+- [Guided Bundle](https://rom-weaver.com/bundle?guide=bundle) turns the Apply sample into a patch-only release archive.
 
 These are optional follow-up exercises.
 

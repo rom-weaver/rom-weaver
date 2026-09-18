@@ -78,7 +78,7 @@ const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow
       </>
     ),
     get: localizer.message("ui.home.flowBundleGet"),
-    href: `${route("apply-patch")}?guide=bundle`,
+    href: route("bundle"),
     title: localizer.message("ui.home.flowBundle"),
   },
   {

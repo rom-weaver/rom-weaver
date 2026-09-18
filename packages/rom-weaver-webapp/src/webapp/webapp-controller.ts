@@ -34,6 +34,7 @@ import {
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
 const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "home",
+  "bundle",
   "patcher",
   "creator",
   "docs",
@@ -57,6 +58,7 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
+  bundle: "bundle",
   creator: "create-patch",
   // The landing page is the app base itself, so its slug is empty and
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
@@ -73,6 +75,8 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "apply-patch": "patcher",
   "apply-patch.html": "patcher",
+  bundle: "bundle",
+  "bundle.html": "bundle",
   "create-patch": "creator",
   "create-patch.html": "creator",
   "identify-rom": "identify",
@@ -159,7 +163,6 @@ const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode
   if (view === "docs" && readRouteSegments().includes("docs")) return;
   const nextUrl = new URL(VIEW_TO_ROUTE_SLUG[view], readAppBaseUrl());
   nextUrl.search = window.location.search;
-  if (view === "patcher" && window.location.hash.toLowerCase() === "#bundle") nextUrl.hash = "#bundle";
   if (nextUrl.href === window.location.href) return;
   window.history[historyMode === "push" ? "pushState" : "replaceState"](window.history.state, "", nextUrl);
 };
