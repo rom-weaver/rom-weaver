@@ -628,7 +628,17 @@ const DocsPage = ({
     const article = document.querySelector<HTMLElement>(".docs-article");
     if (!article) return undefined;
     const timers = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>();
-    const buttons = [...article.querySelectorAll<HTMLButtonElement>("[data-docs-copy]")];
+    const buttons = [...article.querySelectorAll<HTMLElement>("[data-docs-copy-container]")].map((container) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "docs-copy-button";
+      button.dataset.docsCopy = "";
+      button.title = "Copy code";
+      button.setAttribute("aria-label", "Copy code");
+      button.innerHTML = '<span aria-hidden="true" class="docs-copy-icon"></span><span class="sr-only" data-docs-copy-label aria-live="polite"></span>';
+      container.prepend(button);
+      return button;
+    });
     const scheduleReset = (button: HTMLButtonElement, delay: number) => {
       const previous = timers.get(button);
       if (previous) clearTimeout(previous);
@@ -660,6 +670,7 @@ const DocsPage = ({
     return () => {
       for (const cleanup of handlers) cleanup();
       for (const timer of timers.values()) clearTimeout(timer);
+      for (const button of buttons) button.remove();
     };
   }, [active, html]);
   useEffect(() => {

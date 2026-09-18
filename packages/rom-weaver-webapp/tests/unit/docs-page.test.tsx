@@ -223,7 +223,7 @@ echo hi
     expect(route.html).toContain('<h2 id="a-and-b-1"><a class="docs-section-link" href="/docs/fixture#a-and-b-1">');
     expect(route.html).toContain('<span class="docs-section-title">A &amp; <code>B</code></span></a></h2>');
     expect(route.html).toContain('class="docs-section-link-icon"');
-    expect(route.html).toContain('<div class="docs-code-block"><button aria-label="Copy code"');
+    expect(route.html).toContain('<div class="docs-code-block" data-docs-copy-container>');
   });
 
   it("copies a guide code block and shows transient feedback", async () => {
@@ -263,7 +263,7 @@ echo hi
     const container = document.createElement("div");
     container.innerHTML = route.html;
     expect(container.querySelector("a button")).toBeNull();
-    expect(container.querySelector(".docs-inline-code > button")).not.toBeNull();
+    expect(container.querySelector(".docs-inline-code[data-docs-copy-container]")).not.toBeNull();
   });
 
   // A markdown link inside a section heading would nest an <a> inside the
