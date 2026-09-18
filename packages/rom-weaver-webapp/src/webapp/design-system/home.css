@@ -52,6 +52,16 @@
   font-size: 1rem;
   color: var(--ink-2);
 }
+.rw-app .home-try {
+  display: none;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+.rw-app .home-try a {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .rw-app .home-loom {
   display: block;
   grid-area: loom;
@@ -108,19 +118,37 @@
   border-radius: 2px;
 }
 .rw-app .home-loom-legend .k,
-.rw-app .home-loom-legend .sum {
+.rw-app .home-loom-legend .sum,
+.rw-app .home-loom-caption {
   display: none;
 }
 @media (min-width: 880px) {
   .rw-app .home-hero {
     grid-template-areas: "copy loom";
-    grid-template-columns: minmax(0, 1fr) 280px;
-    gap: 24px;
+    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+    gap: 0 56px;
     align-items: start;
-    padding-block: 20px 24px;
+    padding-block: var(--gutter) clamp(40px, 6vw, 72px);
+  }
+  .rw-app .home-loom {
+    align-self: center;
+  }
+  .rw-app .home-loom-frame {
+    padding: var(--sp-l);
+    box-shadow: 0 30px 60px -40px rgb(0 0 0 / 0.55);
   }
   .rw-app .home-hero-copy {
     gap: 12px;
+  }
+  .rw-app .home-hero-body {
+    gap: 0;
+  }
+  .rw-app .home-main-actions {
+    margin-top: 28px;
+  }
+  .rw-app .home-try {
+    display: block;
+    margin-top: 14px;
   }
   .rw-app .home-hero h1 {
     max-width: 28ch;
@@ -130,7 +158,31 @@
     aspect-ratio: 1.4;
   }
   .rw-app .home-loom-legend {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    align-items: center;
+    margin-top: 14px;
+    font-size: 0.75rem;
+  }
+  .rw-app .home-loom-legend .row {
+    display: contents;
+  }
+  .rw-app .home-loom-legend i {
+    width: 22px;
+    height: 8px;
+  }
+  .rw-app .home-loom-legend .k {
+    display: inline;
+    color: var(--ink-3);
+  }
+  .rw-app .home-loom-legend .sum {
+    display: inline;
+  }
+  .rw-app .home-loom-caption {
+    display: block;
+    margin-top: 12px;
+    font-size: 0.8rem;
+    color: var(--ink-3);
   }
 }
 .rw-app .home-section {
