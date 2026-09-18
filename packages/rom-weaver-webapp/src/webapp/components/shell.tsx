@@ -619,7 +619,7 @@ const ProjectTiles = ({
   onOpenDocs,
 }: {
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  docsHref: string;
+  docsHref?: string;
   donateHref?: string;
   githubHref?: string;
   localizer: Localizer;
@@ -630,17 +630,19 @@ const ProjectTiles = ({
   const supportLabel = localizer.message("ui.footer.donate");
   return (
     <>
-      <a
-        aria-label={docsLabel}
-        className="tool"
-        href={docsHref}
-        onClick={(event) => activateOnClick(event, onOpenDocs)}
-      >
-        <BookOpen aria-hidden="true" />
-        <span aria-hidden="true" className="tip">
-          {docsLabel}
-        </span>
-      </a>
+      {docsHref ? (
+        <a
+          aria-label={docsLabel}
+          className="tool"
+          href={docsHref}
+          onClick={(event) => activateOnClick(event, onOpenDocs)}
+        >
+          <BookOpen aria-hidden="true" />
+          <span aria-hidden="true" className="tip">
+            {docsLabel}
+          </span>
+        </a>
+      ) : null}
       {githubHref ? (
         <a
           aria-label={githubLabel}
@@ -1481,10 +1483,19 @@ const Masthead = ({
       }}
     />
   );
-  const projectTiles = (
+  const phoneProjectTiles = (
     <ProjectTiles
       confirmExternalNavigation={confirmExternalNavigation}
       docsHref={docsHref}
+      donateHref={donateHref}
+      githubHref={githubHref}
+      localizer={localizer}
+      onOpenDocs={() => onSelectTab("docs")}
+    />
+  );
+  const desktopProjectTiles = (
+    <ProjectTiles
+      confirmExternalNavigation={confirmExternalNavigation}
       donateHref={donateHref}
       githubHref={githubHref}
       localizer={localizer}
@@ -1522,7 +1533,7 @@ const Masthead = ({
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
               <div className="shell-head-tools">
-                <span className="phone-project-tools">{projectTiles}</span>
+                <span className="phone-project-tools">{phoneProjectTiles}</span>
                 <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}
@@ -1559,7 +1570,7 @@ const Masthead = ({
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
           <div className="topbar-tools">
-            {projectTiles}
+            {desktopProjectTiles}
             <span aria-hidden="true" className="tool-separator" />
             <span className="desktop-runtime header-runtime">{headerStatus}</span>
             {appearanceTiles("desktop")}

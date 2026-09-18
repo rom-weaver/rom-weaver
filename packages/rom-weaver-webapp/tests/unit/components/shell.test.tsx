@@ -304,7 +304,6 @@ describe("Masthead", () => {
     const names = (scope: string) =>
       Array.from(container.querySelectorAll(`${scope} .tool`)).map((tool) => tool.getAttribute("aria-label"));
     const expected = [
-      "Docs",
       "View source on GitHub",
       "Support",
       "Installing offline copy",
@@ -313,7 +312,7 @@ describe("Masthead", () => {
       "Settings",
     ];
     expect(names(".topbar-tools")).toEqual(expected);
-    expect(names(".shell-head-tools")).toEqual(expected);
+    expect(names(".shell-head-tools")).toEqual(["Docs", ...expected]);
     for (const scope of [".topbar-tools", ".shell-head-tools"]) {
       const tools = container.querySelector(scope) as HTMLElement;
       const separator = tools.querySelector(".tool-separator");
@@ -326,7 +325,9 @@ describe("Masthead", () => {
       expect(separator?.nextElementSibling?.querySelector(".tool")?.getAttribute("aria-label")).toBe(
         "Installing offline copy",
       );
-      expect(tools.querySelector('[aria-label="Docs"]')).toBeTruthy();
+      const docs = tools.querySelector('[aria-label="Docs"]');
+      if (scope === ".shell-head-tools") expect(docs).toBeTruthy();
+      else expect(docs).toBeNull();
     }
     fireEvent.click(container.querySelector('.topbar-tools .tool[aria-label="Settings"]') as HTMLButtonElement);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
