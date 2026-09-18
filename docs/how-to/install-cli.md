@@ -6,13 +6,13 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 ## Table of contents
 
 - [Prebuilt install](#prebuilt-install)
-  - [Homebrew (macOS arm64/Intel, Linux arm64/x86-64)](#homebrew-macos-arm64intel-linux-arm64x86-64)
-  - [Scoop (Windows)](#scoop-windows)
-  - [Install script (macOS, Linux)](#install-script-macos-linux)
-  - [Install script (Windows)](#install-script-windows)
-  - [npm](#npm)
-  - [cargo-binstall](#cargo-binstall)
-  - [mise](#mise)
+- [Homebrew (macOS arm64/Intel, Linux arm64/x86-64)](#homebrew-macos-arm64intel-linux-arm64x86-64)
+- [Scoop (Windows)](#scoop-windows)
+- [Install script (macOS, Linux)](#install-script-macos-linux)
+- [Install script (Windows)](#install-script-windows)
+- [npm](#npm)
+- [cargo-binstall](#cargo-binstall)
+- [mise](#mise)
 - [Source install](#source-install)
   - [Install the data without a network](#install-the-data-without-a-network)
 - [Run in Docker](#run-in-docker)
@@ -42,13 +42,13 @@ Some install methods deliver only the executable, so two extra steps finish them
 
 Homebrew, the macOS/Linux install script, and global npm installs put the generated CLI manpages in a Unix manpath. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. The Docker image stores the pages under `/usr/local/share/man/man1`, but it has no `man(1)` program. See [Install shell completions](#install-shell-completions) for completion files, and [man pages](../reference/cli.md#man-pages) for the page commands.
 
-### Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
+## Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
 
 ```bash
 brew install rom-weaver/tap/rom-weaver
 ```
 
-### Scoop (Windows)
+## Scoop (Windows)
 
 ```powershell
 scoop bucket add rom-weaver https://github.com/rom-weaver/scoop-bucket
@@ -57,7 +57,7 @@ scoop install rom-weaver
 
 Scoop stores the generated manpages under the app directory's `docs\\man` folder. Find that directory with `scoop prefix rom-weaver`; Windows has no standard manpath.
 
-### Install script (macOS, Linux)
+## Install script (macOS, Linux)
 
 Downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless `ROM_WEAVER_REQUIRE_ATTESTATION=1` is set. Set `ROM_WEAVER_INSTALL_DIR` to choose another directory, or `ROM_WEAVER_VERSION` to install a specific release. See [Verify a download](verify-downloads.md) to run that check yourself or change how strict it is. It also installs manpages under `~/.local/share/man/man1` and completions under the standard per-user shell directories.
 
@@ -68,7 +68,7 @@ sh -c 'curl -fsSL \
 
 The outer `sh -c` runs the command with POSIX shell syntax.
 
-### Install script (Windows)
+## Install script (Windows)
 
 The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It honors the same environment variables and runs the same checks. The generated manpages are stored under that directory's `docs\man` folder because Windows has no standard manpath. The PowerShell completion is installed under its `completions` folder.
 
@@ -76,7 +76,7 @@ The PowerShell equivalent, installing to `%LOCALAPPDATA%\rom-weaver\bin`. It hon
 irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex
 ```
 
-### npm
+## npm
 
 The only channel covering every supported target at once. Needs Node.js 22+. The unscoped `rom-weaver` package points at the `@rom-weaver/cli` launcher, whose binary arrives through a platform-specific optional dependency, so only your platform's binary is downloaded.
 
@@ -93,7 +93,7 @@ npx @rom-weaver/cli probe --input game.iso
 npm install --save-dev @rom-weaver/cli
 ```
 
-### cargo-binstall
+## cargo-binstall
 
 Fetches the released binary instead of compiling from source, which `cargo install rom-weaver-cli` would otherwise do.
 
@@ -110,7 +110,7 @@ rom-weaver setup
 
 `rom-weaver setup` downloads this version's identify packs and cheat shards from its GitHub release into the per-user data directory. Running it again reports what is installed instead of downloading again; `--force` refreshes it. The Homebrew, scoop, npm, install-script, and Docker packages already carry that data, so `setup` only reports on those.
 
-### mise
+## mise
 
 Manages the CLI per project in `mise.toml` and verifies the release's GitHub artifact attestations on install. [Install mise](https://mise.jdx.dev/installing-mise.html) first. The `minimum_release_age=0s` option lets new releases resolve immediately on release day; omit it if you prefer mise's default release-age delay.
 
