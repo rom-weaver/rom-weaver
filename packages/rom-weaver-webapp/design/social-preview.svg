@@ -8,8 +8,8 @@
 <text id="wordmark" x="57" y="213" font-family="Inter Display, Inter, Arial, sans-serif" font-size="128" font-weight="700" letter-spacing="-4.096" fill="#20282d">rom<tspan fill="#77766d" font-weight="400">-</tspan><tspan fill="#b03a0a">weaver</tspan></text>
 <text id="copy-2" x="64" y="280" font-family="Inter, Arial, Helvetica, sans-serif" font-size="39" font-weight="400" fill="#20282d" letter-spacing="-1">Your ROM workflow. One toolkit.</text>
 <text id="copy-3" x="64" y="333" font-family="Inter, Arial, Helvetica, sans-serif" font-size="27" font-weight="400" fill="#58605b" letter-spacing="-0.2">Patch · Compress · Extract · Convert · Cheats · Saves</text>
-<g id="original-cartridge-mark"><rect x="984" y="92" width="232" height="232" rx="28" fill="#20282d"/><rect x="984" y="92" width="232" height="232" rx="28" fill="url(#weave)"/>
-<svg x="1011.84" y="119.84" width="176.32" height="176.32" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/><path fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/></svg></g>
+<g id="original-cartridge-mark"><rect x="964" y="72" width="272" height="272" rx="33" fill="#20282d"/><rect x="964" y="72" width="272" height="272" rx="33" fill="url(#weave)"/>
+<svg x="996.64" y="104.64" width="206.72" height="206.72" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/><path fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/></svg></g>
 <path d="M64 397H1216" fill="none" stroke="#d8d5cc" stroke-width="1"/>
 <text id="patch-formats" x="64" y="461" font-family="Inter, Arial, sans-serif" font-size="29" font-weight="400" fill="#20282d"><tspan fill="#b03a0a" font-weight="650">21</tspan><tspan dx="10.149999999999999">patch formats</tspan></text>
 <text id="copy-4" x="468" y="444" font-family="Inter, Arial, Helvetica, sans-serif" font-size="27" font-weight="500" fill="#20282d">CHD · RVZ · Z3DS</text>

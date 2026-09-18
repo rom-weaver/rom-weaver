@@ -12,8 +12,8 @@
 <text id="copy-4" x="44" y="192" font-family="Inter, Arial, Helvetica, sans-serif" font-size="20" font-weight="400" fill="#b3bbc8">Patch · Compress · Extract · Convert · Cheats · Saves</text>
 <text id="copy-5" x="806" y="132" font-family="Inter, Arial, Helvetica, sans-serif" font-size="18" font-weight="400" fill="#b3bbc8">Native CLI speed.</text>
 <text id="copy-6" x="806" y="159" font-family="Inter, Arial, Helvetica, sans-serif" font-size="18" font-weight="400" fill="#b3bbc8">Browser convenience.</text>
-<g id="original-cartridge-mark"><rect x="1092" y="64" width="144" height="144" rx="19" fill="#0c0f13"/><rect x="1092" y="64" width="144" height="144" rx="19" fill="url(#weave)"/>
-<svg x="1109.28" y="81.28" width="109.44" height="109.44" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/><path fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/></svg></g>
+<g id="original-cartridge-mark"><rect x="1080" y="52" width="168" height="168" rx="22" fill="#0c0f13"/><rect x="1080" y="52" width="168" height="168" rx="22" fill="url(#weave)"/>
+<svg x="1099.68" y="71.68" width="128.64" height="128.64" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/><path fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/></svg></g>
 <path d="M44 222H1236" fill="none" stroke="#46515d" stroke-width="1"/>
 <text id="patch-formats" x="44" y="262" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="400" fill="#edf0f5"><tspan fill="#ef8534" font-weight="650">21</tspan><tspan dx="7.699999999999999">patch formats</tspan></text>
 <text id="copy-7" x="442" y="249" font-family="Inter, Arial, Helvetica, sans-serif" font-size="21" font-weight="500" fill="#edf0f5">CHD · RVZ · Z3DS</text>
