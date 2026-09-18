@@ -16,7 +16,6 @@ type HomePageProps = {
 };
 
 type Flow = {
-  bring: React.ReactNode;
   get: React.ReactNode;
   href: string;
   primary?: boolean;
@@ -37,25 +36,6 @@ const ArrowIcon = (): React.ReactElement => (
   </svg>
 );
 
-const CheckIcon = (): React.ReactElement => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="1.8"
-    viewBox="0 0 20 20"
-  >
-    <path d="M4 10.5l4 4 8-9" />
-  </svg>
-);
-
-const CONTAINERS_READ = ["ZIP", "7z", "RAR", "tar", "CHD", "RVZ", "Z3DS", "CSO", "PBP", "GCZ", "WIA", "WBFS"];
-const CONTAINERS_WRITE = ["ZIP", "7z", "CHD", "RVZ", "Z3DS"];
-const PATCH_FORMATS = ["IPS", "BPS", "UPS", "xdelta", "PPF", "RUP", "BDF", "APS", "DPS", "BSP", "HDiffPatch"];
-const CHECKSUMS = ["CRC32", "MD5", "SHA-1", "SHA-256", "BLAKE3"];
-
 /**
  * The four featured workflows. This list MUST NOT depend on
  * settings: the page is prerendered into index.html with defaults, so anything
@@ -64,31 +44,22 @@ const CHECKSUMS = ["CRC32", "MD5", "SHA-1", "SHA-256", "BLAKE3"];
  */
 const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow[] => [
   {
-    bring: localizer.message("ui.home.flowApplyBring"),
     get: localizer.message("ui.home.flowApplyGet"),
     href: route("apply-patches"),
     primary: true,
     title: localizer.message("ui.home.flowApply"),
   },
   {
-    bring: (
-      <>
-        {localizer.message("ui.home.flowBundleBringBefore")} <code>rom-weaver-bundle.json</code>{" "}
-        {localizer.message("ui.home.flowBundleBringAfter")}
-      </>
-    ),
     get: localizer.message("ui.home.flowBundleGet"),
     href: route("bundle-patches"),
     title: localizer.message("ui.home.flowBundle"),
   },
   {
-    bring: localizer.message("ui.home.flowCreateBring"),
     get: localizer.message("ui.home.flowCreateGet"),
     href: route("create-patch"),
     title: localizer.message("ui.home.flowCreate"),
   },
   {
-    bring: localizer.message("ui.home.flowTestBring"),
     get: localizer.message("ui.home.flowTestGet"),
     href: route("test-rom"),
     title: localizer.message("ui.home.flowTest"),
@@ -121,9 +92,6 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             <a className="btn primary lg" href={route("apply-patches")}>
               {localizer.message("ui.home.applyPatchCta")}
               <ArrowIcon />
-            </a>
-            <a className="btn ghost lg" href="#home-cli">
-              {localizer.message("ui.home.installCli")}
             </a>
           </div>
           <p className="home-try">
@@ -168,31 +136,16 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               </span>
             </div>
           </div>
-          <p className="home-loom-caption">{localizer.message("ui.home.loomCaption")}</p>
         </div>
       </div>
 
       <div className="home-wrap home-section">
-        <div className="home-section-head">
-          <p className="home-eyebrow">{localizer.message("ui.home.workflowsEyebrow")}</p>
-          <h2>{localizer.message("ui.home.workflowsTitle")}</h2>
-          <p>{localizer.message("ui.home.workflowsDescription")}</p>
-        </div>
         <div className="home-flows">
           {flows.map((flow) => (
             <a className={flow.primary ? "home-flow is-primary" : "home-flow"} href={flow.href} key={flow.title}>
-              <h3>
-                {flow.title}
-                {flow.primary ? <span className="badge">{localizer.message("ui.home.mostUsed")}</span> : null}
-              </h3>
-              <dl>
-                <dt>{localizer.message("ui.home.bring")}</dt>
-                <dd>{flow.bring}</dd>
-                <dt>{localizer.message("ui.home.get")}</dt>
-                <dd>{flow.get}</dd>
-              </dl>
+              <h3>{flow.title}</h3>
+              <p>{flow.get}</p>
               <span className="go">
-                {localizer.message("ui.home.openFlow", { flow: flow.title })}
                 <ArrowIcon />
               </span>
             </a>
@@ -200,162 +153,26 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         </div>
       </div>
 
-      <div className="home-wrap home-section" id="home-cli">
-        <div className="home-section-head">
-          <p className="home-eyebrow">{localizer.message("ui.home.frontendsEyebrow")}</p>
-          <h2>{localizer.message("ui.home.frontendsTitle")}</h2>
-          <p>{localizer.message("ui.home.frontendsDescription")}</p>
-        </div>
-        <div className="home-fronts">
-          <div className="home-front">
-            <h3>{localizer.message("ui.home.webapp")}</h3>
-            <ul>
-              <li>{localizer.message("ui.home.webappItem1")}</li>
-              <li>{localizer.message("ui.home.webappItem2")}</li>
-              <li>{localizer.message("ui.home.webappItem3")}</li>
-              <li>{localizer.message("ui.home.webappItem4")}</li>
-            </ul>
-            <div className="home-install">
-              <span className="k">{localizer.message("ui.home.open")}</span>
-              <textarea
-                aria-label={localizer.message("ui.home.open")}
-                className="home-install-code"
-                defaultValue="https://rom-weaver.com/apply-patches"
-                readOnly
-                rows={1}
-              />
-            </div>
-            <p className="foot">{localizer.message("ui.home.webappFoot")}</p>
-            <div className="home-actions">
-              <a className="btn ghost" href={`${route("docs")}/self-hosting`}>
-                {localizer.message("ui.home.selfHostingGuide")}
-                <ArrowIcon />
-              </a>
-            </div>
-          </div>
-          <div className="home-front">
-            <h3>{localizer.message("ui.home.commandLine")}</h3>
-            <ul>
-              <li>{localizer.message("ui.home.cliItem1")}</li>
-              <li>{localizer.message("ui.home.cliItem2")}</li>
-              <li>{localizer.message("ui.home.cliItem3")}</li>
-            </ul>
-            <div className="home-install">
-              <span className="k">{localizer.message("ui.home.installWith")}</span>
-              <textarea
-                aria-label={localizer.message("ui.home.installWith")}
-                className="home-install-code"
-                defaultValue={`brew install rom-weaver/tap/rom-weaver
-npm install --global rom-weaver
-cargo install rom-weaver-cli && rom-weaver setup
-docker run ghcr.io/rom-weaver/rom-weaver-cli`}
-                readOnly
-                rows={4}
-              />
-            </div>
-            <p className="foot">{localizer.message("ui.home.cliFoot")}</p>
-            <div className="home-actions">
-              <a className="btn ghost" href={`${route("docs")}/install`}>
-                {localizer.message("ui.home.fullInstallGuide")}
-                <ArrowIcon />
-              </a>
-              <a className="btn ghost" href={`${route("docs")}/cli-get-started`}>
-                {localizer.message("ui.home.cliWalkthrough")}
-              </a>
-            </div>
-          </div>
+      <div className="home-wrap home-section home-cli" id="home-cli">
+        <h2>{localizer.message("ui.home.commandLine")}</h2>
+        <div className="home-actions">
+          <a className="btn ghost" href={`${route("docs")}/install`}>
+            {localizer.message("ui.home.fullInstallGuide")}
+            <ArrowIcon />
+          </a>
+          <a className="btn ghost" href={`${route("docs")}/cli-get-started`}>
+            {localizer.message("ui.home.cliWalkthrough")}
+          </a>
+          <a className="btn ghost" href={`${route("docs")}/self-hosting`}>
+            {localizer.message("ui.home.selfHostingGuide")}
+          </a>
         </div>
       </div>
 
-      <div className="home-wrap home-section">
-        <div className="home-section-head">
-          <p className="home-eyebrow">{localizer.message("ui.home.formatsEyebrow")}</p>
-          <h2>{localizer.message("ui.home.formatsTitle")}</h2>
-        </div>
-        <div className="home-formats">
-          <div className="home-fmt-row">
-            <div className="k">
-              {localizer.message("ui.home.containers")} <small>{localizer.message("ui.home.reads")}</small>
-            </div>
-            <div className="home-chips">
-              {CONTAINERS_READ.map((name) => (
-                <span className="home-chip" key={name}>
-                  {name}
-                </span>
-              ))}
-              <span className="more">{localizer.message("ui.home.nestedArchives")}</span>
-            </div>
-          </div>
-          <div className="home-fmt-row">
-            <div className="k">
-              {localizer.message("ui.home.containers")} <small>{localizer.message("ui.home.writes")}</small>
-            </div>
-            <div className="home-chips">
-              {CONTAINERS_WRITE.map((name) => (
-                <span className="home-chip out" key={name}>
-                  {name}
-                </span>
-              ))}
-              <span className="more">{localizer.message("ui.home.codecCompressionSettings")}</span>
-            </div>
-          </div>
-          <div className="home-fmt-row">
-            <div className="k">
-              {localizer.message("ui.home.patches")} <small>{localizer.message("ui.home.readsAndWrites")}</small>
-            </div>
-            <div className="home-chips">
-              {PATCH_FORMATS.map((name) => (
-                <span className="home-chip" key={name}>
-                  {name}
-                </span>
-              ))}
-              <span className="more">
-                <a href={`${route("docs")}/supported-formats`}>{localizer.message("ui.home.fullTable")}</a>
-              </span>
-            </div>
-          </div>
-          <div className="home-fmt-row">
-            <div className="k">{localizer.message("ui.home.checksums")}</div>
-            <div className="home-chips">
-              {CHECKSUMS.map((name) => (
-                <span className="home-chip" key={name}>
-                  {name}
-                </span>
-              ))}
-              <span className="more">{localizer.message("ui.home.copierHeader")}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="home-wrap home-section">
-        <div className="home-section-head">
-          <p className="home-eyebrow">{localizer.message("ui.home.localFirstEyebrow")}</p>
-          <h2>{localizer.message("ui.home.localFirstTitle")}</h2>
-        </div>
-        <div className="home-promises">
-          <div className="home-promise">
-            <h3>
-              <CheckIcon />
-              {localizer.message("ui.home.filesStay")}
-            </h3>
-            <p>{localizer.message("ui.home.filesStayDescription")}</p>
-          </div>
-          <div className="home-promise">
-            <h3>
-              <CheckIcon />
-              {localizer.message("ui.home.bundleProof")}
-            </h3>
-            <p>{localizer.message("ui.home.bundleProofDescription")}</p>
-          </div>
-          <div className="home-promise">
-            <h3>
-              <CheckIcon />
-              {localizer.message("ui.home.openSource")}
-            </h3>
-            <p>{localizer.message("ui.home.openSourceDescription")}</p>
-          </div>
-        </div>
+      <div className="home-wrap home-section home-details">
+        <a href={`${route("docs")}/supported-formats`}>{localizer.message("ui.home.formatsEyebrow")}</a>
+        <p>{localizer.message("ui.home.filesStay")}</p>
+        <p>{localizer.message("ui.home.openSource")}</p>
       </div>
     </section>
   );
