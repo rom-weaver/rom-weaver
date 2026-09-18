@@ -196,7 +196,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="not a URL" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("a.home-flow.is-primary")?.getAttribute("href")).toBe("/apply-patches");
+    expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply-patches");
     expect(container.querySelector("a[href='/create-patch']")).toBeTruthy();
   });
 
