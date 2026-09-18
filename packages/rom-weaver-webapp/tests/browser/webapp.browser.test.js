@@ -462,18 +462,20 @@ test.each([
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
   const chip = document.querySelector(".sample-tutorial-start-chip");
   const chipBox = chip.getBoundingClientRect();
-  expect(chipBox.height).toBeLessThan(40);
-  // The chip rides the hero's lower corner instead of spending a band below it.
+  expect(chipBox.height).toBeGreaterThanOrEqual(44);
+  expect(chipBox.height).toBeLessThanOrEqual(48);
   const hero = document.querySelector(".drop.hero").getBoundingClientRect();
-  expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
+  expect(chipBox.top).toBeGreaterThanOrEqual(hero.bottom);
   // Closed popover is not mounted at all - it must stay out of the prerendered shell.
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(2);
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(4);
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
   expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
+  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe("/docs/apply-rom-patches");
   expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
+  expect(document.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);
