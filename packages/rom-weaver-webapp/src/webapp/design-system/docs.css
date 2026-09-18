@@ -12,16 +12,13 @@ html:has(.docs-workbench) {
 }
 
 .rw-app .docs-workbench {
-  /* The reading frame grows with the viewport until the desktop bound. Code
-     and screenshots keep a looser measure, while tables and prose use the
-     available article width. */
-  --docs-content-max: 80rem;
+  /* The app shell owns the desktop content width. The docs frame MUST fill the
+     content column so it aligns with the header and the other pages. */
   --measure-wide: 60rem;
   --article-pad: clamp(18px, 3vw, 32px);
   --docs-rail: 11rem;
   --docs-gap: clamp(18px, 3vw, 30px);
   width: 100%;
-  max-width: var(--docs-content-max);
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
   margin-inline: auto;
 }
