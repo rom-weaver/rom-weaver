@@ -29,22 +29,62 @@ log-level = "info"
 # Legacy workflow links MUST retain query strings and redirect directly.
 [[advanced.redirects]]
 source = "/apply"
-destination = "/apply-patch"
+destination = "/apply-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply/"
-destination = "/apply-patch"
+destination = "/apply-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply.html"
-destination = "/apply-patch"
+destination = "/apply-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/apply/index.html"
-destination = "/apply-patch"
+destination = "/apply-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patch"
+destination = "/apply-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patch/"
+destination = "/apply-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patch.html"
+destination = "/apply-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/apply-patch/index.html"
+destination = "/apply-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle"
+destination = "/bundle-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle/"
+destination = "/bundle-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle.html"
+destination = "/bundle-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle/index.html"
+destination = "/bundle-patches"
 kind = 301
 
 [[advanced.redirects]]
@@ -129,22 +169,22 @@ kind = 301
 
 [[advanced.redirects]]
 source = "/weave"
-destination = "/apply-patch"
+destination = "/apply-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/"
-destination = "/apply-patch"
+destination = "/apply-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave.html"
-destination = "/apply-patch"
+destination = "/apply-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/index.html"
-destination = "/apply-patch"
+destination = "/apply-patches"
 kind = 301
 
 # Cross-origin isolation - required for SharedArrayBuffer (wasm threads).

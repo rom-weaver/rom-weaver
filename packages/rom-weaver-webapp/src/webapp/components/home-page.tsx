@@ -66,7 +66,7 @@ const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow
   {
     bring: localizer.message("ui.home.flowApplyBring"),
     get: localizer.message("ui.home.flowApplyGet"),
-    href: route("apply-patch"),
+    href: route("apply-patches"),
     primary: true,
     title: localizer.message("ui.home.flowApply"),
   },
@@ -78,7 +78,7 @@ const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow
       </>
     ),
     get: localizer.message("ui.home.flowBundleGet"),
-    href: route("bundle"),
+    href: route("bundle-patches"),
     title: localizer.message("ui.home.flowBundle"),
   },
   {
@@ -118,7 +118,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         <div className="home-hero-body">
           <p className="home-lede">{localizer.message("ui.home.lede")}</p>
           <div className="home-cta">
-            <a className="btn primary lg" href={route("apply-patch")}>
+            <a className="btn primary lg" href={route("apply-patches")}>
               {localizer.message("ui.home.applyPatchCta")}
               <ArrowIcon />
             </a>
@@ -220,7 +220,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <textarea
                 aria-label={localizer.message("ui.home.open")}
                 className="home-install-code"
-                defaultValue="https://rom-weaver.com/apply-patch"
+                defaultValue="https://rom-weaver.com/apply-patches"
                 readOnly
                 rows={1}
               />

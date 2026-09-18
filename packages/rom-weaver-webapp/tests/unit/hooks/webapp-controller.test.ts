@@ -135,7 +135,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().currentView).toBe("test");
     expect(readWorkflowViewFromPath()).toBe("test");
     expect(controller.selectView("patcher")).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply-patch");
+    expect(window.location.pathname).toBe("/apply-patches");
     expect(controller.selectView("test")).toBe("test");
     expect(window.location.pathname).toBe("/test-rom");
   });
@@ -152,7 +152,7 @@ describe("createWebappRootController over the vanilla store", () => {
     const controller = createController();
     expect(controller.getState().currentView).toBe("creator");
     controller.selectView("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply-patch");
+    expect(window.location.pathname).toBe("/rom-weaver/apply-patches");
   });
 
   it("normalizes a static-host index page to its clean route", () => {
@@ -160,7 +160,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(readWorkflowViewFromPath()).toBe("patcher");
     const controller = createController();
     expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply-patch");
+    expect(window.location.pathname).toBe("/rom-weaver/apply-patches");
   });
 
   it("keeps nested docs routes and returns to the app root", () => {

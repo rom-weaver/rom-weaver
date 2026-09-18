@@ -31,7 +31,7 @@ A PlayStation or Saturn disc image in CHD opens without extraction. The emulator
 
 ## Test an Apply result
 
-1. Load your ROM and patches on the [Apply page](https://rom-weaver.com/apply).
+1. Load your ROM and patches on the [Apply Patches page](https://rom-weaver.com/apply-patches).
 2. Check **Post Apply Test** under **Options**, then apply the patches. If the option warns that the platform cannot be tested, use another emulator or the target hardware.
 3. Select **Open in the Test tab** after Apply finishes.
 4. Play far enough to exercise the patched content.

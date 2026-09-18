@@ -5,7 +5,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   bundle: Object.freeze({
     description:
       "Bundle ordered ROM patch workflows locally in your browser, then optionally apply the bundle with checksum validation. No uploads or account required.",
-    slug: "bundle",
+    slug: "bundle-patches",
     title: `${SITE_NAME}: Bundle ROM patches online`,
   }),
   creator: Object.freeze({
@@ -30,7 +30,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   patcher: Object.freeze({
     description:
       "Apply BPS, IPS, UPS, xdelta, and other ROM patches privately in your browser with checksum validation and ordered patch chains. No uploads or account required.",
-    slug: "apply-patch",
+    slug: "apply-patches",
     title: `${SITE_NAME}: Apply ROM patches online`,
   }),
   test: Object.freeze({

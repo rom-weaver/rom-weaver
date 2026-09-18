@@ -14,7 +14,7 @@ Apply ROM hacks and translations, convert disc images, bake in cheat codes, and 
 Works offline in your browser or CLI. Your files stay on your device. No telemetry.
 
 <p>
-  <a href="https://rom-weaver.com/apply-patch"><img alt="Open the webapp" src="https://img.shields.io/badge/Open_the_webapp-d9690f?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xNCAzaDd2N00yMSAzIDEwIDE0Ii8%2BPHBhdGggZD0iTTEwIDNINWEyIDIgMCAwIDAtMiAydjE0YTIgMiAwIDAgMCAyIDJoMTRhMiAyIDAgMCAwIDItMnYtNSIvPjwvc3ZnPg%3D%3D"></a>
+  <a href="https://rom-weaver.com/apply-patches"><img alt="Open the webapp" src="https://img.shields.io/badge/Open_the_webapp-d9690f?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xNCAzaDd2N00yMSAzIDEwIDE0Ii8%2BPHBhdGggZD0iTTEwIDNINWEyIDIgMCAwIDAtMiAydjE0YTIgMiAwIDAgMCAyIDJoMTRhMiAyIDAgMCAwIDItMnYtNSIvPjwvc3ZnPg%3D%3D"></a>
   <a href="https://github.com/sponsors/brandonocasey"><img alt="Sponsor on GitHub" src="https://img.shields.io/badge/Sponsor_on_GitHub-365d82?logo=githubsponsors&amp;logoColor=white"></a>
   <a href="https://ko-fi.com/brandonocasey"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/Support_on_Ko--fi-365d82?logo=kofi&amp;logoColor=white"></a>
   <a href="https://www.npmjs.com/package/rom-weaver"><img alt="npm version" src="https://img.shields.io/npm/v/rom-weaver?logo=npm&amp;logoColor=white&amp;label=npm&amp;color=d9690f"></a>
@@ -55,7 +55,7 @@ Choose the [webapp](#webapp), [self-hosting](#self-hosting), or [CLI](#cli) path
 
 ## Webapp
 
-Open [rom-weaver.com/apply-patch](https://rom-weaver.com/apply-patch). Add your ROM and patches, then download the result. Files are processed on your device. No install or account is needed.
+Open [rom-weaver.com/apply-patches](https://rom-weaver.com/apply-patches). Add your ROM and patches, then download the result. Files are processed on your device. No install or account is needed.
 
 For offline use, first cache the app and any needed identify packs, cheat databases, and emulator cores. Remote files still need a connection. See [offline behavior](docs/explanation/local-first.md#offline) and [privacy](docs/legal/privacy.md).
 

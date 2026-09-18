@@ -124,7 +124,7 @@ describe("selectView with a leave guard", () => {
     expect(view).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
     expect(onConfirmViewLeave).toHaveBeenCalledWith({ currentView: "patcher", nextView: "docs" });
-    expect(window.location.pathname).toBe("/apply-patch");
+    expect(window.location.pathname).toBe("/apply-patches");
   });
 
   it("moves on when the guard agrees", () => {
@@ -188,7 +188,7 @@ describe("the landing route at the app base", () => {
     expect(window.location.pathname).toBe("/rom-weaver/");
 
     controller.selectView("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply-patch");
+    expect(window.location.pathname).toBe("/rom-weaver/apply-patches");
   });
 });
 

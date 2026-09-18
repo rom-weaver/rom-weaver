@@ -26,10 +26,18 @@
 # file instead.
 
 # Legacy workflow links MUST retain query strings and redirect directly.
-/apply /apply-patch 301
-/apply/ /apply-patch 301
-/apply.html /apply-patch 301
-/apply/index.html /apply-patch 301
+/apply /apply-patches 301
+/apply/ /apply-patches 301
+/apply.html /apply-patches 301
+/apply/index.html /apply-patches 301
+/apply-patch /apply-patches 301
+/apply-patch/ /apply-patches 301
+/apply-patch.html /apply-patches 301
+/apply-patch/index.html /apply-patches 301
+/bundle /bundle-patches 301
+/bundle/ /bundle-patches 301
+/bundle.html /bundle-patches 301
+/bundle/index.html /bundle-patches 301
 /create /create-patch 301
 /create/ /create-patch 301
 /create.html /create-patch 301
@@ -46,10 +54,10 @@
 /trim/ /trim-rom 301
 /trim.html /trim-rom 301
 /trim/index.html /trim-rom 301
-/weave /apply-patch 301
-/weave/ /apply-patch 301
-/weave.html /apply-patch 301
-/weave/index.html /apply-patch 301
+/weave /apply-patches 301
+/weave/ /apply-patches 301
+/weave.html /apply-patches 301
+/weave/index.html /apply-patches 301
 
 # `how-to/work-with-archives.md` was published at /docs/formats, one letter away
 # from the reference page at /docs/supported-formats. The guide now matches its

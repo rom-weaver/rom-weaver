@@ -53,10 +53,10 @@ const countVisibleWords = (source) =>
     .trim()
     .split(/\s+/).length;
 
-// index.html is the apex landing page; the patcher lives at apply-patch.html.
+// index.html is the apex landing page; the patcher lives at apply-patches.html.
 const homeHtml = read("index.html");
-const applyHtml = read("apply-patch.html");
-const bundleHtml = read("bundle.html");
+const applyHtml = read("apply-patches.html");
+const bundleHtml = read("bundle-patches.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create-patch.html");
 const identifyHtml = read("identify-rom.html");
@@ -74,8 +74,8 @@ for (const route of DOC_ROUTES) {
 }
 
 for (const route of [
-  "apply-patch",
-  "bundle",
+  "apply-patches",
+  "bundle-patches",
   "create-patch",
   "identify-rom",
   "test-rom",
@@ -89,6 +89,8 @@ for (const route of [
   "trim",
   "tools",
   "weave",
+  "apply-patch",
+  "bundle",
 ]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
@@ -130,18 +132,21 @@ assertIncludes(notFoundHtml, '<meta name="robots" content="noindex" />', "404 ro
 assertIncludes(notFoundHtml, 'data-page="not-found"', "404 app state");
 assertIncludes(notFoundHtml, 'aria-label="404: Page not found"', "404 heading");
 assertIncludes(notFoundHtml, '<header class="shell-banner"', "404 app chrome");
-assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply-patch"', "404 home action");
+assertIncludes(notFoundHtml, 'class="btn primary not-found-home" href="/apply-patches"', "404 home action");
 assertIncludes(notFoundHtml, 'class="btn ghost not-found-docs" href="/docs"', "404 docs action");
 assertIncludes(notFoundHtml, "That page is not here.", "404 recovery heading");
-assertIncludes(notFoundHtml, 'class="nav-row" href="/apply-patch" id="tab-patcher"', "404 inactive workflow row");
+assertIncludes(notFoundHtml, 'class="nav-row" href="/apply-patches" id="tab-patcher"', "404 inactive workflow row");
 if (notFoundHtml.includes('aria-current="page"')) throw new Error("404 page marks a destination as current");
 if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em dash");
 for (const source of ["/weave", "/weave/", "/weave.html", "/weave/index.html"]) {
-  assertIncludes(redirects, `${source} /apply-patch 301`, `${source} compatibility redirect`);
+  assertIncludes(redirects, `${source} /apply-patches 301`, `${source} compatibility redirect`);
+}
+for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/apply-patch/index.html"]) {
+  assertIncludes(redirects, `${source} /apply-patches 301`, `${source} renamed Apply Patches redirect`);
 }
 assertIncludes(llmsTxt, `# ${SITE_NAME}`, "llms.txt site heading");
 for (const url of [
-  "https://rom-weaver.com/apply-patch",
+  "https://rom-weaver.com/apply-patches",
   "https://rom-weaver.com/create-patch",
   "https://rom-weaver.com/identify-rom",
   "https://rom-weaver.com/docs",
@@ -185,7 +190,7 @@ assertIncludes(homeHtml, "Your ROMs. Your changes.", "home headline");
 // The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
-assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply-patch"', "home Apply card");
+assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply-patches"', "home Apply Patches card");
 assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/supported-formats"', "home formats reference link");
 // Home is the only current Project destination on the landing page.
@@ -219,12 +224,12 @@ assertIncludes(testHtml, WORKFLOW_SEO_ROUTES.test.description, "test description
 assertIncludes(read("test/index.html"), WORKFLOW_SEO_ROUTES.test.description, "static-host test description");
 assertIncludes(
   applyHtml,
-  'aria-current="page" aria-label="Apply Patch" class="nav-row" href="apply-patch" id="tab-patcher"',
+  'aria-current="page" aria-label="Apply Patches" class="nav-row" href="apply-patches" id="tab-patcher"',
   "apply prerendered workflow",
 );
 assertIncludes(
   bundleHtml,
-  'aria-current="page" aria-label="Bundle Patches" class="nav-row" href="bundle" id="tab-bundle"',
+  'aria-current="page" aria-label="Bundle Patches" class="nav-row" href="bundle-patches" id="tab-bundle"',
   "bundle prerendered workflow",
 );
 assertIncludes(
@@ -337,9 +342,9 @@ for (const route of DOC_ROUTES) {
   // closing on the same three buttons made it furniture. Each guide still reaches
   // the samples through the prose links its own author wrote.
   if (route.slug === "docs") {
-    assertIncludes(docsHtml, 'href="/apply-patch?guide=apply"', `${route.slug} guided Apply link`);
+    assertIncludes(docsHtml, 'href="/apply-patches?guide=apply"', `${route.slug} guided Apply Patches link`);
     assertIncludes(docsHtml, 'href="/create-patch?guide=create"', `${route.slug} guided Create link`);
-    assertIncludes(docsHtml, 'href="/bundle?guide=bundle"', `${route.slug} guided Bundle link`);
+    assertIncludes(docsHtml, 'href="/bundle-patches?guide=bundle"', `${route.slug} guided Bundle Patches link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
     assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
@@ -397,7 +402,7 @@ for (const beta of ["trim-rom", "ppf-undo", "whats-new", "save-editor"]) {
   );
 }
 for (const [route, panel] of Object.entries({
-  "apply-patch": "panel-patcher",
+  "apply-patches": "panel-patcher",
   "create-patch": "panel-creator",
   "identify-rom": "panel-identify",
   "ppf-undo": "panel-ppf-undo",
@@ -414,12 +419,14 @@ for (const [route, panel] of Object.entries({
   }
 }
 for (const [legacy, canonical] of Object.entries({
-  apply: "apply-patch",
+  apply: "apply-patches",
+  "apply-patch": "apply-patches",
+  bundle: "bundle-patches",
   create: "create-patch",
   identify: "identify-rom",
   test: "test-rom",
   trim: "trim-rom",
-  weave: "apply-patch",
+  weave: "apply-patches",
 })) {
   for (const file of [`${legacy}.html`, `${legacy}/index.html`]) {
     assertIncludes(read(file), 'name="robots" content="noindex,follow"', `${file} noindex`);
@@ -432,10 +439,10 @@ for (const [legacy, canonical] of Object.entries({
 for (const weave of ["weave/index.html", "weave.html"]) {
   assertIncludes(
     read(weave),
-    'aria-current="page" aria-label="Apply Patch" class="nav-row" href="apply-patch" id="tab-patcher"',
+    'aria-current="page" aria-label="Apply Patches" class="nav-row" href="apply-patches" id="tab-patcher"',
     `${weave} patcher shell`,
   );
-  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply-patch"', `${weave} canonical`);
+  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply-patches"', `${weave} canonical`);
 }
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");

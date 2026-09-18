@@ -1,6 +1,6 @@
 # Apply a ROM patch in the browser
 
-Use the Apply page to combine your clean ROM with one or more patches. The original stays untouched and the new file never leaves your device.
+Use the Apply Patches page to combine your clean ROM with one or more patches. The original stays untouched and the new file never leaves your device.
 
 <!-- START doctoc -->
 ## Table of contents

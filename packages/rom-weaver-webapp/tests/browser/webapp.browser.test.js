@@ -455,8 +455,8 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 });
 
 test.each([
-  ["patcher", "/apply-patch?guide=apply"],
-  ["bundle", "/bundle?guide=bundle"],
+  ["patcher", "/apply-patches?guide=apply"],
+  ["bundle", "/bundle-patches?guide=bundle"],
 ])("the %s New here? beacon carries its own guide and the download", async (initialView, guideHref) => {
   await page.viewport(1024, 900);
   mountWebappRoot({ initialView });

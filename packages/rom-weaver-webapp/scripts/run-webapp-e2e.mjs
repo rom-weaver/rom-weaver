@@ -198,13 +198,13 @@ const runHydrationAudit = async (createContext, baseUrl) => {
 
   try {
     for (const testCase of [
-      { finalView: "patcher", initialView: "patcher", path: "apply-patch/", replayClick: true },
+      { finalView: "patcher", initialView: "patcher", path: "apply-patches/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create-patch/" },
       { finalView: "trim", initialView: "trim", path: "trim-rom/" },
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "trim", path: "trim/" },
-      { finalView: "bundle", initialView: "bundle", path: "bundle?guide=bundle" },
+      { finalView: "bundle", initialView: "bundle", path: "bundle-patches?guide=bundle" },
     ]) {
       const page = await context.newPage();
       const failures = [];
@@ -544,7 +544,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if ((await page.locator('.mode[aria-selected="true"]').count()) !== 0) {
       throw new Error("404 page marks a workflow tab as selected");
     }
-    await page.getByRole("link", { name: "Apply a patch" }).waitFor({ state: "visible" });
+    await page.locator(".not-found-home").waitFor({ state: "visible" });
     await page.getByRole("link", { name: "Browse docs" }).waitFor({ state: "visible" });
     await installAuditTools();
     await scanVariants("not found");
@@ -570,7 +570,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     for (const [name, href, expected] of [
       ["brand mark", notFoundLinks.brand, baseUrl],
       ["brand word", notFoundLinks.word, baseUrl],
-      ["home action", notFoundLinks.home, new URL("apply-patch", baseUrl).href],
+      ["home action", notFoundLinks.home, new URL("apply-patches", baseUrl).href],
     ]) {
       if (href !== expected) throw new Error(`404 page ${name} link at ${missedUrl} is ${href}, expected ${expected}`);
     }

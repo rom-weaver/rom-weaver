@@ -8,8 +8,8 @@ const GUIDED_SAMPLE_VIEWS = {
 type GuidedSample = keyof typeof GUIDED_SAMPLE_VIEWS;
 
 const GUIDED_SAMPLE_HREFS = {
-  apply: "/apply-patch?guide=apply",
-  bundle: "/bundle?guide=bundle",
+  apply: "/apply-patches?guide=apply",
+  bundle: "/bundle-patches?guide=bundle",
   create: "/create-patch?guide=create",
   test: "/test-rom?guide=test",
 } as const;
