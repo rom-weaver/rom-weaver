@@ -161,6 +161,8 @@ describe("HomePage", () => {
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
     expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
     expect(container.textContent).toContain("All on your device.");
+    expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
+    expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
     expect(
       Array.from(container.querySelectorAll(".home-install-code")).every(
         (code) => code instanceof HTMLTextAreaElement && code.readOnly,

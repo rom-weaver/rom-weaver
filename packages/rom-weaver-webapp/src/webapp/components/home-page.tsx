@@ -66,6 +66,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                 {localizer.message("ui.home.formatsEyebrow")}
               </a>
             </div>
+            <p className="home-try">
+              {localizer.message("ui.home.tryBefore")}{" "}
+              <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
+              {localizer.message("ui.home.tryAfter")}
+            </p>
           </div>
         </div>
         <div className="home-loom">
@@ -104,6 +109,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               </span>
             </div>
           </div>
+          <p className="home-loom-caption">{localizer.message("ui.home.loomCaption")}</p>
         </div>
       </div>
 
