@@ -73,8 +73,8 @@
 }
 .rw-app .home-link svg {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   color: var(--thread-text);
 }
 .rw-app .home-loom {
@@ -191,8 +191,8 @@
   color: var(--thread-text);
 }
 .rw-app .home-flow .go svg {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
 }
 @media (hover: hover) {
   .rw-app .home-link:hover,
@@ -215,7 +215,6 @@
   }
 }
 .rw-app .home-cli,
-.rw-app .home-details,
 .rw-app .home-actions {
   display: flex;
   flex-wrap: wrap;
@@ -231,10 +230,6 @@
 }
 .rw-app .home-actions {
   gap: 8px;
-}
-.rw-app .home-details {
-  font-size: 0.85rem;
-  color: var(--ink-3);
 }
 @media (max-width: 639px) {
   .rw-app .home-hero {

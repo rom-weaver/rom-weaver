@@ -1,3 +1,5 @@
+import { Download, Footprints, Gamepad2, GitCompare, ListChecks, Package, Server, Terminal } from "lucide-react";
+import { ApplyBandaidIcon } from "../../public/react/components/apply-bandaid-icon.tsx";
 import { HomeLoom } from "./home-loom.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -18,23 +20,10 @@ type HomePageProps = {
 type Flow = {
   get: React.ReactNode;
   href: string;
+  icon: React.ReactElement;
   primary?: boolean;
   title: string;
 };
-
-const ArrowIcon = (): React.ReactElement => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    stroke="currentColor"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeWidth="2"
-    viewBox="0 0 16 16"
-  >
-    <path d="M3 8h10M9 4l4 4-4 4" />
-  </svg>
-);
 
 /**
  * The four featured workflows. This list MUST NOT depend on
@@ -46,22 +35,26 @@ const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow
   {
     get: localizer.message("ui.home.flowApplyGet"),
     href: route("apply-patches"),
+    icon: <ApplyBandaidIcon />,
     primary: true,
     title: localizer.message("ui.home.flowApply"),
   },
   {
     get: localizer.message("ui.home.flowBundleGet"),
     href: route("bundle-patches"),
+    icon: <Package aria-hidden="true" />,
     title: localizer.message("ui.home.flowBundle"),
   },
   {
     get: localizer.message("ui.home.flowCreateGet"),
     href: route("create-patch"),
+    icon: <GitCompare aria-hidden="true" />,
     title: localizer.message("ui.home.flowCreate"),
   },
   {
     get: localizer.message("ui.home.flowTestGet"),
     href: route("test-rom"),
+    icon: <Gamepad2 aria-hidden="true" />,
     title: localizer.message("ui.home.flowTest"),
   },
 ];
@@ -135,20 +128,18 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             <a className={flow.primary ? "home-flow is-primary" : "home-flow"} href={flow.href} key={flow.title}>
               <h3>{flow.title}</h3>
               <p>{flow.get}</p>
-              <span className="go">
-                <ArrowIcon />
-              </span>
+              <span className="go">{flow.icon}</span>
             </a>
           ))}
         </div>
         <div className="home-links">
           <a className="home-link" href={`${route("docs")}/supported-formats`}>
             <span>{localizer.message("ui.home.formatsEyebrow")}</span>
-            <ArrowIcon />
+            <ListChecks aria-hidden="true" />
           </a>
           <a className="home-link" href={resolveGuidedSampleHref(baseUrl, "apply")}>
             <span>{localizer.message("ui.home.tryLink")}</span>
-            <ArrowIcon />
+            <Footprints aria-hidden="true" />
           </a>
         </div>
       </section>
@@ -157,22 +148,19 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         <h2 id="home-cli-title">{localizer.message("ui.home.commandLine")}</h2>
         <div className="home-actions">
           <a className="btn ghost" href={`${route("docs")}/install`}>
+            <Download aria-hidden="true" />
             {localizer.message("ui.home.fullInstallGuide")}
-            <ArrowIcon />
           </a>
           <a className="btn ghost" href={`${route("docs")}/cli-get-started`}>
+            <Terminal aria-hidden="true" />
             {localizer.message("ui.home.cliWalkthrough")}
           </a>
           <a className="btn ghost" href={`${route("docs")}/self-hosting`}>
+            <Server aria-hidden="true" />
             {localizer.message("ui.home.selfHostingGuide")}
           </a>
         </div>
       </section>
-
-      <div className="home-wrap home-section home-details">
-        <p>{localizer.message("ui.home.filesStay")}</p>
-        <p>{localizer.message("ui.home.openSource")}</p>
-      </div>
     </section>
   );
 };
