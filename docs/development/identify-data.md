@@ -44,6 +44,10 @@ The deduplication key contains the hash algorithm, normalized hash, file size, a
 
 OpenGood-only records use `legacyVariant: true`. Their `dumpTags` preserve the GoodTools status tokens.
 
+The builder excludes explicit hack markers and unofficial translation markers before merging records. A parenthesized label can name a base game, such as `(Zelda Hack)`, or a language, such as `(French Translation)`. No-Intro and Redump descriptive translation labels remain available for official re-releases. Explicit hack metadata and GoodTools `[h…]` and `[T±…]` markers still exclude a record from those sources. Trainer, fixed-dump, and pirate markers do not exclude records.
+
+The catalog records the data policy version. A policy change invalidates generated data so the next build regenerates the packs and their indexes.
+
 ## RWFP1 records
 
 Every built-in and imported pack uses RWFP1. The reader accepts only RWFP1.

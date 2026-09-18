@@ -341,6 +341,110 @@ test("GoodTools headered fallback excludes hack markers but keeps legitimate hac
   );
 });
 
+test("all DAT parsers exclude named hack and translation labels but retain other dump variants", () => {
+  const excluded = [
+    "Blink 4 (Zelda Hack)",
+    "Alpha Quest (SMW1 Hack)",
+    "Alpha Quest (Tecmo Super Bowl Hack)",
+    "Alpha Quest (SM64 Hack)",
+    "Alpha Quest (Unknown Hack Data)",
+    "Alpha Quest (bootleg set 2, hack of Japan set)",
+    "Alpha Quest (Six-Bullet Hack)",
+    "Alpha Quest (hacks by Example)",
+    "Alpha Quest (Hacked Patched Blue-201)",
+    "Alpha Quest (FDS Conversion, Kaiser Hacked)",
+    "Tenchi wo Kurau II (Kassar (Chou-Hi)'s Kicking Hack 2011-11-01)",
+    "Alpha Quest (Example (English (v1)) Translation)",
+    "Alpha Quest (French Translation 2017-10-29)",
+    "Alpha Quest (Language Translation French)",
+    "Alpha Quest (Translation-Chinese V1)",
+    "Alpha Quest (Translated by Example)",
+  ];
+  const retained = [
+    "Hacker (U) [!]",
+    "Hack (U) [!]",
+    "Chuck Yeager's Advanced Flight Trainer (U)",
+    "Alpha Quest [t1]",
+    "Alpha Quest [f1]",
+    "Alpha Quest [p1]",
+    "Alpha Quest (Fixed Bug Patch)",
+    "Alpha Quest (Hacker Group System)",
+    "Alpha Quest (Example (Hacker Group System))",
+    "Alpha Quest [Preview]",
+    "Alpha Quest [tape image file]",
+  ];
+  const names = [...excluded, ...retained];
+  const textDat = names
+    .map((name) => `game ( name "${name}" rom ( name "game.nes" size 16 crc AABBCCDD ) )`)
+    .join("\n");
+  const xmlDat = `<datafile>${names
+    .map((name) => `<game name="${name}"><rom name="game.nes" size="16" crc="aabbccdd"/></game>`)
+    .join("")}</datafile>`;
+  const headeredDat = `<datafile><game name="GoodSNES">${names
+    .map((name) => `<rom name="SNESRen/${name}.smc" size="1536" crc="cafebabe"/>`)
+    .join("")}</game></datafile>`;
+  for (const games of [
+    parseLibretroGames(textDat, NES, "dat/NES.dat").games,
+    parseOpenGoodGames(xmlDat, NES, "OpenNES.dat").games,
+    parseOpenGoodGames(xmlDat, NES, "OpenNES.Headered.dat", {
+      revision: OPENGOOD_HEADERED_REVISION,
+      sourceVariant: "headered",
+    }).games,
+    parseGoodToolsHeaderedGames(headeredDat, "Nintendo - Super Nintendo Entertainment System").games,
+  ]) {
+    assert.deepEqual(
+      games.map((game) => game.name),
+      retained,
+    );
+  }
+});
+
+test("release catalogs retain official translation editions without bypassing explicit patch markers", () => {
+  const retained = [
+    "River City Girls Zero (World) (Switch) (Original Translation)",
+    "River City Girls Zero (World) (Switch) (RCG Translation)",
+  ];
+  const entries = [
+    ...retained.map((name) => [name, ""]),
+    ["Alpha Quest (Zelda Hack)", ""],
+    ["Alpha Quest [h1]", ""],
+    ["Alpha Quest [T+Eng1.0]", ""],
+    ["Alpha Quest [T-Eng]", ""],
+    ["Alpha Quest (Original Translation) [h1]", ""],
+    ["Metadata Quest", 'category "Translation"'],
+    ["Flagged Quest", 'hack "true"'],
+    ["Described Quest", 'description "Alpha Quest (Zelda Hack)"'],
+  ];
+  const dat = entries
+    .map(
+      ([name, metadata]) =>
+        `game ( name "${name}" description "${name}" ${metadata} rom ( name "${name}.sfc" size 16 crc AABBCCDD ) )`,
+    )
+    .join("\n");
+  for (const source of ["no-intro", "redump"]) {
+    assert.deepEqual(
+      parseLibretroGames(dat, "Nintendo - Super Nintendo Entertainment System", `metadat/${source}/SNES.dat`).games.map(
+        (game) => game.name,
+      ),
+      retained,
+    );
+  }
+  assert.deepEqual(parseLibretroGames(dat, NES, "dat/NES.dat").games, []);
+});
+
+test("Libretro checks named modification labels in descriptions and ROM filenames", () => {
+  for (const metadata of ['description "Alpha Quest (Zelda Hack)"', 'description "Alpha Quest (French Translation)"']) {
+    const dat = `game ( name "Alpha Quest" ${metadata} rom ( name "game.nes" size 16 crc AABBCCDD ) )`;
+    assert.deepEqual(parseLibretroGames(dat, NES, "dat/NES.dat").games, []);
+  }
+  for (const label of ["Zelda Hack", "French Translation"]) {
+    const dat = `game ( name "Alpha Quest" rom ( name "Alpha Quest (${label}).nes" size 16 crc AABBCCDD ) )`;
+    assert.deepEqual(parseLibretroGames(dat, NES, "dat/NES.dat").games, []);
+  }
+  const dat = `<datafile><game name="Alpha Quest"><description>Alpha Quest (Zelda Hack)</description><rom name="game.nes" size="16" crc="aabbccdd"/></game></datafile>`;
+  assert.deepEqual(parseOpenGoodGames(dat, NES, "OpenNES.dat").games, []);
+});
+
 test("merge prefers the OpenGood name and retains every other name", () => {
   const primary = parseLibretroGames(
     LIBRETRO_DAT,

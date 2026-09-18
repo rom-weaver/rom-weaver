@@ -39,8 +39,8 @@ const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-identify-dats");
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
 const PACK_MAGIC_V1 = Buffer.from("RWFP1\0\0\0", "binary");
-export const IDENTIFY_DATA_POLICY_VERSION = 2;
-const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v3";
+export const IDENTIFY_DATA_POLICY_VERSION = 3;
+const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v4";
 const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
 export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
 export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
@@ -1250,20 +1250,34 @@ function innerLibretroSource(sourcePath) {
   return "libretro";
 }
 
-function isPatchedName(name) {
-  return /\[h[^\]]*\]|\[T[+-][^\]]*\]|\((?:hack|translation)(?:\s+[^)]*)?\)/iu.test(
-    String(name ?? ""),
-  );
+function isPatchedName(name, allowTranslationLabels = false) {
+  const value = String(name ?? "");
+  if (/\[h[^\]]*\]|\[T[+-][^\]]*\]/iu.test(value)) return true;
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "(") {
+      if (depth === 0) start = index + 1;
+      depth += 1;
+    }
+    if (value[index] !== ")" || depth === 0) continue;
+    depth -= 1;
+    if (depth !== 0) continue;
+    const label = value.slice(start, index);
+    if (/\bhack(?:s|ed|ing)?\b/iu.test(label)) return true;
+    if (!allowTranslationLabels && /\b(?:translations?|translated)\b/iu.test(label)) return true;
+  }
+  return false;
 }
 
-function isPatchedMetadata(metadata) {
+function isPatchedMetadata(metadata, allowTranslationLabels = false) {
   return Object.entries(metadata).some(([key, value]) => {
     if (/^(?:hack|romhack|is_hack)$/iu.test(key)) return /^(?:1|true|yes|hack)$/iu.test(value);
     if (/^(?:translation|is_translation)$/iu.test(key))
       return /^(?:1|true|yes|translation)$/iu.test(value);
     if (/^(?:category|genre|type|status)$/iu.test(key))
       return /^(?:(?:rom[ -]?)?hacks?|translations?)$/iu.test(value);
-    return /^(?:name|description)$/iu.test(key) && isPatchedName(value);
+    return /^(?:name|description)$/iu.test(key) && isPatchedName(value, allowTranslationLabels);
   });
 }
 
@@ -1279,6 +1293,9 @@ export function parseLibretroGames(text, platform, sourcePath) {
   const parsed = parseClrMameProDat(text);
   const innerSource = innerLibretroSource(sourcePath);
   const componentSource = innerSource;
+  // Descriptive translation labels in No-Intro and Redump MUST remain available
+  // for official re-releases; explicit modification markers still exclude a dump.
+  const allowTranslationLabels = innerSource === "no-intro" || innerSource === "redump";
   const provenance = sourceProvenance(
     innerSource,
     `${LIBRETRO_REPOSITORY}/blob/${LIBRETRO_REVISION}/${sourcePath.split("/").map(encodeURIComponent).join("/")}`,
@@ -1291,9 +1308,9 @@ export function parseLibretroGames(text, platform, sourcePath) {
     games: parsed.games
       .filter(
         (game) =>
-          !isPatchedName(game.name) &&
-          !isPatchedMetadata(game.metadata) &&
-          !game.roms.some((rom) => isPatchedName(rom.name)),
+          !isPatchedName(game.name, allowTranslationLabels) &&
+          !isPatchedMetadata(game.metadata, allowTranslationLabels) &&
+          !game.roms.some((rom) => isPatchedName(rom.name, allowTranslationLabels)),
       )
       .map((game) => ({
         components: game.roms
