@@ -17,7 +17,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:
-      "Patch, pack, and identify ROMs and disc images locally - in your browser or from the CLI. Nothing is uploaded, and every workflow saves as a replayable bundle.",
+      "A browser ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
     slug: "",
     title: `${SITE_NAME}: Local-first ROM and disc image toolkit`,
   }),

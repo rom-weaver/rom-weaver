@@ -8,7 +8,7 @@
 </h1>
 
 <p align="center">
-  The <code>rom-weaver</code> command-line tool: inspect, extract, compress, and patch ROMs and disc images, all on your own machine.
+  A command-line ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry.
 </p>
 
 <p align="center">

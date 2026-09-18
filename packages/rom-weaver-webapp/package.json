@@ -1,7 +1,7 @@
 {
   "name": "@rom-weaver/webapp",
   "version": "0.15.1",
-  "description": "Patch ROMs, convert disc images, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
+  "description": "A browser ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
   "keywords": [
     "rom",
     "rom-hack",

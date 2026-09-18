@@ -4,12 +4,14 @@
       <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile-dark.svg">
       <source media="(max-width: 600px)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile.svg">
       <source media="(prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/readme-banner-dark.svg">
-      <img src="packages/rom-weaver-webapp/design/readme-banner.svg" alt="rom-weaver — A browser &amp; CLI toolkit for ROMs, patches, cheats, and game saves." width="100%">
+      <img src="packages/rom-weaver-webapp/design/readme-banner.svg" alt="rom-weaver — Your ROM workflow. One toolkit. Patch, Compress, Extract, Convert, Cheat, Save Edit, Identify. rom-weaver.com." width="100%">
     </picture>
   </a>
 </p>
 
-Apply ROM hacks and translations, convert disc images, bake in cheat codes, and edit supported game saves. Play supported games in the browser with EmulatorJS.
+Your ROM workflow. One toolkit.
+
+Patch, compress, extract, convert, and identify ROMs and disc images. Bake in cheat codes and edit supported game saves in your browser or CLI. Play supported games in the browser with EmulatorJS.
 
 Works offline in your browser or CLI. Your files stay on your device. No telemetry.
 
