@@ -22,7 +22,14 @@ const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
 const FAVICON_URLS = new Map(
   ACCENTS.map((accent) => [
     accent.value,
-    `data:image/svg+xml,${encodeURIComponent(renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }))}`,
+    {
+      dark: `data:image/svg+xml,${encodeURIComponent(
+        renderBrandMark(logo, { accent, tone: "light", viewBox: BRAND_MARK_TIGHT_VIEWBOX }),
+      )}`,
+      light: `data:image/svg+xml,${encodeURIComponent(
+        renderBrandMark(logo, { accent, tone: "dark", viewBox: BRAND_MARK_TIGHT_VIEWBOX }),
+      )}`,
+    },
   ]),
 );
 
@@ -75,9 +82,13 @@ const applyAccent = (value: unknown) => {
     if (animate) armAccentAnimation(document.documentElement);
     if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute("data-accent");
     else document.documentElement.setAttribute("data-accent", accent);
-    const faviconUrl = FAVICON_URLS.get(accent);
-    if (faviconUrl) {
-      document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.setAttribute("href", faviconUrl);
+    const faviconUrls = FAVICON_URLS.get(accent);
+    if (faviconUrls) {
+      for (const scheme of ["light", "dark"] as const) {
+        document
+          .querySelector(`link[rel="icon"][type="image/svg+xml"][data-favicon-scheme="${scheme}"]`)
+          ?.setAttribute("href", faviconUrls[scheme]);
+      }
     }
   }
   logger.trace("Applied accent", { accent, animate, changed, requested: value });

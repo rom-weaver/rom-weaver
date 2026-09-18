@@ -47,6 +47,10 @@ for (const [channel, accentName] of Object.entries({
     const accent = ACCENTS.find((entry) => entry.value === accentName);
     const source = fs.readFileSync(new URL(`channel-icons/${channel}/logo.svg`, generatedAssets), "utf8");
     assert.equal(source, renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
+    const lightScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon.svg`, generatedAssets), "utf8");
+    assert.equal(lightScheme, renderBrandMark(logo, { accent, tone: "dark", viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
+    const darkScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon-dark.svg`, generatedAssets), "utf8");
+    assert.equal(darkScheme, renderBrandMark(logo, { accent, tone: "light", viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
   });
 }
 
