@@ -272,6 +272,7 @@ const StatusRows = ({
   runtimeState: RuntimeState;
   children?: ReactNode;
 }) => {
+  const removePointerDown = useRef(false);
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
   const transferredBytes = offlineProgress?.transferredBytes;
@@ -301,7 +302,20 @@ const StatusRows = ({
         <button
           className="btn primary"
           disabled={runtimeState === "disabled" || (showRemove ? removing : downloadRequested)}
-          onClick={showRemove ? onRemove : onDownload}
+          onClick={() => {
+            if (showRemove && removePointerDown.current) {
+              removePointerDown.current = false;
+              return;
+            }
+            if (showRemove) onRemove();
+            else onDownload();
+          }}
+          onPointerDown={() => {
+            if (showRemove) {
+              removePointerDown.current = true;
+              onRemove();
+            }
+          }}
           type="button"
         >
           <OfflineActionIcon aria-hidden="true" size={18} />
@@ -443,6 +457,7 @@ const OfflineLegend = ({
                 }
                 state={state}
               />
+              <span className="sr-only">{localizer.message(RUNTIME_MESSAGES[state].label)}</span>
             </span>
             <div className="sw-legend-details">
               <span className="sw-legend-label">{localizer.message(RUNTIME_MESSAGES[state].label)}</span>
