@@ -10,12 +10,21 @@ const CATALOG = {
   generated: { libretroRevision: "def456", opengoodRevision: "abc123" },
   platforms: [
     {
-      aliases: ["playstation", "psx", "ps1", "sony playstation"],
+      aliases: ["playstation", "psx", "ps1", "ps", "sony playstation"],
       canonicalPlatform: "Sony PlayStation",
       mediaProfiles: ["optical-single-image-v1"],
       packFormat: "RWFP1",
       packSha256: "f".repeat(64),
       packSlug: "sony-playstation",
+      source: "libretro",
+    },
+    {
+      aliases: ["playstation 2", "play station 2", "ps2", "sony playstation 2"],
+      canonicalPlatform: "Sony PlayStation 2",
+      mediaProfiles: ["optical-single-image-v1"],
+      packFormat: "RWFP1",
+      packSha256: "e".repeat(64),
+      packSlug: "sony-playstation-2",
       source: "libretro",
     },
     {
@@ -40,7 +49,7 @@ describe("normalizePlatformAlias", () => {
 describe("parseIdentifyCatalog", () => {
   it("parses a v1 catalog", () => {
     const catalog = parseIdentifyCatalog(CATALOG);
-    expect(catalog?.platforms).toHaveLength(2);
+    expect(catalog?.platforms).toHaveLength(3);
     expect(catalog?.platforms[0]?.source).toBe("libretro");
   });
 
@@ -60,7 +69,7 @@ describe("parseIdentifyCatalog", () => {
       platforms: [
         { ...libretro, packSha256: "" },
         { ...libretro, packSlug: "other", packSha256: "not-hex" },
-        CATALOG.platforms[1],
+        CATALOG.platforms[2],
       ],
     });
     // Only the valid entry survives. The app must not read unverifiable packs.
@@ -72,9 +81,10 @@ describe("resolveCatalogPlatform", () => {
   const catalog = parseIdentifyCatalog(CATALOG);
 
   it("resolves the canonical name, aliases, and loose formatting case-insensitively", () => {
-    for (const name of ["Sony PlayStation", "PSX", "PS1", "sony_playstation"]) {
+    for (const name of ["Sony PlayStation", "PSX", "PS1", "PS", "sony_playstation"]) {
       expect(resolveCatalogPlatform(catalog, name)?.packSlug).toBe("sony-playstation");
     }
+    expect(resolveCatalogPlatform(catalog, "play station 2")?.packSlug).toBe("sony-playstation-2");
     expect(resolveCatalogPlatform(catalog, "GENESIS")?.packSlug).toBe("sega-mega-drive-genesis");
   });
 

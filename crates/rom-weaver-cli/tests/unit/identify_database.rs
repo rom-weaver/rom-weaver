@@ -360,13 +360,17 @@ fn media_profiles_follow_the_platform_family() {
 }
 
 #[test]
-fn curated_aliases_cover_the_mirrored_platforms() {
+fn curated_aliases_cover_catalog_platforms() {
+    assert_eq!(
+        curated_aliases("Atari Jaguar CD Interactive Multimedia System"),
+        ["atari jaguar cd", "jaguar cd", "ajcd"]
+    );
     assert_eq!(
         curated_aliases("Family Computer Disk System"),
         ["fds", "famicom disk system"]
     );
-    assert_eq!(curated_aliases("Nintendo 3DS"), ["3ds"]);
-    assert_eq!(curated_aliases("Nintendo DS"), ["nds", "ds"]);
+    assert_eq!(curated_aliases("Nintendo 3DS"), ["3ds", "n3ds", "new3ds"]);
+    assert_eq!(curated_aliases("Nintendo DS"), ["nds", "ds", "dsi"]);
     assert_eq!(
         curated_aliases("Nintendo Famicom Disk System"),
         ["nintendo fds"]
@@ -376,19 +380,134 @@ fn curated_aliases_cover_the_mirrored_platforms() {
         ["gamecube", "gc", "ngc"]
     );
     assert_eq!(curated_aliases("Nintendo Wii"), ["wii"]);
+    assert_eq!(
+        curated_aliases("SNK - Neo Geo Pocket"),
+        ["neo geo pocket", "ngp"]
+    );
+    assert_eq!(
+        curated_aliases("SNK - Neo Geo Pocket Color"),
+        ["neo geo pocket color", "neo geo pocket colour", "ngpc"]
+    );
+    assert_eq!(
+        curated_aliases("SNK - Neo Geo CD"),
+        ["neo geo cd", "ngcd", "neogeocd", "neocd"]
+    );
     assert_eq!(curated_aliases("Sega Dreamcast"), ["dreamcast", "dc"]);
-    assert_eq!(curated_aliases("Sega Saturn"), ["saturn"]);
+    assert_eq!(curated_aliases("Sega Saturn"), ["saturn", "saturnjp", "ss"]);
+}
+
+#[test]
+fn curated_aliases_cover_frontend_folder_platforms() {
     assert_eq!(
         curated_aliases("Sony PlayStation"),
-        ["playstation", "psx", "ps1"]
+        ["playstation", "psx", "ps1", "ps"]
     );
     assert_eq!(
         curated_aliases("Sony PlayStation 2"),
-        ["ps2", "playstation 2"]
+        ["ps2", "playstation 2", "play station 2"]
     );
     assert_eq!(
         curated_aliases("Sony Playstation Portable"),
-        ["psp", "playstation portable"]
+        ["psp", "playstation portable", "psminis", "psp minis"]
+    );
+    assert_eq!(
+        curated_aliases("Nintendo - Nintendo Entertainment System"),
+        [
+            "nintendo entertainment system",
+            "nes",
+            "famicom",
+            "nintendo famicom",
+            "family computer",
+            "fc",
+        ]
+    );
+    assert_eq!(
+        curated_aliases("Nintendo - Game Boy Advance"),
+        ["game boy advance", "gameboy advance", "gba", "ereader"]
+    );
+    assert_eq!(
+        curated_aliases("Nintendo - GameCube"),
+        ["gamecube", "gc", "ngc"]
+    );
+    assert_eq!(
+        curated_aliases("Nintendo - Nintendo 64"),
+        ["nintendo 64", "n64", "n64dd", "64dd"]
+    );
+    assert_eq!(
+        curated_aliases("Nintendo - Super Nintendo Entertainment System"),
+        [
+            "snes",
+            "sfc",
+            "sfam",
+            "snesna",
+            "satellaview",
+            "super famicom",
+            "super nintendo",
+            "super nes",
+            "sufami",
+            "sufami turbo",
+        ]
+    );
+    assert_eq!(
+        curated_aliases("Nintendo - Family Computer Disk System"),
+        ["fds", "famicom disk system", "nintendo fds"]
+    );
+    assert_eq!(
+        curated_aliases("Sony - PlayStation 2"),
+        ["ps2", "playstation 2", "play station 2"]
+    );
+    assert_eq!(curated_aliases("Nintendo - Wii U"), ["wii u", "wiiu"]);
+    assert_eq!(curated_aliases("Microsoft - Xbox"), ["xbox"]);
+    assert_eq!(
+        curated_aliases("NEC - PC Engine CD - TurboGrafx-CD"),
+        [
+            "pc engine cd",
+            "pcenginecd",
+            "pcecd",
+            "turbografx cd",
+            "tg-cd",
+            "pce cd"
+        ]
+    );
+    assert_eq!(
+        curated_aliases("Sega - Mega-CD - Sega CD"),
+        [
+            "mega cd", "megacd", "megacdjp", "sega cd", "segacd", "mcd", "scd"
+        ]
+    );
+    assert_eq!(
+        curated_aliases("Sega - Master System - Mark III"),
+        ["master system", "mastersystem", "mark3", "sms", "ms"]
+    );
+    assert_eq!(
+        curated_aliases("Sega - Mega Drive - Genesis"),
+        [
+            "genesis",
+            "mega drive",
+            "megadrive",
+            "megadrivejp",
+            "md",
+            "smd",
+            "sega genesis",
+            "sega mega drive",
+        ]
+    );
+    assert_eq!(
+        curated_aliases("Sony - PlayStation Vita"),
+        ["playstation vita", "psvita", "vita"]
+    );
+    assert_eq!(
+        curated_aliases("NEC - PC Engine - TurboGrafx 16"),
+        [
+            "turbografx-16 pc engine",
+            "turbografx",
+            "turbografx 16",
+            "tg16",
+            "pc engine",
+            "pcengine",
+            "pce",
+            "supergrafx",
+        ]
     );
     assert!(curated_aliases("Some Other System").is_empty());
 }

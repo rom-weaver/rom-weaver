@@ -379,6 +379,172 @@ test("family variants resolve to their shared pack", () => {
   assert.ok(entry.aliases.includes("nintendo nintendo 64dd"));
 });
 
+test("curates common frontend folder aliases", () => {
+  const entries = buildCatalogPlatforms([
+    {
+      platform: "Atari - 2600",
+      slug: "atari-2600",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Microsoft - Xbox",
+      slug: "microsoft-xbox",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "NEC - PC Engine - TurboGrafx 16",
+      slug: "nec-pc-engine-turbografx-16",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Sony - PlayStation",
+      slug: "sony-playstation",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Sony - PlayStation 2",
+      slug: "sony-playstation-2",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - Nintendo 64",
+      slug: "nintendo-64",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - Nintendo Entertainment System",
+      slug: "nintendo-entertainment-system",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - Nintendo 3DS",
+      slug: "nintendo-3ds",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - Nintendo DS",
+      slug: "nintendo-ds",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - Super Nintendo Entertainment System",
+      slug: "nintendo-super-nintendo-entertainment-system",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - Game Boy Advance",
+      slug: "nintendo-game-boy-advance",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - Wii U",
+      slug: "nintendo-wii-u",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Nintendo - GameCube",
+      slug: "nintendo-gamecube",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Sega - Mega-CD - Sega CD",
+      slug: "sega-mega-cd-sega-cd",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Sega - Master System - Mark III",
+      slug: "sega-master-system-mark-iii",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Sega - Mega Drive - Genesis",
+      slug: "sega-mega-drive-genesis",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Sony - PlayStation Vita",
+      slug: "sony-playstation-vita",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+    {
+      platform: "Sony - PlayStation Portable",
+      slug: "sony-playstation-portable",
+      source: "libretro",
+      packFormat: "RWFP1",
+    },
+  ]);
+  const atari = entries.find((entry) => entry.canonicalPlatform === "Atari - 2600");
+  const xbox = entries.find((entry) => entry.canonicalPlatform === "Microsoft - Xbox");
+  const pcEngine = entries.find(
+    (entry) => entry.canonicalPlatform === "NEC - PC Engine - TurboGrafx 16",
+  );
+  const playstation = entries.find((entry) => entry.canonicalPlatform === "Sony - PlayStation");
+  const playstation2 = entries.find((entry) => entry.canonicalPlatform === "Sony - PlayStation 2");
+  const n64 = entries.find((entry) => entry.canonicalPlatform === "Nintendo - Nintendo 64");
+  const nes = entries.find(
+    (entry) => entry.canonicalPlatform === "Nintendo - Nintendo Entertainment System",
+  );
+  const n3ds = entries.find((entry) => entry.canonicalPlatform === "Nintendo - Nintendo 3DS");
+  const nds = entries.find((entry) => entry.canonicalPlatform === "Nintendo - Nintendo DS");
+  const snes = entries.find(
+    (entry) => entry.canonicalPlatform === "Nintendo - Super Nintendo Entertainment System",
+  );
+  const gameBoyAdvance = entries.find(
+    (entry) => entry.canonicalPlatform === "Nintendo - Game Boy Advance",
+  );
+  const gameCube = entries.find((entry) => entry.canonicalPlatform === "Nintendo - GameCube");
+  const wiiU = entries.find((entry) => entry.canonicalPlatform === "Nintendo - Wii U");
+  const megaCd = entries.find((entry) => entry.canonicalPlatform === "Sega - Mega-CD - Sega CD");
+  const masterSystem = entries.find(
+    (entry) => entry.canonicalPlatform === "Sega - Master System - Mark III",
+  );
+  const megaDrive = entries.find(
+    (entry) => entry.canonicalPlatform === "Sega - Mega Drive - Genesis",
+  );
+  const vita = entries.find((entry) => entry.canonicalPlatform === "Sony - PlayStation Vita");
+  const psp = entries.find((entry) => entry.canonicalPlatform === "Sony - PlayStation Portable");
+  assert.ok(atari.aliases.includes("atari2600"));
+  assert.ok(xbox.aliases.includes("xbox"));
+  assert.ok(pcEngine.aliases.includes("pcengine"));
+  assert.ok(pcEngine.aliases.includes("supergrafx"));
+  assert.ok(playstation.aliases.includes("ps"));
+  assert.ok(playstation2.aliases.includes("play station 2"));
+  assert.ok(n64.aliases.includes("n64dd"));
+  assert.ok(n64.aliases.includes("64dd"));
+  assert.ok(nes.aliases.includes("fc"));
+  assert.ok(n3ds.aliases.includes("n3ds"));
+  assert.ok(nds.aliases.includes("dsi"));
+  assert.ok(snes.aliases.includes("sfc"));
+  assert.ok(snes.aliases.includes("sufami"));
+  assert.ok(gameBoyAdvance.aliases.includes("gba"));
+  assert.ok(gameCube.aliases.includes("gc"));
+  assert.ok(wiiU.aliases.includes("wiiu"));
+  assert.ok(megaCd.aliases.includes("megacd"));
+  assert.ok(megaCd.aliases.includes("scd"));
+  assert.ok(masterSystem.aliases.includes("ms"));
+  assert.ok(megaDrive.aliases.includes("md"));
+  assert.ok(megaDrive.aliases.includes("smd"));
+  assert.ok(vita.aliases.includes("psvita"));
+  assert.ok(psp.aliases.includes("psminis"));
+});
+
 test("the builder emits deterministic mixed and fallback-only RWFP1 packs", async () => {
   const work = tempDir("mixed");
   const cacheDir = join(work, "cache");
