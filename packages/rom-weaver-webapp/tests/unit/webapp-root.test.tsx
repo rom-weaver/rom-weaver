@@ -614,7 +614,7 @@ describe("development offline status", () => {
     expect(window.location.search).toBe("?offline-layout=title&offline-state=disabled");
     expect(called("onOfflineCopyEnabledChange")).not.toHaveBeenCalled();
     fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
-    fireEvent.click(container.querySelector('.status-about a[href="/whats-new"]') as HTMLAnchorElement);
+    fireEvent.click(navRow(container, "What’s new"));
     expect(called("onSelectView")).toHaveBeenCalledWith("whats-new");
     expect(container.querySelector("dialog.log-dlg")).toBeNull();
   });
