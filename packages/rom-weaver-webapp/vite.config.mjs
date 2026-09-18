@@ -128,6 +128,7 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/favicon.ico": generatedChannelAssetPath(channel, "favicon.ico"),
   "/icon-maskable-192.png": generatedChannelAssetPath(channel, "icon-maskable-192.png"),
   "/icon-maskable-512.png": generatedChannelAssetPath(channel, "icon-maskable-512.png"),
+  "/install.sh": path.join(repoRoot, "install.sh"),
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": generatedChannelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
@@ -303,6 +304,7 @@ const deferDevHotUpdates = () => ({
 const setRootStaticAssetContentType = (requestPath, res) => {
   if (requestPath.endsWith(".html")) res.setHeader("Content-Type", "text/html; charset=utf-8");
   else if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
+  else if (requestPath.endsWith(".sh")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
   else if (requestPath.endsWith(".txt")) res.setHeader("Content-Type", "text/plain; charset=utf-8");
   else if (requestPath.endsWith(".md")) res.setHeader("Content-Type", "text/markdown; charset=utf-8");
   else if (requestPath.endsWith(".avif")) res.setHeader("Content-Type", "image/avif");
@@ -863,13 +865,14 @@ const writeCloudflareHeadersAsset = (channel) => {
       // over the wire) and makes a browser download rather than display them.
       const licenseContentType =
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
+      const installerContentType = "/install.sh\n  Content-Type: text/plain; charset=utf-8\n";
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
           `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${markdownHeaders}`,
       );
     },
     configResolved(config) {

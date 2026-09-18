@@ -62,6 +62,7 @@ const createHtml = read("create-patch.html");
 const identifyHtml = read("identify-rom.html");
 const testHtml = read("test-rom.html");
 const headers = read("_headers");
+const installScript = read("install.sh");
 const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
@@ -95,6 +96,8 @@ for (const route of [
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
+assertIncludes(installScript, "#!/bin/sh", "curl installer");
+assertIncludes(headers, "/install.sh\n  Content-Type: text/plain; charset=utf-8", "curl installer content type");
 assertIncludes(
   headers,
   "/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",
