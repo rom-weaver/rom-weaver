@@ -28,6 +28,50 @@ const WINDOWS_INSTALL = {
   command: "irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex",
 };
 
+const resolveHomeRoute = (baseUrl: string, slug: string): string => {
+  try {
+    return new URL(slug, baseUrl).pathname;
+  } catch {
+    return `/${slug}`;
+  }
+};
+
+type HomeCapabilitiesProps = {
+  baseUrl: string;
+  className: string;
+  headingId: string;
+};
+
+const HomeCapabilities = ({ baseUrl, className, headingId }: HomeCapabilitiesProps): React.ReactElement => {
+  const localizer = useUiLocalizer();
+  const route = (slug: string) => resolveHomeRoute(baseUrl, slug);
+
+  return (
+    <section aria-labelledby={headingId} className={className}>
+      <h2 id={headingId}>{localizer.message("ui.home.workflowsTitle")}</h2>
+      <p className="home-blurb">{localizer.message("ui.home.workflowsDescription")}</p>
+      <div className="home-actions">
+        <a className="btn ghost" href={route("create-patch")}>
+          <GitCompare aria-hidden="true" />
+          {localizer.message("ui.home.flowCreate")}
+        </a>
+        <a className="btn ghost" href={route("bundle-patches")}>
+          <Package aria-hidden="true" />
+          {localizer.message("ui.home.flowBundle")}
+        </a>
+        <a className="btn ghost" href={route("test-rom")}>
+          <Gamepad2 aria-hidden="true" />
+          {localizer.message("ui.home.flowTest")}
+        </a>
+        <a className="btn ghost" href={resolveGuidedSampleHref(baseUrl, "apply")}>
+          <Footprints aria-hidden="true" />
+          {localizer.message("ui.home.tryLink")}
+        </a>
+      </div>
+    </section>
+  );
+};
+
 const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
   const localizer = useUiLocalizer();
   const windows = useSyncExternalStore(
@@ -36,13 +80,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
     () => false,
   );
   const install = windows ? WINDOWS_INSTALL : SHELL_INSTALL;
-  const route = (slug: string) => {
-    try {
-      return new URL(slug, baseUrl).pathname;
-    } catch {
-      return `/${slug}`;
-    }
-  };
+  const route = (slug: string) => resolveHomeRoute(baseUrl, slug);
 
   return (
     <section aria-labelledby="home-title" className="home-page" id="panel-home">
@@ -71,6 +109,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
               {localizer.message("ui.home.tryAfter")}
             </p>
+            <HomeCapabilities
+              baseUrl={baseUrl}
+              className="home-hero-capabilities"
+              headingId="home-hero-capabilities-title"
+            />
           </div>
         </div>
         <div className="home-loom">
@@ -113,28 +156,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         </div>
       </div>
 
-      <section aria-labelledby="home-webapp-title" className="home-wrap home-section home-webapp">
-        <h2 id="home-webapp-title">{localizer.message("ui.home.workflowsTitle")}</h2>
-        <p className="home-blurb">{localizer.message("ui.home.workflowsDescription")}</p>
-        <div className="home-actions">
-          <a className="btn ghost" href={route("create-patch")}>
-            <GitCompare aria-hidden="true" />
-            {localizer.message("ui.home.flowCreate")}
-          </a>
-          <a className="btn ghost" href={route("bundle-patches")}>
-            <Package aria-hidden="true" />
-            {localizer.message("ui.home.flowBundle")}
-          </a>
-          <a className="btn ghost" href={route("test-rom")}>
-            <Gamepad2 aria-hidden="true" />
-            {localizer.message("ui.home.flowTest")}
-          </a>
-          <a className="btn ghost" href={resolveGuidedSampleHref(baseUrl, "apply")}>
-            <Footprints aria-hidden="true" />
-            {localizer.message("ui.home.tryLink")}
-          </a>
-        </div>
-      </section>
+      <HomeCapabilities
+        baseUrl={baseUrl}
+        className="home-wrap home-section home-webapp"
+        headingId="home-webapp-title"
+      />
 
       <section aria-labelledby="home-cli-title" className="home-wrap home-section home-cli" id="home-cli">
         <h2 id="home-cli-title">{localizer.message("ui.home.commandLine")}</h2>
