@@ -73,14 +73,16 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
   return (
     <section aria-labelledby="home-title" className="home-page" id="panel-home">
       <div className="home-wrap home-hero">
-        <div className="home-hero-head">
-          <p className="home-eyebrow">{localizer.message("ui.home.eyebrow")}</p>
-          <h1 id="home-title">
-            {localizer.message("ui.home.title")} <em>{localizer.message("ui.home.titleEmphasis")}</em>
-          </h1>
-        </div>
-        <div className="home-hero-body">
-          <p className="home-lede">{localizer.message("ui.home.lede")}</p>
+        <div className="home-hero-copy">
+          <div className="home-hero-head">
+            <p className="home-eyebrow">{localizer.message("ui.home.eyebrow")}</p>
+            <h1 id="home-title">
+              {localizer.message("ui.home.title")} <em>{localizer.message("ui.home.titleEmphasis")}</em>
+            </h1>
+          </div>
+          <div className="home-hero-body">
+            <p className="home-lede">{localizer.message("ui.home.lede")}</p>
+          </div>
         </div>
         <div className="home-loom">
           <div className="home-loom-frame">

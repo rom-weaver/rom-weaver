@@ -24,16 +24,17 @@
 }
 .rw-app .home-hero {
   display: grid;
-  grid-template-areas: "head" "body";
+  grid-template-areas: "copy";
   gap: 16px;
   padding-block: 24px 32px;
 }
-.rw-app .home-hero-head {
-  grid-area: head;
+.rw-app .home-hero-copy {
+  display: grid;
+  grid-area: copy;
+  gap: 16px;
 }
 .rw-app .home-hero-body {
   display: grid;
-  grid-area: body;
   gap: 16px;
 }
 .rw-app .home-hero h1 {
@@ -138,16 +139,24 @@
 }
 @media (min-width: 880px) {
   .rw-app .home-hero {
-    grid-template-areas: "head loom" "body loom";
-    grid-template-columns: minmax(0, 1fr) 280px;
-    gap: 16px 32px;
-    align-items: center;
+    grid-template-areas: "copy loom";
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 24px;
+    align-items: start;
+    padding-block: 20px 24px;
+  }
+  .rw-app .home-hero-copy {
+    gap: 12px;
+  }
+  .rw-app .home-hero h1 {
+    max-width: 28ch;
+    font-size: 36px;
   }
   .rw-app .home-loom {
     display: block;
   }
-  .rw-app .home-loom-frame canvas {
-    aspect-ratio: 1.4;
+  .rw-app .home-loom-legend {
+    grid-template-columns: 1fr;
   }
 }
 .rw-app .home-section {
@@ -243,6 +252,7 @@
     margin-top: 0;
     font-size: 28px;
   }
+  .rw-app .home-hero-copy,
   .rw-app .home-hero-body {
     gap: 12px;
   }
