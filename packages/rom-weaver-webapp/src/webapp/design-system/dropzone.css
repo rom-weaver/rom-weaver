@@ -825,7 +825,11 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   }
   .rw-app .step.is-input.is-empty.simple-hero .drop.hero {
     gap: 16px;
-    min-height: max(300px, calc(100vh - var(--hero-chrome)));
+    /* All mobile heroes MUST use the Apply route's height budget so the footer
+       clears the fixed dock. The shared reserve is the space the joined
+       search/footer takes on Apply, and keeps the simple variants at the same
+       height. */
+    min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
     padding: 16px;
   }
   .rw-app .simple-hero .hero-lead .lead-description {
