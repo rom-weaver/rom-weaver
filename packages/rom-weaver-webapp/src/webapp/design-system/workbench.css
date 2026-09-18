@@ -605,8 +605,8 @@
   background: var(--ink);
 }
 .rw-app .save-editor-segment-option:has(input:focus-visible) {
-  outline: 2px solid var(--thread);
-  outline-offset: -2px;
+  outline: 2px solid var(--thread-text);
+  outline-offset: 2px;
 }
 .rw-app .save-editor-segment-option:has(input:disabled) {
   cursor: not-allowed;
@@ -658,7 +658,7 @@
   outline-offset: 1px;
 }
 .rw-app .save-editor-toggle:has(input:focus-visible) {
-  outline: 2px solid var(--thread);
+  outline: 2px solid var(--thread-text);
   outline-offset: 2px;
 }
 .rw-app .save-editor-toggle:has(input:disabled) {

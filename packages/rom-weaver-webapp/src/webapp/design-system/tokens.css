@@ -1,6 +1,7 @@
 /* Tokens and themes */
 :root {
-  --thread: #d9690f;
+  --thread: #e87208;
+  --thread-fill: var(--thread);
   --thread-ink: #1c1206; /* text on a thread-colored surface */
   --thread-hi: #fccb90; /* light accent fill */
   /* Reusable 20px plain-weave alpha mask. */
@@ -61,7 +62,7 @@
      over/under reads without an outline. */
   --warp-a: #2c333c;
   --warp-b: #4a5563;
-  --thread-text: #ef8534; /* contrast-safe accent text */
+  --thread-text: #f08439; /* contrast-safe accent text */
   --verified: #88a9cb;
   --fault: #e0606a;
   --care: #d8a64f;
@@ -85,10 +86,10 @@
   --warp-a: #43505f;
   --warp-b: #6b7684;
   /* Light-theme status text must clear 4.5:1 on tinted surfaces. */
-  --thread-text: #b03a0a;
+  --thread-text: #954600;
   /* Readouts also sit on the fault-tinted checksum row, which is lighter than
-     any plate --thread-text is verified against; on paper the bare accent text
-     lands at 4.49:1 there. Deepening it keeps the accent and clears 4.5:1. */
+     any plate --thread-text is verified against. Deepening it also keeps the
+     tutorial beacon readable on the thread-tinted well. */
   --weft: color-mix(in oklab, var(--thread-text) 85%, #000);
   --verified: #365d82;
   --fault: #b91c1c;
@@ -117,7 +118,7 @@
 @property --loom-weft-1 {
   syntax: "<color>";
   inherits: true;
-  initial-value: #d9690f;
+  initial-value: #e87208;
 }
 @property --loom-weft-2 {
   syntax: "<color>";

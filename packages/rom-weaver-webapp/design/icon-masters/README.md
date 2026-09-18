@@ -12,17 +12,17 @@ Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. T
 
 ## Geometry
 
-The logo uses a 64 × 64 viewBox. The cartridge occupies 48 × 56 units, with an accent-colored W, a recessed top edge, and three centered contact cuts at the bottom. The top-right corner uses the cartridge color. The paths contain no fonts, strokes, masks, or clip paths.
+The cartridge occupies 48 × 56 units, with an accent-colored W, a recessed top edge, and three centered contact cuts at the bottom. The standalone SVG and ICO master use a tight `8 4 48 56` viewBox. They fill the available height without stretching or clipping the cartridge. The inline webapp mark keeps its 64 × 64 viewBox. The top-right corner uses the cartridge color. The paths contain no fonts, strokes, masks, or clip paths.
 
-The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon adds a charcoal tile so it stays visible without color-scheme support.
+The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon uses a cream cartridge on a transparent background. The top notch, bottom contact cuts, and rounded corners stay transparent. Square favicon frames have equal transparent margins on the left and right because the cartridge is taller than it is wide.
 
 | Master | Output | Scale | Offset (x and y) | Background |
 | --- | --- | --- | --- | --- |
 | icon-maskable.svg | icon-maskable-{192,512}.png | 0.72 | 8.96 | `#31343a` |
 | apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.80 | 6.4 | `#31343a` |
-| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | 1 | 0 | `#20282d` tile |
+| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | Fit cropped viewBox | Centered | Transparent |
 
-`offset = 32 * (1 - scale)`. The maskable master keeps the mark inside the central 80%-diameter safe circle.
+For launcher icons, `offset = 32 * (1 - scale)`. The maskable master keeps the mark inside the central 80%-diameter safe circle.
 
 ## Rendering
 

@@ -508,7 +508,7 @@
   clip-path: inset(50%);
 }
 .rw-app .pick-row:has(.pick-input:focus-visible) {
-  outline: 2px solid var(--thread);
+  outline: 2px solid var(--thread-text);
   outline-offset: 2px;
 }
 /* Pair color with edge and weight selection cues. */
