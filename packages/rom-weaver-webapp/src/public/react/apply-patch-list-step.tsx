@@ -1950,7 +1950,6 @@ const ApplyPatchListStep = ({
   stripDisabled,
   woven,
 }: {
-  /** Optional patch-like card rendered after the reorderable patch list. */
   afterItems?: ReactNode;
   /** The run has optional/skipped patches: hint on the chain-output card that its
    * expected output only describes the full chain. */

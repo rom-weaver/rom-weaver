@@ -798,7 +798,7 @@ describe("apply workflow view - staged bench", () => {
     const rom = romRow("game.bin");
     rom.info.romType = { platform: "Nintendo Entertainment System" };
     const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
-    const { container } = renderView({ patches: [patchItem("change.ips")], ui });
+    const { container } = renderView({ patches: [patchItem("change.ips")], settings: { betaToolsEnabled: true }, ui });
     // ROM card in the input stack
     const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
     expect(romCard).toBeTruthy();
@@ -837,6 +837,12 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
     // no needs-input directives once content is staged
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
+  });
+
+  it.each([false, undefined])("hides cheats when beta tools are %s", (betaToolsEnabled) => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({ settings: { betaToolsEnabled }, ui });
+    expect(container.querySelector("[data-testid=cheats-step]")).toBeNull();
   });
 
   it("uses a matched title on the ROM card and keeps it out of Checks", () => {
