@@ -109,7 +109,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     icon: <Package aria-hidden="true" />,
     id: "bundle",
     label: "Bundle Patches",
-    railLabel: "Bundle Patches",
+    railLabel: "Bundle",
   },
   {
     beta: true,
