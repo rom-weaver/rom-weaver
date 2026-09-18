@@ -3585,7 +3585,7 @@ msgstr "se verifica durante la aplicación"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.verified"
-msgstr "Comprobado: {input}"
+msgstr "Comprobado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

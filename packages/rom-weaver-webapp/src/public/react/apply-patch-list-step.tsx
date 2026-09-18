@@ -812,7 +812,7 @@ const chainChipText = (
       return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
     }
     if (item.validationState === "valid") {
-      return { text: localizer.message("ui.patchChecks.verified", { input: checkedTarget }) };
+      return { text: localizer.message("ui.patchChecks.verified") };
     }
     return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
   }
@@ -834,18 +834,18 @@ const chainChipText = (
     const predecessor = displayPatch(verdict.matched.index);
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: predecessor }) }
-      : { text: localizer.message("ui.patchChecks.verified", { input: predecessor }) };
+      : { text: localizer.message("ui.patchChecks.verified") };
   }
   if (verdict.matched.kind === "base") {
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) }
-      : { text: localizer.message("ui.patchChecks.verified", { input: checkedTarget }) };
+      : { text: localizer.message("ui.patchChecks.verified") };
   }
   if (item.validationState === "deferred") {
     return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
   }
   if (item.validationState === "valid") {
-    return { text: localizer.message("ui.patchChecks.verified", { input: checkedTarget }) };
+    return { text: localizer.message("ui.patchChecks.verified") };
   }
   return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
 };
