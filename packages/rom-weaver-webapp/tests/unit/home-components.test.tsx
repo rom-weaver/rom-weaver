@@ -168,6 +168,26 @@ describe("HomePage", () => {
     ).toBe(true);
   });
 
+  it.each([
+    ["Windows NT 10.0", "Windows (PowerShell)", "install.ps1"],
+    ["Macintosh; Intel Mac OS X", "macOS / Linux", "install.sh"],
+    ["Linux x86_64", "macOS / Linux", "install.sh"],
+  ])("shows the installer for %s after hydration", (userAgent, label, script) => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+    const page = (
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>
+    );
+    expect(renderToString(page)).toContain("install.sh");
+    const { container } = render(page);
+    const commands = container.querySelectorAll(".home-install-code");
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.getAttribute("aria-label")).toBe(label);
+    expect((commands[0] as HTMLTextAreaElement).value).toContain(script);
+    expect(container.querySelector(".home-install a")?.getAttribute("href")).toContain("/tools/docs/install#");
+  });
+
   it("falls back to root-relative routes when the base URL is invalid", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{ language: "en" }}>
