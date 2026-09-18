@@ -296,6 +296,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
 };
 
 const ApplyDropAfter = ({
+  bundlePage,
   downloadHref,
   onLoadApplySample,
   onLoadBundleSample,
@@ -304,6 +305,7 @@ const ApplyDropAfter = ({
   sampleLoading,
   workflowEmpty,
 }: {
+  bundlePage: boolean;
   onLoadApplySample: () => void;
   onLoadBundleSample: () => void;
   downloadHref: string;
@@ -333,13 +335,11 @@ const ApplyDropAfter = ({
       downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}
       downloadName={FIRST_WEAVE_ASSET}
       error={sampleError}
-      guideHref={resolveGuidedSampleHref(assetBaseUrl, "apply")}
-      label={localizer.message("ui.apply.tutorial.startApply")}
+      guideHref={resolveGuidedSampleHref(assetBaseUrl, bundlePage ? "bundle" : "apply")}
+      label={localizer.message(bundlePage ? "ui.apply.tutorial.createBundle" : "ui.apply.tutorial.startApply")}
       loading={sampleLoading}
-      onStart={onLoadApplySample}
-      onSecondaryStart={onLoadBundleSample}
-      secondaryLabel={localizer.message("ui.apply.tutorial.createBundle")}
-      secondaryHref={resolveGuidedSampleHref(assetBaseUrl, "bundle")}
+      onStart={bundlePage ? onLoadBundleSample : onLoadApplySample}
+      startAction={bundlePage ? "package" : "apply"}
     />
   );
 };
@@ -2174,6 +2174,7 @@ function ApplyWorkflowFormView({
         afterDropZone={
           <>
             <ApplyDropAfter
+              bundlePage={bundlePage}
               downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
               onLoadApplySample={startApplySample}
               onLoadBundleSample={startBundleSample}

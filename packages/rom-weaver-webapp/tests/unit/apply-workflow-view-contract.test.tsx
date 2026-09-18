@@ -224,12 +224,26 @@ describe("apply workflow view - empty bench", () => {
     expect(chip.textContent).toContain("New here?");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
-    expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Create a sharable bundle");
+    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Create a sharable bundle");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
     expect(numbers).toEqual(["0x01"]);
     expect(container.querySelector("#rom-weaver-input-output-file-name")).toBeNull();
+  });
+
+  it.each([
+    ["apply", "/apply-patch?guide=apply", "Start guided Apply"],
+    ["bundle", "/bundle?guide=bundle", "Create a sharable bundle"],
+  ] as const)("offers only the %s guide and the test bundle download", (mode, href, label) => {
+    const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
+    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    const actions = container.querySelectorAll(".sample-tutorial-start-action");
+    expect(actions).toHaveLength(2);
+    expect(actions[0].getAttribute("href")).toBe(href);
+    expect(actions[0].textContent).toContain(label);
+    expect(actions[1].hasAttribute("download")).toBe(true);
+    expect(actions[1].getAttribute("href")).toContain("first-weave.zip");
   });
 
   it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {

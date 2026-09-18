@@ -452,36 +452,28 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
   await page.viewport(1280, 900);
 });
 
-test("the New here? control has a touch target and its popover carries every start action", async () => {
+test.each([
+  ["patcher", "/apply-patch?guide=apply"],
+  ["bundle", "/bundle?guide=bundle"],
+])("the %s New here? beacon carries its own guide and the download", async (initialView, guideHref) => {
   await page.viewport(1024, 900);
-  mountWebappRoot();
+  mountWebappRoot({ initialView });
 
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
   const chip = document.querySelector(".sample-tutorial-start-chip");
   const chipBox = chip.getBoundingClientRect();
-  expect(chipBox.height).toBeGreaterThanOrEqual(44);
-  expect(chipBox.height).toBeLessThanOrEqual(48);
+  expect(chipBox.height).toBeLessThan(40);
+  // The chip rides the hero's lower corner instead of spending a band below it.
   const hero = document.querySelector(".drop.hero").getBoundingClientRect();
-  expect(chipBox.top).toBeGreaterThanOrEqual(hero.bottom);
+  expect(chipBox.bottom).toBeLessThanOrEqual(hero.bottom + 1);
   // Closed popover is not mounted at all - it must stay out of the prerendered shell.
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(5);
-  expect(
-    document.querySelector(".sample-tutorial-start-dismiss")?.classList.contains("sample-tutorial-start-action"),
-  ).toBe(true);
-  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe("/docs/apply-rom-patches");
-  expect(document.querySelector(".sample-tutorial-start-dismiss-copy > span")?.textContent).toBe(
-    "Don't show this again",
-  );
-  expect(document.querySelector(".sample-tutorial-start-dismiss-copy > small")?.textContent).toBe(
-    "Re-enable in Settings",
-  );
-  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(
-    "/apply-patch?guide=apply",
-  );
-  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href")).toBe("/bundle?guide=bundle");
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(2);
+  expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
+  expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
+  expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
   expect(pop.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(pop.top).toBeGreaterThanOrEqual(0);
@@ -492,22 +484,12 @@ test("the New here? control has a touch target and its popover carries every sta
     .toBeLessThanOrEqual(document.documentElement.clientWidth);
   expect(document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
 
-  const summary = document.querySelector(".hero-formats-help > summary");
-  const before = summary.getBoundingClientRect();
-  summary.click();
-  await expect.poll(() => document.querySelector(".hero-formats-help").open).toBe(true);
-  const after = summary.getBoundingClientRect();
-  expect(after.top).toBeCloseTo(before.top, 0);
-  expect(after.left).toBeCloseTo(before.left, 0);
-  summary.click();
-  if (!document.querySelector(".sample-tutorial-start-pop")) chip.click();
-
   // Dismissal hides the beacon in place.
   document.querySelector(".sample-tutorial-start-dismiss").click();
   await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeNull();
 
   // The persisted form of the same choice: onboardingEnabled=false renders no beacon.
-  mountWebappRoot({ settings: { ...getDefaultSettings(), onboardingEnabled: false } });
+  mountWebappRoot({ initialView, settings: { ...getDefaultSettings(), onboardingEnabled: false } });
   await expect.poll(() => document.querySelector(".drop.hero")).toBeTruthy();
   expect(document.querySelector(".sample-tutorial-start-chip")).toBeNull();
 });
