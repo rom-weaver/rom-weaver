@@ -13,6 +13,19 @@ const logo = fs.readFileSync(new URL("../design/icon-masters/brand-mark.svg", im
 const repositoryRenders = new URL("../design/icon-masters/renders/", import.meta.url);
 const generatedAssets = new URL("../../../dist/generated-assets/", import.meta.url);
 
+test("scheme favicons take precedence over the ICO fallback", () => {
+  const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const icons = [...html.matchAll(/<link\b[^>]*>/g)]
+    .map(([link]) => link)
+    .filter((link) => /rel="(?:alternate )?icon"/.test(link));
+  assert.equal(icons.length, 3);
+  assert.match(icons[0], /href="\.\/favicon\.ico"/);
+  assert.match(icons[1], /href="\.\/favicon\.svg"/);
+  assert.match(icons[1], /media="\(prefers-color-scheme: light\)"/);
+  assert.match(icons[2], /href="\.\/favicon-dark\.svg"/);
+  assert.match(icons[2], /media="\(prefers-color-scheme: dark\)"/);
+});
+
 test("the canonical master has geometry but no palette or background", () => {
   assert.match(logo, /class="brand-mark-cartridge"/);
   assert.match(logo, /class="brand-mark-accent"/);
