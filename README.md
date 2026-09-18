@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://rom-weaver.com">
+  <a href="https://rom-weaver.com/apply">
     <picture>
       <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile-dark.svg">
       <source media="(max-width: 600px)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile.svg">
