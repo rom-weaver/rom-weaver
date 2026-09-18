@@ -1341,13 +1341,15 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("phone hero gives back the in-flow navigation height", async () => {
+  test("phone heroes share the Apply height budget", async () => {
     await setViewport(VIEWPORTS[0]);
-    await renderPage(emptyApplyPage(), "light");
+    for (const pageFactory of [emptyApplyPage, emptyCreatePage, emptyTrimPage]) {
+      await renderPage(pageFactory(), "light");
 
-    // 485px of navigation chrome, less the 116px the joined checksum footer
-    // takes (--hero-search-h), so the page footer still clears the dock.
-    expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("369px");
+      // 485px of navigation chrome, less the 116px shared footer reserve, so
+      // the page footer still clears the dock.
+      expect(getComputedStyle(host.querySelector(".drop.hero")).minHeight).toBe("369px");
+    }
   });
 
   test("keeps the workflow gutter fluid without a narrow desktop cap", async () => {
