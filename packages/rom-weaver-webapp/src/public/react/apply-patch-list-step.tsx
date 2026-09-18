@@ -1928,6 +1928,7 @@ const SharedPatchMetaEditor = ({
 };
 
 const ApplyPatchListStep = ({
+  afterItems,
   bundleOutputCheckHint,
   bundleSessionMatches,
   disabledFlags,
@@ -1949,6 +1950,8 @@ const ApplyPatchListStep = ({
   stripDisabled,
   woven,
 }: {
+  /** Optional patch-like card rendered after the reorderable patch list. */
+  afterItems?: ReactNode;
   /** The run has optional/skipped patches: hint on the chain-output card that its
    * expected output only describes the full chain. */
   bundleOutputCheckHint?: boolean;
@@ -2122,6 +2125,7 @@ const ApplyPatchListStep = ({
           />
         ))}
       </div>
+      {afterItems ? <div className="workflow-step-after-items">{afterItems}</div> : null}
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it
         // does not follow. Fixing one link re-plans the chain; any remaining break surfaces next.

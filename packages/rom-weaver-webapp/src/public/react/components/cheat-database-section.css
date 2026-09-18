@@ -1,7 +1,7 @@
 @layer style, foundation, drawers, controls, readouts, docs, overrides;
 
 @layer controls {
-  /* The database is an optional patch card attached to the ROM step, so its
+  /* The database is an optional patch card attached to the patches step, so its
      header follows the same float-and-wrap contract as patch cards. */
   .rw-app .cheat-card-row > .cheat-database-card > .card-top {
     display: flow-root;

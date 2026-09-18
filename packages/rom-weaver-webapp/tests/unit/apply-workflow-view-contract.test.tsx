@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { StepSection } from "../../src/public/react/components/ds/layout.tsx";
 import { shouldIdentifySource } from "../../src/lib/input/input-identification-policy.ts";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { notifyGuidedSampleView, requestGuidedSampleStart } from "../../src/public/react/guided-sample-start.ts";
@@ -135,12 +134,8 @@ const patchItem = (fileName: string): PatchStackItemState =>
   }) as unknown as PatchStackItemState;
 
 // The only production caller (apply-patch-form) supplies the cheat card inside
-// the ROM step, so the harness supplies a stand-in for that card.
-const cheatsStep = (
-  <StepSection num="0x02" title="Cheats">
-    <p>cheats</p>
-  </StepSection>
-);
+// the Patches step, so the harness supplies a stand-in for that card.
+const cheatsStep = <div data-testid="cheats-step">cheats</div>;
 
 const renderView = ({
   bundleMetaById,
@@ -836,6 +831,8 @@ describe("apply workflow view - staged bench", () => {
     expect(patchPosition.textContent).toContain("1");
     expect(patchPosition.disabled).toBe(true);
     expect(patchPosition.getAttribute("aria-label")).toBe("Patch 1 of 1. Reordering unavailable.");
+    expect(container.querySelector("#rom-weaver-row-patch-stack [data-testid=cheats-step]")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-row-file-rom [data-testid=cheats-step]")).toBeNull();
     // the patches step header counts staged files
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
     // no needs-input directives once content is staged

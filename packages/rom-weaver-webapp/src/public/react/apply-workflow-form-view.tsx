@@ -2282,13 +2282,6 @@ function ApplyWorkflowFormView({
                 : renderRomInputRow(group.row, group.index, romRowDeps),
             )}
             listId="rom-weaver-list-input-stack"
-            afterItems={
-              romInputs.length === 1
-                ? cheats?.({
-                    headerStripConflict: cheatHeaderStripConflict,
-                  })
-                : null
-            }
             notice={
               <>
                 {baseConflict ? (
@@ -2309,6 +2302,13 @@ function ApplyWorkflowFormView({
           />
 
           <ApplyPatchListStep
+            afterItems={
+              romInputs.length === 1
+                ? cheats?.({
+                    headerStripConflict: cheatHeaderStripConflict,
+                  })
+                : null
+            }
             bundleMeta={bundleMeta}
             bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
             bundleSessionMatches={bundleSessionMatches}
