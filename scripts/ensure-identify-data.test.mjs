@@ -220,7 +220,7 @@ test("hasCurrentData rejects a pre-catalog index.json", async () => {
   }
 });
 
-test("hasCurrentData rejects data built before hacks were excluded", () => {
+test("hasCurrentData rejects data built before hacks and translations were excluded", () => {
   const { dataDir, work } = buildCurrentDataDir();
   try {
     const catalogPath = join(dataDir, "catalog.json");

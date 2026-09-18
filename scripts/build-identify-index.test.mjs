@@ -101,7 +101,7 @@ game (
 )`;
 const OPENGOOD_DAT = `<?xml version="1.0"?><datafile><header><date>2021-12-27</date></header>
 <game name="Alpha Quest (U) [!]"><rom name="alpha.nes" size="16" crc="aabbccdd" md5="00112233445566778899aabbccddeeff" sha1="00112233445566778899aabbccddeeff00112233"/></game>
-<game name="Legacy Quest (U) [b1][T-Eng]"><rom name="legacy.nes" size="32" crc="deadbeef"/></game></datafile>`;
+<game name="Legacy Quest (U) [b1]"><rom name="legacy.nes" size="32" crc="deadbeef"/></game></datafile>`;
 const OPENGOOD_HEADERED_DAT = OPENGOOD_DAT.replace(
   'size="16" crc="aabbccdd" md5="00112233445566778899aabbccddeeff" sha1="00112233445566778899aabbccddeeff00112233"',
   'size="32" crc="cafebabe"',
@@ -263,6 +263,13 @@ test("Libretro excludes explicit hack names and metadata before merging", () => 
     ["Metadata Quest", 'genre "ROM Hack"'],
     ["Flagged Quest", 'hack "true"'],
     ["Described Quest", 'description "Alpha Quest (Hack)"'],
+    ["Alpha Quest [T-Eng]", ""],
+    ["Alpha Quest [T+Eng1.0]", ""],
+    ["Alpha Quest (Translation)", ""],
+    ["Translation Quest (USA)", ""],
+    ["Translated Quest", 'category "Translation"'],
+    ["Flagged Translation", 'translation "true"'],
+    ["Described Translation", 'description "Alpha Quest [T+Fre]"'],
   ];
   const dat = entries
     .map(
@@ -273,7 +280,7 @@ test("Libretro excludes explicit hack names and metadata before merging", () => 
   const games = parseLibretroGames(dat, NES, "dat/NES.dat").games;
   assert.deepEqual(
     games.map((game) => game.name),
-    ["Hacker (USA)", "Hack (USA)"],
+    ["Hacker (USA)", "Hack (USA)", "Translation Quest (USA)"],
   );
 });
 
@@ -285,6 +292,9 @@ test("OpenGood hacks cannot add names or hashes to a legitimate merged record", 
     "Alpha Quest [hM02]",
     "Alpha Quest (Hack)",
     "Metadata Quest",
+    "Alpha Quest [T-Eng]",
+    "Alpha Quest [T+Eng1.0]",
+    "Alpha Quest (Translation)",
   ];
   const dat = `<datafile>${names
     .map(
@@ -311,7 +321,15 @@ test("OpenGood hacks cannot add names or hashes to a legitimate merged record", 
 });
 
 test("GoodTools headered fallback excludes hack markers but keeps legitimate hack titles", () => {
-  const names = ["Alpha Quest [h1]", "Alpha Quest [hM02]", "Alpha Quest (Hack)", "Hacker (U) [!]"];
+  const names = [
+    "Alpha Quest [h1]",
+    "Alpha Quest [hM02]",
+    "Alpha Quest (Hack)",
+    "Alpha Quest [T-Eng]",
+    "Alpha Quest [T+Eng1.0]",
+    "Alpha Quest (Translation)",
+    "Hacker (U) [!]",
+  ];
   const dat = `<datafile><game name="GoodSNES">${names
     .map((name) => `<rom name="SNESRen/${name}.smc" size="1536" crc="cafebabe"/>`)
     .join("")}</game></datafile>`;
@@ -347,7 +365,7 @@ test("merge prefers the OpenGood name and retains every other name", () => {
   assert.deepEqual(games[0].alternateNames, ["Alpha Quest (J) [!]", "Alpha Quest (USA)"]);
   const legacy = games.find((game) => game.name.startsWith("Legacy Quest"));
   assert.equal(legacy.legacyVariant, true);
-  assert.deepEqual(legacy.dumpTags, ["b1", "T-Eng"]);
+  assert.deepEqual(legacy.dumpTags, ["b1"]);
   assert.deepEqual(extractGoodToolsDumpTags("Title [!][b1]"), ["!", "b1"]);
 });
 
@@ -432,7 +450,7 @@ test("the builder consumes a cached GoodSNES headered DAT", async () => {
     readFileSync(join(outDir, "nintendo-super-nintendo-entertainment-system.pack")),
   );
   const manifest = JSON.parse(pack.get("manifest.json").toString("utf8"));
-  assert.equal(manifest.counts.games, 923);
+  assert.equal(manifest.counts.games, 799);
   assert.ok(manifest.provenance.some((entry) => entry.source === "Eggmansworld/Datfiles"));
 });
 
