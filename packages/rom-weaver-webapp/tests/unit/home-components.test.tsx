@@ -156,7 +156,13 @@ describe("HomePage", () => {
     );
     const links = Array.from(container.querySelectorAll("a.home-flow")).map((link) => link.getAttribute("href"));
     expect(links).toEqual(["/tools/apply-patches", "/tools/bundle-patches", "/tools/create-patch", "/tools/test-rom"]);
+    const flowHeadings = Array.from(container.querySelectorAll("a.home-flow h3")).map((heading) => heading.textContent);
+    expect(flowHeadings[0]).toContain("Apply Patches");
+    expect(flowHeadings[1]).toContain("Bundle Patches");
+    expect(flowHeadings[2]).toContain("Create Patch");
+    expect(flowHeadings[3]).toContain("Test ROM");
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
+    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Apply Patches");
     expect(container.querySelectorAll(".home-flow")).toHaveLength(4);
     expect(container.textContent).toContain("All on your device.");
     expect(
@@ -183,7 +189,8 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Deine ROMs. Deine Änderungen.");
-    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Patch anwenden");
+    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Patches anwenden");
+    expect(container.querySelectorAll("a.home-flow h3")[1]?.textContent).toContain("Patches bündeln");
     expect(container.textContent).toContain("Befehlszeile");
 
     rerender(
@@ -192,7 +199,8 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Tus ROM. Tus cambios.");
-    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Aplicar parche");
+    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Aplicar parches");
+    expect(container.querySelectorAll("a.home-flow h3")[1]?.textContent).toContain("Agrupar parches");
     expect(container.textContent).toContain("Línea de comandos");
   });
 });

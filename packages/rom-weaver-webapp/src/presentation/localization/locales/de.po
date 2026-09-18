@@ -411,7 +411,7 @@ msgstr "Anwenden und herunterladen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
-msgstr "Patch anwenden"
+msgstr "Patches anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -446,7 +446,7 @@ msgstr "Patch anwenden auf"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowApply"
-msgstr "Patch anwenden"
+msgstr "Patches anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -676,7 +676,7 @@ msgstr "Bundle + Patches (.zip)"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowBundle"
-msgstr "Bündel"
+msgstr "Patches bündeln"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

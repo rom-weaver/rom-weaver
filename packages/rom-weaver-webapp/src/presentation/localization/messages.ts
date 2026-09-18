@@ -691,7 +691,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.home.openSourceDescription",
     message: "AGPL-3.0 licensed. Read the code, build it yourself, or host the webapp on your own domain.",
   }),
-  "ui.home.applyPatchCta": msg({ id: "ui.home.applyPatchCta", message: "Apply a patch" }),
+  "ui.home.applyPatchCta": msg({ id: "ui.home.applyPatchCta", message: "Apply Patches" }),
   "ui.home.patches": msg({ id: "ui.home.patches", message: "Patches" }),
   "ui.home.reads": msg({ id: "ui.home.reads", message: "reads" }),
   "ui.home.readsAndWrites": msg({ id: "ui.home.readsAndWrites", message: "reads and writes" }),
