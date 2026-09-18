@@ -53,15 +53,30 @@
 }
 .rw-app .home-links {
   display: grid;
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
-.rw-app .home-formats-link,
-.rw-app .home-try {
-  font-size: 0.85rem;
-  color: var(--ink-3);
+.rw-app .home-link {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 12px 16px;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
 }
-.rw-app .home-formats-link a,
-.rw-app .home-try a,
+.rw-app .home-link svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--thread-text);
+}
 .rw-app .home-details a {
   color: var(--ink-2);
   text-decoration: underline;
@@ -181,11 +196,13 @@
   height: 16px;
 }
 @media (hover: hover) {
+  .rw-app .home-link:hover,
   .rw-app .home-flow:hover {
     background: var(--plate-2);
     border-color: var(--thread);
   }
 }
+.rw-app .home-link:active,
 .rw-app .home-flow:active {
   background: var(--plate-2);
   border-color: var(--thread);
@@ -224,8 +241,7 @@
     gap: 12px;
     padding-block: 16px 20px;
   }
-  .rw-app .home-hero .home-eyebrow,
-  .rw-app .home-try-context {
+  .rw-app .home-hero .home-eyebrow {
     display: none;
   }
   .rw-app .home-hero h1 {
@@ -234,17 +250,6 @@
   }
   .rw-app .home-hero-body {
     gap: 12px;
-  }
-  .rw-app .home-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 16px;
-  }
-  .rw-app .home-formats-link a,
-  .rw-app .home-try a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
   }
   .rw-app .home-section {
     padding-block: 16px;

@@ -89,14 +89,14 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         <div className="home-hero-body">
           <p className="home-lede">{localizer.message("ui.home.lede")}</p>
           <div className="home-links">
-            <p className="home-formats-link">
-              <a href={`${route("docs")}/supported-formats`}>{localizer.message("ui.home.formatsEyebrow")}</a>
-            </p>
-            <p className="home-try">
-              <span className="home-try-context">{localizer.message("ui.home.tryBefore")} </span>
-              <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
-              <span className="home-try-context">{localizer.message("ui.home.tryAfter")}</span>
-            </p>
+            <a className="home-link" href={`${route("docs")}/supported-formats`}>
+              <span>{localizer.message("ui.home.formatsEyebrow")}</span>
+              <ArrowIcon />
+            </a>
+            <a className="home-link" href={resolveGuidedSampleHref(baseUrl, "apply")}>
+              <span>{localizer.message("ui.home.tryLink")}</span>
+              <ArrowIcon />
+            </a>
           </div>
         </div>
         <div className="home-loom">
