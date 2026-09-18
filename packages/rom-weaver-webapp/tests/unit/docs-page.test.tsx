@@ -16,23 +16,24 @@ beforeAll(async () => {
   await Promise.all(DOC_ROUTES.map((route) => preloadDocsHtml(route.slug)));
 });
 
-const renderDocsShell = (slug: string) =>
-  render(
-    <RomWeaverSettingsProvider settings={{}}>
-      <Masthead
-        currentTab="docs"
-        docsSlug={slug}
-        homeHref="/"
-        onSelectTab={() => undefined}
-        onOpenWhatsNew={() => undefined}
-        onOpenLog={() => undefined}
-        onOpenSettings={() => undefined}
-        onOpenStatus={() => undefined}
-        tabs={[{ id: "docs", group: "project", label: "Docs", href: "/docs", icon: <svg /> }]}
-      />
-      <DocsPage active slug={slug} />
-    </RomWeaverSettingsProvider>,
-  );
+const docsShell = (slug: string) => (
+  <RomWeaverSettingsProvider settings={{}}>
+    <Masthead
+      currentTab="docs"
+      docsSlug={slug}
+      homeHref="/"
+      onSelectTab={() => undefined}
+      onOpenWhatsNew={() => undefined}
+      onOpenLog={() => undefined}
+      onOpenSettings={() => undefined}
+      onOpenStatus={() => undefined}
+      tabs={[{ id: "docs", group: "project", label: "Docs", href: "/docs", icon: <svg /> }]}
+    />
+    <DocsPage active slug={slug} />
+  </RomWeaverSettingsProvider>
+);
+
+const renderDocsShell = (slug: string) => render(docsShell(slug));
 
 const BUNDLE_GUIDE_ANCHORS = [
   "choose-what-to-include",
@@ -546,6 +547,35 @@ Fixture description.
     fireEvent.click(contents);
     fireEvent.click(document.querySelector(".docs-contents-menu .warp-rail a") as HTMLElement);
     expect(document.querySelector(".docs-contents-menu")).toBeNull();
+  });
+
+  it("collapses the complete Docs group and shares the choice with the phone menu", async () => {
+    renderDocsShell("docs/cli");
+    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLDetailsElement;
+    expect(disclosure.open).toBe(true);
+    fireEvent.click(disclosure.querySelector("summary") as HTMLElement);
+    await vi.waitFor(() => expect(disclosure.open).toBe(false));
+    expect(document.querySelector(".side-nav #tab-docs")?.getAttribute("href")).toBe("/docs");
+    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLDetailsElement;
+    expect(phoneDisclosure.open).toBe(false);
+    fireEvent.click(phoneDisclosure.querySelector("summary") as HTMLElement);
+    await vi.waitFor(() => expect(phoneDisclosure.open).toBe(true));
+    expect(disclosure.open).toBe(true);
+  });
+
+  it("opens Docs and the active shelf when the current guide changes", async () => {
+    const { rerender } = renderDocsShell("docs/cli");
+    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLDetailsElement;
+    fireEvent.click(disclosure.querySelector("summary") as HTMLElement);
+    await vi.waitFor(() => expect(disclosure.open).toBe(false));
+    rerender(docsShell("docs/cli"));
+    expect(disclosure.open).toBe(false);
+    rerender(docsShell("docs/apply-rom-patches"));
+    await vi.waitFor(() => expect(disclosure.open).toBe(true));
+    const currentLink = document.querySelector('.side-nav .guide-nav a[aria-current="page"]');
+    expect(currentLink?.getAttribute("href")).toBe("/docs/apply-rom-patches");
+    expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true);
   });
 
   it("puts guides and Find in the phone navigation and closes it on a guide choice", async () => {

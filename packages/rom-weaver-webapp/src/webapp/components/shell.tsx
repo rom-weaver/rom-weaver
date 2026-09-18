@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   Cloud,
   CloudCheck,
   CloudDownload,
@@ -95,6 +96,8 @@ type NavEntry = {
   hidden?: boolean;
   className?: string;
   children?: ReactNode;
+  expanded?: boolean;
+  onToggle?: (open: boolean) => void;
   current?: boolean;
   /** Opens in a new tab: the row keeps its href and takes the external guard. */
   external?: boolean;
@@ -179,7 +182,7 @@ const NavRow = ({
   );
   const rowClass = join(className, entry.className);
   if (entry.href) {
-    return (
+    const row = (
       <a
         aria-current={entry.current ? "page" : undefined}
         aria-label={entry.title}
@@ -200,6 +203,20 @@ const NavRow = ({
       >
         {body}
       </a>
+    );
+    if (!entry.children) return row;
+    return (
+      <details
+        className="nav-docs-disclosure"
+        open={entry.expanded}
+        onToggle={(event) => entry.onToggle?.(event.currentTarget.open)}
+      >
+        <summary className="nav-docs-summary">
+          {row}
+          <ChevronDown aria-hidden="true" />
+        </summary>
+        {entry.children}
+      </details>
     );
   }
   return (
@@ -241,7 +258,6 @@ const SideNav = ({
         {section.entries.map((entry) => (
           <div hidden={entry.hidden} key={entry.id}>
             <NavRow className="nav-row" entry={entry} idPrefix="tab-" localizer={localizer} />
-            {entry.children}
           </div>
         ))}
         {section.id === "device" ? appearance : null}
@@ -352,7 +368,6 @@ const MenuSheet = ({
                   {section.entries.map((entry) => (
                     <div className={entry.children ? "nav-docs-entry" : undefined} hidden={entry.hidden} key={entry.id}>
                       <NavRow className="nav-row" entry={entry} localizer={localizer} onNavigate={onClose} />
-                      {entry.children}
                     </div>
                   ))}
                   {section.id === "device" ? appearance : null}
@@ -1136,6 +1151,10 @@ const Masthead = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
+  const [docsExpanded, setDocsExpanded] = useState(true);
+  useEffect(() => {
+    if (currentTab === "docs" && docsSlug) setDocsExpanded(true);
+  }, [currentTab, docsSlug]);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const menuFindRef = useRef<HTMLButtonElement | null>(null);
@@ -1394,6 +1413,8 @@ const Masthead = ({
       ...section,
       entries: section.entries.map((entry) => ({
         ...entry,
+        expanded: docsExpanded,
+        onToggle: setDocsExpanded,
         children:
           entry.id === "docs" && currentTab === "docs" ? (
             <Suspense fallback={null}>
