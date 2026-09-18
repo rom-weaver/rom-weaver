@@ -51,9 +51,6 @@
   font-size: 1rem;
   color: var(--ink-2);
 }
-.rw-app .home-cta {
-  display: flex;
-}
 .rw-app .home-try {
   font-size: 0.85rem;
   color: var(--ink-3);
@@ -231,10 +228,6 @@
   }
   .rw-app .home-hero-body {
     gap: 12px;
-  }
-  .rw-app .home-cta .btn {
-    width: 100%;
-    min-height: 44px;
   }
   .rw-app .home-try a {
     display: inline-flex;
