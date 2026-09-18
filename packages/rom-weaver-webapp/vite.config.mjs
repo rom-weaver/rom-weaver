@@ -315,12 +315,14 @@ const setRootStaticAssetContentType = (requestPath, res) => {
 };
 
 const LEGACY_WORKFLOW_ROUTES = {
-  apply: "apply-patch",
+  apply: "apply-patches",
+  "apply-patch": "apply-patches",
+  bundle: "bundle-patches",
   create: "create-patch",
   identify: "identify-rom",
   test: "test-rom",
   trim: "trim-rom",
-  weave: "apply-patch",
+  weave: "apply-patches",
 };
 
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {
@@ -529,8 +531,8 @@ const createNotFoundHtml = (html, channel, channelLabel) => {
 const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://rom-weaver.com/</loc></url>
-  <url><loc>https://rom-weaver.com/apply-patch</loc></url>
-  <url><loc>https://rom-weaver.com/bundle</loc></url>
+  <url><loc>https://rom-weaver.com/apply-patches</loc></url>
+  <url><loc>https://rom-weaver.com/bundle-patches</loc></url>
   <url><loc>https://rom-weaver.com/create-patch</loc></url>
   <url><loc>https://rom-weaver.com/identify-rom</loc></url>
   <url><loc>https://rom-weaver.com/test-rom</loc></url>
@@ -752,8 +754,8 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         writeDocsMarkdown(path.join(distDir, `${route.slug}.md`), source, docSourcePath(source));
       }
       for (const [slug, html] of [
-        ["apply-patch", applyHtml],
-        ["bundle", bundleHtml],
+        ["apply-patches", applyHtml],
+        ["bundle-patches", bundleHtml],
         ["create-patch", createHtml],
         ["identify-rom", identifyHtml],
         ["test-rom", testHtml],

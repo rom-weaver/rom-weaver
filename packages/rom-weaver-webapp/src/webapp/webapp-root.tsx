@@ -88,10 +88,10 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   {
     dock: true,
     group: "patches",
-    href: "apply-patch",
+    href: "apply-patches",
     icon: <ApplyBandaidIcon className="apply-tab-icon" />,
     id: "patcher",
-    label: "Apply Patch",
+    label: "Apply Patches",
     railLabel: "Apply",
   },
   {
@@ -105,11 +105,11 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "patches",
-    href: "bundle",
+    href: "bundle-patches",
     icon: <Package aria-hidden="true" />,
     id: "bundle",
     label: "Bundle Patches",
-    railLabel: "Bundle",
+    railLabel: "Bundle Patches",
   },
   {
     beta: true,
@@ -877,9 +877,9 @@ function WebappRoot({
                   </h1>
                   <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
                   <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href="/apply-patch">
+                    <a className="btn primary not-found-home" href="/apply-patches">
                       <House aria-hidden="true" />
-                      Apply a patch
+                      Apply Patches
                     </a>
                     <a className="btn ghost not-found-docs" href="/docs">
                       <BookOpen aria-hidden="true" />

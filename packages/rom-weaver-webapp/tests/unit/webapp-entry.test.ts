@@ -150,7 +150,7 @@ const loadWebapp = async (options?: {
 }) => {
   vi.resetModules();
   mocks.renders.length = 0;
-  window.history.replaceState({}, "", options?.url ?? "/apply-patch");
+  window.history.replaceState({}, "", options?.url ?? "/apply-patches");
   document.documentElement.dataset.page = options?.notFound ? "not-found" : "app";
   document.documentElement.dataset.betaToolsEnabled = options?.betaTools ? "true" : "false";
   document.body.innerHTML = `<div id="webapp-root" aria-busy="true">${
@@ -322,12 +322,21 @@ describe("boot", () => {
 
     expect(latest().urlSession?.request).toMatchObject({ kind: "direct" });
     expect(latest().state.currentView).toBe("patcher");
+    expect(window.location.pathname).toBe("/apply-patches");
+  });
+
+  it("replaces the retired Bundle route", async () => {
+    await loadWebapp({ url: "/bundle?guide=bundle" });
+
+    expect(window.location.pathname).toBe("/bundle-patches");
+    expect(window.location.search).toBe("?guide=bundle");
+    expect(latest().state.currentView).toBe("bundle");
   });
 
   it("moves bundle sessions to the Bundle route", async () => {
     await loadWebapp({ url: "/apply-patch?bundle=/bundles/first-weave.zip" });
 
-    expect(window.location.pathname).toBe("/bundle");
+    expect(window.location.pathname).toBe("/bundle-patches");
     expect(window.location.search).toBe("?bundle=/bundles/first-weave.zip");
     expect(latest().state.currentView).toBe("bundle");
   });
@@ -335,7 +344,7 @@ describe("boot", () => {
   it("moves the legacy bundle guide to Bundle and keeps its guide query", async () => {
     await loadWebapp({ url: "/apply-patch?guide=bundle" });
 
-    expect(window.location.pathname).toBe("/bundle");
+    expect(window.location.pathname).toBe("/bundle-patches");
     expect(window.location.search).toBe("?guide=bundle");
     expect(latest().state.currentView).toBe("bundle");
   });
@@ -750,7 +759,7 @@ describe("routing", () => {
     const anchor = clickAnchor("/not-a-route");
     await flush();
 
-    expect(window.location.pathname).toBe("/apply-patch");
+    expect(window.location.pathname).toBe("/apply-patches");
     expect(anchor.isConnected).toBe(true);
   });
 
@@ -772,7 +781,7 @@ describe("routing", () => {
     await flush();
 
     expect(latest().state.currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/apply-patch");
+    expect(window.location.pathname).toBe("/apply-patches");
   });
 
   it("starts the guide named in the address bar after a navigation", async () => {

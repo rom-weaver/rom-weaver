@@ -227,8 +227,8 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it.each([
-    ["apply", "/apply-patch?guide=apply", "Start guided Apply"],
-    ["bundle", "/bundle?guide=bundle", "Create a sharable bundle"],
+    ["apply", "/apply-patches?guide=apply", "Start guided Apply"],
+    ["bundle", "/bundle-patches?guide=bundle", "Create a sharable bundle"],
   ] as const)("offers the %s guide and the test bundle download", (mode, href, label) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);

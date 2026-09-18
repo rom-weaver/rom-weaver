@@ -1,8 +1,8 @@
 # Use cheats in the browser
 
-Use the Apply page to bake cheats into a ROM.
+Use the Apply Patches page to bake cheats into a ROM.
 
-1. Add the original ROM to the Apply page.
+1. Add the original ROM to the Apply Patches page.
 2. Open the Cheats section after rom-weaver identifies the system.
 3. Check the game title, region, revision, and match label.
 4. Search the list.
@@ -56,7 +56,7 @@ rom-weaver selects IPS for ROMs smaller than 16 MiB, BPS from 16 MiB through 256
 6. Select the patch format and file name on the Output step.
 7. Select **Create & download patch**.
 
-**Pick from the cheat database** offers the same cheats the Apply page does. A code that does not resolve to ROM writes blocks the run and states its reason.
+**Pick from the cheat database** offers the same cheats the Apply Patches page does. A code that does not resolve to ROM writes blocks the run and states its reason.
 
 ## Use the database offline
 

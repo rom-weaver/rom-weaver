@@ -14,7 +14,7 @@ A rom-weaver bundle packages an ordered patch recipe into one download. It helps
 
 <!-- END doctoc -->
 
-New to bundles? [What a bundle is](../explanation/bundles.md) covers what one contains and when it is worth making, and the [guided Bundle tour](https://rom-weaver.com/bundle?guide=bundle) builds one from the homebrew practice files.
+New to bundles? [What a bundle is](../explanation/bundles.md) covers what one contains and when it is worth making, and the [guided Bundle Patches tour](https://rom-weaver.com/bundle-patches?guide=bundle) builds one from the homebrew practice files.
 
 ## Choose what to include
 
@@ -26,7 +26,7 @@ Set **Compression type** to ZIP unless your audience specifically wants 7z. Brow
 
 ## Build the patch recipe
 
-1. Open [Apply](https://rom-weaver.com/apply).
+1. Open [Apply Patches](https://rom-weaver.com/apply-patches).
 2. Add the clean ROM and every patch.
 3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys.
 4. Open each patch's three-dot **Patch actions** menu and choose **Edit details**. Add a readable name and, when useful, a description, version, and author. People see this information when they open the bundle.
@@ -58,7 +58,7 @@ In **0x05 Apply**:
 
 1. Set the output filename and format users should receive after patching.
 2. Open **Options**.
-3. Find **Bundle**. It starts at **Hide bundle creation**. Turn bundle output on by choosing **Bundle + patches** for a normal public release. Set **Compression type** to ZIP or 7z in the output options; **ROM specific only** uses ZIP for the bundle archive.
+3. Find **Bundle Patches**. It starts at **Hide bundle creation**. Turn bundle output on by choosing **Bundle + patches** for a normal public release. Set **Compression type** to ZIP or 7z in the output options; **ROM specific only** uses ZIP for the bundle archive.
 4. Confirm or edit **Expected source ROM filename**. This name helps users find the ROM. Checksums prove that its contents match.
 5. Clear the filename to omit the name hint. A different name warns without blocking the weave.
 
@@ -118,7 +118,7 @@ For an update, rebuild the recipe from the same clean Original and the new patch
 You can give users a link that preloads a public bundle:
 
 ```text
-https://rom-weaver.com/bundle?bundle=https://example.com/release.zip
+https://rom-weaver.com/bundle-patches?bundle=https://example.com/release.zip
 ```
 
 The bundle host must permit cross-origin browser downloads with CORS. The user's ROM still stays local. Relative patch URLs inside a remote recipe are resolved against the recipe URL.

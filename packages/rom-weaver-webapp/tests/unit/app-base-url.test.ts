@@ -81,7 +81,7 @@ describe("resolveAssetUrl", () => {
 
 describe("resolveGuidedSampleHref", () => {
   test("keeps root-host guide links root-relative", () => {
-    expect(resolveGuidedSampleHref("https://weaver.example/", "apply")).toBe("/apply-patch?guide=apply");
+    expect(resolveGuidedSampleHref("https://weaver.example/", "apply")).toBe("/apply-patches?guide=apply");
   });
 
   test("keeps guide links inside a sub-path deployment", () => {

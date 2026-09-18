@@ -195,7 +195,16 @@ const isNotFoundPage = document.documentElement.dataset.page === "not-found";
 // chooses a workflow. Direct ROM/patch sessions remain on Apply.
 const replaceLegacyBundleRoute = (): boolean => {
   if (isNotFoundPage) return false;
-  const currentUrl = new URL(window.location.href);
+  let currentUrl = new URL(window.location.href);
+  const renamedPath = currentUrl.pathname
+    .replace(/\/apply-patch(?:\.html|\/index\.html|\/)?$/iu, "/apply-patches")
+    .replace(/\/bundle(?:\.html|\/index\.html|\/)?$/iu, "/bundle-patches");
+  const routeWasRenamed = renamedPath !== currentUrl.pathname;
+  if (routeWasRenamed) {
+    currentUrl.pathname = renamedPath;
+    window.history.replaceState(window.history.state, "", currentUrl);
+    currentUrl = new URL(window.location.href);
+  }
   const params = currentUrl.searchParams;
   const currentView = readWorkflowViewFromPath(currentUrl.pathname);
   const hasBundleSession = params.has("bundle");
@@ -204,8 +213,8 @@ const replaceLegacyBundleRoute = (): boolean => {
   const hasLegacyBundleHash = currentView === "patcher" && currentUrl.hash.toLowerCase() === "#bundle";
   const targetView =
     hasBundleSession || hasLegacyBundleGuide || hasLegacyBundleHash ? "bundle" : hasDirectSession ? "patcher" : null;
-  if (!targetView || currentView === targetView) return false;
-  const nextUrl = new URL(targetView === "bundle" ? "bundle" : "apply-patch", readAppBaseUrl());
+  if (!targetView || currentView === targetView) return routeWasRenamed;
+  const nextUrl = new URL(targetView === "bundle" ? "bundle-patches" : "apply-patches", readAppBaseUrl());
   nextUrl.search = currentUrl.search;
   window.history.replaceState(window.history.state, "", nextUrl);
   return true;

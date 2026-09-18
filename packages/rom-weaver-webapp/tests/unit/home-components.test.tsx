@@ -155,7 +155,7 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     const links = Array.from(container.querySelectorAll("a.home-flow")).map((link) => link.getAttribute("href"));
-    expect(links).toEqual(["/tools/apply-patch", "/tools/bundle", "/tools/create-patch", "/tools/test-rom"]);
+    expect(links).toEqual(["/tools/apply-patches", "/tools/bundle-patches", "/tools/create-patch", "/tools/test-rom"]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
     expect(container.querySelectorAll(".home-flow")).toHaveLength(4);
     expect(container.textContent).toContain("All on your device.");
@@ -172,7 +172,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="not a URL" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply-patch");
+    expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply-patches");
     expect(container.querySelector("a[href='/create-patch']")).toBeTruthy();
   });
 

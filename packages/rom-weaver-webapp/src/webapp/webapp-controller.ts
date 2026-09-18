@@ -58,14 +58,14 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
-  bundle: "bundle",
+  bundle: "bundle-patches",
   creator: "create-patch",
   // The landing page is the app base itself, so its slug is empty and
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
   home: "",
   docs: "docs",
   identify: "identify-rom",
-  patcher: "apply-patch",
+  patcher: "apply-patches",
   "ppf-undo": "ppf-undo",
   "save-editor": "save-editor",
   test: "test-rom",
@@ -73,6 +73,10 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   "whats-new": "whats-new",
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
+  "apply-patches": "patcher",
+  "apply-patches.html": "patcher",
+  "bundle-patches": "bundle",
+  "bundle-patches.html": "bundle",
   "apply-patch": "patcher",
   "apply-patch.html": "patcher",
   bundle: "bundle",

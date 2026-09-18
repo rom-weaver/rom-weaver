@@ -178,7 +178,7 @@ describe("the workbench shell", () => {
 
     expect(container.querySelector(".not-found-page")).not.toBeNull();
     expect(container.querySelector("footer.page-footer")).not.toBeNull();
-    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-patch");
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-patches");
     expect(container.querySelector("#panel-patcher")).toBeNull();
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });

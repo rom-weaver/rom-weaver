@@ -320,11 +320,6 @@ msgstr "ROM hinzufügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyDescription"
-msgstr "Patche ROMs und Disc-Images mit einem oder mehreren Patches, Cheats oder einem Bundle. Öffne komprimierte Dateien direkt und lade das Ergebnis herunter oder teile ein wiederverwendbares Bundle."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.testDescription"
 msgstr "Füge eine unterstützte ROM direkt oder in einem Archiv hinzu, um das Spiel im Browser-Emulator zu testen."
 
@@ -440,11 +435,6 @@ msgstr "Beide Patches anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.flowApply"
-msgstr "Patch anwenden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.target"
 msgstr "Patch anwenden auf"
 
@@ -452,6 +442,11 @@ msgstr "Patch anwenden auf"
 #: src/presentation/localization/messages.ts
 msgid "ui.file.patchTarget"
 msgstr "Patch anwenden auf"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.flowApply"
+msgstr "Patch anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -675,13 +670,13 @@ msgstr "Mehrere bearbeiten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.flowBundle"
-msgstr "Bündel"
+msgid "ui.apply.bundleTutorial.bundlePatches"
+msgstr "Bundle + Patches (.zip)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.bundlePatches"
-msgstr "Bundle + Patches (.zip)"
+msgid "ui.home.flowBundle"
+msgstr "Bündel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1180,11 +1175,6 @@ msgstr "Nicht mehr anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.reenable"
-msgstr "In Einstellungen wieder aktivieren"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.done"
 msgstr "Fertig"
 
@@ -1577,6 +1567,11 @@ msgstr "Header automatisch ({mode})"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.header"
 msgstr "Headeroptionen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.headeredRom"
+msgstr "ROM mit Header"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2190,6 +2185,11 @@ msgstr "An"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.local"
+msgstr "Lokal. Offline nutzbar. Keine Telemetrie."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.frontendsEyebrow"
 msgstr "Eine Engine, zwei Oberflächen"
 
@@ -2435,6 +2435,11 @@ msgstr "Patch-Position"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyDescription"
+msgstr "Patche ROMs und Disc-Images mit einem oder mehreren Patches, Cheats oder einem Bundle. Öffne komprimierte Dateien direkt und lade das Ergebnis herunter oder teile ein wiederverwendbares Bundle."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.patchedFormat"
 msgstr "Gepatcht: {format}"
 
@@ -2567,6 +2572,11 @@ msgstr "Pull-Request-Vorschau"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality"
 msgstr "Qualität"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.reenable"
+msgstr "In Einstellungen wieder aktivieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2832,11 +2842,6 @@ msgstr "ROMs"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.loading"
 msgstr "RomWeaver entpackt ein kleines ROM und zwei Patches und prüft dann jede Datei."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.footer.local"
-msgstr "Lokal. Offline nutzbar. Keine Telemetrie."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3499,6 +3504,11 @@ msgstr "Unerwartet"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.unheaderedRom"
+msgstr "ROM ohne Header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unidentified"
 msgstr "Nicht identifiziert"
 
@@ -3716,13 +3726,3 @@ msgstr "ZIP"
 #: src/presentation/localization/messages.ts
 msgid "settings.zipCodec"
 msgstr "ZIP-Codec"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.headeredRom"
-msgstr "ROM mit Header"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.unheaderedRom"
-msgstr "ROM ohne Header"
