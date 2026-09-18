@@ -1289,6 +1289,10 @@
     align-items: start;
     max-width: calc(var(--app-max) + var(--rail-w) + var(--sp-l));
   }
+  /* The footer MUST end the sidebar’s grid span so unused rows stay above it. */
+  .rw-app .page-footer {
+    grid-row: 100;
+  }
   .rw-app .side-col {
     position: sticky;
     inset-block-start: 0;
