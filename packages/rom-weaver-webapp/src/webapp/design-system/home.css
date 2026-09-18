@@ -216,6 +216,35 @@
   font-size: 0.85rem;
   color: var(--ink-3);
 }
+@media (max-width: 639px) {
+  .rw-app .home-hero {
+    gap: 12px;
+    padding-block: 16px 20px;
+  }
+  .rw-app .home-hero .home-eyebrow,
+  .rw-app .home-try-context {
+    display: none;
+  }
+  .rw-app .home-hero h1 {
+    margin-top: 0;
+    font-size: 28px;
+  }
+  .rw-app .home-hero-body {
+    gap: 12px;
+  }
+  .rw-app .home-cta .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+  .rw-app .home-try a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .rw-app .home-section {
+    padding-block: 16px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .rw-app .home-flow {
     transition: none;

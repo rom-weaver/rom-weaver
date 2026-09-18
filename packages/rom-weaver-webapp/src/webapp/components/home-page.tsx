@@ -95,9 +95,9 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             </a>
           </div>
           <p className="home-try">
-            {localizer.message("ui.home.tryBefore")}{" "}
+            <span className="home-try-context">{localizer.message("ui.home.tryBefore")} </span>
             <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
-            {localizer.message("ui.home.tryAfter")}
+            <span className="home-try-context">{localizer.message("ui.home.tryAfter")}</span>
           </p>
         </div>
         <div className="home-loom">
