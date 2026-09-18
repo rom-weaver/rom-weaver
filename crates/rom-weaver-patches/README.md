@@ -1,5 +1,9 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/packages/rom-weaver-webapp/design/icon-masters/renders/madder.svg" alt="" width="64" height="64"><br>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/packages/rom-weaver-webapp/design/icon-masters/renders/light/madder.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/packages/rom-weaver-webapp/design/icon-masters/renders/dark/madder.svg">
+    <img src="https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/packages/rom-weaver-webapp/design/icon-masters/renders/dark/madder.svg" alt="" width="64" height="64">
+  </picture><br>
   rom-weaver-patches
 </h1>
 

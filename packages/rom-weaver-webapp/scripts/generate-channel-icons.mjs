@@ -24,7 +24,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_THEMES, renderBrandMark } from "../src/webapp/brand-mark-assets.mjs";
+import { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONES, renderBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
 import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
@@ -64,7 +64,7 @@ const parseOptions = (args) => {
 const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "verdigris", preview: "plum" };
 
 // Sizes come from design/icon-masters/README.md. The wrappers are generated
-// around the transparent dark-theme mark so the source master stays reusable.
+// around the transparent light-tone mark so the source master stays reusable.
 const RASTER_TARGETS = [
   { output: "icon-maskable-512.png", scale: 0.72, size: 512 },
   { output: "icon-maskable-192.png", scale: 0.72, size: 192 },
@@ -187,12 +187,12 @@ const main = async () => {
       );
 
       for (const target of RASTER_TARGETS) {
-        const logo = renderBrandMark(brandMaster, { accent, theme: "dark" });
+        const logo = renderBrandMark(brandMaster, { accent, tone: "light" });
         const launcher = launcherWrapper(logo, target.scale);
         emit(path.join(channelDir, target.output), await rasterize(page, launcher, target.size));
       }
 
-      const favicon = faviconSvg(renderBrandMark(brandMaster, { accent, theme: "dark" }));
+      const favicon = faviconSvg(renderBrandMark(brandMaster, { accent, tone: "light" }));
       const images = [];
       for (const size of [16, 32, 48, 64]) {
         images.push({ size, png: await rasterize(page, favicon, size) });
@@ -215,10 +215,10 @@ const main = async () => {
         path.join(variantRoot, `${accent.value}.svg`),
         Buffer.from(renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
       );
-      for (const theme of BRAND_MARK_THEMES) {
+      for (const tone of BRAND_MARK_TONES) {
         emit(
-          path.join(variantRoot, theme, `${accent.value}.svg`),
-          Buffer.from(renderBrandMark(logo, { accent, theme, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
+          path.join(variantRoot, tone, `${accent.value}.svg`),
+          Buffer.from(renderBrandMark(logo, { accent, tone, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
         );
       }
     }

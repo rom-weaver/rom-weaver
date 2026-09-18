@@ -1,13 +1,13 @@
 import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
 
-/** @typedef {"responsive" | "light" | "dark"} BrandMarkTheme */
+/** @typedef {"responsive" | "light" | "dark"} BrandMarkTone */
 
 /** @type {readonly ("light" | "dark")[]} */
-const BRAND_MARK_THEMES = Object.freeze(["light", "dark"]);
+const BRAND_MARK_TONES = Object.freeze(["dark", "light"]);
 const BRAND_MARK_VIEWBOX = "0 0 64 64";
 const BRAND_MARK_TIGHT_VIEWBOX = "8 4 48 56";
 /** @type {Readonly<Record<"light" | "dark", string>>} */
-const BRAND_MARK_COLORS = Object.freeze({ light: "#20282d", dark: "#f6ecda" });
+const BRAND_MARK_TONE_COLORS = Object.freeze({ dark: "#20282d", light: "#f6ecda" });
 
 /** @param {string | { value: string }} accent */
 const resolveAccent = (accent) => {
@@ -34,24 +34,24 @@ const replacePathFill = (svg, className, fill) => {
 };
 
 /**
- * Apply a theme and accent to the colorless brand-mark master.
+ * Apply a logo tone and accent to the colorless brand-mark master.
  *
- * The responsive theme is for the public favicon and keeps the two browser
- * color schemes in one SVG. Explicit themes are used for rasterized outputs.
+ * The responsive tone is for the public favicon and keeps the two browser
+ * color schemes in one SVG. Explicit tones are used for static outputs.
  *
  * @param {string} svg
- * @param {{ accent?: string | { value: string }, theme?: BrandMarkTheme, viewBox?: string }} [options]
+ * @param {{ accent?: string | { value: string }, tone?: BrandMarkTone, viewBox?: string }} [options]
  */
-const renderBrandMark = (svg, { accent = DEFAULT_ACCENT, theme = "responsive", viewBox = BRAND_MARK_VIEWBOX } = {}) => {
+const renderBrandMark = (svg, { accent = DEFAULT_ACCENT, tone = "responsive", viewBox = BRAND_MARK_VIEWBOX } = {}) => {
   assertBrandMarkMaster(svg);
   const resolvedAccent = resolveAccent(accent);
-  if (theme !== "responsive" && !BRAND_MARK_THEMES.includes(theme)) {
-    throw new Error(`brand marks: unknown theme '${theme}'`);
+  if (tone !== "responsive" && !BRAND_MARK_TONES.includes(tone)) {
+    throw new Error(`brand marks: unknown tone '${tone}'`);
   }
-  const cartridge = theme === "responsive" ? "var(--brand-cartridge)" : BRAND_MARK_COLORS[theme];
+  const cartridge = tone === "responsive" ? "var(--brand-cartridge)" : BRAND_MARK_TONE_COLORS[tone];
   const style =
-    theme === "responsive"
-      ? `<style>.brand-mark { --brand-cartridge: ${BRAND_MARK_COLORS.light}; } @media (prefers-color-scheme: dark) { .brand-mark { --brand-cartridge: ${BRAND_MARK_COLORS.dark}; } }</style>`
+    tone === "responsive"
+      ? `<style>.brand-mark { --brand-cartridge: ${BRAND_MARK_TONE_COLORS.dark}; } @media (prefers-color-scheme: dark) { .brand-mark { --brand-cartridge: ${BRAND_MARK_TONE_COLORS.light}; } }</style>`
       : "";
   let rendered = svg.replace(/(<svg\b[^>]*)(>)/, '$1 class="brand-mark"$2');
   rendered = rendered.replace(/viewBox="[^"]*"/, `viewBox="${viewBox}"`);
@@ -60,4 +60,4 @@ const renderBrandMark = (svg, { accent = DEFAULT_ACCENT, theme = "responsive", v
   return rendered.replace("</svg>", `${style}</svg>`);
 };
 
-export { BRAND_MARK_COLORS, BRAND_MARK_THEMES, BRAND_MARK_TIGHT_VIEWBOX, renderBrandMark };
+export { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONE_COLORS, BRAND_MARK_TONES, renderBrandMark };
