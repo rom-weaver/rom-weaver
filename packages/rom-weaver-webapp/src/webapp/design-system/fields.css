@@ -300,6 +300,9 @@
 .rw-app .bundle-rom-option .checkrow {
   margin-block: 0;
 }
+.rw-app .bundle-rom-option input[type="checkbox"] {
+  --sw-h: 24px;
+}
 .rw-app .bundle-rom-warning {
   grid-column: 1 / -1;
 }

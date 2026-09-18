@@ -22,7 +22,7 @@ Use **Bundle + patches** for a normal public release. It includes the recipe and
 
 Use **Bundle + ROM + patches** only for homebrew, your own backups, public domain material, or another ROM you are allowed to redistribute. A convenient button does not grant permission to share copyrighted game data.
 
-Choose ZIP unless your audience specifically wants 7z. Browsers and operating systems open ZIP easily. ZIP and 7z contain the same recipe information.
+Set **Compression type** to ZIP unless your audience specifically wants 7z. Browsers and operating systems open ZIP easily. If you choose **ROM specific only**, bundle output falls back to a ZIP archive. ZIP and 7z contain the same recipe information.
 
 ## Build the patch recipe
 
@@ -58,28 +58,28 @@ In **0x05 Apply**:
 
 1. Set the output filename and format users should receive after patching.
 2. Open **Options**.
-3. Find **Bundle**. It starts at **Hide bundle creation**. Turn bundle output on by choosing **Bundle + patches (.zip)** for a normal public release.
+3. Find **Bundle**. It starts at **Hide bundle creation**. Turn bundle output on by choosing **Bundle + patches** for a normal public release. Set **Compression type** to ZIP or 7z in the output options; **ROM specific only** uses ZIP for the bundle archive.
 4. Confirm or edit **Expected source ROM filename**. This name helps users find the ROM. Checksums prove that its contents match.
 5. Clear the filename to omit the name hint. A different name warns without blocking the weave.
 
 Create the download:
 
-1. Choose **Create ZIP Bundle**.
+1. Choose the **Create ZIP Bundle** or **Create 7z Bundle** action that matches **Compression type**.
 2. Wait while rom-weaver calculates checksums and checks the recipe.
-3. When the button changes to **Download ZIP Bundle**, choose it and save the archive.
+3. When the button changes to the matching **Download** action, choose it and save the archive.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-light.avif" width="1170" height="2013">
     <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-light.avif" width="2242" height="1399">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-light.webp" width="1170" height="2013">
-    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the light theme">
+    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches selected and the bundle creation control in the light theme">
   </picture>
   <picture data-docs-screenshot-theme="dark">
     <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-dark.avif" width="1170" height="2013">
     <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-dark.avif" width="2242" height="1399">
     <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="2013">
-    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches ZIP selected and the Create ZIP Bundle control in the dark theme">
+    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches selected and the bundle creation control in the dark theme">
   </picture>
   <figcaption>Bundle creation packages the staged recipe without applying the patches.</figcaption>
 </figure>

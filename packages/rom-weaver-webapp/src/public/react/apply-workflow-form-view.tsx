@@ -1572,40 +1572,12 @@ const BundleOutputFields = ({
   bundleTools?: BundleToolsState;
 }) => {
   const localizer = useUiLocalizer();
-  const exportTypeInfo = {
-    items: [
-      localizer.message("ui.apply.archive.info.recipe"),
-      localizer.message("ui.apply.archive.info.index"),
-      localizer.message("ui.apply.archive.info.contents"),
-      localizer.message("ui.apply.archive.info.apply"),
-    ],
-    summary: localizer.message("ui.apply.archive.summary"),
-    title: localizer.message("ui.apply.archive.title"),
-  };
   if (!bundleExport) return null;
-  const archiveType = bundleExport.format === "7z" ? "7z" : "zip";
-  const setBundleContents = (includeRom: boolean, format = archiveType) => {
-    bundleTools?.setBundlePackage(`${format}:${includeRom ? "rom" : "patches"}`);
+  const setBundleContents = (includeRom: boolean) => {
+    bundleTools?.setBundlePackage(includeRom ? "rom" : "patches");
   };
   return (
     <div className="bundle-job-fields">
-      <OutputField
-        className="export-type-field"
-        label={localizer.message("ui.apply.archive.type")}
-        labelInfo={<FieldInfoToggle info={exportTypeInfo} label={localizer.message("ui.apply.archive.type")} />}
-      >
-        <DropdownSelect
-          aria-label={localizer.message("ui.apply.archive.type")}
-          className="select"
-          disabled={bundleExport.busy}
-          id="rom-weaver-bundle-export-format"
-          onChange={(event) => setBundleContents(bundleExport.bundleRom, event.currentTarget.value)}
-          value={archiveType}
-        >
-          <option value="zip">ZIP (.zip)</option>
-          <option value="7z">7z (.7z)</option>
-        </DropdownSelect>
-      </OutputField>
       <div className="bundle-rom-option">
         <label className="checkrow" htmlFor="rom-weaver-bundle-export-bundle-rom">
           <input
@@ -2043,10 +2015,11 @@ function ApplyWorkflowFormView({
   });
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
+  const outputDisabled = outputState.disabled || bundleExport?.busy === true;
   const header = resolveOutputHeaderOptions(romInputs);
   const outputHeaderField = (
     <OutputHeaderField
-      disabled={outputState.disabled}
+      disabled={outputDisabled}
       headeredExtension={header.headeredExtension}
       headerlessExtension={header.headerlessExtension}
       onChange={(value) => controllers.output.setOutputHeader?.(value)}
@@ -2069,7 +2042,7 @@ function ApplyWorkflowFormView({
     <>
       {outputHeaderField}
       <PostApplyBehaviorFields
-        disabled={outputState.disabled}
+        disabled={outputDisabled}
         downloadSetting={settings.postApplyDownloadBehavior}
         testSetting={settings.postApplyTestBehavior}
       />
@@ -2084,7 +2057,7 @@ function ApplyWorkflowFormView({
     useGuidedSampleLoader({
       assetBaseUrl,
       onDrop: handleUnifiedDrop,
-      onStartBundle: () => bundleTools?.setBundlePackage("zip:patches"),
+      onStartBundle: () => bundleTools?.setBundlePackage("patches"),
     });
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
@@ -2337,7 +2310,7 @@ function ApplyWorkflowFormView({
           <WorkflowOutputStep
             action={renderOutputAction}
             compress={buildOutputCompressionPanel({
-              disabled: outputState.disabled,
+              disabled: outputDisabled,
               extraChildren: outputExtraFields,
               fields: outputState.compress?.fields,
               format: compressHeaderFormat,
@@ -2351,7 +2324,7 @@ function ApplyWorkflowFormView({
               readouts: null,
               timing: outputState.compressTiming || undefined,
             })}
-            disabled={outputState.disabled}
+            disabled={outputDisabled}
             fault={applyFailed}
             fileName={outputState.displayFileName}
             fileNameId="rom-weaver-input-output-file-name"

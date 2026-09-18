@@ -435,7 +435,7 @@ describe("apply workflow view - empty bench", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    expect(setBundlePackage).toHaveBeenCalledWith("zip:patches");
+    expect(setBundlePackage).toHaveBeenCalledWith("patches");
     expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });
@@ -1294,12 +1294,10 @@ describe("apply workflow view - bundle controls", () => {
     expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job .bundle-share");
   });
 
-  it("persists archive and ROM choices from the sharing controls", () => {
+  it("persists ROM inclusion from the sharing controls", () => {
     const exported = bundleExport();
     const setBundlePackage = vi.fn((value: string) => {
-      const [format = "", contents = ""] = value.split(":");
-      exported.setFormat(format);
-      exported.setBundleRom(contents === "rom");
+      exported.setBundleRom(value === "rom");
     });
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const view = () => (
@@ -1317,13 +1315,9 @@ describe("apply workflow view - bundle controls", () => {
     );
     const { container, rerender } = render(view());
 
-    fireEvent.change(container.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement, {
-      target: { value: "7z" },
-    });
-    expect(setBundlePackage).toHaveBeenCalledWith("7z:patches");
     rerender(view());
     fireEvent.click(container.querySelector("#rom-weaver-bundle-export-bundle-rom") as HTMLInputElement);
-    expect(setBundlePackage).toHaveBeenCalledWith("7z:rom");
+    expect(setBundlePackage).toHaveBeenCalledWith("rom");
   });
 
   it("names the export action when the ROM is included", () => {
@@ -1353,13 +1347,16 @@ describe("apply workflow view - bundle controls", () => {
   it("defaults each patch input to automatic and locks it during bundle export", () => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const onPatchInputBasisChange = vi.fn();
+    const compress = { fields: [], note: "Compression note" };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
           bundleExport={{ ...bundleExport(), busy: true }}
           bundleTools={bundleTools(() => undefined)}
           controllers={{
-            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            output: storeOf(
+              outputState({ compress: compress as never, disabled: false }),
+            ) as unknown as PatcherOutputController,
             patchStack: storeOf({
               items: [patchItem("first.ips"), patchItem("second.ips")],
             }) as unknown as PatcherStackController,
@@ -1374,6 +1371,9 @@ describe("apply workflow view - bundle controls", () => {
     expect(selects).toHaveLength(2);
     expect(selects.every((select) => select.value === "auto")).toBe(true);
     expect(selects.every((select) => select.disabled)).toBe(true);
+    expect((container.querySelector("#rom-weaver-select-output-format-compress") as HTMLSelectElement)?.disabled).toBe(
+      true,
+    );
     fireEvent.change(selects[1] as HTMLSelectElement, { target: { value: "base" } });
     expect(onPatchInputBasisChange).not.toHaveBeenCalled();
   });
@@ -1417,13 +1417,7 @@ describe("apply workflow view - bundle controls", () => {
 
     expect(container.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
     expect(container.querySelector("#rom-weaver-bundle-job")).toBeTruthy();
-    expect((container.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement).value).toBe("zip");
-    expect(
-      Array.from(
-        (container.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement).options,
-        (option) => option.value,
-      ),
-    ).toEqual(["zip", "7z"]);
+    expect(container.querySelector("#rom-weaver-bundle-export-format")).toBeNull();
     expect(container.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
   });
 
@@ -1455,7 +1449,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(container.querySelector("#rom-weaver-button-apply")?.compareDocumentPosition(job || container)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
   });
 

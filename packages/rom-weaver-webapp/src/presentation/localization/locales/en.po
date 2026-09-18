@@ -681,7 +681,7 @@ msgstr "Bundle"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.bundlePatches"
-msgstr "Bundle + patches (.zip)"
+msgstr "Bundle + patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3121,7 +3121,7 @@ msgstr "The archive holds that index and the patch files. Including the original
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.safeBundle.body"
-msgstr "The bundle download is separate from Apply. Bundle + patches (.zip) shares the recipe and patches without putting a copyrighted ROM in the download."
+msgstr "The bundle download is separate from Apply. Bundle + patches shares the recipe and patches without putting a copyrighted ROM in the download."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

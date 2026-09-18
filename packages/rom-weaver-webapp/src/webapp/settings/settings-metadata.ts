@@ -285,20 +285,19 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validValues: ["decimal", "binary"],
   },
   bundlePackage: {
-    defaultValue: "zip:patches",
+    defaultValue: "patches",
     id: "settings-bundle-package",
     key: "bundlePackage",
     kind: "select",
     label: "Bundle",
     options: [
-      { label: "Bundle + patches (.zip)", value: "zip:patches" },
-      { label: "Bundle + ROM + patches (.zip)", value: "zip:rom" },
-      { label: "Bundle + patches (.7z)", value: "7z:patches" },
-      { label: "Bundle + ROM + patches (.7z)", value: "7z:rom" },
+      { label: "Bundle + patches", value: "patches" },
+      { label: "Bundle + ROM + patches", value: "rom" },
     ],
-    suggestion: "Choose the archive type and whether to include the ROM in a shared bundle.",
+    suggestion:
+      "Choose whether to include the ROM in a shared bundle. The Compression type controls its archive format.",
     validationLabel: "Bundle",
-    validValues: ["zip:patches", "zip:rom", "7z:patches", "7z:rom"],
+    validValues: ["patches", "rom"],
   },
   emulatorSaveStorageEnabled: {
     defaultValue: true,

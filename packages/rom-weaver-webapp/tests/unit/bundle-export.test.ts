@@ -3,6 +3,7 @@ import {
   buildBundleExportRows,
   buildBundlePatchInputs,
   preparePackagedRom,
+  resolveBundleArchiveFormat,
 } from "../../src/public/react/bundle-export.tsx";
 
 const createCompressionOutput = () => ({
@@ -132,6 +133,15 @@ describe("preparePackagedRom", () => {
 
     expect(create).not.toHaveBeenCalled();
     expect(packaged).toBeUndefined();
+  });
+});
+
+describe("resolveBundleArchiveFormat", () => {
+  it("keeps archive choices and falls back to ZIP for ROM-specific output", () => {
+    expect(resolveBundleArchiveFormat("7z")).toBe("7z");
+    expect(resolveBundleArchiveFormat("zip")).toBe("zip");
+    expect(resolveBundleArchiveFormat("rvz")).toBe("zip");
+    expect(resolveBundleArchiveFormat("none")).toBe("zip");
   });
 });
 

@@ -54,23 +54,17 @@ test("export bundle bundles the session from main-page options with a checks-onl
   await waitForApplyButtonEnabled();
 
   // Bundle authoring is a separate secondary job below Apply.
-  const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
-  expect(formatSelect).not.toBeNull();
+  await waitForState(() => document.getElementById("rom-weaver-bundle-job"));
   expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
   const bundleDrawer = document.querySelector("#rom-weaver-bundle-job .cks-head");
   expect(bundleDrawer?.textContent).toContain("Share this patch recipe (for patch creators)");
   expect(bundleDrawer?.getAttribute("aria-expanded")).toBe("false");
   bundleDrawer?.click();
   await expect.poll(() => bundleDrawer?.getAttribute("aria-expanded")).toBe("true");
-  expect(formatSelect.value).toBe("zip");
-  expect(Array.from(formatSelect.options, (option) => option.textContent)).toEqual(["ZIP (.zip)", "7z (.7z)"]);
   expect(document.getElementById("rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
   expect(document.getElementById("rom-weaver-bundle-export-bundle-rom").checked).toBe(false);
   expect(document.querySelector("#rom-weaver-bundle-job .notice")).toBeNull();
-  // The archive type and ROM choice stay separate from the share action.
-  setFormControlValue(formatSelect, "zip");
   expect(window.location.hash).toBe("");
-  await expect.poll(() => formatSelect.value).toBe("zip");
 
   // Choosing a package also arms the export action.
   const exportButton = await waitForState(() => {
@@ -139,8 +133,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   // than the field (EditableCheckRow keeps the field out of the way between edits).
   await expect.poll(() => document.getElementById("rom-weaver-patch-input-crc32-0-open")?.textContent).toBe("deadbeef");
 
-  // The selected output is a .zip bundle with the ROM left out.
-  expect(formatSelect.value).toBe("zip");
+  // The bundle follows the Apply Compression type and leaves the ROM out.
   expect(document.getElementById("rom-weaver-bundle-export-bundle-rom").checked).toBe(false);
 
   // A patch switched off while authoring remains in the recipe as an optional
@@ -234,7 +227,7 @@ test("the bundle drawer is addressable by a single selector inside the output ro
   const [romFile, patchFile] = await Promise.all([loadFixtureFile(RAW_ROM), loadFixtureFile(RAW_PATCH)]);
   mount(createElement(ApplyPatchForm, { pageDrop: { files: [romFile, patchFile], id: 1 } }));
   await waitForApplyButtonEnabled();
-  await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
+  await waitForState(() => document.getElementById("rom-weaver-bundle-job"));
 
   const outputRow = document.getElementById("rom-weaver-row-output-file-name");
   expect(outputRow).not.toBeNull();
@@ -266,10 +259,7 @@ test("keeps the sharing job after an ordinary Apply completes", async () => {
   expect(job?.textContent).toContain("Share this patch recipe (for patch creators)");
   expect(applyButton?.compareDocumentPosition(job || document.body)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   expect(document.querySelector(".outopts #rom-weaver-bundle-export-format")).toBeNull();
-
-  const formatSelect = document.getElementById("rom-weaver-bundle-export-format");
-  expect(formatSelect).not.toBeNull();
-  expect(formatSelect.value).toBe("zip");
+  expect(document.getElementById("rom-weaver-bundle-export-format")).toBeNull();
   expect(document.getElementById("rom-weaver-button-export-bundle")).not.toBeNull();
 });
 
@@ -279,7 +269,7 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   let exported = null;
   mount(
     createElement(ApplyPatchForm, {
-      defaultSettings: { bundlePackage: "zip:rom" },
+      defaultSettings: { bundlePackage: "rom" },
       onBundleExportComplete: (result) => {
         exported = result;
       },
@@ -288,9 +278,8 @@ test("export bundles the extracted patch leaf, not the archive it arrived in", a
   );
   await waitForApplyButtonEnabled();
 
-  // The persisted bundlePackage setting preselects the archive and ROM choice.
-  const formatSelect = await waitForState(() => document.getElementById("rom-weaver-bundle-export-format"));
-  expect(formatSelect?.value).toBe("zip");
+  // The persisted bundlePackage setting preselects the ROM choice.
+  await waitForState(() => document.getElementById("rom-weaver-bundle-export-bundle-rom"));
   expect(document.getElementById("rom-weaver-bundle-rom-name")).toBeNull();
   const exportButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");

@@ -14,6 +14,7 @@ import {
   serializeSettingsForStorage,
   validateSettingsDraft,
 } from "../../src/webapp/settings/settings-schema.ts";
+import { getDefaultCompressionMode } from "../../src/public/react/settings-context.tsx";
 
 // A complete draft built from the real defaults so each invalid-branch test can mutate a
 // single field in isolation; the unmodified draft must validate with zero messages.
@@ -52,7 +53,7 @@ describe("getDefaultSettings", () => {
     expect(settings.chdCreateCdCodecs).toBe("cdlz,cdzl,cdfl");
     expect(settings.fixChecksum).toBe(false);
     expect(settings.byteUnits).toBe("decimal");
-    expect(settings.bundlePackage).toBe("zip:patches");
+    expect(settings.bundlePackage).toBe("patches");
     expect(settings.postApplyDownloadBehavior).toBe("auto-show");
     expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);
@@ -94,6 +95,13 @@ describe("getDefaultSettings", () => {
   });
 });
 
+describe("getDefaultCompressionMode", () => {
+  it("reads the mode from the settings object", () => {
+    expect(getDefaultCompressionMode({ defaultCompression: "7z only" })).toBe("7z only");
+    expect(getDefaultCompressionMode("7z only")).toBe("auto");
+  });
+});
+
 describe("validateSettingsDraft", () => {
   it("accepts an all-defaults draft with no messages or invalid fields", () => {
     const result = validateSettingsDraft(validDraft());
@@ -108,9 +116,16 @@ describe("validateSettingsDraft", () => {
   });
 
   it("accepts a bundle package default", () => {
-    const result = validateSettingsDraft(validDraft({ bundlePackage: "ZIP:ROM" }));
-    expect(result.settings.bundlePackage).toBe("zip:rom");
+    const result = validateSettingsDraft(validDraft({ bundlePackage: "ROM" }));
+    expect(result.settings.bundlePackage).toBe("rom");
     expect(result.invalidFields).not.toContain(getSettingsFieldId("bundlePackage"));
+  });
+
+  it("migrates an archived bundle package to its ROM-inclusion choice", () => {
+    const storage = makeStorage(
+      JSON.stringify({ version: SETTINGS_STORAGE_VERSION, apply: { output: { bundlePackage: "7z:rom" } } }),
+    );
+    expect(loadSettings(storage).bundlePackage).toBe("rom");
   });
 
   it("accepts binary file size units", () => {

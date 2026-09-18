@@ -57,6 +57,9 @@ type BundleExportStart =
   | { create: BundleExportCreate; rom: NonNullable<BundleExportSources["rom"]> }
   | { error: string };
 
+const resolveBundleArchiveFormat = (compressionFormat: string | undefined): "7z" | "zip" =>
+  compressionFormat?.trim().toLowerCase() === "7z" ? "7z" : "zip";
+
 const validateBundleExportStart = ({
   create,
   patches,
@@ -607,4 +610,10 @@ const useBundleExport = ({
   };
 };
 
-export { buildBundleExportRows, buildBundlePatchInputs, preparePackagedRom, useBundleExport };
+export {
+  buildBundleExportRows,
+  buildBundlePatchInputs,
+  preparePackagedRom,
+  resolveBundleArchiveFormat,
+  useBundleExport,
+};
