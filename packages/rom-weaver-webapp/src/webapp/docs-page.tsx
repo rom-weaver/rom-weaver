@@ -542,7 +542,8 @@ const setDocsCopyState = (button: HTMLButtonElement, state: "copied" | "failed" 
   if (state) button.dataset.copyState = state;
   else delete button.dataset.copyState;
   const label = button.querySelector<HTMLElement>("[data-docs-copy-label]");
-  if (label) label.textContent = state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy";
+  if (label) label.textContent = state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "";
+  button.title = state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy code";
   button.setAttribute("aria-label", state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy code");
 };
 
@@ -639,7 +640,7 @@ const DocsPage = ({
     };
     const handlers = buttons.map((button) => {
       const handleClick = () => {
-        const value = button.closest(".docs-code-block")?.querySelector("code")?.textContent ?? "";
+        const value = button.closest(".docs-code-block, .docs-inline-code")?.querySelector("code")?.textContent ?? "";
         if (!value) return;
         copyToClipboard(value).then(
           () => {

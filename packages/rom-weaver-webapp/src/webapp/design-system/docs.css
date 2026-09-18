@@ -505,7 +505,7 @@ html:has(.docs-workbench) {
 .rw-app .docs-code-block pre {
   max-width: none;
   padding: var(--sp-l);
-  padding-top: calc(var(--sp-l) + 28px);
+  padding-inline-end: 56px;
   margin: 0;
   overflow-x: auto;
   background: var(--well);
@@ -526,8 +526,10 @@ html:has(.docs-workbench) {
   display: inline-flex;
   gap: 6px;
   align-items: center;
-  min-height: var(--ctl);
-  padding: 4px 9px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   font: inherit;
   font-size: 0.68rem;
   font-weight: 700;
@@ -543,8 +545,8 @@ html:has(.docs-workbench) {
     transform 0.15s var(--ease);
 }
 .rw-app .docs-copy-button svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 .rw-app .docs-copy-icon-check {
   display: none;
@@ -1181,4 +1183,28 @@ html:has(.docs-workbench) {
   .rw-app .docs-article[data-page-turn] {
     animation: none;
   }
+}
+
+.rw-app .docs-inline-code {
+  display: inline;
+}
+.rw-app .docs-inline-code .docs-copy-button {
+  position: static;
+  width: 24px;
+  height: 24px;
+  margin-inline-start: 3px;
+  vertical-align: middle;
+}
+@media (hover: hover) {
+  .rw-app .docs-code-block .docs-copy-button {
+    opacity: 0;
+  }
+  .rw-app .docs-code-block:hover .docs-copy-button {
+    opacity: 1;
+  }
+}
+.rw-app .docs-code-block:active .docs-copy-button,
+.rw-app .docs-code-block:focus-within .docs-copy-button,
+.rw-app .docs-code-block .docs-copy-button[data-copy-state] {
+  opacity: 1;
 }

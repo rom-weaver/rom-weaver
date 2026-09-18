@@ -231,12 +231,39 @@ echo hi
     vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
     render(<DocsPage active slug="docs/cli" />);
 
-    const button = screen.getAllByRole("button", { name: "Copy code" })[0] as HTMLButtonElement;
+    const button = document.querySelector<HTMLButtonElement>(".docs-code-block [data-docs-copy]");
+    if (!button) throw new Error("Missing block copy button");
     const code = button.closest(".docs-code-block")?.querySelector("code");
     const text = code?.textContent ?? "";
     fireEvent.click(button);
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(text));
     await vi.waitFor(() => expect(button.getAttribute("aria-label")).toBe("Copied"));
+  });
+
+  it("copies inline commands without including the control label", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
+    render(<DocsPage active slug="docs/cli" />);
+    const code = [...document.querySelectorAll(".docs-inline-code > code")].find((entry) =>
+      entry.textContent?.startsWith("rom-weaver "),
+    );
+    if (!code) throw new Error("Missing inline command");
+    const button = code.parentElement?.querySelector<HTMLButtonElement>("[data-docs-copy]");
+    if (!button) throw new Error("Missing inline copy button");
+    fireEvent.click(button);
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(code.textContent));
+    await vi.waitFor(() => expect(button.title).toBe("Copied"));
+  });
+
+  it("keeps copy buttons outside links containing code", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      "# Fixture\n\nRun [`rom-weaver setup`](https://example.com).",
+    );
+    const container = document.createElement("div");
+    container.innerHTML = route.html;
+    expect(container.querySelector("a button")).toBeNull();
+    expect(container.querySelector(".docs-inline-code > button")).not.toBeNull();
   });
 
   // A markdown link inside a section heading would nest an <a> inside the

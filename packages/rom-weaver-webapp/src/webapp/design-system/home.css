@@ -249,8 +249,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--ctl);
-  height: var(--ctl);
+  width: 32px;
+  height: 32px;
   padding: 0;
   color: var(--ink-3);
   cursor: pointer;
