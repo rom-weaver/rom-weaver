@@ -2,13 +2,29 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
 import { ACCENTS } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
+import {
+  BRAND_MARK_COLORS,
+  BRAND_MARK_THEMES,
+  BRAND_MARK_TIGHT_VIEWBOX,
+  renderBrandMark,
+} from "../src/webapp/brand-mark-assets.mjs";
 
-const logo = fs.readFileSync(new URL("../src/assets/app/root/logo.svg", import.meta.url), "utf8");
+const logo = fs.readFileSync(new URL("../design/icon-masters/brand-mark.svg", import.meta.url), "utf8");
+const repositoryRenders = new URL("../design/icon-masters/renders/", import.meta.url);
 const generatedAssets = new URL("../../../dist/generated-assets/", import.meta.url);
 
-test("rejects a source missing the accent color", () => {
-  assert.throws(() => tintBrandMark(logo.replaceAll("#e87208", "#000000"), ACCENTS[1]), /missing the accent color/);
+test("the canonical master has geometry but no palette or background", () => {
+  assert.match(logo, /class="brand-mark-cartridge"/);
+  assert.match(logo, /class="brand-mark-accent"/);
+  assert.doesNotMatch(logo, /#[0-9a-f]{6}/i);
+  assert.doesNotMatch(logo, /<rect|<g\b/);
+});
+
+test("rejects a source missing the accent shape", () => {
+  assert.throws(
+    () => renderBrandMark(logo.replace('class="brand-mark-accent"', 'class="missing-accent"'), ACCENTS[1]),
+    /missing the accent shape/,
+  );
 });
 
 for (const [channel, accentName] of Object.entries({
@@ -20,13 +36,29 @@ for (const [channel, accentName] of Object.entries({
   test(`${channel} matches its default accent`, () => {
     const accent = ACCENTS.find((entry) => entry.value === accentName);
     const source = fs.readFileSync(new URL(`channel-icons/${channel}/logo.svg`, generatedAssets), "utf8");
-    assert.equal(source, tintBrandMark(logo, accent));
+    assert.equal(source, renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
   });
 }
 
 for (const accent of ACCENTS) {
   test(`${accent.value} reusable logo matches its accent`, () => {
-    const source = fs.readFileSync(new URL(`logo-variants/${accent.value}.svg`, generatedAssets), "utf8");
-    assert.equal(source, tintBrandMark(logo, accent));
+    const expected = renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX });
+    const rendered = fs.readFileSync(new URL(`${accent.value}.svg`, repositoryRenders), "utf8");
+    const generated = fs.readFileSync(new URL(`logo-variants/${accent.value}.svg`, generatedAssets), "utf8");
+    assert.equal(rendered, expected);
+    assert.equal(generated, rendered);
   });
+
+  for (const theme of BRAND_MARK_THEMES) {
+    test(`${accent.value} ${theme} logo uses the ${theme} cartridge`, () => {
+      const expected = renderBrandMark(logo, { accent, theme, viewBox: BRAND_MARK_TIGHT_VIEWBOX });
+      const rendered = fs.readFileSync(new URL(`${theme}/${accent.value}.svg`, repositoryRenders), "utf8");
+      const generated = fs.readFileSync(new URL(`logo-variants/${theme}/${accent.value}.svg`, generatedAssets), "utf8");
+      assert.equal(rendered, expected);
+      assert.equal(generated, rendered);
+      assert.match(rendered, new RegExp(`fill="${BRAND_MARK_COLORS[theme]}"`));
+      assert.match(rendered, new RegExp(`fill="${accent.swatch}"`));
+      assert.doesNotMatch(rendered, /<rect|<g\b/);
+    });
+  }
 }

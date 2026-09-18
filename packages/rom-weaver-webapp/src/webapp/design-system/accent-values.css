@@ -1,0 +1,65 @@
+/* Generated from src/webapp/accent-palette.mjs. Do not edit by hand. */
+/* ── Woad (woad) ── */
+:root[data-accent="woad"] {
+  --thread: #747bfa;
+  --thread-ink: #0b1030;
+  --thread-hi: #c5cbf6;
+}
+:root[data-accent="woad"][data-theme="dark"] {
+  --thread-text: #9ba6ff;
+}
+:root[data-accent="woad"][data-theme="light"] {
+  --thread-text: #4947c3;
+}
+
+/* ── Violet (violet) ── */
+:root[data-accent="violet"] {
+  --thread: #a45bea;
+  --thread-ink: #0b0516;
+  --thread-hi: #d7c3f3;
+}
+:root[data-accent="violet"][data-theme="dark"] {
+  --thread-text: #caa2fb;
+}
+:root[data-accent="violet"][data-theme="light"] {
+  --thread-text: #773aae;
+}
+
+/* ── Verdigris (verdigris) ── */
+:root[data-accent="verdigris"] {
+  --thread: #149c46;
+  --thread-ink: #020c07;
+  --thread-hi: #aee1c6;
+}
+:root[data-accent="verdigris"][data-theme="dark"] {
+  --thread-text: #71c582;
+}
+:root[data-accent="verdigris"][data-theme="light"] {
+  --thread-text: #296a39;
+}
+
+/* ── Teal (teal) ── */
+:root[data-accent="teal"] {
+  --thread: #009ba5;
+  --thread-ink: #020c0d;
+  --thread-hi: #9fe2e7;
+}
+:root[data-accent="teal"][data-theme="dark"] {
+  --thread-text: #45c3cd;
+}
+:root[data-accent="teal"][data-theme="light"] {
+  --thread-text: #066970;
+}
+
+/* ── Plum (plum) ── */
+:root[data-accent="plum"] {
+  --thread: #d548a0;
+  --thread-ink: #10020c;
+  --thread-hi: #eac1db;
+}
+:root[data-accent="plum"][data-theme="dark"] {
+  --thread-text: #e68abe;
+}
+:root[data-accent="plum"][data-theme="light"] {
+  --thread-text: #a12876;
+}

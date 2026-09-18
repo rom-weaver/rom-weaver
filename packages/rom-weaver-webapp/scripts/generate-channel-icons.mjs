@@ -24,15 +24,15 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import { tintBrandMark } from "../src/webapp/brand-mark-assets.mjs";
+import { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_THEMES, renderBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
 import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(rootDir, "..", "..");
-const assetRoot = path.join(rootDir, "src", "assets", "app", "root");
 const designRoot = path.join(rootDir, "design");
 const masterRoot = path.join(designRoot, "icon-masters");
+const brandMasterPath = path.join(masterRoot, "brand-mark.svg");
 
 const usage = () => {
   throw new Error("Usage: node scripts/generate-channel-icons.mjs --output-dir <directory> [--check]");
@@ -63,18 +63,29 @@ const parseOptions = (args) => {
 // Channel defaults MUST match src/webapp/build-channel.ts.
 const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "verdigris", preview: "plum" };
 
-// Sizes come from design/icon-masters/README.md; each master already bakes in
-// its own scale/offset for the mask it targets.
+// Sizes come from design/icon-masters/README.md. The wrappers are generated
+// around the transparent dark-theme mark so the source master stays reusable.
 const RASTER_TARGETS = [
-  { master: "icon-maskable.svg", output: "icon-maskable-512.png", size: 512 },
-  { master: "icon-maskable.svg", output: "icon-maskable-192.png", size: 192 },
-  { master: "apple-touch-icon.svg", output: "apple-touch-icon.png", size: 180 },
+  { output: "icon-maskable-512.png", scale: 0.72, size: 512 },
+  { output: "icon-maskable-192.png", scale: 0.72, size: 192 },
+  { output: "apple-touch-icon.png", scale: 0.8, size: 180 },
 ];
 
 // Social cards MUST match the dimensions index.html advertises to crawlers.
 const SOCIAL_PREVIEW = { height: 1280, width: 2560 };
 
 const digest = (buffer) => createHash("sha256").update(buffer).digest("hex").slice(0, 12);
+
+const readBrandMaster = () => fs.readFileSync(brandMasterPath, "utf8");
+
+const stripSvgShell = (svg) => svg.replace(/<svg\b[^>]*>/, "").replace("</svg>", "");
+
+const launcherWrapper = (logo, scale) => {
+  const offset = 32 * (1 - scale);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>rom-weaver launcher icon</title><path fill="#31343a" d="M0 0h64v64H0z"/><g transform="translate(${offset} ${offset}) scale(${scale})">${stripSvgShell(logo)}</g></svg>`;
+};
+
+const faviconSvg = (logo) => logo.replace(/viewBox="[^"]*"/, `viewBox="${BRAND_MARK_TIGHT_VIEWBOX}"`);
 
 /**
  * Lay an SVG out at an exact pixel size. It is handed over as a data URI inside
@@ -163,6 +174,7 @@ const main = async () => {
   };
 
   try {
+    const brandMaster = readBrandMaster();
     for (const [channel, accentName] of Object.entries(CHANNEL_ACCENTS)) {
       const accent = ACCENTS.find((entry) => entry.value === accentName);
       if (!accent) throw new Error(`Unknown channel accent: ${accentName}`);
@@ -171,15 +183,16 @@ const main = async () => {
       console.log(channel);
       emit(
         path.join(channelDir, "logo.svg"),
-        Buffer.from(tintBrandMark(fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8"), accent)),
+        Buffer.from(renderBrandMark(brandMaster, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
       );
 
       for (const target of RASTER_TARGETS) {
-        const master = tintBrandMark(fs.readFileSync(path.join(masterRoot, target.master), "utf8"), accent);
-        emit(path.join(channelDir, target.output), await rasterize(page, master, target.size));
+        const logo = renderBrandMark(brandMaster, { accent, theme: "dark" });
+        const launcher = launcherWrapper(logo, target.scale);
+        emit(path.join(channelDir, target.output), await rasterize(page, launcher, target.size));
       }
 
-      const favicon = tintBrandMark(fs.readFileSync(path.join(masterRoot, "favicon.svg"), "utf8"), accent);
+      const favicon = faviconSvg(renderBrandMark(brandMaster, { accent, theme: "dark" }));
       const images = [];
       for (const size of [16, 32, 48, 64]) {
         images.push({ size, png: await rasterize(page, favicon, size) });
@@ -196,9 +209,18 @@ const main = async () => {
       }
     }
 
-    const logo = fs.readFileSync(path.join(assetRoot, "logo.svg"), "utf8");
+    const logo = readBrandMaster();
     for (const accent of ACCENTS) {
-      emit(path.join(variantRoot, `${accent.value}.svg`), Buffer.from(tintBrandMark(logo, accent)));
+      emit(
+        path.join(variantRoot, `${accent.value}.svg`),
+        Buffer.from(renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
+      );
+      for (const theme of BRAND_MARK_THEMES) {
+        emit(
+          path.join(variantRoot, theme, `${accent.value}.svg`),
+          Buffer.from(renderBrandMark(logo, { accent, theme, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
+        );
+      }
     }
   } finally {
     await browser.close();

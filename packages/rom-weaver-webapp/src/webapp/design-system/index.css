@@ -6,6 +6,7 @@
 
 @import "../style.css" layer(style);
 @import "./tokens.css" layer(foundation);
+@import "./accent-values.css" layer(foundation);
 @import "./accents.css" layer(foundation);
 @import "./base.css" layer(foundation);
 @import "./masthead.css" layer(foundation);

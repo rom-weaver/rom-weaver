@@ -1,4 +1,13 @@
 import type { SVGProps } from "react";
+import brandMark from "../../../design/icon-masters/brand-mark.svg?raw";
+
+const BRAND_MARK_PATHS = [...brandMark.matchAll(/<path class="([^"]+)"[^>]*d="([^"]+)"\s*\/>/g)].map(
+  ([, className, d]) => ({ className, d }),
+);
+
+if (BRAND_MARK_PATHS.length !== 2) {
+  throw new Error("Brand mark source must contain exactly two paths");
+}
 
 // The accent MUST follow CSS during hydration so a stored palette appears on the first paint.
 const BrandMark = (props: SVGProps<SVGSVGElement>) => (
@@ -10,11 +19,9 @@ const BrandMark = (props: SVGProps<SVGSVGElement>) => (
     xmlns="http://www.w3.org/2000/svg"
     {...props}
   >
-    <path
-      fill="currentColor"
-      d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"
-    />
-    <path className="brand-mark-accent" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z" />
+    {BRAND_MARK_PATHS.map(({ className, d }) => (
+      <path className={className} d={d} key={className} />
+    ))}
   </svg>
 );
 
