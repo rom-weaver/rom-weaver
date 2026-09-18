@@ -210,7 +210,9 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
     .toEqual(["Apply", "Create", "Test", "Menu"]);
   expect(navRow("PPF undo")).toBeUndefined();
-  expect(navRow("Identify")).toBeUndefined();
+  expect(navRow("Identify")).toBeTruthy();
+  navRow("Identify").click();
+  await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);
   // Docs is a named row rather than something behind a glyph.
   expect(navRow("Docs")).toBeTruthy();
   expect(navRow("Home")).toBeTruthy();

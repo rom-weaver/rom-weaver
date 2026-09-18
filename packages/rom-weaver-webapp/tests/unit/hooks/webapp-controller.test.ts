@@ -68,9 +68,9 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/missing");
   });
 
-  it("hides beta workflow views until enabled", () => {
+  it("keeps Identify available while gating beta workflows", () => {
     const controller = createController();
-    expect(controller.selectView("identify")).toBe("patcher");
+    expect(controller.selectView("identify")).toBe("identify");
     expect(controller.selectView("trim")).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
 
@@ -83,7 +83,8 @@ describe("createWebappRootController over the vanilla store", () => {
 
     controller.updateDraftSetting("betaToolsEnabled", false);
     expect(controller.saveDraftSettings()).toBe(true);
-    expect(controller.getState().currentView).toBe("patcher");
+    expect(controller.getState().currentView).toBe("identify");
+    expect(controller.selectView("trim")).toBe("patcher");
   });
 
   it("keeps a direct beta route in the initial path", () => {

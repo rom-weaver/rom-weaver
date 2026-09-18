@@ -842,7 +842,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Identify, Trim, and PPF undo)",
+    message: "Enable beta tools (Trim and PPF undo)",
   }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),

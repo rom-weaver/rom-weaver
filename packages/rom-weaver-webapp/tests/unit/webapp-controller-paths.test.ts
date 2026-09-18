@@ -191,3 +191,13 @@ describe("the landing route at the app base", () => {
     expect(window.location.pathname).toBe("/rom-weaver/apply-patch");
   });
 });
+
+describe("stable Identify routing", () => {
+  it.each(["/identify", "/identify-rom"])("opens %s with beta tools disabled", (path) => {
+    const storage = createStorage();
+    persistExternalSettings(storage, { betaToolsEnabled: false });
+    window.history.replaceState({}, "", path);
+    const controller = createController({ storage });
+    expect(controller.getState().currentView).toBe("identify");
+  });
+});

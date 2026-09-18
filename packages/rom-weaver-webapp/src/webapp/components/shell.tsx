@@ -408,6 +408,8 @@ const useNavToolPopover = (
       if (below + height > window.innerHeight - margin) {
         top = above >= margin ? above : Math.max(margin, Math.min(below, window.innerHeight - height - margin));
       }
+      const maxTop = Math.max(margin, window.innerHeight - height - margin);
+      top = Math.max(margin, Math.min(top, maxTop));
       panel.style.left = `${left}px`;
       panel.style.top = `${top}px`;
     };
