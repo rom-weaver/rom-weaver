@@ -114,7 +114,7 @@
 @media (min-width: 880px) {
   .rw-app .home-hero {
     grid-template-areas: "copy loom";
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) 280px;
     gap: 24px;
     align-items: start;
     padding-block: 20px 24px;
@@ -125,6 +125,9 @@
   .rw-app .home-hero h1 {
     max-width: 28ch;
     font-size: 36px;
+  }
+  .rw-app .home-loom-frame canvas {
+    aspect-ratio: 1.4;
   }
   .rw-app .home-loom-legend {
     grid-template-columns: 1fr;

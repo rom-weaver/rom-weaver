@@ -9,7 +9,7 @@ const WEFT_ROWS = 3;
 const WEFT_TOKENS = ["--loom-weft-1", "--loom-weft-2", "--loom-weft-3"];
 /** Keep in step with the aspect-ratio pair in home.css, which reserves the box. */
 const NARROW_ASPECT = 2.4;
-const WIDE_ASPECT = 2.4;
+const WIDE_ASPECT = 1.4;
 const NARROW_MAX_WIDTH = 880;
 const DRAW_MS = 900;
 const STAGGER_MS = 520;
