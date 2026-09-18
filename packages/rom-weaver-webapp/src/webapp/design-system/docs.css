@@ -1160,7 +1160,8 @@ html:has(.docs-workbench) {
      Wrapping also keeps a sideways scroller out of the middle of a page the
      reader is scrolling down. */
   .rw-app .docs-code-block pre {
-    padding: calc(var(--sp-m) + 28px) var(--sp-m) var(--sp-m);
+    padding: var(--sp-m);
+    padding-inline-end: 56px;
     overflow-x: visible;
   }
   /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
@@ -1194,17 +1195,4 @@ html:has(.docs-workbench) {
   height: 24px;
   margin-inline-start: 3px;
   vertical-align: middle;
-}
-@media (hover: hover) {
-  .rw-app .docs-code-block .docs-copy-button {
-    opacity: 0;
-  }
-  .rw-app .docs-code-block:hover .docs-copy-button {
-    opacity: 1;
-  }
-}
-.rw-app .docs-code-block:active .docs-copy-button,
-.rw-app .docs-code-block:focus-within .docs-copy-button,
-.rw-app .docs-code-block .docs-copy-button[data-copy-state] {
-  opacity: 1;
 }
