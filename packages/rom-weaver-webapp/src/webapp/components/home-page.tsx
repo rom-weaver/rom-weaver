@@ -88,12 +88,6 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         </div>
         <div className="home-hero-body">
           <p className="home-lede">{localizer.message("ui.home.lede")}</p>
-          <div className="home-cta">
-            <a className="btn primary lg" href={route("apply-patches")}>
-              {localizer.message("ui.home.applyPatchCta")}
-              <ArrowIcon />
-            </a>
-          </div>
           <p className="home-try">
             <span className="home-try-context">{localizer.message("ui.home.tryBefore")} </span>
             <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
