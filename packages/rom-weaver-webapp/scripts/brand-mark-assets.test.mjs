@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { test } from "node:test";
 import { ACCENTS } from "../src/webapp/accent-palette.mjs";
 import {
+  BRAND_MARK_FAVICON_VIEWBOX,
   BRAND_MARK_TONE_COLORS,
   BRAND_MARK_TONES,
   BRAND_MARK_TIGHT_VIEWBOX,
@@ -24,6 +25,11 @@ test("scheme favicons take precedence over the ICO fallback", () => {
   assert.match(icons[1], /media="\(prefers-color-scheme: light\)"/);
   assert.match(icons[2], /href="\.\/favicon-dark\.svg"/);
   assert.match(icons[2], /media="\(prefers-color-scheme: dark\)"/);
+});
+
+test("favicons use a square crop", () => {
+  const [, , width, height] = BRAND_MARK_FAVICON_VIEWBOX.split(" ").map(Number);
+  assert.equal(width, height);
 });
 
 test("the canonical master has geometry but no palette or background", () => {
@@ -61,9 +67,9 @@ for (const [channel, accentName] of Object.entries({
     const source = fs.readFileSync(new URL(`channel-icons/${channel}/logo.svg`, generatedAssets), "utf8");
     assert.equal(source, renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
     const lightScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon.svg`, generatedAssets), "utf8");
-    assert.equal(lightScheme, renderBrandMark(logo, { accent, tone: "dark", viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
+    assert.equal(lightScheme, renderBrandMark(logo, { accent, tone: "dark", viewBox: BRAND_MARK_FAVICON_VIEWBOX }));
     const darkScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon-dark.svg`, generatedAssets), "utf8");
-    assert.equal(darkScheme, renderBrandMark(logo, { accent, tone: "light", viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
+    assert.equal(darkScheme, renderBrandMark(logo, { accent, tone: "light", viewBox: BRAND_MARK_FAVICON_VIEWBOX }));
   });
 }
 

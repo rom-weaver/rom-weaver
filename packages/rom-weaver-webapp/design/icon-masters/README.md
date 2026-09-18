@@ -21,8 +21,8 @@ The cartridge occupies 48 × 56 units, with a recessed top edge and three center
 | Responsive generated render | `channel-icons/*/logo.svg`, `logo-variants/*.svg` | — | — | Transparent |
 | Dark logo render | `renders/dark/*.svg`; `logo-variants/dark/*.svg` | — | — | Transparent |
 | Light logo render | `renders/light/*.svg`; `logo-variants/light/*.svg` | — | — | Transparent |
-| Light-scheme favicon | `channel-icons/*/favicon.svg` | Fit tight viewBox | Centered | Transparent |
-| Dark-scheme favicon | `channel-icons/*/favicon-dark.svg` | Fit tight viewBox | Centered | Transparent |
+| Light-scheme favicon | `channel-icons/*/favicon.svg` | Fit square `4 4 56 56` viewBox | Centered | Transparent |
+| Dark-scheme favicon | `channel-icons/*/favicon-dark.svg` | Fit square `4 4 56 56` viewBox | Centered | Transparent |
 | Light logo render in launcher wrapper | `icon-maskable-{192,512}.png` | 0.72 | 8.96 | `#31343a` |
 | Light logo render in launcher wrapper | `apple-touch-icon.png` (180px) | 0.80 | 6.4 | `#31343a` |
 | Light logo tight render fallback | `favicon.ico` (16, 32, 48, and 64px frames) | Fit tight viewBox | Centered | Transparent |
@@ -51,7 +51,7 @@ npm --prefix packages/rom-weaver-webapp run icons:channels
 
 The icon generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in the fixed-tone ICO fallback, and colors each channel's W from the accent palette. It writes channel icons, scheme-specific favicon SVGs, and responsive and explicit light/dark logo variants to the ignored `dist/generated-assets/` directory. The build and checks fail when the checked-in SVG renders are stale.
 
-The webapp links `favicon.svg` for light browser surfaces and `favicon-dark.svg` for dark browser surfaces. The ICO fallback cannot carry a color-scheme rule, so it keeps the light logo for browsers that do not select an SVG favicon.
+The webapp links `favicon.svg` for light browser surfaces and `favicon-dark.svg` for dark browser surfaces. Both SVGs use a square viewBox so browsers do not apply a second non-square fit when they place the favicon in a square tab slot. The ICO fallback cannot carry a color-scheme rule, so it keeps the light logo for browsers that do not select an SVG favicon.
 
 The accent palette is defined once in `../../src/webapp/accent-palette.mjs`. `npm --prefix packages/rom-weaver-webapp run accents:generate` writes the CSS token blocks from that palette, and `npm --prefix packages/rom-weaver-webapp run accents:check` fails when the generated CSS is stale.
 
