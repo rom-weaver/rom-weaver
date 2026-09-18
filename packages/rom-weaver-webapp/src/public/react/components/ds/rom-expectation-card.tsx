@@ -563,6 +563,9 @@ const RomSearch = ({
           onChange={(event) => lookup.setText(event.currentTarget.value, (event.nativeEvent as InputEvent).isComposing)}
           onCompositionEnd={(event) => lookup.setText(event.currentTarget.value, false)}
           onCompositionStart={(event) => lookup.setText(event.currentTarget.value, true)}
+          onFocus={() => {
+            if (!(searching || resultCount)) void lookup.search();
+          }}
           enterKeyHint="search"
           placeholder={localizer.message("ui.identify.searchPlaceholder")}
           ref={inputRef}

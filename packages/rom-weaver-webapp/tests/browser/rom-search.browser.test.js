@@ -127,6 +127,8 @@ test("typing searches after a pause without submitting the form", async () => {
   expect(getInput().getAttribute("enterkeyhint")).toBe("search");
   type(getInput(), "metroid gba");
   expect(getStatus().textContent).toBe("Searching…");
+  getInput().focus();
+  expect(searchExpectedRomTitles).not.toHaveBeenCalled();
 
   await waitFor(() => getResults().length === 1);
   expect(getStatus()).toBeNull();
@@ -139,16 +141,50 @@ test("Enter retries the same query after a failed automatic search", async () =>
   searchExpectedRomTitles
     .mockRejectedValueOnce(new Error("Lookup unavailable"))
     .mockResolvedValueOnce({ status: "ok", titles: [FUSION] });
+  getInput().focus();
   type(getInput(), "metroid");
   await waitFor(() => getError() !== null);
   expect(getError().textContent).toContain("Lookup unavailable");
 
-  getInput().focus();
   await userEvent.keyboard("{Enter}");
   await waitFor(() => getResults().length === 1);
   expect(searchExpectedRomTitles).toHaveBeenCalledTimes(2);
   expect(searchExpectedRomTitles.mock.calls[1][0]).toBe("metroid");
   expect(getError()).toBeNull();
+});
+
+test("focus retries the existing query without typing or submitting", async () => {
+  searchExpectedRomTitles
+    .mockRejectedValueOnce(new Error("Lookup unavailable"))
+    .mockResolvedValueOnce({ status: "ok", titles: [FUSION] });
+  type(getInput(), "metroid");
+  await waitFor(() => getError() !== null);
+
+  getInput().focus();
+  await waitFor(() => getResults().length === 1);
+  expect(searchExpectedRomTitles).toHaveBeenCalledTimes(2);
+  expect(searchExpectedRomTitles.mock.calls[1][0]).toBe("metroid");
+  expect(getError()).toBeNull();
+  getInput().blur();
+  getInput().focus();
+  expect(searchExpectedRomTitles).toHaveBeenCalledTimes(2);
+});
+
+test("focus reopens choices after selecting a release", async () => {
+  searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION] });
+  searchExpectedRomByName.mockResolvedValue({ status: "matched", matches: [FUSION_USA] });
+  submit("metroid");
+  await waitFor(() => getResults().length === 1);
+  await page.getByRole("button", { name: /Metroid Fusion/u }).click();
+  await waitFor(() => getResults()[0]?.includes("(USA)"));
+  await page.getByRole("button", { name: /Metroid Fusion/u }).click();
+  await waitFor(() => getResults().length === 0);
+
+  getInput().focus();
+  await waitFor(() => getResults().length === 1);
+  expect(searchExpectedRomTitles).toHaveBeenCalledTimes(2);
+  expect(getInput().value).toBe("metroid");
+  expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).not.toBeNull();
 });
 
 test("a name search lists titles across every platform", async () => {
