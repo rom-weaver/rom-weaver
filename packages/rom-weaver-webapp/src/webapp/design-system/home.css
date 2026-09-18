@@ -132,7 +132,7 @@
     grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
     gap: 0 56px;
     align-items: start;
-    padding-block: var(--gutter) clamp(40px, 6vw, 72px);
+    padding-block: var(--gutter) clamp(24px, 3vw, 40px);
   }
   .rw-app .home-loom {
     align-self: center;
@@ -227,6 +227,7 @@
 .rw-app .home-install-code {
   width: 100%;
   padding: 12px;
+  padding-inline-end: 48px;
   overflow-x: auto;
   font: inherit;
   font-size: 0.875rem;
@@ -236,6 +237,56 @@
   background: var(--well);
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
+}
+.rw-app .home-install-code-wrap {
+  position: relative;
+  min-width: 0;
+}
+.rw-app .home-install-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ctl);
+  height: var(--ctl);
+  padding: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+  transition:
+    color 0.18s,
+    background 0.18s,
+    border-color 0.18s,
+    transform 0.15s var(--ease);
+}
+.rw-app .home-install-copy svg {
+  width: 15px;
+  height: 15px;
+}
+.rw-app .home-install-copy.copied {
+  color: var(--thread-text);
+  border-color: var(--thread);
+}
+@media (hover: hover) {
+  .rw-app .home-install-copy:hover {
+    color: var(--ink);
+    background: var(--well);
+    border-color: var(--seam-strong);
+  }
+}
+.rw-app .home-install-copy:active {
+  color: var(--ink);
+  background: var(--well);
+  border-color: var(--seam-strong);
+  transform: scale(0.97);
+}
+.rw-app .home-install-copy:focus-visible {
+  outline: 2px solid var(--thread-text);
+  outline-offset: 2px;
 }
 .rw-app .home-actions {
   display: flex;

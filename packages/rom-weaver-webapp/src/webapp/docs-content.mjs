@@ -176,6 +176,9 @@ const rewriteDocImage = (href, sourceFile) => {
 const SECTION_LINK_ICON =
   '<svg aria-hidden="true" class="docs-section-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
 
+const DOCS_COPY_BUTTON =
+  '<button aria-label="Copy code" class="docs-copy-button" data-docs-copy type="button"><svg aria-hidden="true" class="docs-copy-icon docs-copy-icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg aria-hidden="true" class="docs-copy-icon docs-copy-icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg><span data-docs-copy-label>Copy</span></button>';
+
 /**
  * @param {string} markdown @param {string} slug @param {string} sourceFile
  * @returns {{ html: string, sections: DocSection[] }}
@@ -193,7 +196,8 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
     renderer: {
       code(token) {
         defaultRenderer.parser = this.parser;
-        return defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
+        const code = defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
+        return `<div class="docs-code-block">${DOCS_COPY_BUTTON}${code}</div>\n`;
       },
       // Note markers are authored as Unicode superscripts so the Markdown still
       // reads on GitHub, but that glyph is a fixed half-height and hairline
