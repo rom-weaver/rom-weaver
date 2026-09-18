@@ -176,8 +176,8 @@ const rewriteDocImage = (href, sourceFile) => {
 const SECTION_LINK_ICON =
   '<svg aria-hidden="true" class="docs-section-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
 
-const DOCS_COPY_BUTTON =
-  '<button aria-label="Copy code" class="docs-copy-button" data-docs-copy title="Copy code" type="button"><svg aria-hidden="true" class="docs-copy-icon docs-copy-icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg aria-hidden="true" class="docs-copy-icon docs-copy-icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg><span class="sr-only" data-docs-copy-label aria-live="polite"></span></button>';
+const DOCS_COPY_BUTTON_COMPACT =
+  '<button aria-label="Copy code" class="docs-copy-button" data-docs-copy title="Copy code" type="button"><span aria-hidden="true" class="docs-copy-icon"></span><span class="sr-only" data-docs-copy-label aria-live="polite"></span></button>';
 
 /**
  * @param {string} markdown @param {string} slug @param {string} sourceFile
@@ -197,20 +197,20 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       code(token) {
         defaultRenderer.parser = this.parser;
         const code = defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
-        return `<div class="docs-code-block">${DOCS_COPY_BUTTON}${code}</div>\n`;
+        return `<div class="docs-code-block">${DOCS_COPY_BUTTON_COMPACT}${code}</div>\n`;
       },
       codespan(token) {
         defaultRenderer.parser = this.parser;
         const html = defaultRenderer.codespan(token);
         if (!/^(?:rom-weaver$|[a-z][a-z0-9._/-]*\s+\S)/.test(token.text)) return html;
-        return `<span class="docs-inline-code">${html}${DOCS_COPY_BUTTON}</span>`;
+        return `<span class="docs-inline-code">${html}${DOCS_COPY_BUTTON_COMPACT}</span>`;
       },
       link(token) {
         defaultRenderer.parser = this.parser;
         const linked = defaultRenderer.link(token);
-        const html = linked.replaceAll(DOCS_COPY_BUTTON, "");
-        return linked.includes(DOCS_COPY_BUTTON)
-          ? `<span class="docs-inline-code">${html}${DOCS_COPY_BUTTON}</span>`
+        const html = linked.replaceAll(DOCS_COPY_BUTTON_COMPACT, "");
+        return linked.includes(DOCS_COPY_BUTTON_COMPACT)
+          ? `<span class="docs-inline-code">${html}${DOCS_COPY_BUTTON_COMPACT}</span>`
           : html;
       },
       // Note markers are authored as Unicode superscripts so the Markdown still

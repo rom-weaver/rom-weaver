@@ -544,22 +544,22 @@ html:has(.docs-workbench) {
     border-color 0.18s,
     transform 0.15s var(--ease);
 }
-.rw-app .docs-copy-button svg {
+.rw-app .docs-copy-icon {
+  display: block;
   width: 16px;
   height: 16px;
 }
-.rw-app .docs-copy-icon-check {
-  display: none;
+.rw-app .docs-copy-icon::before {
+  font-size: 1.1rem;
+  line-height: 1;
+  content: "⧉";
 }
 .rw-app .docs-copy-button[data-copy-state="copied"] {
   color: var(--thread-text);
   border-color: var(--thread);
 }
-.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-icon-copy {
-  display: none;
-}
-.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-icon-check {
-  display: block;
+.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-icon::before {
+  content: "✓";
 }
 .rw-app .docs-copy-button[data-copy-state="failed"] {
   color: var(--ink);
