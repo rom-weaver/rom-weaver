@@ -27,7 +27,7 @@ import type { BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worke
 import { getLastSessionEntries, getLogEntries, type LogStoreEntry, subscribeLogEntries } from "../log-store.ts";
 import { APP_VERSION, COMMITS_SINCE_VERSION, COMMIT_HASH, DIRTY_HASH, GIT_BRANCH } from "../build-version.ts";
 import { CHANNEL_BADGE } from "../build-channel.ts";
-import { ABOUT_URL, GITHUB_URL } from "../project-links.ts";
+import { GITHUB_URL } from "../project-links.ts";
 import {
   downloadOfflineCopy,
   getInitialOfflineCopyState,
@@ -38,6 +38,7 @@ import {
 } from "../pwa/offline-warmup-client.ts";
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import type { OfflineCachedFile } from "../offline-warmup.ts";
+import { isReactWebappDevelopmentMode } from "../development-defaults.ts";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
   describeWarmupUnit,
@@ -59,6 +60,15 @@ import type { Localizer } from "../../presentation/localization/index.ts";
  */
 
 const logger = createLogger("log-dialog");
+
+const PREVIEW_STATE_LABELS: Record<RuntimeState, string> = {
+  active: "Offline active",
+  ready: "Offline ready",
+  update: "Update ready",
+  installing: "Installing 40%",
+  online: "Online only",
+  disabled: "Offline disabled",
+};
 
 const normalizeLevel = (value: string | undefined): LogLevel =>
   value && (LOG_LEVELS as readonly string[]).includes(value) ? (value as LogLevel) : "warn";
@@ -232,16 +242,14 @@ const GITHUB_BASE = GITHUB_URL.replace(/\/$/, "");
 const PR_NUMBER = CHANNEL_BADGE.match(/^pr-(\d+)$/i)?.[1];
 
 /**
- * Build facts, plainly listed: what is running, from where, and in what host.
- * The offline state is one of those facts, so it is the first row rather than a
- * card above them - the badge is its value, the same way the commit hash is the
- * commit row's.
+ * Offline controls MUST stay separate from the build facts so action notes
+ * can use the full section width.
  */
 const StatusRows = ({
   localizer,
   offlineProgress,
   runtimeState,
-  previewActive = false,
+  children,
   downloadRequested,
   downloadUnavailable,
   onDownload,
@@ -249,6 +257,7 @@ const StatusRows = ({
   removing,
   removeUnavailable,
   onRemove,
+  onUpdate,
 }: {
   localizer: Localizer;
   downloadRequested: boolean;
@@ -258,9 +267,10 @@ const StatusRows = ({
   removing: boolean;
   removeUnavailable: boolean;
   onRemove: () => void;
+  onUpdate?: () => void;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   runtimeState: RuntimeState;
-  previewActive?: boolean;
+  children?: ReactNode;
 }) => {
   const distance =
     typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
@@ -272,75 +282,65 @@ const StatusRows = ({
           { size: localizer.formatBytes(transferredBytes) },
         )
       : null;
+  const showRemove = (runtimeState !== "disabled" && offlineCopyEnabled) || removing || removeUnavailable;
+  const OfflineActionIcon = showRemove ? Trash2 : Download;
+  let actionLabel = localizer.message("ui.runtime.downloadOffline");
+  if (showRemove) {
+    actionLabel = localizer.message(removing ? "ui.runtime.removingOffline" : "ui.runtime.removeOffline");
+  } else if (downloadRequested) {
+    actionLabel = localizer.message("ui.runtime.downloadRequested");
+  }
+  const offlineStatus = (
+    <div className="sw-status-cell">
+      <span className="sr-only" role="status">
+        {runtimeState === "installing"
+          ? installingRuntimeLabel(localizer, offlineProgress ?? null)
+          : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
+      </span>
+      <div className="sw-cache-action">
+        <button
+          className="btn primary"
+          disabled={runtimeState === "disabled" || (showRemove ? removing : downloadRequested)}
+          onClick={showRemove ? onRemove : onDownload}
+          type="button"
+        >
+          <OfflineActionIcon aria-hidden="true" size={18} />
+          {actionLabel}
+        </button>
+        {removeUnavailable ? (
+          <span className="sw-cache-error" role="alert">
+            {localizer.message("ui.runtime.removeUnavailable")}
+          </span>
+        ) : null}
+        {downloadUnavailable ? (
+          <span className="sw-cache-error" role="alert">
+            {localizer.message("ui.runtime.downloadUnavailable")}
+          </span>
+        ) : null}
+      </div>
+      {runtimeState === "installing" && offlineProgress && !offlineProgress.ready ? (
+        <>
+          {typeof offlineProgress.cachedFiles === "number" &&
+          typeof offlineProgress.totalFiles === "number" &&
+          offlineProgress.totalFiles > 0 ? (
+            <span className="sw-progress-detail">
+              {localizer.message("ui.runtime.detailFiles", {
+                cached: offlineProgress.cachedFiles,
+                total: offlineProgress.totalFiles,
+              })}
+            </span>
+          ) : null}
+          {(() => {
+            const detail = describeWarmupUnit(localizer, offlineProgress);
+            if (!detail) return null;
+            return <span className="sw-progress-detail">{detail}</span>;
+          })()}
+        </>
+      ) : null}
+      {transferDetail ? <span className="sw-progress-detail">{transferDetail}</span> : null}
+    </div>
+  );
   const rows: Array<[string, React.ReactNode]> = [
-    [
-      localizer.message("ui.status.offline"),
-      <span className="sw-status-cell" key="sw">
-        <span className="sw-chip" data-sw={runtimeState} role="status">
-          <RuntimeGlyph
-            percent={runtimeState === "installing" ? offlineWarmupPercent(offlineProgress ?? null) : null}
-            state={runtimeState}
-          />
-          {runtimeState === "installing"
-            ? installingRuntimeLabel(localizer, offlineProgress ?? null)
-            : localizer.message(RUNTIME_MESSAGES[runtimeState].label)}
-        </span>
-        {/* Remove MUST precede changing download controls and progress so updates cannot move a pressed button. */}
-        {!previewActive && runtimeState !== "disabled" && (offlineCopyEnabled || removing || removeUnavailable) ? (
-          <>
-            <button className="btn slim ghost" disabled={removing} onClick={onRemove} type="button">
-              <Trash2 aria-hidden="true" size={14} />
-              {localizer.message(removing ? "ui.runtime.removingOffline" : "ui.runtime.removeOffline")}
-            </button>
-            <span className="sw-cache-note">{localizer.message("ui.runtime.removeOfflineHint")}</span>
-            {removeUnavailable ? (
-              <span className="sw-cache-error" role="alert">
-                {localizer.message("ui.runtime.removeUnavailable")}
-              </span>
-            ) : null}
-          </>
-        ) : null}
-        {!previewActive && (runtimeState === "installing" || runtimeState === "online") ? (
-          <>
-            <button
-              className="btn slim ghost"
-              disabled={downloadRequested || removing}
-              onClick={onDownload}
-              type="button"
-            >
-              <Download aria-hidden="true" size={14} />
-              {localizer.message(downloadRequested ? "ui.runtime.downloadRequested" : "ui.runtime.downloadOffline")}
-            </button>
-            <span className="sw-cache-note">{localizer.message("ui.runtime.downloadOfflineHint")}</span>
-            {downloadUnavailable ? (
-              <span className="sw-cache-error" role="alert">
-                {localizer.message("ui.runtime.downloadUnavailable")}
-              </span>
-            ) : null}
-          </>
-        ) : null}
-        {runtimeState === "installing" && offlineProgress && !offlineProgress.ready ? (
-          <>
-            {typeof offlineProgress.cachedFiles === "number" &&
-            typeof offlineProgress.totalFiles === "number" &&
-            offlineProgress.totalFiles > 0 ? (
-              <span className="sw-progress-detail">
-                {localizer.message("ui.runtime.detailFiles", {
-                  cached: offlineProgress.cachedFiles,
-                  total: offlineProgress.totalFiles,
-                })}
-              </span>
-            ) : null}
-            {(() => {
-              const detail = describeWarmupUnit(localizer, offlineProgress);
-              if (!detail) return null;
-              return <span className="sw-progress-detail">{detail}</span>;
-            })()}
-          </>
-        ) : null}
-        {transferDetail ? <span className="sw-progress-detail">{transferDetail}</span> : null}
-      </span>,
-    ],
     [
       localizer.message("ui.status.version"),
       <span className="status-build-id" key="version">{`v${APP_VERSION}${distance}${DIRTY_HASH ? "*" : ""}`}</span>,
@@ -386,43 +386,78 @@ const StatusRows = ({
     localizer.message(readPwaState() ? "ui.status.envPwa" : "ui.status.envWeb"),
   ]);
   return (
-    <section className="status-group">
-      <h3 className="dlg-section-title">{localizer.message("ui.status.build")}</h3>
-      <dl className="status-rows">
-        {rows.map(([label, value]) => (
-          <div className="status-row" key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <>
+      <section className="status-group offline-group">
+        <h3 className="dlg-section-title">{localizer.message("ui.status.offline")}</h3>
+        <OfflineLegend
+          current={runtimeState}
+          localizer={localizer}
+          offlineProgress={offlineProgress}
+          onUpdate={onUpdate}
+        />
+        {offlineStatus}
+        {children}
+      </section>
+      <section className="status-group">
+        <h3 className="dlg-section-title">{localizer.message("ui.status.build")}</h3>
+        <dl className="status-rows">
+          {rows.map(([label, value]) => (
+            <div className="status-row" key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </>
   );
 };
 
-/**
- * Every offline state at once, so the badge in the row above is read against the
- * four it could have been rather than on its own. The current one is marked
- * instead of being left out - a reader looking for what they have should find it
- * in the same list, not by elimination.
- */
-const OfflineLegend = ({ current, localizer }: { current: RuntimeState; localizer: Localizer }) => (
-  <section className="status-group sw-legend">
-    <h3 className="dlg-section-title">{localizer.message("ui.status.offlineLegend")}</h3>
-    <dl>
-      {RUNTIME_STATES.map((state) => (
-        <div className="sw-legend-row" data-current={state === current ? "" : undefined} key={state}>
-          <dt>
-            <span className="sw-chip" data-sw={state}>
-              <RuntimeGlyph state={state} />
-              {localizer.message(RUNTIME_MESSAGES[state].label)}
+const OfflineLegend = ({
+  current,
+  localizer,
+  offlineProgress,
+  onUpdate,
+}: {
+  current: RuntimeState;
+  localizer: Localizer;
+  offlineProgress?: OfflineWarmupDisplayProgress | null;
+  onUpdate?: () => void;
+}) => (
+  <div className="sw-legend">
+    <ul>
+      {RUNTIME_STATES.map((state) => {
+        const description = `${localizer.message(RUNTIME_MESSAGES[state].label)}: ${localizer.message(RUNTIME_MESSAGES[state].description)}`;
+        return (
+          <li className="sw-legend-row" data-current={state === current ? "" : undefined} key={state}>
+            <span
+              aria-label={description}
+              className="sw-chip sw-legend-icon"
+              data-sw={state}
+              role="img"
+              title={description}
+            >
+              <RuntimeGlyph
+                percent={
+                  state === current && state === "installing" ? offlineWarmupPercent(offlineProgress ?? null) : null
+                }
+                state={state}
+              />
             </span>
-          </dt>
-          <dd>{localizer.message(RUNTIME_MESSAGES[state].description)}</dd>
-        </div>
-      ))}
-    </dl>
-  </section>
+            <div className="sw-legend-details">
+              <span className="sw-legend-label">{localizer.message(RUNTIME_MESSAGES[state].label)}</span>
+              <span className="sw-legend-description">{localizer.message(RUNTIME_MESSAGES[state].description)}</span>
+              {state === current && state === "update" && onUpdate ? (
+                <button className="btn slim primary sw-update-action" onClick={onUpdate} type="button">
+                  {localizer.message("ui.update.reloadNow")}
+                </button>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  </div>
 );
 
 // Path only: the cache name and revision/sha query params are noise in the
@@ -571,31 +606,6 @@ const OfflineCachedFiles = ({
     </section>
   );
 };
-
-/**
- * One line out to the About guide, which is where licence, attribution and
- * privacy are now written in full. Three paragraphs of them under the status
- * rows made the tab a page about the project rather than a readout of it.
- */
-const AboutLink = ({ localizer, onOpenWhatsNew }: { localizer: Localizer; onOpenWhatsNew?: () => void }) => (
-  <div className="status-about">
-    <a
-      className="about-link"
-      href="/whats-new"
-      onClick={(event) => {
-        if (!onOpenWhatsNew || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-          return;
-        event.preventDefault();
-        onOpenWhatsNew();
-      }}
-    >
-      {localizer.message("ui.update.whatsNew")}
-    </a>{" "}
-    <a className="about-link" href={ABOUT_URL}>
-      {localizer.message("ui.status.about")}
-    </a>
-  </div>
-);
 
 /** Which settings field a deep link asks for; `token` re-arms an unchanged field. */
 type SettingsFocusHint = { fieldId: string; token: number };
@@ -1058,7 +1068,6 @@ const LogDialog = ({
   initialTab = "status",
   onRestoreDefaults,
   onSaveSettings,
-  onOpenWhatsNew,
   onTabChange,
   serviceWorkerStatus,
   offlineProgress = null,
@@ -1068,6 +1077,8 @@ const LogDialog = ({
   settingsPanel,
   updateReady = false,
   previewRuntimeState = null,
+  onPreviewRuntimeStateChange,
+  onReloadUpdate,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1077,7 +1088,6 @@ const LogDialog = ({
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
-  onOpenWhatsNew?: () => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   offlineCopyEnabled?: boolean;
@@ -1087,6 +1097,8 @@ const LogDialog = ({
   settingsPanel?: ReactNode;
   updateReady?: boolean;
   previewRuntimeState?: RuntimeState | null;
+  onPreviewRuntimeStateChange?: (state: RuntimeState | null) => void;
+  onReloadUpdate?: () => void;
 }) => {
   const localizer = useUiLocalizer();
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -1118,11 +1130,26 @@ const LogDialog = ({
   const [opfsError, setOpfsError] = useState<string | null>(null);
   const [downloadUnavailable, setDownloadUnavailable] = useState(false);
   const requestDownload = () => {
+    if (previewRuntimeState !== null) {
+      onPreviewRuntimeStateChange?.("installing");
+      return;
+    }
     onOfflineCopyEnabledChange?.(true);
     const accepted = downloadOfflineCopy();
     setDownloadUnavailable(!accepted);
   };
+  const requestUpdate = () => {
+    if (previewRuntimeState !== null) {
+      onPreviewRuntimeStateChange?.("ready");
+      return;
+    }
+    onReloadUpdate?.();
+  };
   const requestRemoval = () => {
+    if (previewRuntimeState !== null) {
+      onPreviewRuntimeStateChange?.("online");
+      return;
+    }
     setDownloadUnavailable(false);
     onOfflineCopyEnabledChange?.(false);
     setOfflineWarmupEnabled(false);
@@ -1297,26 +1324,64 @@ const LogDialog = ({
         {tab === "status" ? (
           <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
             <StatusRows
-              downloadRequested={offlineCopy.downloadRequested}
-              downloadUnavailable={downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error)}
-              offlineCopyEnabled={offlineCopyEnabled}
-              removing={!offlineCopy.enabled && offlineCopy.pending}
-              removeUnavailable={!offlineCopy.enabled && !!offlineCopy.error}
+              downloadRequested={previewRuntimeState === null && offlineCopy.downloadRequested}
+              downloadUnavailable={
+                previewRuntimeState === null && (downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error))
+              }
+              offlineCopyEnabled={
+                previewRuntimeState === null
+                  ? offlineCopyEnabled
+                  : previewRuntimeState !== "online" && previewRuntimeState !== "disabled"
+              }
+              removing={previewRuntimeState === null && !offlineCopy.enabled && offlineCopy.pending}
+              removeUnavailable={previewRuntimeState === null && !offlineCopy.enabled && !!offlineCopy.error}
               onRemove={requestRemoval}
+              onUpdate={onReloadUpdate || onPreviewRuntimeStateChange ? requestUpdate : undefined}
               localizer={localizer}
               offlineProgress={offlineProgress}
               onDownload={requestDownload}
               runtimeState={runtimeState}
-              previewActive={previewRuntimeState !== null}
-            />
-            <OfflineCachedFiles
-              error={cachedFilesError}
-              files={cachedFiles}
-              loading={cachedFilesLoading}
-              localizer={localizer}
-            />
-            <OfflineLegend current={runtimeState} localizer={localizer} />
-            <AboutLink localizer={localizer} onOpenWhatsNew={onOpenWhatsNew} />
+            >
+              <OfflineCachedFiles
+                error={cachedFilesError}
+                files={cachedFiles}
+                loading={cachedFilesLoading}
+                localizer={localizer}
+              />
+            </StatusRows>
+            {isReactWebappDevelopmentMode() && onPreviewRuntimeStateChange ? (
+              <section aria-label="Development" className="status-group sw-preview">
+                <h3 className="dlg-section-title">Development</h3>
+                <div className="sw-preview-control">
+                  <label htmlFor="dev-offline-state">Offline status preview</label>
+                  <span className="sw-preview-select">
+                    <select
+                      aria-describedby="dev-offline-state-help"
+                      className="select"
+                      id="dev-offline-state"
+                      value={previewRuntimeState ?? "actual"}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        if (value === "actual") onPreviewRuntimeStateChange?.(null);
+                        else if ((RUNTIME_STATES as readonly string[]).includes(value)) {
+                          onPreviewRuntimeStateChange?.(value as RuntimeState);
+                        }
+                      }}
+                    >
+                      <option value="actual">Actual</option>
+                      {RUNTIME_STATES.map((value) => (
+                        <option key={value} value={value}>
+                          {PREVIEW_STATE_LABELS[value]}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </div>
+                <p className="sw-cache-note" id="dev-offline-state-help">
+                  Preview only. Resets on reload. Does not change the offline cache or service worker.
+                </p>
+              </section>
+            ) : null}
           </div>
         ) : null}
         {tab === "logs" || tab === "storage" ? (

@@ -64,6 +64,7 @@
   --warp-b: #4a5563;
   --thread-text: #f08439; /* contrast-safe accent text */
   --verified: #88a9cb;
+  --offline-active: #82be99;
   --fault: #e0606a;
   --care: #d8a64f;
   --care-text: #d8a64f; /* amber already clears 4.5:1 on every dark surface */
@@ -92,6 +93,7 @@
      tutorial beacon readable on the thread-tinted well. */
   --weft: color-mix(in oklab, var(--thread-text) 85%, #000);
   --verified: #365d82;
+  --offline-active: #286342;
   --fault: #b91c1c;
   --care: #c4870f;
   /* `--care` is a fill colour on paper: 3.1:1 as text on the plate. Amber words

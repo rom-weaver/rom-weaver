@@ -100,6 +100,7 @@ const settle = async () => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 beforeEach(() => {
@@ -363,31 +364,129 @@ describe("OPFS inspector", () => {
 });
 
 describe("manual offline installation", () => {
+  it("offers the update action inside the current state when an update is ready", () => {
+    const onReloadUpdate = vi.fn();
+    const view = renderDialog({ updateReady: true, onReloadUpdate });
+    const button = view.getByRole("button", { name: "Reload now" });
+    expect(button.closest(".sw-legend-row")?.hasAttribute("data-current")).toBe(true);
+    fireEvent.click(button);
+    expect(onReloadUpdate).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer the update action when no update is ready", () => {
+    const view = renderDialog({ onReloadUpdate: vi.fn(), serviceWorkerStatus: "off" });
+    expect(view.queryByRole("button", { name: "Reload now" })).toBeNull();
+  });
+
+  it("previews an update without reloading the real app", () => {
+    const onReloadUpdate = vi.fn();
+    const onPreviewRuntimeStateChange = vi.fn();
+    const view = renderDialog({ previewRuntimeState: "update", onReloadUpdate, onPreviewRuntimeStateChange });
+    fireEvent.click(view.getByRole("button", { name: "Reload now" }));
+    expect(onPreviewRuntimeStateChange).toHaveBeenCalledWith("ready");
+    expect(onReloadUpdate).not.toHaveBeenCalled();
+  });
+
+  it("offers the development preview in Status without saving the selected state", () => {
+    vi.stubEnv("DEV", true);
+    vi.stubEnv("MODE", "development");
+    const writes = vi.spyOn(window.localStorage, "setItem");
+    const onPreviewRuntimeStateChange = vi.fn();
+    const view = renderDialog({ onPreviewRuntimeStateChange });
+    const select = view.getByLabelText("Offline status preview");
+    expect(select.closest("#logpanel-status")).toBeTruthy();
+    expect(select.closest(".sw-status-cell")).toBeNull();
+    expect(select.closest(".status-group")?.querySelector("h3")?.textContent).toBe("Development");
+    fireEvent.change(select, { target: { value: "ready" } });
+    fireEvent.change(select, { target: { value: "actual" } });
+    expect(onPreviewRuntimeStateChange.mock.calls).toEqual([["ready"], [null]]);
+    expect(writes).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("tab", { name: "Settings" }));
+    expect(view.queryByLabelText("Offline status preview")).toBeNull();
+    writes.mockRestore();
+  });
+
+  it("keeps the development preview out of production", () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("MODE", "production");
+    const view = renderDialog({ onPreviewRuntimeStateChange: vi.fn() });
+    expect(view.queryByLabelText("Offline status preview")).toBeNull();
+  });
+
+  it.each([
+    ["ready", true, false],
+    ["update", true, false],
+    ["installing", true, false],
+    ["online", false, true],
+    ["disabled", false, true],
+    ["active", true, false],
+  ] as const)("previews %s actions without cache writes", (state, remove, download) => {
+    const onPreviewRuntimeStateChange = vi.fn();
+    const onOfflineCopyEnabledChange = vi.fn();
+    const view = renderDialog({
+      previewRuntimeState: state,
+      offlineCopyEnabled: false,
+      onPreviewRuntimeStateChange,
+      onOfflineCopyEnabledChange,
+    });
+    const removeButton = view.queryByRole("button", { name: "Remove offline copy" });
+    const downloadButton = view.queryByRole("button", { name: "Download offline copy" });
+    expect(!!removeButton).toBe(remove);
+    expect(!!downloadButton).toBe(download);
+    for (const button of [removeButton, downloadButton]) {
+      if (button) {
+        expect(button.hasAttribute("disabled")).toBe(state === "disabled");
+        fireEvent.click(button);
+      }
+    }
+    expect(onPreviewRuntimeStateChange.mock.calls.map(([value]) => value)).toEqual([
+      ...(remove ? ["online"] : []),
+      ...(download && state !== "disabled" ? ["installing"] : []),
+    ]);
+    expect(onOfflineCopyEnabledChange).not.toHaveBeenCalled();
+    expect(downloadOfflineCopy).not.toHaveBeenCalled();
+    expect(setOfflineWarmupEnabled).not.toHaveBeenCalled();
+  });
+
   it("requests the remaining files from Status and shows the accepted request", () => {
     const onOfflineCopyEnabledChange = vi.fn();
     const view = renderDialog({
       serviceWorkerStatus: "active",
       offlineProgress: { ready: false, cachedBytes: 1, totalBytes: 10 },
+      offlineCopyEnabled: false,
       onOfflineCopyEnabledChange,
     });
     fireEvent.click(view.getByRole("button", { name: "Download offline copy" }));
     expect(onOfflineCopyEnabledChange).toHaveBeenCalledWith(true);
     expect(downloadOfflineCopy).toHaveBeenCalledTimes(1);
     expect(view.getByRole("button", { name: "Download requested" }).getAttribute("disabled")).not.toBeNull();
-    expect(view.getByText("Downloads remaining files, even with data saver on.")).toBeTruthy();
+    expect(view.queryByText("Downloads remaining files, even with data saver on.")).toBeNull();
+    expect(
+      view.queryByText("Removes downloaded app files. Your files, saves, and settings stay on this device."),
+    ).toBeNull();
   });
 
-  it.each(["active", "off"] as const)("does not offer downloads when already ready or disabled (%s)", (status) => {
+  it.each([
+    ["active", "Remove offline copy"],
+    ["off", "Download offline copy"],
+  ] as const)("always offers one clear action for %s", (status, name) => {
     const view = renderDialog({
       serviceWorkerStatus: status,
       offlineProgress: { ready: status === "active", cachedBytes: 10, totalBytes: 10 },
     });
-    expect(view.queryByRole("button", { name: "Download offline copy" })).toBeNull();
+    expect(view.getByRole("button", { name }).hasAttribute("disabled")).toBe(status === "off");
+    if (status === "off") {
+      fireEvent.click(view.getByRole("button", { name }));
+      expect(downloadOfflineCopy).not.toHaveBeenCalled();
+      expect(setOfflineWarmupEnabled).not.toHaveBeenCalled();
+    }
+    expect(view.container.querySelectorAll(".sw-cache-action button")).toHaveLength(1);
+    expect(view.container.querySelector(".sw-cache-action .sw-cache-note")).toBeNull();
   });
 
   it("keeps the action available when there is no download scheduler", () => {
     vi.mocked(downloadOfflineCopy).mockReturnValueOnce(false);
-    const view = renderDialog({ serviceWorkerStatus: "active" });
+    const view = renderDialog({ serviceWorkerStatus: "active", offlineCopyEnabled: false });
     const button = view.getByRole("button", { name: "Download offline copy" });
     fireEvent.click(button);
     expect(button.getAttribute("disabled")).toBeNull();
@@ -429,6 +528,13 @@ describe("manual offline installation", () => {
 });
 
 describe("cached file inventory", () => {
+  it("keeps the cached-file drawer with the offline controls", () => {
+    const { container } = renderDialog();
+    const section = container.querySelector(".sw-status-cell")?.closest(".status-group");
+    expect(section?.querySelector(".sw-cache-drawer")).toBeTruthy();
+    expect(section?.querySelector(".dlg-section-title")?.textContent).toBe("Offline");
+  });
+
   const openDrawer = (container: HTMLElement) => {
     fireEvent.click(container.querySelector(".sw-cache-drawer > .cks-head") as HTMLButtonElement);
   };
@@ -572,6 +678,23 @@ describe("status offline row", () => {
 
     const rows = container.querySelectorAll(".sw-legend-row");
     expect(rows).toHaveLength(6);
+    const section = container.querySelector(".offline-group");
+    expect(section?.querySelectorAll(".sw-legend-icon")).toHaveLength(6);
+    expect(section?.querySelector(".sw-status-cell [role=status] svg")).toBeNull();
+    expect(section?.querySelector(":scope > .sw-status-cell")).toBeTruthy();
+    expect(Array.from(container.querySelectorAll("h3"), (heading) => heading.textContent)).not.toContain(
+      "What the offline states mean",
+    );
+    for (const row of rows) {
+      const icon = row.querySelector('[role="img"]');
+      expect(icon?.getAttribute("aria-label")).toContain(": ");
+      expect(icon?.getAttribute("title")).toBe(icon?.getAttribute("aria-label"));
+      expect(icon?.querySelector("svg")).toBeTruthy();
+      expect(icon?.textContent).toBe("");
+      const description = row.querySelector(".sw-legend-description");
+      expect(description?.textContent).toBeTruthy();
+      expect(icon?.getAttribute("aria-label")).toContain(description?.textContent);
+    }
     expect(container.querySelectorAll(".sw-legend-row[data-current]")).toHaveLength(1);
     expect(container.querySelector(".sw-legend-row[data-current] .sw-chip")?.getAttribute("data-sw")).toBe("disabled");
   });

@@ -47,7 +47,7 @@ import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
 import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
-import { Masthead, RUNTIME_STATES, UpdateBanner } from "./components/shell.tsx";
+import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
@@ -157,15 +157,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   // Reference rather than a workflow, so it sits with the project links.
   { group: "project", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
 ];
-
-const PREVIEW_STATE_LABELS: Record<RuntimeState, string> = {
-  active: "Offline active",
-  ready: "Offline ready",
-  update: "Update ready",
-  installing: "Installing 40%",
-  online: "Online only",
-  disabled: "Offline disabled",
-};
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -1016,54 +1007,17 @@ function WebappRoot({
               onRestoreDefaults={actions.onRestoreDefaults}
               onSaveSettings={saveSettings}
               onTabChange={handleDialogTabChange}
-              onOpenWhatsNew={() => {
-                setLogOpen(false);
-                openWhatsNew();
-              }}
               open={logOpen}
               serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
               offlineProgress={previewOfflineProgress}
               previewRuntimeState={previewRuntimeState}
+              onPreviewRuntimeStateChange={changePreviewRuntimeState}
+              onReloadUpdate={actions.onReloadUpdate}
               offlineCopyEnabled={state.settings.offlineCopyEnabled}
               onOfflineCopyEnabledChange={actions.onOfflineCopyEnabledChange}
               settingsFocusHint={settingsFocusHint}
               settingsPanel={
                 <Suspense fallback={null}>
-                  {isReactWebappDevelopmentMode() ? (
-                    <section aria-label="Development" className="setgroup">
-                      <div className="gtitle">Development</div>
-                      <div className="setrow">
-                        <label className="slabel" htmlFor="dev-offline-state">
-                          Offline status
-                        </label>
-                        <span className="sctl">
-                          <select
-                            aria-describedby="dev-offline-state-help"
-                            className="select"
-                            id="dev-offline-state"
-                            value={previewRuntimeState ?? "actual"}
-                            onChange={(event) => {
-                              const value = event.currentTarget.value;
-                              if (value === "actual") changePreviewRuntimeState(null);
-                              else if ((RUNTIME_STATES as readonly string[]).includes(value)) {
-                                changePreviewRuntimeState(value as RuntimeState);
-                              }
-                            }}
-                          >
-                            <option value="actual">Actual</option>
-                            {RUNTIME_STATES.map((value) => (
-                              <option key={value} value={value}>
-                                {PREVIEW_STATE_LABELS[value]}
-                              </option>
-                            ))}
-                          </select>
-                        </span>
-                      </div>
-                      <p id="dev-offline-state-help">
-                        Display only. Does not change the offline cache or service worker.
-                      </p>
-                    </section>
-                  ) : null}
                   <SettingsPanel
                     draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
                     onDraftChange={actions.onDraftChange}
