@@ -22,6 +22,25 @@ afterEach(() => {
 });
 
 describe("IdentifyDrawer", () => {
+  it("shows candidate shorthand with full names and keeps copy evidence", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
+    const { container } = render(
+      <IdentifyDrawer
+        identification={{
+          matches: [],
+          status: "unidentified",
+          platformCandidates: [{ platform: "Sony - PlayStation", confidence: "high", evidence: "header_magic" }],
+        }}
+      />,
+    );
+    const name = container.querySelector('.identify-drawer-evidence [title="Sony - PlayStation"]');
+    expect(name?.querySelector('[aria-hidden="true"]')?.textContent).toBe("PSX");
+    expect(name?.querySelector(".sr-only")?.textContent).toBe("Sony - PlayStation");
+    fireEvent.click(name?.closest("button") as HTMLButtonElement);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("Sony - PlayStation · high · header_magic"));
+  });
+
   it("lists every name as a copyable row", async () => {
     const { container } = render(
       <IdentifyDrawer
@@ -48,6 +67,10 @@ describe("IdentifyDrawer", () => {
       expect(row.className).not.toContain("ck-half");
     }
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("GBA");
+    expect(container.querySelector(".readouts [title]")?.getAttribute("title")).toBe("NINTENDO GAME BOY ADVANCE");
+    expect(container.querySelector(".identify-drawer-evidence [title]")?.getAttribute("title")).toBe(
+      "NINTENDO GAME BOY ADVANCE",
+    );
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("CRC32");
     // The record's provenance names the source; the pack file name never does.
     expect(container.querySelector(".identify-drawer-evidence")?.textContent).toContain("OpenGood");
