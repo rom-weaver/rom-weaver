@@ -131,6 +131,9 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/llms.txt": path.join(rootAssetDir, "llms.txt"),
   "/logo.svg": generatedChannelAssetPath(channel, "logo.svg"),
   "/manifest.json": rootManifestSourcePath,
+  "/emulatorjs/LICENSE": path.join(rootDir, "vendor", "emulatorjs", "LICENSE"),
+  "/emulatorjs/NOTICE": path.join(rootDir, "vendor", "emulatorjs", "NOTICE"),
+  "/rom-weaver-bundle-v2.schema.json": path.join(repoRoot, "docs", "rom-weaver-bundle-v2.schema.json"),
   "/social-preview.avif": generatedSocialPreviewPath("social-preview.avif"),
   "/social-preview.png": generatedSocialPreviewPath("social-preview.png"),
   "/social-preview.webp": generatedSocialPreviewPath("social-preview.webp"),
@@ -309,7 +312,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
   else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
   else if (requestPath.endsWith(".pack")) res.setHeader("Content-Type", "application/octet-stream");
-  else if (requestPath.endsWith("NOTICE")) {
+  else if (requestPath.endsWith("LICENSE") || requestPath.endsWith("NOTICE")) {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
   }
 };

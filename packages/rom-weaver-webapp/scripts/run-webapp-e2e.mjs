@@ -26,6 +26,29 @@ const A11Y_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag2
 export const computeDocsRouteSlugs = (docSources) => docSources.map((source) => source.slug);
 export const hasVisiblePrerenderedShell = (layout) => layout.prerendered && layout.dockInFirstViewport;
 const DOCS_ROUTES = computeDocsRouteSlugs(DOC_SOURCES);
+const LINK_AUDIT_WORKFLOW_ROUTES = [
+  "",
+  "apply-patches",
+  "create-patch",
+  "identify-rom",
+  "test-rom",
+  "bundle-patches",
+  "trim-rom",
+  "ppf-undo",
+  "save-editor",
+  "whats-new",
+  "apply",
+  "create",
+  "identify",
+  "test",
+  "bundle",
+  "trim",
+  "tools",
+];
+export const computeLinkAuditRoutes = (docSources) => [
+  ...new Set([...LINK_AUDIT_WORKFLOW_ROUTES, ...computeDocsRouteSlugs(docSources)]),
+];
+const LINK_AUDIT_ROUTES = computeLinkAuditRoutes(DOC_SOURCES);
 const A11Y_VIEWPORTS = [
   { height: 720, label: "desktop", width: 1280 },
   { height: 844, label: "mobile", width: 390 },
@@ -35,7 +58,7 @@ const ARCHIVE_STRESS_TIMEOUT_MS = 240_000;
 const MANY_ENTRIES_COUNT = 2048;
 const MANY_ENTRY_SIZE = 4096;
 const E2E_ATTEMPTS = 2;
-const E2E_SHARD_FLAGS = ["--a11y", "--journeys", "--journeys-raw", "--journeys-archive"];
+const E2E_SHARD_FLAGS = ["--a11y", "--links", "--journeys", "--journeys-raw", "--journeys-archive"];
 const PREBUILT_WEBAPP_CHANNEL = "prod";
 const PREBUILT_WEBAPP_DIST_FILES = ["index.html", "manifest.json"];
 export const resolveE2EShard = (args) => {
@@ -77,6 +100,7 @@ export const assertPrebuiltWebappDist = (readFile) => {
 };
 const E2E_SHARD = resolveE2EShard(process.argv.slice(2));
 const RUN_AUDITS = E2E_SHARD === "all" || E2E_SHARD === "a11y";
+const RUN_LINK_AUDIT = E2E_SHARD === "all" || E2E_SHARD === "links";
 const RUN_RAW_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-raw";
 const RUN_ARCHIVE_JOURNEY = E2E_SHARD === "all" || E2E_SHARD === "journeys" || E2E_SHARD === "journeys-archive";
 const browserName = process.env.ROM_WEAVER_BROWSER || "chromium";
@@ -135,11 +159,22 @@ const waitForServer = (url, timeoutMs = 60_000) =>
     attempt();
   });
 
-const requestStatus = (url) =>
+const requestStatus = (url, { headers = {}, maxRedirects = 5 } = {}) =>
   new Promise((resolve, reject) => {
-    const request = https.get(url, { rejectUnauthorized: shouldRejectUnauthorized(url) }, (response) => {
+    const request = https.get(url, { headers, rejectUnauthorized: shouldRejectUnauthorized(url) }, (response) => {
+      const status = response.statusCode || 0;
+      const location = response.headers.location;
       response.resume();
-      resolve(response.statusCode || 0);
+      // Link checks MUST follow redirects so a stale destination cannot hide behind a successful 3xx response.
+      if (status >= 300 && status < 400 && location) {
+        if (maxRedirects === 0) {
+          reject(new Error(`too many redirects while requesting ${url}`));
+          return;
+        }
+        requestStatus(new URL(location, url).href, { headers, maxRedirects: maxRedirects - 1 }).then(resolve, reject);
+        return;
+      }
+      resolve(status);
     });
     request.on("error", reject);
   });
@@ -355,6 +390,80 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         await page.close();
       }
     }
+  } finally {
+    await context.close();
+  }
+};
+
+export const collectInternalLinkTargets = (links, baseUrl) => {
+  const origin = new URL(baseUrl).origin;
+  const targets = new Map();
+  for (const link of links) {
+    const url = new URL(link.href, baseUrl);
+    if (!/^https?:$/.test(url.protocol) || url.origin !== origin) continue;
+    url.hash = "";
+    const href = url.href;
+    const target = targets.get(href) || { href, sources: [] };
+    if (link.source && !target.sources.includes(link.source)) target.sources.push(link.source);
+    targets.set(href, target);
+  }
+  return [...targets.values()];
+};
+
+export const runLinkAudit = async (createContext, baseUrl) => {
+  const context = await createContext({ ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  const links = [];
+  try {
+    for (const route of LINK_AUDIT_ROUTES) {
+      const pageUrl = new URL(route, baseUrl).href;
+      const response = await page.goto(pageUrl, { waitUntil: "domcontentloaded" });
+      const status = response?.status() || 0;
+      if (status < 200 || status >= 400) throw new Error(`${route || "/"} returned HTTP ${status}`);
+      if (route === "docs" || route.startsWith("docs/")) {
+        await page.locator(".docs-article h1").waitFor({ state: "attached" });
+      } else {
+        await page.locator("#webapp-root").waitFor({ state: "attached" });
+      }
+      await page.locator("#webapp-root:not([aria-busy])").waitFor({ state: "attached" });
+      links.push(
+        ...(await page.evaluate(
+          (source) =>
+            [...document.querySelectorAll("a[href]")].map((element) => ({
+              href: element.href,
+              source,
+            })),
+          route,
+        )),
+      );
+    }
+
+    const targets = collectInternalLinkTargets(links, baseUrl);
+    if (!targets.length) throw new Error("link audit found no same-origin links");
+    const pagePaths = new Set(
+      LINK_AUDIT_ROUTES.map((route) => {
+        const pathname = new URL(route, baseUrl).pathname.replace(/\/+$/, "");
+        return pathname || "/";
+      }),
+    );
+    const failures = [];
+    await Promise.all(
+      targets.map(async ({ href, sources }) => {
+        try {
+          const pathname = new URL(href).pathname.replace(/\/+$/, "") || "/";
+          // Vite's dev fallback returns the app shell with 200 for unknown paths when Accept includes text/html.
+          // Known page routes need text/html; asset checks use binary Accept so a missing asset remains 404.
+          const accept = pagePaths.has(pathname) ? "text/html" : "application/octet-stream";
+          const status = await requestStatus(href, { headers: { Accept: accept } });
+          if (status >= 400 || status < 200)
+            failures.push(`${href} returned HTTP ${status} (from ${sources.join(", ")})`);
+        } catch (error) {
+          failures.push(`${href} could not be requested (from ${sources.join(", ")}): ${error?.message || error}`);
+        }
+      }),
+    );
+    if (failures.length) throw new Error(`link audit found broken same-origin links:\n- ${failures.join("\n- ")}`);
+    process.stdout.write(`PASS link audit (${LINK_AUDIT_ROUTES.length} pages, ${targets.length} links)\n`);
   } finally {
     await context.close();
   }
@@ -1204,6 +1313,7 @@ const main = async () => {
           browserName === "webkit",
         );
       }
+      if (RUN_LINK_AUDIT) await runLinkAudit(createContext, devBaseUrl);
       if (RUN_RAW_JOURNEY) {
         await runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",

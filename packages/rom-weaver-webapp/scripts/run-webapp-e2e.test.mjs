@@ -11,6 +11,8 @@ import {
   assertSingleDocsHeading,
   buildWorkerReuseManifestCase,
   checkCssCoverage,
+  collectInternalLinkTargets,
+  computeLinkAuditRoutes,
   computeDocsRouteSlugs,
   hasVisiblePrerenderedShell,
   resolveE2EBuild,
@@ -82,6 +84,7 @@ describe("resolveE2EShard", () => {
 
   it("selects each supported shard", () => {
     assert.equal(resolveE2EShard(["--a11y"]), "a11y");
+    assert.equal(resolveE2EShard(["--links"]), "links");
     assert.equal(resolveE2EShard(["--journeys"]), "journeys");
     assert.equal(resolveE2EShard(["--journeys-raw"]), "journeys-raw");
     assert.equal(resolveE2EShard(["--journeys-archive"]), "journeys-archive");
@@ -90,7 +93,7 @@ describe("resolveE2EShard", () => {
   it("rejects incompatible shard flags", () => {
     assert.throws(
       () => resolveE2EShard(["--a11y", "--journeys-raw"]),
-      /Use only one E2E shard: --a11y, --journeys, --journeys-raw, or --journeys-archive/,
+      /Use only one E2E shard: --a11y, --links, --journeys, --journeys-raw, or --journeys-archive/,
     );
   });
 });
@@ -183,6 +186,36 @@ describe("computeDocsRouteSlugs", () => {
 
   it("returns an empty array for an empty route table", () => {
     assert.deepEqual(computeDocsRouteSlugs([]), []);
+  });
+});
+
+describe("computeLinkAuditRoutes", () => {
+  it("includes workflow and documentation routes once", () => {
+    const routes = computeLinkAuditRoutes([
+      { file: "a.md", label: "A", slug: "docs/a" },
+      { file: "b.md", label: "B", slug: "docs/b" },
+      { file: "a-again.md", label: "A again", slug: "docs/a" },
+    ]);
+    assert.equal(routes.filter((route) => route === "docs/a").length, 1);
+    assert.ok(routes.includes(""));
+    assert.ok(routes.includes("apply-patches"));
+    assert.ok(routes.includes("docs/b"));
+  });
+});
+
+describe("collectInternalLinkTargets", () => {
+  it("deduplicates same-origin links and ignores external links", () => {
+    assert.deepEqual(
+      collectInternalLinkTargets(
+        [
+          { href: "https://dev.example/docs#one", source: "docs/a" },
+          { href: "https://dev.example/docs#two", source: "docs/b" },
+          { href: "https://rom-weaver.com/docs", source: "docs/a" },
+        ],
+        "https://dev.example/",
+      ),
+      [{ href: "https://dev.example/docs", sources: ["docs/a", "docs/b"] }],
+    );
   });
 });
 

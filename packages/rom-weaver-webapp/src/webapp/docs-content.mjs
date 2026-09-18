@@ -145,11 +145,14 @@ const createHeadingRenderer = ({ unwrapLinks = false } = {}) => {
 const rewriteDocHref = (href, slug, sourceFile) => {
   if (href.startsWith(`${SITE_ORIGIN}/`)) return href.slice(SITE_ORIGIN.length);
   if (href.startsWith("#")) return `/${slug}${href}`;
+  if (href.startsWith("/")) return href;
   if (/^(?:[a-z]+:|\/\/)/i.test(href)) return href;
 
   const resolved = new URL(href, `https://repository.invalid/docs/${sourceFile}`);
-  if (!resolved.pathname.endsWith(".md")) return href;
   const repositoryPath = resolved.pathname.slice(1);
+  if (repositoryPath === "docs/rom-weaver-bundle-v2.schema.json") {
+    return `/rom-weaver-bundle-v2.schema.json${resolved.hash}`;
+  }
   const docsPath = repositoryPath.startsWith("docs/") ? repositoryPath.slice("docs/".length) : "";
   const route = DOC_SOURCES.find((entry) => entry.file === docsPath);
   if (route) return `/${route.slug}${resolved.hash}`;
