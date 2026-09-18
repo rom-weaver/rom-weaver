@@ -78,8 +78,7 @@ brew install rom-weaver/tap/rom-weaver
 ```
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf \
-  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh
+curl -fsSL https://rom-weaver.com/install.sh | sh
 ```
 
 ```bash

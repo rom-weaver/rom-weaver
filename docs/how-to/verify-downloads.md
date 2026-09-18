@@ -96,7 +96,7 @@ The install scripts run the digest query against the file they just downloaded. 
 
 ```bash
 sh -c 'curl -fsSL \
-  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh |
+  https://rom-weaver.com/install.sh |
   ROM_WEAVER_SKIP_ATTESTATION=1 sh'
 ```
 
