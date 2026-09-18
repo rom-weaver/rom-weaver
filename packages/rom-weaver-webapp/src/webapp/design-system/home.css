@@ -151,11 +151,6 @@
   font-size: 0.95rem;
   color: var(--ink-2);
 }
-.rw-app .home-installs {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
 .rw-app .home-install {
   display: grid;
   gap: 8px;
@@ -169,16 +164,6 @@
   color: var(--ink-2);
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-@media (min-width: 640px) {
-  .rw-app .home-installs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (min-width: 1000px) {
-  .rw-app .home-installs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 .rw-app .home-install-code {
   width: 100%;
