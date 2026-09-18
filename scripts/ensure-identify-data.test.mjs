@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   INDEX_FORMAT,
+  IDENTIFY_DATA_POLICY_VERSION,
   LIBRETRO_LICENSE_FILE,
   GOODTOOLS_ARCHIVE,
   GOODTOOLS_ARCHIVE_SHA256,
@@ -66,6 +67,7 @@ function buildCurrentDataDir() {
   const catalog = {
     format: "rom-weaver-identify-catalog-v1",
     generated: {
+      policyVersion: IDENTIFY_DATA_POLICY_VERSION,
       libretroRevision: LIBRETRO_REVISION,
       opengoodRevision: OPENGOOD_REVISION,
       opengoodHeaderedRevision: OPENGOOD_HEADERED_REVISION,
@@ -212,6 +214,22 @@ test("hasCurrentData rejects a pre-catalog index.json", async () => {
     const index = JSON.parse(readFileSync(indexPath, "utf8"));
     delete index.catalog;
     writeFileSync(indexPath, JSON.stringify(index, null, 2));
+    assert.equal(hasCurrentData(dataDir), false);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("hasCurrentData rejects data built before hacks were excluded", () => {
+  const { dataDir, work } = buildCurrentDataDir();
+  try {
+    const catalogPath = join(dataDir, "catalog.json");
+    const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+    delete catalog.generated.policyVersion;
+    writeFileSync(catalogPath, JSON.stringify(catalog));
+    assert.equal(hasCurrentData(dataDir), false);
+    catalog.generated.policyVersion = IDENTIFY_DATA_POLICY_VERSION - 1;
+    writeFileSync(catalogPath, JSON.stringify(catalog));
     assert.equal(hasCurrentData(dataDir), false);
   } finally {
     rmSync(work, { recursive: true, force: true });

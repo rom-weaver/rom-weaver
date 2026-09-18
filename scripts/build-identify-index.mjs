@@ -39,7 +39,8 @@ const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-identify-dats");
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
 const PACK_MAGIC_V1 = Buffer.from("RWFP1\0\0\0", "binary");
-const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v2";
+export const IDENTIFY_DATA_POLICY_VERSION = 1;
+const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v3";
 const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
 export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
 export const CATALOG_FORMAT = "rom-weaver-identify-catalog-v1";
@@ -1065,7 +1066,12 @@ async function parseOpenGoodDat(text, platform, state) {
     const nameMatch = chunk.slice(0, headerEnd).match(/\bname="([^"]*)"/u);
     if (!nameMatch) continue;
     const gameName = xmlUnescape(nameMatch[1]).trim();
-    if (!gameName) continue;
+    if (
+      !gameName ||
+      isHackName(gameName) ||
+      isHackMetadata(xmlGameMetadata(chunk, parseAttributes(chunk.slice(0, headerEnd))))
+    )
+      continue;
 
     const romMatcher = /<rom\b([^>]*?)\/?>/gu;
     let romMatch = romMatcher.exec(chunk);
@@ -1187,6 +1193,27 @@ function innerLibretroSource(sourcePath) {
   return "libretro";
 }
 
+function isHackName(name) {
+  return /\[h[^\]]*\]|\(hack(?:\s+[^)]*)?\)/iu.test(String(name ?? ""));
+}
+
+function isHackMetadata(metadata) {
+  return Object.entries(metadata).some(([key, value]) => {
+    if (/^(?:hack|romhack|is_hack)$/iu.test(key)) return /^(?:1|true|yes|hack)$/iu.test(value);
+    if (/^(?:category|genre|type|status)$/iu.test(key))
+      return /^(?:rom[ -]?)?hacks?$/iu.test(value);
+    return /^(?:name|description)$/iu.test(key) && isHackName(value);
+  });
+}
+
+function xmlGameMetadata(chunk, attributes) {
+  const metadata = { ...attributes };
+  for (const match of chunk.split("</game>")[0].matchAll(/<([\w-]+)>([^<]*)<\/\1>/gu)) {
+    metadata[match[1]] = xmlUnescape(match[2]).trim();
+  }
+  return metadata;
+}
+
 export function parseLibretroGames(text, platform, sourcePath) {
   const parsed = parseClrMameProDat(text);
   const innerSource = innerLibretroSource(sourcePath);
@@ -1201,6 +1228,12 @@ export function parseLibretroGames(text, platform, sourcePath) {
   return {
     header: parsed.header,
     games: parsed.games
+      .filter(
+        (game) =>
+          !isHackName(game.name) &&
+          !isHackMetadata(game.metadata) &&
+          !game.roms.some((rom) => isHackName(rom.name)),
+      )
       .map((game) => ({
         components: game.roms
           .map((rom, ordinal) => componentFromRom(rom, ordinal, componentSource))
@@ -1249,7 +1282,7 @@ export function parseOpenGoodGames(
     if (end < 0) continue;
     const game = parseAttributes(chunk.slice(0, end));
     const name = String(game.name ?? "").trim();
-    if (!name) continue;
+    if (!name || isHackName(name) || isHackMetadata(xmlGameMetadata(chunk, game))) continue;
     const components = [];
     for (const match of chunk.matchAll(/<rom\b([^>]*?)\/?>/gu)) {
       const component = componentFromRom(parseAttributes(match[1]), components.length);
@@ -1296,6 +1329,7 @@ export function parseGoodToolsHeaderedGames(text, platform) {
       continue;
     const filename = sourceName.slice("SNESRen/".length);
     const name = filename.slice(0, -".smc".length);
+    if (isHackName(name)) continue;
     const component = componentFromRom({ ...rom, name: filename }, 0, "open-good");
     if (!component.crc32 && !component.md5 && !component.sha1) continue;
     games.push({
@@ -2701,6 +2735,7 @@ export async function main(argv = process.argv.slice(2)) {
   const catalog = {
     format: CATALOG_FORMAT,
     generated: {
+      policyVersion: IDENTIFY_DATA_POLICY_VERSION,
       opengoodRevision: OPENGOOD_REVISION,
       opengoodHeaderedRevision: OPENGOOD_HEADERED_REVISION,
       goodToolsRelease: GOODTOOLS_RELEASE,
