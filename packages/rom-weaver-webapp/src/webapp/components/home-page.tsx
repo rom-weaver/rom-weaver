@@ -88,16 +88,6 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         </div>
         <div className="home-hero-body">
           <p className="home-lede">{localizer.message("ui.home.lede")}</p>
-          <div className="home-links">
-            <a className="home-link" href={`${route("docs")}/supported-formats`}>
-              <span>{localizer.message("ui.home.formatsEyebrow")}</span>
-              <ArrowIcon />
-            </a>
-            <a className="home-link" href={resolveGuidedSampleHref(baseUrl, "apply")}>
-              <span>{localizer.message("ui.home.tryLink")}</span>
-              <ArrowIcon />
-            </a>
-          </div>
         </div>
         <div className="home-loom">
           <div className="home-loom-frame">
@@ -138,7 +128,8 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         </div>
       </div>
 
-      <div className="home-wrap home-section">
+      <section aria-labelledby="home-webapp-title" className="home-wrap home-section home-webapp">
+        <h2 id="home-webapp-title">{localizer.message("ui.home.webapp")}</h2>
         <div className="home-flows">
           {flows.map((flow) => (
             <a className={flow.primary ? "home-flow is-primary" : "home-flow"} href={flow.href} key={flow.title}>
@@ -150,10 +141,20 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             </a>
           ))}
         </div>
-      </div>
+        <div className="home-links">
+          <a className="home-link" href={`${route("docs")}/supported-formats`}>
+            <span>{localizer.message("ui.home.formatsEyebrow")}</span>
+            <ArrowIcon />
+          </a>
+          <a className="home-link" href={resolveGuidedSampleHref(baseUrl, "apply")}>
+            <span>{localizer.message("ui.home.tryLink")}</span>
+            <ArrowIcon />
+          </a>
+        </div>
+      </section>
 
-      <div className="home-wrap home-section home-cli" id="home-cli">
-        <h2>{localizer.message("ui.home.commandLine")}</h2>
+      <section aria-labelledby="home-cli-title" className="home-wrap home-section home-cli" id="home-cli">
+        <h2 id="home-cli-title">{localizer.message("ui.home.commandLine")}</h2>
         <div className="home-actions">
           <a className="btn ghost" href={`${route("docs")}/install`}>
             {localizer.message("ui.home.fullInstallGuide")}
@@ -166,7 +167,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             {localizer.message("ui.home.selfHostingGuide")}
           </a>
         </div>
-      </div>
+      </section>
 
       <div className="home-wrap home-section home-details">
         <p>{localizer.message("ui.home.filesStay")}</p>
