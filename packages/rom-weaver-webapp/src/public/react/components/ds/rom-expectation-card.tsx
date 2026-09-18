@@ -249,6 +249,14 @@ const releaseComponentName = (component: ParsedIdentifyExpectedComponent) => {
 /* Expected checksums stay inside the release's one button. ChecksumRow is a
    button of its own, so using it here would create nested controls. */
 const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedComponent[] | undefined }) => {
+  const localizer = useUiLocalizer();
+  const hasUnheaderedNes = components?.some((component) => /\.unh$/iu.test(component.filename || ""));
+  const componentName = (component: ParsedIdentifyExpectedComponent) => {
+    if (/\.unh$/iu.test(component.filename || "")) return localizer.message("ui.identify.unheaderedRom");
+    if (hasUnheaderedNes && /\.nes$/iu.test(component.filename || ""))
+      return localizer.message("ui.identify.headeredRom");
+    return releaseComponentName(component);
+  };
   const available = (components || [])
     .map((component) => ({
       component,
@@ -267,8 +275,8 @@ const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedCo
           className="identify-search-result-component"
           key={`${component.ordinal}/${component.filename || component.role}`}
         >
-          {hasMultipleComponents ? (
-            <span className="identify-search-result-component-name">{releaseComponentName(component)}</span>
+          {hasMultipleComponents || hasUnheaderedNes ? (
+            <span className="identify-search-result-component-name">{componentName(component)}</span>
           ) : null}
           <span className="identify-search-result-checksum-values">
             {checksums.map(([algorithm, value]) => (

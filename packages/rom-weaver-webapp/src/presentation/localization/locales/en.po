@@ -3721,3 +3721,13 @@ msgstr "ZIP"
 #: src/presentation/localization/messages.ts
 msgid "settings.zipCodec"
 msgstr "ZIP codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.headeredRom"
+msgstr "Headered ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.unheaderedRom"
+msgstr "Unheadered ROM"

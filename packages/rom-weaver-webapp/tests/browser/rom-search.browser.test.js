@@ -259,6 +259,55 @@ test("a title with one release stays selectable", async () => {
   expect(document.querySelector("#rom-weaver-bundle-rom-expectation").textContent).toContain("Metroid Fusion (USA)");
 });
 
+test("a NES release names its header variants without showing the DAT extension", async () => {
+  const title = {
+    name: "Super Mario Bros.",
+    platform: "Nintendo - Nintendo Entertainment System",
+    slug: "nintendo-nintendo-entertainment-system",
+  };
+  const release = match("Super Mario Bros. (USA)", {
+    expectedComponents: [
+      { crc32: "abcd1234", filename: "Super Mario Bros. (USA).unh", ordinal: 0, size: 40960 },
+      { crc32: "deadbeef", filename: "Super Mario Bros. (USA).nes", ordinal: 1, size: 40976 },
+    ],
+    platform: title.platform,
+  });
+  searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [title] });
+  searchExpectedRomByName.mockResolvedValue({ matches: [release], status: "matched" });
+
+  submit("mario");
+  await waitFor(() => getResults().length === 1);
+  await page.getByRole("button", { name: /Super Mario Bros\./u }).click();
+  await waitFor(() => getResults()[0]?.includes("Unheadered ROM"));
+
+  expect(getResults()).toHaveLength(1);
+  expect(getResults()[0]).toContain("Headered ROM");
+  expect(getResults()[0]).toContain("abcd1234");
+  expect(getResults()[0]).toContain("deadbeef");
+  expect(getResults()[0]).not.toContain(".unh");
+  expect(getResults()[0]).not.toContain(".nes");
+
+  const previousTheme = document.documentElement.getAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme", "dark");
+  await page.viewport(390, 844);
+  try {
+    const button = document.querySelector(".identify-search-result-btn--version");
+    for (const label of button.querySelectorAll(".identify-search-result-component-name")) {
+      const bounds = label.getBoundingClientRect();
+      expect(bounds.right).toBeLessThanOrEqual(button.getBoundingClientRect().right);
+      expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth + 1);
+    }
+    await page.screenshot({ path: "../../../../dist/ui-verify/rom-header-variants-dark-chromium-390.png" });
+    await page.getByRole("button", { name: /Unheadered ROM/u }).click();
+    await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
+    expect(document.querySelector("#rom-weaver-bundle-rom-expectation").textContent).toContain("Super Mario Bros.");
+  } finally {
+    if (previousTheme === null) document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", previousTheme);
+    await page.viewport(1280, 900);
+  }
+});
+
 test("a checksum lists releases before the user selects one", async () => {
   lookupExpectedRom.mockResolvedValue({ matches: [FUSION_USA], status: "matched" });
 
