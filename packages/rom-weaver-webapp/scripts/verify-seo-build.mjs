@@ -190,7 +190,7 @@ assertIncludes(homeHtml, "Your ROMs. Your changes.", "home headline");
 // The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");
-assertIncludes(homeHtml, 'class="home-flow is-primary" href="/apply-patches"', "home Apply Patches card");
+assertIncludes(homeHtml, 'class="btn primary lg" href="/apply-patches"', "home Apply action");
 assertIncludes(homeHtml, 'href="/create-patch"', "home Create card");
 assertIncludes(homeHtml, 'href="/docs/supported-formats"', "home formats reference link");
 // Home is the only current Project destination on the landing page.

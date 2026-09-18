@@ -585,7 +585,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "Cargo, cargo-binstall, and mise install the executable alone, so they need rom-weaver setup to download the identify and cheat databases. Every install method, with checksums and shell completions, is in the install guide.",
   }),
-  "ui.home.cliItem1": msg({ id: "ui.home.cliItem1", message: "Native builds for Linux, macOS, and Windows." }),
+  "ui.home.cliItem1": msg({
+    id: "ui.home.cliItem1",
+    message: "Install with npm, Homebrew, Cargo, or Docker for scripts and batch jobs.",
+  }),
   "ui.home.cliItem2": msg({
     id: "ui.home.cliItem2",
     message: "Every command can print line-delimited JSON for scripts.",
@@ -639,7 +642,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.home.flowTestGet",
     message: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
   }),
-  "ui.home.formatsEyebrow": msg({ id: "ui.home.formatsEyebrow", message: "What it reads and writes" }),
+  "ui.home.formatsEyebrow": msg({ id: "ui.home.formatsEyebrow", message: "See what’s supported" }),
   "ui.home.formatsTitle": msg({
     id: "ui.home.formatsTitle",
     message: "Every console generation brought its own format. Bring all of them.",
@@ -653,15 +656,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.home.frontendsTitle",
     message: "The same Rust core, in a tab or in a shell.",
   }),
-  "ui.home.fullInstallGuide": msg({ id: "ui.home.fullInstallGuide", message: "Full install guide" }),
+  "ui.home.fullInstallGuide": msg({ id: "ui.home.fullInstallGuide", message: "Other install methods" }),
   "ui.home.fullTable": msg({ id: "ui.home.fullTable", message: "full table" }),
   "ui.home.get": msg({ id: "ui.home.get", message: "Get" }),
   "ui.home.installCli": msg({ id: "ui.home.installCli", message: "Install the CLI" }),
   "ui.home.installWith": msg({ id: "ui.home.installWith", message: "Install with one of" }),
   "ui.home.lede": msg({
     id: "ui.home.lede",
-    message:
-      "Apply translations, combine patches, and create patches of your own. Work with ROMs and disc images, compressed or raw, in your browser or terminal. Save your patch order and checksums in a reusable bundle so others can apply the same changes.",
+    message: "Apply one or more patches to your ROMs and disc images, compressed or raw.",
   }),
   "ui.home.localFirstEyebrow": msg({ id: "ui.home.localFirstEyebrow", message: "Why local-first" }),
   "ui.home.localFirstTitle": msg({
@@ -703,7 +705,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: ": a tiny homebrew NES ROM and two patches, already in order.",
   }),
   "ui.home.tryBefore": msg({ id: "ui.home.tryBefore", message: "New here?" }),
-  "ui.home.tryLink": msg({ id: "ui.home.tryLink", message: "Walk through the sample" }),
+  "ui.home.tryLink": msg({ id: "ui.home.tryLink", message: "Walk through a sample" }),
   "ui.home.webappFoot": msg({
     id: "ui.home.webappFoot",
     message: "Want your own copy? Host it yourself from static files or a Docker image.",
@@ -726,11 +728,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.workflowsDescription": msg({
     id: "ui.home.workflowsDescription",
-    message:
-      "Every workflow takes files you already have and gives back one file you can keep, share, or play. A bundle is how a workflow itself gets shared.",
+    message: "Create patches, share reusable bundles, and test ROMs in your browser.",
   }),
   "ui.home.workflowsEyebrow": msg({ id: "ui.home.workflowsEyebrow", message: "Pick a workflow" }),
-  "ui.home.workflowsTitle": msg({ id: "ui.home.workflowsTitle", message: "Start from the files on your disk." }),
+  "ui.home.workflowsTitle": msg({ id: "ui.home.workflowsTitle", message: "Other capabilities" }),
   "ui.home.writes": msg({ id: "ui.home.writes", message: "writes" }),
   "ui.output.applyDownload": msg({ id: "ui.output.applyDownload", message: "Apply & download" }),
   "ui.output.cancelApply": msg({ id: "ui.output.cancelApply", message: "Cancel applying" }),

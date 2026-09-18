@@ -95,9 +95,9 @@ The install scripts run the digest query against the file they just downloaded. 
 [Why an unanswered check installs anyway](../explanation/release-provenance.md#why-an-unanswered-check-installs-anyway) covers the reasoning behind that last row. Every refusal prints the way past it:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf \
+sh -c 'curl -fsSL \
   https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh |
-  ROM_WEAVER_SKIP_ATTESTATION=1 sh
+  ROM_WEAVER_SKIP_ATTESTATION=1 sh'
 ```
 
 The assignment belongs on `sh`, not on `curl`: putting it at the front of the pipeline sets it for the download and not for the script that reads the variable, so the install refuses again.

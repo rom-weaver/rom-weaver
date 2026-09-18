@@ -154,22 +154,40 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    const links = Array.from(container.querySelectorAll("a.home-flow")).map((link) => link.getAttribute("href"));
-    expect(links).toEqual(["/tools/apply-patches", "/tools/bundle-patches", "/tools/create-patch", "/tools/test-rom"]);
-    const flowHeadings = Array.from(container.querySelectorAll("a.home-flow h3")).map((heading) => heading.textContent);
-    expect(flowHeadings[0]).toContain("Apply Patches");
-    expect(flowHeadings[1]).toContain("Bundle Patches");
-    expect(flowHeadings[2]).toContain("Create Patch");
-    expect(flowHeadings[3]).toContain("Test ROM");
+    const links = Array.from(
+      container.querySelectorAll("a[href^='/tools/']:not([href*='/docs']):not([href*='?'])"),
+    ).map((link) => link.getAttribute("href"));
+    expect(links).toEqual(["/tools/apply-patches", "/tools/create-patch", "/tools/bundle-patches", "/tools/test-rom"]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
-    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Apply Patches");
-    expect(container.querySelectorAll(".home-flow")).toHaveLength(4);
+    expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
     expect(container.textContent).toContain("All on your device.");
+    expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
+    expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
     expect(
       Array.from(container.querySelectorAll(".home-install-code")).every(
         (code) => code instanceof HTMLTextAreaElement && code.readOnly,
       ),
     ).toBe(true);
+  });
+
+  it.each([
+    ["Windows NT 10.0", "Windows (PowerShell)", "install.ps1"],
+    ["Macintosh; Intel Mac OS X", "macOS / Linux", "install.sh"],
+    ["Linux x86_64", "macOS / Linux", "install.sh"],
+  ])("shows the installer for %s after hydration", (userAgent, label, script) => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
+    const page = (
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>
+    );
+    expect(renderToString(page)).toContain("install.sh");
+    const { container } = render(page);
+    const commands = container.querySelectorAll(".home-install-code");
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.getAttribute("aria-label")).toBe(label);
+    expect((commands[0] as HTMLTextAreaElement).value).toContain(script);
+    expect(container.querySelector(".home-install a")?.getAttribute("href")).toContain("/tools/docs/install#");
   });
 
   it("falls back to root-relative routes when the base URL is invalid", () => {
@@ -189,8 +207,7 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Deine ROMs. Deine Änderungen.");
-    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Patches anwenden");
-    expect(container.querySelectorAll("a.home-flow h3")[1]?.textContent).toContain("Patches bündeln");
+    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Patches anwenden");
     expect(container.textContent).toContain("Befehlszeile");
 
     rerender(
@@ -199,8 +216,7 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Tus ROM. Tus cambios.");
-    expect(container.querySelector("a.home-flow h3")?.textContent).toContain("Aplicar parches");
-    expect(container.querySelectorAll("a.home-flow h3")[1]?.textContent).toContain("Agrupar parches");
+    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Aplicar parches");
     expect(container.textContent).toContain("Línea de comandos");
   });
 });
