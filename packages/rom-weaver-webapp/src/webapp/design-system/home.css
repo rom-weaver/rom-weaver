@@ -1,6 +1,7 @@
 .rw-app .home-page {
   display: block;
   padding: 0;
+  container: home-page / inline-size;
 }
 .rw-app .home-wrap {
   width: 100%;
@@ -61,6 +62,9 @@
   color: var(--ink-2);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.rw-app .home-hero-capabilities {
+  display: none;
 }
 .rw-app .home-loom {
   display: block;
@@ -238,6 +242,20 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+@container home-page (min-width: 900px) {
+  .rw-app .home-hero-capabilities {
+    display: grid;
+    gap: 12px;
+    padding-block: 16px 0;
+    border-top: 1px solid var(--seam-soft);
+  }
+  .rw-app .home-hero-capabilities h2 {
+    font-size: 1.125rem;
+  }
+  .rw-app .home-webapp {
+    display: none;
+  }
 }
 @media (max-width: 639px) {
   .rw-app .home-hero {

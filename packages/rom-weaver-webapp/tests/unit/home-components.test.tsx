@@ -155,7 +155,10 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     const links = Array.from(
-      container.querySelectorAll("a[href^='/tools/']:not([href*='/docs']):not([href*='?'])"),
+      container.querySelectorAll(
+        ".home-main-actions a[href^='/tools/']:not([href*='/docs']):not([href*='?']), " +
+          ".home-webapp a[href^='/tools/']:not([href*='/docs']):not([href*='?'])",
+      ),
     ).map((link) => link.getAttribute("href"));
     expect(links).toEqual(["/tools/apply-patches", "/tools/create-patch", "/tools/bundle-patches", "/tools/test-rom"]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
@@ -163,6 +166,7 @@ describe("HomePage", () => {
     expect(container.textContent).toContain("All on your device.");
     expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
+    expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(4);
     expect(
       Array.from(container.querySelectorAll(".home-install-code")).every(
         (code) => code instanceof HTMLTextAreaElement && code.readOnly,
