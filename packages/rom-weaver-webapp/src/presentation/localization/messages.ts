@@ -656,7 +656,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.home.frontendsTitle",
     message: "The same Rust core, in a tab or in a shell.",
   }),
-  "ui.home.fullInstallGuide": msg({ id: "ui.home.fullInstallGuide", message: "Full install guide" }),
+  "ui.home.fullInstallGuide": msg({ id: "ui.home.fullInstallGuide", message: "Other install methods" }),
   "ui.home.fullTable": msg({ id: "ui.home.fullTable", message: "full table" }),
   "ui.home.get": msg({ id: "ui.home.get", message: "Get" }),
   "ui.home.installCli": msg({ id: "ui.home.installCli", message: "Install the CLI" }),

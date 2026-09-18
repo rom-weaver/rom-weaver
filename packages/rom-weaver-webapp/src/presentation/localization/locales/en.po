@@ -1506,7 +1506,7 @@ msgstr "Found by game name - add the ROM to verify it"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullInstallGuide"
-msgstr "Full install guide"
+msgstr "Other install methods"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
