@@ -82,7 +82,7 @@
       },
       {
         "name": "Apply",
-        "path": "/apply-patch/"
+        "path": "/apply-patches/"
       },
       {
         "name": "Create",
