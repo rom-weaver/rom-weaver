@@ -1,24 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-labelledby="title desc">
-  <title id="title">rom-weaver — A browser &amp; CLI toolkit for ROMs, patches, cheats, and game saves.</title>
-  <desc id="desc">The cartridge W logo and rom-weaver wordmark on a dark charcoal woven background.</desc>
-  <defs>
-    <pattern id="weave" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M0 8h32M0 24h32M8 0v32M24 0v32" fill="none" stroke="#f6ecda" opacity=".05"/>
-    </pattern>
-  </defs>
-  <rect width="1280" height="300" rx="20" fill="#28313b"/>
-  <path d="M960 0h300a20 20 0 0 1 20 20v260a20 20 0 0 1-20 20H960Z" fill="#0c0f13"/>
-  <path d="M960 0h300a20 20 0 0 1 20 20v260a20 20 0 0 1-20 20H960Z" fill="url(#weave)"/>
-  <path d="M0 276h960" stroke="#d9690f" stroke-width="4"/>
-  <g font-family="Arial, Helvetica, sans-serif">
-    <text x="68" y="126" fill="#edf0f5" font-size="100" font-weight="700" letter-spacing="-3">rom<tspan fill="#939cab" font-weight="400">-</tspan><tspan fill="#ef8534">weaver</tspan></text>
-    <text x="72" y="200" fill="#edf0f5" font-size="30" font-weight="600" letter-spacing="-.6">A browser &amp; CLI toolkit for ROMs,</text>
-    <text x="72" y="244" fill="#edf0f5" font-size="30" font-weight="600" letter-spacing="-.6">patches, cheats, and game saves.</text>
-    <text x="1120" y="264" fill="#f6ecda" font-size="24" text-anchor="middle">rom-weaver.com</text>
-  </g>
-  <svg x="1025" y="30" width="190" height="190" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-    <path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/>
-    <path fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/>
-  </svg>
-  <rect x="1" y="1" width="1278" height="298" rx="19" fill="none" stroke="#596674" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+<title id="title">rom-weaver — Desktop README banner (dark)</title>
+<desc id="desc">A browser &amp; CLI toolkit. Your ROM workflow. One toolkit. Patch, Compress, Extract, Convert, Cheats, Saves. 21 patch formats. CHD, RVZ and Z3DS; 7z and ZIP compression. Broad archive and disc-image extraction. Native CLI speed. Browser convenience. rom-weaver.com.</desc>
+<defs><pattern id="weave" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M0 8h32M0 24h32M8 0v32M24 0v32" fill="none" stroke="#f6ecda" stroke-width="1" opacity=".05"/></pattern></defs>
+<rect width="1280" height="300" rx="20" fill="#28313b"/>
+
+<rect x=".5" y=".5" width="1279" height="299" rx="19.5" fill="none" stroke="#4b5866" stroke-width="1"/>
+<text id="copy-1" x="44" y="33" font-family="Inter, Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#b3bbc8">A browser &amp; CLI toolkit</text>
+<text id="copy-2" x="1236" y="33" font-family="Inter, Arial, Helvetica, sans-serif" font-size="15" font-weight="400" fill="#b3bbc8" text-anchor="end">rom-weaver.com</text>
+<text id="wordmark" x="40" y="112" font-family="Inter Display, Inter, Arial, sans-serif" font-size="94" font-weight="700" letter-spacing="-3.008" fill="#edf0f5">rom<tspan fill="#939cab" font-weight="400">-</tspan><tspan fill="#ef8534">weaver</tspan></text>
+<text id="copy-3" x="44" y="157" font-family="Inter, Arial, Helvetica, sans-serif" font-size="26" font-weight="400" fill="#edf0f5" letter-spacing="-0.45">Your ROM workflow. One toolkit.</text>
+<text id="copy-4" x="44" y="192" font-family="Inter, Arial, Helvetica, sans-serif" font-size="20" font-weight="400" fill="#b3bbc8">Patch · Compress · Extract · Convert · Cheats · Saves</text>
+<text id="copy-5" x="806" y="132" font-family="Inter, Arial, Helvetica, sans-serif" font-size="18" font-weight="400" fill="#b3bbc8">Native CLI speed.</text>
+<text id="copy-6" x="806" y="159" font-family="Inter, Arial, Helvetica, sans-serif" font-size="18" font-weight="400" fill="#b3bbc8">Browser convenience.</text>
+<g id="original-cartridge-mark"><rect x="1092" y="64" width="144" height="144" rx="19" fill="#0c0f13"/><rect x="1092" y="64" width="144" height="144" rx="19" fill="url(#weave)"/>
+<svg x="1109.28" y="81.28" width="109.44" height="109.44" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/><path fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/></svg></g>
+<path d="M44 222H1236" fill="none" stroke="#46515d" stroke-width="1"/>
+<text id="patch-formats" x="44" y="262" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="400" fill="#edf0f5"><tspan fill="#ef8534" font-weight="650">21</tspan><tspan dx="7.699999999999999">patch formats</tspan></text>
+<text id="copy-7" x="442" y="249" font-family="Inter, Arial, Helvetica, sans-serif" font-size="21" font-weight="500" fill="#edf0f5">CHD · RVZ · Z3DS</text>
+<text id="copy-8" x="442" y="277" font-family="Inter, Arial, Helvetica, sans-serif" font-size="17" font-weight="400" fill="#b3bbc8">7z · ZIP compression</text>
+<text id="copy-9" x="846" y="249" font-family="Inter, Arial, Helvetica, sans-serif" font-size="21" font-weight="500" fill="#edf0f5">Broad archive &amp;</text>
+<text id="copy-10" x="846" y="277" font-family="Inter, Arial, Helvetica, sans-serif" font-size="17" font-weight="400" fill="#b3bbc8">disc-image extraction</text>
 </svg>
