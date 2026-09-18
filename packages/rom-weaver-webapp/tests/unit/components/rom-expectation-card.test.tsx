@@ -207,7 +207,7 @@ describe("RomSearch release choices", () => {
       ...overrides,
     }) as ReturnType<typeof useRomLookup>;
 
-  it("keeps release checksums collapsed until the row is expanded", () => {
+  it("shows release checksums with one list checkbox", () => {
     const choose = vi.fn();
     render(
       <RomSearch
@@ -246,11 +246,11 @@ describe("RomSearch release choices", () => {
     expect(choice.textContent).not.toContain("a1b2c3d4");
     expect(choice.textContent).toContain("disc-1.bin");
     expect(choice.textContent).toContain("Track 2");
-    const expand = screen.getByRole("button", { name: "Show checksums" });
-    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    const expand = screen.getByRole("checkbox", { name: "ui.identify.showChecksums" }) as HTMLInputElement;
+    expect(expand.checked).toBe(false);
     expect(choice.querySelectorAll("button")).toHaveLength(0);
     fireEvent.click(expand);
-    expect(expand.getAttribute("aria-expanded")).toBe("true");
+    expect(expand.checked).toBe(true);
     expect(screen.getByText("a1b2c3d4")).toBeTruthy();
     expect(screen.getByText("m".repeat(32))).toBeTruthy();
     expect(screen.getByText("s".repeat(40))).toBeTruthy();
@@ -310,7 +310,7 @@ describe("RomSearch release choices", () => {
       expect(choice.textContent).toContain(labels[0]);
       expect(choice.textContent).toContain(labels[1]);
     }
-    fireEvent.click(container.querySelector(".identify-search-result-checks-toggle") as HTMLButtonElement);
+    fireEvent.click(screen.getByRole("checkbox"));
     expect(container.textContent).toContain("CRC32abcd1234");
     if (filenames.length > 1) expect(container.textContent).toContain("CRC32deadbeef");
     fireEvent.click(choice);

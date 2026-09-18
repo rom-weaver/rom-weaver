@@ -124,7 +124,7 @@ test("one box takes a checksum or a name, with no platform to choose first", asy
 test("typing searches after a pause without submitting the form", async () => {
   searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [FUSION] });
   expect(getStatus()).toBeNull();
-  expect(getInput().enterKeyHint).toBe("search");
+  expect(getInput().getAttribute("enterkeyhint")).toBe("search");
   type(getInput(), "metroid gba");
   expect(getStatus().textContent).toBe("Searching…");
 
@@ -262,7 +262,12 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   expect(getResults()[0]).not.toContain("!");
   expect(getResults()[1]).toContain("Metroid Fusion (Europe)");
 
-  for (const toggle of document.querySelectorAll(".identify-search-result-checks-toggle")) toggle.click();
+  await page.getByRole("checkbox", { name: "Show checksums" }).click();
+  await waitFor(() => document.querySelectorAll(".identify-search-result-checksum").length === 4);
+  expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
+  await page.getByRole("checkbox", { name: "Show checksums" }).click();
+  await waitFor(() => document.querySelectorAll(".identify-search-result-checksum").length === 0);
+  await page.getByRole("checkbox", { name: "Show checksums" }).click();
   await waitFor(() => document.querySelectorAll(".identify-search-result-checksum").length === 4);
   host.style.width = "350px";
   for (const row of document.querySelectorAll(".identify-search-result")) {
@@ -302,7 +307,7 @@ test("a title with one release stays selectable", async () => {
 
   await waitFor(() => getResults().length === 1 && getResults()[0]?.includes("Metroid Fusion (USA)"));
   expect(getResults()[0]).not.toContain("d7ae93df");
-  await page.getByRole("button", { name: "Show checksums" }).click();
+  await page.getByRole("checkbox", { name: "Show checksums" }).click();
   expect(document.querySelector(".identify-search-result-checksum-details").textContent).toContain("d7ae93df");
   expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
   document.querySelector(".identify-search-result-btn").click();
@@ -339,7 +344,7 @@ test("a NES release names its header variants without showing the DAT extension"
   expect(getResults()[0]).not.toContain(".unh");
   expect(getResults()[0]).not.toContain(".nes");
 
-  await page.getByRole("button", { name: "Show checksums" }).click();
+  await page.getByRole("checkbox", { name: "Show checksums" }).click();
   expect(document.querySelector(".identify-search-result-checksum-details").textContent).toContain("abcd1234");
   expect(document.querySelector(".identify-search-result-checksum-details").textContent).toContain("deadbeef");
 

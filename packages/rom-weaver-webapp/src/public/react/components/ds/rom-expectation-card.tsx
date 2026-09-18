@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
@@ -343,9 +343,6 @@ const RomTitleRow = ({
   </div>
 );
 
-/* Release rows show component names without flooding the choice list with
- * hashes. The values stay behind the row's separate disclosure control so the
- * release button never contains another button. */
 const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedComponent[] | undefined }) => {
   const localizer = useUiLocalizer();
   const hasUnheaderedNes = components?.some((component) => /\.unh$/iu.test(component.filename || ""));
@@ -363,6 +360,7 @@ const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedCo
     .filter(({ hasChecksums }) => hasChecksums);
   if (!available.length) return null;
   const hasMultipleComponents = available.length > 1;
+  if (!(hasMultipleComponents || hasUnheaderedNes)) return null;
   return (
     <span className="identify-search-result-components">
       {available.map(({ component }) => (
@@ -423,26 +421,21 @@ const ReleaseChecksumDetails = ({ components }: { components: ParsedIdentifyExpe
   );
 };
 
-/* One release of a chosen title. The name leads; platform, region, revision,
-   and dump tags separate releases. The tags are decoded ("Verified dump", not
-   "!") so the kind of dump reads plainly; checksum values stay behind the
-   disclosure control while this button selects the release. */
 const RomVersionRow = ({
   buttonRef,
   id,
   match,
   onChoose,
   selected,
+  showChecksums,
 }: {
   buttonRef?: (button: HTMLButtonElement | null) => void;
   id?: string;
   match: ParsedIdentifyTitleMatch;
   onChoose: () => void;
   selected?: boolean;
+  showChecksums: boolean;
 }) => {
-  const localizer = useUiLocalizer();
-  const [checksumsOpen, setChecksumsOpen] = useState(false);
-  const checksumsId = useId();
   const dumpKinds = (match.dumpTags || []).filter((tag) => tag.trim()).map(identifyDumpTagLabel);
   const details = [match.region, match.revision, ...dumpKinds].filter(Boolean);
   return (
@@ -461,26 +454,7 @@ const RomVersionRow = ({
         </span>
         <ReleaseChecksums components={match.expectedComponents} />
       </button>
-      {match.expectedComponents?.some((component) =>
-        EXPECTED_ROM_CHECK_ORDER.some((algorithm) => component[algorithm]),
-      ) ? (
-        <>
-          <button
-            aria-controls={checksumsId}
-            aria-expanded={checksumsOpen}
-            className="identify-search-result-checks-toggle"
-            onClick={() => setChecksumsOpen((open) => !open)}
-            type="button"
-          >
-            {localizer.message(checksumsOpen ? "ui.identify.hideChecksums" : "ui.identify.showChecksums")}
-          </button>
-          {checksumsOpen ? (
-            <div id={checksumsId}>
-              <ReleaseChecksumDetails components={match.expectedComponents} />
-            </div>
-          ) : null}
-        </>
-      ) : null}
+      {showChecksums ? <ReleaseChecksumDetails components={match.expectedComponents} /> : null}
     </div>
   );
 };
@@ -511,6 +485,7 @@ const RomSearch = ({
   variant?: "compact" | "hero" | "section";
 }) => {
   const [titlePage, setTitlePage] = useState({ titles: lookup.titles, count: 50 });
+  const [showChecksums, setShowChecksums] = useState(false);
   const visibleTitleCount = titlePage.titles === lookup.titles ? titlePage.count : 50;
   const inputId = `${idPrefix}-search`;
   const resultListId = `${inputId}-results`;
@@ -622,6 +597,16 @@ const RomSearch = ({
         </div>
       ) : null}
       {lookup.versions.length ? (
+        <label className="identify-search-checks-option">
+          <input
+            checked={showChecksums}
+            onChange={(event) => setShowChecksums(event.currentTarget.checked)}
+            type="checkbox"
+          />
+          {localizer.message("ui.identify.showChecksums")}
+        </label>
+      ) : null}
+      {lookup.versions.length ? (
         <div
           aria-label={localizer.message("ui.identify.versionResultsList")}
           className="identify-search-results"
@@ -638,6 +623,7 @@ const RomSearch = ({
               match={match}
               onChoose={() => lookup.choose(match)}
               selected={resultKind === "version" && boundedSelectedResult === index}
+              showChecksums={showChecksums}
             />
           ))}
         </div>

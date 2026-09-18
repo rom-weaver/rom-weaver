@@ -726,8 +726,12 @@
 .rw-app .identify-search-result {
   display: block;
 }
+.rw-app .identify-search-result + .identify-search-result {
+  border-block-start: 1px solid var(--seam-soft);
+}
 .rw-app .identify-search-result-btn {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-s);
   align-items: baseline;
   justify-content: flex-start;
@@ -745,22 +749,19 @@
 .rw-app .identify-search-result-btn--selected {
   background: var(--plate-2);
 }
-.rw-app .identify-search-result-btn--version {
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
 .rw-app .identify-search-result-name {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 .rw-app .identify-search-result-meta {
+  margin-inline-start: auto;
   font-size: 0.8rem;
   color: var(--ink-3);
 }
 .rw-app .identify-search-result-components {
-  display: grid;
-  flex: 1 0 100%;
-  gap: var(--sp-2xs);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
   min-width: 0;
 }
 .rw-app .identify-search-result-component {
@@ -768,7 +769,7 @@
   gap: var(--sp-2xs);
   min-width: 0;
 }
-.rw-app .identify-search-result-component + .identify-search-result-component {
+.rw-app .identify-search-result-checksum-details .identify-search-result-component + .identify-search-result-component {
   padding-block-start: var(--sp-2xs);
   border-block-start: 1px solid var(--seam);
 }
@@ -778,17 +779,18 @@
   color: var(--ink-2);
   overflow-wrap: anywhere;
 }
-.rw-app .identify-search-result-checks-toggle {
-  display: block;
-  width: 100%;
-  padding: var(--sp-2xs) var(--sp-s);
-  font-size: 0.78rem;
+.rw-app .identify-search-checks-option {
+  display: flex;
+  flex-basis: 100%;
+  gap: var(--sp-s);
+  align-items: center;
+  min-height: var(--ctl);
+  font-size: 0.8rem;
   color: var(--ink-3);
-  text-align: start;
   cursor: pointer;
-  background: color-mix(in oklab, var(--chassis) 55%, var(--well));
-  border: 0;
-  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .identify-search-checks-option input {
+  accent-color: var(--ink-2);
 }
 .rw-app .identify-search-result-checksum-details {
   display: grid;
@@ -822,16 +824,8 @@
   .rw-app .identify-search-result-btn:hover {
     background: var(--plate-2);
   }
-  .rw-app .identify-search-result-checks-toggle:hover {
-    color: var(--ink);
-    background: var(--plate-2);
-  }
 }
 /* Touch browsers get no hover, so the press itself supplies the feedback. */
 .rw-app .identify-search-result-btn:active {
-  background: var(--plate-2);
-}
-.rw-app .identify-search-result-checks-toggle:active {
-  color: var(--ink);
   background: var(--plate-2);
 }
