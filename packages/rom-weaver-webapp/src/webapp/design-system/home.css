@@ -24,7 +24,7 @@
 }
 .rw-app .home-hero {
   display: grid;
-  grid-template-areas: "copy";
+  grid-template-areas: "copy" "loom";
   gap: 16px;
   padding-block: 24px 32px;
 }
@@ -53,7 +53,7 @@
   color: var(--ink-2);
 }
 .rw-app .home-loom {
-  display: none;
+  display: block;
   grid-area: loom;
 }
 .rw-app .home-loom-frame {
@@ -126,9 +126,6 @@
     max-width: 28ch;
     font-size: 36px;
   }
-  .rw-app .home-loom {
-    display: block;
-  }
   .rw-app .home-loom-legend {
     grid-template-columns: 1fr;
   }
@@ -154,10 +151,39 @@
   font-size: 0.95rem;
   color: var(--ink-2);
 }
+.rw-app .home-installs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.rw-app .home-install {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+.rw-app .home-install > a {
+  width: fit-content;
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (min-width: 640px) {
+  .rw-app .home-installs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1000px) {
+  .rw-app .home-installs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 .rw-app .home-install-code {
   width: 100%;
-  max-width: 32em;
   padding: 12px;
+  overflow-x: auto;
   font: inherit;
   font-size: 0.875rem;
   color: var(--ink);
