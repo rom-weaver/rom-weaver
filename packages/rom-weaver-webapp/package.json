@@ -106,7 +106,7 @@
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.7.0",
-    "lucide-react": "1.45.0",
+    "lucide-react": "1.46.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -131,7 +131,7 @@
     "browserslist": "4.28.9",
     "cross-env": "10.1.0",
     "happy-dom": "20.14.5",
-    "jscpd": "5.2.0",
+    "jscpd": "5.2.1",
     "knip": "6.35.1",
     "lighthouse": "13.4.1",
     "marked": "18.0.13",
