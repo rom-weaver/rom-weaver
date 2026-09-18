@@ -399,6 +399,8 @@ Fixture description.
 
 [Install](../reference/cli.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
+[Source](../../crates/rom-weaver-patches/src/lib.rs)
+[Schema](../rom-weaver-bundle-v2.schema.json)
 ![Sample](../screenshots/first-sample-rom-world.webp)
 `,
     );
@@ -407,6 +409,10 @@ Fixture description.
     expect(route.html).toContain(
       'href="https://github.com/rom-weaver/rom-weaver/blob/main/docs/development/mobile-safari-verification.md"',
     );
+    expect(route.html).toContain(
+      'href="https://github.com/rom-weaver/rom-weaver/blob/main/crates/rom-weaver-patches/src/lib.rs"',
+    );
+    expect(route.html).toContain('href="/rom-weaver-bundle-v2.schema.json"');
     expect(route.html).toContain('src="/docs/screenshots/first-sample-rom-world.webp"');
   });
 

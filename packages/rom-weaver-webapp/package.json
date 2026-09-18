@@ -99,6 +99,7 @@
     "test:e2e:fast": "node scripts/run-e2e.mjs fast",
     "test:e2e:ios": "node scripts/start-ios-e2e.mjs",
     "test:e2e:nightly": "node scripts/run-e2e.mjs nightly",
+    "test:e2e:links": "node scripts/run-webapp-e2e.mjs --links",
     "test:e2e:webapp": "node scripts/run-webapp-e2e.mjs",
     "test:e2e:webapp:webkit": "cross-env ROM_WEAVER_BROWSER=webkit node scripts/run-webapp-e2e.mjs",
     "test:performance": "run-s --continue-on-error check:size audit:lighthouse",
