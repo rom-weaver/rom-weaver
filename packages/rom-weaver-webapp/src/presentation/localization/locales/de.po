@@ -3575,7 +3575,7 @@ msgstr "wird beim Anwenden überprüft"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.verified"
-msgstr "Geprüft: {input}"
+msgstr "Geprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

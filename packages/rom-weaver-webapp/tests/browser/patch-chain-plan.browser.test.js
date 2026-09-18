@@ -62,7 +62,7 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
 
   // The chain head verifies against the ROM; the dependent patch is deferred
   // with its link named - never dry-run against the wrong bytes.
-  await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified: game.bin");
+  await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified");
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply: chain-step-a.bps");
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
@@ -102,8 +102,8 @@ test("same-base patches all match the ROM and feed the Expected group without co
 
   // Both patches were authored against the base: each one verifies against
   // the ROM directly instead of chaining off its neighbor.
-  await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified: game.bin");
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified: game.bin");
+  await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified");
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
   expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
 
   // Their shared base expectation unions into the ROM card's Expected group
@@ -123,14 +123,14 @@ test("checksumless patches distinguish successful preflight from verified identi
   const passedChecks = () =>
     document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length;
   await expect.poll(passedChecks, { timeout: 60000 }).toBe(2);
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified: game.bin");
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 
 test("a patch input selector re-plans that patch", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified: game.bin");
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
 
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.value).toBe("auto");
@@ -149,7 +149,7 @@ test("a patch input selector re-plans that patch", async () => {
 
   // Return to automatic detection.
   setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "auto");
-  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Verified: game.bin");
+  await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Verified");
   expect(patchCheckHeadings(1)).toEqual([
     "Authored input checks: Original ROM (automatic)",
     "Embedded output checks: Standalone patch result",
@@ -165,7 +165,7 @@ test("a Previous basis pin reaches Apply execution", async () => {
     }),
   );
   await dropFixtures([RAW_ROM, CHAIN_A, SAME_BASE_D]);
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified: game.bin");
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
 
   // The sibling patch is base-authored. Pinning it to Previous must reach the
   // real apply command, which then checks it against patch 1's intermediate
