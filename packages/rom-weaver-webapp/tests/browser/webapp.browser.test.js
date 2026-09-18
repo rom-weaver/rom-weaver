@@ -472,10 +472,10 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(4);
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
   expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
-  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe("/docs/apply-rom-patches");
+  expect(document.querySelector(".sample-tutorial-start-guide")).toBeNull();
   expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
   expect(document.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();
@@ -571,11 +571,10 @@ test("the phone header carries device controls and project links, and Menu carri
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".shell-head-tools")).toBeTruthy();
-  // The footer is gone: project links and Docs stay in the header.
+  // The footer is gone: project links stay in the header and Docs stays in Menu.
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
-    "Docs",
     "View source on GitHub",
     "Support",
     document.querySelector(".desktop-runtime .sub-status").getAttribute("aria-label"),
@@ -583,7 +582,7 @@ test("the phone header carries device controls and project links, and Menu carri
     "Accent: Madder",
     "Settings",
   ]);
-  expect(document.querySelector('.shell-head-tools [aria-label="Docs"]')).toBeTruthy();
+  expect(document.querySelector('.shell-head-tools [aria-label="Docs"]')).toBeNull();
   for (const tile of tiles) expect(getComputedStyle(tile).display).not.toBe("none");
   for (const [label, href] of [
     ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],

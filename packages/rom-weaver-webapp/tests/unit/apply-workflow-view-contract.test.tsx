@@ -229,20 +229,20 @@ describe("apply workflow view - empty bench", () => {
   it.each([
     ["apply", "/apply-patch?guide=apply", "Start guided Apply"],
     ["bundle", "/bundle?guide=bundle", "Create a sharable bundle"],
-  ] as const)("offers the %s guide, documentation, and the test bundle download", (mode, href, label) => {
+  ] as const)("offers the %s guide and the test bundle download", (mode, href, label) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
-    expect(actions).toHaveLength(4);
+    expect(actions).toHaveLength(3);
     expect(actions[0].getAttribute("href")).toBe(href);
     expect(actions[0].textContent).toContain(label);
-    expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(
-      "/docs/apply-rom-patches",
-    );
+    expect(container.querySelector(".sample-tutorial-start-guide")).toBeNull();
     expect(container.querySelector(".sample-tutorial-start-download")?.getAttribute("href")).toContain(
       "first-weave.zip",
     );
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
+    if (mode === "bundle") expect(container.querySelector(".hero-guide")).toBeTruthy();
+    else expect(container.querySelector(".hero-guide")).toBeNull();
   });
 
   it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {

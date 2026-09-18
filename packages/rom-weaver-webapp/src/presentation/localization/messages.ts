@@ -1024,7 +1024,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle.",
   }),
-  "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
   "ui.hero.bundleDescription": msg({
     id: "ui.hero.bundleDescription",
     message: "Stage a ROM and its patches, describe the recipe, and share a reusable bundle.",

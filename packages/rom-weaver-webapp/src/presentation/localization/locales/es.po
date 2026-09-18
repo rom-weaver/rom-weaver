@@ -2570,11 +2570,6 @@ msgstr "Calidad"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyGuide"
-msgstr "Lee la guía de Apply"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.bundleGuide"
 msgstr "Lee la guía de Bundle"
 
