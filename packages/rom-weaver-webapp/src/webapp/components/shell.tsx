@@ -1151,7 +1151,7 @@ const Masthead = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const [docsExpanded, setDocsExpanded] = useState(true);
+  const [docsExpanded, setDocsExpanded] = useState(currentTab === "docs");
   useEffect(() => {
     if (currentTab === "docs" && docsSlug) setDocsExpanded(true);
   }, [currentTab, docsSlug]);
@@ -1416,9 +1416,11 @@ const Masthead = ({
         expanded: docsExpanded,
         onToggle: setDocsExpanded,
         children:
-          entry.id === "docs" && currentTab === "docs" ? (
+          entry.id === "docs" ? (
             <Suspense fallback={null}>
-              <DocsNavigationRoute currentSlug={docsSlug} onNavigate={onNavigate} />
+              {docsExpanded ? (
+                <DocsNavigationRoute currentSlug={currentTab === "docs" ? docsSlug : ""} onNavigate={onNavigate} />
+              ) : null}
             </Suspense>
           ) : undefined,
       })),

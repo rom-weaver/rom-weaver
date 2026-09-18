@@ -47,9 +47,6 @@ html:has(.docs-workbench) {
   margin: 2px 0 var(--sp-s) 12px;
   border-inline-start: 1px solid var(--seam);
 }
-.rw-app .nav-docs-entry {
-  grid-column: 1 / -1;
-}
 .rw-app .warp-rail-title {
   display: block;
   padding: var(--sp-m) 0 var(--sp-s) 1.15rem;

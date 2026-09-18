@@ -361,6 +361,9 @@
     color 0.18s,
     background 0.18s;
 }
+.rw-app .nav-docs-entry {
+  grid-column: 1 / -1;
+}
 .rw-app .nav-docs-summary {
   display: flex;
   align-items: center;

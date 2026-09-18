@@ -16,10 +16,10 @@ beforeAll(async () => {
   await Promise.all(DOC_ROUTES.map((route) => preloadDocsHtml(route.slug)));
 });
 
-const docsShell = (slug: string) => (
+const docsShell = (slug: string, currentTab = "docs") => (
   <RomWeaverSettingsProvider settings={{}}>
     <Masthead
-      currentTab="docs"
+      currentTab={currentTab}
       docsSlug={slug}
       homeHref="/"
       onSelectTab={() => undefined}
@@ -548,6 +548,25 @@ Fixture description.
     fireEvent.click(document.querySelector(".docs-contents-menu .warp-rail a") as HTMLElement);
     expect(document.querySelector(".docs-contents-menu")).toBeNull();
   });
+
+  it.each(["home", "patcher", "identify", "whats-new"])(
+    "expands Docs from %s without marking a guide current",
+    async (currentTab) => {
+      render(docsShell("docs", currentTab));
+      const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLDetailsElement;
+      expect(disclosure.open).toBe(false);
+      expect(disclosure.querySelector(".guide-nav")).toBeNull();
+      fireEvent.click(disclosure.querySelector("summary") as HTMLElement);
+      await vi.waitFor(() => expect(disclosure.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length));
+      expect(disclosure.querySelector('a[aria-current="page"]')).toBeNull();
+      fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+      const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLDetailsElement;
+      expect(phoneDisclosure.open).toBe(true);
+      fireEvent.click(phoneDisclosure.querySelector("summary") as HTMLElement);
+      await vi.waitFor(() => expect(disclosure.open).toBe(false));
+      expect(phoneDisclosure.open).toBe(false);
+    },
+  );
 
   it("collapses the complete Docs group and shares the choice with the phone menu", async () => {
     renderDocsShell("docs/cli");
