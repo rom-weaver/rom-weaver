@@ -3,7 +3,7 @@
   "version": "0.15.1",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
-  "description": "Offline ROM toolkit: patch, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry.",
+  "description": "A command-line ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. No telemetry.",
   "keywords": [
     "rom",
     "rom-hack",
