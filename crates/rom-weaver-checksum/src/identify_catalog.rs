@@ -168,7 +168,7 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         entry("Apple Macintosh", &["macintosh", "mac"]),
         entry(
             "Atari Jaguar CD Interactive Multimedia System",
-            &["jaguar cd", "ajcd"],
+            &["atari jaguar cd", "jaguar cd", "ajcd"],
         ),
         entry("Bandai Pippin", &["pippin"]),
         entry("Bandai Playdia Quick Interactive System", &["playdia"]),
@@ -192,12 +192,19 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         entry("Namco System 246", &["system 246"]),
         entry(
             "NEC PC Engine CD & TurboGrafx CD",
-            &["pc engine cd", "turbografx cd", "pce cd"],
+            &[
+                "pc engine cd",
+                "pcenginecd",
+                "pcecd",
+                "turbografx cd",
+                "tg-cd",
+                "pce cd",
+            ],
         ),
         entry("NEC PC-88 series", &["pc-88", "pc88"]),
         entry("NEC PC-98 series", &["pc-98", "pc98"]),
         entry("NEC PC-FX & PC-FXGA", &["pc-fx", "pcfx"]),
-        entry("Neo Geo CD", &["ngcd"]),
+        entry("Neo Geo CD", &["neo geo cd", "ngcd", "neogeocd", "neocd"]),
         entry("Nintendo GameCube", &["gamecube", "gc", "ngc"]),
         entry("Nintendo Wii", &["wii"]),
         entry("Palm OS", &["palm"]),
@@ -212,7 +219,12 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         entry("Sega Chihiro", &["chihiro"]),
         entry("Sega Dreamcast", &["dreamcast", "dc"]),
         entry("Sega Lindbergh", &["lindbergh"]),
-        entry("Sega Mega CD & Sega CD", &["mega cd", "sega cd", "mcd"]),
+        entry(
+            "Sega Mega CD & Sega CD",
+            &[
+                "mega cd", "megacd", "megacdjp", "sega cd", "segacd", "mcd", "scd",
+            ],
+        ),
         entry("Sega Naomi", &["naomi"]),
         entry("Sega Naomi 2", &["naomi 2", "naomi2"]),
         entry(
@@ -221,10 +233,13 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         ),
         entry("Sega RingEdge", &["ringedge"]),
         entry("Sega RingEdge 2", &["ringedge 2"]),
-        entry("Sega Saturn", &["saturn"]),
+        entry("Sega Saturn", &["saturn", "saturnjp", "ss"]),
         entry("Sharp X68000", &["x68000"]),
-        entry("Sony PlayStation", &["playstation", "psx", "ps1"]),
-        entry("Sony PlayStation 2", &["playstation 2", "ps2"]),
+        entry("Sony PlayStation", &["playstation", "psx", "ps1", "ps"]),
+        entry(
+            "Sony PlayStation 2",
+            &["playstation 2", "play station 2", "ps2"],
+        ),
         entry("Sony PlayStation 3", &["playstation 3", "ps3"]),
         entry(
             "Sony PlayStation Portable",
@@ -275,26 +290,34 @@ fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         }
     }
     vec![
-        entry("Atari 2600", &["2600", "atari vcs", "vcs"], "atari-2600"),
-        entry("Atari 5200", &["5200"], "atari-5200"),
-        entry("Atari 7800", &["7800"], "atari-7800"),
-        entry("Atari Lynx", &["lynx"], "atari-lynx"),
+        entry(
+            "Atari 2600",
+            &["2600", "atari vcs", "vcs", "atari2600"],
+            "atari-2600",
+        ),
+        entry("Atari 5200", &["5200", "atari5200"], "atari-5200"),
+        entry("Atari 7800", &["7800", "atari7800"], "atari-7800"),
+        entry("Atari Lynx", &["lynx", "atarilynx"], "atari-lynx"),
         entry("Neo Geo Pocket", &["ngp"], "neo-geo-pocket"),
         entry(
             "Neo Geo Pocket Color",
-            &["ngpc", "neo geo pocket colour"],
+            &["ngpc", "neo geo pocket color", "neo geo pocket colour"],
             "neo-geo-pocket-color",
         ),
-        entry("Nintendo 64", &["n64"], "nintendo-64"),
+        entry("Nintendo 64", &["n64", "n64dd", "64dd"], "nintendo-64"),
         entry(
             "Nintendo Entertainment System",
-            &["nes", "famicom", "nintendo famicom"],
+            &["nes", "famicom", "nintendo famicom", "fc"],
             "nintendo-entertainment-system",
         ),
-        entry("Nintendo Game Boy", &["gb", "gameboy"], "nintendo-game-boy"),
+        entry(
+            "Nintendo Game Boy",
+            &["gb", "gameboy", "sgb"],
+            "nintendo-game-boy",
+        ),
         entry(
             "Nintendo Game Boy Advance",
-            &["gba", "gameboy advance"],
+            &["gba", "gameboy advance", "ereader"],
             "nintendo-game-boy-advance",
         ),
         entry(
@@ -304,24 +327,65 @@ fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         ),
         entry(
             "Nintendo Super Nintendo Entertainment System",
-            &["snes", "super nintendo", "super nes", "super famicom"],
+            &[
+                "snes",
+                "sfc",
+                "sfam",
+                "satellaview",
+                "super nintendo",
+                "super nes",
+                "super famicom",
+                "sufami",
+                "sufami turbo",
+            ],
             "nintendo-super-nintendo-entertainment-system",
         ),
-        entry("Sega 32X", &["32x", "megadrive 32x"], "sega-32x"),
-        entry("Sega Game Gear", &["gg", "game gear"], "sega-game-gear"),
+        entry(
+            "Sega 32X",
+            &[
+                "32x",
+                "megadrive 32x",
+                "sega32",
+                "sega32x",
+                "sega32xjp",
+                "sega32xna",
+            ],
+            "sega-32x",
+        ),
+        entry(
+            "Sega Game Gear",
+            &["gg", "game gear", "gamegear"],
+            "sega-game-gear",
+        ),
         entry(
             "Sega Master System",
-            &["sms", "master system"],
+            &["sms", "master system", "mastersystem", "mark3", "ms"],
             "sega-master-system",
         ),
         entry(
             "Sega Mega Drive _ Genesis",
-            &["genesis", "mega drive", "megadrive", "sega genesis"],
+            &[
+                "genesis",
+                "mega drive",
+                "megadrive",
+                "megadrivejp",
+                "md",
+                "smd",
+                "sega genesis",
+            ],
             "sega-mega-drive-genesis",
         ),
         entry(
             "TurboGrafx-16_PC Engine",
-            &["tg16", "turbografx", "turbografx 16", "pc engine", "pce"],
+            &[
+                "tg16",
+                "turbografx",
+                "turbografx 16",
+                "pc engine",
+                "pcengine",
+                "pce",
+                "supergrafx",
+            ],
             "turbografx-16-pc-engine",
         ),
     ]
@@ -355,11 +419,11 @@ mod tests {
     fn parses_and_resolves_aliases_and_canonical_names() {
         let bytes = catalog_json(serde_json::json!([platform_json(
             "Sony PlayStation",
-            &["psx", "ps1"],
+            &["psx", "ps1", "ps"],
             "sony-playstation"
         )]));
         let catalog = IdentifyCatalog::parse(&bytes).expect("catalog parses");
-        for name in ["PSX", "ps1", "Sony PlayStation", "sony_playstation!"] {
+        for name in ["PSX", "ps1", "PS", "Sony PlayStation", "sony_playstation!"] {
             let entry = catalog.resolve_platform(name).expect("resolves");
             assert_eq!(entry.canonical_platform, "Sony PlayStation");
         }
@@ -412,18 +476,34 @@ mod tests {
     fn builtin_catalog_resolves_common_names() {
         let catalog = IdentifyCatalog::builtin();
         let cases = [
+            ("atari2600", "Atari 2600"),
             ("famicom", "Nintendo Entertainment System"),
+            ("fc", "Nintendo Entertainment System"),
+            ("n64dd", "Nintendo 64"),
+            ("64dd", "Nintendo 64"),
             (
                 "Super Famicom",
                 "Nintendo Super Nintendo Entertainment System",
             ),
+            ("sfc", "Nintendo Super Nintendo Entertainment System"),
+            ("sfam", "Nintendo Super Nintendo Entertainment System"),
             ("mega-drive", "Sega Mega Drive _ Genesis"),
             ("genesis", "Sega Mega Drive _ Genesis"),
+            ("megadrivejp", "Sega Mega Drive _ Genesis"),
+            ("md", "Sega Mega Drive _ Genesis"),
+            ("smd", "Sega Mega Drive _ Genesis"),
             ("PC Engine", "TurboGrafx-16_PC Engine"),
+            ("pcengine", "TurboGrafx-16_PC Engine"),
+            ("supergrafx", "TurboGrafx-16_PC Engine"),
+            ("sgb", "Nintendo Game Boy"),
+            ("ereader", "Nintendo Game Boy Advance"),
             ("gbc", "Nintendo Game Boy Color"),
+            ("gba", "Nintendo Game Boy Advance"),
             ("NGPC", "Neo Geo Pocket Color"),
             ("game gear", "Sega Game Gear"),
             ("Sega Master System", "Sega Master System"),
+            ("ms", "Sega Master System"),
+            ("sufami", "Nintendo Super Nintendo Entertainment System"),
         ];
         for (alias, canonical) in cases {
             let entry = catalog
@@ -505,10 +585,25 @@ mod tests {
 
         let cases = [
             ("PSX", "Sony PlayStation"),
+            ("ps1", "Sony PlayStation"),
+            ("PS", "Sony PlayStation"),
             ("ps2", "Sony PlayStation 2"),
+            ("play station 2", "Sony PlayStation 2"),
             ("dreamcast", "Sega Dreamcast"),
             ("Xbox 360", "Microsoft Xbox 360"),
+            ("xbox360", "Microsoft Xbox 360"),
             ("pc engine cd", "NEC PC Engine CD & TurboGrafx CD"),
+            ("pcenginecd", "NEC PC Engine CD & TurboGrafx CD"),
+            ("pcecd", "NEC PC Engine CD & TurboGrafx CD"),
+            (
+                "atari jaguar cd",
+                "Atari Jaguar CD Interactive Multimedia System",
+            ),
+            ("neogeocd", "Neo Geo CD"),
+            ("neocd", "Neo Geo CD"),
+            ("megacd", "Sega Mega CD & Sega CD"),
+            ("scd", "Sega Mega CD & Sega CD"),
+            ("saturnjp", "Sega Saturn"),
             ("3DO", "Panasonic 3DO Interactive Multiplayer"),
             ("Nintendo GameCube", "Nintendo GameCube"),
         ];

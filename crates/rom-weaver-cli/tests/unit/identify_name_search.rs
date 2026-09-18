@@ -150,9 +150,57 @@ fn title_scores_match_canonical_system_names_and_aliases() {
 
 #[test]
 fn title_scores_allow_system_only_and_typo_queries() {
-    let systems = ["Sony PlayStation", "playstation", "psx"];
+    let systems = [
+        "Sony PlayStation",
+        "playstation",
+        "psx",
+        "ps1",
+        "ps",
+        "Sony PlayStation 2",
+        "playstation 2",
+        "play station 2",
+        "ps2",
+    ];
     assert!(title_system_hit("playstation", "Final Fantasy VII", &systems).is_some());
+    assert!(title_system_hit("ps", "Final Fantasy VII", &systems).is_some());
     assert!(title_system_hit("final fantazy playstatoin", "Final Fantasy VII", &systems).is_some());
+    assert!(title_system_hit("play station 2", "Gran Turismo 4", &systems).is_some());
+}
+
+#[test]
+fn title_scores_common_cartridge_aliases() {
+    let systems = [
+        "Nintendo Entertainment System",
+        "nes",
+        "famicom",
+        "fc",
+        "Nintendo Super Nintendo Entertainment System",
+        "snes",
+        "sfc",
+        "sfam",
+        "Nintendo 64",
+        "n64",
+        "n64dd",
+        "Nintendo Game Boy Advance",
+        "game boy advance",
+        "gba",
+        "Nintendo GameCube",
+        "gamecube",
+        "gc",
+        "Sega Mega Drive _ Genesis",
+        "md",
+        "Sega Master System",
+        "ms",
+    ];
+    assert!(title_system_hit("nes", "Super Mario Bros.", &systems).is_some());
+    assert!(title_system_hit("fc", "Super Mario Bros.", &systems).is_some());
+    assert!(title_system_hit("sfc", "Super Mario World", &systems).is_some());
+    assert!(title_system_hit("n64dd", "Mario Kart 64", &systems).is_some());
+    assert!(title_system_hit("gba", "Pokemon Ruby", &systems).is_some());
+    assert!(title_system_hit("game boy advance", "Pokemon Ruby", &systems).is_some());
+    assert!(title_system_hit("gc", "The Wind Waker", &systems).is_some());
+    assert!(title_system_hit("md", "Sonic the Hedgehog", &systems).is_some());
+    assert!(title_system_hit("ms", "Alex Kidd", &systems).is_some());
 }
 
 #[test]

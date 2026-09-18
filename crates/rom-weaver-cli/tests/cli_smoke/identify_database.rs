@@ -192,7 +192,7 @@ fn playstation_database(temp: &TempDir, payload: &[u8], with_pack: bool) -> Path
         dir.join("catalog.json"),
         catalog_json(&[(
             "Sony PlayStation",
-            &["psx", "ps1"],
+            &["psx", "ps1", "ps"],
             "sony-playstation",
             "nointro-single-image-v1",
         )]),
@@ -276,7 +276,7 @@ fn identify_system_alias_routes_to_an_installed_rwfp1_pack() {
             "--input",
             temp.child("game.bin").path().to_str().expect("ROM path"),
             "--system",
-            "psx",
+            "ps",
             "--database-dir",
             dir.to_str().expect("dir path"),
             "--json",

@@ -773,16 +773,18 @@ fn identify_title_index_searches_system_names_and_aliases() {
         index.path(),
         serde_json::to_vec(&serde_json::json!({
             "format": "rom-weaver-identify-title-index-v1",
-            "packs": ["nes", "snes", "sony-playstation"],
+            "packs": ["nes", "snes", "sony-playstation", "sony-playstation-2"],
             "systems": [
-                ["Nintendo Entertainment System", "nes", "famicom"],
-                ["Nintendo Super Nintendo Entertainment System", "snes", "super nintendo", "super famicom"],
-                ["Sony PlayStation", "playstation", "psx"]
+                ["Nintendo Entertainment System", "nes", "famicom", "fc"],
+                ["Nintendo Super Nintendo Entertainment System", "snes", "sfc", "super nintendo", "super famicom"],
+                ["Sony PlayStation", "playstation", "psx", "ps1", "ps"],
+                ["Sony PlayStation 2", "playstation 2", "play station 2", "ps2"]
             ],
             "titles": [
                 ["Mario's Time Machine", [0, 1]],
                 ["Super Mario World", [1]],
-                ["Crash Bandicoot", [2]]
+                ["Crash Bandicoot", [2]],
+                ["Gran Turismo 4", [3]]
             ]
         }))
         .expect("index JSON"),
@@ -791,11 +793,19 @@ fn identify_title_index_searches_system_names_and_aliases() {
     for (query, expected_name, expected_slugs) in [
         ("mario snes", "Mario's Time Machine", vec!["snes"]),
         ("super famicom mario", "Super Mario World", vec!["snes"]),
+        ("fc mario", "Mario's Time Machine", vec!["nes"]),
         (
             "playstation crahs",
             "Crash Bandicoot",
             vec!["sony-playstation"],
         ),
+        ("ps crash", "Crash Bandicoot", vec!["sony-playstation"]),
+        (
+            "play station 2 gran turismo",
+            "Gran Turismo 4",
+            vec!["sony-playstation-2"],
+        ),
+        ("sfc", "Super Mario World", vec!["snes"]),
         ("snes", "Super Mario World", vec!["snes"]),
     ] {
         let output = command_stdout(
