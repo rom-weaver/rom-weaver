@@ -8,7 +8,7 @@ import {
   RomExpectationCard,
   RomSearch,
 } from "../../../src/public/react/components/ds/rom-expectation-card.tsx";
-import type { ParsedIdentifyResolution } from "../../../src/types/identify.ts";
+import type { ParsedIdentifyResolution, ParsedIdentifyTitleMatch } from "../../../src/types/identify.ts";
 import type { useRomLookup } from "../../../src/public/react/use-rom-lookup.ts";
 
 beforeAll(async () => {
@@ -98,6 +98,93 @@ describe("RomExpectationCard", () => {
     expect(rows(container).some((row) => row.includes("CRC32 abcd1234"))).toBe(true);
     expect(rows(container).some((row) => row.includes("BYTES 1024"))).toBe(true);
   });
+
+  it("opens both header variants on an identified ROM card", () => {
+    const { container } = render(
+      <RomExpectationCard
+        expectation={{ checks: { checksums: {} }, source: "name" }}
+        identification={matched([
+          {
+            crc32: "abcd1234",
+            filename: "Game.unh",
+            ordinal: 0,
+            size: 16384,
+          },
+          {
+            crc32: "deadbeef",
+            filename: "Game.nes",
+            ordinal: 1,
+            size: 16400,
+          },
+        ])}
+      />,
+    );
+
+    const groups = expectedGroups(container);
+    expect(groups).toHaveLength(0);
+    const heads = [...container.querySelectorAll(".ck-group-head")].map((head) => head.textContent);
+    expect(heads.some((head) => head?.startsWith("Unheadered ROM"))).toBe(true);
+    expect(heads.some((head) => head?.startsWith("Headered ROM"))).toBe(true);
+    expect(container.textContent).toContain("abcd1234");
+    expect(container.textContent).toContain("deadbeef");
+  });
+
+  it("keeps the authored size with the matching header variant", () => {
+    const { container } = render(
+      <RomExpectationCard
+        expectation={{ checks: { checksums: { crc32: "abcd1234" }, size: 1024 }, source: "bundle" }}
+        identification={matched([
+          { crc32: "abcd1234", filename: "Game.unh", ordinal: 0, size: 16384 },
+          { crc32: "deadbeef", filename: "Game.nes", ordinal: 1, size: 16400 },
+        ])}
+      />,
+    );
+
+    const groups = [...container.querySelectorAll<HTMLElement>(".ck-group")];
+    const unheadered = groups.find((group) =>
+      group.querySelector(".ck-group-head")?.textContent?.startsWith("Unheadered ROM"),
+    );
+    const headered = groups.find((group) =>
+      group.querySelector(".ck-group-head")?.textContent?.startsWith("Headered ROM"),
+    );
+    expect(rows(unheadered as ParentNode)).toContain("BYTES 1024");
+    expect(rows(headered as ParentNode)).toContain("BYTES 16400");
+  });
+
+  it("fills every component in a multi-track identified ROM card", () => {
+    const { container } = render(
+      <RomExpectationCard
+        expectation={{ checks: { checksums: {} }, source: "name" }}
+        identification={matched([
+          {
+            crc32: "11111111",
+            filename: "game (Track 1).bin",
+            ordinal: 0,
+            role: "data_track",
+            size: 2352,
+            track: 1,
+          },
+          {
+            crc32: "22222222",
+            filename: "game (Track 2).bin",
+            ordinal: 1,
+            role: "audio_track",
+            size: 4704,
+            track: 2,
+          },
+        ])}
+      />,
+    );
+
+    expect(expectedGroups(container)).toHaveLength(0);
+    const heads = [...container.querySelectorAll(".ck-group-head")].map((head) => head.textContent);
+    expect(heads.some((head) => head?.startsWith("game (Track 1).bin"))).toBe(true);
+    expect(heads.some((head) => head?.startsWith("game (Track 2).bin"))).toBe(true);
+    expect(container.textContent).toContain("11111111");
+    expect(container.textContent).toContain("22222222");
+    expect(container.textContent).toContain("2352");
+    expect(container.textContent).toContain("4704");
+  });
 });
 
 describe("RomSearch release choices", () => {
@@ -120,7 +207,7 @@ describe("RomSearch release choices", () => {
       ...overrides,
     }) as ReturnType<typeof useRomLookup>;
 
-  it("shows each available checksum and platform before a release is selected", () => {
+  it("shows release checksums with one list checkbox", () => {
     const choose = vi.fn();
     render(
       <RomSearch
@@ -156,16 +243,18 @@ describe("RomSearch release choices", () => {
 
     const choice = screen.getByRole("button", { name: /Game \(USA\)/u });
     expect(choice.textContent).toContain("Sony - PlayStation");
-    expect(choice.textContent).toContain("CRC32a1b2c3d4");
-    expect(choice.textContent).toContain(`MD5${"m".repeat(32)}`);
-    expect(choice.textContent).toContain(`SHA-1${"s".repeat(40)}`);
-    expect(choice.textContent).toContain(`SHA-256${"h".repeat(64)}`);
+    expect(choice.textContent).not.toContain("a1b2c3d4");
     expect(choice.textContent).toContain("disc-1.bin");
     expect(choice.textContent).toContain("Track 2");
-    expect(
-      [...choice.querySelectorAll(".identify-search-result-checksum-label")].map((label) => label.textContent),
-    ).toEqual(["CRC32", "MD5", "SHA-1", "SHA-256", "CRC32"]);
+    const expand = screen.getByRole("checkbox", { name: "ui.identify.showChecksums" }) as HTMLInputElement;
+    expect(expand.checked).toBe(false);
     expect(choice.querySelectorAll("button")).toHaveLength(0);
+    fireEvent.click(expand);
+    expect(expand.checked).toBe(true);
+    expect(screen.getByText("a1b2c3d4")).toBeTruthy();
+    expect(screen.getByText("m".repeat(32))).toBeTruthy();
+    expect(screen.getByText("s".repeat(40))).toBeTruthy();
+    expect(screen.getByText("h".repeat(64))).toBeTruthy();
     fireEvent.click(choice);
     expect(choose).toHaveBeenCalledOnce();
   });
@@ -178,7 +267,7 @@ describe("RomSearch release choices", () => {
       />,
     );
 
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
     expect((input as HTMLInputElement).disabled).toBe(false);
     expect(screen.getByRole("status").textContent).toBe("Searching…");
   });
@@ -215,12 +304,49 @@ describe("RomSearch release choices", () => {
       [...container.querySelectorAll(".identify-search-result-component-name")].map((element) => element.textContent),
     ).toEqual(labels);
     const choice = container.querySelector(".identify-search-result-btn") as HTMLButtonElement;
-    expect(choice.textContent).toContain("CRC32abcd1234");
+    expect(choice.textContent).not.toContain("abcd1234");
     expect(choice.textContent).not.toContain(".unh");
-    if (filenames.length > 1) expect(choice.textContent).toContain("CRC32deadbeef");
+    if (filenames.length > 1) {
+      expect(choice.textContent).toContain(labels[0]);
+      expect(choice.textContent).toContain(labels[1]);
+    }
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(container.textContent).toContain("CRC32abcd1234");
+    if (filenames.length > 1) expect(container.textContent).toContain("CRC32deadbeef");
     fireEvent.click(choice);
     expect(choose).toHaveBeenCalledWith(version);
     expect(version.expectedComponents.map((component) => component.filename)).toEqual(filenames);
+  });
+
+  it("starts on the first release and lets arrows move the Enter choice", () => {
+    const choose = vi.fn();
+    const versions: ParsedIdentifyTitleMatch[] = [
+      { algorithm: "name", database: "test", name: "First", platform: "NES", variant: "raw" },
+      { algorithm: "name", database: "test", name: "Second", platform: "NES", variant: "raw" },
+    ];
+    const { container } = render(
+      <RomSearch
+        localizer={{ message: (key: string) => key } as never}
+        lookup={lookup({ choose, text: "games", versions })}
+      />,
+    );
+
+    const input = container.querySelector<HTMLInputElement>(".identify-search-input");
+    if (!input) throw new Error("the search input is missing");
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>(".identify-search-result-btn--version")];
+    const options = [...container.querySelectorAll<HTMLElement>('[role="option"]')];
+    expect(buttons[0]?.getAttribute("aria-current")).toBe("true");
+    expect(buttons[1]?.getAttribute("aria-current")).toBeNull();
+    expect(options[0]?.getAttribute("aria-selected")).toBe("true");
+    expect(options[1]?.getAttribute("aria-selected")).toBe("false");
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(buttons[0]?.getAttribute("aria-current")).toBeNull();
+    expect(buttons[1]?.getAttribute("aria-current")).toBe("true");
+    expect(options[0]?.getAttribute("aria-selected")).toBe("false");
+    expect(options[1]?.getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(choose).toHaveBeenCalledWith(versions[1]);
   });
 });
 

@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
@@ -35,6 +35,13 @@ const orderExpectedAlgorithms = (checksums: Record<string, string>) =>
     (algorithm, index, all) => checksums[algorithm] && all.indexOf(algorithm) === index,
   );
 
+const releaseComponentName = (component: ParsedIdentifyExpectedComponent) => {
+  if (component.filename) return component.filename;
+  if (component.track !== undefined) return `Track ${component.track}`;
+  if (component.role) return component.role.replaceAll("_", " ");
+  return `Component ${component.ordinal + 1}`;
+};
+
 /* Rows for one checksum set. BYTES rides directly after CRC32: the two short
    ck-half rows must sit adjacent for the ckrows grid to pair them, matching the
    resolved ROM card. */
@@ -51,6 +58,73 @@ const ExpectedCheckRows = ({ checksums, size }: { checksums: Record<string, stri
         </Fragment>
       ))}
       {checksums.crc32 ? null : bytesRow}
+    </>
+  );
+};
+
+const componentChecksums = (component: ParsedIdentifyExpectedComponent): Record<string, string> =>
+  Object.fromEntries(
+    EXPECTED_ROM_CHECK_ORDER.flatMap((algorithm) => {
+      const value = component[algorithm];
+      return value ? [[algorithm, value]] : [];
+    }),
+  );
+
+const headerVariantComponents = (
+  identification: ParsedIdentifyResolution | undefined,
+): ParsedIdentifyExpectedComponent[] => {
+  if (identification?.status !== "matched") return [];
+  const components = identification.matches[0]?.expectedComponents || [];
+  const hasUnheadered = components.some((component) => /\.unh$/iu.test(component.filename || ""));
+  const hasHeadered = components.some((component) => /\.nes$/iu.test(component.filename || ""));
+  return hasUnheadered && hasHeadered
+    ? components.filter((component) => /\.(?:unh|nes)$/iu.test(component.filename || ""))
+    : [];
+};
+
+const expectedComponentName = (
+  component: ParsedIdentifyExpectedComponent,
+  localizer: ReturnType<typeof useUiLocalizer>,
+): string => {
+  if (/\.unh$/iu.test(component.filename || "")) return localizer.message("ui.identify.unheaderedRom");
+  if (/\.nes$/iu.test(component.filename || "")) return localizer.message("ui.identify.headeredRom");
+  return releaseComponentName(component);
+};
+
+const ExpectedComponentCheckGroups = ({
+  components,
+  database,
+  ownChecks,
+  ownSize,
+}: {
+  components: ParsedIdentifyExpectedComponent[];
+  database: string;
+  ownChecks: Record<string, string>;
+  ownSize?: number;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <>
+      {components.map((component) => {
+        const checksums = componentChecksums(component);
+        const ownsComponent = Object.entries(ownChecks).some(
+          ([algorithm, value]) => value && checksums[algorithm]?.toLowerCase() === value.toLowerCase(),
+        );
+        return (
+          <div className="ck-group" key={`${component.ordinal}/${component.filename || component.role}`}>
+            <div className="ck-group-head">
+              {expectedComponentName(component, localizer)}
+              <span className="ck-head-note">
+                {ownsComponent ? localizer.message("ui.sourceInfo.expected") : database}
+              </span>
+            </div>
+            <ExpectedCheckRows
+              checksums={ownsComponent ? { ...checksums, ...ownChecks } : checksums}
+              size={ownsComponent ? (ownSize ?? component.size) : component.size}
+            />
+          </div>
+        );
+      })}
     </>
   );
 };
@@ -151,8 +225,9 @@ const compareRomExpectation = (
  * patches-only bundle, a patch that declares its source ROM, or a checksum the
  * user pasted. Styled like the ROM card it becomes once the input lands; only
  * the meta note marks it expected. When the check identifies against the local
- * data the card is titled with that ROM and its ONE Expected group merges the
- * database's checksums and size into the check's own values.
+ * data the card is titled with that ROM and its Expected group merges the
+ * database's checksums and size into the check's own values. NES records with
+ * both header forms show one expected group for each form.
  */
 const RomExpectationCard = ({
   expectation,
@@ -185,6 +260,10 @@ const RomExpectationCard = ({
   // authored as an expectation, and it is the one the run will verify against.
   const merged = { ...database?.checksums, ...own };
   const mergedSize = expectation.checks?.size ?? database?.size;
+  const headerVariants = headerVariantComponents(identification);
+  const expectedComponents = identified?.expectedComponents || [];
+  const componentGroups =
+    headerVariants.length > 1 ? headerVariants : expectedComponents.length > 1 ? expectedComponents : [];
   // An identified title is a display name over the placeholder file name, so
   // the card reads like the ROM card it becomes once the file lands.
   const extractName = identification
@@ -204,7 +283,14 @@ const RomExpectationCard = ({
           label={localizer.message("ui.checks.title")}
           sublabel={localizer.message("ui.sourceInfo.expected")}
         >
-          {identified ? (
+          {componentGroups.length > 1 ? (
+            <ExpectedComponentCheckGroups
+              components={componentGroups}
+              database={identified?.database || localizer.message("ui.sourceInfo.identifyData")}
+              ownChecks={own}
+              ownSize={expectation.checks?.size}
+            />
+          ) : identified ? (
             <div className="ck-group">
               {/* The head note says who asserted the checks and which database
                   filled in the rest, so nobody reads a hint as a check. */}
@@ -228,27 +314,70 @@ const RomExpectationCard = ({
 
 /* One title from a name search, on one platform. The index holds base titles,
    so the platform is what separates two rows with the same name. */
-const RomTitleRow = ({ onChoose, title }: { onChoose: () => void; title: ExpectedRomTitle }) => (
-  <li className="identify-search-result">
-    <button className="identify-search-result-btn" onClick={onChoose} type="button">
+const RomTitleRow = ({
+  buttonRef,
+  id,
+  onChoose,
+  selected,
+  title,
+}: {
+  buttonRef?: (button: HTMLButtonElement | null) => void;
+  id?: string;
+  onChoose: () => void;
+  selected?: boolean;
+  title: ExpectedRomTitle;
+}) => (
+  <div aria-selected={Boolean(selected)} className="identify-search-result" id={id} role="option" tabIndex={-1}>
+    <button
+      aria-current={selected ? "true" : undefined}
+      className={`identify-search-result-btn${selected ? " identify-search-result-btn--selected" : ""}`}
+      onClick={onChoose}
+      ref={buttonRef}
+      type="button"
+    >
       <span className="identify-search-result-name">{title.name}</span>
       <span className="identify-search-result-meta">
         <PlatformName name={title.platform} />
       </span>
     </button>
-  </li>
+  </div>
 );
 
-const releaseComponentName = (component: ParsedIdentifyExpectedComponent) => {
-  if (component.filename) return component.filename;
-  if (component.track !== undefined) return `Track ${component.track}`;
-  if (component.role) return component.role.replaceAll("_", " ");
-  return `Component ${component.ordinal + 1}`;
+const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedComponent[] | undefined }) => {
+  const localizer = useUiLocalizer();
+  const hasUnheaderedNes = components?.some((component) => /\.unh$/iu.test(component.filename || ""));
+  const componentName = (component: ParsedIdentifyExpectedComponent) => {
+    if (/\.unh$/iu.test(component.filename || "")) return localizer.message("ui.identify.unheaderedRom");
+    if (hasUnheaderedNes && /\.nes$/iu.test(component.filename || ""))
+      return localizer.message("ui.identify.headeredRom");
+    return releaseComponentName(component);
+  };
+  const available = (components || [])
+    .map((component) => ({
+      component,
+      hasChecksums: EXPECTED_ROM_CHECK_ORDER.some((algorithm) => component[algorithm]),
+    }))
+    .filter(({ hasChecksums }) => hasChecksums);
+  if (!available.length) return null;
+  const hasMultipleComponents = available.length > 1;
+  if (!(hasMultipleComponents || hasUnheaderedNes)) return null;
+  return (
+    <span className="identify-search-result-components">
+      {available.map(({ component }) => (
+        <span
+          className="identify-search-result-component"
+          key={`${component.ordinal}/${component.filename || component.role}`}
+        >
+          {hasMultipleComponents || hasUnheaderedNes ? (
+            <span className="identify-search-result-component-name">{componentName(component)}</span>
+          ) : null}
+        </span>
+      ))}
+    </span>
+  );
 };
 
-/* Expected checksums stay inside the release's one button. ChecksumRow is a
-   button of its own, so using it here would create nested controls. */
-const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedComponent[] | undefined }) => {
+const ReleaseChecksumDetails = ({ components }: { components: ParsedIdentifyExpectedComponent[] | undefined }) => {
   const localizer = useUiLocalizer();
   const hasUnheaderedNes = components?.some((component) => /\.unh$/iu.test(component.filename || ""));
   const componentName = (component: ParsedIdentifyExpectedComponent) => {
@@ -267,9 +396,9 @@ const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedCo
     }))
     .filter(({ checksums }) => checksums.length);
   if (!available.length) return null;
-  const hasMultipleComponents = (components?.length || 0) > 1;
+  const hasMultipleComponents = available.length > 1;
   return (
-    <span className="identify-search-result-checks">
+    <div className="identify-search-result-checksum-details">
       {available.map(({ component, checksums }) => (
         <span
           className="identify-search-result-component"
@@ -288,22 +417,34 @@ const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedCo
           </span>
         </span>
       ))}
-    </span>
+    </div>
   );
 };
 
-/* One release of a chosen title. The name leads; platform, region, revision,
-   and dump tags separate releases. The tags are decoded ("Verified dump", not
-   "!") so the kind of dump reads as plainly as its checksums, which let the
-   user choose the exact dump before this one button selects it. */
-const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; onChoose: () => void }) => {
+const RomVersionRow = ({
+  buttonRef,
+  id,
+  match,
+  onChoose,
+  selected,
+  showChecksums,
+}: {
+  buttonRef?: (button: HTMLButtonElement | null) => void;
+  id?: string;
+  match: ParsedIdentifyTitleMatch;
+  onChoose: () => void;
+  selected?: boolean;
+  showChecksums: boolean;
+}) => {
   const dumpKinds = (match.dumpTags || []).filter((tag) => tag.trim()).map(identifyDumpTagLabel);
   const details = [match.region, match.revision, ...dumpKinds].filter(Boolean);
   return (
-    <li className="identify-search-result">
+    <div aria-selected={Boolean(selected)} className="identify-search-result" id={id} role="option" tabIndex={-1}>
       <button
-        className="identify-search-result-btn identify-search-result-btn--version"
+        aria-current={selected ? "true" : undefined}
+        className={`identify-search-result-btn identify-search-result-btn--version${selected ? " identify-search-result-btn--selected" : ""}`}
         onClick={onChoose}
+        ref={buttonRef}
         type="button"
       >
         <span className="identify-search-result-name">{displayTitle(match.name)}</span>
@@ -313,7 +454,8 @@ const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; o
         </span>
         <ReleaseChecksums components={match.expectedComponents} />
       </button>
-    </li>
+      {showChecksums ? <ReleaseChecksumDetails components={match.expectedComponents} /> : null}
+    </div>
   );
 };
 
@@ -343,14 +485,41 @@ const RomSearch = ({
   variant?: "compact" | "hero" | "section";
 }) => {
   const [titlePage, setTitlePage] = useState({ titles: lookup.titles, count: 50 });
+  const [showChecksums, setShowChecksums] = useState(false);
   const visibleTitleCount = titlePage.titles === lookup.titles ? titlePage.count : 50;
   const inputId = `${idPrefix}-search`;
+  const resultListId = `${inputId}-results`;
   const compact = variant === "compact";
   const searching = lookup.busy || lookup.pending;
   const searchingLabel = lookup.stage || localizer.message("ui.identify.searching");
   const chosen = lookup.title;
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const resultButtonsRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const resultKind = lookup.versions.length ? "version" : !chosen && lookup.titles.length ? "title" : "none";
+  const resultCount =
+    resultKind === "version"
+      ? lookup.versions.length
+      : resultKind === "title"
+        ? Math.min(lookup.titles.length, visibleTitleCount)
+        : 0;
+  const [selectedResult, setSelectedResult] = useState(0);
+  const boundedSelectedResult = resultCount ? Math.min(selectedResult, resultCount - 1) : 0;
+  useEffect(() => {
+    setSelectedResult((index) => (resultCount ? Math.min(index, resultCount - 1) : 0));
+  }, [resultCount]);
+  useEffect(() => {
+    resultButtonsRef.current[boundedSelectedResult]?.scrollIntoView?.({ block: "nearest" });
+  }, [boundedSelectedResult]);
+  const chooseSelectedResult = () => {
+    if (resultKind === "version") {
+      const match = lookup.versions[boundedSelectedResult];
+      if (match) lookup.choose(match);
+      return;
+    }
+    const title = lookup.titles[boundedSelectedResult];
+    if (title) void lookup.chooseTitle(title);
+  };
   useKeepInputVisible(inputRef, formRef);
   return (
     <form
@@ -362,6 +531,20 @@ const RomSearch = ({
         if (lookup.busy) return;
         void lookup.search();
       }}
+      onKeyDown={(event) => {
+        if (event.target !== inputRef.current) return;
+        if (searching || !resultCount) return;
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setSelectedResult((index) => (index + 1) % resultCount);
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setSelectedResult((index) => (index <= 0 ? resultCount - 1 : index - 1));
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          chooseSelectedResult();
+        }
+      }}
       ref={formRef}
     >
       <label className="identify-search-label" htmlFor={inputId}>
@@ -369,6 +552,10 @@ const RomSearch = ({
       </label>
       <div className="identify-search-row">
         <input
+          aria-activedescendant={resultCount ? `${resultListId}-${boundedSelectedResult}` : undefined}
+          aria-autocomplete="list"
+          aria-controls={resultCount ? resultListId : undefined}
+          aria-expanded={resultCount > 0}
           aria-invalid={lookup.error ? "true" : undefined}
           autoComplete="off"
           className="input identify-search-input"
@@ -376,9 +563,13 @@ const RomSearch = ({
           onChange={(event) => lookup.setText(event.currentTarget.value, (event.nativeEvent as InputEvent).isComposing)}
           onCompositionEnd={(event) => lookup.setText(event.currentTarget.value, false)}
           onCompositionStart={(event) => lookup.setText(event.currentTarget.value, true)}
+          onFocus={() => {
+            if (!(searching || resultCount)) void lookup.search();
+          }}
           enterKeyHint="search"
           placeholder={localizer.message("ui.identify.searchPlaceholder")}
           ref={inputRef}
+          role="combobox"
           spellCheck={false}
           type="text"
           value={lookup.text}
@@ -409,18 +600,57 @@ const RomSearch = ({
         </div>
       ) : null}
       {lookup.versions.length ? (
-        <ul aria-label={localizer.message("ui.identify.versionResultsList")} className="identify-search-results">
-          {lookup.versions.map((match) => (
-            <RomVersionRow key={versionKey(match)} match={match} onChoose={() => lookup.choose(match)} />
+        <label className="identify-search-checks-option">
+          <input
+            checked={showChecksums}
+            onChange={(event) => setShowChecksums(event.currentTarget.checked)}
+            type="checkbox"
+          />
+          {localizer.message("ui.identify.showChecksums")}
+        </label>
+      ) : null}
+      {lookup.versions.length ? (
+        <div
+          aria-label={localizer.message("ui.identify.versionResultsList")}
+          className="identify-search-results"
+          id={resultListId}
+          role="listbox"
+        >
+          {lookup.versions.map((match, index) => (
+            <RomVersionRow
+              buttonRef={(button) => {
+                resultButtonsRef.current[index] = button;
+              }}
+              id={`${resultListId}-${index}`}
+              key={versionKey(match)}
+              match={match}
+              onChoose={() => lookup.choose(match)}
+              selected={resultKind === "version" && boundedSelectedResult === index}
+              showChecksums={showChecksums}
+            />
           ))}
-        </ul>
+        </div>
       ) : null}
       {!chosen && lookup.titles.length ? (
-        <ul aria-label={localizer.message("ui.identify.titleResults")} className="identify-search-results">
-          {lookup.titles.slice(0, visibleTitleCount).map((title) => (
-            <RomTitleRow key={`${title.slug}/${title.name}`} onChoose={() => lookup.chooseTitle(title)} title={title} />
+        <div
+          aria-label={localizer.message("ui.identify.titleResults")}
+          className="identify-search-results"
+          id={resultListId}
+          role="listbox"
+        >
+          {lookup.titles.slice(0, visibleTitleCount).map((title, index) => (
+            <RomTitleRow
+              buttonRef={(button) => {
+                resultButtonsRef.current[index] = button;
+              }}
+              id={`${resultListId}-${index}`}
+              key={`${title.slug}/${title.name}`}
+              onChoose={() => lookup.chooseTitle(title)}
+              selected={resultKind === "title" && boundedSelectedResult === index}
+              title={title}
+            />
           ))}
-        </ul>
+        </div>
       ) : null}
       {!chosen && lookup.titles.length > visibleTitleCount ? (
         <button

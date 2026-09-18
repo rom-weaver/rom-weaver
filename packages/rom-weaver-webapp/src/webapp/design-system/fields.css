@@ -892,6 +892,12 @@
 .rw-app .bundle-rom-expectation {
   margin-block: 13px 10px;
 }
+.rw-app .bundle-rom-expectation:has(+ .identify-search--compact) {
+  margin-block-end: 0;
+}
+.rw-app .bundle-rom-expectation:has(+ .identify-search--compact) .card {
+  --card-end-radius: 0;
+}
 .rw-app .bundle-rom-expectation .card {
   background: color-mix(in oklab, var(--plate-2) 55%, var(--chassis));
   border-color: var(--seam-strong);

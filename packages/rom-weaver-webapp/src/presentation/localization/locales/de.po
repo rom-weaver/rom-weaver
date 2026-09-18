@@ -1585,6 +1585,11 @@ msgstr "Verstecke {count} weitere {count, plural, one {Variante} other {Variante
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hideChecksums"
+msgstr "Prüfsummen ausblenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.nav.homeShort"
 msgstr "Startseite"
 
@@ -2982,6 +2987,11 @@ msgstr "Zeige {count} weitere {count, plural, one {Variante} other {Varianten}}"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.showDetails"
 msgstr "Details zu {label} anzeigen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.showChecksums"
+msgstr "Prüfsummen anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -328,6 +328,35 @@ test("a pasted checksum raises the expected-ROM card without a file", async () =
   expect(host.textContent).toContain("Add the ROM to verify it");
 });
 
+test("a multi-component identified ROM fills every expected check group", async () => {
+  lookupExpectedRom.mockResolvedValue({
+    matches: [
+      {
+        ...gbaMatch("Disc Game (USA)"),
+        expectedComponents: [
+          { crc32: "11111111", filename: "disc (Track 1).bin", ordinal: 0, role: "data_track", size: 2352 },
+          { crc32: "22222222", filename: "disc (Track 2).bin", ordinal: 1, role: "audio_track", size: 4704 },
+        ],
+      },
+    ],
+    status: "matched",
+  });
+  await mountIdentifyForm();
+  setHashInput("abcd1234");
+  submitSearch();
+  await chooseRelease("Disc Game (USA)");
+  await waitFor(() => host.querySelector("#identify-container-expected-rom"));
+  const card = host.querySelector("#identify-container-expected-rom");
+  expect(card).not.toBeNull();
+
+  expect(card.textContent).toContain("disc (Track 1).bin");
+  expect(card.textContent).toContain("11111111");
+  expect(card.textContent).toContain("2352");
+  expect(card.textContent).toContain("disc (Track 2).bin");
+  expect(card.textContent).toContain("22222222");
+  expect(card.textContent).toContain("4704");
+});
+
 test("text that is not a checksum searches the titles, and no title is not an answer", async () => {
   searchExpectedRomTitles.mockResolvedValue({ status: "ok", titles: [] });
   await mountIdentifyForm();

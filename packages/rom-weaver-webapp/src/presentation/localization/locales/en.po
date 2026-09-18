@@ -1585,6 +1585,11 @@ msgstr "Hide {count} more {count, plural, one {variant} other {variants}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.hideChecksums"
+msgstr "Hide checksums"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.nav.homeShort"
 msgstr "Home"
 
@@ -2982,6 +2987,11 @@ msgstr "Show {count} more {count, plural, one {variant} other {variants}}"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.showDetails"
 msgstr "Show {label} details"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.showChecksums"
+msgstr "Show checksums"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

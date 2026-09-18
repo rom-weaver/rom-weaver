@@ -113,6 +113,49 @@ describe("identifyRom", () => {
     expect(result.status).toBe("matched");
   });
 
+  it("does not expose disc sheets as checksum-less ROM candidates", async () => {
+    const identification = { matches: [match("Disc Game")], status: "matched" };
+    ingest.mockResolvedValue({
+      outputs: [],
+      patchOutputs: [],
+      result: {
+        assets: [
+          {
+            checksumVariants: [],
+            checksums: {},
+            copiedInPlace: false,
+            fileName: "disc.cue",
+            identification,
+            kind: "cue",
+            memberPath: "Disc/disc.cue",
+            path: "/work/disc.cue",
+          },
+          {
+            checksumVariants: [{ algorithm: "crc32", value: "12345678" }],
+            checksums: { crc32: "12345678" },
+            copiedInPlace: false,
+            fileName: "track01.bin",
+            identification,
+            kind: "track",
+            memberPath: "Disc/track01.bin",
+            path: "/work/track01.bin",
+          },
+        ],
+      },
+    });
+
+    const result = await identifyRom(new Blob(["archive"]), "disc.zip");
+
+    expect(result.archiveName).toBe("disc.zip");
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]).toMatchObject({
+      checksums: { crc32: "12345678" },
+      checksumVariants: [{ algorithm: "crc32", value: "12345678" }],
+      path: "Disc/track01.bin",
+      status: "matched",
+    });
+  });
+
   it("reports ambiguous when a member resolves to several records", async () => {
     ingest.mockResolvedValue({
       outputs: [],

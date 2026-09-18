@@ -1355,6 +1355,10 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 .rw-app .needs-input:focus-visible {
   color: var(--ink-2);
 }
+.rw-app .needs-input:has(+ .identify-search--section) {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
 @media (hover: hover) {
   .rw-app .needs-input:hover {
     color: var(--ink-2);

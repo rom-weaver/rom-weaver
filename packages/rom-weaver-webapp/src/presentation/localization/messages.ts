@@ -1157,6 +1157,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.identify.versionResultsList": msg({ id: "ui.identify.versionResultsList", message: "Versions" }),
   "ui.identify.headeredRom": msg({ id: "ui.identify.headeredRom", message: "Headered ROM" }),
+  "ui.identify.hideChecksums": msg({ id: "ui.identify.hideChecksums", message: "Hide checksums" }),
+  "ui.identify.showChecksums": msg({ id: "ui.identify.showChecksums", message: "Show checksums" }),
   "ui.identify.unheaderedRom": msg({ id: "ui.identify.unheaderedRom", message: "Unheadered ROM" }),
   "ui.identify.versionsBack": msg({ id: "ui.identify.versionsBack", message: "Other games" }),
   "ui.identify.versionsNoMatch": msg({
