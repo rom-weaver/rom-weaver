@@ -819,6 +819,7 @@ function WebappRoot({
             channelBadge={CHANNEL_BADGE}
             confirmExternalNavigation={actions.onConfirmExternalNavigation}
             currentTab={notFound ? "" : state.currentView}
+            docsSlug={docsSlug}
             donateHref={DONATE_URL}
             githubHref={GITHUB_URL}
             onAccentChange={actions.onAccentChange}

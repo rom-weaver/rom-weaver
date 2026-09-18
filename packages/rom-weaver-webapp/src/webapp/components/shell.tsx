@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import type { IconNode } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { DocsNavigationRoute } from "../workflow-routes.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
@@ -93,6 +94,7 @@ type NavEntry = {
   /** Rendered but not shown: a beta row before the client setting is known. */
   hidden?: boolean;
   className?: string;
+  children?: ReactNode;
   current?: boolean;
   /** Opens in a new tab: the row keeps its href and takes the external guard. */
   external?: boolean;
@@ -237,7 +239,10 @@ const SideNav = ({
       <div className="nav-group" key={section.id}>
         <h2 className="nav-group-label">{section.title}</h2>
         {section.entries.map((entry) => (
-          <NavRow className="nav-row" entry={entry} idPrefix="tab-" key={entry.id} localizer={localizer} />
+          <div hidden={entry.hidden} key={entry.id}>
+            <NavRow className="nav-row" entry={entry} idPrefix="tab-" localizer={localizer} />
+            {entry.children}
+          </div>
         ))}
         {section.id === "device" ? appearance : null}
       </div>
@@ -345,13 +350,10 @@ const MenuSheet = ({
                 short enough to pair up and the whole index fits one screen. */}
                 <div className="nav-group-grid">
                   {section.entries.map((entry) => (
-                    <NavRow
-                      className="nav-row"
-                      entry={entry}
-                      key={entry.id}
-                      localizer={localizer}
-                      onNavigate={onClose}
-                    />
+                    <div className={entry.children ? "nav-docs-entry" : undefined} hidden={entry.hidden} key={entry.id}>
+                      <NavRow className="nav-row" entry={entry} localizer={localizer} onNavigate={onClose} />
+                      {entry.children}
+                    </div>
                   ))}
                   {section.id === "device" ? appearance : null}
                 </div>
@@ -1062,6 +1064,7 @@ const Masthead = ({
   onAccentChange,
   tabs,
   currentTab,
+  docsSlug = "docs",
   dirty,
   homeHref,
   onSelectTab,
@@ -1090,6 +1093,7 @@ const Masthead = ({
   onAccentChange?: (accent: string) => void;
   tabs: WorkflowTab[];
   currentTab: string;
+  docsSlug?: string;
   dirty?: boolean;
   /** Base URL of the app's Home route. */
   homeHref: string;
@@ -1385,6 +1389,19 @@ const Masthead = ({
     tabs,
   ]);
 
+  const withDocsNavigation = (navSections: NavSectionData[], onNavigate?: () => void): NavSectionData[] =>
+    navSections.map((section) => ({
+      ...section,
+      entries: section.entries.map((entry) => ({
+        ...entry,
+        children:
+          entry.id === "docs" && currentTab === "docs" ? (
+            <Suspense fallback={null}>
+              <DocsNavigationRoute currentSlug={docsSlug} onNavigate={onNavigate} />
+            </Suspense>
+          ) : undefined,
+      })),
+    }));
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
   // Docs and the landing page bring their own h1, so the brand steps down to a
@@ -1518,7 +1535,7 @@ const Masthead = ({
               appearance={appearanceTiles("rail", true)}
               localizer={localizer}
               navLabel={navLabel}
-              sections={sections}
+              sections={withDocsNavigation(sections)}
             />
           </aside>
         </div>
@@ -1599,10 +1616,13 @@ const Masthead = ({
         }}
         open={menuOpen}
         opened={menuMounted}
-        sections={[
-          ...sections.filter((section) => section.id !== "project"),
-          ...sections.filter((section) => section.id === "project"),
-        ]}
+        sections={withDocsNavigation(
+          [
+            ...sections.filter((section) => section.id !== "project"),
+            ...sections.filter((section) => section.id === "project"),
+          ],
+          closeMenu,
+        )}
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />

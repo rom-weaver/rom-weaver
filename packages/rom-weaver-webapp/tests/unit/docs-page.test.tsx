@@ -3,14 +3,36 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
+import { DocsNavigation, DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
+import { Masthead } from "../../src/webapp/components/shell.tsx";
+import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
 
 // Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
 // requires its HTML resolved first, exactly as the app preloads before mount.
 beforeAll(async () => {
+  await preloadWorkflowRoute("docs");
   await Promise.all(DOC_ROUTES.map((route) => preloadDocsHtml(route.slug)));
 });
+
+const renderDocsShell = (slug: string) =>
+  render(
+    <RomWeaverSettingsProvider settings={{}}>
+      <Masthead
+        currentTab="docs"
+        docsSlug={slug}
+        homeHref="/"
+        onSelectTab={() => undefined}
+        onOpenWhatsNew={() => undefined}
+        onOpenLog={() => undefined}
+        onOpenSettings={() => undefined}
+        onOpenStatus={() => undefined}
+        tabs={[{ id: "docs", group: "project", label: "Docs", href: "/docs", icon: <svg /> }]}
+      />
+      <DocsPage active slug={slug} />
+    </RomWeaverSettingsProvider>,
+  );
 
 const BUNDLE_GUIDE_ANCHORS = [
   "choose-what-to-include",
@@ -99,6 +121,16 @@ describe("DocsPage", () => {
     // doctoc's in-file table of contents is for GitHub; the rail replaces it here.
     expect(screen.queryByRole("heading", { name: "Table of contents" })).toBeNull();
   });
+
+  it.each(["docs/fix-permission-errors", "docs/rom-cheats"])(
+    "uses the whole article column for sectionless %s",
+    (slug) => {
+      render(<DocsPage active slug={slug} />);
+      expect(document.querySelector(".docs-layout-full")).toBeTruthy();
+      expect(document.querySelector(".docs-rails")).toBeNull();
+      expect(document.querySelector(".docs-trail")).toBeNull();
+    },
+  );
 
   it("marks the final section current when the document reaches its scroll limit", async () => {
     vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
@@ -390,9 +422,9 @@ Fixture description.
   });
 
   it("shelves every route and keeps disclosure choices between pages", async () => {
-    const { unmount } = render(<DocsPage active slug="docs/cli" />);
+    const { unmount } = render(<DocsNavigation currentSlug="docs/cli" />);
 
-    const nav = document.querySelector(".docs-rails .guide-nav");
+    const nav = document.querySelector(".guide-nav");
     expect(defaultShelfTitle).toBe("Start here");
     expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual(
       shelfTitles,
@@ -402,21 +434,28 @@ Fixture description.
     expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
     expect(nav?.querySelector('a[aria-current="page"]')?.textContent).toBe("CLI reference");
     const shelves = [...(nav?.querySelectorAll<HTMLDetailsElement>(".guide-shelf") ?? [])];
-    expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title === defaultShelfTitle));
+    await vi.waitFor(() => expect(shelfFor(shelves, routeFor("docs/cli").group)?.open).toBe(true));
     const hostingShelf = shelfFor(shelves, routeFor("docs/self-hosting").group);
     fireEvent.click(hostingShelf?.querySelector("summary") as HTMLElement);
     expect(hostingShelf?.open).toBe(true);
 
     unmount();
-    render(<DocsPage active slug="docs/privacy" />);
+    render(<DocsNavigation currentSlug="docs/privacy" />);
     await vi.waitFor(() => {
-      const currentShelves = [...document.querySelectorAll<HTMLDetailsElement>(".docs-rails .guide-shelf")];
+      const currentShelves = [...document.querySelectorAll<HTMLDetailsElement>(".guide-shelf")];
       const openTitles = new Set(
         currentShelves
           .filter((shelf) => shelf.open)
           .map((shelf) => shelf.querySelector(".guide-shelf-title")?.textContent),
       );
-      expect(openTitles).toEqual(new Set([defaultShelfTitle, routeFor("docs/self-hosting").group]));
+      expect(openTitles).toEqual(
+        new Set([
+          defaultShelfTitle,
+          routeFor("docs/cli").group,
+          routeFor("docs/privacy").group,
+          routeFor("docs/self-hosting").group,
+        ]),
+      );
     });
   });
 
@@ -434,7 +473,7 @@ Fixture description.
     render(<DocsPage active slug="docs" />);
 
     const index = document.querySelector(".docs-index");
-    expect(screen.getAllByRole("combobox", { name: "Search documentation" })).toHaveLength(2);
+    expect(screen.queryByRole("combobox", { name: "Search documentation" })).toBeNull();
     expect(index?.querySelector('a[href="/docs/get-started"]')?.textContent).toContain(
       "Apply your first patch (browser)",
     );
@@ -463,32 +502,24 @@ Fixture description.
     }
   });
 
-  it("fuzzy-searches guide text and links directly to the matching section", async () => {
-    render(<DocsPage active slug="docs" />);
-
-    const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
+  it("searches guide text through Find and links to the matching section", async () => {
+    renderDocsShell("docs");
+    expect(document.querySelector(".docs-rails .guide-nav")).toBeNull();
+    expect(document.querySelectorAll(".side-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+    fireEvent.click(document.querySelector(".topbar-find") as HTMLElement);
+    const input = document.querySelector(".find-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "checksumm warning" } });
-
-    const section = routeFor("docs/fix-checksum-errors").sections.find(
-      (entry) => entry.id === "what-does-the-warning-mean",
-    );
-    expect(section).toBeTruthy();
-    // The search index is a lazy chunk fetched on the first keystroke, so the
-    // results fill in once it lands.
     await vi.waitFor(() =>
       expect(
-        document.querySelector<HTMLAnchorElement>(
-          `.docs-search-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#${section?.id}"]`,
+        document.querySelector(
+          '.find-results a[href^="/docs/fix-checksum-errors?highlight="][href$="#what-does-the-warning-mean"]',
         ),
       ).toBeTruthy(),
     );
-    expect(screen.getByRole("status").textContent).toMatch(/result/);
-
     fireEvent.keyDown(input, { key: "ArrowDown" });
     expect(input.getAttribute("aria-activedescendant")).toBeTruthy();
     fireEvent.keyDown(input, { key: "Escape" });
-    expect((input as HTMLInputElement).value).toBe("");
-    expect(document.querySelector(".guide-shelf")).toBeTruthy();
+    expect(document.querySelector(".find-palette")).toBeNull();
   });
 
   it("plays the page turn only after the reader changes guide", () => {
@@ -501,59 +532,53 @@ Fixture description.
     expect(document.querySelector(".docs-article")?.getAttribute("data-page-turn")).toBe("true");
   });
 
-  it("opens this guide's outline and every guide from the phone trail", () => {
+  it("opens only this guide's outline from the phone trail", () => {
     render(<DocsPage active slug="docs/cli" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Contents" }));
-
+    const contents = screen.getByRole("button", { name: "On this page" });
+    fireEvent.click(contents);
     const menu = document.querySelector(".docs-contents-menu");
     expect(menu?.querySelector(".warp-rail")).toBeTruthy();
-    expect(menu?.querySelectorAll(".guide-nav .guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
-    expect(menu?.querySelector('.guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
-    const contents = screen.getByRole("button", { name: "Contents" });
+    expect(menu?.querySelector(".guide-nav")).toBeNull();
     expect(contents.getAttribute("aria-expanded")).toBe("true");
-    expect(document.querySelector(".docs-trail input[aria-label='Search documentation']")).toBeTruthy();
-
+    expect(document.querySelector(".docs-trail input")).toBeNull();
     fireEvent.click(contents);
     expect(document.querySelector(".docs-contents-menu")).toBeNull();
     fireEvent.click(contents);
-
-    // Choosing a guide has to take the menu with it - the reader asked to leave.
-    fireEvent.click(document.querySelector(".docs-contents-menu .guide-nav .guide-nav-list a") as HTMLElement);
+    fireEvent.click(document.querySelector(".docs-contents-menu .warp-rail a") as HTMLElement);
     expect(document.querySelector(".docs-contents-menu")).toBeNull();
   });
 
-  it("shares search state with the mobile search", async () => {
-    render(<DocsPage active slug="docs" />);
-    const inputs = screen.getAllByRole("combobox", { name: "Search documentation" });
-    fireEvent.change(inputs.at(-1) as HTMLElement, { target: { value: "OPFS" } });
-
-    // The search index is a lazy chunk fetched on the first keystroke.
+  it("puts guides and Find in the phone navigation and closes it on a guide choice", async () => {
+    renderDocsShell("docs/cli");
+    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
     await vi.waitFor(() =>
-      expect(document.querySelectorAll(".docs-trail .docs-search-results a[href*='#']").length).toBeGreaterThan(0),
+      expect(document.querySelectorAll(".menu-sheet .guide-nav-list a")).toHaveLength(DOC_ROUTES.length),
     );
+    expect(document.querySelector('.menu-sheet .guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
+    fireEvent.click(document.querySelector(".menu-sheet .guide-nav-list a") as HTMLElement);
+    expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
+    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    fireEvent.click(document.querySelector(".menu-find") as HTMLElement);
+    expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
+    const input = document.querySelector(".find-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "OPFS" } });
+    await vi.waitFor(() => expect(document.querySelector('.find-results a[href*="highlight=OPFS"]')).toBeTruthy());
   });
 
-  it("highlights and centers the selected search term in its section", async () => {
+  it("highlights and centers a Find result in its section", async () => {
     const scrollIntoView = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
-    render(<DocsPage active slug="docs/apply-rom-patches" />);
-
-    const input = screen.getAllByRole("combobox", { name: "Search documentation" })[0] as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "Nintendo 64" } });
-    await vi.waitFor(
-      () =>
-        expect(
-          document.querySelector('.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]'),
-        ).toBeTruthy(),
-      { timeout: 10_000 },
-    );
-    const link = document.querySelector<HTMLAnchorElement>(
-      '.docs-search-results a[href*="apply-rom-patches"][href*="highlight="]',
-    );
-    fireEvent.click(link as HTMLAnchorElement);
-
-    await vi.waitFor(() => expect(document.querySelector("mark.docs-search-highlight")?.textContent).toBe("Nintendo"));
+    const slug = "docs/fix-checksum-errors";
+    const { rerender } = render(<DocsPage active slug={slug} />);
+    window.history.replaceState({}, "", `/${slug}?highlight=header#cartridge-header-differences`);
+    rerender(<DocsPage active slug={slug} />);
+    await vi.waitFor(() => expect(document.querySelector("mark.docs-search-highlight")?.textContent).toBe("header"));
+    const heading = document.getElementById("cartridge-header-differences");
+    expect(heading).toBeTruthy();
+    expect(
+      heading?.compareDocumentPosition(document.querySelector("mark.docs-search-highlight") as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" }));
   });
 

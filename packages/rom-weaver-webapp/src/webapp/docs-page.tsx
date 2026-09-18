@@ -1,22 +1,18 @@
 import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
-import type { DocSearchEntry } from "virtual:rom-weaver-docs-search";
 import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
-import { findSearchToken, searchDocs } from "./docs-search.mjs";
+import { findSearchToken } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { GITHUB_URL } from "./project-links.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 
 type DocRoute = (typeof DOC_ROUTES)[number];
-type DocSearchRoute = DocRoute & { searchEntries: readonly DocSearchEntry[] };
-type DocSearchResult = ReturnType<typeof searchDocs>[number];
 
 const logger = createLogger("docs-page");
 
@@ -190,24 +186,6 @@ const useDocsHtml = (slug: string, active: boolean): string | undefined => {
   return cached;
 };
 
-/** Joined once on demand: route metadata plus the prebuilt text entries of the lazy search chunk. */
-let docsSearchIndexPromise: Promise<readonly DocSearchRoute[]> | null = null;
-
-const loadDocsSearchIndex = (): Promise<readonly DocSearchRoute[]> => {
-  docsSearchIndexPromise ??= import("virtual:rom-weaver-docs-search").then(
-    ({ SEARCH_ENTRIES }) => DOC_ROUTES.map((route) => ({ ...route, searchEntries: SEARCH_ENTRIES[route.slug] ?? [] })),
-    (error) => {
-      // Cleared so the next search interaction retries the chunk.
-      docsSearchIndexPromise = null;
-      logger.warn("Docs search index failed to load", {
-        message: error instanceof Error ? error.message : String(error || ""),
-      });
-      throw error;
-    },
-  );
-  return docsSearchIndexPromise;
-};
-
 /**
  * True once the reader has changed guide at least once.
  *
@@ -283,117 +261,6 @@ const SectionRail = ({
   );
 };
 
-const DocsSearch = ({
-  onNavigate,
-  onSelect,
-  onQueryChange,
-  query,
-  results,
-}: {
-  onNavigate?: () => void;
-  onSelect?: (result: DocSearchResult, query: string) => void;
-  onQueryChange: (query: string) => void;
-  query: string;
-  results: readonly DocSearchResult[];
-}) => {
-  const inputId = useId();
-  const resultListId = `${inputId}-results`;
-  const statusId = `${inputId}-status`;
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const [open, setOpen] = useState(false);
-  const hasQuery = query.trim().length > 0;
-  const showResults = hasQuery && open;
-
-  useEffect(() => {
-    if (query !== "") setActiveIndex(-1);
-    if (query === "") setOpen(false);
-  }, [query]);
-
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onQueryChange("");
-      setOpen(false);
-      return;
-    }
-    if (!results.length) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((current) => (current + 1) % results.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIndex((current) => (current <= 0 ? results.length - 1 : current - 1));
-    } else if (event.key === "Enter" && activeIndex >= 0) {
-      event.preventDefault();
-      document.getElementById(`${resultListId}-${activeIndex}`)?.click();
-    }
-  };
-
-  return (
-    <div className="docs-search">
-      <input
-        aria-activedescendant={activeIndex >= 0 ? `${resultListId}-${activeIndex}` : undefined}
-        aria-controls={resultListId}
-        aria-describedby={statusId}
-        aria-expanded={showResults}
-        aria-label="Search documentation"
-        autoComplete="off"
-        className="input"
-        id={inputId}
-        onChange={(event) => {
-          setOpen(true);
-          onQueryChange(event.currentTarget.value);
-        }}
-        onKeyDown={onKeyDown}
-        onFocus={() => setOpen(true)}
-        placeholder="Search docs"
-        role="combobox"
-        type="search"
-        value={query}
-      />
-      {showResults ? (
-        <div className="docs-search-results">
-          <p aria-live="polite" className="docs-search-status" id={statusId} role="status">
-            {results.length === 0
-              ? "No matching documentation."
-              : `${results.length} ${results.length === 1 ? "result" : "results"}`}
-          </p>
-          {results.length > 0 ? (
-            <ul className="guide-nav-list docs-search-result-list" id={resultListId}>
-              {results.map((result, index) => {
-                const highlight = new URLSearchParams({ highlight: query.trim() });
-                const href = `/${result.route.slug}?${highlight}${result.entry.id ? `#${result.entry.id}` : ""}`;
-                return (
-                  <li key={`${result.route.slug}:${result.entry.id ?? "introduction"}`}>
-                    <a
-                      aria-label={`${result.entry.label}, ${result.route.title}`}
-                      className={index === activeIndex ? "is-active" : undefined}
-                      href={href}
-                      id={`${resultListId}-${index}`}
-                      onFocus={() => warmDocsHtml(result.route.slug)}
-                      onPointerEnter={() => warmDocsHtml(result.route.slug)}
-                      onClick={() => {
-                        onSelect?.(result, query);
-                        onQueryChange("");
-                        setOpen(false);
-                        onNavigate?.();
-                      }}
-                    >
-                      <strong className="docs-search-result-title">{result.entry.label}</strong>
-                      <small>in {result.route.title}</small>
-                      <small>{result.snippet}</small>
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-};
-
 /** Every page, on the shelf its folder puts it on. */
 const DocsNav = ({
   currentSlug,
@@ -407,7 +274,6 @@ const DocsNav = ({
   openShelves: DocShelfState;
 }) => (
   <nav aria-label="Docs" className="guide-nav">
-    <span className="guide-nav-title">Docs</span>
     {DOC_SHELVES.map((shelf) => (
       <details
         className="guide-shelf"
@@ -507,83 +373,39 @@ const DocsFaqPreview = () => (
 
 const TrailRow = ({
   buttonRef,
-  onNavigate,
-  onSearchQueryChange,
-  onSearchSelect,
   onToggle,
-  query,
-  results,
   menuOpen,
 }: {
-  buttonRef?: { current: HTMLButtonElement | null };
-  onNavigate: () => void;
-  onSearchQueryChange: (query: string) => void;
-  onSearchSelect: (result: DocSearchResult, query: string) => void;
+  buttonRef: { current: HTMLButtonElement | null };
   onToggle: () => void;
-  query: string;
-  results: readonly DocSearchResult[];
   menuOpen: boolean;
 }) => (
   <div className="docs-trail-row">
     <button
       aria-controls="docs-contents-menu"
       aria-expanded={menuOpen}
-      aria-haspopup="true"
       className="docs-trail-menu"
       onClick={onToggle}
       ref={buttonRef}
       type="button"
     >
       <ListTree aria-hidden="true" />
-      <span>Contents</span>
+      <span>On this page</span>
     </button>
-    <div className="docs-trail-search">
-      <DocsSearch
-        onNavigate={onNavigate}
-        onQueryChange={onSearchQueryChange}
-        onSelect={onSearchSelect}
-        query={query}
-        results={results}
-      />
-    </div>
   </div>
 );
 
-/**
- * The trail: phone-width navigation, search, and reading progress.
- *
- * It holds the bottom of the screen, immediately above the app's own dock, so
- * the two ways out of a guide - another guide, another mode - sit under the
- * same thumb. The desktop rails are the sidebar; here they are a menu above
- * the trail that the Contents button opens.
- *
- * The gauge rides the bar's top edge, which is the seam between the guide and
- * the chrome, so the reader can see where they are in a long guide without
- * carrying another navigation label.
- */
 const TrailHead = ({
   activeIndex,
   fraction,
   initializing,
-  onSearchSelect,
-  onSearchQueryChange,
-  onShelfToggle,
-  openShelves,
   route,
-  searchQuery,
-  searchResults,
   weights,
 }: {
   activeIndex: number;
   fraction: number;
   initializing: boolean;
-  onSearchSelect: (result: DocSearchResult, query: string) => void;
-  onSearchQueryChange: (query: string) => void;
-  onShelfToggle: (title: string, open: boolean) => void;
-  openShelves: DocShelfState;
   route: DocRoute;
-  searchQuery: string;
-  searchResults: readonly DocSearchResult[];
   weights: readonly number[];
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -622,27 +444,12 @@ const TrailHead = ({
           <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
         </span>
       ) : null}
-      <TrailRow
-        buttonRef={menuButtonRef}
-        onNavigate={closeMenu}
-        onSearchQueryChange={onSearchQueryChange}
-        onSearchSelect={onSearchSelect}
-        onToggle={() => setMenuOpen((open) => !open)}
-        query={searchQuery}
-        results={searchResults}
-        menuOpen={menuOpen}
-      />
+      <TrailRow buttonRef={menuButtonRef} onToggle={() => setMenuOpen((open) => !open)} menuOpen={menuOpen} />
       {menuOpen ? (
         <aside aria-label="Documentation contents" className="docs-contents-menu" id="docs-contents-menu">
           {outlined ? (
             <SectionRail activeIndex={activeIndex} initializing={initializing} onNavigate={closeMenu} route={route} />
           ) : null}
-          <DocsNav
-            currentSlug={route.slug}
-            onNavigate={closeMenu}
-            onShelfToggle={onShelfToggle}
-            openShelves={openShelves}
-          />
         </aside>
       ) : null}
     </div>
@@ -797,18 +604,6 @@ const DocsPage = ({
   const pageTurned = useDocsPageTurned(route.slug);
   const { onShelfToggle, openShelves } = useDocShelfState();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchIndex, setSearchIndex] = useState<readonly DocSearchRoute[]>([]);
-  const searchResults = useMemo(() => searchDocs(searchIndex, searchQuery), [searchIndex, searchQuery]);
-  // The prebuilt index is its own lazy chunk, fetched the first time the
-  // reader actually searches; results fill in when it lands.
-  const onSearchQueryChange = useCallback((query: string) => {
-    if (query.trim())
-      void loadDocsSearchIndex()
-        .then(setSearchIndex)
-        .catch(() => undefined);
-    setSearchQuery(query);
-  }, []);
   const initialHighlight = readDocsHighlight();
   const [highlightQuery, setHighlightQuery] = useState(initialHighlight.query);
   const [highlightSection, setHighlightSection] = useState<string | null>(initialHighlight.sectionId);
@@ -822,16 +617,13 @@ const DocsPage = ({
     if (!active) return;
     syncDocsSeoMetadata(route);
   }, [active, route]);
-  useEffect(() => {
-    if (!active) setSearchQuery("");
-  }, [active]);
   useEffect(() => setSampleBase(assetBaseUrl || AUTHORED_SAMPLE_BASE), [assetBaseUrl]);
+  const highlight = readDocsHighlight(route.slug);
   useEffect(() => {
     if (!active) return;
-    const highlight = readDocsHighlight(route.slug);
     setHighlightQuery(highlight.query);
     setHighlightSection(highlight.sectionId);
-  }, [active, route.slug]);
+  }, [active, highlight.query, highlight.sectionId]);
   useEffect(() => {
     if (!(active && highlightQuery && html)) return;
     const article = document.querySelector<HTMLElement>(".docs-article");
@@ -852,43 +644,26 @@ const DocsPage = ({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [active, html]);
-  const onSearchSelect = useCallback((result: DocSearchResult, query: string) => {
-    setHighlightQuery(query);
-    setHighlightSection(result.entry.id);
-  }, []);
   return (
     <div className="docs-workbench" id="main">
-      <div className="docs-search-header">
-        <DocsSearch
-          onSelect={onSearchSelect}
-          onQueryChange={onSearchQueryChange}
-          query={searchQuery}
-          results={searchResults}
-        />
-      </div>
       {/* Keyed on the route so moving to another guide closes the sheet with it,
           rather than leaving it open over a guide it no longer describes. */}
-      <TrailHead
-        activeIndex={activeIndex}
-        fraction={fraction}
-        initializing={initializing}
-        key={route.slug}
-        onSearchSelect={onSearchSelect}
-        onSearchQueryChange={onSearchQueryChange}
-        onShelfToggle={onShelfToggle}
-        openShelves={openShelves}
-        route={route}
-        searchQuery={searchQuery}
-        searchResults={searchResults}
-        weights={weights}
-      />
-      <div className="docs-layout">
-        <div className="docs-rails">
-          <DocsNav currentSlug={route.slug} onShelfToggle={onShelfToggle} openShelves={openShelves} />
-          {route.sections.length > 0 ? (
+      {route.sections.length > 0 ? (
+        <TrailHead
+          activeIndex={activeIndex}
+          fraction={fraction}
+          initializing={initializing}
+          key={route.slug}
+          route={route}
+          weights={weights}
+        />
+      ) : null}
+      <div className={route.sections.length > 0 ? "docs-layout" : "docs-layout docs-layout-full"}>
+        {route.sections.length > 0 ? (
+          <div className="docs-rails">
             <SectionRail activeIndex={activeIndex} initializing={initializing} route={route} />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         <section className="docs-panel">
           {/* Keyed on the route so a guide switch remounts the article and
               replays its entrance - that animation IS the page transition. */}
@@ -911,4 +686,20 @@ const DocsPage = ({
   );
 };
 
-export { DocsPage, preloadDocsHtml };
+const DocsNavigation = ({ currentSlug, onNavigate }: { currentSlug: string; onNavigate?: () => void }) => {
+  const { onShelfToggle, openShelves } = useDocShelfState();
+  useEffect(() => {
+    const shelf = DOC_SHELVES.find((entry) => entry.routes.some((route) => route.slug === currentSlug));
+    if (shelf) onShelfToggle(shelf.title, true);
+  }, [currentSlug, onShelfToggle]);
+  return (
+    <DocsNav
+      currentSlug={currentSlug}
+      onNavigate={onNavigate}
+      onShelfToggle={onShelfToggle}
+      openShelves={openShelves}
+    />
+  );
+};
+
+export { DocsNavigation, DocsPage, preloadDocsHtml };
