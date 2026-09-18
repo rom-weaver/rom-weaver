@@ -1151,6 +1151,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Choose the version of {title} for {platform}",
   }),
   "ui.identify.versionResultsList": msg({ id: "ui.identify.versionResultsList", message: "Versions" }),
+  "ui.identify.headeredRom": msg({ id: "ui.identify.headeredRom", message: "Headered ROM" }),
+  "ui.identify.unheaderedRom": msg({ id: "ui.identify.unheaderedRom", message: "Unheadered ROM" }),
   "ui.identify.versionsBack": msg({ id: "ui.identify.versionsBack", message: "Other games" }),
   "ui.identify.versionsNoMatch": msg({
     id: "ui.identify.versionsNoMatch",

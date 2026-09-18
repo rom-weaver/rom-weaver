@@ -182,6 +182,46 @@ describe("RomSearch release choices", () => {
     expect((input as HTMLInputElement).disabled).toBe(false);
     expect(screen.getByRole("status").textContent).toBe("Searching…");
   });
+
+  it.each([
+    { filenames: ["Game.unh", "Game.nes"], labels: ["Unheadered ROM", "Headered ROM"], language: "en" },
+    { filenames: ["Game.UNH"], labels: ["Unheadered ROM"], language: "en" },
+    { filenames: ["Game.unh", "Game.nes"], labels: ["ROM sin cabecera", "ROM con cabecera"], language: "es" },
+  ])("labels NES header variants for $filenames in $language", ({ filenames, labels, language }) => {
+    const choose = vi.fn();
+    const version = {
+      algorithm: "name",
+      database: "No-Intro",
+      expectedComponents: filenames.map((filename, ordinal) => ({
+        crc32: ordinal === 0 ? "abcd1234" : "deadbeef",
+        filename,
+        ordinal,
+        size: ordinal === 0 ? 16384 : 16400,
+      })),
+      name: "Game (USA)",
+      platform: "Nintendo - Nintendo Entertainment System",
+      variant: "name",
+    };
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language }}>
+        <RomSearch
+          localizer={{ message: (key: string) => key } as never}
+          lookup={lookup({ choose, versions: [version] })}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(
+      [...container.querySelectorAll(".identify-search-result-component-name")].map((element) => element.textContent),
+    ).toEqual(labels);
+    const choice = container.querySelector(".identify-search-result-btn") as HTMLButtonElement;
+    expect(choice.textContent).toContain("CRC32abcd1234");
+    expect(choice.textContent).not.toContain(".unh");
+    if (filenames.length > 1) expect(choice.textContent).toContain("CRC32deadbeef");
+    fireEvent.click(choice);
+    expect(choose).toHaveBeenCalledWith(version);
+    expect(version.expectedComponents.map((component) => component.filename)).toEqual(filenames);
+  });
 });
 
 describe("compareRomExpectation", () => {
