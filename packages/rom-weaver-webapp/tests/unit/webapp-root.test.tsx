@@ -154,11 +154,15 @@ describe("selectViewWithTransition", () => {
 });
 
 describe("the workbench shell", () => {
-  it.each(["patcher", "home", "docs"] as const)("shows one shared privacy footer on %s", async (currentView) => {
+  it.each(["patcher", "home", "docs"] as const)("shows one shared legal footer on %s", async (currentView) => {
     const { container } = await renderRoot({ currentView });
     const footers = container.querySelectorAll("footer.page-footer");
     expect(footers).toHaveLength(1);
-    expect(footers[0]?.textContent).toBe("On-device. Offline support. No telemetry.");
+    expect(footers[0]?.textContent).toBe("On-device. Offline support. No telemetry.AboutPrivacy");
+    expect(footers[0]?.querySelector('a[href="/docs/about"]')?.textContent).toBe("About");
+    expect(footers[0]?.querySelector('a[href="/docs/privacy"]')?.textContent).toBe("Privacy");
+    expect(footers[0]?.querySelector(".page-footer-links")?.className).toBe("page-footer-links");
+    expect(footers[0]?.querySelectorAll(".page-footer-link")).toHaveLength(2);
     expect(container.querySelector("main footer.page-footer")).toBeNull();
     expect(container.querySelector(".hero-privacy")).toBeNull();
   });

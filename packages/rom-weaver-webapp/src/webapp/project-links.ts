@@ -2,8 +2,7 @@
 
 const GITHUB_URL = "https://github.com/rom-weaver/rom-weaver/";
 const DONATE_URL = "https://ko-fi.com/brandonocasey";
-/* Licence, attribution and privacy are the About guide's subject; it links to
-   all three, so the chrome needs only the one address. */
 const ABOUT_URL = "/docs/about";
+const PRIVACY_URL = "/docs/privacy";
 
-export { ABOUT_URL, DONATE_URL, GITHUB_URL };
+export { ABOUT_URL, DONATE_URL, GITHUB_URL, PRIVACY_URL };

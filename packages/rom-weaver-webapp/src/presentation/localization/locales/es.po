@@ -300,6 +300,11 @@ msgstr "Un paquete de rom-weaver es una receta para aplicar una cadena de parche
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.about"
+msgstr "Acerca de"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.about"
 msgstr "Acerca de rom-weaver, su licencia y su privacidad"
 
@@ -410,11 +415,6 @@ msgstr "Aplicar y descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.applyPatchCta"
-msgstr "Aplicar parches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.related.applyAPatch"
 msgstr "Aplicar un parche"
 
@@ -435,6 +435,11 @@ msgstr "Aplicar ambos parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Aplica uno o varios parches a tus ROM e imágenes de disco, comprimidos o sin comprimir."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.target"
 msgstr "Aplicar parche a"
 
@@ -446,6 +451,11 @@ msgstr "Aplicar parche en"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowApply"
+msgstr "Aplicar parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.applyPatchCta"
 msgstr "Aplicar parches"
 
 #. js-lingui-explicit-id
@@ -467,11 +477,6 @@ msgstr "Aplicar a: {input}"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Herramienta Aplicar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Aplica uno o varios parches a tus ROM e imágenes de disco, comprimidos o sin comprimir."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1050,6 +1055,11 @@ msgstr "Crear parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.workflowsDescription"
+msgstr "Crea parches, comparte paquetes reutilizables y prueba ROM en tu navegador."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.createTool"
 msgstr "Herramienta Crear"
 
@@ -1340,11 +1350,6 @@ msgstr "Cada generación de consolas trajo su propio formato. Tráelos todos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.workflowsDescription"
-msgstr "Crea parches, comparte paquetes reutilizables y prueba ROM en tu navegador."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.evidence"
 msgstr "Evidencias"
 
@@ -1502,11 +1507,6 @@ msgstr "Encontrada por suma de verificación; agrega la ROM para verificarla"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectationMetaName"
 msgstr "Encontrada por nombre del juego; agrega la ROM para verificarla"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.fullInstallGuide"
-msgstr "Otros métodos de instalación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1682,6 +1682,11 @@ msgstr "Instálala desde el menú del navegador y seguirá funcionando sin conex
 #: src/presentation/localization/messages.ts
 msgid "ui.home.installCli"
 msgstr "Instalar la CLI"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.cliItem1"
+msgstr "Instala la CLI con npm, Homebrew, Cargo o Docker para scripts y trabajos por lotes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2045,11 +2050,6 @@ msgstr "Nombres"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.cliItem1"
-msgstr "Instala la CLI con npm, Homebrew, Cargo o Docker para scripts y trabajos por lotes."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.info.nested"
 msgstr "Los archivos anidados se descomprimen; las ROM y los parches se localizan automáticamente."
 
@@ -2285,8 +2285,18 @@ msgstr "ROM original{member}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.workflowsTitle"
+msgstr "Otras funciones"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.versionsBack"
 msgstr "Otros juegos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.fullInstallGuide"
+msgstr "Otros métodos de instalación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2547,6 +2557,11 @@ msgstr "Salida del parche anterior"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.autoPrevious"
 msgstr "Salida del parche anterior (automático)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.footer.privacy"
+msgstr "Privacidad"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2890,6 +2905,11 @@ msgstr "Secciones"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.formatsEyebrow"
+msgstr "Ver formatos compatibles"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "con partidas guardadas que permanecen en este dispositivo."
 
@@ -3012,11 +3032,6 @@ msgstr "Estándar"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.standard"
 msgstr "Estándar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.workflowsTitle"
-msgstr "Otras funciones"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3579,13 +3594,13 @@ msgstr "Clase de variante"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "se verifica durante la aplicación"
+msgid "ui.patchChecks.verified"
+msgstr "Comprobado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Comprobado"
+msgid "ui.chain.verifiedDuringWeave"
+msgstr "se verifica durante la aplicación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3621,11 +3636,6 @@ msgstr "¿Quieres tu propia copia? Hospédala tú mismo con archivos estáticos 
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webapp"
 msgstr "Aplicación web"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.formatsEyebrow"
-msgstr "Ver formatos compatibles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

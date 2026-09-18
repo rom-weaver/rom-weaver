@@ -300,6 +300,11 @@ msgstr "A rom-weaver bundle is a recipe for applying a patch chain to a ROM. Its
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.about"
+msgstr "About"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.about"
 msgstr "About rom-weaver, its licence and its privacy"
 
@@ -410,11 +415,6 @@ msgstr "Apply & download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.applyPatchCta"
-msgstr "Apply Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.related.applyAPatch"
 msgstr "Apply a patch"
 
@@ -435,6 +435,11 @@ msgstr "Apply both patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Apply one or more patches to your ROMs and disc images, compressed or raw."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.target"
 msgstr "Apply patch into"
 
@@ -446,6 +451,11 @@ msgstr "Apply patch into"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowApply"
+msgstr "Apply Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.applyPatchCta"
 msgstr "Apply Patches"
 
 #. js-lingui-explicit-id
@@ -467,11 +477,6 @@ msgstr "Apply to: {input}"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Apply tool"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Apply one or more patches to your ROMs and disc images, compressed or raw."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1050,6 +1055,11 @@ msgstr "Create Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.workflowsDescription"
+msgstr "Create patches, share reusable bundles, and test ROMs in your browser."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.createTool"
 msgstr "Create tool"
 
@@ -1340,11 +1350,6 @@ msgstr "Every console generation brought its own format. Bring all of them."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.workflowsDescription"
-msgstr "Create patches, share reusable bundles, and test ROMs in your browser."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.evidence"
 msgstr "Evidence"
 
@@ -1502,11 +1507,6 @@ msgstr "Found by checksum - add the ROM to verify it"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectationMetaName"
 msgstr "Found by game name - add the ROM to verify it"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.fullInstallGuide"
-msgstr "Other install methods"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1682,6 +1682,11 @@ msgstr "Install it from the browser menu and it keeps working offline."
 #: src/presentation/localization/messages.ts
 msgid "ui.home.installCli"
 msgstr "Install the CLI"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.cliItem1"
+msgstr "Install with npm, Homebrew, Cargo, or Docker for scripts and batch jobs."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2045,11 +2050,6 @@ msgstr "Names"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.cliItem1"
-msgstr "Install with npm, Homebrew, Cargo, or Docker for scripts and batch jobs."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.info.nested"
 msgstr "Nested archives are decompressed; ROMs and patches are located automatically."
 
@@ -2285,8 +2285,18 @@ msgstr "Original ROM{member}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.workflowsTitle"
+msgstr "Other capabilities"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.versionsBack"
 msgstr "Other games"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.fullInstallGuide"
+msgstr "Other install methods"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2547,6 +2557,11 @@ msgstr "Previous patch output"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.autoPrevious"
 msgstr "Previous patch output (automatic)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.footer.privacy"
+msgstr "Privacy"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2890,6 +2905,11 @@ msgstr "Sections"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.formatsEyebrow"
+msgstr "See what’s supported"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "See your changes in play."
 
@@ -3012,11 +3032,6 @@ msgstr "Standard"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.standard"
 msgstr "Standard"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.workflowsTitle"
-msgstr "Other capabilities"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3579,13 +3594,13 @@ msgstr "Variant class"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "verified during apply"
+msgid "ui.patchChecks.verified"
+msgstr "Verified"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Verified"
+msgid "ui.chain.verifiedDuringWeave"
+msgstr "verified during apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3621,11 +3636,6 @@ msgstr "Want your own copy? Host it yourself from static files or a Docker image
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webapp"
 msgstr "Webapp"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.formatsEyebrow"
-msgstr "See what’s supported"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
