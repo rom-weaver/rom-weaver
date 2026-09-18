@@ -51,10 +51,16 @@
   font-size: 1rem;
   color: var(--ink-2);
 }
+.rw-app .home-links {
+  display: grid;
+  gap: 16px;
+}
+.rw-app .home-formats-link,
 .rw-app .home-try {
   font-size: 0.85rem;
   color: var(--ink-3);
 }
+.rw-app .home-formats-link a,
 .rw-app .home-try a,
 .rw-app .home-details a {
   color: var(--ink-2);
@@ -229,6 +235,12 @@
   .rw-app .home-hero-body {
     gap: 12px;
   }
+  .rw-app .home-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 16px;
+  }
+  .rw-app .home-formats-link a,
   .rw-app .home-try a {
     display: inline-flex;
     align-items: center;

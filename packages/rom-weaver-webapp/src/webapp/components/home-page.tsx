@@ -88,11 +88,16 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         </div>
         <div className="home-hero-body">
           <p className="home-lede">{localizer.message("ui.home.lede")}</p>
-          <p className="home-try">
-            <span className="home-try-context">{localizer.message("ui.home.tryBefore")} </span>
-            <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
-            <span className="home-try-context">{localizer.message("ui.home.tryAfter")}</span>
-          </p>
+          <div className="home-links">
+            <p className="home-formats-link">
+              <a href={`${route("docs")}/supported-formats`}>{localizer.message("ui.home.formatsEyebrow")}</a>
+            </p>
+            <p className="home-try">
+              <span className="home-try-context">{localizer.message("ui.home.tryBefore")} </span>
+              <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
+              <span className="home-try-context">{localizer.message("ui.home.tryAfter")}</span>
+            </p>
+          </div>
         </div>
         <div className="home-loom">
           <div className="home-loom-frame">
@@ -164,7 +169,6 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
       </div>
 
       <div className="home-wrap home-section home-details">
-        <a href={`${route("docs")}/supported-formats`}>{localizer.message("ui.home.formatsEyebrow")}</a>
         <p>{localizer.message("ui.home.filesStay")}</p>
         <p>{localizer.message("ui.home.openSource")}</p>
       </div>
