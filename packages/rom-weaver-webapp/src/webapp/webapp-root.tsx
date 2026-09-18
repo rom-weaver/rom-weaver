@@ -51,7 +51,7 @@ import { Masthead, RUNTIME_STATES, UpdateBanner } from "./components/shell.tsx";
 import type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
-import { DONATE_URL, GITHUB_URL } from "./project-links.ts";
+import { ABOUT_URL, DONATE_URL, GITHUB_URL, PRIVACY_URL } from "./project-links.ts";
 import {
   createOfflineWarmupProgressGate,
   listenForOfflinePrecacheProgress,
@@ -362,7 +362,12 @@ const PanelThreadCount = ({
 
 const PageFooter = () => {
   const localizer = useUiLocalizer();
-  return <footer className="page-footer">{localizer.message("ui.footer.local")}</footer>;
+  return (
+    <footer className="page-footer">
+      <span>{localizer.message("ui.footer.local")}</span> <a href={ABOUT_URL}>{localizer.message("ui.footer.about")}</a>{" "}
+      <a href={PRIVACY_URL}>{localizer.message("ui.footer.privacy")}</a>
+    </footer>
+  );
 };
 
 const DropVeil = () => {

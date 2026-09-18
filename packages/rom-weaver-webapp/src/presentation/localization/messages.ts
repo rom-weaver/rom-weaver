@@ -1006,6 +1006,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.find.resultCount": msg({ id: "ui.find.resultCount", message: "{count} results" }),
   "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Support" }),
+  "ui.footer.about": msg({ id: "ui.footer.about", message: "About" }),
+  "ui.footer.privacy": msg({ id: "ui.footer.privacy", message: "Privacy" }),
   "ui.nav.docs": msg({ id: "ui.nav.docs", message: "Docs" }),
   "ui.nav.groupDevice": msg({ id: "ui.nav.groupDevice", message: "This device" }),
   "ui.nav.groupPatches": msg({ id: "ui.nav.groupPatches", message: "Patches" }),

@@ -300,6 +300,11 @@ msgstr "Ein rom-weaver-Bundle ist eine Anleitung zum Anwenden einer Patch-Kette 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.footer.about"
+msgstr "Über"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.about"
 msgstr "Über rom-weaver, seine Lizenz und seinen Datenschutz"
 
@@ -410,11 +415,6 @@ msgstr "Anwenden und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.applyPatchCta"
-msgstr "Patches anwenden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.related.applyAPatch"
 msgstr "Ein Patch anwenden"
 
@@ -435,6 +435,11 @@ msgstr "Beide Patches anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Wende einen oder mehrere Patches auf deine ROMs und Disc-Abbilder an, komprimiert oder unkomprimiert."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.target"
 msgstr "Patch anwenden auf"
 
@@ -446,6 +451,11 @@ msgstr "Patch anwenden auf"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowApply"
+msgstr "Patches anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.applyPatchCta"
 msgstr "Patches anwenden"
 
 #. js-lingui-explicit-id
@@ -467,11 +477,6 @@ msgstr "Anwenden auf: {input}"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Anwenden-Tool"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Wende einen oder mehrere Patches auf deine ROMs und Disc-Abbilder an, komprimiert oder unkomprimiert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1050,6 +1055,11 @@ msgstr "Patch erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.workflowsDescription"
+msgstr "Erstelle Patches, teile wiederverwendbare Bundles und teste ROMs in deinem Browser."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.createTool"
 msgstr "Erstellen-Tool"
 
@@ -1340,11 +1350,6 @@ msgstr "Jede Konsolengeneration brachte eigene Formate. Bring sie alle mit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.workflowsDescription"
-msgstr "Erstelle Patches, teile wiederverwendbare Bundles und teste ROMs in deinem Browser."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.evidence"
 msgstr "Nachweise"
 
@@ -1502,11 +1507,6 @@ msgstr "Per Prüfsumme gefunden – füge die ROM zur Prüfung hinzu"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectationMetaName"
 msgstr "Per Spielname gefunden – füge die ROM zur Prüfung hinzu"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.fullInstallGuide"
-msgstr "Weitere Installationsmethoden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1682,6 +1682,11 @@ msgstr "Installiere sie über das Browsermenü, dann funktioniert sie weiter off
 #: src/presentation/localization/messages.ts
 msgid "ui.home.installCli"
 msgstr "CLI installieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.cliItem1"
+msgstr "Installiere das CLI mit npm, Homebrew, Cargo oder Docker für Skripte und Stapelverarbeitung."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2045,11 +2050,6 @@ msgstr "Namen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.cliItem1"
-msgstr "Installiere das CLI mit npm, Homebrew, Cargo oder Docker für Skripte und Stapelverarbeitung."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.info.nested"
 msgstr "Verschachtelte Archive werden dekomprimiert; ROMs und Patches werden automatisch gefunden."
 
@@ -2285,8 +2285,18 @@ msgstr "Original-ROM{member}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.workflowsTitle"
+msgstr "Weitere Funktionen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.versionsBack"
 msgstr "Andere Spiele"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.fullInstallGuide"
+msgstr "Weitere Installationsmethoden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2547,6 +2557,11 @@ msgstr "Ausgabe des vorherigen Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.autoPrevious"
 msgstr "Ausgabe des vorherigen Patches (automatisch)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.footer.privacy"
+msgstr "Datenschutz"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2890,6 +2905,11 @@ msgstr "Bereiche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.formatsEyebrow"
+msgstr "Unterstützte Formate ansehen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "mit Spielständen, die auf diesem Gerät bleiben."
 
@@ -3012,11 +3032,6 @@ msgstr "Standard"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.standard"
 msgstr "Standard"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.workflowsTitle"
-msgstr "Weitere Funktionen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3579,13 +3594,13 @@ msgstr "Variantenklasse"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.chain.verifiedDuringWeave"
-msgstr "wird beim Anwenden überprüft"
+msgid "ui.patchChecks.verified"
+msgstr "Geprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.verified"
-msgstr "Geprüft"
+msgid "ui.chain.verifiedDuringWeave"
+msgstr "wird beim Anwenden überprüft"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3621,11 +3636,6 @@ msgstr "Möchtest du eine eigene Kopie? Hoste sie selbst aus statischen Dateien 
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webapp"
 msgstr "Web-App"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.formatsEyebrow"
-msgstr "Unterstützte Formate ansehen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
