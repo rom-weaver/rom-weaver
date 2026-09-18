@@ -671,11 +671,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await docsNavigationPage
         .locator('.side-nav .nav-row[aria-current="page"][id="tab-patcher"]')
         .waitFor({ state: "visible" });
-      if ((await docsNavigationPage.locator(".docs-rails .guide-nav").count()) !== 0) {
+      if ((await docsNavigationPage.locator(".side-nav .guide-nav").count()) !== 0) {
         throw new Error("Docs navigation mounted before its lazy route was ready");
       }
       releaseDocsChunk();
-      await docsNavigationPage.locator(".docs-rails .guide-nav").waitFor({ state: "visible" });
+      await docsNavigationPage.locator(".side-nav .guide-nav").waitFor({ state: "visible" });
       await docsNavigationPage.locator('.side-nav .nav-row[aria-current="page"][id="tab-docs"]').waitFor({
         state: "visible",
       });
