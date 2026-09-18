@@ -1,6 +1,6 @@
 # Icon masters
 
-Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. The masters use the Cartridge W paths from `../../src/assets/app/root/logo.svg` with fixed colors and padding for each surface.
+`brand-mark.svg` is the only editable source for the brand geometry. It contains the two brand paths on a transparent canvas and uses `currentColor` only. It has no accent palette, tone colors, or background. The checked-in files under `renders/` are generated views of this master.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -12,27 +12,44 @@ Source SVGs for build-generated icons in `../../../../dist/generated-assets/`. T
 
 ## Geometry
 
-The cartridge occupies 48 × 56 units, with an accent-colored W, a recessed top edge, and three centered contact cuts at the bottom. The standalone SVG and ICO master use a tight `8 4 48 56` viewBox. They fill the available height without stretching or clipping the cartridge. The inline webapp mark keeps its 64 × 64 viewBox. The top-right corner uses the cartridge color. The paths contain no fonts, strokes, masks, or clip paths.
+The cartridge occupies 48 × 56 units, with a recessed top edge and three centered contact cuts at the bottom. The W is a separate path so the build can apply every accent color. The master keeps a `0 0 64 64` viewBox for the inline webapp mark. Standalone logos use the tight `8 4 48 56` viewBox. The paths contain no fonts, strokes, masks, or clip paths.
 
-The standalone SVG uses charcoal on light surfaces and cream when the browser requests a dark color scheme. The inline webapp mark follows the app's ink and accent CSS tokens. Launcher icons use a cream cartridge on an opaque charcoal background. The ICO favicon uses a cream cartridge on a transparent background. The top notch, bottom contact cuts, and rounded corners stay transparent. Square favicon frames have equal transparent margins on the left and right because the cartridge is taller than it is wide.
+`renderBrandMark` applies a dark logo tone (`#20282d`) or light logo tone (`#f6ecda`) and one accent swatch. Generated responsive SVGs select the tone with `prefers-color-scheme`; explicit light and dark renders keep the same transparent background. The inline webapp mark follows the app's ink and accent CSS tokens.
 
-| Master | Output | Scale | Offset (x and y) | Background |
+| Render | Output | Scale | Offset (x and y) | Background |
 | --- | --- | --- | --- | --- |
-| icon-maskable.svg | icon-maskable-{192,512}.png | 0.72 | 8.96 | `#31343a` |
-| apple-touch-icon.svg | apple-touch-icon.png (180px) | 0.80 | 6.4 | `#31343a` |
-| favicon.svg | favicon.ico (16, 32, 48, and 64px frames) | Fit cropped viewBox | Centered | Transparent |
+| Responsive generated render | `channel-icons/*/logo.svg`, `logo-variants/*.svg` | — | — | Transparent |
+| Dark logo render | `renders/dark/*.svg`; `logo-variants/dark/*.svg` | — | — | Transparent |
+| Light logo render | `renders/light/*.svg`; `logo-variants/light/*.svg` | — | — | Transparent |
+| Light logo render in launcher wrapper | `icon-maskable-{192,512}.png` | 0.72 | 8.96 | `#31343a` |
+| Light logo render in launcher wrapper | `apple-touch-icon.png` (180px) | 0.80 | 6.4 | `#31343a` |
+| Light logo tight render | `favicon.ico` (16, 32, 48, and 64px frames) | Fit tight viewBox | Centered | Transparent |
 
-For launcher icons, `offset = 32 * (1 - scale)`. The maskable master keeps the mark inside the central 80%-diameter safe circle.
+For launcher icons, `offset = 32 * (1 - scale)`. The generated maskable version keeps the mark inside the central safe circle. Its opaque background is added by the build wrapper, not by the canonical master.
 
 ## Rendering
 
-From the repository root, regenerate production, beta, nightly, and preview icons:
+From the repository root, render the checked-in SVG views:
+
+```sh
+npm --prefix packages/rom-weaver-webapp run brand:render
+```
+
+Check those views:
+
+```sh
+npm --prefix packages/rom-weaver-webapp run brand:check
+```
+
+Then regenerate production, beta, nightly, and preview icons:
 
 ```sh
 npm --prefix packages/rom-weaver-webapp run icons:channels
 ```
 
-The generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's W from the accent palette. It writes channel icons and reusable logo variants to the repository `dist/generated-assets/` directory. The build, development server, and script tests run it before they load generated assets. The tracked social preview files in `../../design/` are separate build inputs.
+The icon generator uses the installed Playwright Chromium browser. It renders the PNGs, stores optimized PNG frames in each ICO, and colors each channel's W from the accent palette. It writes channel icons and responsive and explicit light/dark logo variants to the ignored `dist/generated-assets/` directory. The build and checks fail when the checked-in SVG renders are stale.
+
+The accent palette is defined once in `../../src/webapp/accent-palette.mjs`. `npm --prefix packages/rom-weaver-webapp run accents:generate` writes the CSS token blocks from that palette, and `npm --prefix packages/rom-weaver-webapp run accents:check` fails when the generated CSS is stale.
 
 Check the generated output against the current masters:
 

@@ -3,6 +3,10 @@
    Chassis, plate and ink stay put, so an accent reads as the same app in a
    different dye lot rather than a different theme.
 
+   The per-accent values live in accent-palette.mjs. The generated
+   accent-values.css file supplies the data-accent blocks imported by
+   design-system/index.css. This file owns the shared transition and controls.
+
    Only --thread, --thread-ink, --thread-hi and --thread-text are set per dye
    lot. The tokens in tokens.css that carry an accent - --shuttle, --weft and
    the --loom-weft-* bands - are all derived from those four, so the progress
@@ -17,73 +21,8 @@
    out-specify and out-order the plain :root[data-theme] blocks. Madder is the
    baseline defined in tokens.css and needs no block of its own.
 
-   Every pairing below is verified in tests/browser/accessibility.browser.test.js
+   Every pairing is verified in tests/browser/accessibility.browser.test.js
    ("accent" sweep) - both themes, every surface. */
-
-/* ── woad: indigo ── */
-:root[data-accent="woad"] {
-  --thread: #747bfa;
-  --thread-ink: #0b1030;
-  --thread-hi: #c5cbf6;
-}
-:root[data-accent="woad"][data-theme="dark"] {
-  --thread-text: #9ba6ff;
-}
-:root[data-accent="woad"][data-theme="light"] {
-  --thread-text: #4947c3;
-}
-
-/* ── violet ── */
-:root[data-accent="violet"] {
-  --thread: #a45bea;
-  --thread-ink: #0b0516;
-  --thread-hi: #d7c3f3;
-}
-:root[data-accent="violet"][data-theme="dark"] {
-  --thread-text: #caa2fb;
-}
-:root[data-accent="violet"][data-theme="light"] {
-  --thread-text: #773aae;
-}
-
-/* ── verdigris: green ── */
-:root[data-accent="verdigris"] {
-  --thread: #149c46;
-  --thread-ink: #020c07;
-  --thread-hi: #aee1c6;
-}
-:root[data-accent="verdigris"][data-theme="dark"] {
-  --thread-text: #71c582;
-}
-:root[data-accent="verdigris"][data-theme="light"] {
-  --thread-text: #296a39;
-}
-
-/* ── teal ── */
-:root[data-accent="teal"] {
-  --thread: #009ba5;
-  --thread-ink: #020c0d;
-  --thread-hi: #9fe2e7;
-}
-:root[data-accent="teal"][data-theme="dark"] {
-  --thread-text: #45c3cd;
-}
-:root[data-accent="teal"][data-theme="light"] {
-  --thread-text: #066970;
-}
-
-/* ── plum ── */
-:root[data-accent="plum"] {
-  --thread: #d548a0;
-  --thread-ink: #10020c;
-  --thread-hi: #eac1db;
-}
-:root[data-accent="plum"][data-theme="dark"] {
-  --thread-text: #e68abe;
-}
-:root[data-accent="plum"][data-theme="light"] {
-  --thread-text: #a12876;
-}
 
 /* ── accent switch dissolve ──
    Registering the surface dyes as <color> lets them interpolate; the

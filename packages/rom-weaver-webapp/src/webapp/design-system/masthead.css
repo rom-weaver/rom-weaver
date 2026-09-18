@@ -47,6 +47,9 @@
   border-radius: 8px;
   stroke: none;
 }
+.rw-app .brand-mark-cartridge {
+  fill: currentColor;
+}
 .rw-app .brand-mark-accent {
   fill: var(--thread);
 }

@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from "react";
-import logo from "../assets/app/root/logo.svg?raw";
+import logo from "../../design/icon-masters/brand-mark.svg?raw";
 import { createLogger } from "../lib/logging.ts";
 import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
-import { tintBrandMark } from "./brand-mark-assets.mjs";
+import { BRAND_MARK_TIGHT_VIEWBOX, renderBrandMark } from "./brand-mark-assets.mjs";
 
 /**
  * Accent dye lots. The accent is the second theme axis alongside dark/light:
- * it re-dyes the `--thread` tokens (design-system/accents.css) without touching
+ * it re-dyes the `--thread` tokens (design-system/accent-values.css) without touching
  * chassis, plate or ink. Madder is the baseline defined in tokens.css.
  *
  * The active accent is reflected on `<html data-accent>`; madder clears the
@@ -20,7 +20,10 @@ const logger = createLogger("accent");
 type Accent = (typeof ACCENTS)[number]["value"];
 const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
 const FAVICON_URLS = new Map(
-  ACCENTS.map((accent) => [accent.value, `data:image/svg+xml,${encodeURIComponent(tintBrandMark(logo, accent))}`]),
+  ACCENTS.map((accent) => [
+    accent.value,
+    `data:image/svg+xml,${encodeURIComponent(renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }))}`,
+  ]),
 );
 
 const isAccent = (value: unknown): value is Accent => typeof value === "string" && ACCENT_VALUES.includes(value);
