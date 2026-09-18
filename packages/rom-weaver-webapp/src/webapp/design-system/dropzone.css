@@ -583,8 +583,6 @@
   gap: 28px;
   min-height: 340px;
   padding: 40px 24px;
-  background: var(--plate);
-  border-style: dashed;
 }
 .rw-app .simple-hero .hero-lead .lead-title {
   font-size: clamp(1.6rem, 3vw, 2.3rem);
@@ -662,50 +660,29 @@
 }
 
 /* Input step */
-.rw-app .step.is-input .drop.hero {
-  background: var(--empty-fill);
-  border: 1px solid var(--seam);
+.rw-app .step.is-input .drop,
+.rw-app .needs-input {
+  background: var(--plate);
+  border: 1px dashed var(--seam);
   border-radius: var(--r-l);
   transition:
     border-color 0.2s,
     background 0.2s;
 }
-.rw-app .step.is-input .drop.hero:focus-visible {
-  background: var(--empty-fill-hover);
+.rw-app .step.is-input .drop:focus-within,
+.rw-app .step.is-input .drop:active,
+.rw-app .needs-input:focus-visible,
+.rw-app .needs-input:active {
   border-color: var(--empty-border-hover);
 }
 @media (hover: hover) {
-  .rw-app .step.is-input .drop.hero:hover {
-    background: var(--empty-fill-hover);
+  .rw-app .step.is-input .drop:hover,
+  .rw-app .needs-input:hover {
     border-color: var(--empty-border-hover);
   }
-}
-.rw-app .step.is-input .drop.hero:active {
-  background: var(--empty-fill-hover);
-  border-color: var(--empty-border-hover);
 }
 .rw-app .step.is-input .drop:not(.hero) {
   padding: var(--sp-l);
-  background: var(--empty-fill);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
-  transition:
-    border-color 0.2s,
-    background 0.2s;
-}
-.rw-app .step.is-input .drop:not(.hero):focus-within {
-  background: var(--empty-fill-hover);
-  border-color: var(--empty-border-hover);
-}
-@media (hover: hover) {
-  .rw-app .step.is-input .drop:not(.hero):hover {
-    background: var(--empty-fill-hover);
-    border-color: var(--empty-border-hover);
-  }
-}
-.rw-app .step.is-input .drop:not(.hero):active {
-  background: var(--empty-fill-hover);
-  border-color: var(--empty-border-hover);
 }
 .rw-app .step.is-input .drop:not(.hero) .main.btnish {
   min-height: 0;
@@ -1353,10 +1330,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   }
 }
 
-/* secondary input sections (patches, modified), when empty, don't offer their
-   own drop target - they point the user UP to the 0x01 hero. they share the
-   hero's framing (solid seam, tinted fill, large radius) so the empty bench
-   reads as one consistent family, while still routing taps back to 0x01. */
+/* Empty secondary sections MUST direct users to the shared input drop zone. */
 .rw-app .needs-input {
   display: flex;
   gap: var(--sp-m);
@@ -1373,9 +1347,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   white-space: nowrap;
   appearance: none;
   cursor: pointer;
-  background: var(--empty-fill);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-l);
   transition:
     color 0.15s,
     background 0.15s,
@@ -1383,20 +1354,14 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .needs-input:focus-visible {
   color: var(--ink-2);
-  background: var(--empty-fill-hover);
-  border-color: var(--empty-border-hover);
 }
 @media (hover: hover) {
   .rw-app .needs-input:hover {
     color: var(--ink-2);
-    background: var(--empty-fill-hover);
-    border-color: var(--empty-border-hover);
   }
 }
 .rw-app .needs-input:active {
   color: var(--ink-2);
-  background: var(--empty-fill-hover);
-  border-color: var(--empty-border-hover);
 }
 .rw-app .needs-input svg {
   flex: none;

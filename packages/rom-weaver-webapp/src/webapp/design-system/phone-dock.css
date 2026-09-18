@@ -31,12 +31,6 @@
     grid-area: 1 / 1;
   }
 
-  /* the whole empty hero is the tap target - flash it on touch so taps
-     anywhere in the panel visibly register */
-  .rw-app .step.is-input.is-empty .drop.hero:active {
-    background: color-mix(in oklab, var(--thread) 6%, transparent);
-  }
-
   .rw-app .step.is-input.is-empty:has(> .step-body > .identify-search--hero) .drop.hero {
     min-height: max(260px, calc(100vh - var(--hero-chrome) - var(--hero-search-h)));
   }
