@@ -186,13 +186,18 @@ const main = async () => {
         Buffer.from(renderBrandMark(brandMaster, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
       );
 
+      const darkFavicon = faviconSvg(renderBrandMark(brandMaster, { accent, tone: "dark" }));
+      const lightFavicon = faviconSvg(renderBrandMark(brandMaster, { accent, tone: "light" }));
+      emit(path.join(channelDir, "favicon.svg"), Buffer.from(darkFavicon));
+      emit(path.join(channelDir, "favicon-dark.svg"), Buffer.from(lightFavicon));
+
       for (const target of RASTER_TARGETS) {
         const logo = renderBrandMark(brandMaster, { accent, tone: "light" });
         const launcher = launcherWrapper(logo, target.scale);
         emit(path.join(channelDir, target.output), await rasterize(page, launcher, target.size));
       }
 
-      const favicon = faviconSvg(renderBrandMark(brandMaster, { accent, tone: "light" }));
+      const favicon = lightFavicon;
       const images = [];
       for (const size of [16, 32, 48, 64]) {
         images.push({ size, png: await rasterize(page, favicon, size) });
