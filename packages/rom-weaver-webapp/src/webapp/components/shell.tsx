@@ -1,5 +1,4 @@
 import {
-  BookOpen,
   Cloud,
   CloudCheck,
   CloudDownload,
@@ -612,37 +611,19 @@ const AccentTile = ({
 /** Source and support: the project links shared by the desktop and phone chrome. */
 const ProjectTiles = ({
   confirmExternalNavigation,
-  docsHref,
   donateHref,
   githubHref,
   localizer,
-  onOpenDocs,
 }: {
   confirmExternalNavigation?: (href: string) => Promise<boolean>;
-  docsHref?: string;
   donateHref?: string;
   githubHref?: string;
   localizer: Localizer;
-  onOpenDocs: () => void;
 }) => {
-  const docsLabel = localizer.message("ui.nav.docs");
   const githubLabel = localizer.message("ui.tools.github");
   const supportLabel = localizer.message("ui.footer.donate");
   return (
     <>
-      {docsHref ? (
-        <a
-          aria-label={docsLabel}
-          className="tool"
-          href={docsHref}
-          onClick={(event) => activateOnClick(event, onOpenDocs)}
-        >
-          <BookOpen aria-hidden="true" />
-          <span aria-hidden="true" className="tip">
-            {docsLabel}
-          </span>
-        </a>
-      ) : null}
       {githubHref ? (
         <a
           aria-label={githubLabel}
@@ -1168,7 +1149,6 @@ const Masthead = ({
     [],
   );
   const navLabel = localizer.message("ui.nav.primary");
-  const docsHref = tabs.find((tab) => tab.id === "docs")?.href ?? "docs";
 
   /* The beta-tools setting is client-only, so the prerendered shell must not
      disagree with the first hydration pass: every beta row is in the markup
@@ -1483,23 +1463,12 @@ const Masthead = ({
       }}
     />
   );
-  const phoneProjectTiles = (
-    <ProjectTiles
-      confirmExternalNavigation={confirmExternalNavigation}
-      docsHref={docsHref}
-      donateHref={donateHref}
-      githubHref={githubHref}
-      localizer={localizer}
-      onOpenDocs={() => onSelectTab("docs")}
-    />
-  );
-  const desktopProjectTiles = (
+  const projectTiles = (
     <ProjectTiles
       confirmExternalNavigation={confirmExternalNavigation}
       donateHref={donateHref}
       githubHref={githubHref}
       localizer={localizer}
-      onOpenDocs={() => onSelectTab("docs")}
     />
   );
 
@@ -1533,7 +1502,7 @@ const Masthead = ({
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
               <div className="shell-head-tools">
-                <span className="phone-project-tools">{phoneProjectTiles}</span>
+                <span className="phone-project-tools">{projectTiles}</span>
                 <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}
@@ -1570,7 +1539,7 @@ const Masthead = ({
             <kbd>{FIND_SHORTCUT_HINT}</kbd>
           </button>
           <div className="topbar-tools">
-            {desktopProjectTiles}
+            {projectTiles}
             <span aria-hidden="true" className="tool-separator" />
             <span className="desktop-runtime header-runtime">{headerStatus}</span>
             {appearanceTiles("desktop")}

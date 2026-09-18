@@ -312,7 +312,7 @@ describe("Masthead", () => {
       "Settings",
     ];
     expect(names(".topbar-tools")).toEqual(expected);
-    expect(names(".shell-head-tools")).toEqual(["Docs", ...expected]);
+    expect(names(".shell-head-tools")).toEqual(expected);
     for (const scope of [".topbar-tools", ".shell-head-tools"]) {
       const tools = container.querySelector(scope) as HTMLElement;
       const separator = tools.querySelector(".tool-separator");
@@ -326,8 +326,7 @@ describe("Masthead", () => {
         "Installing offline copy",
       );
       const docs = tools.querySelector('[aria-label="Docs"]');
-      if (scope === ".shell-head-tools") expect(docs).toBeTruthy();
-      else expect(docs).toBeNull();
+      expect(docs).toBeNull();
     }
     fireEvent.click(container.querySelector('.topbar-tools .tool[aria-label="Settings"]') as HTMLButtonElement);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);

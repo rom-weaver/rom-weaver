@@ -62,6 +62,15 @@ afterEach(() => {
 });
 
 describe("the navigation both layouts share", () => {
+  it("keeps Docs out of the desktop and phone header tools", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+
+    expect(container.querySelector('a.tool[href="docs"]')).toBeNull();
+    for (const scope of Object.values(navs(container))) {
+      expect(rowNamed(scope, "Docs").getAttribute("href")).toBe("docs");
+    }
+  });
+
   it("routes every row to its handler, from either layout", () => {
     const onOpenLog = vi.fn();
     const onOpenStatus = vi.fn();
