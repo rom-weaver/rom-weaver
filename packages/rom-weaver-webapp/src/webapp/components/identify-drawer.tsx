@@ -1,4 +1,6 @@
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { Fragment } from "react";
+import { PlatformName } from "../../public/react/components/ds/platform-name.tsx";
 import { ScanSearch } from "lucide-react";
 import { identifyGoodToolsRevisionLabels, uniqueIdentifyDisplayNames } from "../../presentation/identify-title.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
@@ -23,10 +25,34 @@ const HALF_ROW_MAX_CHARS = 16;
  * three lines beside an empty column. */
 const halfRowClass = (value: string): string | undefined => (value.length < HALF_ROW_MAX_CHARS ? "ck-half" : undefined);
 
-const EvidenceRow = ({ label, values }: { label: string; values: readonly string[] }) => {
+const EvidenceRow = ({
+  label,
+  values,
+  platforms = false,
+}: {
+  label: string;
+  values: readonly string[];
+  platforms?: boolean;
+}) => {
   if (!values.length) return null;
-  const value = values.join(" · ");
-  return <ChecksumRow className={halfRowClass(value)} copyValue={value} label={label} value={value} />;
+  const value = values.map((name) => (platforms ? abbreviatePlatform(name) : name)).join(" · ");
+  return (
+    <ChecksumRow
+      className={halfRowClass(value)}
+      copyValue={values.join(" · ")}
+      label={label}
+      value={
+        platforms
+          ? values.map((name, index) => (
+              <Fragment key={name}>
+                {index ? " · " : null}
+                <PlatformName name={name} />
+              </Fragment>
+            ))
+          : value
+      }
+    />
+  );
 };
 
 const IdentifyDrawer = ({
@@ -111,7 +137,18 @@ const IdentifyDrawer = ({
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={
         <>
-          {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
+          {systemTag ? (
+            <DrawerReadout>
+              {platforms.length
+                ? platforms.map((name, index) => (
+                    <Fragment key={name}>
+                      {index ? " · " : null}
+                      <PlatformName name={name} />
+                    </Fragment>
+                  ))
+                : systemTag}
+            </DrawerReadout>
+          ) : null}
           {condition ? (
             <DrawerReadout muted>{localizer.message(`ui.identifyDrawer.condition.${condition}`)}</DrawerReadout>
           ) : status === "matched" ? (
@@ -169,11 +206,23 @@ const IdentifyDrawer = ({
                 />
               ) : null}
               {platformCandidates?.length ? (
-                <EvidenceRow
+                <ChecksumRow
                   label={localizer.message("ui.identifyDrawer.platformCandidates")}
-                  values={platformCandidates.map((candidate) =>
-                    [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" · "),
-                  )}
+                  copyValue={platformCandidates
+                    .map((candidate) =>
+                      [candidate.platform, candidate.confidence, candidate.evidence].filter(Boolean).join(" · "),
+                    )
+                    .join(" · ")}
+                  value={platformCandidates.map((candidate, index) => (
+                    <Fragment key={`${candidate.platform}/${candidate.confidence}/${candidate.evidence}`}>
+                      {index ? " · " : null}
+                      <PlatformName name={candidate.platform} />
+                      {[candidate.confidence, candidate.evidence]
+                        .filter(Boolean)
+                        .map((detail) => ` · ${detail}`)
+                        .join("")}
+                    </Fragment>
+                  ))}
                 />
               ) : null}
               {componentEvidence ? (
@@ -195,10 +244,7 @@ const IdentifyDrawer = ({
               ) : null}
               <EvidenceRow label={localizer.message("ui.identifyDrawer.matchedBy")} values={algorithms} />
               <EvidenceRow label={localizer.message("ui.identifyDrawer.variant")} values={variants} />
-              <EvidenceRow
-                label={localizer.message("ui.identifyDrawer.platform")}
-                values={platforms.map(abbreviatePlatform)}
-              />
+              <EvidenceRow label={localizer.message("ui.identifyDrawer.platform")} platforms values={platforms} />
               {regions.length ? (
                 <EvidenceRow label={localizer.message("ui.identifyDrawer.region")} values={regions} />
               ) : null}

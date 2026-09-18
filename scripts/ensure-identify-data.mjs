@@ -13,6 +13,7 @@ import {
   GOODTOOLS_RELEASE,
   GOODTOOLS_REPOSITORY,
   INDEX_FORMAT,
+  IDENTIFY_DATA_POLICY_VERSION,
   LIBRETRO_LICENSE_FILE,
   LIBRETRO_PLATFORM_PATHS,
   LIBRETRO_REPOSITORY,
@@ -66,6 +67,7 @@ const hasCurrentCatalog = (dataDir) => {
   }
   if (catalog.format !== CATALOG_FORMAT) return false;
   if (
+    catalog.generated?.policyVersion !== IDENTIFY_DATA_POLICY_VERSION ||
     catalog.generated?.libretroRevision !== LIBRETRO_REVISION ||
     catalog.generated?.opengoodRevision !== OPENGOOD_REVISION ||
     catalog.generated?.opengoodHeaderedRevision !== OPENGOOD_HEADERED_REVISION ||

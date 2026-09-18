@@ -162,8 +162,10 @@ test("a name search lists titles across every platform", async () => {
   expect(lookupExpectedRom).not.toHaveBeenCalled();
   // The platform is what separates two rows with the same title.
   expect(getResults()[0]).toContain("Metroid Fusion");
-  expect(getResults()[0]).toContain("Nintendo - Game Boy Advance");
-  expect(getResults()[2]).toContain("Nintendo - GameCube");
+  expect(getResults()[0]).toContain("GBA");
+  expect(document.querySelectorAll(".identify-search-result-meta [title]")[0].title).toBe(FUSION.platform);
+  expect(getResults()[2]).toContain("GC");
+  expect(document.querySelectorAll(".identify-search-result-meta [title]")[2].title).toBe(PRIME.platform);
   expect(document.querySelector(".identify-search-results-label").textContent).toBe("Choose the game you need");
 });
 
@@ -203,6 +205,8 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   expect(document.querySelector(".identify-search-results-label").textContent).toContain("Metroid Fusion");
   expect(document.querySelector(".identify-search-results-label").textContent).toContain("Game Boy Advance");
   // Region, revision, and dump tags are what separate two releases of one game.
+  expect(getResults()[0]).toContain("GBA");
+  expect(document.querySelector(".identify-search-result-meta [title]").title).toBe(FUSION.platform);
   expect(getResults()[0]).toContain("USA");
   expect(getResults()[0]).toContain("Rev 1");
   // The pack's "!" code is decoded into the kind of dump it stands for.

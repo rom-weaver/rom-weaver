@@ -17,6 +17,7 @@ import type { RomLookupMessages, useRomLookup } from "../../use-rom-lookup.ts";
 import { ChecksumList, ChecksumRow } from "./checksum-list.tsx";
 import { ExtractName } from "./extraction-tree.tsx";
 import { FileCard } from "./file-card.tsx";
+import { PlatformName } from "./platform-name.tsx";
 
 const EXPECTED_ROM_CHECK_LABELS: Record<string, string> = {
   crc32: "CRC32",
@@ -231,7 +232,9 @@ const RomTitleRow = ({ onChoose, title }: { onChoose: () => void; title: Expecte
   <li className="identify-search-result">
     <button className="identify-search-result-btn" onClick={onChoose} type="button">
       <span className="identify-search-result-name">{title.name}</span>
-      <span className="identify-search-result-meta">{title.platform}</span>
+      <span className="identify-search-result-meta">
+        <PlatformName name={title.platform} />
+      </span>
     </button>
   </li>
 );
@@ -287,7 +290,7 @@ const ReleaseChecksums = ({ components }: { components: ParsedIdentifyExpectedCo
    user choose the exact dump before this one button selects it. */
 const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; onChoose: () => void }) => {
   const dumpKinds = (match.dumpTags || []).filter((tag) => tag.trim()).map(identifyDumpTagLabel);
-  const details = [match.platform, match.region, match.revision, ...dumpKinds].filter(Boolean);
+  const details = [match.region, match.revision, ...dumpKinds].filter(Boolean);
   return (
     <li className="identify-search-result">
       <button
@@ -296,7 +299,10 @@ const RomVersionRow = ({ match, onChoose }: { match: ParsedIdentifyTitleMatch; o
         type="button"
       >
         <span className="identify-search-result-name">{displayTitle(match.name)}</span>
-        {details.length ? <span className="identify-search-result-meta">{details.join(" · ")}</span> : null}
+        <span className="identify-search-result-meta">
+          <PlatformName name={match.platform} />
+          {details.length ? ` · ${details.join(" · ")}` : null}
+        </span>
         <ReleaseChecksums components={match.expectedComponents} />
       </button>
     </li>
