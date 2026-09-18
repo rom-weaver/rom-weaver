@@ -471,7 +471,7 @@ msgstr "Apply tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.lede"
-msgstr "Apply a patch, create your own, or test a ROM. Your files stay on your device."
+msgstr "Apply one or more patches to your ROMs and disc images, compressed or raw."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1341,7 +1341,7 @@ msgstr "Every console generation brought its own format. Bring all of them."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsDescription"
-msgstr "Every workflow takes files you already have and gives back one file you can keep, share, or play. A bundle is how a workflow itself gets shared."
+msgstr "Create patches, share reusable bundles, and test ROMs in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2046,7 +2046,7 @@ msgstr "Names"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem1"
-msgstr "Native builds for Linux, macOS, and Windows."
+msgstr "Install with npm, Homebrew, Cargo, or Docker for scripts and batch jobs."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3016,7 +3016,7 @@ msgstr "Standard"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsTitle"
-msgstr "Start from the files on your disk."
+msgstr "Other capabilities"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

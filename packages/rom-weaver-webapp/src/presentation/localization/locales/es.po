@@ -471,7 +471,7 @@ msgstr "Herramienta Aplicar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.lede"
-msgstr "Aplica un parche, crea el tuyo o prueba una ROM. Tus archivos permanecen en tu dispositivo."
+msgstr "Aplica uno o varios parches a tus ROM e imágenes de disco, comprimidos o sin comprimir."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1341,7 +1341,7 @@ msgstr "Cada generación de consolas trajo su propio formato. Tráelos todos."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsDescription"
-msgstr "Cada flujo de trabajo toma archivos que ya tienes y devuelve un archivo que puedes guardar, compartir o reproducir. Un paquete permite compartir el propio flujo de trabajo."
+msgstr "Crea parches, comparte paquetes reutilizables y prueba ROM en tu navegador."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2046,7 +2046,7 @@ msgstr "Nombres"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem1"
-msgstr "Compilaciones nativas para Linux, macOS y Windows."
+msgstr "Instala la CLI con npm, Homebrew, Cargo o Docker para scripts y trabajos por lotes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3016,7 +3016,7 @@ msgstr "Estándar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsTitle"
-msgstr "Empieza con los archivos de tu disco."
+msgstr "Otras funciones"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
