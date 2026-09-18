@@ -1,8 +1,6 @@
-import { useSyncExternalStore } from "react";
-import { Download, Footprints, Gamepad2, GitCompare, ListChecks, Package, Server, Terminal } from "lucide-react";
-import { ApplyBandaidIcon } from "../../public/react/components/apply-bandaid-icon.tsx";
 import { HomeLoom } from "./home-loom.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 
 /**
@@ -17,25 +15,59 @@ type HomePageProps = {
   baseUrl: string;
 };
 
-const SHELL_INSTALL = {
-  name: "macOS / Linux",
-  slug: "install-script-macos-linux",
-  command: "sh -c 'curl -fsSL https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh'",
+type Flow = {
+  get: React.ReactNode;
+  href: string;
+  primary?: boolean;
+  title: string;
 };
-const WINDOWS_INSTALL = {
-  name: "Windows (PowerShell)",
-  slug: "install-script-windows",
-  command: "irm https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.ps1 | iex",
-};
+
+const ArrowIcon = (): React.ReactElement => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="2"
+    viewBox="0 0 16 16"
+  >
+    <path d="M3 8h10M9 4l4 4-4 4" />
+  </svg>
+);
+
+/**
+ * The four featured workflows. This list MUST NOT depend on
+ * settings: the page is prerendered into index.html with defaults, so anything
+ * read from storage here renders a different tree on the client and fails
+ * hydration. Utility tools are reached from More.
+ */
+const buildFlows = (route: (slug: string) => string, localizer: Localizer): Flow[] => [
+  {
+    get: localizer.message("ui.home.flowApplyGet"),
+    href: route("apply-patches"),
+    primary: true,
+    title: localizer.message("ui.home.flowApply"),
+  },
+  {
+    get: localizer.message("ui.home.flowBundleGet"),
+    href: route("bundle-patches"),
+    title: localizer.message("ui.home.flowBundle"),
+  },
+  {
+    get: localizer.message("ui.home.flowCreateGet"),
+    href: route("create-patch"),
+    title: localizer.message("ui.home.flowCreate"),
+  },
+  {
+    get: localizer.message("ui.home.flowTestGet"),
+    href: route("test-rom"),
+    title: localizer.message("ui.home.flowTest"),
+  },
+];
 
 const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
   const localizer = useUiLocalizer();
-  const windows = useSyncExternalStore(
-    () => () => undefined,
-    () => /Windows/i.test(navigator.userAgent),
-    () => false,
-  );
-  const install = windows ? WINDOWS_INSTALL : SHELL_INSTALL;
   const route = (slug: string) => {
     try {
       return new URL(slug, baseUrl).pathname;
@@ -43,35 +75,30 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
       return `/${slug}`;
     }
   };
+  const flows = buildFlows(route, localizer);
 
   return (
     <section aria-labelledby="home-title" className="home-page" id="panel-home">
       <div className="home-wrap home-hero">
-        <div className="home-hero-copy">
-          <div className="home-hero-head">
-            <p className="home-eyebrow">{localizer.message("ui.home.eyebrow")}</p>
-            <h1 id="home-title">
-              {localizer.message("ui.home.title")} <em>{localizer.message("ui.home.titleEmphasis")}</em>
-            </h1>
+        <div className="home-hero-head">
+          <p className="home-eyebrow">{localizer.message("ui.home.eyebrow")}</p>
+          <h1 id="home-title">
+            {localizer.message("ui.home.title")} <em>{localizer.message("ui.home.titleEmphasis")}</em>
+          </h1>
+        </div>
+        <div className="home-hero-body">
+          <p className="home-lede">{localizer.message("ui.home.lede")}</p>
+          <div className="home-cta">
+            <a className="btn primary lg" href={route("apply-patches")}>
+              {localizer.message("ui.home.applyPatchCta")}
+              <ArrowIcon />
+            </a>
           </div>
-          <div className="home-hero-body">
-            <p className="home-lede">{localizer.message("ui.home.lede")}</p>
-            <div className="home-actions home-main-actions">
-              <a className="btn primary lg" href={route("apply-patches")}>
-                <ApplyBandaidIcon />
-                {localizer.message("ui.home.applyPatchCta")}
-              </a>
-              <a className="btn ghost lg" href={`${route("docs")}/supported-formats`}>
-                <ListChecks aria-hidden="true" />
-                {localizer.message("ui.home.formatsEyebrow")}
-              </a>
-            </div>
-            <p className="home-try">
-              {localizer.message("ui.home.tryBefore")}{" "}
-              <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
-              {localizer.message("ui.home.tryAfter")}
-            </p>
-          </div>
+          <p className="home-try">
+            {localizer.message("ui.home.tryBefore")}{" "}
+            <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
+            {localizer.message("ui.home.tryAfter")}
+          </p>
         </div>
         <div className="home-loom">
           <div className="home-loom-frame">
@@ -109,62 +136,44 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               </span>
             </div>
           </div>
-          <p className="home-loom-caption">{localizer.message("ui.home.loomCaption")}</p>
         </div>
       </div>
 
-      <section aria-labelledby="home-webapp-title" className="home-wrap home-section home-webapp">
-        <h2 id="home-webapp-title">{localizer.message("ui.home.workflowsTitle")}</h2>
-        <p className="home-blurb">{localizer.message("ui.home.workflowsDescription")}</p>
-        <div className="home-actions">
-          <a className="btn ghost" href={route("create-patch")}>
-            <GitCompare aria-hidden="true" />
-            {localizer.message("ui.home.flowCreate")}
-          </a>
-          <a className="btn ghost" href={route("bundle-patches")}>
-            <Package aria-hidden="true" />
-            {localizer.message("ui.home.flowBundle")}
-          </a>
-          <a className="btn ghost" href={route("test-rom")}>
-            <Gamepad2 aria-hidden="true" />
-            {localizer.message("ui.home.flowTest")}
-          </a>
-          <a className="btn ghost" href={resolveGuidedSampleHref(baseUrl, "apply")}>
-            <Footprints aria-hidden="true" />
-            {localizer.message("ui.home.tryLink")}
-          </a>
+      <div className="home-wrap home-section">
+        <div className="home-flows">
+          {flows.map((flow) => (
+            <a className={flow.primary ? "home-flow is-primary" : "home-flow"} href={flow.href} key={flow.title}>
+              <h3>{flow.title}</h3>
+              <p>{flow.get}</p>
+              <span className="go">
+                <ArrowIcon />
+              </span>
+            </a>
+          ))}
         </div>
-      </section>
+      </div>
 
-      <section aria-labelledby="home-cli-title" className="home-wrap home-section home-cli" id="home-cli">
-        <h2 id="home-cli-title">{localizer.message("ui.home.commandLine")}</h2>
-        <p className="home-blurb">{localizer.message("ui.home.cliItem1")}</p>
-        <div className="home-install">
-          <a href={`${route("docs")}/install#${install.slug}`}>{install.name}</a>
-          <textarea
-            aria-label={install.name}
-            className="home-install-code"
-            key={install.name}
-            defaultValue={install.command}
-            readOnly
-            rows={1}
-          />
-        </div>
+      <div className="home-wrap home-section home-cli" id="home-cli">
+        <h2>{localizer.message("ui.home.commandLine")}</h2>
         <div className="home-actions">
           <a className="btn ghost" href={`${route("docs")}/install`}>
-            <Download aria-hidden="true" />
             {localizer.message("ui.home.fullInstallGuide")}
+            <ArrowIcon />
           </a>
           <a className="btn ghost" href={`${route("docs")}/cli-get-started`}>
-            <Terminal aria-hidden="true" />
             {localizer.message("ui.home.cliWalkthrough")}
           </a>
           <a className="btn ghost" href={`${route("docs")}/self-hosting`}>
-            <Server aria-hidden="true" />
             {localizer.message("ui.home.selfHostingGuide")}
           </a>
         </div>
-      </section>
+      </div>
+
+      <div className="home-wrap home-section home-details">
+        <a href={`${route("docs")}/supported-formats`}>{localizer.message("ui.home.formatsEyebrow")}</a>
+        <p>{localizer.message("ui.home.filesStay")}</p>
+        <p>{localizer.message("ui.home.openSource")}</p>
+      </div>
     </section>
   );
 };

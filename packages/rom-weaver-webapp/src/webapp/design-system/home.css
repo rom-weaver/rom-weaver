@@ -24,17 +24,16 @@
 }
 .rw-app .home-hero {
   display: grid;
-  grid-template-areas: "copy" "loom";
+  grid-template-areas: "head" "body";
   gap: 16px;
   padding-block: 24px 32px;
 }
-.rw-app .home-hero-copy {
-  display: grid;
-  grid-area: copy;
-  gap: 16px;
+.rw-app .home-hero-head {
+  grid-area: head;
 }
 .rw-app .home-hero-body {
   display: grid;
+  grid-area: body;
   gap: 16px;
 }
 .rw-app .home-hero h1 {
@@ -52,18 +51,21 @@
   font-size: 1rem;
   color: var(--ink-2);
 }
+.rw-app .home-cta {
+  display: flex;
+}
 .rw-app .home-try {
-  display: none;
   font-size: 0.85rem;
   color: var(--ink-3);
 }
-.rw-app .home-try a {
+.rw-app .home-try a,
+.rw-app .home-details a {
   color: var(--ink-2);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .rw-app .home-loom {
-  display: block;
+  display: none;
   grid-area: loom;
 }
 .rw-app .home-loom-frame {
@@ -118,148 +120,104 @@
   border-radius: 2px;
 }
 .rw-app .home-loom-legend .k,
-.rw-app .home-loom-legend .sum,
-.rw-app .home-loom-caption {
+.rw-app .home-loom-legend .sum {
   display: none;
 }
 @media (min-width: 880px) {
   .rw-app .home-hero {
-    grid-template-areas: "copy loom";
-    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
-    gap: 0 56px;
-    align-items: start;
-    padding-block: var(--gutter) clamp(40px, 6vw, 72px);
+    grid-template-areas: "head loom" "body loom";
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 16px 32px;
+    align-items: center;
   }
   .rw-app .home-loom {
-    align-self: center;
-  }
-  .rw-app .home-loom-frame {
-    padding: var(--sp-l);
-    box-shadow: 0 30px 60px -40px rgb(0 0 0 / 0.55);
-  }
-  .rw-app .home-hero-copy {
-    gap: 12px;
-  }
-  .rw-app .home-hero-body {
-    gap: 0;
-  }
-  .rw-app .home-main-actions {
-    margin-top: 28px;
-  }
-  .rw-app .home-try {
     display: block;
-    margin-top: 14px;
-  }
-  .rw-app .home-hero h1 {
-    max-width: 28ch;
-    font-size: 36px;
   }
   .rw-app .home-loom-frame canvas {
     aspect-ratio: 1.4;
-  }
-  .rw-app .home-loom-legend {
-    grid-template-columns: auto 1fr;
-    gap: 6px 12px;
-    align-items: center;
-    margin-top: 14px;
-    font-size: 0.75rem;
-  }
-  .rw-app .home-loom-legend .row {
-    display: contents;
-  }
-  .rw-app .home-loom-legend i {
-    width: 22px;
-    height: 8px;
-  }
-  .rw-app .home-loom-legend .k {
-    display: inline;
-    color: var(--ink-3);
-  }
-  .rw-app .home-loom-legend .sum {
-    display: inline;
-  }
-  .rw-app .home-loom-caption {
-    display: block;
-    margin-top: 12px;
-    font-size: 0.8rem;
-    color: var(--ink-3);
   }
 }
 .rw-app .home-section {
   padding-block: 24px;
   border-top: 1px solid var(--seam-soft);
 }
-.rw-app .home-webapp {
+.rw-app .home-flows {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
-.rw-app .home-cli {
+.rw-app .home-flow {
   display: grid;
-  gap: 16px;
-}
-.rw-app .home-webapp h2,
-.rw-app .home-cli h2 {
-  font-size: 1.125rem;
-}
-.rw-app .home-blurb {
-  max-width: 52em;
-  font-size: 0.95rem;
-  color: var(--ink-2);
-}
-.rw-app .home-install {
-  display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 16px;
   align-content: start;
-  min-width: 0;
-}
-.rw-app .home-install > a {
-  width: fit-content;
-  font-size: 0.875rem;
-  font-weight: 650;
-  color: var(--ink-2);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.rw-app .home-install-code {
-  width: 100%;
-  padding: 12px;
-  overflow-x: auto;
-  font: inherit;
-  font-size: 0.875rem;
-  color: var(--ink);
-  white-space: pre;
-  resize: none;
-  background: var(--well);
+  padding: 16px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--plate);
   border: 1px solid var(--seam);
-  border-radius: var(--r-s);
+  border-radius: var(--r-l);
+  transition: border-color 0.15s var(--ease);
 }
+.rw-app .home-flow h3 {
+  font-size: 1.125rem;
+  font-weight: 750;
+}
+.rw-app .home-flow p {
+  grid-column: 1;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+.rw-app .home-flow .go {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-self: center;
+  color: var(--thread-text);
+}
+.rw-app .home-flow .go svg {
+  width: 16px;
+  height: 16px;
+}
+@media (hover: hover) {
+  .rw-app .home-flow:hover {
+    background: var(--plate-2);
+    border-color: var(--thread);
+  }
+}
+.rw-app .home-flow:active {
+  background: var(--plate-2);
+  border-color: var(--thread);
+}
+.rw-app .home-flow.is-primary {
+  border-color: var(--thread);
+}
+@media (min-width: 640px) {
+  .rw-app .home-flows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.rw-app .home-cli,
+.rw-app .home-details,
 .rw-app .home-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px 24px;
   align-items: center;
 }
-@media (max-width: 639px) {
-  .rw-app .home-hero {
-    gap: 12px;
-    padding-block: 16px 20px;
-  }
-  .rw-app .home-hero .home-eyebrow {
-    display: none;
-  }
-  .rw-app .home-hero h1 {
-    margin-top: 0;
-    font-size: 28px;
-  }
-  .rw-app .home-hero-copy,
-  .rw-app .home-hero-body {
-    gap: 12px;
-  }
-  .rw-app .home-section {
-    padding-block: 16px;
-  }
-  .rw-app .home-main-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+.rw-app .home-cli {
+  justify-content: space-between;
+}
+.rw-app .home-cli h2 {
+  font-size: 1.125rem;
+}
+.rw-app .home-actions {
+  gap: 8px;
+}
+.rw-app .home-details {
+  font-size: 0.85rem;
+  color: var(--ink-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rw-app .home-flow {
+    transition: none;
   }
 }
