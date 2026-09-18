@@ -639,7 +639,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.home.flowTestGet",
     message: "It running in EmulatorJS in this tab, so you can check the patch before you save it.",
   }),
-  "ui.home.formatsEyebrow": msg({ id: "ui.home.formatsEyebrow", message: "What it reads and writes" }),
+  "ui.home.formatsEyebrow": msg({ id: "ui.home.formatsEyebrow", message: "See what’s supported" }),
   "ui.home.formatsTitle": msg({
     id: "ui.home.formatsTitle",
     message: "Every console generation brought its own format. Bring all of them.",
@@ -703,7 +703,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: ": a tiny homebrew NES ROM and two patches, already in order.",
   }),
   "ui.home.tryBefore": msg({ id: "ui.home.tryBefore", message: "New here?" }),
-  "ui.home.tryLink": msg({ id: "ui.home.tryLink", message: "Walk through the sample" }),
+  "ui.home.tryLink": msg({ id: "ui.home.tryLink", message: "Walk through a sample" }),
   "ui.home.webappFoot": msg({
     id: "ui.home.webappFoot",
     message: "Want your own copy? Host it yourself from static files or a Docker image.",

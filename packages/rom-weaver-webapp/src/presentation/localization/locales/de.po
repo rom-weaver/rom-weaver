@@ -3610,7 +3610,7 @@ msgstr "Quelltext auf GitHub"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.tryLink"
-msgstr "Beispiel ausprobieren"
+msgstr "Ein Beispiel durchgehen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3625,7 +3625,7 @@ msgstr "Web-App"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.formatsEyebrow"
-msgstr "Was es liest und schreibt"
+msgstr "Unterstützte Formate ansehen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
