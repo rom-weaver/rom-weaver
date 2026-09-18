@@ -84,10 +84,19 @@ const createWorkflowRoute = <View extends WebappView>(
 const CreatorRoute = createWorkflowRoute("creator", () =>
   import("../public/react/create-patch-form.tsx").then((module) => ({ default: module.CreatePatchForm })),
 );
+type DocsNavigationProps = { currentSlug: string; onNavigate?: () => void };
+let loadedDocsNavigation: ComponentType<DocsNavigationProps> | null = null;
+const LazyDocsNavigation = lazy(() => import("./docs-page.tsx").then((module) => ({ default: module.DocsNavigation })));
+const DocsNavigationRoute = (props: DocsNavigationProps) => {
+  const Component = loadedDocsNavigation ?? LazyDocsNavigation;
+  return <Component {...props} />;
+};
+
 const DocsRoute = createWorkflowRoute("docs", () =>
   import("./docs-page.tsx").then(async (module) => {
     // Each guide's HTML is its own chunk; without the landing guide's the
     // article would mount empty and pop in a frame later.
+    loadedDocsNavigation = module.DocsNavigation;
     await module.preloadDocsHtml().catch(() => undefined);
     return { default: module.DocsPage };
   }),
@@ -161,6 +170,7 @@ export {
   ApplyPatchRoute,
   BundleRoute,
   CreatePatchRoute,
+  DocsNavigationRoute,
   DocsPageRoute,
   EmulatorTestRoute,
   HomePageRoute,

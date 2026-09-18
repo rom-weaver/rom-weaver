@@ -16,23 +16,9 @@ html:has(.docs-workbench) {
      measure, while tables and prose use the available article width. */
   --measure-wide: 60rem;
   --article-pad: clamp(18px, 3vw, 32px);
-  --docs-rail: 13.5rem;
+  --docs-rail: 11rem;
   --docs-gap: clamp(18px, 3vw, 30px);
   padding-block: var(--sp-m) clamp(40px, 8vw, 72px);
-}
-
-/* --- search --- */
-.rw-app .docs-search-header {
-  position: relative;
-  z-index: 70;
-  display: grid;
-  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
-  gap: var(--docs-gap);
-  margin-block: 0 var(--sp-l);
-}
-.rw-app .docs-search-header .docs-search {
-  grid-column: 2;
-  margin-inline-end: 2px;
 }
 
 /* --- layout --- */
@@ -40,89 +26,36 @@ html:has(.docs-workbench) {
   display: grid;
   /* The article takes whatever the rail leaves, so the panel reaches the edge
      of the workbench on any screen. Each block inside picks its own measure. */
-  grid-template-columns: var(--docs-rail) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--docs-rail);
   gap: var(--docs-gap);
   align-items: start;
+}
+.rw-app .docs-layout-full {
+  grid-template-columns: minmax(0, 1fr);
 }
 .rw-app .docs-rails {
   position: sticky;
   top: var(--sp-l);
   display: grid;
+  grid-row: 1;
+  grid-column: 2;
   gap: var(--sp-l);
 }
 
 /* --- guide switcher --- */
 .rw-app .guide-nav {
-  overflow: hidden;
-  background: var(--plate);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
+  margin: 2px 0 var(--sp-s) 12px;
+  border-inline-start: 1px solid var(--seam);
 }
-.rw-app .guide-nav-title,
 .rw-app .warp-rail-title {
   display: block;
+  padding: var(--sp-m) 0 var(--sp-s) 1.15rem;
   font-size: 0.655rem;
   font-weight: 700;
   font-stretch: 86%;
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-}
-.rw-app .guide-nav-title {
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--seam-soft);
-}
-
-.rw-app .docs-search {
-  position: relative;
-}
-.rw-app .docs-search input {
-  font-size: 0.82rem;
-  background: var(--plate-2);
-}
-.rw-app .docs-search-results {
-  position: absolute;
-  inset: calc(100% + 5px) 0 auto;
-  z-index: 80;
-  max-height: min(60vh, 30rem);
-  overflow: auto;
-  background: var(--plate);
-  border: 1px solid var(--seam-strong);
-  border-radius: var(--r-m);
-  box-shadow: 0 14px 34px color-mix(in oklab, var(--ink) 18%, transparent);
-}
-.rw-app .docs-search-status {
-  padding: 9px 12px 7px;
-  margin: 0;
-  font-size: 0.68rem;
-  color: var(--ink-3);
-  border-bottom: 1px solid var(--seam-soft);
-}
-.rw-app .docs-search-result-list a {
-  display: grid;
-  gap: 3px;
-}
-.rw-app .docs-search-result-list strong,
-.rw-app .docs-search-result-list small {
-  display: block;
-}
-.rw-app .docs-search-result-title {
-  font-weight: 750;
-  color: var(--ink);
-}
-.rw-app .docs-search-result-list a.is-active {
-  color: var(--ink);
-  background: var(--well);
-}
-.rw-app .docs-search-result-list small {
-  font-size: 0.67rem;
-  color: var(--ink-3);
-}
-.rw-app .docs-search-result-list small:last-child {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
 }
 .rw-app .docs-search-highlight {
   padding-inline: 0.08em;
@@ -131,8 +64,7 @@ html:has(.docs-workbench) {
   background: var(--weft);
   border-radius: 2px;
 }
-/* Shelves: one per folder under docs/. Browser usage opens by default; after that,
-   the reader's choices carry across pages. */
+/* The current guide's shelf SHOULD open when the reader changes pages. */
 .rw-app .guide-shelf {
   padding: 3px 5px;
 }
@@ -217,17 +149,11 @@ html:has(.docs-workbench) {
 }
 
 /* --- warp rail: the signature --- */
-/* Plated like the guide nav above it, so the two rail items read as one
-   column of panels rather than a card followed by loose text. The whole rail
-   is `display: none` below 860px, so this needs no breakpoint of its own. */
 .rw-app .warp-rail {
   padding: 0 2px var(--sp-s);
   background: var(--plate);
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
-}
-.rw-app .warp-rail-title {
-  padding: var(--sp-m) 0 var(--sp-s) 1.15rem;
 }
 .rw-app .warp-rail-list {
   position: relative;
@@ -295,6 +221,8 @@ html:has(.docs-workbench) {
 
 /* --- article --- */
 .rw-app .docs-panel {
+  grid-row: 1;
+  grid-column: 1;
   min-width: 0;
   overflow: hidden;
   background: var(--plate);
@@ -997,8 +925,17 @@ html:has(.docs-workbench) {
   .rw-app .docs-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+  .rw-app .docs-layout-full {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rw-app .docs-panel {
+    grid-row: 1;
+    grid-column: 1;
+  }
   .rw-app .docs-rails {
     display: none;
+    grid-row: 1;
+    grid-column: 2;
   }
   .rw-app .docs-index {
     display: grid;
@@ -1028,9 +965,6 @@ html:has(.docs-workbench) {
   .rw-app .docs-workbench {
     padding-block-end: calc(var(--docs-trail-h) + var(--sp-m));
   }
-  .rw-app .docs-search-header {
-    display: none;
-  }
   .rw-app .docs-trail-row {
     display: flex;
     gap: var(--sp-s);
@@ -1043,9 +977,6 @@ html:has(.docs-workbench) {
     flex: none;
     gap: 5px;
     align-items: center;
-    /* the search beside it is a plain `.input`, which takes the shared control
-       height - a hardcoded 36px left the button a head shorter than the field
-       it shares a row with. Same token, so they track each other. */
     height: var(--ctl);
     padding-inline: 10px;
     font: inherit;
@@ -1082,13 +1013,6 @@ html:has(.docs-workbench) {
     background: var(--well);
     border-color: var(--seam-strong);
   }
-  .rw-app .docs-trail-search {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .rw-app .docs-trail-search .docs-search input {
-    background: var(--plate);
-  }
   .rw-app .docs-contents-menu {
     position: fixed;
     inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--docs-trail-h) + var(--sp-s));
@@ -1103,15 +1027,6 @@ html:has(.docs-workbench) {
     border: 1px solid var(--seam-strong);
     border-radius: var(--r-l);
     box-shadow: var(--overlay-shadow);
-  }
-  /* Results open upward - the bar is the floor of the screen now - and against
-     the bar rather than the input, so a phone gets the full width to read them
-     in instead of the strip left over beside the Contents button. */
-  .rw-app .docs-trail .docs-search {
-    position: static;
-  }
-  .rw-app .docs-trail .docs-search-results {
-    inset: auto var(--gutter) calc(100% + 5px);
   }
   /* The warp, woven: one tick per section, each as wide as its section is long,
      so the crossing weft is a plain scroll fraction that still lands inside the

@@ -1476,7 +1476,7 @@ msgstr "Find"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.placeholder"
-msgstr "Find a tool, guide, or setting"
+msgstr "Find a tool, doc, device information, or setting"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

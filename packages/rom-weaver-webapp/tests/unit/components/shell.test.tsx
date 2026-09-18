@@ -258,6 +258,9 @@ describe("Masthead", () => {
       expect(labels).not.toContain("PPF undo");
       expect(labels).not.toContain("Saves");
       expect(labels).toContain("Apply");
+      for (const row of container.querySelectorAll(`${nav} .nav-row[hidden]`)) {
+        expect(row.parentElement?.hidden).toBe(true);
+      }
     }
     // The rows are still in the markup: the setting is client-only, so the
     // prerendered shell and the first hydration pass must agree on the DOM.
