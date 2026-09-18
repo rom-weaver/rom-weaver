@@ -96,8 +96,8 @@ const cloneIdentification = (
 ): ParsedIdentifyResolution | undefined =>
   identification
     ? {
+        ...identification,
         matches: identification.matches.map((match) => ({ ...match })),
-        status: identification.status,
       }
     : undefined;
 

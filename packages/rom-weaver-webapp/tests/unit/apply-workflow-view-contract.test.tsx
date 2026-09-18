@@ -871,6 +871,52 @@ describe("apply workflow view - staged bench", () => {
     expect(romCard?.querySelector(".extract-d .tree-name")?.textContent).toBe("game.bin");
   });
 
+  it("fills identified base and variant checks from the matched record", () => {
+    const rom = romRow("game.nes");
+    rom.info = {
+      ...rom.info,
+      checksumVariants: [
+        {
+          checksums: { crc32: "99887766" },
+          id: "remove-header",
+          label: "Headerless",
+          transforms: { removeHeader: { strippedBytes: 8 } },
+        },
+      ],
+      identification: {
+        database: { packFormat: "rwfp5", source: "opengood" },
+        evidence: { requiredComponentsMatched: 1, requiredComponentsTotal: 1 },
+        matches: [
+          {
+            algorithm: "md5",
+            database: "demo.pack",
+            expectedComponents: [{ md5: "c".repeat(32), ordinal: 0, role: "rom", size: 5 }],
+            name: "Headered Game (USA)",
+            platform: "Nintendo Entertainment System",
+            variant: "remove-header",
+          },
+        ],
+        quality: "exact",
+        status: "matched",
+      },
+      identificationStatus: "matched",
+      romInfo: "Headered Game (USA)",
+    };
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
+    const { container } = renderView({ ui });
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+
+    const checks = Array.from(romCard?.querySelectorAll(".cks") || []).find((drawer) =>
+      drawer.textContent?.includes("Checks"),
+    );
+    expect(checks?.textContent).toContain("Headerless");
+    expect(checks?.textContent).toContain("c".repeat(32));
+    expect(checks?.textContent).toContain("5");
+    expect(checks?.querySelectorAll(".ck.ck-db")).toHaveLength(1);
+    expect(romCard?.querySelector(".identify-drawer")?.textContent).toContain("OpenGood");
+    expect(romCard?.querySelector(".identify-drawer")?.textContent).toContain("Headered Game (USA)");
+  });
+
   it("uses a validated patch requirement to identify the ROM", () => {
     const rom = romRow("game.bin");
     const patch = patchItem("change.ips");

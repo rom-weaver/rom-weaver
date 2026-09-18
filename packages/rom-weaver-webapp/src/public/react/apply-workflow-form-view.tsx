@@ -53,6 +53,7 @@ import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
 import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
+import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
 import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
@@ -901,6 +902,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
   const { localizer, romInputs, verificationStates, ui } = deps;
   const identification = resolveRomIdentification(romInput, deps.identificationStates.get(romInput.id));
   const identificationLookup = romInput.info.identification || buildPatchIdentificationLookup(identification);
+  const database = identifyRecordChecks(romInput.info.identification);
   const state = resolveRomCardState(verificationStates.get(romInput.id), identification?.status);
   const { percent, staging, stagingPhase } = resolveRomStaging(romInput);
   // A container ROM extracts and checksums in one pass (Rust hashes inline), so it
@@ -950,6 +952,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
             ? undefined
             : { crc32: romInput.info.crc32, md5: romInput.info.md5, sha1: romInput.info.sha1 },
           checksumVariants: staging ? undefined : romInput.info.checksumVariants,
+          ...(database ? { database } : {}),
           // Also while staging: the bundle already declares these, so they reserve their own group
           // (and read) before the hashes land instead of appearing with them.
           ...(expected ? { expected } : {}),

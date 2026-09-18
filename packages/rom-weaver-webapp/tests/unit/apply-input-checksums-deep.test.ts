@@ -47,7 +47,22 @@ describe("apply input checksum finalization", () => {
       _precomputedChecksumMs: 7,
       checksums: { crc32: " A1B2C3D4 ", md5: "00112233445566778899AABBCCDDEEFF", sha1: "abc" },
       checksumVariants: [{ checksums: { crc32: "variant" }, id: "raw", label: "Raw", transforms: { trim: true } }],
-      identification: { matches: [{ name: "Demo" }], status: "identified" },
+      identification: {
+        database: { packFormat: "rwfp5", source: "opengood" },
+        evidence: { requiredComponentsMatched: 1, requiredComponentsTotal: 1 },
+        matches: [
+          {
+            algorithm: "crc32",
+            database: "demo.pack",
+            expectedComponents: [{ crc32: "a1b2c3d4", ordinal: 0, role: "rom", size: 8 }],
+            name: "Demo",
+            platform: "SNES",
+            variant: "raw",
+          },
+        ],
+        quality: "exact",
+        status: "matched",
+      },
       romType: { platform: "SNES", recommendedFormat: "sfc" },
     });
     const calculatedFile = file("calculated.sfc");
@@ -91,6 +106,7 @@ describe("apply input checksum finalization", () => {
     expect(first.checksumVariants).toEqual([
       { checksums: { crc32: "variant" }, id: "raw", label: "Raw", transforms: { trim: true } },
     ]);
+    expect(first.identification).toEqual(precomputedFile.identification);
     expect(calculated).toMatchObject({
       checksums: { crc32: "d4c3b2a1", md5: "ffeeddccbbaa99887766554433221100", sha1: "def" },
       checksumTimeMs: expect.any(Number),
