@@ -303,15 +303,15 @@ const StatusRows = ({
           className="btn primary"
           disabled={runtimeState === "disabled" || (showRemove ? removing : downloadRequested)}
           onClick={() => {
-            if (showRemove && removePointerDown.current) {
+            if (removePointerDown.current) {
               removePointerDown.current = false;
               return;
             }
             if (showRemove) onRemove();
             else onDownload();
           }}
-          onPointerDown={() => {
-            if (showRemove) {
+          onPointerDown={(event) => {
+            if (showRemove && event.button === 0) {
               removePointerDown.current = true;
               onRemove();
             }
