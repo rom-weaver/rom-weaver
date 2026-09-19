@@ -651,7 +651,7 @@ const DocsPage = ({
     };
     const handlers = buttons.map((button) => {
       const handleClick = () => {
-        const value = button.closest(".docs-code-block, .docs-inline-code")?.querySelector("code")?.textContent ?? "";
+        const value = button.closest(".docs-code-block")?.querySelector("code")?.textContent ?? "";
         if (!value) return;
         copyToClipboard(value).then(
           () => {

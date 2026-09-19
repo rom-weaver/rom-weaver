@@ -194,22 +194,8 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       code(token) {
         defaultRenderer.parser = this.parser;
         const code = defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
-        return `<div class="docs-code-block" data-docs-copy-container>${code}</div>\n`;
-      },
-      codespan(token) {
-        defaultRenderer.parser = this.parser;
-        const html = defaultRenderer.codespan(token);
-        if (!/^(?:rom-weaver$|[a-z][a-z0-9._/-]*\s+\S)/.test(token.text)) return html;
-        return `<span class="docs-inline-code" data-docs-copy-container>${html}</span>`;
-      },
-      link(token) {
-        defaultRenderer.parser = this.parser;
-        const linked = defaultRenderer.link(token);
-        const match = linked.match(
-          /^<a([^>]*)><span class="docs-inline-code" data-docs-copy-container>([\s\S]*)<\/span><\/a>$/,
-        );
-        if (!match) return linked;
-        return `<span class="docs-inline-code" data-docs-copy-container><a${match[1]}>${match[2]}</a></span>`;
+        const lineAttribute = token.text.includes("\n") ? "" : ' data-docs-copy-lines="single"';
+        return `<div class="docs-code-block" data-docs-copy-container${lineAttribute}>${code}</div>\n`;
       },
       // Note markers are authored as Unicode superscripts so the Markdown still
       // reads on GitHub, but that glyph is a fixed half-height and hairline

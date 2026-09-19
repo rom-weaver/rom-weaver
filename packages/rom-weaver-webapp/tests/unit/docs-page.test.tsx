@@ -209,6 +209,11 @@ Fixture description.
 \`\`\`sh
 echo hi
 \`\`\`
+
+\`\`\`sh
+echo one
+echo two
+\`\`\`
 `,
     );
 
@@ -219,11 +224,19 @@ echo hi
     expect(route.html).toContain('href="/docs/patch-formats#ips"');
     expect(route.html).toContain('href="/docs/fixture#a-and-b"');
     expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
+    expect(route.html).toContain('class="docs-code-block" data-docs-copy-container data-docs-copy-lines="single"');
     expect(route.html).toContain('<h2 id="a-and-b"><a class="docs-section-link" href="/docs/fixture#a-and-b">');
     expect(route.html).toContain('<h2 id="a-and-b-1"><a class="docs-section-link" href="/docs/fixture#a-and-b-1">');
     expect(route.html).toContain('<span class="docs-section-title">A &amp; <code>B</code></span></a></h2>');
     expect(route.html).toContain('class="docs-section-link-icon"');
-    expect(route.html).toContain('<div class="docs-code-block" data-docs-copy-container>');
+    expect(route.html).toContain(
+      '<div class="docs-code-block" data-docs-copy-container data-docs-copy-lines="single">',
+    );
+    const rendered = document.createElement("template");
+    rendered.innerHTML = route.html;
+    const codeBlocks = [...rendered.content.querySelectorAll<HTMLElement>(".docs-code-block")];
+    expect(codeBlocks).toHaveLength(2);
+    expect(codeBlocks[1]?.dataset.docsCopyLines).toBeUndefined();
   });
 
   it("copies a guide code block and shows transient feedback", async () => {
@@ -240,22 +253,17 @@ echo hi
     await vi.waitFor(() => expect(button.getAttribute("aria-label")).toBe("Copied"));
   });
 
-  it("copies inline commands without including the control label", async () => {
-    const writeText = vi.fn(() => Promise.resolve());
-    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
+  it("does not add copy controls to inline commands", () => {
     render(<DocsPage active slug="docs/cli" />);
-    const code = [...document.querySelectorAll(".docs-inline-code > code")].find((entry) =>
-      entry.textContent?.startsWith("rom-weaver "),
+
+    const command = [...document.querySelectorAll(".docs-article p code")].find((code) =>
+      code.textContent?.startsWith("rom-weaver "),
     );
-    if (!code) throw new Error("Missing inline command");
-    const button = code.parentElement?.querySelector<HTMLButtonElement>("[data-docs-copy]");
-    if (!button) throw new Error("Missing inline copy button");
-    fireEvent.click(button);
-    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(code.textContent));
-    await vi.waitFor(() => expect(button.title).toBe("Copied"));
+    expect(command).toBeTruthy();
+    expect(command?.closest("p")?.querySelector("[data-docs-copy]")).toBeNull();
   });
 
-  it("keeps copy buttons outside links containing code", () => {
+  it("keeps linked inline code without a copy control", () => {
     const route = createDocRoute(
       { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
       "# Fixture\n\nRun [`rom-weaver setup`](https://example.com).",
@@ -263,7 +271,7 @@ echo hi
     const container = document.createElement("div");
     container.innerHTML = route.html;
     expect(container.querySelector("a button")).toBeNull();
-    expect(container.querySelector(".docs-inline-code[data-docs-copy-container]")).not.toBeNull();
+    expect(container.querySelector("a > code")?.textContent).toBe("rom-weaver setup");
   });
 
   // A markdown link inside a section heading would nest an <a> inside the

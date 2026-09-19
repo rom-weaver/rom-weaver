@@ -1166,6 +1166,13 @@ html:has(.docs-workbench) {
     padding-inline-end: 56px;
     overflow-x: visible;
   }
+  .rw-app .docs-code-block[data-docs-copy-lines="single"] .docs-copy-button {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .rw-app .docs-code-block[data-docs-copy-lines="single"] .docs-copy-button:active {
+    transform: translateY(-50%) scale(0.97);
+  }
   /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
      to the block, not per line, so it shifts every real line of the command as
      well and invents nesting that is not in the source. The trailing `\` is
@@ -1186,15 +1193,4 @@ html:has(.docs-workbench) {
   .rw-app .docs-article[data-page-turn] {
     animation: none;
   }
-}
-
-.rw-app .docs-inline-code {
-  display: inline;
-}
-.rw-app .docs-inline-code .docs-copy-button {
-  position: static;
-  width: 24px;
-  height: 24px;
-  margin-inline-start: 3px;
-  vertical-align: middle;
 }
