@@ -5,6 +5,7 @@ import { ACCENTS } from "../src/webapp/accent-palette.mjs";
 import {
   BRAND_MARK_TONE_COLORS,
   BRAND_MARK_TONES,
+  BRAND_MARK_FAVICON_VIEWBOX,
   BRAND_MARK_TIGHT_VIEWBOX,
   renderBrandMark,
   renderFavicon,
@@ -14,20 +15,35 @@ const logo = fs.readFileSync(new URL("../design/icon-masters/brand-mark.svg", im
 const repositoryRenders = new URL("../design/icon-masters/renders/", import.meta.url);
 const generatedAssets = new URL("../../../dist/generated-assets/", import.meta.url);
 
-test("the adaptive favicon takes precedence over the ICO fallback", () => {
+test("the adaptive favicon has PNG and ICO fallbacks", () => {
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const icons = [...html.matchAll(/<link\b[^>]*>/g)]
     .map(([link]) => link)
     .filter((link) => /rel="(?:alternate )?icon"/.test(link));
-  assert.equal(icons.length, 2);
-  assert.match(icons[0], /href="\.\/favicon\.ico"/);
-  assert.match(icons[1], /href="\.\/favicon\.svg"/);
-  assert.match(icons[1], /data-favicon/);
-  assert.doesNotMatch(icons[1], /media=/);
+  assert.equal(icons.length, 3);
+  assert.match(icons[0], /href="\.\/favicon\.svg"/);
+  assert.match(icons[0], /data-favicon/);
+  assert.doesNotMatch(icons[0], /media=/);
+  assert.match(icons[1], /href="\.\/favicon-32x32\.png"/);
+  assert.match(icons[1], /sizes="32x32"/);
+  assert.match(icons[2], /href="\.\/favicon\.ico"/);
+  assert.match(icons[2], /sizes="any"/);
 });
 
-test("favicons use the exact brand mark bounds", () => {
+test("favicons preserve the mark with 5–12% padding", () => {
   assert.equal(BRAND_MARK_TIGHT_VIEWBOX, "8 4 48 56");
+  assert.equal(BRAND_MARK_FAVICON_VIEWBOX, "0.8889 0.8889 62.2222 62.2222");
+});
+
+test("the app manifest separates regular and maskable icons", () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(new URL("../src/assets/app/root/manifest.json", import.meta.url), "utf8"),
+  );
+  assert.deepEqual(manifest.icons, [
+    { purpose: "any", sizes: "192x192", src: "icon-192.png", type: "image/png" },
+    { purpose: "any", sizes: "512x512", src: "icon-512.png", type: "image/png" },
+    { purpose: "maskable", sizes: "512x512", src: "icon-maskable-512.png", type: "image/png" },
+  ]);
 });
 
 test("the canonical master has geometry but no palette or background", () => {
@@ -66,7 +82,8 @@ for (const [channel, accentName] of Object.entries({
     assert.equal(source, renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
     const favicon = fs.readFileSync(new URL(`channel-icons/${channel}/favicon.svg`, generatedAssets), "utf8");
     assert.equal(favicon, renderFavicon(logo, { accent }));
-    assert.match(favicon, /width="64" height="64" preserveAspectRatio="none"/);
+    assert.match(favicon, /width="64" height="64"/);
+    assert.doesNotMatch(favicon, /preserveAspectRatio="none"/);
     assert.match(favicon, /@media \(prefers-color-scheme: dark\)/);
     assert.doesNotMatch(favicon, /<rect|<g\b/);
   });
