@@ -802,13 +802,15 @@
 }
 /* the tool wears the live dye so the current lot is readable without opening */
 .rw-app .accent-tool-dot {
+  --accent-dot-size: clamp(4px, 20%, 7px);
   position: absolute;
-  inset-block-start: calc(50% + 5px);
+  inset-block-start: calc(50% + var(--accent-dot-size) + 2px);
   inset-block-end: auto;
-  inset-inline-start: calc(50% + 5px);
+  inset-inline-start: calc(50% + var(--accent-dot-size) + 2px);
   inset-inline-end: auto;
-  width: 7px;
-  height: 7px;
+  width: var(--accent-dot-size);
+  height: auto;
+  aspect-ratio: 1;
   background: var(--thread);
   border-radius: 50%;
   box-shadow: 0 0 0 1.5px var(--chassis);
