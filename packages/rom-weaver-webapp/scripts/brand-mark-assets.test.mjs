@@ -14,17 +14,16 @@ const logo = fs.readFileSync(new URL("../design/icon-masters/brand-mark.svg", im
 const repositoryRenders = new URL("../design/icon-masters/renders/", import.meta.url);
 const generatedAssets = new URL("../../../dist/generated-assets/", import.meta.url);
 
-test("scheme favicons take precedence over the ICO fallback", () => {
+test("the adaptive favicon takes precedence over the ICO fallback", () => {
   const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const icons = [...html.matchAll(/<link\b[^>]*>/g)]
     .map(([link]) => link)
     .filter((link) => /rel="(?:alternate )?icon"/.test(link));
-  assert.equal(icons.length, 3);
+  assert.equal(icons.length, 2);
   assert.match(icons[0], /href="\.\/favicon\.ico"/);
   assert.match(icons[1], /href="\.\/favicon\.svg"/);
-  assert.match(icons[1], /media="\(prefers-color-scheme: light\)"/);
-  assert.match(icons[2], /href="\.\/favicon-dark\.svg"/);
-  assert.match(icons[2], /media="\(prefers-color-scheme: dark\)"/);
+  assert.match(icons[1], /data-favicon/);
+  assert.doesNotMatch(icons[1], /media=/);
 });
 
 test("favicons use the exact brand mark bounds", () => {
@@ -65,14 +64,11 @@ for (const [channel, accentName] of Object.entries({
     const accent = ACCENTS.find((entry) => entry.value === accentName);
     const source = fs.readFileSync(new URL(`channel-icons/${channel}/logo.svg`, generatedAssets), "utf8");
     assert.equal(source, renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
-    const lightScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon.svg`, generatedAssets), "utf8");
-    assert.equal(lightScheme, renderFavicon(logo, { accent, tone: "dark" }));
-    assert.match(lightScheme, /width="64" height="64" preserveAspectRatio="none"/);
-    assert.doesNotMatch(lightScheme, /<rect|<g\b/);
-    const darkScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon-dark.svg`, generatedAssets), "utf8");
-    assert.equal(darkScheme, renderFavicon(logo, { accent, tone: "light" }));
-    assert.match(darkScheme, /width="64" height="64" preserveAspectRatio="none"/);
-    assert.doesNotMatch(darkScheme, /<rect|<g\b/);
+    const favicon = fs.readFileSync(new URL(`channel-icons/${channel}/favicon.svg`, generatedAssets), "utf8");
+    assert.equal(favicon, renderFavicon(logo, { accent }));
+    assert.match(favicon, /width="64" height="64" preserveAspectRatio="none"/);
+    assert.match(favicon, /@media \(prefers-color-scheme: dark\)/);
+    assert.doesNotMatch(favicon, /<rect|<g\b/);
   });
 }
 

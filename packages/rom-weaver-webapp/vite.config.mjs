@@ -126,7 +126,6 @@ const rootStaticAssetSourcesForChannel = (channel) => ({
   "/_redirects": path.join(rootAssetDir, "_redirects"),
   "/apple-touch-icon.png": generatedChannelAssetPath(channel, "apple-touch-icon.png"),
   "/favicon.ico": generatedChannelAssetPath(channel, "favicon.ico"),
-  "/favicon-dark.svg": generatedChannelAssetPath(channel, "favicon-dark.svg"),
   "/favicon.svg": generatedChannelAssetPath(channel, "favicon.svg"),
   "/icon-maskable-192.png": generatedChannelAssetPath(channel, "icon-maskable-192.png"),
   "/icon-maskable-512.png": generatedChannelAssetPath(channel, "icon-maskable-512.png"),

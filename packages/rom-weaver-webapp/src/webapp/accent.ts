@@ -20,13 +20,7 @@ const logger = createLogger("accent");
 type Accent = (typeof ACCENTS)[number]["value"];
 const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
 const FAVICON_URLS = new Map(
-  ACCENTS.map((accent) => [
-    accent.value,
-    {
-      dark: `data:image/svg+xml,${encodeURIComponent(renderFavicon(logo, { accent, tone: "light" }))}`,
-      light: `data:image/svg+xml,${encodeURIComponent(renderFavicon(logo, { accent, tone: "dark" }))}`,
-    },
-  ]),
+  ACCENTS.map((accent) => [accent.value, `data:image/svg+xml,${encodeURIComponent(renderFavicon(logo, { accent }))}`]),
 );
 
 const isAccent = (value: unknown): value is Accent => typeof value === "string" && ACCENT_VALUES.includes(value);
@@ -78,14 +72,9 @@ const applyAccent = (value: unknown) => {
     if (animate) armAccentAnimation(document.documentElement);
     if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute("data-accent");
     else document.documentElement.setAttribute("data-accent", accent);
-    const faviconUrls = FAVICON_URLS.get(accent);
-    if (faviconUrls) {
-      for (const scheme of ["light", "dark"] as const) {
-        document
-          .querySelector(`link[rel="icon"][type="image/svg+xml"][data-favicon-scheme="${scheme}"]`)
-          ?.setAttribute("href", faviconUrls[scheme]);
-      }
-    }
+    const faviconUrl = FAVICON_URLS.get(accent);
+    if (faviconUrl)
+      document.querySelector('link[rel="icon"][type="image/svg+xml"][data-favicon]')?.setAttribute("href", faviconUrl);
   }
   logger.trace("Applied accent", { accent, animate, changed, requested: value });
   if (changed) for (const listener of listeners) listener();
