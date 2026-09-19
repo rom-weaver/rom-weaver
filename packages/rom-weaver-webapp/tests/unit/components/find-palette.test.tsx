@@ -191,15 +191,15 @@ describe("Find", () => {
     expect(onOpenSettingsField).toHaveBeenCalledWith("settings-worker-threads");
   });
 
-  it("swaps with the phone Menu sheet, which reaches Find from its own foot", () => {
+  it("swaps with the phone Menu sheet and opens from the dock", () => {
     const { container } = render(withSettings(<Masthead {...props} />));
     fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     expect(container.querySelector(".find-palette")).not.toBeNull();
 
-    // Opening Menu closes Find; the sheet's own row opens it again.
+    // Opening Menu closes Find; the dock's Find tab replaces the sheet.
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     expect(container.querySelector(".find-palette")).toBeNull();
-    fireEvent.click(container.querySelector(".menu-find") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".dock-find") as HTMLButtonElement);
     expect(container.querySelector(".find-palette")).not.toBeNull();
     expect(container.querySelector(".menu-sheet")?.hasAttribute("hidden")).toBe(true);
   });

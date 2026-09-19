@@ -1,7 +1,7 @@
 /* ═══ Find ═══
    One box for tools, settings, app surfaces and guides. Its trigger is a
-   search field in the desktop top bar and a row at the foot of the phone Menu
-   sheet; the palette itself is one element that the layout threshold
+   search field in the desktop top bar and a phone dock tab; the palette itself
+   is one element that the layout threshold
    repositions: a panel under the top bar on desktop, a sheet above the dock on
    phones. */
 .rw-app .find-palette {

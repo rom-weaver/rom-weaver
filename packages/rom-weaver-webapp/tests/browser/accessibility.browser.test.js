@@ -968,9 +968,7 @@ describe("webapp keyboard navigation", () => {
     // button silently drops focus to the body.
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);
-    if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
-    await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
-    host.querySelector(".menu-find").click();
+    host.querySelector(".dock-find").click();
     await settleUntil(() => !!host.querySelector(".find-input"));
 
     host
@@ -979,7 +977,7 @@ describe("webapp keyboard navigation", () => {
     await settleUntil(() => !host.querySelector(".find-input"));
 
     expect(document.activeElement).not.toBe(document.body);
-    expect(document.activeElement.closest(".menu-find, .dock-menu")).toBeTruthy();
+    expect(document.activeElement.closest(".dock-find")).toBeTruthy();
   });
 
   test("the Menu sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
@@ -1209,11 +1207,7 @@ describe("webapp responsive navigation", () => {
       await setViewport({ height: 430, width });
       await renderMastheadOnly(ALL_TABS);
       if (width > 999) host.querySelector(".topbar-find").click();
-      else {
-        host.querySelector(".dock-menu").click();
-        await settle();
-        host.querySelector(".menu-find").click();
-      }
+      else host.querySelector(".dock-find").click();
       await settle();
       const input = host.querySelector(".find-input");
       const options = host.querySelectorAll(".find-option");
@@ -1283,9 +1277,9 @@ describe("webapp responsive navigation", () => {
       const dock = host.querySelector(".dock");
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
-      // Three workflows plus Menu, each with a word under its glyph.
+      // Three workflows plus Find and Menu, each with a word under its glyph.
       const slots = [...dock.querySelectorAll(".dock-tab")];
-      expect(slots.length).toBe(4);
+      expect(slots.length).toBe(5);
       for (const slot of slots) {
         const label = slot.lastElementChild;
         expect(label.textContent.trim().length).toBeGreaterThan(0);

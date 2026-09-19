@@ -658,7 +658,7 @@ Fixture description.
     expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true);
   });
 
-  it("puts guides and Find in the phone navigation and closes it on a guide choice", async () => {
+  it("puts guides in the phone navigation and Find in the dock", async () => {
     renderDocsShell("docs/cli");
     fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
     await vi.waitFor(() =>
@@ -667,8 +667,7 @@ Fixture description.
     expect(document.querySelector('.menu-sheet .guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
     fireEvent.click(document.querySelector(".menu-sheet .guide-nav-list a") as HTMLElement);
     expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
-    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-    fireEvent.click(document.querySelector(".menu-find") as HTMLElement);
+    fireEvent.click(document.querySelector(".dock-find") as HTMLElement);
     expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
     const input = document.querySelector(".find-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "OPFS" } });

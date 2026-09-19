@@ -272,19 +272,27 @@ const SideNav = ({
 
 const PhoneDock = ({
   current,
+  findLabel,
+  findOpen,
+  findTriggerRef,
   menuLabel,
   menuOpen,
   navLabel,
   onSelect,
+  onToggleFind,
   onToggleMenu,
   tabs,
   triggerRef,
 }: {
   current: string;
+  findLabel: string;
+  findOpen: boolean;
+  findTriggerRef: RefObject<HTMLButtonElement | null>;
   menuLabel: string;
   menuOpen: boolean;
   navLabel: string;
   onSelect: (id: string) => void;
+  onToggleFind: () => void;
   onToggleMenu: () => void;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
@@ -304,6 +312,20 @@ const PhoneDock = ({
       </a>
     ))}
     <button
+      aria-controls="find-palette"
+      aria-expanded={findOpen}
+      aria-haspopup="dialog"
+      aria-keyshortcuts="/ Control+K Meta+K"
+      aria-label={findLabel}
+      className="dock-tab dock-find"
+      onClick={onToggleFind}
+      ref={findTriggerRef}
+      type="button"
+    >
+      <Search aria-hidden="true" />
+      <span>{findLabel}</span>
+    </button>
+    <button
       aria-controls="menu-sheet"
       aria-expanded={menuOpen}
       aria-label={menuLabel}
@@ -320,10 +342,8 @@ const PhoneDock = ({
 
 const MenuSheet = ({
   appearance,
-  findRef,
   localizer,
   onClose,
-  onOpenFind,
   open,
   opened,
   sections,
@@ -332,11 +352,8 @@ const MenuSheet = ({
 }: {
   /** Theme and accent rows join This Device after the sheet opens. */
   appearance: ReactNode;
-  /** The sheet's own Find row, so Escape can return focus to it on the phone. */
-  findRef: RefObject<HTMLButtonElement | null>;
   localizer: Localizer;
   onClose: () => void;
-  onOpenFind: () => void;
   open: boolean;
   /** The secondary nav mounts after the first open, once hydration is complete. */
   opened: boolean;
@@ -379,13 +396,6 @@ const MenuSheet = ({
               </div>
             ))
           : null}
-      </div>
-      <div className="menu-sheet-foot">
-        <button className="menu-find" onClick={onOpenFind} ref={findRef} type="button">
-          <Search aria-hidden="true" />
-          <span>{localizer.message("ui.find.placeholder")}</span>
-          <kbd>{FIND_SHORTCUT_HINT}</kbd>
-        </button>
       </div>
     </nav>
   );
@@ -1154,15 +1164,15 @@ const Masthead = ({
   }, [currentTab, docsSlug]);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const menuFindRef = useRef<HTMLButtonElement | null>(null);
-  /* Find opens from the top bar on desktop and from the Menu sheet's foot on
-     the phone. Escape restores focus to whichever of those the layout shows,
+  const dockFindRef = useRef<HTMLButtonElement | null>(null);
+  /* Find opens from the top bar on desktop and from the dock on the phone.
+     Escape restores focus to whichever of those the layout shows,
      resolved at call time rather than stored, because the layout is CSS's
      decision and this component never reads a breakpoint. */
   const activeFindRef = useMemo(
     () => ({
       get current() {
-        return visibleFirst([findTriggerRef.current, menuFindRef.current, menuTriggerRef.current]);
+        return visibleFirst([findTriggerRef.current, dockFindRef.current]);
       },
       set current(node: HTMLButtonElement | null) {
         findTriggerRef.current = node;
@@ -1610,10 +1620,17 @@ const Masthead = ({
       ) : null}
       <PhoneDock
         current={currentTab}
+        findLabel={localizer.message("ui.find.label")}
+        findOpen={findOpen}
+        findTriggerRef={dockFindRef}
         menuLabel={localizer.message("ui.tools.menu")}
         menuOpen={menuOpen}
         navLabel={navLabel}
         onSelect={onSelectTab}
+        onToggleFind={() => {
+          setMenuOpen(false);
+          setFindOpen((open) => !open);
+        }}
         onToggleMenu={() => {
           setFindOpen(false);
           onPreloadLog?.();
@@ -1629,11 +1646,6 @@ const Masthead = ({
         appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
         localizer={localizer}
         onClose={closeMenu}
-        findRef={menuFindRef}
-        onOpenFind={() => {
-          setMenuOpen(false);
-          setFindOpen(true);
-        }}
         open={menuOpen}
         opened={menuMounted}
         sections={withDocsNavigation(
