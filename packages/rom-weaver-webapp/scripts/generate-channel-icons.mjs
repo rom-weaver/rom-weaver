@@ -73,7 +73,6 @@ const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "ve
 const RASTER_TARGETS = [
   { output: "icon-maskable-512.png", scale: 0.72, size: 512 },
   { output: "icon-maskable-192.png", scale: 0.72, size: 192 },
-  { output: "apple-touch-icon.png", scale: 0.8, size: 180 },
 ];
 
 // Social cards MUST match the dimensions index.html advertises to crawlers.
@@ -206,10 +205,8 @@ const main = async () => {
         Buffer.from(renderBrandMark(brandMaster, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
       );
 
-      const darkFavicon = renderFavicon(brandMaster, { accent, tone: "dark" });
-      const lightFavicon = renderFavicon(brandMaster, { accent, tone: "light" });
-      emit(path.join(channelDir, "favicon.svg"), Buffer.from(darkFavicon));
-      emit(path.join(channelDir, "favicon-dark.svg"), Buffer.from(lightFavicon));
+      const favicon = renderFavicon(brandMaster, { accent });
+      emit(path.join(channelDir, "favicon.svg"), Buffer.from(favicon));
 
       for (const target of RASTER_TARGETS) {
         const logo = renderBrandMark(brandMaster, { accent, tone: "light" });
@@ -217,10 +214,14 @@ const main = async () => {
         emit(path.join(channelDir, target.output), await rasterize(page, launcher, target.size));
       }
 
-      const favicon = lightFavicon;
+      const fallbackFavicon = renderFavicon(brandMaster, { accent, tone: "light" });
+      const appleTouchIcon = await rasterize(page, fallbackFavicon, 180);
+      assertFaviconTouchesEdges(appleTouchIcon, 180);
+      emit(path.join(channelDir, "apple-touch-icon.png"), appleTouchIcon);
+
       const images = [];
       for (const size of [16, 32, 48, 64]) {
-        const png = await rasterize(page, favicon, size);
+        const png = await rasterize(page, fallbackFavicon, size);
         assertFaviconTouchesEdges(png, size);
         images.push({ size, png });
       }

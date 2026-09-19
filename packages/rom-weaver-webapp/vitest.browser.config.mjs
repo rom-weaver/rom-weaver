@@ -40,7 +40,6 @@ const generatedRootIconAssets = new Map(
   [
     ["/apple-touch-icon.png", "apple-touch-icon.png"],
     ["/favicon.ico", "favicon.ico"],
-    ["/favicon-dark.svg", "favicon-dark.svg"],
     ["/favicon.svg", "favicon.svg"],
     ["/icon-maskable-192.png", "icon-maskable-192.png"],
     ["/icon-maskable-512.png", "icon-maskable-512.png"],
