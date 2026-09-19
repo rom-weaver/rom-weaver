@@ -592,7 +592,7 @@ Fixture description.
 
   it("opens only this guide's outline from the phone trail", () => {
     render(<DocsPage active slug="docs/cli" />);
-    const contents = screen.getByRole("button", { name: "On this page" });
+    const contents = screen.getByRole("button", { name: "Contents" });
     fireEvent.click(contents);
     const menu = document.querySelector(".docs-contents-menu");
     expect(menu?.querySelector(".warp-rail")).toBeTruthy();
@@ -771,12 +771,8 @@ Fixture description.
     const readAt = (scrollY: number) => {
       scrollTop = scrollY;
       layOutHeadings();
-      // Resize re-measures before reading; scroll alone reuses the cached
-      // geometry, which was taken before these rects existed.
       fireEvent(window, new Event("resize"));
-      return {
-        weft: (document.querySelector(".warp-gauge-weft") as HTMLElement | null)?.style.width,
-      };
+      return document.querySelectorAll('.warp-rail-list a[aria-current="true"]');
     };
 
     // Reading line is 108px, so the second heading (1000px) becomes current
@@ -784,7 +780,8 @@ Fixture description.
     // The last section stays reachable at the scroll limit even though its
     // heading never crosses the reading line.
     const atLimit = readAt(4600);
-    expect(atLimit.weft).toBe("100%");
+    expect(atLimit).toHaveLength(1);
+    expect([...atLimit].every((link) => link.getAttribute("href")?.endsWith(`#${sections.at(-1)?.id}`))).toBe(true);
   });
 
   it("indexes every other page on the hub, and no page on a guide", () => {
