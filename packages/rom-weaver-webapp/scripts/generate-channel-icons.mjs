@@ -24,7 +24,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONES, renderBrandMark } from "../src/webapp/brand-mark-assets.mjs";
+import {
+  BRAND_MARK_TIGHT_VIEWBOX,
+  BRAND_MARK_TONES,
+  renderBrandMark,
+  renderFavicon,
+} from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
 import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
@@ -85,8 +90,6 @@ const launcherWrapper = (logo, scale) => {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>rom-weaver launcher icon</title><path fill="#31343a" d="M0 0h64v64H0z"/><g transform="translate(${offset} ${offset}) scale(${scale})">${stripSvgShell(logo)}</g></svg>`;
 };
 
-const faviconSvg = (logo) => logo.replace(/viewBox="[^"]*"/, `viewBox="${BRAND_MARK_TIGHT_VIEWBOX}"`);
-
 /**
  * Lay an SVG out at an exact pixel size. It is handed over as a data URI inside
  * a bare page so nothing else can contribute pixels.
@@ -111,6 +114,23 @@ const rasterize = async (page, svg, size) => {
   const optimized = optimizePng(shot);
   assertSamePixels(shot, optimized, `rasterized ${size}px icon`);
   return optimized;
+};
+
+const assertFaviconTouchesEdges = (png, size) => {
+  const { data, height, width } = decodeRgba(png);
+  const alphaAt = (x, y) => data[(y * width + x) * 4 + 3];
+  const rowHasAlpha = (y) => Array.from({ length: width }, (_, x) => alphaAt(x, y)).some(Boolean);
+  const columnHasAlpha = (x) => Array.from({ length: height }, (_, y) => alphaAt(x, y)).some(Boolean);
+  if (
+    width !== size ||
+    height !== size ||
+    !rowHasAlpha(0) ||
+    !rowHasAlpha(height - 1) ||
+    !columnHasAlpha(0) ||
+    !columnHasAlpha(width - 1)
+  ) {
+    throw new Error(`favicon ${size}px: mark does not touch all four edges`);
+  }
 };
 
 /**
@@ -186,8 +206,8 @@ const main = async () => {
         Buffer.from(renderBrandMark(brandMaster, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
       );
 
-      const darkFavicon = faviconSvg(renderBrandMark(brandMaster, { accent, tone: "dark" }));
-      const lightFavicon = faviconSvg(renderBrandMark(brandMaster, { accent, tone: "light" }));
+      const darkFavicon = renderFavicon(brandMaster, { accent, tone: "dark" });
+      const lightFavicon = renderFavicon(brandMaster, { accent, tone: "light" });
       emit(path.join(channelDir, "favicon.svg"), Buffer.from(darkFavicon));
       emit(path.join(channelDir, "favicon-dark.svg"), Buffer.from(lightFavicon));
 
@@ -200,7 +220,9 @@ const main = async () => {
       const favicon = lightFavicon;
       const images = [];
       for (const size of [16, 32, 48, 64]) {
-        images.push({ size, png: await rasterize(page, favicon, size) });
+        const png = await rasterize(page, favicon, size);
+        assertFaviconTouchesEdges(png, size);
+        images.push({ size, png });
       }
       emit(path.join(channelDir, "favicon.ico"), encodeFavicon(images));
     }

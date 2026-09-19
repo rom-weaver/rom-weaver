@@ -48,7 +48,12 @@ describe("accent favicon", () => {
   test.each(ACCENTS)("applies $label to the favicon on initial load", (accent) => {
     applyAccent(accent.value);
     for (const favicon of [lightFavicon, darkFavicon]) {
-      expect(readFavicon(favicon).querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe(accent.swatch);
+      const svg = readFavicon(favicon).documentElement;
+      expect(svg.querySelector(".brand-mark-accent")?.getAttribute("fill")).toBe(accent.swatch);
+      expect(svg.getAttribute("viewBox")).toBe("8 4 48 56");
+      expect(svg.getAttribute("width")).toBe("64");
+      expect(svg.getAttribute("height")).toBe("64");
+      expect(svg.getAttribute("preserveAspectRatio")).toBe("none");
     }
     expect(readFavicon(lightFavicon).querySelector(".brand-mark-cartridge")?.getAttribute("fill")).toBe("#20282d");
     expect(readFavicon(darkFavicon).querySelector(".brand-mark-cartridge")?.getAttribute("fill")).toBe("#f6ecda");

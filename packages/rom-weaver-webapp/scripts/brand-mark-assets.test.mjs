@@ -7,6 +7,7 @@ import {
   BRAND_MARK_TONES,
   BRAND_MARK_TIGHT_VIEWBOX,
   renderBrandMark,
+  renderFavicon,
 } from "../src/webapp/brand-mark-assets.mjs";
 
 const logo = fs.readFileSync(new URL("../design/icon-masters/brand-mark.svg", import.meta.url), "utf8");
@@ -65,10 +66,12 @@ for (const [channel, accentName] of Object.entries({
     const source = fs.readFileSync(new URL(`channel-icons/${channel}/logo.svg`, generatedAssets), "utf8");
     assert.equal(source, renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
     const lightScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon.svg`, generatedAssets), "utf8");
-    assert.equal(lightScheme, renderBrandMark(logo, { accent, tone: "dark", viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
+    assert.equal(lightScheme, renderFavicon(logo, { accent, tone: "dark" }));
+    assert.match(lightScheme, /width="64" height="64" preserveAspectRatio="none"/);
     assert.doesNotMatch(lightScheme, /<rect|<g\b/);
     const darkScheme = fs.readFileSync(new URL(`channel-icons/${channel}/favicon-dark.svg`, generatedAssets), "utf8");
-    assert.equal(darkScheme, renderBrandMark(logo, { accent, tone: "light", viewBox: BRAND_MARK_TIGHT_VIEWBOX }));
+    assert.equal(darkScheme, renderFavicon(logo, { accent, tone: "light" }));
+    assert.match(darkScheme, /width="64" height="64" preserveAspectRatio="none"/);
     assert.doesNotMatch(darkScheme, /<rect|<g\b/);
   });
 }
