@@ -1193,7 +1193,10 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   border-radius: 0;
 }
 .rw-app .sw-legend-details {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: var(--sp-xs);
   min-width: 0;
 }
 .rw-app .offline-group > .sw-status-cell:has(.sw-cache-action, .sw-progress-detail) {
