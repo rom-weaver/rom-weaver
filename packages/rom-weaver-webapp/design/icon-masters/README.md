@@ -23,7 +23,7 @@ The cartridge occupies 48 × 56 units, with a recessed top edge and three center
 | Light logo render | `renders/light/*.svg`; `logo-variants/light/*.svg` | — | — | Transparent |
 | Adaptive favicon | `channel-icons/*/favicon.svg` | Fit tight `8 4 48 56` viewBox | Centered | Transparent |
 | Light logo render in launcher wrapper | `icon-maskable-{192,512}.png` | 0.72 | 8.96 | `#31343a` |
-| Light favicon render | `apple-touch-icon.png` (180px) | Fit tight | 0 | Transparent |
+| Light logo render | `apple-touch-icon.png` (180px) | Fit tight, aspect preserved | Minimum equal side inset | Transparent |
 | Light logo tight render fallback | `favicon.ico` (16, 32, 48, and 64px frames) | Fit tight viewBox | Centered | Transparent |
 
 For launcher icons, `offset = 32 * (1 - scale)`. The generated maskable version keeps the mark inside the central safe circle. Its opaque background is added by the build wrapper, not by the canonical master.
