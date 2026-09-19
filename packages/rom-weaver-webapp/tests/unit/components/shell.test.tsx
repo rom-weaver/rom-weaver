@@ -179,17 +179,25 @@ describe("Masthead", () => {
     );
   });
 
-  it("docks three workflows plus Menu, and toggles the sheet from the same button", () => {
+  it("docks three workflows plus Find and Menu", () => {
     const onSelectTab = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
     const dockNav = container.querySelector(".dock") as HTMLElement;
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
-    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Menu"]);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Find", "Menu"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
 
     const menu = container.querySelector(".dock-menu") as HTMLButtonElement;
+    const find = container.querySelector(".dock-find") as HTMLButtonElement;
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
+    expect(find.getAttribute("aria-controls")).toBe("find-palette");
+    expect(find.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(find);
+    expect(find.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector(".find-palette")).toBeTruthy();
+    fireEvent.click(find);
+    expect(container.querySelector(".find-palette")).toBeNull();
     expect(menu.getAttribute("aria-controls")).toBe(sheet.id);
     expect(menu.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(menu);

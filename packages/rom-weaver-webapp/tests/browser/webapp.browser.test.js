@@ -205,10 +205,10 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The dock keeps its three workflow slots plus Menu at every setting.
+  // The dock keeps its three workflow slots plus Find and Menu at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Test", "Menu"]);
+    .toEqual(["Apply", "Create", "Test", "Find", "Menu"]);
   expect(navRow("PPF undo")).toBeUndefined();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
@@ -655,12 +655,11 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   const body = sheet.querySelector(".menu-sheet-body");
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(navRow("PPF undo", ".menu-sheet")).toBeTruthy();
-  const foot = sheet.querySelector(".menu-sheet-foot");
-  const footTop = foot.getBoundingClientRect().top;
+  const bodyTop = body.getBoundingClientRect().top;
   body.scrollTop = 150;
-  expect(foot.getBoundingClientRect().top).toBe(footTop);
+  expect(body.getBoundingClientRect().top).toBe(bodyTop);
   expect(document.querySelector(".phone-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
-  expect(foot.querySelector(".sub-status")).toBeNull();
+  expect(sheet.querySelector(".dock-find")).toBeNull();
 
   navRow("Logs", ".menu-sheet").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
@@ -700,7 +699,7 @@ test("Theme and Accent float above the navigation without moving its rows", asyn
   await page.viewport(1280, 900);
 });
 
-test("the Menu sheet uses its content height and keeps its foot at the dock", async () => {
+test("the Menu sheet uses its content height and stays above the dock", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
@@ -708,14 +707,13 @@ test("the Menu sheet uses its content height and keeps its foot at the dock", as
   const project = sheet?.querySelectorAll(".nav-group")[3];
   expect(project).not.toBeNull();
   const body = sheet.querySelector(".menu-sheet-body");
-  const foot = sheet.querySelector(".menu-sheet-foot");
   const dock = document.querySelector(".dock");
   expect(sheet.getBoundingClientRect().top).toBeGreaterThan(100);
   expect(
     sheet.querySelector(".nav-group").getBoundingClientRect().top - sheet.getBoundingClientRect().top,
   ).toBeLessThan(24);
   expect(body.scrollHeight).toBe(body.clientHeight);
-  expect(foot.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
+  expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
   const start = {
     sheetHeight: sheet.getBoundingClientRect().height,
     projectTop: project.getBoundingClientRect().top,
@@ -727,7 +725,7 @@ test("the Menu sheet uses its content height and keeps its foot at the dock", as
   await page.viewport(390, 520);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
-  expect(foot.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
+  expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
   await page.viewport(1280, 900);
 });
 
