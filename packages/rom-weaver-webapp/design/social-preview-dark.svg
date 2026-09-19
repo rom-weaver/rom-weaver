@@ -16,7 +16,7 @@
     <text x="64" y="548" fill="#b3bbc8" font-size="48">rom-weaver.com</text>
   </g>
   <svg x="950" y="170" width="300" height="300" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-    <path fill="#f6ecda" d="M14 4h8v6h20V4h8a6 6 0 0 1 6 6v44a6 6 0 0 1-6 6h-5.5v-9h-5v9h-5v-9h-5v9h-5v-9h-5v9h-5.5a6 6 0 0 1-6-6V10a6 6 0 0 1 6-6Z"/>
-    <path class="brand-mark-accent" fill="#d9690f" d="M16 18l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/>
+    <path fill="#f6ecda" d="M14 8h8v6h20V8h8a6 6 0 0 1 6 6v36a6 6 0 0 1-6 6h-5.5v-8h-5v8h-5v-8h-5v8h-5v-8h-5v8h-5.5a6 6 0 0 1-6-6V14a6 6 0 0 1 6-6Z"/>
+    <path class="brand-mark-accent" fill="#d9690f" d="M16 20l7 25h7l2-6 2 6h7l7-25h-8l-3 14-5-10-5 10-3-14Z"/>
   </svg>
 </svg>

@@ -12,7 +12,7 @@
 
 ## Geometry
 
-The cartridge occupies 48 × 56 units, with a recessed top edge and three centered contact cuts at the bottom. The W is a separate path so the build can apply every accent color. The master keeps a `0 0 64 64` viewBox for the inline webapp mark. Standalone logos use the tight `8 4 48 56` viewBox. The paths contain no fonts, strokes, masks, or clip paths.
+The cartridge occupies 48 × 48 units, with a recessed top edge and three centered contact cuts at the bottom. The W is a separate path so the build can apply every accent color. The master keeps a `0 0 64 64` viewBox for the inline webapp mark. Standalone logos use the tight `8 8 48 48` viewBox. The paths contain no fonts, strokes, masks, or clip paths.
 
 `renderBrandMark` applies a dark logo tone (`#20282d`) or light logo tone (`#f6ecda`) and one accent swatch. Generated responsive SVGs select the tone with `prefers-color-scheme`; explicit light and dark renders keep the same transparent background. The inline webapp mark follows the app's ink and accent CSS tokens.
 
@@ -21,11 +21,11 @@ The cartridge occupies 48 × 56 units, with a recessed top edge and three center
 | Responsive generated render | `channel-icons/*/logo.svg`, `logo-variants/*.svg` | — | — | Transparent |
 | Dark logo render | `renders/dark/*.svg`; `logo-variants/dark/*.svg` | — | — | Transparent |
 | Light logo render | `renders/light/*.svg`; `logo-variants/light/*.svg` | — | — | Transparent |
-| Adaptive favicon | `channel-icons/*/favicon.svg` | Aspect preserved | 5% vertical, 11.4% horizontal | Transparent |
-| Light logo app render | `icon-{192,512}.png` | 0.9 | Centered | `#31343a` |
-| Light logo maskable render | `icon-maskable-512.png` | 0.72 | Central mask-safe region | `#31343a` |
-| Light logo app render | `apple-touch-icon.png` (180px) | 0.9 | Centered inside the iOS mask safe area | `#31343a` |
-| Light logo favicon fallback | `favicon-32x32.png`; `favicon.ico` (16, 32, 48, and 64px frames) | 1.02 | 5–12% | `#31343a` |
+| Adaptive favicon | `channel-icons/*/favicon.svg` | Aspect preserved | 5% on each side | Transparent |
+| Light logo app render | `icon-{192,512}.png` | 1 | Centered | `#31343a` |
+| Light logo maskable render | `icon-maskable-512.png` | 0.82 | Central mask-safe region | `#31343a` |
+| Light logo app render | `apple-touch-icon.png` (180px) | 1 | Centered inside the iOS mask safe area | `#31343a` |
+| Light logo favicon fallback | `favicon-32x32.png`; `favicon.ico` (16, 32, 48, and 64px frames) | 1.15 | 5–12% | `#31343a` |
 
 For app, maskable, touch, and fallback icons, `offset = 32 * (1 - scale)`. The dedicated maskable version keeps the mark inside the central safe region. Each app icon has a full-canvas opaque background and no pre-rounded corners. The touch icon has enough space for the iOS mask.
 
