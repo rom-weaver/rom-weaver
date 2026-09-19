@@ -72,12 +72,12 @@ const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "ve
 // around the transparent light-tone mark so the source master stays reusable.
 const APP_ICON_BACKGROUND = "#31343a";
 const APP_ICON_TARGETS = [
-  { minInsetRatio: 0.09, output: "icon-192.png", scale: 0.9, size: 192 },
-  { minInsetRatio: 0.09, output: "icon-512.png", scale: 0.9, size: 512 },
-  { minInsetRatio: 0.15, output: "icon-maskable-512.png", scale: 0.72, size: 512 },
+  { minInsetRatio: 0.12, output: "icon-192.png", scale: 1, size: 192 },
+  { minInsetRatio: 0.12, output: "icon-512.png", scale: 1, size: 512 },
+  { minInsetRatio: 0.18, output: "icon-maskable-512.png", scale: 0.82, size: 512 },
 ];
-const APPLE_TOUCH_ICON = { scale: 0.9, size: 180 };
-const FAVICON_FALLBACK_SCALE = 0.99;
+const APPLE_TOUCH_ICON = { scale: 1, size: 180 };
+const FAVICON_FALLBACK_SCALE = 1.15;
 
 // Social cards MUST match the dimensions index.html advertises to crawlers.
 const SOCIAL_PREVIEW = { height: 1280, width: 2560 };
@@ -240,7 +240,7 @@ const main = async () => {
       );
       assertAppIconFit(appleTouchIcon, {
         label: "apple-touch-icon.png",
-        minInsetRatio: 0.09,
+        minInsetRatio: 0.12,
         size: APPLE_TOUCH_ICON.size,
       });
       emit(path.join(channelDir, "apple-touch-icon.png"), appleTouchIcon);

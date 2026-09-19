@@ -31,8 +31,8 @@ test("the adaptive favicon has PNG and ICO fallbacks", () => {
 });
 
 test("favicons preserve the mark with 5–12% padding", () => {
-  assert.equal(BRAND_MARK_TIGHT_VIEWBOX, "8 4 48 56");
-  assert.equal(BRAND_MARK_FAVICON_VIEWBOX, "0.8889 0.8889 62.2222 62.2222");
+  assert.equal(BRAND_MARK_TIGHT_VIEWBOX, "8 8 48 48");
+  assert.equal(BRAND_MARK_FAVICON_VIEWBOX, "5.3333 5.3333 53.3333 53.3333");
 });
 
 test("the app manifest separates regular and maskable icons", () => {
