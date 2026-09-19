@@ -635,7 +635,8 @@ const DocsPage = ({
       button.dataset.docsCopy = "";
       button.title = "Copy code";
       button.setAttribute("aria-label", "Copy code");
-      button.innerHTML = '<span aria-hidden="true" class="docs-copy-icon"></span><span class="sr-only" data-docs-copy-label aria-live="polite"></span>';
+      button.innerHTML =
+        '<span aria-hidden="true" class="docs-copy-icon"></span><span class="sr-only" data-docs-copy-label aria-live="polite"></span>';
       container.prepend(button);
       return button;
     });

@@ -205,7 +205,9 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
       link(token) {
         defaultRenderer.parser = this.parser;
         const linked = defaultRenderer.link(token);
-        const match = linked.match(/^<a([^>]*)><span class="docs-inline-code" data-docs-copy-container>([\s\S]*)<\/span><\/a>$/);
+        const match = linked.match(
+          /^<a([^>]*)><span class="docs-inline-code" data-docs-copy-container>([\s\S]*)<\/span><\/a>$/,
+        );
         if (!match) return linked;
         return `<span class="docs-inline-code" data-docs-copy-container><a${match[1]}>${match[2]}</a></span>`;
       },
