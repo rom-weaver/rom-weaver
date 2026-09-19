@@ -5,68 +5,20 @@ import { useEffect, useLayoutEffect, useState } from "react";
 // from the wrong state after hydration.
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-/**
- * Section weights and scroll progress use the same measured article span so the marker aligns with section boundaries.
- */
 type ReadingProgress = {
   /** Index of the section being read, or -1 before the first heading. */
   activeIndex: number;
-  /** Document scroll position, 0 at the top and 1 at the scroll limit. */
-  fraction: number;
   /** True until the first client measurement has settled. */
   initializing: boolean;
-  /** Each section's share of the document, summing to 1. */
-  weights: readonly number[];
 };
 
 /** Reading line: a heading counts as current once it passes under the masthead. */
 const HEADING_BAND_PX = 108;
 
-const EMPTY: ReadingProgress = { activeIndex: -1, fraction: 0, initializing: true, weights: [] };
-
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
-
-type Measurement = {
-  /** Document offset of the first heading: where the outline, and the gauge, begin. */
-  start: number;
-  /** Document offset of the end of the article: where they both end. */
-  end: number;
-  weights: number[];
-};
+const EMPTY: ReadingProgress = { activeIndex: -1, initializing: true };
 
 /**
- * Measure how much of the article each section spans. A section runs from its
- * own heading to the next one; the last runs to the end of the article.
- *
- * The weights and the scroll fraction have to be measured over the same span or
- * the weft crosses a tick boundary before the reader crosses the heading: the
- * front matter above the first heading and the call to action below the article
- * belong to neither.
- */
-const measure = (sections: readonly { id: string }[]): Measurement => {
-  const article = document.querySelector(".docs-article");
-  const end = article ? article.getBoundingClientRect().bottom + window.scrollY : document.documentElement.scrollHeight;
-  const tops = sections.map(({ id }) => {
-    const heading = document.getElementById(id);
-    return heading ? heading.getBoundingClientRect().top + window.scrollY : Number.NaN;
-  });
-  const start = tops.find(Number.isFinite) ?? 0;
-  const spans = tops.map((top, index) => {
-    const next = tops[index + 1] ?? end;
-    return Number.isFinite(top) && Number.isFinite(next) ? Math.max(1, next - top) : 1;
-  });
-  const total = spans.reduce((sum, span) => sum + span, 0);
-  return {
-    end,
-    start,
-    weights: total > 0 ? spans.map((span) => span / total) : spans.map(() => 1 / (spans.length || 1)),
-  };
-};
-
-/**
- * Track continuous reading position through a long guide, so a progress
- * indicator can move while the reader scrolls rather than only stepping at
- * heading boundaries.
+ * Track the section that the reader has reached in a long guide.
  */
 const useReadingProgress = (sections: readonly { id: string }[], active: boolean): ReadingProgress => {
   const [progress, setProgress] = useState<ReadingProgress>(EMPTY);
@@ -81,14 +33,6 @@ const useReadingProgress = (sections: readonly { id: string }[], active: boolean
     setInitializing(true);
     let frame = 0;
     let settleFrame = 0;
-    // Re-measured on resize and after layout shifts (fonts, images) rather than
-    // cached once: a guide's images land well after the first paint.
-    let measured: Measurement = { end: 0, start: 0, weights: [] };
-
-    const remeasure = () => {
-      measured = measure(sections);
-    };
-
     const read = () => {
       frame = 0;
       const scrollable = document.documentElement.scrollHeight - window.innerHeight;
@@ -104,15 +48,9 @@ const useReadingProgress = (sections: readonly { id: string }[], active: boolean
       // The last section must be reachable even when the document ends before
       // its heading crosses the reading line.
       if (atLimit) activeIndex = sections.length - 1;
-      // Measured from the same reading line that picks the active section, so
-      // the weft reaches a tick boundary exactly when the heading does.
-      const span = measured.end - measured.start;
-      const travelled = window.scrollY + HEADING_BAND_PX - measured.start;
       setProgress({
         activeIndex: activeIndex < 0 ? 0 : activeIndex,
-        fraction: atLimit ? 1 : clamp01(span > 0 ? travelled / span : 0),
         initializing: true,
-        weights: measured.weights,
       });
     };
 
@@ -120,28 +58,17 @@ const useReadingProgress = (sections: readonly { id: string }[], active: boolean
       if (frame) return;
       frame = requestAnimationFrame(read);
     };
-    const relayout = () => {
-      remeasure();
-      schedule();
-    };
-
-    remeasure();
     read();
     // Keep the first measured marker out of the transition until the browser
     // has painted the settled shell. Later scroll changes remain animated.
     settleFrame = requestAnimationFrame(() => setInitializing(false));
     window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", relayout);
-    document.fonts?.ready?.then(relayout).catch(() => undefined);
-    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(relayout) : null;
-    const article = document.querySelector(".docs-article");
-    if (observer && article) observer.observe(article);
+    window.addEventListener("resize", schedule);
     return () => {
       if (frame) cancelAnimationFrame(frame);
       if (settleFrame) cancelAnimationFrame(settleFrame);
       window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", relayout);
-      observer?.disconnect();
+      window.removeEventListener("resize", schedule);
     };
   }, [active, sections]);
 

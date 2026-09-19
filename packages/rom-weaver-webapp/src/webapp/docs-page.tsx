@@ -391,23 +391,19 @@ const TrailRow = ({
       type="button"
     >
       <ListTree aria-hidden="true" />
-      <span>On this page</span>
+      <span>Contents</span>
     </button>
   </div>
 );
 
 const TrailHead = ({
   activeIndex,
-  fraction,
   initializing,
   route,
-  weights,
 }: {
   activeIndex: number;
-  fraction: number;
   initializing: boolean;
   route: DocRoute;
-  weights: readonly number[];
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const trailRef = useRef<HTMLDivElement | null>(null);
@@ -437,14 +433,6 @@ const TrailHead = ({
 
   return (
     <div className="docs-trail" ref={trailRef}>
-      {outlined ? (
-        <span aria-hidden="true" className="warp-gauge">
-          {route.sections.map((section, index) => (
-            <i key={section.id} style={{ flexGrow: weights[index] ?? 1 }} />
-          ))}
-          <span className="warp-gauge-weft" style={{ width: `${fraction * 100}%` }} />
-        </span>
-      ) : null}
       <TrailRow buttonRef={menuButtonRef} onToggle={() => setMenuOpen((open) => !open)} menuOpen={menuOpen} />
       {menuOpen ? (
         <aside aria-label="Documentation contents" className="docs-contents-menu" id="docs-contents-menu">
@@ -608,9 +596,9 @@ const DocsPage = ({
   const route = targetHtml === undefined ? lastReadyRoute.current : targetRoute;
   const routeHtml = docsHtmlCache.get(route.slug) ?? "";
   const hub = route.slug === HUB_SLUG;
-  // One subscription for the page: the desktop rail and the phone trail read the
-  // same position, and the hook measures the document on every scroll frame.
-  const { activeIndex, fraction, initializing, weights } = useReadingProgress(route.sections, active);
+  // One subscription for the page: the desktop rail and phone contents sheet
+  // use the same active section.
+  const { activeIndex, initializing } = useReadingProgress(route.sections, active);
   const pageTurned = useDocsPageTurned(route.slug);
   const { onShelfToggle, openShelves } = useDocShelfState();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -710,14 +698,7 @@ const DocsPage = ({
       {/* Keyed on the route so moving to another guide closes the sheet with it,
           rather than leaving it open over a guide it no longer describes. */}
       {route.sections.length > 0 ? (
-        <TrailHead
-          activeIndex={activeIndex}
-          fraction={fraction}
-          initializing={initializing}
-          key={route.slug}
-          route={route}
-          weights={weights}
-        />
+        <TrailHead activeIndex={activeIndex} initializing={initializing} key={route.slug} route={route} />
       ) : null}
       <div className={route.sections.length > 0 ? "docs-layout" : "docs-layout docs-layout-full"}>
         {route.sections.length > 0 ? (
