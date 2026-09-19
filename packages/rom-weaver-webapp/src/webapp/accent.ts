@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import logo from "../../design/icon-masters/brand-mark.svg?raw";
 import { createLogger } from "../lib/logging.ts";
 import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
-import { BRAND_MARK_TIGHT_VIEWBOX, renderBrandMark } from "./brand-mark-assets.mjs";
+import { renderFavicon } from "./brand-mark-assets.mjs";
 
 /**
  * Accent dye lots. The accent is the second theme axis alongside dark/light:
@@ -23,12 +23,8 @@ const FAVICON_URLS = new Map(
   ACCENTS.map((accent) => [
     accent.value,
     {
-      dark: `data:image/svg+xml,${encodeURIComponent(
-        renderBrandMark(logo, { accent, tone: "light", viewBox: BRAND_MARK_TIGHT_VIEWBOX }),
-      )}`,
-      light: `data:image/svg+xml,${encodeURIComponent(
-        renderBrandMark(logo, { accent, tone: "dark", viewBox: BRAND_MARK_TIGHT_VIEWBOX }),
-      )}`,
+      dark: `data:image/svg+xml,${encodeURIComponent(renderFavicon(logo, { accent, tone: "light" }))}`,
+      light: `data:image/svg+xml,${encodeURIComponent(renderFavicon(logo, { accent, tone: "dark" }))}`,
     },
   ]),
 );

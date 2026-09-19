@@ -60,4 +60,18 @@ const renderBrandMark = (svg, { accent = DEFAULT_ACCENT, tone = "responsive", vi
   return rendered.replace("</svg>", `${style}</svg>`);
 };
 
-export { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONE_COLORS, BRAND_MARK_TONES, renderBrandMark };
+/**
+ * Fill a square favicon viewport without clipping the cartridge geometry.
+ * The mark is narrower than it is tall, so the favicon MUST scale each axis
+ * independently to touch all four edges.
+ *
+ * @param {string} svg
+ * @param {{ accent?: string | { value: string }, tone?: BrandMarkTone }} [options]
+ */
+const renderFavicon = (svg, options) =>
+  renderBrandMark(svg, { ...options, viewBox: BRAND_MARK_TIGHT_VIEWBOX }).replace(
+    "<svg ",
+    '<svg width="64" height="64" preserveAspectRatio="none" ',
+  );
+
+export { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONE_COLORS, BRAND_MARK_TONES, renderBrandMark, renderFavicon };
