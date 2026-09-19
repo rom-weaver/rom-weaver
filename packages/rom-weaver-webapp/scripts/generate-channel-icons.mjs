@@ -132,6 +132,16 @@ const assertFaviconTouchesEdges = (png, size) => {
   }
 };
 
+const assertAppleTouchIconFit = (png) => {
+  const { data, height, width } = decodeRgba(png);
+  const alphaAt = (x, y) => data[(y * width + x) * 4 + 3];
+  const rowHasAlpha = (y) => Array.from({ length: width }, (_, x) => alphaAt(x, y)).some(Boolean);
+  const columnHasAlpha = (x) => Array.from({ length: height }, (_, y) => alphaAt(x, y)).some(Boolean);
+  if (!(rowHasAlpha(0) && rowHasAlpha(height - 1)) || columnHasAlpha(0) || columnHasAlpha(width - 1)) {
+    throw new Error("apple touch icon: mark must preserve its proportions and touch the vertical edges");
+  }
+};
+
 /**
  * Render the social card once and return it in all three formats crawlers are
  * offered. WebP and AVIF encode from the PNG's own pixels, so the three can
@@ -215,8 +225,9 @@ const main = async () => {
       }
 
       const fallbackFavicon = renderFavicon(brandMaster, { accent, tone: "light" });
-      const appleTouchIcon = await rasterize(page, fallbackFavicon, 180);
-      assertFaviconTouchesEdges(appleTouchIcon, 180);
+      const appleTouchMark = renderBrandMark(brandMaster, { accent, tone: "light", viewBox: BRAND_MARK_TIGHT_VIEWBOX });
+      const appleTouchIcon = await rasterize(page, appleTouchMark, 180);
+      assertAppleTouchIconFit(appleTouchIcon);
       emit(path.join(channelDir, "apple-touch-icon.png"), appleTouchIcon);
 
       const images = [];
