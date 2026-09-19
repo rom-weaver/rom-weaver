@@ -21,13 +21,13 @@ test("the adaptive favicon has PNG and ICO fallbacks", () => {
     .map(([link]) => link)
     .filter((link) => /rel="(?:alternate )?icon"/.test(link));
   assert.equal(icons.length, 3);
-  assert.match(icons[0], /href="\.\/favicon\.svg"/);
-  assert.match(icons[0], /data-favicon/);
-  assert.doesNotMatch(icons[0], /media=/);
+  assert.match(icons[0], /href="\.\/favicon\.ico"/);
+  assert.match(icons[0], /sizes="16x16 32x32 48x48 64x64"/);
   assert.match(icons[1], /href="\.\/favicon-32x32\.png"/);
   assert.match(icons[1], /sizes="32x32"/);
-  assert.match(icons[2], /href="\.\/favicon\.ico"/);
-  assert.match(icons[2], /sizes="any"/);
+  assert.match(icons[2], /href="\.\/favicon\.svg"/);
+  assert.match(icons[2], /data-favicon/);
+  assert.doesNotMatch(icons[2], /media=/);
 });
 
 test("favicons preserve the mark with 5–12% padding", () => {
