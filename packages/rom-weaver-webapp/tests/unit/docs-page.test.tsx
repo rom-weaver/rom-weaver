@@ -8,6 +8,7 @@ import { Masthead } from "../../src/webapp/components/shell.tsx";
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
+import { navigatorWith } from "./navigator-test-utils.ts";
 
 // Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
 // requires its HTML resolved first, exactly as the app preloads before mount.
@@ -79,6 +80,7 @@ describe("DocsPage", () => {
   afterEach(() => {
     window.history.replaceState({}, "", "/");
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("restores docs metadata when its kept-alive panel becomes active again", () => {
@@ -207,6 +209,11 @@ Fixture description.
 \`\`\`sh
 echo hi
 \`\`\`
+
+\`\`\`sh
+echo one
+echo two
+\`\`\`
 `,
     );
 
@@ -217,10 +224,54 @@ echo hi
     expect(route.html).toContain('href="/docs/patch-formats#ips"');
     expect(route.html).toContain('href="/docs/fixture#a-and-b"');
     expect(route.html).toContain('<pre tabindex="0"><code class="language-sh">');
+    expect(route.html).toContain('class="docs-code-block" data-docs-copy-container data-docs-copy-lines="single"');
     expect(route.html).toContain('<h2 id="a-and-b"><a class="docs-section-link" href="/docs/fixture#a-and-b">');
     expect(route.html).toContain('<h2 id="a-and-b-1"><a class="docs-section-link" href="/docs/fixture#a-and-b-1">');
     expect(route.html).toContain('<span class="docs-section-title">A &amp; <code>B</code></span></a></h2>');
     expect(route.html).toContain('class="docs-section-link-icon"');
+    expect(route.html).toContain(
+      '<div class="docs-code-block" data-docs-copy-container data-docs-copy-lines="single">',
+    );
+    const rendered = document.createElement("template");
+    rendered.innerHTML = route.html;
+    const codeBlocks = [...rendered.content.querySelectorAll<HTMLElement>(".docs-code-block")];
+    expect(codeBlocks).toHaveLength(2);
+    expect(codeBlocks[1]?.dataset.docsCopyLines).toBeUndefined();
+  });
+
+  it("copies a guide code block and shows transient feedback", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
+    render(<DocsPage active slug="docs/cli" />);
+
+    const button = document.querySelector<HTMLButtonElement>(".docs-code-block [data-docs-copy]");
+    if (!button) throw new Error("Missing block copy button");
+    const code = button.closest(".docs-code-block")?.querySelector("code");
+    const text = code?.textContent ?? "";
+    fireEvent.click(button);
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(text));
+    await vi.waitFor(() => expect(button.getAttribute("aria-label")).toBe("Copied"));
+  });
+
+  it("does not add copy controls to inline commands", () => {
+    render(<DocsPage active slug="docs/cli" />);
+
+    const command = [...document.querySelectorAll(".docs-article p code")].find((code) =>
+      code.textContent?.startsWith("rom-weaver "),
+    );
+    expect(command).toBeTruthy();
+    expect(command?.closest("p")?.querySelector("[data-docs-copy]")).toBeNull();
+  });
+
+  it("keeps linked inline code without a copy control", () => {
+    const route = createDocRoute(
+      { file: "how-to/fixture.md", label: "Fixture", slug: "docs/fixture" },
+      "# Fixture\n\nRun [`rom-weaver setup`](https://example.com).",
+    );
+    const container = document.createElement("div");
+    container.innerHTML = route.html;
+    expect(container.querySelector("a button")).toBeNull();
+    expect(container.querySelector("a > code")?.textContent).toBe("rom-weaver setup");
   });
 
   // A markdown link inside a section heading would nest an <a> inside the

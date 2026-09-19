@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadCatalog } from "../../src/presentation/localization/catalog.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { HomeLoom } from "../../src/webapp/components/home-loom.tsx";
 import { HomePage } from "../../src/webapp/components/home-page.tsx";
+import { navigatorWith } from "./navigator-test-utils.ts";
 
 const makeContext = () =>
   ({
@@ -148,7 +149,7 @@ describe("HomeLoom", () => {
 });
 
 describe("HomePage", () => {
-  it("builds sub-path-safe workflow links and includes the public workflow copy", () => {
+  it("builds sub-path-safe workflow links and includes the public workflow copy", async () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{ language: "en" }}>
         <HomePage baseUrl="https://example.com/tools/" />
@@ -172,6 +173,10 @@ describe("HomePage", () => {
         (code) => code instanceof HTMLTextAreaElement && code.readOnly,
       ),
     ).toBe(true);
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal("navigator", navigatorWith({ clipboard: { writeText } }));
+    fireEvent.click(container.querySelector(".home-install-copy") as HTMLButtonElement);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("install.sh")));
   });
 
   it.each([

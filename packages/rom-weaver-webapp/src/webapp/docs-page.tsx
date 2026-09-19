@@ -2,6 +2,7 @@ import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
+import { copyToClipboard } from "../lib/clipboard.ts";
 import { createLogger } from "../lib/logging.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { RelatedStrip } from "./components/related-strip.tsx";
@@ -537,6 +538,15 @@ const clearDocsHighlightParam = () => {
   window.history.replaceState(window.history.state, "", url);
 };
 
+const setDocsCopyState = (button: HTMLButtonElement, state: "copied" | "failed" | null) => {
+  if (state) button.dataset.copyState = state;
+  else delete button.dataset.copyState;
+  const label = button.querySelector<HTMLElement>("[data-docs-copy-label]");
+  if (label) label.textContent = state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "";
+  button.title = state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy code";
+  button.setAttribute("aria-label", state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy code");
+};
+
 const highlightDocsTerm = (article: HTMLElement, query: string, sectionId: string | null) => {
   for (const mark of article.querySelectorAll("mark.docs-search-highlight")) {
     mark.replaceWith(document.createTextNode(mark.textContent ?? ""));
@@ -613,6 +623,57 @@ const DocsPage = ({
   // guides where the two differ.
   const [sampleBase, setSampleBase] = useState(AUTHORED_SAMPLE_BASE);
   const html = useMemo(() => retargetSampleUrls(routeHtml, sampleBase), [routeHtml, sampleBase]);
+  useEffect(() => {
+    if (!(active && html)) return undefined;
+    const article = document.querySelector<HTMLElement>(".docs-article");
+    if (!article) return undefined;
+    const timers = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>();
+    const buttons = [...article.querySelectorAll<HTMLElement>("[data-docs-copy-container]")].map((container) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "docs-copy-button";
+      button.dataset.docsCopy = "";
+      button.title = "Copy code";
+      button.setAttribute("aria-label", "Copy code");
+      button.innerHTML =
+        '<svg aria-hidden="true" class="docs-copy-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg><svg aria-hidden="true" class="docs-copy-check" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="m20 6-11 11-5-5"></path></svg><span class="sr-only" data-docs-copy-label aria-live="polite"></span>';
+      container.prepend(button);
+      return button;
+    });
+    const scheduleReset = (button: HTMLButtonElement, delay: number) => {
+      const previous = timers.get(button);
+      if (previous) clearTimeout(previous);
+      const timer = setTimeout(() => {
+        timers.delete(button);
+        setDocsCopyState(button, null);
+      }, delay);
+      timers.set(button, timer);
+    };
+    const handlers = buttons.map((button) => {
+      const handleClick = () => {
+        const value = button.closest(".docs-code-block")?.querySelector("code")?.textContent ?? "";
+        if (!value) return;
+        copyToClipboard(value).then(
+          () => {
+            setDocsCopyState(button, "copied");
+            scheduleReset(button, 1100);
+          },
+          (error) => {
+            logger.trace("Documentation code copy failed", { message: String(error) });
+            setDocsCopyState(button, "failed");
+            scheduleReset(button, 1600);
+          },
+        );
+      };
+      button.addEventListener("click", handleClick);
+      return () => button.removeEventListener("click", handleClick);
+    });
+    return () => {
+      for (const cleanup of handlers) cleanup();
+      for (const timer of timers.values()) clearTimeout(timer);
+      for (const button of buttons) button.remove();
+    };
+  }, [active, html]);
   useEffect(() => {
     if (!active) return;
     syncDocsSeoMetadata(route);

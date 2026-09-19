@@ -497,10 +497,16 @@ html:has(.docs-workbench) {
 .rw-app .docs-article :not(pre) > code {
   overflow-wrap: anywhere;
 }
-.rw-app .docs-article pre {
+.rw-app .docs-code-block {
+  position: relative;
   max-width: var(--measure-wide);
-  padding: var(--sp-l);
   margin-block: var(--sp-xl);
+}
+.rw-app .docs-code-block pre {
+  max-width: none;
+  padding: var(--sp-l);
+  padding-inline-end: 56px;
+  margin: 0;
   overflow-x: auto;
   background: var(--well);
   border: 1px solid var(--seam);
@@ -511,6 +517,72 @@ html:has(.docs-workbench) {
   color: var(--ink-2);
   background: transparent;
   border: 0;
+}
+.rw-app .docs-copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--ink-3);
+  cursor: pointer;
+  background: color-mix(in oklab, var(--plate) 45%, transparent);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+  transition:
+    color 0.18s,
+    background 0.18s,
+    border-color 0.18s,
+    transform 0.15s var(--ease);
+}
+.rw-app .docs-copy-icon,
+.rw-app .docs-copy-check {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+.rw-app .docs-copy-check {
+  display: none;
+}
+.rw-app .docs-copy-button[data-copy-state="copied"] {
+  color: var(--thread-text);
+  border-color: var(--thread);
+}
+.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-icon {
+  display: none;
+}
+.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-check {
+  display: block;
+}
+.rw-app .docs-copy-button[data-copy-state="failed"] {
+  color: var(--ink);
+  border-color: var(--seam-strong);
+}
+@media (hover: hover) {
+  .rw-app .docs-copy-button:hover {
+    color: var(--ink);
+    background: var(--well);
+    border-color: var(--seam-strong);
+  }
+}
+.rw-app .docs-copy-button:active {
+  color: var(--ink);
+  background: var(--well);
+  border-color: var(--seam-strong);
+  transform: scale(0.97);
+}
+.rw-app .docs-copy-button:focus-visible {
+  outline: 2px solid var(--thread-text);
+  outline-offset: 2px;
 }
 /* The inline margin is zeroed deliberately: the UA sheet ships `margin: 1em
    40px`, and setting only `margin-block` leaves that 40px in place, indenting
@@ -1089,9 +1161,17 @@ html:has(.docs-workbench) {
      so a command that looks complete but is not is the worst thing on the page.
      Wrapping also keeps a sideways scroller out of the middle of a page the
      reader is scrolling down. */
-  .rw-app .docs-article pre {
+  .rw-app .docs-code-block pre {
     padding: var(--sp-m);
+    padding-inline-end: 56px;
     overflow-x: visible;
+  }
+  .rw-app .docs-code-block[data-docs-copy-lines="single"] .docs-copy-button {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .rw-app .docs-code-block[data-docs-copy-lines="single"] .docs-copy-button:active {
+    transform: translateY(-50%) scale(0.97);
   }
   /* No hanging indent for wrapped lines: `text-indent` on a `pre` applies once
      to the block, not per line, so it shifts every real line of the command as

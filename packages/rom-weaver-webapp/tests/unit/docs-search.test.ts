@@ -46,6 +46,17 @@ Report bugs through the security policy.
 const [indexedFaqRoute] = createDocsSearchIndex([faqRoute]);
 
 describe("docs search", () => {
+  it("does not index copy control labels", () => {
+    const commands = createDocRoute(
+      { file: "how-to/fixture.md", label: "Commands", slug: "docs/fixture" },
+      "# Commands\n\nRun `rom-weaver setup`.\n\n```sh\nrom-weaver formats\n```",
+    );
+    const [indexed] = createDocsSearchIndex([commands]);
+    expect(indexed.searchEntries[0].text).not.toContain("Copy");
+    expect(indexed.searchEntries[0].text).toContain("rom-weaver setup");
+    expect(indexed.searchEntries[0].text).toContain("rom-weaver formats");
+  });
+
   it("normalizes punctuation and diacritics into searchable tokens", () => {
     expect(searchTokens("Éxtract, checksum-errors!")).toEqual(["extract", "checksum", "errors"]);
   });

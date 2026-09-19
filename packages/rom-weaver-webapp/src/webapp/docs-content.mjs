@@ -193,7 +193,9 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
     renderer: {
       code(token) {
         defaultRenderer.parser = this.parser;
-        return defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
+        const code = defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');
+        const lineAttribute = token.text.includes("\n") ? "" : ' data-docs-copy-lines="single"';
+        return `<div class="docs-code-block" data-docs-copy-container${lineAttribute}>${code}</div>\n`;
       },
       // Note markers are authored as Unicode superscripts so the Markdown still
       // reads on GitHub, but that glyph is a fixed half-height and hairline

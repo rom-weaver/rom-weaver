@@ -1,6 +1,18 @@
 import { useSyncExternalStore } from "react";
-import { Download, Footprints, Gamepad2, GitCompare, ListChecks, Package, Server, Terminal } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Download,
+  Footprints,
+  Gamepad2,
+  GitCompare,
+  ListChecks,
+  Package,
+  Server,
+  Terminal,
+} from "lucide-react";
 import { ApplyBandaidIcon } from "../../public/react/components/apply-bandaid-icon.tsx";
+import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
@@ -80,6 +92,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
     () => false,
   );
   const install = windows ? WINDOWS_INSTALL : SHELL_INSTALL;
+  const { copied, copy } = useClipboardCopy(install.command);
   const route = (slug: string) => resolveHomeRoute(baseUrl, slug);
 
   return (
@@ -167,14 +180,25 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         <p className="home-blurb">{localizer.message("ui.home.cliItem1")}</p>
         <div className="home-install">
           <a href={`${route("docs")}/install#${install.slug}`}>{install.name}</a>
-          <textarea
-            aria-label={install.name}
-            className="home-install-code"
-            key={install.name}
-            defaultValue={install.command}
-            readOnly
-            rows={1}
-          />
+          <div className="home-install-code-wrap">
+            <textarea
+              aria-label={install.name}
+              className="home-install-code"
+              key={install.name}
+              defaultValue={install.command}
+              readOnly
+              rows={1}
+            />
+            <button
+              aria-label={`${localizer.message("ui.common.copy")} ${install.name}`}
+              className={`home-install-copy${copied ? " copied" : ""}`}
+              onClick={copy}
+              title={localizer.message("ui.common.copy")}
+              type="button"
+            >
+              {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+            </button>
+          </div>
         </div>
         <div className="home-actions">
           <a className="btn ghost" href={`${route("docs")}/install`}>
