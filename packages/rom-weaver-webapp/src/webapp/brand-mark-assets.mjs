@@ -6,6 +6,9 @@ import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
 const BRAND_MARK_TONES = Object.freeze(["dark", "light"]);
 const BRAND_MARK_VIEWBOX = "0 0 64 64";
 const BRAND_MARK_TIGHT_VIEWBOX = "8 4 48 56";
+// The square viewport leaves 5% above and below the 56-unit mark. Its narrower
+// geometry then has 11.4% at each side without distorting the cartridge.
+const BRAND_MARK_FAVICON_VIEWBOX = "0.8889 0.8889 62.2222 62.2222";
 /** @type {Readonly<Record<"light" | "dark", string>>} */
 const BRAND_MARK_TONE_COLORS = Object.freeze({ dark: "#20282d", light: "#f6ecda" });
 
@@ -61,17 +64,22 @@ const renderBrandMark = (svg, { accent = DEFAULT_ACCENT, tone = "responsive", vi
 };
 
 /**
- * Fill a square favicon viewport without clipping the cartridge geometry.
- * The mark is narrower than it is tall, so the favicon MUST scale each axis
- * independently to touch all four edges.
+ * Fit the undistorted mark into the favicon viewport with 5–12% padding.
  *
  * @param {string} svg
  * @param {{ accent?: string | { value: string }, tone?: BrandMarkTone }} [options]
  */
 const renderFavicon = (svg, options) =>
-  renderBrandMark(svg, { ...options, viewBox: BRAND_MARK_TIGHT_VIEWBOX }).replace(
+  renderBrandMark(svg, { ...options, viewBox: BRAND_MARK_FAVICON_VIEWBOX }).replace(
     "<svg ",
-    '<svg width="64" height="64" preserveAspectRatio="none" ',
+    '<svg width="64" height="64" ',
   );
 
-export { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONE_COLORS, BRAND_MARK_TONES, renderBrandMark, renderFavicon };
+export {
+  BRAND_MARK_FAVICON_VIEWBOX,
+  BRAND_MARK_TIGHT_VIEWBOX,
+  BRAND_MARK_TONE_COLORS,
+  BRAND_MARK_TONES,
+  renderBrandMark,
+  renderFavicon,
+};
