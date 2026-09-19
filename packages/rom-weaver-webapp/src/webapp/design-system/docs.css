@@ -535,7 +535,7 @@ html:has(.docs-workbench) {
   font-weight: 700;
   color: var(--ink-3);
   cursor: pointer;
-  background: color-mix(in oklab, var(--plate) 82%, transparent);
+  background: color-mix(in oklab, var(--plate) 88%, transparent);
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
   transition:
@@ -544,22 +544,24 @@ html:has(.docs-workbench) {
     border-color 0.18s,
     transform 0.15s var(--ease);
 }
-.rw-app .docs-copy-icon {
+.rw-app .docs-copy-icon,
+.rw-app .docs-copy-check {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
-.rw-app .docs-copy-icon::before {
-  font-size: 1.1rem;
-  line-height: 1;
-  content: "⧉";
+.rw-app .docs-copy-check {
+  display: none;
 }
 .rw-app .docs-copy-button[data-copy-state="copied"] {
   color: var(--thread-text);
   border-color: var(--thread);
 }
-.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-icon::before {
-  content: "✓";
+.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-icon {
+  display: none;
+}
+.rw-app .docs-copy-button[data-copy-state="copied"] .docs-copy-check {
+  display: block;
 }
 .rw-app .docs-copy-button[data-copy-state="failed"] {
   color: var(--ink);

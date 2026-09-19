@@ -254,7 +254,7 @@
   padding: 0;
   color: var(--ink-3);
   cursor: pointer;
-  background: var(--plate);
+  background: color-mix(in oklab, var(--plate) 88%, transparent);
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
   transition:

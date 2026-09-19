@@ -636,7 +636,7 @@ const DocsPage = ({
       button.title = "Copy code";
       button.setAttribute("aria-label", "Copy code");
       button.innerHTML =
-        '<span aria-hidden="true" class="docs-copy-icon"></span><span class="sr-only" data-docs-copy-label aria-live="polite"></span>';
+        '<svg aria-hidden="true" class="docs-copy-icon" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg><svg aria-hidden="true" class="docs-copy-check" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="m20 6-11 11-5-5"></path></svg><span class="sr-only" data-docs-copy-label aria-live="polite"></span>';
       container.prepend(button);
       return button;
     });
