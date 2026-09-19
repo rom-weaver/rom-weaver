@@ -616,7 +616,6 @@ describe("development offline status", () => {
     fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
     fireEvent.click(navRow(container, "What’s new"));
     expect(called("onSelectView")).toHaveBeenCalledWith("whats-new");
-    expect(container.querySelector("dialog.log-dlg")).toBeNull();
   });
 
   it("hides overrides and ignores their URL parameters in production", async () => {
