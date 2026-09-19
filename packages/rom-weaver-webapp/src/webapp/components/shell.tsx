@@ -1,8 +1,6 @@
 import {
   ChevronDown,
   Cloud,
-  CloudCheck,
-  CloudDownload,
   CloudOff,
   createLucideIcon,
   HardDrive,
@@ -10,11 +8,13 @@ import {
   House,
   LoaderCircle,
   Menu,
+  MonitorCheck,
   MonitorCog,
+  MonitorOff,
   Moon,
   Newspaper,
-  PackageCheck,
   Palette,
+  RefreshCw,
   ScrollText,
   Search,
   Settings,
@@ -865,13 +865,13 @@ const installingRuntimeLabel = (
 };
 
 const RUNTIME_ICONS = {
-  active: CloudCheck,
-  disabled: CloudOff,
+  active: MonitorCheck,
+  disabled: MonitorOff,
   installing: LoaderCircle,
   online: CloudOff,
-  ready: PackageCheck,
-  update: CloudDownload,
-} satisfies Record<RuntimeState, typeof CloudCheck>;
+  ready: MonitorCheck,
+  update: RefreshCw,
+} satisfies Record<RuntimeState, typeof Cloud>;
 
 const PROGRESS_RING_RADIUS = 10;
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_RADIUS;
@@ -913,22 +913,15 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
   );
 };
 
-/**
- * Uses the shared Lucide set for every service-worker state. An installing
- * state with a known percent gets a determinate progress ring instead of the
- * indeterminate spinner.
- */
 const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?: number | null }) => {
-  if (state === "installing" && typeof percent === "number") return <ProgressRingGlyph percent={percent} />;
+  if (state === "installing" && typeof percent === "number") {
+    return <ProgressRingGlyph percent={percent} />;
+  }
   const Icon = RUNTIME_ICONS[state];
   return <Icon aria-hidden="true" strokeWidth={2.4} />;
 };
 
-/**
- * The offline state, as a word rather than a lone glyph. `.sub-status` and its
- * inner `.sub-status-text` are what the parser-time resolver in `index.html`
- * rewrites, so both class names are load-bearing.
- */
+/** The parser-time resolver MUST keep the status and text hooks in sync before hydration. */
 const StatusChip = ({
   iconOnly = false,
   label,

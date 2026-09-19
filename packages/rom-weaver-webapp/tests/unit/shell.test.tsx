@@ -11,6 +11,7 @@ import {
   prefersReducedMotion,
   readPwaState,
   resolveRuntimeState,
+  RuntimeGlyph,
 } from "../../src/webapp/components/shell.tsx";
 import type { WorkflowTab } from "../../src/webapp/components/shell.tsx";
 
@@ -439,5 +440,24 @@ describe("the theme control", () => {
     fireEvent.click(container.querySelectorAll('.topbar-tools [role="menuitemradio"]')[1] as HTMLButtonElement);
 
     expect(themeTool.getAttribute("aria-label")).toBe("Theme: Dark");
+  });
+});
+
+describe("offline status glyphs", () => {
+  it("keeps the original progress ring when the installing percentage is known", () => {
+    const glyph = renderToStaticMarkup(<RuntimeGlyph percent={40} state="installing" />);
+    expect(glyph).toContain("sw-progress-ring");
+    expect(glyph).toContain(">40</text>");
+  });
+
+  it.each([
+    ["active", "monitor-check"],
+    ["ready", "monitor-check"],
+    ["update", "refresh-cw"],
+    ["online", "cloud-off"],
+    ["disabled", "monitor-off"],
+    ["installing", "loader-circle"],
+  ] as const)("shows the %s state with its standalone symbol", (state, name) => {
+    expect(renderToStaticMarkup(<RuntimeGlyph state={state} />)).toContain("lucide-" + name);
   });
 });

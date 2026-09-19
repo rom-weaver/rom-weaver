@@ -118,8 +118,7 @@ describe("LogDialog", () => {
     expect(container.querySelector(".status-rows")).not.toBeNull();
     // the trace log belongs to the Logs tab, so it is not mounted on Status
     expect(container.querySelector(".tracelog")).toBeNull();
-    const aboutLinks = Array.from(container.querySelectorAll<HTMLAnchorElement>(".status-about a"));
-    expect(aboutLinks.map((link) => link.getAttribute("href"))).toEqual(["/whats-new", "/docs/about"]);
+    expect(container.querySelectorAll(".status-about a")).toHaveLength(0);
     const branchLink = container.querySelector<HTMLAnchorElement>('.status-row a[href$="/tree/dev"]');
     expect(branchLink?.textContent).toBe("dev");
     expect(branchLink?.target).toBe("_blank");

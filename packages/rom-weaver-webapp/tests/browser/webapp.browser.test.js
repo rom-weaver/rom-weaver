@@ -538,9 +538,9 @@ test("navigation Status keeps a plain label and opens the current Status view", 
   await expect
     .poll(() => document.querySelector(".log-dlg[open] #logpanel-status .sw-legend [data-current]"))
     .toBeTruthy();
-  expect(document.querySelector(".log-dlg #logpanel-status .sw-legend [data-current] .sw-chip")?.textContent).toContain(
-    "Update available",
-  );
+  expect(
+    document.querySelector(".log-dlg #logpanel-status .sw-legend [data-current] .sw-legend-label")?.textContent,
+  ).toContain("Update available");
 });
 
 test("mobile diagnostics keep the Storage tab on one tab row", async () => {
