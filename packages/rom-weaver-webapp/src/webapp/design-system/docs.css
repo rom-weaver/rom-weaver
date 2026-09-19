@@ -535,7 +535,7 @@ html:has(.docs-workbench) {
   font-weight: 700;
   color: var(--ink-3);
   cursor: pointer;
-  background: color-mix(in oklab, var(--plate) 88%, transparent);
+  background: color-mix(in oklab, var(--plate) 45%, transparent);
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
   transition:
