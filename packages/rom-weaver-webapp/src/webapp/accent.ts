@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import logo from "../../design/icon-masters/brand-mark.svg?raw";
 import { createLogger } from "../lib/logging.ts";
 import { ACCENTS, DEFAULT_ACCENT } from "./accent-palette.mjs";
-import { BRAND_MARK_TIGHT_VIEWBOX, renderBrandMark } from "./brand-mark-assets.mjs";
+import { renderFavicon } from "./brand-mark-assets.mjs";
 
 /**
  * Accent dye lots. The accent is the second theme axis alongside dark/light:
@@ -20,10 +20,7 @@ const logger = createLogger("accent");
 type Accent = (typeof ACCENTS)[number]["value"];
 const ACCENT_VALUES: readonly string[] = ACCENTS.map((accent) => accent.value);
 const FAVICON_URLS = new Map(
-  ACCENTS.map((accent) => [
-    accent.value,
-    `data:image/svg+xml,${encodeURIComponent(renderBrandMark(logo, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX }))}`,
-  ]),
+  ACCENTS.map((accent) => [accent.value, `data:image/svg+xml,${encodeURIComponent(renderFavicon(logo, { accent }))}`]),
 );
 
 const isAccent = (value: unknown): value is Accent => typeof value === "string" && ACCENT_VALUES.includes(value);
@@ -76,9 +73,8 @@ const applyAccent = (value: unknown) => {
     if (accent === DEFAULT_ACCENT) document.documentElement.removeAttribute("data-accent");
     else document.documentElement.setAttribute("data-accent", accent);
     const faviconUrl = FAVICON_URLS.get(accent);
-    if (faviconUrl) {
-      document.querySelector('link[rel="icon"][type="image/svg+xml"]')?.setAttribute("href", faviconUrl);
-    }
+    if (faviconUrl)
+      document.querySelector('link[rel="icon"][type="image/svg+xml"][data-favicon]')?.setAttribute("href", faviconUrl);
   }
   logger.trace("Applied accent", { accent, animate, changed, requested: value });
   if (changed) for (const listener of listeners) listener();

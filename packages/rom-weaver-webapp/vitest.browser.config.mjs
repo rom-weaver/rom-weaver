@@ -40,7 +40,10 @@ const generatedRootIconAssets = new Map(
   [
     ["/apple-touch-icon.png", "apple-touch-icon.png"],
     ["/favicon.ico", "favicon.ico"],
-    ["/icon-maskable-192.png", "icon-maskable-192.png"],
+    ["/favicon-32x32.png", "favicon-32x32.png"],
+    ["/favicon.svg", "favicon.svg"],
+    ["/icon-192.png", "icon-192.png"],
+    ["/icon-512.png", "icon-512.png"],
     ["/icon-maskable-512.png", "icon-maskable-512.png"],
     ["/logo.svg", "logo.svg"],
   ].map(([requestPath, name]) => [requestPath, generatedChannelAssetPath("dev", name)]),
