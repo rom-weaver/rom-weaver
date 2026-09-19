@@ -804,9 +804,9 @@
 .rw-app .accent-tool-dot {
   --accent-dot-size: clamp(4px, 20%, 7px);
   position: absolute;
-  inset-block-start: calc(50% + var(--accent-dot-size) + 2px);
+  inset-block-start: calc(50% + 5px);
   inset-block-end: auto;
-  inset-inline-start: calc(50% + var(--accent-dot-size) + 2px);
+  inset-inline-start: calc(50% + 5px);
   inset-inline-end: auto;
   width: var(--accent-dot-size);
   height: auto;
