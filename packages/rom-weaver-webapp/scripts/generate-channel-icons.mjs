@@ -24,12 +24,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import {
-  BRAND_MARK_FAVICON_VIEWBOX,
-  BRAND_MARK_TIGHT_VIEWBOX,
-  BRAND_MARK_TONES,
-  renderBrandMark,
-} from "../src/webapp/brand-mark-assets.mjs";
+import { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONES, renderBrandMark } from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
 import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
@@ -90,7 +85,7 @@ const launcherWrapper = (logo, scale) => {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>rom-weaver launcher icon</title><path fill="#31343a" d="M0 0h64v64H0z"/><g transform="translate(${offset} ${offset}) scale(${scale})">${stripSvgShell(logo)}</g></svg>`;
 };
 
-const faviconSvg = (logo) => logo.replace(/viewBox="[^"]*"/, `viewBox="${BRAND_MARK_FAVICON_VIEWBOX}"`);
+const faviconSvg = (logo) => logo.replace(/viewBox="[^"]*"/, `viewBox="${BRAND_MARK_TIGHT_VIEWBOX}"`);
 
 /**
  * Lay an SVG out at an exact pixel size. It is handed over as a data URI inside
