@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -15,7 +16,11 @@ test("retired assets and design experiments stay out of the tracked tree", () =>
     `${webapp}/prototypes/**`,
     `${webapp}/src/assets/powered_by_rom_patcher_js.png`,
   ]);
-  assert.deepEqual(files, [], "Remove retired files; maintained design inputs belong in the webapp package");
+  assert.deepEqual(
+    files,
+    [],
+    "Remove retired files; maintained design inputs belong in the webapp package",
+  );
 });
 
 test("build outputs stay out of the tracked tree", () => {
@@ -44,5 +49,18 @@ test("build outputs stay out of the tracked tree", () => {
     "crates/rom-weaver-cli/data/identify/v1/title-index.json",
     "crates/rom-weaver-cli/data/identify/v1/cheats-*.json",
   ]);
-  assert.deepEqual(files, [], "Generate build outputs in ignored directories instead of committing them");
+  assert.deepEqual(
+    files,
+    [],
+    "Generate build outputs in ignored directories instead of committing them",
+  );
+});
+
+test("the Docker context includes the published bundle schema", () => {
+  const dockerIgnore = readFileSync(new URL("../.dockerignore", import.meta.url), "utf8");
+  assert.match(
+    dockerIgnore,
+    /^!docs\/rom-weaver-bundle-v2\.schema\.json$/mu,
+    "Vite publishes the bundle schema, so Docker builds MUST include its source file",
+  );
 });
