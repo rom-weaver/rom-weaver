@@ -24,7 +24,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { ACCENTS, DEFAULT_ACCENT } from "../src/webapp/accent-palette.mjs";
-import { BRAND_MARK_TIGHT_VIEWBOX, BRAND_MARK_TONES, renderBrandMark } from "../src/webapp/brand-mark-assets.mjs";
+import {
+  BRAND_MARK_TIGHT_VIEWBOX,
+  BRAND_MARK_TONES,
+  renderBrandMark,
+  renderFavicon,
+} from "../src/webapp/brand-mark-assets.mjs";
 import { assertSamePixels, decodeRgba, optimizePng } from "./optimize-png.mjs";
 import { encodeAvif, encodeWebp } from "./social-preview-encoders.mjs";
 
@@ -65,11 +70,14 @@ const CHANNEL_ACCENTS = { production: DEFAULT_ACCENT, beta: "woad", nightly: "ve
 
 // Sizes come from design/icon-masters/README.md. The wrappers are generated
 // around the transparent light-tone mark so the source master stays reusable.
-const RASTER_TARGETS = [
-  { output: "icon-maskable-512.png", scale: 0.72, size: 512 },
-  { output: "icon-maskable-192.png", scale: 0.72, size: 192 },
-  { output: "apple-touch-icon.png", scale: 0.8, size: 180 },
+const APP_ICON_BACKGROUND = "#31343a";
+const APP_ICON_TARGETS = [
+  { minInsetRatio: 0.12, output: "icon-192.png", scale: 1, size: 192 },
+  { minInsetRatio: 0.12, output: "icon-512.png", scale: 1, size: 512 },
+  { minInsetRatio: 0.18, output: "icon-maskable-512.png", scale: 0.82, size: 512 },
 ];
+const APPLE_TOUCH_ICON = { scale: 1, size: 180 };
+const FAVICON_FALLBACK_SCALE = 1.15;
 
 // Social cards MUST match the dimensions index.html advertises to crawlers.
 const SOCIAL_PREVIEW = { height: 1280, width: 2560 };
@@ -80,12 +88,10 @@ const readBrandMaster = () => fs.readFileSync(brandMasterPath, "utf8");
 
 const stripSvgShell = (svg) => svg.replace(/<svg\b[^>]*>/, "").replace("</svg>", "");
 
-const launcherWrapper = (logo, scale) => {
+const appIconWrapper = (logo, scale) => {
   const offset = 32 * (1 - scale);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>rom-weaver launcher icon</title><path fill="#31343a" d="M0 0h64v64H0z"/><g transform="translate(${offset} ${offset}) scale(${scale})">${stripSvgShell(logo)}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>rom-weaver app icon</title><path fill="${APP_ICON_BACKGROUND}" d="M0 0h64v64H0z"/><g transform="translate(${offset} ${offset}) scale(${scale})">${stripSvgShell(logo)}</g></svg>`;
 };
-
-const faviconSvg = (logo) => logo.replace(/viewBox="[^"]*"/, `viewBox="${BRAND_MARK_TIGHT_VIEWBOX}"`);
 
 /**
  * Lay an SVG out at an exact pixel size. It is handed over as a data URI inside
@@ -111,6 +117,37 @@ const rasterize = async (page, svg, size) => {
   const optimized = optimizePng(shot);
   assertSamePixels(shot, optimized, `rasterized ${size}px icon`);
   return optimized;
+};
+
+const assertAppIconFit = (png, { label, minInsetRatio, size }) => {
+  const { data, height, width } = decodeRgba(png);
+  const background = [0x31, 0x34, 0x3a];
+  for (let offset = 3; offset < data.length; offset += 4) {
+    if (data[offset] !== 255) throw new Error(`${label}: app icon background must be opaque`);
+  }
+  const isMark = (x, y) => {
+    const offset = (y * width + x) * 4;
+    return background.some((channel, index) => data[offset + index] !== channel);
+  };
+  const rowHasMark = (y) => Array.from({ length: width }, (_, x) => isMark(x, y)).some(Boolean);
+  const columnHasMark = (x) => Array.from({ length: height }, (_, y) => isMark(x, y)).some(Boolean);
+  const top = Array.from({ length: height }, (_, y) => y).find(rowHasMark);
+  const bottomY = Array.from({ length: height }, (_, y) => height - 1 - y).find(rowHasMark);
+  const left = Array.from({ length: width }, (_, x) => x).find(columnHasMark);
+  const rightX = Array.from({ length: width }, (_, x) => width - 1 - x).find(columnHasMark);
+  const bottom = bottomY === undefined ? undefined : height - 1 - bottomY;
+  const right = rightX === undefined ? undefined : width - 1 - rightX;
+  const insets = [top, bottom, left, right];
+  const minimumInset = Math.ceil(size * minInsetRatio);
+  if (
+    width !== size ||
+    height !== size ||
+    insets.some((inset) => inset === undefined || inset < minimumInset) ||
+    Math.abs(top - bottom) > 1 ||
+    Math.abs(left - right) > 1
+  ) {
+    throw new Error(`${label}: mark must be centered inside its mask safe area; got ${insets.join(", ")}`);
+  }
 };
 
 /**
@@ -186,16 +223,35 @@ const main = async () => {
         Buffer.from(renderBrandMark(brandMaster, { accent, viewBox: BRAND_MARK_TIGHT_VIEWBOX })),
       );
 
-      for (const target of RASTER_TARGETS) {
-        const logo = renderBrandMark(brandMaster, { accent, tone: "light" });
-        const launcher = launcherWrapper(logo, target.scale);
-        emit(path.join(channelDir, target.output), await rasterize(page, launcher, target.size));
+      const favicon = renderFavicon(brandMaster, { accent });
+      emit(path.join(channelDir, "favicon.svg"), Buffer.from(favicon));
+
+      const appIconMark = renderBrandMark(brandMaster, { accent, tone: "light" });
+      for (const target of APP_ICON_TARGETS) {
+        const appIcon = await rasterize(page, appIconWrapper(appIconMark, target.scale), target.size);
+        assertAppIconFit(appIcon, { ...target, label: target.output });
+        emit(path.join(channelDir, target.output), appIcon);
       }
 
-      const favicon = faviconSvg(renderBrandMark(brandMaster, { accent, tone: "light" }));
+      const appleTouchIcon = await rasterize(
+        page,
+        appIconWrapper(appIconMark, APPLE_TOUCH_ICON.scale),
+        APPLE_TOUCH_ICON.size,
+      );
+      assertAppIconFit(appleTouchIcon, {
+        label: "apple-touch-icon.png",
+        minInsetRatio: 0.12,
+        size: APPLE_TOUCH_ICON.size,
+      });
+      emit(path.join(channelDir, "apple-touch-icon.png"), appleTouchIcon);
+
+      const fallbackFavicon = appIconWrapper(appIconMark, FAVICON_FALLBACK_SCALE);
       const images = [];
       for (const size of [16, 32, 48, 64]) {
-        images.push({ size, png: await rasterize(page, favicon, size) });
+        const png = await rasterize(page, fallbackFavicon, size);
+        assertAppIconFit(png, { label: `favicon ${size}px`, minInsetRatio: 0.04, size });
+        if (size === 32) emit(path.join(channelDir, "favicon-32x32.png"), png);
+        images.push({ size, png });
       }
       emit(path.join(channelDir, "favicon.ico"), encodeFavicon(images));
     }
