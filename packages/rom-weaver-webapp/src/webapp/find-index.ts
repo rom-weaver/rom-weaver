@@ -5,6 +5,8 @@ import { createLogger } from "../lib/logging.ts";
 import type { WorkflowTab } from "./components/shell.tsx";
 import { searchDocs } from "./docs-search.mjs";
 import { SETTINGS_FIELD_METADATA, SETTINGS_PANEL_SECTIONS } from "./settings/settings-metadata.ts";
+import { identifyHashAlgorithm } from "../types/identify.ts";
+import type { RomLookupSelection } from "../public/react/use-rom-lookup.ts";
 
 const logger = createLogger("find-index");
 
@@ -12,6 +14,7 @@ type FindKind = "tool" | "app" | "setting" | "guide";
 
 type FindAction =
   | { type: "view"; view: string }
+  | { type: "identify"; selection: RomLookupSelection }
   | { type: "settings"; fieldId?: string }
   | { type: "status" }
   | { type: "storage" }
@@ -54,6 +57,50 @@ type FindSources = {
   githubHref?: string;
   localizer: Localizer;
   tabs: readonly WorkflowTab[];
+};
+
+const MIN_IDENTIFY_QUERY_LENGTH = 2;
+const MIN_HASH_LENGTH = 8;
+const IDENTIFY_RESULT_LIMIT = 4;
+
+/**
+ * Search the same lazy identification data as the Identify workflow. Hex text
+ * that looks like a checksum never falls through to the title index.
+ */
+const loadIdentifyFindEntries = async (
+  query: string,
+  identifyLabel: string,
+  signal?: AbortSignal,
+): Promise<FindEntry[]> => {
+  const normalized = query.trim();
+  if (normalized.length < MIN_IDENTIFY_QUERY_LENGTH) return [];
+  const hex = normalized.toLowerCase();
+  const algorithm = identifyHashAlgorithm(hex);
+  if (/^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH) {
+    if (!algorithm) return [];
+    const { lookupExpectedRom } = await import("../lib/apply/expected-rom-lookup.ts");
+    const result = await lookupExpectedRom({ checksums: { [algorithm]: hex } }, { signal });
+    if (!result || result.status === "unavailable") return [];
+    return result.matches.slice(0, IDENTIFY_RESULT_LIMIT).map((match, index) => ({
+      action: { type: "identify", selection: { foundBy: "checksum", kind: "version", match, query: hex } },
+      hint: identifyLabel,
+      id: `identify:checksum:${hex}:${index}`,
+      keywords: "",
+      kind: "tool",
+      label: match.name,
+    }));
+  }
+  const { searchExpectedRomTitles } = await import("../lib/apply/expected-rom-lookup.ts");
+  const result = await searchExpectedRomTitles(normalized, { limit: IDENTIFY_RESULT_LIMIT, signal });
+  if (result.status === "unavailable") return [];
+  return result.titles.map((title) => ({
+    action: { type: "identify", selection: { kind: "title", query: normalized, title } },
+    hint: identifyLabel,
+    id: `identify:title:${title.slug}:${title.name}`,
+    keywords: "",
+    kind: "tool",
+    label: title.name,
+  }));
 };
 
 const KIND_ORDER: Record<FindKind, number> = { tool: 0, app: 1, setting: 1, guide: 2 };
@@ -308,4 +355,4 @@ const searchFind = (index: FindIndex, query: string): FindResult[] => {
 };
 
 export type { FindAction, FindEntry, FindIndex, FindKind, FindResult, FindSources };
-export { createFindIndex, loadGuideRoutes, searchFind };
+export { createFindIndex, loadGuideRoutes, loadIdentifyFindEntries, searchFind };

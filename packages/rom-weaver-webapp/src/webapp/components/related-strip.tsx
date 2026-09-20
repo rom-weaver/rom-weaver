@@ -36,7 +36,7 @@ const RelatedStrip = ({ entryKey, onSelectTab }: RelatedStripProps) => {
             <button className="related-row related-row-tool" onClick={() => onSelectTab(tool.view)} type="button">
               <span className="related-kind mono">{localizer.message("ui.related.kindTool")}</span>
               <span className="related-label">{localizer.message(tool.labelId)}</span>
-              <span className="related-hint">{localizer.message("ui.related.hintTool")}</span>
+              <span className="related-hint">{localizer.message(tool.hintId ?? "ui.related.hintTool")}</span>
             </button>
           </li>
         ))}

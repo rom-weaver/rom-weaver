@@ -1209,6 +1209,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.related.createTool": msg({ id: "ui.related.createTool", message: "Create tool" }),
   "ui.related.heading": msg({ id: "ui.related.heading", message: "Related" }),
   "ui.related.hintGuide": msg({ id: "ui.related.hintGuide", message: "Opens the guide" }),
+  "ui.related.hintCarriesSelection": msg({
+    id: "ui.related.hintCarriesSelection",
+    message: "Keeps this selection",
+  }),
   "ui.related.hintTool": msg({ id: "ui.related.hintTool", message: "Switches tab" }),
   "ui.related.identifyFile": msg({ id: "ui.related.identifyFile", message: "Identify this file" }),
   "ui.related.identifyTool": msg({ id: "ui.related.identifyTool", message: "Identify tool" }),
@@ -1217,6 +1221,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.related.testRom": msg({ id: "ui.related.testRom", message: "Test this ROM" }),
   "ui.related.testTool": msg({ id: "ui.related.testTool", message: "Test tool" }),
   "ui.related.trimTool": msg({ id: "ui.related.trimTool", message: "Trim tool" }),
+  "ui.related.useRomInApply": msg({ id: "ui.related.useRomInApply", message: "Use this ROM in Apply" }),
   "ui.result.download": msg({ id: "ui.result.download", message: "Download" }),
   "ui.rom.baseConflict": msg({
     id: "ui.rom.baseConflict",

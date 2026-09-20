@@ -2,8 +2,9 @@ import { Search } from "lucide-react";
 import type { KeyboardEvent, RefObject } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
+import { RomSearchResultSummary } from "../../public/react/components/ds/rom-expectation-card.tsx";
 import type { FindAction, FindEntry, FindIndex, FindKind, FindResult, FindSources } from "../find-index.ts";
-import { createFindIndex, loadGuideRoutes, searchFind } from "../find-index.ts";
+import { createFindIndex, loadGuideRoutes, loadIdentifyFindEntries, searchFind } from "../find-index.ts";
 
 const KIND_MESSAGE: Record<
   FindKind,
@@ -49,9 +50,15 @@ const FindPalette = ({
   const paletteRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeEntryId, setActiveEntryId] = useState<string | null>(null);
   const [index, setIndex] = useState<FindIndex>(() => createFindIndex({ ...sources, localizer }));
-  const results: FindResult[] = useMemo(() => searchFind(index, query), [index, query]);
+  const [identifyEntries, setIdentifyEntries] = useState<FindEntry[]>([]);
+  const results: FindResult[] = useMemo(
+    () => [...identifyEntries.map((entry) => ({ entry, score: Number.MAX_SAFE_INTEGER })), ...searchFind(index, query)],
+    [identifyEntries, index, query],
+  );
+  const selectedResultIndex = activeEntryId ? results.findIndex((result) => result.entry.id === activeEntryId) : -1;
+  const activeIndex = Math.max(0, selectedResultIndex);
 
   // The static index is rebuilt when the entries it derives from change; the
   // guides join it once their chunks land, which the first search triggers.
@@ -71,9 +78,29 @@ const FindPalette = ({
   }, [hasQuery, index.guides.length, open]);
 
   useEffect(() => {
+    setIdentifyEntries([]);
+    if (!(open && hasQuery)) return undefined;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const identifyLabel = index.entries.find((entry) => entry.id === "tool:identify")?.label ?? "Identify ROM";
+      void loadIdentifyFindEntries(query, identifyLabel, controller.signal).then(
+        (entries) => {
+          if (!controller.signal.aborted) setIdentifyEntries(entries);
+        },
+        () => undefined,
+      );
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [hasQuery, index.entries, open, query]);
+
+  useEffect(() => {
     if (!open) {
       setQuery("");
-      setActiveIndex(0);
+      setIdentifyEntries([]);
+      setActiveEntryId(null);
       return undefined;
     }
     inputRef.current?.focus();
@@ -112,10 +139,10 @@ const FindPalette = ({
     if (!results.length) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((current) => (current + 1) % results.length);
+      setActiveEntryId(results[(activeIndex + 1) % results.length]?.entry.id ?? null);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => (current <= 0 ? results.length - 1 : current - 1));
+      setActiveEntryId(results[activeIndex <= 0 ? results.length - 1 : activeIndex - 1]?.entry.id ?? null);
     } else if (event.key === "Enter") {
       event.preventDefault();
       const result = results[activeIndex];
@@ -140,7 +167,7 @@ const FindPalette = ({
           className="find-input"
           id={inputId}
           onChange={(event) => {
-            setActiveIndex(0);
+            setActiveEntryId(null);
             setQuery(event.currentTarget.value);
           }}
           onKeyDown={onKeyDown}
@@ -168,19 +195,28 @@ const FindPalette = ({
             const active = resultIndex === activeIndex;
             const shared = {
               "aria-selected": active,
-              className: active ? "find-option is-active" : "find-option",
+              className: `find-option${entry.action.type === "identify" ? " is-identify" : ""}${active ? " is-active" : ""}`,
               id: `${listId}-${resultIndex}`,
-              onPointerEnter: () => setActiveIndex(resultIndex),
+              onPointerEnter: () => setActiveEntryId(entry.id),
               role: "option",
               tabIndex: -1,
             } as const;
-            const inner = (
-              <>
-                <span className={`find-kind is-${entry.kind}`}>{localizer.message(KIND_MESSAGE[entry.kind])}</span>
-                <span className="find-label">{entry.label}</span>
-                {entry.hint ? <span className="find-hint">{entry.hint}</span> : null}
-              </>
-            );
+            const inner =
+              entry.action.type === "identify" ? (
+                <span className="find-identify-result identify-search-result-btn">
+                  {entry.action.selection.kind === "title" ? (
+                    <RomSearchResultSummary kind="title" title={entry.action.selection.title} />
+                  ) : (
+                    <RomSearchResultSummary kind="version" match={entry.action.selection.match} />
+                  )}
+                </span>
+              ) : (
+                <>
+                  <span className={`find-kind is-${entry.kind}`}>{localizer.message(KIND_MESSAGE[entry.kind])}</span>
+                  <span className="find-label">{entry.label}</span>
+                  {entry.hint ? <span className="find-hint">{entry.hint}</span> : null}
+                </>
+              );
             if (entry.href)
               return (
                 <a

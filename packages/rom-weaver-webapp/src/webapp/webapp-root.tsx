@@ -40,6 +40,7 @@ import type { PageFileDrop } from "../public/react/public-types.ts";
 // back into the entry and defeats the split below.
 import { RomWeaverSettingsProvider } from "../public/react/settings-context.tsx";
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
+import type { RomLookupResult, RomLookupResultRequest, RomLookupSelection } from "../public/react/use-rom-lookup.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
@@ -488,6 +489,13 @@ function WebappRoot({
   // silently discard the user's work. Each form mounts on first visit and then
   // stays mounted but hidden, which preserves state across tab switches.
   const [visitedViews, setVisitedViews] = useState<readonly WebappView[]>([state.currentView]);
+  const [identifyLookupRequest, setIdentifyLookupRequest] = useState<{
+    id: number;
+    selection: RomLookupSelection;
+  }>();
+  const identifyLookupIdRef = useRef(0);
+  const [applyRomLookupRequest, setApplyRomLookupRequest] = useState<RomLookupResultRequest>();
+  const applyRomLookupIdRef = useRef(0);
   const currentViewRef = useRef(state.currentView);
   currentViewRef.current = state.currentView;
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
@@ -689,6 +697,18 @@ function WebappRoot({
     setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
   }, [state.currentView]);
   const isViewMounted = (view: WebappView) => state.currentView === view || visitedViews.includes(view);
+  const openIdentifyLookup = useCallback(
+    (selection: RomLookupSelection) => {
+      identifyLookupIdRef.current += 1;
+      setIdentifyLookupRequest({ id: identifyLookupIdRef.current, selection });
+      handleSelectTab("identify");
+    },
+    [handleSelectTab],
+  );
+  const carryIdentifyResultToApply = useCallback((result: RomLookupResult | undefined) => {
+    applyRomLookupIdRef.current += 1;
+    setApplyRomLookupRequest({ id: applyRomLookupIdRef.current, result });
+  }, []);
 
   // Arm the dropzones while a file is dragged anywhere over the page. `dragover`
   // fires continuously, so a short debounce clears the flag once it stops (drag
@@ -838,6 +858,7 @@ function WebappRoot({
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenSettingsField={openSettingsTab}
+            onIdentifyQuery={openIdentifyLookup}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             offlineProgress={previewOfflineProgress}
             previewRuntimeState={previewRuntimeState}
@@ -916,6 +937,7 @@ function WebappRoot({
                     onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
                     pageDrop={pageDropFor("patcher")}
+                    romLookupRequest={applyRomLookupRequest}
                     startup={state.startup}
                   />,
                 )}
@@ -959,7 +981,12 @@ function WebappRoot({
                 )}
                 {workflowPanel(
                   "identify",
-                  <IdentifyRouteForm onSelectTab={handleSelectTab} pageDrop={pageDropFor("identify")} />,
+                  <IdentifyRouteForm
+                    lookupRequest={identifyLookupRequest}
+                    onLookupResultChange={carryIdentifyResultToApply}
+                    onSelectTab={handleSelectTab}
+                    pageDrop={pageDropFor("identify")}
+                  />,
                 )}
                 {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(

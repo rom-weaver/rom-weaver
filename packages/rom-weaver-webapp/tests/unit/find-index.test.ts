@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalizer } from "../../src/presentation/localization/index.ts";
-import { createFindIndex, searchFind } from "../../src/webapp/find-index.ts";
+import { createFindIndex, loadIdentifyFindEntries, searchFind } from "../../src/webapp/find-index.ts";
+
+const identifyMocks = vi.hoisted(() => ({
+  lookupExpectedRom: vi.fn(),
+  searchExpectedRomTitles: vi.fn(),
+}));
+
+vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => identifyMocks);
 
 const TABS = [
   { href: "apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
@@ -44,6 +51,11 @@ const sources = {
   localizer: createLocalizer("en"),
   tabs: TABS,
 };
+
+beforeEach(() => {
+  identifyMocks.lookupExpectedRom.mockReset();
+  identifyMocks.searchExpectedRomTitles.mockReset();
+});
 
 describe("createFindIndex", () => {
   it("lists tools then app surfaces for browsing, and every setting for search", () => {
@@ -126,5 +138,67 @@ describe("searchFind", () => {
     const guide = searchFind(index, "mismatch").find((result) => result.entry.kind === "guide");
     expect(guide?.entry.href).toBe("/docs/fix-checksum-errors?highlight=mismatch");
     expect(guide?.entry.hint).toBe("Fix checksum errors");
+  });
+});
+
+describe("loadIdentifyFindEntries", () => {
+  it("searches titles and opens Identify with the selected title", async () => {
+    identifyMocks.searchExpectedRomTitles.mockResolvedValueOnce({
+      status: "ok",
+      titles: [{ name: "Sonic the Hedgehog", platform: "Sega Genesis", slug: "sega-genesis" }],
+    });
+
+    await expect(loadIdentifyFindEntries("sonic", "Identify ROM")).resolves.toEqual([
+      expect.objectContaining({
+        action: {
+          type: "identify",
+          selection: {
+            kind: "title",
+            query: "sonic",
+            title: { name: "Sonic the Hedgehog", platform: "Sega Genesis", slug: "sega-genesis" },
+          },
+        },
+        hint: "Identify ROM",
+        label: "Sonic the Hedgehog",
+      }),
+    ]);
+    expect(identifyMocks.searchExpectedRomTitles).toHaveBeenCalledWith("sonic", {
+      limit: 4,
+      signal: undefined,
+    });
+  });
+
+  it("routes an exact checksum and does not search it as a title", async () => {
+    identifyMocks.lookupExpectedRom.mockResolvedValueOnce({
+      matches: [{ name: "Super Mario Bros. (World)", platform: "Nintendo - NES" }],
+      status: "matched",
+    });
+
+    await expect(loadIdentifyFindEntries("3337ec46", "Identify ROM")).resolves.toEqual([
+      expect.objectContaining({
+        action: {
+          type: "identify",
+          selection: {
+            foundBy: "checksum",
+            kind: "version",
+            match: { name: "Super Mario Bros. (World)", platform: "Nintendo - NES" },
+            query: "3337ec46",
+          },
+        },
+        hint: "Identify ROM",
+        label: "Super Mario Bros. (World)",
+      }),
+    ]);
+    expect(identifyMocks.lookupExpectedRom).toHaveBeenCalledWith(
+      { checksums: { crc32: "3337ec46" } },
+      { signal: undefined },
+    );
+    expect(identifyMocks.searchExpectedRomTitles).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an incomplete checksum as a title", async () => {
+    await expect(loadIdentifyFindEntries("3337ec460", "Identify ROM")).resolves.toEqual([]);
+    expect(identifyMocks.lookupExpectedRom).not.toHaveBeenCalled();
+    expect(identifyMocks.searchExpectedRomTitles).not.toHaveBeenCalled();
   });
 });

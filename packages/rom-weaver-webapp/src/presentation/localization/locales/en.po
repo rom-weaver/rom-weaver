@@ -1780,6 +1780,11 @@ msgstr "Keep these offline. Unticked databases are still downloaded on demand wh
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.hintCarriesSelection"
+msgstr "Keeps this selection"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
 msgstr "Identify a ROM."
 
@@ -3581,6 +3586,11 @@ msgstr "Use duplicate ROMs?"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMemberTitle"
 msgstr "Use the exact member path from the selected ROM or patch output."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.useRomInApply"
+msgstr "Use this ROM in Apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

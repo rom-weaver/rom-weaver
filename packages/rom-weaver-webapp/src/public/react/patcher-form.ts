@@ -1,6 +1,7 @@
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import type { ParsedBundleCreateResult, ParsedBundlePatchInput } from "../../types/bundle.ts";
 import type { ApplySettings } from "../../types/settings.ts";
+import type { RomLookupResultRequest } from "./use-rom-lookup.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
 import type { PatcherOutputState, PatchStackItemState, PatchStackState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherSectionNoticeKey, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
@@ -83,6 +84,7 @@ type ApplyPatchFormProps = {
   defaultPatches?: BinarySource[];
   defaultSettings?: ApplyPatchFormSettings;
   pageDrop?: PageFileDrop | null;
+  romLookupRequest?: RomLookupResultRequest;
   disabled?: boolean;
   threads?: number | string;
   containerInputsEnabled?: boolean;
