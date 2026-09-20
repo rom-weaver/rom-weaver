@@ -383,6 +383,7 @@ const TrailRow = ({
 }) => (
   <div className="docs-trail-row">
     <button
+      aria-label="Contents"
       aria-controls="docs-contents-menu"
       aria-expanded={menuOpen}
       className="docs-trail-menu"
@@ -391,7 +392,6 @@ const TrailRow = ({
       type="button"
     >
       <ListTree aria-hidden="true" />
-      <span>Contents</span>
     </button>
   </div>
 );
