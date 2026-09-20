@@ -1103,6 +1103,7 @@ const Masthead = ({
   onPreloadLog,
   onOpenSettings,
   onOpenSettingsField,
+  onIdentifyQuery,
   serviceWorkerStatus,
   offlineProgress = null,
   previewRuntimeState = null,
@@ -1134,6 +1135,8 @@ const Masthead = ({
   onOpenSettings: () => void;
   /** Find's deep link into one settings field; falls back to plain Settings. */
   onOpenSettingsField?: (fieldId: string) => void;
+  /** Send a Find title or checksum result to the Identify workflow. */
+  onIdentifyQuery?: (query: string) => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   previewRuntimeState?: RuntimeState | null;
@@ -1209,6 +1212,7 @@ const Masthead = ({
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const onFindAction = (action: FindAction) => {
     if (action.type === "view") onSelectTab(action.view);
+    else if (action.type === "identify") onIdentifyQuery?.(action.query);
     else if (action.type === "settings") {
       if (action.fieldId && onOpenSettingsField) onOpenSettingsField(action.fieldId);
       else onOpenSettings();

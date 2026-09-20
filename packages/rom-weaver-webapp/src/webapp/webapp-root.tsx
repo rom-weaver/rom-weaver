@@ -488,6 +488,8 @@ function WebappRoot({
   // silently discard the user's work. Each form mounts on first visit and then
   // stays mounted but hidden, which preserves state across tab switches.
   const [visitedViews, setVisitedViews] = useState<readonly WebappView[]>([state.currentView]);
+  const [identifyLookupRequest, setIdentifyLookupRequest] = useState<{ id: number; query: string }>();
+  const identifyLookupIdRef = useRef(0);
   const currentViewRef = useRef(state.currentView);
   currentViewRef.current = state.currentView;
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
@@ -689,6 +691,14 @@ function WebappRoot({
     setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
   }, [state.currentView]);
   const isViewMounted = (view: WebappView) => state.currentView === view || visitedViews.includes(view);
+  const openIdentifyLookup = useCallback(
+    (query: string) => {
+      identifyLookupIdRef.current += 1;
+      setIdentifyLookupRequest({ id: identifyLookupIdRef.current, query });
+      handleSelectTab("identify");
+    },
+    [handleSelectTab],
+  );
 
   // Arm the dropzones while a file is dragged anywhere over the page. `dragover`
   // fires continuously, so a short debounce clears the flag once it stops (drag
@@ -838,6 +848,7 @@ function WebappRoot({
             onPreloadLog={preloadLogDialog}
             onOpenSettings={() => openSettingsTab()}
             onOpenSettingsField={openSettingsTab}
+            onIdentifyQuery={openIdentifyLookup}
             serviceWorkerStatus={serviceWorkerCache.serviceWorkerStatus}
             offlineProgress={previewOfflineProgress}
             previewRuntimeState={previewRuntimeState}
@@ -959,7 +970,11 @@ function WebappRoot({
                 )}
                 {workflowPanel(
                   "identify",
-                  <IdentifyRouteForm onSelectTab={handleSelectTab} pageDrop={pageDropFor("identify")} />,
+                  <IdentifyRouteForm
+                    lookupRequest={identifyLookupRequest}
+                    onSelectTab={handleSelectTab}
+                    pageDrop={pageDropFor("identify")}
+                  />,
                 )}
                 {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(

@@ -1,12 +1,24 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { Masthead } from "../../../src/webapp/components/shell.tsx";
 import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 
-afterEach(cleanup);
+const identifyMocks = vi.hoisted(() => ({
+  lookupExpectedRom: vi.fn(),
+  searchExpectedRomTitles: vi.fn(),
+}));
+
+vi.mock("../../../src/lib/apply/expected-rom-lookup.ts", () => identifyMocks);
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  identifyMocks.lookupExpectedRom.mockReset();
+  identifyMocks.searchExpectedRomTitles.mockReset();
+});
 
 const withSettings = (children: ReactNode) => (
   <RomWeaverSettingsProvider settings={{}}>{children}</RomWeaverSettingsProvider>
@@ -148,6 +160,43 @@ describe("Find", () => {
 
     expect(onSelectTab).toHaveBeenCalledWith("creator");
     expect(container.querySelector(".find-palette")).toBeNull();
+  });
+
+  it("shows a title result and sends it to Identify", async () => {
+    vi.useFakeTimers();
+    identifyMocks.searchExpectedRomTitles.mockResolvedValueOnce({
+      status: "ok",
+      titles: [{ name: "Sonic the Hedgehog", platform: "Sega Genesis", slug: "sega-genesis" }],
+    });
+    const onIdentifyQuery = vi.fn();
+    const { container, getByText } = render(withSettings(<Masthead {...props} onIdentifyQuery={onIdentifyQuery} />));
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
+    fireEvent.change(findInput(container), { target: { value: "sonic" } });
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    const result = getByText("Sonic the Hedgehog");
+    fireEvent.click(result.closest('[role="option"]') as HTMLElement);
+
+    expect(onIdentifyQuery).toHaveBeenCalledWith("Sonic the Hedgehog");
+    expect(container.querySelector(".find-palette")).toBeNull();
+  });
+
+  it("keeps a keyboard selection when identify results arrive", async () => {
+    vi.useFakeTimers();
+    identifyMocks.searchExpectedRomTitles.mockResolvedValueOnce({
+      status: "ok",
+      titles: [{ name: "Checksum Hero", platform: "Test System", slug: "test-system" }],
+    });
+    const { container } = render(withSettings(<Masthead {...props} />));
+    fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
+    fireEvent.change(findInput(container), { target: { value: "checksum" } });
+    fireEvent.keyDown(findInput(container), { key: "ArrowDown" });
+    const selectedBefore = container.querySelector('[role="option"][aria-selected="true"]')?.textContent;
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(container.querySelector('[role="option"][aria-selected="true"]')?.textContent).toBe(selectedBefore);
+    expect(container.querySelector(".find-results")?.textContent).toContain("Checksum Hero");
   });
 
   it("opens the bundle page", () => {

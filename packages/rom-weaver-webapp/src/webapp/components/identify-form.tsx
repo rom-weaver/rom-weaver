@@ -43,6 +43,7 @@ const IDENTIFY_SUPPORTED_FILES = [
 type IdentifyFormProps = {
   containerId?: string;
   inputId?: string;
+  lookupRequest?: { id: number; query: string };
   /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
   onSelectTab?: (id: string) => void;
   pageDrop?: PageFileDrop | null;
@@ -119,12 +120,18 @@ const CandidateResult = ({
 const IdentifyForm = ({
   containerId = "identify-container",
   inputId = "identify-input-picker",
+  lookupRequest,
   onSelectTab,
   pageDrop,
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
   const [file, setFile] = useState<File | null>(null);
   const romLookup = useRomLookup(ROM_LOOKUP_MESSAGES(localizer));
+  const applyLookupRef = useRef(romLookup.setText);
+  applyLookupRef.current = romLookup.setText;
+  useEffect(() => {
+    if (lookupRequest) applyLookupRef.current(lookupRequest.query);
+  }, [lookupRequest]);
   const [result, setResult] = useState<ParsedIdentifyResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
