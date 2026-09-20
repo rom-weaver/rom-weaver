@@ -186,7 +186,7 @@ assertIncludes(
 assertIncludes(homeHtml, 'href="https://rom-weaver.com/"', "home canonical");
 assertIncludes(homeHtml, WORKFLOW_SEO_ROUTES.home.description, "home description");
 assertIncludes(homeHtml, 'id="panel-home"', "home prerendered landing page");
-assertIncludes(homeHtml, "Your ROMs. Your changes.", "home headline");
+assertIncludes(homeHtml, "Your ROM workflow.", "home headline");
 // The brand steps down to a span here so the landing headline is the
 // document's only h1.
 if ((homeHtml.match(/<h1\b/g) || []).length !== 1) throw new Error("the home page must contain exactly one h1");

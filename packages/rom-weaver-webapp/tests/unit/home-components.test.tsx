@@ -162,9 +162,9 @@ describe("HomePage", () => {
       ),
     ).map((link) => link.getAttribute("href"));
     expect(links).toEqual(["/tools/apply-patches", "/tools/create-patch", "/tools/bundle-patches", "/tools/test-rom"]);
-    expect(container.querySelector("#home-title")?.textContent).toContain("Your ROMs. Your changes.");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Your ROM workflow.");
     expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
-    expect(container.textContent).toContain("All on your device.");
+    expect(container.textContent).toContain("One toolkit.");
     expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
     expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(4);
@@ -215,7 +215,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("#home-title")?.textContent).toContain("Deine ROMs. Deine Änderungen.");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Dein ROM-Arbeitsablauf.");
     expect(container.querySelector("a.btn.primary")?.textContent).toContain("Patches anwenden");
     expect(container.textContent).toContain("Befehlszeile");
 
@@ -224,7 +224,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("#home-title")?.textContent).toContain("Tus ROM. Tus cambios.");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Tu flujo de trabajo para ROM.");
     expect(container.querySelector("a.btn.primary")?.textContent).toContain("Aplicar parches");
     expect(container.textContent).toContain("Línea de comandos");
   });
