@@ -14,13 +14,6 @@ describe("useReadingProgress", () => {
       return nextFrame;
     });
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe = vi.fn();
-        disconnect = vi.fn();
-      },
-    );
     Object.defineProperty(document.documentElement, "scrollHeight", { configurable: true, value: 1400 });
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 400 });
     setScrollY(0);
@@ -34,12 +27,12 @@ describe("useReadingProgress", () => {
         useReadingProgress(sections, active),
       { initialProps: { active: false, sections: [{ id: "one" }] } },
     );
-    expect(result.current).toEqual({ activeIndex: -1, fraction: 0, initializing: false, weights: [] });
+    expect(result.current).toEqual({ activeIndex: -1, initializing: false });
     rerender({ active: true, sections: [] });
-    expect(result.current).toEqual({ activeIndex: -1, fraction: 0, initializing: false, weights: [] });
+    expect(result.current).toEqual({ activeIndex: -1, initializing: false });
   });
 
-  it("measures weighted sections and updates the active marker on scroll and resize", async () => {
+  it("updates the active marker on scroll and resize", async () => {
     const article = document.createElement("article");
     article.className = "docs-article";
     article.getBoundingClientRect = () => ({ bottom: 1200 - window.scrollY }) as DOMRect;
@@ -56,21 +49,17 @@ describe("useReadingProgress", () => {
     const { result } = renderHook(() => useReadingProgress(sections, true));
     await waitFor(() => expect(result.current.initializing).toBe(false));
     expect(result.current.activeIndex).toBe(0);
-    expect(result.current.weights).toEqual([0.5, 0.5]);
-    expect(result.current.fraction).toBe(0);
 
     setScrollY(700);
     await act(async () => {
       window.dispatchEvent(new Event("scroll"));
     });
     await waitFor(() => expect(result.current.activeIndex).toBe(1));
-    expect(result.current.fraction).toBeCloseTo(0.608);
 
     setScrollY(1000);
     await act(async () => {
       window.dispatchEvent(new Event("resize"));
     });
-    await waitFor(() => expect(result.current.fraction).toBe(1));
-    expect(result.current.activeIndex).toBe(1);
+    await waitFor(() => expect(result.current.activeIndex).toBe(1));
   });
 });

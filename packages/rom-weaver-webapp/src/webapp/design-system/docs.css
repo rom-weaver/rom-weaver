@@ -994,7 +994,7 @@ html:has(.docs-workbench) {
 /* --- responsive --- */
 @media (max-width: 860px) {
   .rw-app {
-    --docs-trail-h: 56px;
+    --docs-chip-h: 44px;
   }
   .rw-app .docs-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -1014,45 +1014,27 @@ html:has(.docs-workbench) {
   .rw-app .docs-index {
     display: grid;
   }
-  /* Fixed to the bottom, riding directly on top of the app dock: the two ways
-     out of a guide - another guide, another mode - then sit under one thumb.
-     It clears the dock through the same `--dock-h` the dock pad uses, so the
-     phone browser's own collapsing toolbar is already accounted for. */
+  /* A small opaque control keeps the outline within thumb reach without
+     reserving a full-width strip above the app dock. */
   .rw-app .docs-trail {
     position: fixed;
-    inset: auto 0 0;
+    inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--sp-m)) auto;
     /* under the dock (1000) and the update banner (999), over the article */
     z-index: 998;
     display: block;
-    /* The row rides on top of the dock, but the surface runs all the way to the
-       floor: `--dock-h` is the height the column reserves, which is a few pixels
-       more than the dock actually draws, and a bar that stopped at it would leave
-       a strip of scrolling article showing between the two. */
-    padding-block-end: var(--dock-h, 0px);
-    padding-inline: var(--gutter);
-    background: color-mix(in oklab, var(--plate) 88%, transparent);
-    border-block-start: 1px solid var(--seam);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
-  /* The guide has to end above the bar rather than under it. */
-  .rw-app .docs-workbench {
-    padding-block-end: calc(var(--docs-trail-h) + var(--sp-m));
   }
   .rw-app .docs-trail-row {
     display: flex;
-    gap: var(--sp-s);
     align-items: center;
-    height: var(--docs-trail-h);
-    padding-inline: var(--sp-s);
   }
   .rw-app .docs-trail-menu {
     display: inline-flex;
     flex: none;
-    gap: 5px;
     align-items: center;
-    height: var(--ctl);
-    padding-inline: 10px;
+    justify-content: center;
+    width: var(--docs-chip-h);
+    height: var(--docs-chip-h);
+    padding: 0;
     font: inherit;
     font-size: 0.68rem;
     font-weight: 700;
@@ -1062,13 +1044,14 @@ html:has(.docs-workbench) {
     letter-spacing: 0.06em;
     cursor: pointer;
     background: var(--plate);
-    border: 1px solid var(--seam);
-    border-radius: var(--r-s);
+    border: 1px solid var(--seam-strong);
+    border-radius: 999px;
+    box-shadow: 0 8px 24px color-mix(in oklab, var(--ink) 18%, transparent);
   }
   .rw-app .docs-trail-menu svg {
     flex: none;
-    width: 15px;
-    height: 15px;
+    width: 18px;
+    height: 18px;
     color: var(--weft);
   }
   .rw-app .docs-trail-menu[aria-expanded="true"] {
@@ -1089,11 +1072,11 @@ html:has(.docs-workbench) {
   }
   .rw-app .docs-contents-menu {
     position: fixed;
-    inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--docs-trail-h) + var(--sp-s));
+    inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--docs-chip-h) + 2 * var(--sp-m));
     z-index: 999;
     display: grid;
     gap: var(--sp-m);
-    max-height: min(70dvh, calc(100dvh - var(--dock-h, 0px) - var(--docs-trail-h) - 2 * var(--sp-s)));
+    max-height: min(70dvh, calc(100dvh - var(--dock-h, 0px) - var(--docs-chip-h) - 3 * var(--sp-m)));
     padding: var(--sp-s);
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -1102,40 +1085,6 @@ html:has(.docs-workbench) {
     border-radius: var(--r-l);
     box-shadow: var(--overlay-shadow);
   }
-  /* The warp, woven: one tick per section, each as wide as its section is long,
-     so the crossing weft is a plain scroll fraction that still lands inside the
-     right tick. Ticks are divided by a border rather than a gap, which keeps
-     them edge to edge and the boundaries exactly where the weft stops. It rides
-     the trail's top edge, the seam between the guide and the chrome. */
-  .rw-app .warp-gauge {
-    position: absolute;
-    inset: -1px 0 auto;
-    z-index: 1;
-    display: flex;
-    height: 2px;
-  }
-  /* The floor keeps a two-line section visible as a tick, at the cost of
-     borrowing a pixel or two from its neighbours - so the weft can sit ~1% off
-     a boundary on a guide with many sections. The label beside it is exact;
-     the gauge is the shape of the document, not a readout. */
-  .rw-app .warp-gauge i {
-    box-sizing: border-box;
-    flex: 1 1 0;
-    min-width: 2px;
-    background: var(--seam-soft);
-    /* the divider reads as the bar's top seam continuing between ticks */
-    border-right: 1px solid var(--seam);
-  }
-  .rw-app .warp-gauge i:last-of-type {
-    border-right: 0;
-  }
-  .rw-app .warp-gauge-weft {
-    position: absolute;
-    inset: 0 auto 0 0;
-    background: var(--thread);
-    transition: width 0.18s var(--ease);
-  }
-
   /* --- the way back up ---
      On its own row under the two steps: three controls abreast leaves each step
      too narrow to read the page it names. */

@@ -739,9 +739,15 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await docsTrail.waitFor({ state: "attached" });
     const trailGeometry = await docsTrail.evaluate((element) => {
       const rect = element.getBoundingClientRect();
-      return { bottom: rect.bottom, height: rect.height, viewportHeight: window.innerHeight };
+      return {
+        bottom: rect.bottom,
+        height: rect.height,
+        position: getComputedStyle(element).position,
+        viewportHeight: window.innerHeight,
+      };
     });
-    if (Math.abs(trailGeometry.bottom - trailGeometry.viewportHeight) > 1 || trailGeometry.height <= 0) {
+    const bottomGap = trailGeometry.viewportHeight - trailGeometry.bottom;
+    if (trailGeometry.position !== "fixed" || bottomGap < -1 || bottomGap > 128 || trailGeometry.height <= 0) {
       throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
