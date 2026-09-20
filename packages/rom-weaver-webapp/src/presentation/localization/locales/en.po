@@ -435,11 +435,6 @@ msgstr "Apply both patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Apply one or more patches to your ROMs and disc images, compressed or raw."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.target"
 msgstr "Apply patch into"
 

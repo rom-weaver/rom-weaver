@@ -435,11 +435,6 @@ msgstr "Aplicar ambos parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Aplica uno o varios parches a tus ROM e imágenes de disco, comprimidos o sin comprimir."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.target"
 msgstr "Aplicar parche a"
 
