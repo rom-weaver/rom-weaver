@@ -2,11 +2,22 @@
 
 ## [0.16.0](https://github.com/rom-weaver/rom-weaver/compare/v0.15.1...v0.16.0) (2026-09-20)
 
+### Highlights
+
+* Update CLI scripts to read requested results from stdout and use `--jsonl` for event streams; J2ME, Palm OS, Symbian, PSID, DOS, ScummVM, and fantasy-console identify catalogs are no longer available ([#796](https://github.com/rom-weaver/rom-weaver/issues/796)) ([#770](https://github.com/rom-weaver/rom-weaver/issues/770))
+* Enable the Beta tools flag in Settings to edit supported Pokémon Generation III saves and use cheats in the browser, or use both features from the CLI ([#577](https://github.com/rom-weaver/rom-weaver/issues/577)) ([#578](https://github.com/rom-weaver/rom-weaver/issues/578)) ([#683](https://github.com/rom-weaver/rom-weaver/issues/683)) ([#698](https://github.com/rom-weaver/rom-weaver/issues/698)) ([#699](https://github.com/rom-weaver/rom-weaver/issues/699))
+* Find ROMs by game name or checksum with live fuzzy search across platforms, then carry the selected release into Apply ([#711](https://github.com/rom-weaver/rom-weaver/issues/711)) ([#742](https://github.com/rom-weaver/rom-weaver/issues/742)) ([#747](https://github.com/rom-weaver/rom-weaver/issues/747)) ([#754](https://github.com/rom-weaver/rom-weaver/issues/754)) ([#854](https://github.com/rom-weaver/rom-weaver/issues/854))
+* Navigate a refreshed interface with unified tools, a docked mobile Find action, floating mobile docs contents, and adaptive square logos and icons ([#634](https://github.com/rom-weaver/rom-weaver/issues/634)) ([#710](https://github.com/rom-weaver/rom-weaver/issues/710)) ([#771](https://github.com/rom-weaver/rom-weaver/issues/771)) ([#843](https://github.com/rom-weaver/rom-weaver/issues/843)) ([#851](https://github.com/rom-weaver/rom-weaver/issues/851)) ([#852](https://github.com/rom-weaver/rom-weaver/issues/852))
+* Build safer CLI pipelines with positional inputs, binary stdin and stdout, dry runs, and local identify-data installation ([#744](https://github.com/rom-weaver/rom-weaver/issues/744)) ([#746](https://github.com/rom-weaver/rom-weaver/issues/746)) ([#753](https://github.com/rom-weaver/rom-weaver/issues/753)) ([#704](https://github.com/rom-weaver/rom-weaver/issues/704)) ([#775](https://github.com/rom-weaver/rom-weaver/issues/775))
+* Create bundles whose optional patches and multi-track changes preserve the correct cumulative target chain ([#539](https://github.com/rom-weaver/rom-weaver/issues/539))
 
 ### ⚠ BREAKING CHANGES
 
 * **cli:** make output script-friendly ([#796](https://github.com/rom-weaver/rom-weaver/issues/796))
 * **identify:** trim catalogs and reuse CI builds ([#770](https://github.com/rom-weaver/rom-weaver/issues/770))
+
+<details>
+<summary>All changes</summary>
 
 ### Features
 
@@ -67,7 +78,6 @@
 * **webapp:** unify docs navigation and search ([#832](https://github.com/rom-weaver/rom-weaver/issues/832)) ([7b996ee](https://github.com/rom-weaver/rom-weaver/commit/7b996ee29c21b470b14599c15dab8ca238d6dc5f))
 * **webapp:** unify the nav and add Find ([#634](https://github.com/rom-weaver/rom-weaver/issues/634)) ([464ec86](https://github.com/rom-weaver/rom-weaver/commit/464ec867f1410aa2f603339d9a0f0de969ebcf85))
 
-
 ### Bug Fixes
 
 * align home content with navigation ([#794](https://github.com/rom-weaver/rom-weaver/issues/794)) ([6f6633f](https://github.com/rom-weaver/rom-weaver/commit/6f6633f1df655cea4740b7861dc7b883f8f3dea6))
@@ -113,18 +123,15 @@
 * **webapp:** tune header status spacing ([#809](https://github.com/rom-weaver/rom-weaver/issues/809)) ([8a321aa](https://github.com/rom-weaver/rom-weaver/commit/8a321aa9b7e3410e9dda986d715799929b841791))
 * **webapp:** use compression for bundles ([#813](https://github.com/rom-weaver/rom-weaver/issues/813)) ([1ddcc86](https://github.com/rom-weaver/rom-weaver/commit/1ddcc86be9c60982fc2c982fae9b84b5c1bd0c4f))
 
-
 ### Performance Improvements
 
 * **cheats:** derive cheat record fields on load ([#740](https://github.com/rom-weaver/rom-weaver/issues/740)) ([b15376a](https://github.com/rom-weaver/rom-weaver/commit/b15376a0bceb6f9f4cbbc88deb3affddd52d31bc))
 * **ci:** restore cached identify packs before Lighthouse ([#733](https://github.com/rom-weaver/rom-weaver/issues/733)) ([d400904](https://github.com/rom-weaver/rom-weaver/commit/d400904abd301875fce12a97a638e9ea8b7e961a))
 * **webapp:** load non-English catalogs on demand ([#715](https://github.com/rom-weaver/rom-weaver/issues/715)) ([4b7b459](https://github.com/rom-weaver/rom-weaver/commit/4b7b4591078eb1d78157c35ee1da79291aad62e2))
 
-
 ### Reverts
 
 * **ci:** gate asset sizes on absolute budgets again ([#734](https://github.com/rom-weaver/rom-weaver/issues/734)) ([72d8c18](https://github.com/rom-weaver/rom-weaver/commit/72d8c18f8bf0108afa20ad6bf6b1b055a32b79bc))
-
 
 ### Documentation
 
@@ -135,7 +142,6 @@
 * remove the CLI usability audit report ([#750](https://github.com/rom-weaver/rom-weaver/issues/750)) ([b19b30e](https://github.com/rom-weaver/rom-weaver/commit/b19b30e7406ce3ce51848e13d4816a8d77b6f9d8))
 * use canonical GitHub conduct link ([#810](https://github.com/rom-weaver/rom-weaver/issues/810)) ([9fe30ab](https://github.com/rom-weaver/rom-weaver/commit/9fe30ab8c20603c946dc60f580db1f04cc83ece3))
 
-
 ### Styles
 
 * **webapp:** align landing copy ([#853](https://github.com/rom-weaver/rom-weaver/issues/853)) ([a03725a](https://github.com/rom-weaver/rom-weaver/commit/a03725a24af5d222d3a9a4dd21a0c5654bde956a))
@@ -143,8 +149,8 @@
 * **webapp:** restore desktop loom layout ([#844](https://github.com/rom-weaver/rom-weaver/issues/844)) ([7ced4d0](https://github.com/rom-weaver/rom-weaver/commit/7ced4d0c0ac0d43c94680b1742c5489059591a2b))
 * **webapp:** simplify idle workflow seams ([#835](https://github.com/rom-weaver/rom-weaver/issues/835)) ([b452e63](https://github.com/rom-weaver/rom-weaver/commit/b452e6376c305898a7fb6cb81d7ec3155ed8014d))
 
-
-### Internal
+<details>
+<summary>Internal</summary>
 
 * cache wasm compiler results ([#784](https://github.com/rom-weaver/rom-weaver/issues/784)) ([29982c8](https://github.com/rom-weaver/rom-weaver/commit/29982c8d80d36702795c9864d04d30222039b0aa))
 * check dependabot daily on a fixed UTC-5 clock ([#731](https://github.com/rom-weaver/rom-weaver/issues/731)) ([c17a400](https://github.com/rom-weaver/rom-weaver/commit/c17a400688e579b4c99e0281d599f7ee8719425b))
@@ -196,6 +202,8 @@
 * **webapp:** remove duplicate design assets ([#778](https://github.com/rom-weaver/rom-weaver/issues/778)) ([d3d4a4b](https://github.com/rom-weaver/rom-weaver/commit/d3d4a4baf9f6beea54bfc4419111247d35599bca))
 * **webapp:** serve identify test assets ([#766](https://github.com/rom-weaver/rom-weaver/issues/766)) ([e7df60e](https://github.com/rom-weaver/rom-weaver/commit/e7df60ea43a06218a6c06d47ea2c67e418439ecb))
 * **webapp:** use mpa browser server ([#768](https://github.com/rom-weaver/rom-weaver/issues/768)) ([6d64853](https://github.com/rom-weaver/rom-weaver/commit/6d648539f4d4cb3caec0549f56f527dee178f82f))
+</details>
+</details>
 
 ## [0.15.1](https://github.com/rom-weaver/rom-weaver/compare/v0.15.0...v0.15.1) (2026-09-07)
 
