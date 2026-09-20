@@ -132,7 +132,8 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
   });
 
   // The nav names every workflow, beta ones included; the dock keeps its three
-  // slots plus Menu, and everything else reaches the phone through that sheet.
+  // workflow slots, Find, and Menu. Everything else reaches the phone through
+  // that sheet.
   // The sheet itself is empty until it is first opened, so the shell ships one
   // copy of the rows rather than two.
   expect(host.querySelectorAll(".side-nav .nav-row").length).toBeGreaterThan(4);
