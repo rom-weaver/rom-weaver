@@ -663,7 +663,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.installWith": msg({ id: "ui.home.installWith", message: "Install with one of" }),
   "ui.home.lede": msg({
     id: "ui.home.lede",
-    message: "Apply one or more patches to your ROMs and disc images, compressed or raw.",
+    message:
+      "Patch, compress, extract, convert, identify, use cheats, and edit game saves in your browser or terminal. Your files stay on your device.",
   }),
   "ui.home.localFirstEyebrow": msg({ id: "ui.home.localFirstEyebrow", message: "Why local-first" }),
   "ui.home.localFirstTitle": msg({
@@ -698,8 +699,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.reads": msg({ id: "ui.home.reads", message: "reads" }),
   "ui.home.readsAndWrites": msg({ id: "ui.home.readsAndWrites", message: "reads and writes" }),
   "ui.home.selfHostingGuide": msg({ id: "ui.home.selfHostingGuide", message: "Self-hosting guide" }),
-  "ui.home.title": msg({ id: "ui.home.title", message: "Your ROMs. Your changes." }),
-  "ui.home.titleEmphasis": msg({ id: "ui.home.titleEmphasis", message: "All on your device." }),
+  "ui.home.title": msg({ id: "ui.home.title", message: "Your ROM workflow." }),
+  "ui.home.titleEmphasis": msg({ id: "ui.home.titleEmphasis", message: "One toolkit." }),
   "ui.home.tryAfter": msg({
     id: "ui.home.tryAfter",
     message: ": a tiny homebrew NES ROM and two patches, already in order.",
@@ -1076,8 +1077,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.footer.local",
     message: "On-device. Offline support. No telemetry.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Apply a patch." }),
-  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "Change how you play." }),
+  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Your ROM workflow. One toolkit." }),
+  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "One toolkit." }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",
     message: "Try your ROM.",

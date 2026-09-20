@@ -361,7 +361,7 @@ msgstr "Unter AGPL-3.0 lizenziert. Lies den Code, baue ihn selbst oder hoste die
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.titleEmphasis"
-msgstr "Alles auf deinem Gerät."
+msgstr "Ein Werkzeugkasten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -421,7 +421,7 @@ msgstr "Ein Patch anwenden"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Einen Patch anwenden."
+msgstr "Dein ROM-Arbeitsablauf. Ein Werkzeugkasten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -477,6 +477,11 @@ msgstr "Anwenden auf: {input}"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Anwenden-Tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Patche, komprimiere, extrahiere, konvertiere und identifiziere ROMs, verwende Cheats und bearbeite Spielstände im Browser oder Terminal. Deine Dateien bleiben auf deinem Gerät."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -781,7 +786,7 @@ msgstr "CD-Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
-msgstr "und das Ergebnis oder ein teilbares Bundle herunterladen."
+msgstr "Ein Werkzeugkasten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3730,7 +3735,7 @@ msgstr "Dein Werkzeugkasten für ROMs und Disc-Images"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.title"
-msgstr "Deine ROMs. Deine Änderungen."
+msgstr "Dein ROM-Arbeitsablauf."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
