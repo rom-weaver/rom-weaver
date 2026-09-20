@@ -138,7 +138,7 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
   expect(host.querySelectorAll(".side-nav .nav-row").length).toBeGreaterThan(4);
   expect(host.querySelectorAll(".menu-sheet .nav-row").length).toBe(0);
   expect(host.querySelectorAll('.side-nav .nav-row[href="trim"]').length).toBe(1);
-  expect(host.querySelectorAll(".dock .dock-tab").length).toBe(4);
+  expect(host.querySelectorAll(".dock .dock-tab").length).toBe(5);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });
