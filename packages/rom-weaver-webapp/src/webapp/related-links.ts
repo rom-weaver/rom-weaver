@@ -58,7 +58,6 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
     ],
   },
   identify: {
-    guide: { slug: "docs/identify-and-hash-files" },
     tools: [
       {
         hintId: "ui.related.hintCarriesSelection",

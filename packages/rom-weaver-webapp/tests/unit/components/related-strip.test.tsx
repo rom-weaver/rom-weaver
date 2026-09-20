@@ -68,6 +68,7 @@ describe("RelatedStrip", () => {
 
     expect(container.querySelector(".related-label")?.textContent).toBe("Use this ROM in Apply");
     expect(container.querySelector(".related-hint")?.textContent).toBe("Keeps this selection");
+    expect(container.querySelector(".related-row-guide")).toBeNull();
   });
 
   it("renders a guide row as a plain link to the docs slug", () => {
