@@ -906,14 +906,14 @@
 
 /* ── the phone dock ──
    Runtime status spans the top row, so its wording stays readable above the
-   three workflows and Menu. */
+   three workflows, Find, and Menu. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
   inset-inline: 0;
   z-index: 1000;
   display: none;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   row-gap: 0;
   padding: 3px max(var(--sp-s), var(--safe-r)) max(3px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
   background: color-mix(in oklab, var(--plate) 88%, transparent);
@@ -1072,7 +1072,7 @@
   }
 
   html[data-offline-layout="tab"] .rw-app .dock {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     row-gap: 0;
   }
   html[data-offline-layout="tab"] .rw-app .dock-tab,
@@ -1080,7 +1080,7 @@
     grid-row: 1;
   }
   html[data-offline-layout="tab"] .rw-app .dock-runtime {
-    grid-column: 5;
+    grid-column: 6;
     min-block-size: 49px;
   }
   html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status {
@@ -1256,61 +1256,6 @@
   min-block-size: 41px;
   padding: 10px 8px;
 }
-/* Find sits at the bottom edge, in the thumb zone, where the phone layout
-   already puts the palette it opens. */
-.rw-app .menu-sheet-foot {
-  flex: none;
-  padding: var(--sp-xs) var(--gutter);
-  border-block-start: 1px solid var(--seam);
-}
-.rw-app .menu-find {
-  display: flex;
-  gap: var(--sp-s);
-  align-items: center;
-  inline-size: 100%;
-  block-size: 42px;
-  padding-inline: 10px;
-  font: inherit;
-  font-size: 0.82rem;
-  color: var(--ink-3);
-  text-align: start;
-  appearance: none;
-  cursor: text;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-s);
-}
-.rw-app .menu-find svg {
-  flex: none;
-  width: 16px;
-  height: 16px;
-}
-.rw-app .menu-find span {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rw-app .menu-find kbd {
-  flex: none;
-  padding: 1px 6px;
-  font-family: inherit;
-  font-size: 0.68rem;
-  color: var(--ink-3);
-  background: var(--plate);
-  border: 1px solid var(--seam);
-  border-radius: 4px;
-}
-.rw-app .menu-find:active {
-  border-color: var(--seam-strong);
-}
-@media (hover: hover) {
-  .rw-app .menu-find:hover {
-    border-color: var(--seam-strong);
-  }
-}
-
 /* ── the layout threshold ──
    ▼ The single number that decides which of the two shells is on screen. */
 @media (min-width: 1000px) {
