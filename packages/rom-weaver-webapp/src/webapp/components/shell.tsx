@@ -28,6 +28,7 @@ import { DocsNavigationRoute } from "../workflow-routes.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
+import type { RomLookupSelection } from "../../public/react/use-rom-lookup.ts";
 import { ACCENTS, useAccent } from "../accent.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
@@ -1136,7 +1137,7 @@ const Masthead = ({
   /** Find's deep link into one settings field; falls back to plain Settings. */
   onOpenSettingsField?: (fieldId: string) => void;
   /** Send a Find title or checksum result to the Identify workflow. */
-  onIdentifyQuery?: (query: string) => void;
+  onIdentifyQuery?: (selection: RomLookupSelection) => void;
   serviceWorkerStatus?: ServiceWorkerStatus | null;
   offlineProgress?: OfflineWarmupDisplayProgress | null;
   previewRuntimeState?: RuntimeState | null;
@@ -1212,7 +1213,7 @@ const Masthead = ({
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const onFindAction = (action: FindAction) => {
     if (action.type === "view") onSelectTab(action.view);
-    else if (action.type === "identify") onIdentifyQuery?.(action.query);
+    else if (action.type === "identify") onIdentifyQuery?.(action.selection);
     else if (action.type === "settings") {
       if (action.fieldId && onOpenSettingsField) onOpenSettingsField(action.fieldId);
       else onOpenSettings();

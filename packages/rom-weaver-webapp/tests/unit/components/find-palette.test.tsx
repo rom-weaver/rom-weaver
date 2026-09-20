@@ -177,7 +177,12 @@ describe("Find", () => {
     const result = getByText("Sonic the Hedgehog");
     fireEvent.click(result.closest('[role="option"]') as HTMLElement);
 
-    expect(onIdentifyQuery).toHaveBeenCalledWith("Sonic the Hedgehog");
+    expect(onIdentifyQuery).toHaveBeenCalledWith({
+      kind: "title",
+      query: "sonic",
+      title: { name: "Sonic the Hedgehog", platform: "Sega Genesis", slug: "sega-genesis" },
+    });
+    expect(result.closest(".find-identify-result")?.classList.contains("identify-search-result-btn")).toBe(true);
     expect(container.querySelector(".find-palette")).toBeNull();
   });
 

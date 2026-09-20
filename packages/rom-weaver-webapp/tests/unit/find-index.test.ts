@@ -150,8 +150,15 @@ describe("loadIdentifyFindEntries", () => {
 
     await expect(loadIdentifyFindEntries("sonic", "Identify ROM")).resolves.toEqual([
       expect.objectContaining({
-        action: { type: "identify", query: "Sonic the Hedgehog" },
-        hint: "Identify ROM · Sega Genesis",
+        action: {
+          type: "identify",
+          selection: {
+            kind: "title",
+            query: "sonic",
+            title: { name: "Sonic the Hedgehog", platform: "Sega Genesis", slug: "sega-genesis" },
+          },
+        },
+        hint: "Identify ROM",
         label: "Sonic the Hedgehog",
       }),
     ]);
@@ -169,8 +176,16 @@ describe("loadIdentifyFindEntries", () => {
 
     await expect(loadIdentifyFindEntries("3337ec46", "Identify ROM")).resolves.toEqual([
       expect.objectContaining({
-        action: { type: "identify", query: "3337ec46" },
-        hint: "Identify ROM · Nintendo - NES",
+        action: {
+          type: "identify",
+          selection: {
+            foundBy: "checksum",
+            kind: "version",
+            match: { name: "Super Mario Bros. (World)", platform: "Nintendo - NES" },
+            query: "3337ec46",
+          },
+        },
+        hint: "Identify ROM",
         label: "Super Mario Bros. (World)",
       }),
     ]);

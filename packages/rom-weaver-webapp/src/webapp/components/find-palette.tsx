@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import type { KeyboardEvent, RefObject } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
+import { RomSearchResultSummary } from "../../public/react/components/ds/rom-expectation-card.tsx";
 import type { FindAction, FindEntry, FindIndex, FindKind, FindResult, FindSources } from "../find-index.ts";
 import { createFindIndex, loadGuideRoutes, loadIdentifyFindEntries, searchFind } from "../find-index.ts";
 
@@ -194,19 +195,28 @@ const FindPalette = ({
             const active = resultIndex === activeIndex;
             const shared = {
               "aria-selected": active,
-              className: active ? "find-option is-active" : "find-option",
+              className: `find-option${entry.action.type === "identify" ? " is-identify" : ""}${active ? " is-active" : ""}`,
               id: `${listId}-${resultIndex}`,
               onPointerEnter: () => setActiveEntryId(entry.id),
               role: "option",
               tabIndex: -1,
             } as const;
-            const inner = (
-              <>
-                <span className={`find-kind is-${entry.kind}`}>{localizer.message(KIND_MESSAGE[entry.kind])}</span>
-                <span className="find-label">{entry.label}</span>
-                {entry.hint ? <span className="find-hint">{entry.hint}</span> : null}
-              </>
-            );
+            const inner =
+              entry.action.type === "identify" ? (
+                <span className="find-identify-result identify-search-result-btn">
+                  {entry.action.selection.kind === "title" ? (
+                    <RomSearchResultSummary kind="title" title={entry.action.selection.title} />
+                  ) : (
+                    <RomSearchResultSummary kind="version" match={entry.action.selection.match} />
+                  )}
+                </span>
+              ) : (
+                <>
+                  <span className={`find-kind is-${entry.kind}`}>{localizer.message(KIND_MESSAGE[entry.kind])}</span>
+                  <span className="find-label">{entry.label}</span>
+                  {entry.hint ? <span className="find-hint">{entry.hint}</span> : null}
+                </>
+              );
             if (entry.href)
               return (
                 <a

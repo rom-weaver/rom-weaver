@@ -125,6 +125,13 @@
   color: var(--ink-3);
   white-space: nowrap;
 }
+.rw-app .find-option.is-identify {
+  display: block;
+  padding: 0;
+}
+.rw-app .find-identify-result {
+  inline-size: 100%;
+}
 @media (prefers-reduced-motion: reduce) {
   .rw-app .find-palette {
     animation: none;

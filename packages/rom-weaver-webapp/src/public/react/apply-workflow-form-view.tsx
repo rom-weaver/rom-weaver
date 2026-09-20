@@ -85,7 +85,7 @@ import {
   usePostApplyTestBehaviorValue,
 } from "./use-apply-download-orchestration.ts";
 import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
-import { useRomLookup } from "./use-rom-lookup.ts";
+import { useRomLookup, type RomLookupResultRequest } from "./use-rom-lookup.ts";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -1834,6 +1834,7 @@ function ApplyWorkflowFormView({
   patchInputBasis,
   onPatchInputBasisChange,
   pendingDrops = [],
+  romLookupRequest,
   startup = { message: "", status: "ready" },
 }: {
   /**
@@ -1874,6 +1875,7 @@ function ApplyWorkflowFormView({
   patchInputBasis?: PatchInputBasis;
   onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
   pendingDrops?: PendingDrop[];
+  romLookupRequest?: RomLookupResultRequest;
   startup?: StartupState;
 }) {
   const uiController = controllers.ui;
@@ -2003,6 +2005,13 @@ function ApplyWorkflowFormView({
   // or patch that already declares one answers the question, so the search
   // stays out of the way and its own result is dropped.
   const romLookup = useRomLookup(ROM_LOOKUP_MESSAGES(localizer));
+  const applyRomLookupRequestRef = useRef({ clear: romLookup.clear, selectResult: romLookup.selectResult });
+  applyRomLookupRequestRef.current = { clear: romLookup.clear, selectResult: romLookup.selectResult };
+  useEffect(() => {
+    if (!romLookupRequest) return;
+    if (romLookupRequest.result) applyRomLookupRequestRef.current.selectResult(romLookupRequest.result);
+    else applyRomLookupRequestRef.current.clear();
+  }, [romLookupRequest]);
   const canSearchRom = romInputs.length === 0 && !hasExpectedChecks;
   const { clear: clearManualRomLookup } = romLookup;
   const staleRomLookup = !canSearchRom && !!(romLookup.text || romLookup.result);

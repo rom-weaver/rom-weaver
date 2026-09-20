@@ -312,6 +312,34 @@ const RomExpectationCard = ({
   );
 };
 
+/** The shared title/release content used by Identify and shell Find results. */
+const RomSearchResultSummary = (
+  props: { kind: "title"; title: ExpectedRomTitle } | { kind: "version"; match: ParsedIdentifyTitleMatch },
+) => {
+  if (props.kind === "title")
+    return (
+      <>
+        <span className="identify-search-result-name">{props.title.name}</span>
+        <span className="identify-search-result-meta">
+          <PlatformName name={props.title.platform} />
+        </span>
+      </>
+    );
+  const { match } = props;
+  const dumpKinds = (match.dumpTags || []).filter((tag) => tag.trim()).map(identifyDumpTagLabel);
+  const details = [match.region, match.revision, ...dumpKinds].filter(Boolean);
+  return (
+    <>
+      <span className="identify-search-result-name">{displayTitle(match.name)}</span>
+      <span className="identify-search-result-meta">
+        <PlatformName name={match.platform} />
+        {details.length ? ` · ${details.join(" · ")}` : null}
+      </span>
+      <ReleaseChecksums components={match.expectedComponents} />
+    </>
+  );
+};
+
 /* One title from a name search, on one platform. The index holds base titles,
    so the platform is what separates two rows with the same name. */
 const RomTitleRow = ({
@@ -335,10 +363,7 @@ const RomTitleRow = ({
       ref={buttonRef}
       type="button"
     >
-      <span className="identify-search-result-name">{title.name}</span>
-      <span className="identify-search-result-meta">
-        <PlatformName name={title.platform} />
-      </span>
+      <RomSearchResultSummary kind="title" title={title} />
     </button>
   </div>
 );
@@ -436,8 +461,6 @@ const RomVersionRow = ({
   selected?: boolean;
   showChecksums: boolean;
 }) => {
-  const dumpKinds = (match.dumpTags || []).filter((tag) => tag.trim()).map(identifyDumpTagLabel);
-  const details = [match.region, match.revision, ...dumpKinds].filter(Boolean);
   return (
     <div aria-selected={Boolean(selected)} className="identify-search-result" id={id} role="option" tabIndex={-1}>
       <button
@@ -447,12 +470,7 @@ const RomVersionRow = ({
         ref={buttonRef}
         type="button"
       >
-        <span className="identify-search-result-name">{displayTitle(match.name)}</span>
-        <span className="identify-search-result-meta">
-          <PlatformName name={match.platform} />
-          {details.length ? ` · ${details.join(" · ")}` : null}
-        </span>
-        <ReleaseChecksums components={match.expectedComponents} />
+        <RomSearchResultSummary kind="version" match={match} />
       </button>
       {showChecksums ? <ReleaseChecksumDetails components={match.expectedComponents} /> : null}
     </div>
@@ -683,6 +701,7 @@ export {
   databaseOnlyChecks,
   ROM_LOOKUP_MESSAGES,
   RomExpectationCard,
+  RomSearchResultSummary,
   romLookupSource,
   RomSearch,
   type RomExpectation,

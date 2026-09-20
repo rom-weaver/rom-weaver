@@ -25,7 +25,7 @@ import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { useUiLocalizer } from "../../public/react/settings-context.tsx";
-import { useRomLookup } from "../../public/react/use-rom-lookup.ts";
+import { useRomLookup, type RomLookupResult, type RomLookupSelection } from "../../public/react/use-rom-lookup.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
 
@@ -43,7 +43,8 @@ const IDENTIFY_SUPPORTED_FILES = [
 type IdentifyFormProps = {
   containerId?: string;
   inputId?: string;
-  lookupRequest?: { id: number; query: string };
+  lookupRequest?: { id: number; selection: RomLookupSelection };
+  onLookupResultChange?: (result: RomLookupResult | undefined) => void;
   /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
   onSelectTab?: (id: string) => void;
   pageDrop?: PageFileDrop | null;
@@ -121,17 +122,19 @@ const IdentifyForm = ({
   containerId = "identify-container",
   inputId = "identify-input-picker",
   lookupRequest,
+  onLookupResultChange,
   onSelectTab,
   pageDrop,
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
   const [file, setFile] = useState<File | null>(null);
   const romLookup = useRomLookup(ROM_LOOKUP_MESSAGES(localizer));
-  const applyLookupRef = useRef(romLookup.setText);
-  applyLookupRef.current = romLookup.setText;
+  const applyLookupRef = useRef(romLookup.select);
+  applyLookupRef.current = romLookup.select;
   useEffect(() => {
-    if (lookupRequest) applyLookupRef.current(lookupRequest.query);
+    if (lookupRequest) applyLookupRef.current(lookupRequest.selection);
   }, [lookupRequest]);
+  useEffect(() => onLookupResultChange?.(romLookup.result), [onLookupResultChange, romLookup.result]);
   const [result, setResult] = useState<ParsedIdentifyResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);

@@ -6,6 +6,7 @@ import type { WorkflowTab } from "./components/shell.tsx";
 import { searchDocs } from "./docs-search.mjs";
 import { SETTINGS_FIELD_METADATA, SETTINGS_PANEL_SECTIONS } from "./settings/settings-metadata.ts";
 import { identifyHashAlgorithm } from "../types/identify.ts";
+import type { RomLookupSelection } from "../public/react/use-rom-lookup.ts";
 
 const logger = createLogger("find-index");
 
@@ -13,7 +14,7 @@ type FindKind = "tool" | "app" | "setting" | "guide";
 
 type FindAction =
   | { type: "view"; view: string }
-  | { type: "identify"; query: string }
+  | { type: "identify"; selection: RomLookupSelection }
   | { type: "settings"; fieldId?: string }
   | { type: "status" }
   | { type: "storage" }
@@ -81,8 +82,8 @@ const loadIdentifyFindEntries = async (
     const result = await lookupExpectedRom({ checksums: { [algorithm]: hex } }, { signal });
     if (!result || result.status === "unavailable") return [];
     return result.matches.slice(0, IDENTIFY_RESULT_LIMIT).map((match, index) => ({
-      action: { type: "identify", query: hex },
-      hint: `${identifyLabel} · ${match.platform}`,
+      action: { type: "identify", selection: { foundBy: "checksum", kind: "version", match, query: hex } },
+      hint: identifyLabel,
       id: `identify:checksum:${hex}:${index}`,
       keywords: "",
       kind: "tool",
@@ -93,8 +94,8 @@ const loadIdentifyFindEntries = async (
   const result = await searchExpectedRomTitles(normalized, { limit: IDENTIFY_RESULT_LIMIT, signal });
   if (result.status === "unavailable") return [];
   return result.titles.map((title) => ({
-    action: { type: "identify", query: title.name },
-    hint: `${identifyLabel} · ${title.platform}`,
+    action: { type: "identify", selection: { kind: "title", query: normalized, title } },
+    hint: identifyLabel,
     id: `identify:title:${title.slug}:${title.name}`,
     keywords: "",
     kind: "tool",

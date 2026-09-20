@@ -72,6 +72,30 @@ it("offers the optional ROM drop zone beside a checksum match", async () => {
   expect(container.querySelector(".ghost-steps")).toBeNull();
 });
 
+it("accepts the exact Find record and exposes it for Apply", async () => {
+  const onLookupResultChange = vi.fn();
+  const { container } = render(
+    <IdentifyForm
+      lookupRequest={{
+        id: 1,
+        selection: { foundBy: "checksum", kind: "version", match: MATCH, query: "abcd1234" },
+      }}
+      onLookupResultChange={onLookupResultChange}
+    />,
+  );
+
+  await waitFor(() => expect(container.querySelector("#identify-container-expected-rom")).not.toBeNull());
+  expect(mockedLookup).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Metroid Fusion (USA)");
+  expect(onLookupResultChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      checks: { checksums: { crc32: "abcd1234" } },
+      foundBy: "checksum",
+      identification: { matches: [MATCH], status: "matched" },
+    }),
+  );
+});
+
 it("marks the staged ROM ok when it matches the pasted checksum", async () => {
   identifyRom.mockResolvedValue(stageCandidate("abcd1234"));
   const { container } = render(<IdentifyForm />);

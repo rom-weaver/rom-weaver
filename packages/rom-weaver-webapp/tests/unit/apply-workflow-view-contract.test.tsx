@@ -151,6 +151,7 @@ const renderView = ({
   patches = [] as PatchStackItemState[],
   patchEnablement,
   pendingDrops,
+  romLookupRequest,
   settings = {},
   startup,
   ui,
@@ -168,6 +169,7 @@ const renderView = ({
   patches?: PatchStackItemState[];
   patchEnablement?: Parameters<typeof ApplyWorkflowFormView>[0]["patchEnablement"];
   pendingDrops?: Parameters<typeof ApplyWorkflowFormView>[0]["pendingDrops"];
+  romLookupRequest?: Parameters<typeof ApplyWorkflowFormView>[0]["romLookupRequest"];
   settings?: Parameters<typeof RomWeaverSettingsProvider>[0]["settings"];
   startup?: Parameters<typeof ApplyWorkflowFormView>[0]["startup"];
   ui: PatcherUiState;
@@ -197,6 +199,7 @@ const renderView = ({
         mode={mode}
         patchEnablement={patchEnablement}
         pendingDrops={pendingDrops}
+        romLookupRequest={romLookupRequest}
         startup={startup}
       />
     </RomWeaverSettingsProvider>,
@@ -315,6 +318,74 @@ describe("apply workflow view - empty bench", () => {
     fireEvent.click(romStep.querySelector('button[aria-label="Clear the expected ROM"]') as HTMLButtonElement);
     await vi.waitFor(() => expect(container.querySelector(".drop.hero")).toBeTruthy());
     expect((container.querySelector("#rom-weaver-rom-search") as HTMLInputElement).value).toBe("");
+  });
+
+  it("starts with the expected ROM selected in Identify", async () => {
+    lookupExpectedRom.mockClear();
+    const carriedMatch = {
+      algorithm: "components" as const,
+      database: "No-Intro",
+      expectedComponents: [{ crc32: "3610a686" }],
+      name: "Metroid Fusion (USA)",
+      platform: "Nintendo - Game Boy Advance",
+      variant: "raw",
+    };
+    const { container } = renderView({
+      romLookupRequest: {
+        id: 1,
+        result: {
+          checks: { checksums: { crc32: "3610a686" } },
+          foundBy: "name",
+          identification: { matches: [carriedMatch], status: "matched" },
+        },
+      },
+      ui: createEmptyPatcherUiState(),
+    });
+
+    await vi.waitFor(() => expect(container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
+    expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
+      "Metroid Fusion (USA)",
+    );
+    expect(lookupExpectedRom).not.toHaveBeenCalled();
+  });
+
+  it("clears an expected ROM that was cleared in Identify", async () => {
+    const carriedMatch = {
+      algorithm: "components" as const,
+      database: "No-Intro",
+      expectedComponents: [{ crc32: "3610a686" }],
+      name: "Metroid Fusion (USA)",
+      platform: "Nintendo - Game Boy Advance",
+      variant: "raw",
+    };
+    const props = {
+      romLookupRequest: {
+        id: 1,
+        result: {
+          checks: { checksums: { crc32: "3610a686" } },
+          foundBy: "name" as const,
+          identification: { matches: [carriedMatch], status: "matched" as const },
+        },
+      },
+      ui: createEmptyPatcherUiState(),
+    };
+    const view = renderView(props);
+    await vi.waitFor(() => expect(view.container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeTruthy());
+
+    view.rerender(
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyWorkflowFormView
+          controllers={{
+            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            patchStack: { ...storeOf({ items: [] }), removeItem: () => undefined, reorder: () => undefined },
+            ui: Object.assign(storeOf(props.ui), props.ui) as unknown as PatcherUiController,
+          }}
+          romLookupRequest={{ id: 2, result: undefined }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    await vi.waitFor(() => expect(view.container.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull());
   });
 
   it("keeps the checksum search open in 0x02 while patches wait for a ROM", async () => {

@@ -1901,6 +1901,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         patchInputBasis={patchInputBasis}
         onPatchInputBasisChange={handlePatchInputBasisChange}
         pendingDrops={pendingDrops}
+        romLookupRequest={props.romLookupRequest}
         startup={startup}
       />
       {candidateSelectionDialog}

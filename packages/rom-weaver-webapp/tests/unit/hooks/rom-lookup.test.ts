@@ -152,6 +152,54 @@ describe("useRomLookup", () => {
     expect(hook.result.current.result?.identification.matches).toEqual([second]);
   });
 
+  it("selects a Find checksum record without repeating the lookup", () => {
+    const selected = match("Selected", { expectedComponents: [{ crc32: "deadbeef", md5: "2".repeat(32) }] });
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+
+    act(() =>
+      hook.result.current.select({
+        foundBy: "checksum",
+        kind: "version",
+        match: selected,
+        query: "deadbeef",
+      }),
+    );
+
+    expect(mockedLookup).not.toHaveBeenCalled();
+    expect(hook.result.current.result?.identification.matches).toEqual([selected]);
+    expect(hook.result.current.result?.checks.checksums).toEqual({ crc32: "deadbeef", md5: "2".repeat(32) });
+  });
+
+  it("opens the releases for the exact Find title", async () => {
+    const release = match("Hello World (USA)");
+    mockedByName.mockResolvedValue({ matches: [release], status: "matched" });
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+
+    act(() => hook.result.current.select({ kind: "title", query: "hello", title: TITLE }));
+    await waitFor(() => expect(hook.result.current.versions).toEqual([release]));
+
+    expect(mockedTitles).not.toHaveBeenCalled();
+    expect(mockedByName).toHaveBeenCalledWith(TITLE.slug, TITLE.name, expect.anything());
+    expect(hook.result.current.title).toEqual(TITLE);
+  });
+
+  it("restores a settled Identify result without reading data again", () => {
+    const selected = match("Carried to Apply", { expectedComponents: [{ sha1: "a".repeat(40) }] });
+    const hook = renderHook(() => useRomLookup(MESSAGES));
+    const result = {
+      checks: { checksums: { sha1: "a".repeat(40) } },
+      foundBy: "name" as const,
+      identification: { matches: [selected], status: "matched" as const },
+    };
+
+    act(() => hook.result.current.selectResult(result));
+
+    expect(mockedLookup).not.toHaveBeenCalled();
+    expect(mockedByName).not.toHaveBeenCalled();
+    expect(hook.result.current.result).toEqual(result);
+    expect(hook.result.current.text).toBe("Carried to Apply");
+  });
+
   it("cancels delayed searches on clear and unmount", async () => {
     vi.useFakeTimers();
     const hook = renderHook(() => useRomLookup(MESSAGES));

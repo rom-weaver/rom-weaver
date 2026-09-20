@@ -45,6 +45,17 @@ type RomLookupResult = {
   identification: ParsedIdentifyResolution;
 };
 
+type RomLookupSelection =
+  | { kind: "title"; query: string; title: ExpectedRomTitle }
+  | {
+      foundBy: "checksum" | "name";
+      kind: "version";
+      match: ParsedIdentifyTitleMatch;
+      query: string;
+    };
+
+type RomLookupResultRequest = { id: number; result: RomLookupResult | undefined };
+
 type RomLookupMessages = {
   failed: string;
   hashInvalid: string;
@@ -326,6 +337,51 @@ const useRomLookup = (messages: RomLookupMessages) => {
     [begin, fail, messages, onProgress, stale],
   );
 
+  /** Apply a record already selected by another app surface without repeating its search. */
+  const select = useCallback(
+    (selection: RomLookupSelection) => {
+      if (selection.kind === "title") {
+        cancel();
+        setState({ ...IDLE, text: selection.query, titles: [selection.title] });
+        void chooseTitle(selection.title);
+        return;
+      }
+      cancel();
+      const record = checksForMatch(selection.match);
+      const hash = selection.query.trim().toLowerCase();
+      const algorithm = selection.foundBy === "checksum" ? identifyHashAlgorithm(hash) : undefined;
+      setState({
+        ...IDLE,
+        result: {
+          checks: {
+            ...record,
+            checksums: {
+              ...record.checksums,
+              ...(algorithm ? { [algorithm]: hash } : {}),
+            },
+          },
+          foundBy: selection.foundBy,
+          identification: { matches: [selection.match], status: "matched" },
+        },
+        text: selection.query,
+      });
+    },
+    [cancel, chooseTitle],
+  );
+
+  /** Carry a settled expected ROM between workflows without reading identification data again. */
+  const selectResult = useCallback(
+    (result: RomLookupResult) => {
+      cancel();
+      setState({
+        ...IDLE,
+        result,
+        text: result.identification.matches[0]?.name || "",
+      });
+    },
+    [cancel],
+  );
+
   /** Back from a title's releases to the title list, which is kept. */
   const leaveTitle = useCallback(() => {
     cancel();
@@ -345,7 +401,13 @@ const useRomLookup = (messages: RomLookupMessages) => {
   // say so instead of promising results.
   const hex = state.text.trim().toLowerCase();
   const incompleteHash = /^[0-9a-f]+$/u.test(hex) && hex.length >= MIN_HASH_LENGTH && !identifyHashAlgorithm(hex);
-  return { ...state, choose, chooseTitle, clear, incompleteHash, leaveTitle, search, setText };
+  return { ...state, choose, chooseTitle, clear, incompleteHash, leaveTitle, search, select, selectResult, setText };
 };
 
-export { useRomLookup, type RomLookupMessages };
+export {
+  useRomLookup,
+  type RomLookupMessages,
+  type RomLookupResult,
+  type RomLookupResultRequest,
+  type RomLookupSelection,
+};
