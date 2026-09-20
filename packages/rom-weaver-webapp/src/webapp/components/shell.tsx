@@ -296,49 +296,55 @@ const PhoneDock = ({
   onToggleMenu: () => void;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
-}) => (
-  <nav aria-label={navLabel} className="dock">
-    {tabs.map((tab) => (
-      <a
-        aria-current={tab.id === current ? "page" : undefined}
-        className="dock-tab"
-        data-mode={tab.id}
-        href={tab.href}
-        key={tab.id}
-        onClick={(event) => activateOnClick(event, () => onSelect(tab.id))}
+}) => {
+  const findIndex = Math.ceil(tabs.length / 2);
+  const renderWorkflowTab = (tab: WorkflowTab) => (
+    <a
+      aria-current={tab.id === current ? "page" : undefined}
+      className="dock-tab"
+      data-mode={tab.id}
+      href={tab.href}
+      key={tab.id}
+      onClick={(event) => activateOnClick(event, () => onSelect(tab.id))}
+    >
+      {tab.icon}
+      <span>{tab.railLabel ?? tab.label}</span>
+    </a>
+  );
+
+  return (
+    <nav aria-label={navLabel} className="dock">
+      {tabs.slice(0, findIndex).map(renderWorkflowTab)}
+      <button
+        aria-controls="find-palette"
+        aria-expanded={findOpen}
+        aria-haspopup="dialog"
+        aria-keyshortcuts="/ Control+K Meta+K"
+        aria-label={findLabel}
+        className="dock-tab dock-find"
+        onClick={onToggleFind}
+        ref={findTriggerRef}
+        type="button"
       >
-        {tab.icon}
-        <span>{tab.railLabel ?? tab.label}</span>
-      </a>
-    ))}
-    <button
-      aria-controls="find-palette"
-      aria-expanded={findOpen}
-      aria-haspopup="dialog"
-      aria-keyshortcuts="/ Control+K Meta+K"
-      aria-label={findLabel}
-      className="dock-tab dock-find"
-      onClick={onToggleFind}
-      ref={findTriggerRef}
-      type="button"
-    >
-      <Search aria-hidden="true" />
-      <span>{findLabel}</span>
-    </button>
-    <button
-      aria-controls="menu-sheet"
-      aria-expanded={menuOpen}
-      aria-label={menuLabel}
-      className="dock-tab dock-menu"
-      onClick={onToggleMenu}
-      ref={triggerRef}
-      type="button"
-    >
-      <Menu aria-hidden="true" />
-      <span>{menuLabel}</span>
-    </button>
-  </nav>
-);
+        <Search aria-hidden="true" />
+        <span>{findLabel}</span>
+      </button>
+      {tabs.slice(findIndex).map(renderWorkflowTab)}
+      <button
+        aria-controls="menu-sheet"
+        aria-expanded={menuOpen}
+        aria-label={menuLabel}
+        className="dock-tab dock-menu"
+        onClick={onToggleMenu}
+        ref={triggerRef}
+        type="button"
+      >
+        <Menu aria-hidden="true" />
+        <span>{menuLabel}</span>
+      </button>
+    </nav>
+  );
+};
 
 const MenuSheet = ({
   appearance,

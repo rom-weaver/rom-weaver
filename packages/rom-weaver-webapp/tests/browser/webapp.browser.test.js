@@ -208,7 +208,7 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
   // The dock keeps its three workflow slots plus Find and Menu at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Test", "Find", "Menu"]);
+    .toEqual(["Apply", "Create", "Find", "Test", "Menu"]);
   expect(navRow("PPF undo")).toBeUndefined();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();

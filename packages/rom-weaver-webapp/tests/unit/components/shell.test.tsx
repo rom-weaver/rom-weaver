@@ -184,7 +184,7 @@ describe("Masthead", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
     const dockNav = container.querySelector(".dock") as HTMLElement;
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
-    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Find", "Menu"]);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Find", "Test", "Menu"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
 
@@ -210,7 +210,7 @@ describe("Masthead", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(sheet.hidden).toBe(true);
 
-    fireEvent.click(slots[2] as HTMLAnchorElement);
+    fireEvent.click(dockNav.querySelector('[data-mode="test"]') as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("test");
   });
 
