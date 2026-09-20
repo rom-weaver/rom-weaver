@@ -5,6 +5,7 @@ import type { WebappView } from "./webapp-state-types.ts";
 type RelatedToolLink = {
   /** True for a tool that stays behind the beta-tools setting (Trim). */
   beta?: boolean;
+  hintId?: MessageId;
   labelId: MessageId;
   view: WebappView;
 };
@@ -58,7 +59,13 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
   },
   identify: {
     guide: { slug: "docs/identify-and-hash-files" },
-    tools: [{ labelId: "ui.related.applyAPatch", view: "patcher" }],
+    tools: [
+      {
+        hintId: "ui.related.hintCarriesSelection",
+        labelId: "ui.related.useRomInApply",
+        view: "patcher",
+      },
+    ],
   },
   patcher: {
     guide: { slug: "docs/fix-checksum-errors" },

@@ -1780,6 +1780,11 @@ msgstr "Mantener sin conexión. Las bases de datos no marcadas se descargan a pe
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.hintCarriesSelection"
+msgstr "Conserva esta selección"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
 msgstr "Identifica una ROM."
 
@@ -3581,6 +3586,11 @@ msgstr "¿Usar ROM duplicadas?"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMemberTitle"
 msgstr "Usa la ruta exacta del archivo interno de la ROM o del resultado del parche seleccionado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.useRomInApply"
+msgstr "Usar esta ROM en Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

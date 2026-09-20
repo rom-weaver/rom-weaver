@@ -454,7 +454,7 @@ const IdentifyForm = ({
       ) : (
         <GhostSteps steps={[{ num: "0x02", title: localizer.message("ui.step.rom") }]} />
       )}
-      {!busy && !!result && !unavailable && onSelectTab ? (
+      {!busy && (!!expectation || (!!result && !unavailable)) && onSelectTab ? (
         <RelatedStrip entryKey="identify" onSelectTab={onSelectTab} />
       ) : null}
     </section>

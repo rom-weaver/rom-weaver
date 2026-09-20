@@ -1780,6 +1780,11 @@ msgstr "Diese offline vorhalten. Nicht angehakte Datenbanken werden weiterhin be
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.related.hintCarriesSelection"
+msgstr "Behält diese Auswahl bei"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
 msgstr "Eine ROM identifizieren."
 
@@ -3581,6 +3586,11 @@ msgstr "Doppelte ROMs verwenden?"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.executionMemberTitle"
 msgstr "Verwende den genauen Dateipfad innerhalb des ausgewählten ROMs oder Patch-Ergebnisses."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.related.useRomInApply"
+msgstr "Dieses ROM in Anwenden verwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

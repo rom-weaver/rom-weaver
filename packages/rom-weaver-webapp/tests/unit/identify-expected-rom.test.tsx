@@ -81,12 +81,15 @@ it("accepts the exact Find record and exposes it for Apply", async () => {
         selection: { foundBy: "checksum", kind: "version", match: MATCH, query: "abcd1234" },
       }}
       onLookupResultChange={onLookupResultChange}
+      onSelectTab={vi.fn()}
     />,
   );
 
   await waitFor(() => expect(container.querySelector("#identify-container-expected-rom")).not.toBeNull());
   expect(mockedLookup).not.toHaveBeenCalled();
   expect(container.textContent).toContain("Metroid Fusion (USA)");
+  expect(container.querySelector(".related-row-tool")?.textContent).toContain("Use this ROM in Apply");
+  expect(container.querySelector(".related-row-tool")?.textContent).toContain("Keeps this selection");
   expect(onLookupResultChange).toHaveBeenLastCalledWith(
     expect.objectContaining({
       checks: { checksums: { crc32: "abcd1234" } },
