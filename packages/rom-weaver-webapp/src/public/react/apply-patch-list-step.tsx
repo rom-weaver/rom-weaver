@@ -1047,21 +1047,25 @@ const PatchChecksDrawer = ({
       <p className="patch-checks-explanation" id={`rom-weaver-patch-checks-help-${index}`}>
         {localizer.message("ui.patchChecks.explanation")}
       </p>
-      <p className="patch-checks-execution" id={`rom-weaver-patch-execution-input-label-${index}`}>
-        {localizer.message("ui.patchChecks.execution", { input: executionInput })}
-      </p>
-      <PatchExecutionInputSelect
-        disabled={disabled || item.optionsDisabled}
-        index={index}
-        meta={executionInputMeta}
-        onMetaChange={onMetaChange}
-        predecessors={predecessors}
-      />
-      {targetRom ? (
-        <p className="patch-checks-execution" id={`rom-weaver-patch-target-rom-label-${index}`}>
-          {localizer.message("ui.patchChecks.targetRom", { target: targetRom })}
-        </p>
-      ) : null}
+      <div className="patch-checks-context">
+        <div className="patch-checks-context-row">
+          <p className="patch-checks-execution" id={`rom-weaver-patch-execution-input-label-${index}`}>
+            {localizer.message("ui.patchChecks.execution", { input: executionInput })}
+          </p>
+          <PatchExecutionInputSelect
+            disabled={disabled || item.optionsDisabled}
+            index={index}
+            meta={executionInputMeta}
+            onMetaChange={onMetaChange}
+            predecessors={predecessors}
+          />
+        </div>
+        {targetRom ? (
+          <p className="patch-checks-execution" id={`rom-weaver-patch-target-rom-label-${index}`}>
+            {localizer.message("ui.patchChecks.targetRom", { target: targetRom })}
+          </p>
+        ) : null}
+      </div>
       {sides.map(({ addableFields, builtInRows, editableFields, markFor, metaField, side, userValue }) => {
         const inputHeading =
           side === "input"
