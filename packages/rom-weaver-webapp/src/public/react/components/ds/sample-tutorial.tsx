@@ -457,6 +457,12 @@ const SampleTutorial = ({
   const motionRef = useRef<Animation | null>(null);
   const arrivingRef = useRef(false);
   const step = steps[stepIndex];
+  const stepCta = step?.cta;
+  const stepLift = step?.lift;
+  const stepOpenDrawers = step?.openDrawers;
+  const stepOpenMenu = step?.openMenu;
+  const stepPlacement = step?.placement;
+  const stepTarget = step?.target;
   const endGuide = () => {
     clearGuidedSampleQuery();
     onClose();
@@ -538,7 +544,7 @@ const SampleTutorial = ({
   }, [onClose]);
 
   useEffect(() => {
-    const targetSelector = step?.target;
+    const targetSelector = stepTarget;
     if (!(live && targetSelector)) return;
     let target: HTMLElement | null = null;
     let stage: HTMLElement | null = null;
@@ -560,27 +566,27 @@ const SampleTutorial = ({
       target.classList.add("sample-tutorial-target");
       stage?.classList.add("sample-tutorial-stage");
       target.setAttribute("aria-describedby", [previousDescription, bodyId].filter(Boolean).join(" "));
-      if (step.openDrawers) {
+      if (stepOpenDrawers) {
         for (const drawer of target.querySelectorAll<HTMLButtonElement>(".cks > .cks-head[aria-expanded='false']")) {
           openedDrawers.push(drawer);
           drawer.click();
         }
       }
-      if (step.openMenu) {
+      if (stepOpenMenu) {
         openedMenu = target.querySelector<HTMLButtonElement>(".patch-menu-btn[aria-expanded='false']");
         openedMenu?.click();
       }
-      if (step.lift) {
+      if (stepLift) {
         // The swap control lives between two rows, so no single target can hold
         // it. Lift its row, not the button: .swap-row sets a z-index of its own,
         // so a lift on the button would be scoped inside that stacking context.
-        lifted = document.querySelector<HTMLElement>(step.lift);
+        lifted = document.querySelector<HTMLElement>(stepLift);
         lifted?.classList.add("sample-tutorial-lift");
       }
-      if (step.cta) {
+      if (stepCta) {
         // A data attribute, not a class: React rewrites this button's className
         // whenever its download state changes and would drop a class we added.
-        cta = target.querySelector<HTMLElement>(step.cta);
+        cta = target.querySelector<HTMLElement>(stepCta);
         cta?.setAttribute("data-guide-cta", "true");
         removeCtaEndListener = bindFinalCta(cta, stepIndex === steps.length - 1, () => {
           endedByCtaRef.current = true;
@@ -618,7 +624,7 @@ const SampleTutorial = ({
         else target.removeAttribute("aria-describedby");
       }
     };
-  }, [bodyId, live, step, stepIndex, steps.length]);
+  }, [bodyId, live, stepCta, stepIndex, stepLift, stepOpenDrawers, stepOpenMenu, stepTarget, steps.length]);
 
   // Use document coordinates so the ring and anchored card scroll with the row.
   // Placement MUST NOT run on scroll: main-thread updates can lag composited scrolling.
@@ -642,7 +648,7 @@ const SampleTutorial = ({
       setMoving(false);
       // Drifts in from the row's side, so the card reads as coming off the row
       // it explains rather than materialising in place.
-      const rise = step?.placement === "top" ? -GUIDE_ENTER_RISE : GUIDE_ENTER_RISE;
+      const rise = stepPlacement === "top" ? -GUIDE_ENTER_RISE : GUIDE_ENTER_RISE;
       motionRef.current = startGuideMotion(
         dialog,
         { opacity: [0, 1], translate: [`0 ${rise}px`, "0 0"] },
@@ -651,10 +657,10 @@ const SampleTutorial = ({
     };
     if (!(targetEl && dialog && ring)) {
       unanchor();
-      if (!step?.target) arrive();
+      if (!stepTarget) arrive();
       return;
     }
-    const prefer = step?.placement ?? "bottom";
+    const prefer = stepPlacement ?? "bottom";
     const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY);
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     let settle = 0;
@@ -754,7 +760,7 @@ const SampleTutorial = ({
       // the next step's placement measure from the CSS-pinned bar and glide
       // across the screen instead of from the card the user is looking at.
     };
-  }, [step, targetEl]);
+  }, [stepPlacement, stepTarget, targetEl]);
 
   if (!(portalTarget && step)) return null;
   const finalStep = live && stepIndex === steps.length - 1;
