@@ -133,6 +133,14 @@ const patchItem = (fileName: string): PatchStackItemState =>
     validationValues: [],
   }) as unknown as PatchStackItemState;
 
+// A staged patch carries the run's patchable inputs as its target options; the
+// target select renders only when at least one exists.
+const withTargets = (item: PatchStackItemState): PatchStackItemState => ({
+  ...item,
+  targetOptions: [{ label: "game.bin", value: "rom-1" }],
+  targetValue: "rom-1",
+});
+
 // The only production caller (apply-patch-form) supplies the cheat card inside
 // the Patches step, so the harness supplies a stand-in for that card.
 const cheatsStep = <div data-testid="cheats-step">cheats</div>;
@@ -587,7 +595,7 @@ describe("apply workflow view - staged bench", () => {
         getPatchIds: () => ["patch-a", "patch-b"],
         onToggle: () => undefined,
       },
-      patches: [patchItem("disabled.ips"), patchItem("enabled.ips")],
+      patches: [withTargets(patchItem("disabled.ips")), withTargets(patchItem("enabled.ips"))],
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
     });
 
@@ -598,9 +606,11 @@ describe("apply workflow view - staged bench", () => {
   });
 
   it("labels the first patch in each target lane as the original ROM", () => {
-    const first = patchItem("first.ips");
+    const first = withTargets(patchItem("first.ips"));
+    first.targetOptions = [{ label: "a.bin", value: "rom-a" }];
     first.targetValue = "rom-a";
-    const second = patchItem("second.ips");
+    const second = withTargets(patchItem("second.ips"));
+    second.targetOptions = [{ label: "b.bin", value: "rom-b" }];
     second.targetValue = "rom-b";
     const { container } = renderView({
       bundleMetaById: new Map([
@@ -621,6 +631,55 @@ describe("apply workflow view - staged bench", () => {
     // in its own lane and both automatic targets read the original ROM.
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
     expect(target.options[0]?.textContent).toBe("Original ROM");
+  });
+
+  it("omits a patch-output reference's member, which only the ROM input uses", () => {
+    const onBundleMetaChange = vi.fn();
+    const first = withTargets(patchItem("first.ips"));
+    const second = withTargets(patchItem("second.ips"));
+    const { container } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", { name: "First" }],
+        ["patch-b", { input: { member: "track02.bin", rom: true }, name: "Second" }],
+      ]),
+      onBundleMetaChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [first, second],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.gdi")] },
+    });
+
+    const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
+    expect(target.value).toBe("rom");
+    fireEvent.change(target, { target: { value: "patch:patch-a" } });
+    // A patch-output reference names a lane; the member belongs to the ROM input,
+    // and neither the webapp nor the CLI reads it back from a patch reference.
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", { input: { patch: "patch-a" } });
+
+    fireEvent.change(target, { target: { value: "rom" } });
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+      input: { member: "track02.bin", rom: true },
+    });
+  });
+
+  it("hides the target select when the run has no patchable input", () => {
+    const patch = patchItem("add-on.bps");
+    const { container } = renderView({
+      bundleMetaById: new Map([["patch-a", {}]]),
+      onBundleMetaChange: vi.fn(),
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a"],
+        onToggle: () => undefined,
+      },
+      patches: [patch],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [] },
+    });
+
+    expect(container.querySelector("#rom-weaver-select-patch-target-0")).toBeNull();
   });
 
   it("edits shared patch details from the patches header", async () => {
@@ -865,9 +924,9 @@ describe("apply workflow view - staged bench", () => {
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
     expect(target.value).toBe("patch:patch-a");
     fireEvent.change(target, { target: { value: "rom" } });
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
-      input: { member: "generated/track03.bin", rom: true },
-    });
+    // The member belongs to the ROM input, so it rides along only when that input
+    // is the target; a patch-output reference carries no member.
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", { input: { rom: true } });
   });
 
   it("shows an unavailable named stack input before Apply", () => {

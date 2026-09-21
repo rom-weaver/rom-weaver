@@ -1221,6 +1221,7 @@ const PatchDragHandle = ({
 const PatchTarget = ({
   disabled,
   hasImplicitPredecessor,
+  hasTarget,
   index,
   meta,
   onMetaChange,
@@ -1228,19 +1229,23 @@ const PatchTarget = ({
 }: {
   disabled?: boolean;
   hasImplicitPredecessor: boolean;
+  /** False when the run has no patchable input at all, so there is nothing to target. */
+  hasTarget: boolean;
   index: number;
   meta?: BundlePatchMeta;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
   predecessors: readonly { id?: string; label: string }[];
 }) => {
   const localizer = useUiLocalizer();
-  if (!onMetaChange) return null;
+  if (!(onMetaChange && hasTarget)) return null;
   const input = meta?.input;
   const currentValue = input ? ("rom" in input ? "rom" : `patch:${input.patch}`) : "auto";
   const knownReference = !!input && "patch" in input && predecessors.some((entry) => entry.id === input.patch);
-  // Re-selecting the automatic value clears the pin, so the checksum verdict decides again.
-  const keepMember = (next: { rom: true } | { patch: string }) =>
-    input?.member ? { ...next, member: input.member } : next;
+  // A member only describes a leaf of the ROM input. A patch-output reference
+  // names a lane, so carrying the member onto it would persist a stale selector
+  // that neither the webapp nor the CLI reads back.
+  const romReference = (): { rom: true; member?: string } =>
+    input && "rom" in input && input.member ? { member: input.member, rom: true } : { rom: true };
   return (
     <span className="target-grp patch-target-grp">
       <Crosshair aria-hidden="true" />
@@ -1258,10 +1263,10 @@ const PatchTarget = ({
             return;
           }
           if (value === "rom") {
-            onMetaChange({ input: keepMember({ rom: true }) });
+            onMetaChange({ input: romReference() });
             return;
           }
-          onMetaChange({ input: keepMember({ patch: value.slice("patch:".length) }) });
+          onMetaChange({ input: { patch: value.slice("patch:".length) } });
         }}
         value={currentValue}
       >
@@ -1270,6 +1275,9 @@ const PatchTarget = ({
             hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original",
           )}
         </option>
+        {/* The explicit option must stay for every state: a select whose value is
+            `rom` renders the first option when no matching one exists, which would
+            display the automatic label for a pinned ROM. */}
         <option value="rom">{localizer.message("ui.patchInputs.original")}</option>
         {predecessors.map((predecessor) =>
           predecessor.id ? (
@@ -1670,6 +1678,7 @@ const PatchCard = ({
             <PatchTarget
               disabled={!!item.optionsDisabled}
               hasImplicitPredecessor={hasImplicitPredecessor}
+              hasTarget={!!item.targetOptions?.length}
               index={index}
               meta={meta}
               onMetaChange={onMetaChange}
