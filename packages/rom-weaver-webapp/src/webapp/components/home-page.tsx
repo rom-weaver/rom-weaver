@@ -32,7 +32,7 @@ type HomePageProps = {
 const SHELL_INSTALL = {
   name: "macOS / Linux",
   slug: "install-script-macos-linux",
-  command: "sh -c 'curl -fsSL https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh'",
+  command: "sh -c 'curl -fsSL https://rom-weaver.com/install.sh | sh'",
 };
 const WINDOWS_INSTALL = {
   name: "Windows (PowerShell)",

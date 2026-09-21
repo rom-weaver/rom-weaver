@@ -63,7 +63,7 @@ Downloads the latest release to `~/.local/bin` and checks its build provenance, 
 
 ```bash
 sh -c 'curl -fsSL \
-  https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/install.sh | sh'
+  https://rom-weaver.com/install.sh | sh'
 ```
 
 The outer `sh -c` runs the command with POSIX shell syntax.
