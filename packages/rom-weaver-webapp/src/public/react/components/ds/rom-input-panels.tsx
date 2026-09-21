@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
 import type { IdentifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
+import { abbreviatePlatform } from "../../../../presentation/platform-abbreviations.ts";
+import { identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import type { ChecksumVariant, ExtractTiming } from "../../../../types/checksum.ts";
 import type { ParsedIdentifyLookupResult } from "../../../../types/identify.ts";
+import { useRomWeaverSettings, useUiLocalizer } from "../../settings-context.tsx";
 import { DiscSheetsPanel } from "./cue-panel.tsx";
+import { DrawerReadout } from "./drawer.tsx";
 import { IdentifyDrawer, PendingIdentifyDrawer } from "../../../../webapp/components/identify-drawer.tsx";
 import {
   type ChecksumPendingGroup,
@@ -69,20 +73,39 @@ const RomInputPanels = ({
   showInfo = true,
   showCue = true,
 }: RomInputPanelsProps) => {
+  const localizer = useUiLocalizer();
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
   const isDisc = Array.isArray(tracks) && tracks.length > 0;
+  const matchedPlatforms = [...new Set((identification?.matches ?? []).map((match) => match.platform).filter(Boolean))];
+  const systemTag = matchedPlatforms.length ? matchedPlatforms.map(abbreviatePlatform).join(" · ") : platformTag;
+  const status = identification?.status;
+  const summary = detailedViewEnabled ? undefined : (
+    <>
+      {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
+      {identifyPending ? (
+        <DrawerReadout muted>{localizer.message("ui.identifyDrawer.identifying")}</DrawerReadout>
+      ) : status === "matched" ? (
+        <DrawerReadout>{localizer.message("ui.file.identified")}</DrawerReadout>
+      ) : status === "ambiguous" ? (
+        <DrawerReadout muted>{identifyMatchCountLabel(identification?.matches.length ?? 0)}</DrawerReadout>
+      ) : status ? (
+        <DrawerReadout muted>{localizer.message("ui.identifyDrawer.unidentified")}</DrawerReadout>
+      ) : null}
+    </>
+  );
   const renderInfo = () => {
-    if (isDisc) return <DiscTracksPanel timing={info.timing} tracks={tracks} />;
-    if (showInfo) return <SourceInfoList {...info} />;
+    if (isDisc) return <DiscTracksPanel summary={summary} timing={info.timing} tracks={tracks} />;
+    if (showInfo) return <SourceInfoList {...info} summary={summary} />;
     return null;
   };
   // Shared card drawer order: the disc index sheets, then the single Checks
   // panel. The Files drawer leads above these, rendered by the card row.
   return (
     <>
-      {showCue ? <DiscSheetsPanel cueText={cue?.cueText} gdiText={gdi?.gdiText} /> : null}
-      {identifyPending ? (
+      {detailedViewEnabled && showCue ? <DiscSheetsPanel cueText={cue?.cueText} gdiText={gdi?.gdiText} /> : null}
+      {detailedViewEnabled && identifyPending ? (
         <PendingIdentifyDrawer platformTag={platformTag} />
-      ) : identification || platformTag ? (
+      ) : detailedViewEnabled && (identification || platformTag) ? (
         <IdentifyDrawer defaultOpen={identifyDefaultOpen} identification={identification} platformTag={platformTag} />
       ) : null}
       {renderInfo()}

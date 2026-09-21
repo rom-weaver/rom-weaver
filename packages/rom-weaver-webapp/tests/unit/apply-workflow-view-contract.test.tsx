@@ -160,7 +160,7 @@ const renderView = ({
   pendingDrops,
   romLookupRequest,
   setPatchTarget,
-  settings = {},
+  settings = { detailedViewEnabled: true },
   startup,
   ui,
 }: {
@@ -195,8 +195,9 @@ const renderView = ({
     ui: Object.assign(storeOf(ui), ui) as unknown as PatcherUiController,
   };
   Object.assign(controllers.output, outputControllerOverrides);
+  const resolvedSettings = { detailedViewEnabled: true, ...settings };
   return render(
-    <RomWeaverSettingsProvider settings={settings}>
+    <RomWeaverSettingsProvider settings={resolvedSettings}>
       <ApplyWorkflowFormView
         bundleMetaById={bundleMetaById}
         cheats={({ renderStack }) =>

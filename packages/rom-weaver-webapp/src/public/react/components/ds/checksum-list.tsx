@@ -120,6 +120,7 @@ const ChecksumList = ({
   match,
   verifying,
   sublabel,
+  summary,
   defaultOpen,
   open,
   onToggle,
@@ -136,6 +137,7 @@ const ChecksumList = ({
    * verdict chip (the card's verify-bar carries the motion; the body stays fully visible). */
   verifying?: boolean;
   sublabel?: ReactNode;
+  summary?: ReactNode;
   defaultOpen?: boolean;
   open?: boolean;
   onToggle?: (open: boolean) => void;
@@ -154,8 +156,9 @@ const ChecksumList = ({
     onToggle={onToggle}
     open={open}
     readouts={
-      sublabel || timing || match || verifying ? (
+      summary || sublabel || timing || match || verifying ? (
         <>
+          {summary}
           {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
           {verifying ? (
             <DrawerReadout muted>Verifying…</DrawerReadout>
@@ -212,6 +215,7 @@ const PendingChecks = ({
   defaultOpen,
   open,
   onToggle,
+  summary,
 }: {
   groups: ChecksumPendingGroup[];
   label?: ReactNode;
@@ -219,6 +223,7 @@ const PendingChecks = ({
   defaultOpen?: boolean;
   open?: boolean;
   onToggle?: (open: boolean) => void;
+  summary?: ReactNode;
 }) => {
   const localizer = useUiLocalizer();
   return (
@@ -227,6 +232,7 @@ const PendingChecks = ({
       label={label ?? localizer.message("ui.checks.title")}
       onToggle={onToggle}
       open={open}
+      summary={summary}
     >
       {groups.map((group) => {
         if (group.content) return <Fragment key={group.id}>{group.content}</Fragment>;

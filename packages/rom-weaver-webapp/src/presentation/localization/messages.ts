@@ -871,6 +871,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
   "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Level" }),
+  "settings.detailedViewEnabled": msg({
+    id: "settings.detailedViewEnabled",
+    message: "Show detailed file information",
+  }),
   "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),

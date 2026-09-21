@@ -42,7 +42,7 @@ const makeStorage = (initial?: string | null): StubStorage => {
 describe("getDefaultSettings", () => {
   it("returns every field in SETTINGS_FIELD_ORDER with the documented defaults", () => {
     const settings = getDefaultSettings();
-    expect(SETTINGS_STORAGE_VERSION).toBe(9);
+    expect(SETTINGS_STORAGE_VERSION).toBe(10);
     expect(Object.keys(settings).sort()).toEqual([...SETTINGS_FIELD_ORDER].sort());
     expect(settings.defaultCompression).toBe("zip/special");
     expect(settings.compressionProfile).toBe("max");
@@ -58,6 +58,7 @@ describe("getDefaultSettings", () => {
     expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
+    expect(settings.detailedViewEnabled).toBe(false);
     expect(settings.offlineCopyEnabled).toBe(true);
     expect(settings.threads).toBe("auto");
   });
@@ -327,11 +328,12 @@ describe("loadSettings", () => {
   });
 
   it("applies a valid grouped payload round-tripped through serialize", () => {
-    const modified = { ...getDefaultSettings(), fixChecksum: true, language: "de" };
+    const modified = { ...getDefaultSettings(), detailedViewEnabled: true, fixChecksum: true, language: "de" };
     const stored = serializeSettingsForStorage(modified);
     const storage = makeStorage(stored);
     const loaded = loadSettings(storage);
     expect(loaded.fixChecksum).toBe(true);
+    expect(loaded.detailedViewEnabled).toBe(true);
     expect(loaded.language).toBe("de");
     expect(storage.removedKeys).toEqual([]);
   });

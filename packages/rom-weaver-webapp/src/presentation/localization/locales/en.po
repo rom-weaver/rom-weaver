@@ -3060,6 +3060,11 @@ msgstr "Show checksums"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.detailedViewEnabled"
+msgstr "Show detailed file information"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
 msgstr "Show the \"New here?\" quick-start tips"
 
