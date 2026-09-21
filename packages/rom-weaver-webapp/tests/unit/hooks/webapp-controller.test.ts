@@ -104,6 +104,17 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.pathname).toBe("/trim-rom");
   });
 
+  it("commits and persists the detailed view toggle immediately", () => {
+    const storage = createStorage();
+    const controller = createController(storage);
+
+    controller.setDetailedViewEnabled(true);
+
+    expect(controller.getState().settings.detailedViewEnabled).toBe(true);
+    expect(controller.getState().draftSettings.detailedViewEnabled).toBe(true);
+    expect(storage.getItem("rom-weaver-settings")).toContain('"detailedViewEnabled":true');
+  });
+
   it("loads the create workflow from its path", () => {
     window.history.replaceState({}, "", "/create-patch");
     const controller = createController();

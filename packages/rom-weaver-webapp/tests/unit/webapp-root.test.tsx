@@ -263,23 +263,28 @@ describe("the unified dialog", () => {
     );
   });
 
-  it("stages a settings draft when the panel gear opens it", async () => {
+  it("switches from the default simple view to detailed view from the panel heading", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".workflow-panel-head button") as HTMLButtonElement);
+    const toggle = container.querySelector(".workflow-panel-head .panel-view-toggle") as HTMLButtonElement;
+    expect(toggle.textContent).toBe("Simple");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(toggle.getAttribute("aria-label")).toBe("Switch to detailed view");
+    fireEvent.click(toggle);
 
-    expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
-    await waitFor(() =>
-      expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
-    );
+    expect(called("onDetailedViewEnabledChange")).toHaveBeenCalledWith(true);
+    expect(called("onOpenSettings")).not.toHaveBeenCalled();
   });
 
-  it.each(["patcher", "creator", "trim"] as const)("shows the thread setting beside Settings on %s", async (view) => {
-    const { container } = await renderRoot({ currentView: view });
-    const button = container.querySelector(`#panel-${view} .panel-threads-btn`) as HTMLButtonElement | null;
-    expect(button?.textContent).toMatch(/^\d+ threads?$/);
-    expect(container.querySelector(".masthead-threads")).toBeNull();
-  });
+  it.each(["patcher", "creator", "trim"] as const)(
+    "shows the thread setting beside the view toggle on %s",
+    async (view) => {
+      const { container } = await renderRoot({ currentView: view });
+      const button = container.querySelector(`#panel-${view} .panel-threads-btn`) as HTMLButtonElement | null;
+      expect(button?.textContent).toMatch(/^\d+ threads?$/);
+      expect(container.querySelector(".masthead-threads")).toBeNull();
+    },
+  );
 
   it.each(["identify", "test", "ppf-undo", "save-editor"] as const)(
     "does not show the thread setting on %s",
@@ -469,7 +474,7 @@ describe("offline warm-up progress", () => {
 
 describe("the settings draft flow", () => {
   const openSettings = (container: HTMLElement) => {
-    fireEvent.click(container.querySelector(".workflow-panel-head button") as HTMLButtonElement);
+    fireEvent.click(navRow(container, "Settings"));
     return waitFor(() => {
       const dialog = container.querySelector("dialog.log-dlg");
       if (!dialog) throw new Error("The settings dialog never opened");
@@ -592,7 +597,7 @@ describe("development offline status", () => {
     vi.stubEnv("MODE", "development");
     window.history.replaceState(null, "", "/?offline-layout=title&offline-state=disabled");
     const { container, called } = await renderRoot({ settingsDialogOpen: true });
-    fireEvent.click(container.querySelector(".workflow-panel-head .panel-settings-btn") as HTMLButtonElement);
+    fireEvent.click(navRow(container, "Settings"));
     fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
     await waitFor(() => expect(container.querySelector("#dev-offline-state")).not.toBeNull());
     const select = container.querySelector("#dev-offline-state") as HTMLSelectElement;
@@ -623,7 +628,7 @@ describe("development offline status", () => {
     vi.stubEnv("MODE", "production");
     window.history.replaceState(null, "", "/?offline-layout=strip&offline-state=disabled");
     const { container } = await renderRoot({ settingsDialogOpen: true, updateReady: true });
-    fireEvent.click(container.querySelector(".workflow-panel-head .panel-settings-btn") as HTMLButtonElement);
+    fireEvent.click(navRow(container, "Settings"));
     await waitFor(() => expect(container.querySelector(".settings-panel")).not.toBeNull());
     expect(container.querySelector("#dev-offline-state")).toBeNull();
     expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe("update");

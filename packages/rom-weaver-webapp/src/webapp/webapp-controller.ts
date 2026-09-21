@@ -544,6 +544,15 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: { ...state.draftSettings, onboardingEnabled: enabled },
       });
     },
+    setDetailedViewEnabled(enabled: boolean) {
+      const state = store.getState();
+      if (state.settings.detailedViewEnabled === enabled) return;
+      const nextSettings = { ...copySettings(state.settings), detailedViewEnabled: enabled };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, detailedViewEnabled: enabled },
+      });
+    },
     setOfflineCopyEnabled(enabled: boolean) {
       const state = store.getState();
       const draftSettings = { ...state.draftSettings, offlineCopyEnabled: enabled };

@@ -5,10 +5,11 @@ import {
   House,
   Package,
   RotateCcw,
+  Rows3,
   Save as SaveIcon,
   ScanSearch,
   Scissors,
-  Settings,
+  ListTree,
 } from "lucide-react";
 import {
   lazy,
@@ -241,31 +242,20 @@ const ResetButton = ({ onReset }: { onReset: () => void }) => {
   );
 };
 
-/** Settings entry for the workflow panel's `0x01` heading band. */
-const PanelSettingsButton = ({
-  onOpenSettings,
-  onPreloadSettings,
-  settingsOpen,
-}: {
-  onOpenSettings: () => void;
-  onPreloadSettings?: () => void;
-  settingsOpen?: boolean;
-}) => {
+/** File-detail switch for the workflow panel's `0x01` heading band. */
+const PanelViewToggle = ({ detailed, onChange }: { detailed: boolean; onChange: (enabled: boolean) => void }) => {
   const localizer = useUiLocalizer();
-  const label = localizer.message("ui.settings.title");
+  const label = localizer.message(detailed ? "ui.view.detailed" : "ui.view.simple");
+  const action = localizer.message(detailed ? "ui.view.switchToSimple" : "ui.view.switchToDetailed");
   return (
     <button
-      aria-label={label}
-      aria-expanded={settingsOpen}
-      aria-haspopup="dialog"
-      className="panel-settings-btn"
-      onClick={onOpenSettings}
-      onFocus={onPreloadSettings}
-      onPointerDown={onPreloadSettings}
-      onPointerEnter={onPreloadSettings}
+      aria-label={action}
+      aria-pressed={detailed}
+      className="panel-view-toggle"
+      onClick={() => onChange(!detailed)}
       type="button"
     >
-      <Settings aria-hidden="true" />
+      {detailed ? <ListTree aria-hidden="true" /> : <Rows3 aria-hidden="true" />}
       <span>{label}</span>
     </button>
   );
@@ -647,10 +637,9 @@ function WebappRoot({
                 onPreloadSettings={preloadSettingsPanel}
               />
             ) : null}
-            <PanelSettingsButton
-              onOpenSettings={() => openSettingsTab()}
-              onPreloadSettings={preloadSettingsPanel}
-              settingsOpen={state.settingsDialogOpen}
+            <PanelViewToggle
+              detailed={state.settings.detailedViewEnabled === true}
+              onChange={actions.onDetailedViewEnabledChange}
             />
             <ResetButton onReset={actions.onReset} />
           </div>

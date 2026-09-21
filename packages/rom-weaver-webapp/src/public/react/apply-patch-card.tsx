@@ -7,7 +7,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
-import { useUiLocalizer } from "./settings-context.tsx";
+import { useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -119,6 +119,7 @@ const PatchCard = ({
   const patchExtracting = /extract/i.test(String(stagingProps?.label ?? ""));
   const disabledClass = isDisabled ? "is-disabled" : undefined;
   const localizer = useUiLocalizer();
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
   const selectedInput = meta?.input;
   // Tracks belong to the original ROM, so a patch-output source has none to pick.
   const showTrack = !(staging || isDisabled || (selectedInput && "patch" in selectedInput));
@@ -280,7 +281,10 @@ const PatchCard = ({
           {verdict === "bad" ? (
             <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
           ) : null}
-          {isDisabled || (staging && !patchExtracting && !meta) || (bundleSessionMatches && !meta) ? null : (
+          {!detailedViewEnabled ||
+          isDisabled ||
+          (staging && !patchExtracting && !meta) ||
+          (bundleSessionMatches && !meta) ? null : (
             <ExtractDrawer
               fileName={item.fileName}
               fileSize={item.fileSize}

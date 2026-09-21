@@ -1125,6 +1125,11 @@ msgstr "Description"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.view.detailed"
+msgstr "Detailed"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.trimDetected"
 msgstr "Detected"
 
@@ -3070,6 +3075,11 @@ msgstr "Show the \"New here?\" quick-start tips"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.view.simple"
+msgstr "Simple"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Skip to main content"
 
@@ -3185,8 +3195,18 @@ msgstr "Switch to dark theme"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.view.switchToDetailed"
+msgstr "Switch to detailed view"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.theme.toLight"
 msgstr "Switch to light theme"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.view.switchToSimple"
+msgstr "Switch to simple view"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
