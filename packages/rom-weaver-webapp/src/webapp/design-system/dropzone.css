@@ -999,16 +999,9 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   box-shadow:
     0 0 0 6px color-mix(in oklab, var(--thread) 20%, transparent),
     0 0 34px 6px color-mix(in oklab, var(--thread) 34%, transparent);
-  /* The ring unmounts between steps, so this intro replays as it locks onto
-     each new row. */
-  animation:
-    sample-tutorial-ring-in 0.28s var(--ease) both,
-    sample-tutorial-ring-breathe 2.8s var(--ease) 0.28s infinite;
-}
-/* The button the final step asks for. Skipped while disabled - nothing should
-   beckon at a control that cannot be pressed. */
-.rw-app .btn[data-guide-cta="true"]:not(:disabled) {
-  animation: sample-tutorial-cta-pulse 1.9s var(--ease) infinite;
+  /* The ring unmounts between steps, so this intro replays once as it locks
+     onto each new row. It MUST stay still after that while the reader works. */
+  animation: sample-tutorial-ring-in 0.28s var(--ease) both;
 }
 /* Only when stepping - scroll tracking must stay locked to the row. */
 .rw-app .sample-tutorial-ring[data-glide="true"] {
@@ -1247,24 +1240,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     box-shadow: 0 0 0 2px transparent;
   }
 }
-/* Slow enough to guide the eye without nagging. */
-@keyframes sample-tutorial-ring-breathe {
-  50% {
-    border-color: var(--thread-hi);
-    box-shadow:
-      0 0 0 10px color-mix(in oklab, var(--thread) 14%, transparent),
-      0 0 46px 10px color-mix(in oklab, var(--thread) 44%, transparent);
-  }
-}
-@keyframes sample-tutorial-cta-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 60%, transparent);
-  }
-  70% {
-    box-shadow: 0 0 0 14px color-mix(in oklab, var(--thread) 0%, transparent);
-  }
-}
 @keyframes sample-tutorial-dialog-in {
   from {
     opacity: 0;
@@ -1318,8 +1293,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   .rw-app .sample-tutorial-scrim,
   .rw-app .sample-tutorial-ring,
   .rw-app .sample-tutorial-dialog,
-  .rw-app .sample-tutorial-progress > span,
-  .rw-app .btn[data-guide-cta="true"]:not(:disabled) {
+  .rw-app .sample-tutorial-progress > span {
     animation: none;
   }
   .rw-app .sample-tutorial-progress > span {
