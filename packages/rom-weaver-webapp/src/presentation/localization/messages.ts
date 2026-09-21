@@ -674,7 +674,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.loomAriaLabel": msg({
     id: "ui.home.loomAriaLabel",
     message:
-      "The original ROM drawn as vertical threads, with three patches woven across it in order, one colored band per patch.",
+      "The patched result drawn as vertical threads, with three patches woven across it in order, one colored band per patch.",
   }),
   "ui.home.loomCaption": msg({
     id: "ui.home.loomCaption",
@@ -683,6 +683,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.loomOriginalRom": msg({ id: "ui.home.loomOriginalRom", message: "Original ROM" }),
   "ui.home.loomPatch": msg({ id: "ui.home.loomPatch", message: "patch {n}" }),
+  "ui.home.loomOutput": msg({ id: "ui.home.loomOutput", message: "output" }),
+  "ui.home.loomResult": msg({ id: "ui.home.loomResult", message: "result" }),
   "ui.home.loomSource": msg({ id: "ui.home.loomSource", message: "source" }),
   "ui.home.loomTag": msg({ id: "ui.home.loomTag", message: "apply · 3 patches · in order" }),
   "ui.home.mostUsed": msg({ id: "ui.home.mostUsed", message: "most used" }),

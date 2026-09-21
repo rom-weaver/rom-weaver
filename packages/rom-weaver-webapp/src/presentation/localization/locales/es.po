@@ -2395,6 +2395,16 @@ msgstr "parche {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomOutput"
+msgstr "salida"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomResult"
+msgstr "resultado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchNumber"
 msgstr "Parche {n}"
 
@@ -3241,7 +3251,7 @@ msgstr "El nombre termina en"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomAriaLabel"
-msgstr "La ROM original se muestra como hilos verticales, con tres parches tejidos sobre ella en orden y una banda de color por parche."
+msgstr "El resultado parcheado se muestra como hilos verticales, con tres parches tejidos sobre él en orden y una banda de color por parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

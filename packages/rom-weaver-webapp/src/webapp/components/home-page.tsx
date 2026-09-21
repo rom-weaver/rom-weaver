@@ -132,35 +132,48 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         <div className="home-loom">
           <div className="home-loom-frame">
             <span className="home-loom-tag">{localizer.message("ui.home.loomTag")}</span>
-            <HomeLoom ariaLabel={localizer.message("ui.home.loomAriaLabel")} />
+            <div className="home-loom-result">
+              <HomeLoom ariaLabel={localizer.message("ui.home.loomAriaLabel")} />
+              <span>{localizer.message("ui.home.loomResult")}</span>
+            </div>
             <div className="home-loom-legend">
               <span className="row home-loom-disc-flow">
-                <i style={{ background: "var(--warp-b)" }} />
+                <i className="home-loom-source-swatch" />
                 <span>
                   <span className="k">{localizer.message("ui.home.loomSource")} </span>
-                  <code>game.chd</code> → <code>game.iso</code> → <code>patched-game.chd</code>
-                  <span className="sum">
-                    {" · "}
-                    <code>sha1 ✓</code>
-                  </span>
+                  <code>game.chd</code> → <code>game.iso</code>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-1)" }} />
                 <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })} </span>translation.bps.rar
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })} </span>
+                  <code>translation.bps.rar</code> → <code>translation.bps</code>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-2)" }} />
                 <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })} </span>bugfix.ips.zip
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })} </span>
+                  <code>bugfix.ips.zip</code> → <code>bugfix.ips</code>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-3)" }} />
                 <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })} </span>undub.xdelta.7z
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })} </span>
+                  <code>undub.xdelta.7z</code> → <code>undub.xdelta</code>
+                </span>
+              </span>
+              <span className="row home-loom-disc-flow home-loom-output-flow">
+                <i className="home-loom-output-swatch" />
+                <span>
+                  <span className="k">{localizer.message("ui.home.loomOutput")} </span>
+                  <code>game.iso</code> → <code>patched-game.chd</code>
+                  <span className="sum">
+                    {" · "}
+                    <code>sha1 ✓</code>
+                  </span>
                 </span>
               </span>
             </div>
