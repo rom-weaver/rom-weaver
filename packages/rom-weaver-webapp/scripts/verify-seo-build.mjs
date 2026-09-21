@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
-import { isLegalDocRoute } from "../src/webapp/docs-routing.mjs";
+import { API_CATALOG_PATH, OPENAPI_PATH } from "../src/webapp/api-catalog.mjs";
+import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
@@ -96,8 +97,44 @@ for (const route of [
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
 assertIncludes(headers, "\n  Cache-Control: no-cache\n", "document revalidation cache header");
+// Cloudflare's _headers parser folds a pattern line that directly follows an
+// indented header line into the previous rule, which drops the new rule's
+// headers. Rules MUST stay blank-line separated.
+const headerLines = headers.split("\n");
+for (const [index, line] of headerLines.entries()) {
+  if (line.startsWith("/") && headerLines[index - 1]?.startsWith(" ")) {
+    throw new Error(`_headers pattern ${JSON.stringify(line)} must be preceded by a blank line`);
+  }
+}
 assertIncludes(installScript, "#!/bin/sh", "curl installer");
 assertIncludes(headers, "/install.sh\n  Content-Type: text/plain; charset=utf-8", "curl installer content type");
+if (production) {
+  assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json`, "API catalog content type");
+  assertIncludes(headers, `Link: <${API_CATALOG_PATH}>; rel="api-catalog"`, "API catalog HEAD link relation");
+  const catalog = JSON.parse(read(API_CATALOG_PATH));
+  if (!Array.isArray(catalog.linkset) || catalog.linkset.length === 0) {
+    throw new Error("API catalog must contain a non-empty linkset array");
+  }
+  for (const [index, entry] of catalog.linkset.entries()) {
+    for (const relation of ["anchor", "service-desc", "service-doc"]) {
+      if (!entry[relation]) throw new Error(`API catalog entry ${index} is missing ${relation}`);
+    }
+    if (!entry.anchor.startsWith(SITE_ORIGIN)) throw new Error(`API catalog entry ${index} anchor is off-origin`);
+    for (const relation of ["service-desc", "service-doc"]) {
+      for (const link of entry[relation]) {
+        if (!link.href?.startsWith(SITE_ORIGIN)) throw new Error(`API catalog ${relation} href is off-origin`);
+      }
+    }
+    if (entry["service-desc"][0].href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
+      throw new Error("API catalog service-desc MUST point at the OpenAPI document");
+    }
+  }
+  const openapi = JSON.parse(read(OPENAPI_PATH));
+  if (!/^3\.1\.\d+$/u.test(openapi.openapi)) throw new Error("OpenAPI document MUST declare OpenAPI 3.1");
+  if (!openapi.paths || Object.keys(openapi.paths).length === 0) throw new Error("OpenAPI document has no paths");
+} else if (fs.existsSync(path.join(distDir, API_CATALOG_PATH))) {
+  throw new Error("API catalog MUST NOT be published on a non-production channel");
+}
 assertIncludes(
   headers,
   "/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",

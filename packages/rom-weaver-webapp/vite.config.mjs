@@ -24,6 +24,12 @@ import { initialPrecacheUrls } from "./scripts/offline-downloads.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
 import { DOC_SOURCES, readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
+import {
+  API_CATALOG_PATH,
+  createApiCatalogSource,
+  createOpenApiSource,
+  OPENAPI_PATH,
+} from "./src/webapp/api-catalog.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -797,7 +803,14 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
           legacyHtml.replace('<base href="../" />', '<base href="./" />'),
         );
       }
-      if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
+      if (channel === "prod") {
+        fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
+        // The API catalog is a production surface: a preview channel MUST NOT
+        // advertise the production API, matching the sitemap and robots rules.
+        fs.mkdirSync(path.join(distDir, path.dirname(API_CATALOG_PATH)), { recursive: true });
+        fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource());
+        fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource());
+      }
       const thirdPartyDir = path.join(distDir, "third_party");
       fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), thirdPartyDir, {
         recursive: true,
@@ -857,6 +870,7 @@ const writeCloudflareHeadersAsset = (channel) => {
         "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
       };
+      const production = channel === "prod";
       const distDir = path.resolve(rootDir, outDir);
       const outputPath = path.join(distDir, "_headers");
       const headerLines = Object.entries(headers)
@@ -869,13 +883,18 @@ const writeCloudflareHeadersAsset = (channel) => {
       const licenseContentType =
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       const installerContentType = "/install.sh\n  Content-Type: text/plain; charset=utf-8\n";
+      // The catalog file has no extension, so Cloudflare would serve it as a
+      // binary download. The Link header satisfies the RFC 9727 HEAD response.
+      const apiCatalogHeaders = production
+        ? `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`
+        : "";
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
           `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${apiCatalogHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {
