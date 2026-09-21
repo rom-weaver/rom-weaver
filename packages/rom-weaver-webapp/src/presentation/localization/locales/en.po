@@ -2395,6 +2395,31 @@ msgstr "patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomCompress"
+msgstr "compress"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomExtract"
+msgstr "extract"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomOutput"
+msgstr "output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomResult"
+msgstr "result"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomUnpack"
+msgstr "unpack"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchNumber"
 msgstr "Patch {n}"
 
@@ -3241,7 +3266,7 @@ msgstr "The name ends in"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomAriaLabel"
-msgstr "The original ROM drawn as vertical threads, with three patches woven across it in order, one colored band per patch."
+msgstr "The patched result drawn as vertical threads, with three patches woven across it in order, one colored band per patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

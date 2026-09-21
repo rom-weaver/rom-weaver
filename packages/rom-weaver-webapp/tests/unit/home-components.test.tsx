@@ -167,6 +167,23 @@ describe("HomePage", () => {
     expect(container.textContent).toContain("One toolkit.");
     expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
+    expect(container.querySelector(".home-loom-disc-flow")?.textContent).toContain("game.chdextractgame.iso");
+    expect(container.textContent).toContain("translation.bps.rarunpacktranslation.bps");
+    expect(container.textContent).toContain("bugfix.ips.zipunpackbugfix.ips");
+    expect(container.textContent).toContain("undub.xdelta.7zunpackundub.xdelta");
+    expect(container.querySelector(".home-loom-output-flow")?.textContent).toContain(
+      "outputgame.isocompresspatched-game.chd",
+    );
+    expect(Array.from(container.querySelectorAll(".home-loom-flow-action"), (item) => item.textContent)).toEqual([
+      "extract",
+      "unpack",
+      "unpack",
+      "unpack",
+      "compress",
+    ]);
+    expect(container.querySelector(".home-loom-disc-flow .home-loom-source-swatch")).not.toBeNull();
+    expect(container.querySelector(".home-loom-output-flow .home-loom-output-swatch")).not.toBeNull();
+    expect(container.querySelector(".home-loom-result")?.textContent).toBe("result");
     expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(4);
     expect(
       Array.from(container.querySelectorAll(".home-install-code")).every(

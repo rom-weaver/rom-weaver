@@ -132,35 +132,68 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
         <div className="home-loom">
           <div className="home-loom-frame">
             <span className="home-loom-tag">{localizer.message("ui.home.loomTag")}</span>
-            <HomeLoom ariaLabel={localizer.message("ui.home.loomAriaLabel")} />
+            <div className="home-loom-result">
+              <HomeLoom ariaLabel={localizer.message("ui.home.loomAriaLabel")} />
+              <span>{localizer.message("ui.home.loomResult")}</span>
+            </div>
             <div className="home-loom-legend">
-              <span className="row">
-                <i style={{ background: "var(--warp-b)" }} />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomSource")} </span>
-                  {localizer.message("ui.home.loomOriginalRom")}
-                  <span className="sum">
-                    {" · "}
-                    <code>sha1 ✓</code>
-                  </span>
+              <span className="row home-loom-disc-flow">
+                <i className="home-loom-source-swatch" />
+                <span className="home-loom-flow-copy">
+                  <strong className="k">{localizer.message("ui.home.loomSource")}</strong>
+                  <code>game.chd</code>
+                  <code className="home-loom-flow-result">
+                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomExtract")}</strong>
+                    {"game.iso"}
+                  </code>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-1)" }} />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })} </span>translation.bps
+                <span className="home-loom-flow-copy">
+                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 1 })}</strong>
+                  <code>translation.bps.rar</code>
+                  <code className="home-loom-flow-result">
+                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
+                    {"translation.bps"}
+                  </code>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-2)" }} />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })} </span>bugfix.ips
+                <span className="home-loom-flow-copy">
+                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 2 })}</strong>
+                  <code>bugfix.ips.zip</code>
+                  <code className="home-loom-flow-result">
+                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
+                    {"bugfix.ips"}
+                  </code>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-3)" }} />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })} </span>undub.xdelta
+                <span className="home-loom-flow-copy">
+                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 3 })}</strong>
+                  <code>undub.xdelta.7z</code>
+                  <code className="home-loom-flow-result">
+                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
+                    {"undub.xdelta"}
+                  </code>
+                </span>
+              </span>
+              <span className="row home-loom-disc-flow home-loom-output-flow">
+                <i className="home-loom-output-swatch" />
+                <span className="home-loom-flow-copy">
+                  <strong className="k">{localizer.message("ui.home.loomOutput")}</strong>
+                  <code>game.iso</code>
+                  <code className="home-loom-flow-result">
+                    <strong className="home-loom-flow-action">{localizer.message("ui.home.loomCompress")}</strong>
+                    {"patched-game.chd"}
+                  </code>
+                  <span className="sum">
+                    {" · "}
+                    <code>sha1 ✓</code>
+                  </span>
                 </span>
               </span>
             </div>
