@@ -591,8 +591,10 @@ describe("apply workflow view - staged bench", () => {
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
     });
 
-    const executionInput = container.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
-    expect(executionInput.options[0]?.textContent).toBe("Original ROM");
+    // The second patch's only enabled predecessor is disabled, so its automatic
+    // target is the ROM input rather than a patch output.
+    const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
+    expect(target.options[0]?.textContent).toBe("Original ROM");
   });
 
   it("labels the first patch in each target lane as the original ROM", () => {
@@ -615,8 +617,10 @@ describe("apply workflow view - staged bench", () => {
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("a.bin"), romRow("b.bin")] },
     });
 
-    const executionInput = container.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
-    expect(executionInput.options[0]?.textContent).toBe("Original ROM");
+    // Each patch targets a different ROM, so neither has an enabled predecessor
+    // in its own lane and both automatic targets read the original ROM.
+    const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
+    expect(target.options[0]?.textContent).toBe("Original ROM");
   });
 
   it("edits shared patch details from the patches header", async () => {
@@ -821,24 +825,28 @@ describe("apply workflow view - staged bench", () => {
 
     const addOnCard = container.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")[1];
     expect(addOnCard?.textContent).toContain("Authored input checks: Original ROM");
-    expect(addOnCard?.textContent).toContain("Apply to");
-    expect(addOnCard?.textContent).toContain("Target ROM: game.sfc / program.rom");
     expect(addOnCard?.textContent).toContain("Embedded output checks: Standalone patch result");
     expect(addOnCard?.textContent).toContain("Stack output checks: Combined result");
-    expect(addOnCard?.textContent).toContain("Shared input checks: Output of Base patch");
+    expect(addOnCard?.textContent).toContain("Shared input checks: Base patch");
     expect(addOnCard?.textContent).toContain("Checks during apply: Base patch");
     expect(addOnCard?.textContent).not.toContain("Verified: game.sfc / program.rom");
 
-    const executionInput = addOnCard?.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
-    expect(executionInput.options[0]?.textContent).toBe("Original ROM");
-    fireEvent.change(executionInput, { target: { value: "rom" } });
+    // The target select writes the explicit choice; the automatic value stays unset.
+    const target = addOnCard?.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
+    expect(target.options[0]?.textContent).toBe("Original ROM");
+    expect(target.value).toBe("patch:patch-a");
+    fireEvent.change(target, { target: { value: "rom" } });
     expect(onBundleMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
   });
 
-  it("keeps a selected producer member when the execution source changes", () => {
+  it("keeps a selected producer member when the target source changes", () => {
     const onBundleMetaChange = vi.fn();
     const first = patchItem("first.ips");
     const second = patchItem("second.ips");
+    second.targetOptions = [
+      { label: "track03.bin", value: "generated/track03.bin" },
+      { label: "track04.bin", value: "generated/track04.bin" },
+    ];
     const { container } = renderView({
       bundleMetaById: new Map([
         ["patch-a", { name: "First" }],
@@ -854,17 +862,11 @@ describe("apply workflow view - staged bench", () => {
       ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.sfc")] },
     });
 
-    const select = container.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
-    expect(select.options[2]?.textContent).toContain("First / generated/track03.bin");
-    const member = container.querySelector("#rom-weaver-patch-execution-member-1") as HTMLInputElement;
-    fireEvent.change(member, { target: { value: "generated/track04.bin" } });
-    fireEvent.blur(member);
+    const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
+    expect(target.value).toBe("patch:patch-a");
+    fireEvent.change(target, { target: { value: "rom" } });
     expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
-      input: { member: "generated/track04.bin", patch: "patch-a" },
-    });
-    fireEvent.change(select, { target: { value: "rom" } });
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
-      input: { member: "generated/track04.bin", rom: true },
+      input: { member: "generated/track03.bin", rom: true },
     });
   });
 
@@ -910,11 +912,12 @@ describe("apply workflow view - staged bench", () => {
     expect(sharedChecks?.textContent).toContain("c6fb1252");
     expect(sharedChecks?.querySelector(".ck-mark")).toBeNull();
 
-    const executionInput = container.querySelector("#rom-weaver-patch-execution-input-0") as HTMLSelectElement;
-    expect(executionInput.options[1]?.textContent).toBe("Original ROM / program.rom");
-    fireEvent.change(executionInput, { target: { value: "current" } });
-    fireEvent.change(executionInput, { target: { value: "rom" } });
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-a", { input: { member: "program.rom", rom: true } });
+    // The automatic option names the resolved source; picking it clears the pin.
+    const target = container.querySelector("#rom-weaver-select-patch-target-0") as HTMLSelectElement;
+    expect(target.options[0]?.textContent).toBe("Original ROM");
+    expect(target.value).toBe("rom");
+    fireEvent.change(target, { target: { value: "auto" } });
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-a", { input: undefined });
   });
 
   it("renders ROM and patch cards with the structural classes the browser tests query", () => {

@@ -193,9 +193,9 @@ describe("ApplyPatchListStep", () => {
     const { container } = renderList({ patchStack, onBundleMetaChange, onTogglePatch });
 
     fireEvent.change(container.querySelector("#rom-weaver-select-patch-target-0") as HTMLSelectElement, {
-      target: { value: "rom-b" },
+      target: { value: "rom" },
     });
-    expect(patchStack.setPatchTarget).toHaveBeenCalledWith(0, "rom-b");
+    expect(onBundleMetaChange).toHaveBeenCalledWith(0, { input: { rom: true } });
     fireEvent.change(container.querySelector("#rom-weaver-patch-header-mode-0") as HTMLSelectElement, {
       target: { value: "keep" },
     });

@@ -175,6 +175,41 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.execution"
+#~ msgstr "Anwenden auf"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.executionMember"
+#~ msgstr "Dateipfad im Container"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.originalRom"
+#~ msgstr "Original-ROM{member}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.patchOutput"
+#~ msgstr "Ausgabe von {patch}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patch.selectTarget"
+#~ msgstr "Ziel wählen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.targetRom"
+#~ msgstr "Ziel-ROM: {target}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.executionMemberTitle"
+#~ msgstr "Verwende den genauen Dateipfad innerhalb des ausgewählten ROMs oder Patch-Ergebnisses."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -435,11 +470,6 @@ msgstr "Beide Patches anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.target"
-msgstr "Patch anwenden auf"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.file.patchTarget"
 msgstr "Patch anwenden auf"
 
@@ -452,11 +482,6 @@ msgstr "Patches anwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Patches anwenden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Anwenden auf"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1935,11 +1960,6 @@ msgstr "Medienprofil nicht unterstützt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.executionMember"
-msgstr "Dateipfad im Container"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.menu"
 msgstr "Menü"
 
@@ -2295,11 +2315,6 @@ msgstr "Original-ROM (automatisch)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.originalRom"
-msgstr "Original-ROM{member}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsTitle"
 msgstr "Weitere Funktionen"
 
@@ -2357,16 +2372,6 @@ msgstr "Ausgabeformat"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Ausgabe-Header"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.patchOutput"
-msgstr "Ausgabe von {patch}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.precedingPatchOutput"
-msgstr "Ausgabe vorheriger Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2587,6 +2592,11 @@ msgstr "vorherige Ausgabe"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchInputs.previous"
 msgstr "Ausgabe des vorherigen Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.precedingPatchOutput"
+msgstr "Ausgabe vorheriger Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2955,11 +2965,6 @@ msgstr "mit Spielständen, die auf diesem Gerät bleiben."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.selectTarget"
-msgstr "Ziel wählen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.select.patchesHint"
 msgstr "Wähle die Patches, die du hinzufügen willst, und drücke dann Patches hinzufügen."
 
@@ -2967,6 +2972,11 @@ msgstr "Wähle die Patches, die du hinzufügen willst, und drücke dann Patches 
 #: src/presentation/localization/messages.ts
 msgid "ui.select.multipleRoms"
 msgstr "Wähle die zu verwendende ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.selectTrack"
+msgstr "Track wählen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3185,8 +3195,8 @@ msgstr "Tippen, um Dateien zu wählen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.targetRom"
-msgstr "Ziel-ROM: {target}"
+msgid "ui.patch.target"
+msgstr "Ziel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3500,6 +3510,11 @@ msgstr "GESAMT"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.track"
+msgstr "Track"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Übertragen"
 
@@ -3621,11 +3636,6 @@ msgstr "Doppelte ROMs verwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "Doppelte ROMs verwenden?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.executionMemberTitle"
-msgstr "Verwende den genauen Dateipfad innerhalb des ausgewählten ROMs oder Patch-Ergebnisses."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

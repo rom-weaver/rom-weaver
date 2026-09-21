@@ -66,12 +66,15 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply: chain-step-a.bps");
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
-  expect(document.getElementById("rom-weaver-patch-execution-input-0")?.querySelector("option")?.textContent).toBe(
-    "Original ROM",
-  );
-  expect(document.getElementById("rom-weaver-patch-execution-input-1")?.querySelector("option")?.textContent).toBe(
-    "Output of preceding patches",
-  );
+  // The target select names the automatic source; patch 2's is the chain head's output.
+  const target0 = /** @type {HTMLSelectElement} */ (document.getElementById("rom-weaver-select-patch-target-0"));
+  const target1 = /** @type {HTMLSelectElement} */ (document.getElementById("rom-weaver-select-patch-target-1"));
+  expect(target0.options[0]?.textContent).toBe("Original ROM");
+  expect(target0.value).toBe("auto");
+  expect(target1.options[0]?.textContent).toBe("Previous patch output");
+  expect(target1.value).toBe("auto");
+  // A single target lane has nothing to choose between, so the track select is hidden.
+  expect(document.getElementById("rom-weaver-patch-track-0")).toBeNull();
   expect(patchCheckHeadings(0)).toEqual([
     "Authored input checks: Original ROM (automatic)",
     "Embedded output checks: Standalone patch result",

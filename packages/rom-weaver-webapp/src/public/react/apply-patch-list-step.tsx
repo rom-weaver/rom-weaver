@@ -4,6 +4,7 @@ import {
   ArrowUp,
   Check,
   Crosshair,
+  Disc3,
   EllipsisVertical,
   GitBranch,
   Pencil,
@@ -22,7 +23,7 @@ import type { Localizer } from "../../presentation/localization/index.ts";
 import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
-import type { ParsedBundleChecks, ParsedBundlePatchInput } from "../../types/bundle.ts";
+import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import {
   CHECK_ALGORITHMS,
   type CHECK_FIELDS,
@@ -441,137 +442,60 @@ const PatchInputBasisSelect = ({
     </span>
   );
 };
-
-const executionInputLabel = (
-  input: ParsedBundlePatchInput | undefined,
-  hasImplicitPredecessor: boolean,
-  predecessors: readonly { id?: string; label: string }[],
-  localizer: Localizer,
-) => {
-  if (!input) {
-    return localizer.message(
-      hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original",
-    );
-  }
-  if ("rom" in input) {
-    return localizer.message("ui.patchChecks.originalRom", {
-      member: input.member ? ` / ${input.member}` : "",
-    });
-  }
-  const predecessor = predecessors.find((entry) => entry.id === input.patch);
-  const label = predecessor
-    ? localizer.message("ui.patchChecks.patchOutput", { patch: predecessor.label })
-    : localizer.message("ui.patchChecks.unknownPatchOutput", { patch: input.patch });
-  return input.member ? `${label} / ${input.member}` : label;
-};
-
-const PatchExecutionInputSelect = ({
+/**
+ * The patch's patchable tracks, as a select. Shown only when the resolved
+ * source offers a real choice, because a single track (or a plain ROM) needs no
+ * decision; the value is the member locator the engine resolves the leaf by.
+ */
+const PatchTrackSelect = ({
   disabled,
-  hasImplicitPredecessor,
   index,
   meta,
   onMetaChange,
-  predecessors,
+  sourceMembers,
 }: {
   disabled?: boolean;
-  hasImplicitPredecessor: boolean;
   index: number;
   meta?: BundlePatchMeta;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
-  predecessors: readonly { id?: string; label: string }[];
+  sourceMembers: readonly { value: string; label: string }[];
 }) => {
   const localizer = useUiLocalizer();
-  const rememberedMember = useRef<string | undefined>(undefined);
-  if (!onMetaChange) return null;
-  const current = meta?.input;
-  if (current?.member) rememberedMember.current = current.member;
-  let currentValue = "current";
-  if (current) currentValue = "rom" in current ? "rom" : `patch:${current.patch}`;
-  const knownReference = current && "patch" in current && predecessors.some((entry) => entry.id === current.patch);
+  if (!onMetaChange || sourceMembers.length <= 1) return null;
+  const input = meta?.input;
   return (
-    <span className="target-grp patch-execution-grp">
-      <Crosshair aria-hidden="true" />
-      <label className="sr-only" htmlFor={`rom-weaver-patch-execution-input-${index}`}>
-        Apply patch {index + 1} to
+    <span className="target-grp patch-track-grp">
+      <Disc3 aria-hidden="true" />
+      <label className="sr-only" htmlFor={`rom-weaver-patch-track-${index}`}>
+        {localizer.message("ui.patch.track")}
       </label>
-      <select
+      <DropdownSelect
         className="meta-target-select mono ptgt-sel"
         disabled={disabled}
-        id={`rom-weaver-patch-execution-input-${index}`}
+        id={`rom-weaver-patch-track-${index}`}
         onChange={(event) => {
-          const value = event.currentTarget.value;
-          if (value === "current") {
-            onMetaChange({ input: undefined });
+          const member = event.currentTarget.value || undefined;
+          if (!input) {
+            onMetaChange({ input: member ? { member, rom: true } : undefined });
             return;
           }
-          if (value === "rom") {
-            const member = rememberedMember.current;
+          if ("rom" in input) {
             onMetaChange({ input: member ? { member, rom: true } : { rom: true } });
             return;
           }
-          const member = rememberedMember.current;
-          onMetaChange({ input: member ? { member, patch: value.slice(6) } : { patch: value.slice(6) } });
+          onMetaChange({ input: member ? { member, patch: input.patch } : { patch: input.patch } });
         }}
-        title="Choose the stack state this patch runs on."
-        value={currentValue}
+        value={input?.member || ""}
       >
-        <option value="current">
-          {localizer.message(
-            hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original",
-          )}
+        <option disabled value="">
+          {localizer.message("ui.patch.selectTrack")}
         </option>
-        <option value="rom">
-          {localizer.message("ui.patchChecks.originalRom", {
-            member: rememberedMember.current ? ` / ${rememberedMember.current}` : "",
-          })}
-        </option>
-        {predecessors.map((predecessor) =>
-          predecessor.id ? (
-            <option key={predecessor.id} value={`patch:${predecessor.id}`}>
-              {executionInputLabel(
-                {
-                  ...(current && "patch" in current && current.patch === predecessor.id && current.member
-                    ? { member: current.member }
-                    : {}),
-                  patch: predecessor.id,
-                },
-                hasImplicitPredecessor,
-                [predecessor],
-                localizer,
-              )}
-            </option>
-          ) : null,
-        )}
-        {current && "patch" in current && !knownReference ? (
-          <option value={`patch:${current.patch}`}>
-            {localizer.message("ui.patchChecks.unknownPatchOutput", { patch: current.patch })}
+        {sourceMembers.map((member) => (
+          <option key={member.value} value={member.value}>
+            {member.label}
           </option>
-        ) : null}
-      </select>
-      {current ? (
-        <label className="sr-only" htmlFor={`rom-weaver-patch-execution-member-${index}`}>
-          Member for patch {index + 1} input
-        </label>
-      ) : null}
-      {current ? (
-        <input
-          className="meta-target-select mono ptgt-member"
-          defaultValue={current.member || ""}
-          disabled={disabled}
-          id={`rom-weaver-patch-execution-member-${index}`}
-          onBlur={(event) => {
-            const member = event.currentTarget.value.trim() || undefined;
-            rememberedMember.current = member;
-            let input: ParsedBundlePatchInput;
-            if ("rom" in current) input = member ? { member, rom: true } : { rom: true };
-            else input = member ? { member, patch: current.patch } : { patch: current.patch };
-            onMetaChange({ input });
-          }}
-          placeholder={localizer.message("ui.patchChecks.executionMember")}
-          title={localizer.message("ui.patchChecks.executionMemberTitle")}
-          type="text"
-        />
-      ) : null}
+        ))}
+      </DropdownSelect>
     </span>
   );
 };
@@ -896,9 +820,6 @@ const PatchChecksDrawer = ({
   basisChoice,
   chainChip,
   disabled,
-  executionInput,
-  executionInputMeta,
-  hasImplicitPredecessor,
   index,
   isChainInput,
   isChainOutput,
@@ -907,11 +828,9 @@ const PatchChecksDrawer = ({
   onMetaChange,
   outputCheckHint,
   patchStack,
-  predecessors,
   romActuals,
   sharedInputChecks,
   sharedInputLabel,
-  targetRom,
 }: {
   /** The selected or resolved state that the authored input checks describe. */
   basisChoice: PatchInputBasis;
@@ -921,11 +840,6 @@ const PatchChecksDrawer = ({
    * plan, so the header verdict/timing readouts stay off - the drawer remains
    * editable. */
   disabled?: boolean;
-  /** The state this patch will receive when its stack runs. */
-  executionInput: string;
-  executionInputMeta?: BundlePatchMeta;
-  /** An earlier enabled patch writes to this patch's implicit target lane. */
-  hasImplicitPredecessor: boolean;
   index: number;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
    * input verify the ROM live (and gate the apply); output checks on the chain
@@ -940,15 +854,12 @@ const PatchChecksDrawer = ({
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
   patchStack: PatcherStackController;
-  predecessors: readonly { id?: string; label: string }[];
   /** The chain-input patch's target ROM computed checks - the actual values a
    * user-entered INPUT check is compared against for its per-row match mark. */
   romActuals?: RomCheckActuals;
   /** Checks declared by the predecessor for the same explicit input state. */
   sharedInputChecks?: ParsedBundleChecks;
   sharedInputLabel?: string;
-  /** Selected ROM or disc member for this patch, when the workflow resolved one. */
-  targetRom?: string;
 }) => {
   const setOption = patchStack.setPatchOption;
   const localizer = useUiLocalizer();
@@ -1062,26 +973,6 @@ const PatchChecksDrawer = ({
       timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, localizer.message("ui.patch.checks"))}
       verifying={verifying}
     >
-      <div className="patch-checks-context">
-        <div className="patch-checks-context-row">
-          <p className="patch-checks-execution" id={`rom-weaver-patch-execution-input-label-${index}`}>
-            {localizer.message("ui.patchChecks.execution")}
-          </p>
-          <PatchExecutionInputSelect
-            disabled={disabled || item.optionsDisabled}
-            hasImplicitPredecessor={hasImplicitPredecessor}
-            index={index}
-            meta={executionInputMeta}
-            onMetaChange={onMetaChange}
-            predecessors={predecessors}
-          />
-        </div>
-        {targetRom ? (
-          <p className="patch-checks-execution" id={`rom-weaver-patch-target-rom-label-${index}`}>
-            {localizer.message("ui.patchChecks.targetRom", { target: targetRom })}
-          </p>
-        ) : null}
-      </div>
       {sides.map(({ addableFields, builtInRows, editableFields, markFor, metaField, side, userValue }) => {
         const inputHeading =
           side === "input"
@@ -1159,12 +1050,10 @@ const PatchChecksDrawer = ({
           </Fragment>
         );
       })}
-      {sharedInputRows.length ? (
+      {sharedInputRows.length && sharedInputLabel ? (
         <div className="ck-group" id={`rom-weaver-patch-shared-input-checks-${index}`}>
           <div className="ck-group-head">
-            <span>
-              {localizer.message("ui.patchChecks.sharedInput", { input: sharedInputLabel || executionInput })}
-            </span>
+            <span>{localizer.message("ui.patchChecks.sharedInput", { input: sharedInputLabel })}</span>
           </div>
           <IdentifiedCheckTitle checks={sharedInputChecks} enabled={!disabled} />
           {sharedInputRows.map((row) => (
@@ -1323,39 +1212,77 @@ const PatchDragHandle = ({
   );
 };
 
-/** The patch's track/target on the meta line - inline select when there is a choice. */
+/**
+ * The patch's target on the meta line: the stack state it runs on. The stored
+ * value is the explicit choice only, so an unset target keeps following the
+ * checksum-resolved default (the ROM input, or the previous patch's output when
+ * one is enabled ahead of this patch).
+ */
 const PatchTarget = ({
+  disabled,
+  hasImplicitPredecessor,
   index,
-  item,
-  patchStack,
+  meta,
+  onMetaChange,
+  predecessors,
 }: {
+  disabled?: boolean;
+  hasImplicitPredecessor: boolean;
   index: number;
-  item: PatchStackItemState;
-  patchStack: PatcherStackController;
+  meta?: BundlePatchMeta;
+  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  predecessors: readonly { id?: string; label: string }[];
 }) => {
   const localizer = useUiLocalizer();
-  if (!item.targetOptions || item.targetOptions.length <= 1) return null;
+  if (!onMetaChange) return null;
+  const input = meta?.input;
+  const currentValue = input ? ("rom" in input ? "rom" : `patch:${input.patch}`) : "auto";
+  const knownReference = !!input && "patch" in input && predecessors.some((entry) => entry.id === input.patch);
+  // Re-selecting the automatic value clears the pin, so the checksum verdict decides again.
+  const keepMember = (next: { rom: true } | { patch: string }) =>
+    input?.member ? { ...next, member: input.member } : next;
   return (
-    <span className="target-grp">
+    <span className="target-grp patch-target-grp">
       <Crosshair aria-hidden="true" />
       <label className="sr-only" htmlFor={`rom-weaver-select-patch-target-${index}`}>
         {localizer.message("ui.patch.target")}
       </label>
       <DropdownSelect
         className="meta-target-select mono ptgt-sel"
-        disabled={item.targetDisabled}
+        disabled={disabled}
         id={`rom-weaver-select-patch-target-${index}`}
-        onChange={(event) => patchStack.setPatchTarget?.(index, event.currentTarget.value)}
-        value={item.targetValue || ""}
+        onChange={(event) => {
+          const value = event.currentTarget.value;
+          if (value === "auto") {
+            onMetaChange({ input: undefined });
+            return;
+          }
+          if (value === "rom") {
+            onMetaChange({ input: keepMember({ rom: true }) });
+            return;
+          }
+          onMetaChange({ input: keepMember({ patch: value.slice("patch:".length) }) });
+        }}
+        value={currentValue}
       >
-        <option disabled value="">
-          {localizer.message("ui.patch.selectTarget")}
+        <option value="auto">
+          {localizer.message(
+            hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original",
+          )}
         </option>
-        {item.targetOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
+        <option value="rom">{localizer.message("ui.patchInputs.original")}</option>
+        {predecessors.map((predecessor) =>
+          predecessor.id ? (
+            <option key={predecessor.id} value={`patch:${predecessor.id}`}>
+              {localizer.message("ui.patchChecks.patchOutput", { patch: predecessor.label })}
+            </option>
+          ) : null,
+        )}
+        {input && "patch" in input && !knownReference ? (
+          <option value={`patch:${input.patch}`}>
+            {localizer.message("ui.patchChecks.unknownPatchOutput", { patch: input.patch })}
           </option>
-        ))}
+        ) : null}
       </DropdownSelect>
     </span>
   );
@@ -1655,21 +1582,20 @@ const PatchCard = ({
   const disabledClass = isDisabled ? "is-disabled" : undefined;
   const localizer = useUiLocalizer();
   const selectedInput = meta?.input;
-  const executionInput = executionInputLabel(selectedInput, hasImplicitPredecessor, predecessors, localizer);
-  const targetRom = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
   const sharedPredecessor =
     selectedInput && "patch" in selectedInput
       ? predecessors.find((predecessor) => predecessor.id === selectedInput.patch)
       : undefined;
   const usesRootRom = (!!selectedInput && "rom" in selectedInput) || item.chainVerdict?.matched.kind === "base";
   const sharedInputChecks = sharedPredecessor?.outputChecks || (usesRootRom ? sharedRomChecks : undefined);
-  let sharedInputLabel: string | undefined;
-  if (sharedPredecessor) {
-    sharedInputLabel = executionInput;
-  } else if (usesRootRom) {
-    const member = selectedInput && "rom" in selectedInput ? selectedInput.member : undefined;
-    sharedInputLabel = localizer.message("ui.patchChecks.originalRom", { member: member ? ` / ${member}` : "" });
-  }
+  // A member lane names its track so the shared-check heading is unambiguous; the
+  // whole-source lanes carry no member, so they read as the plain source name.
+  const sharedInputLabel = sharedPredecessor
+    ? sharedPredecessor.label + (selectedInput?.member ? ` / ${selectedInput.member}` : "")
+    : usesRootRom
+      ? localizer.message("ui.patchInputs.original") +
+        (selectedInput && "rom" in selectedInput && selectedInput.member ? ` / ${selectedInput.member}` : "")
+      : undefined;
   // A disabled patch is out of the run: its (stale) verification verdict
   // stays off the card; the Checks drawer stays editable (metadata only).
   const verdict = getPatchCardVerdict(item.validationState, isDisabled);
@@ -1740,7 +1666,25 @@ const PatchCard = ({
               previousBasisAvailable={previousBasisAvailable}
             />
           )}
-          {staging ? null : <PatchTarget index={index} item={item} patchStack={patchStack} />}
+          {staging ? null : (
+            <PatchTarget
+              disabled={!!item.optionsDisabled}
+              hasImplicitPredecessor={hasImplicitPredecessor}
+              index={index}
+              meta={meta}
+              onMetaChange={onMetaChange}
+              predecessors={predecessors}
+            />
+          )}
+          {staging || isDisabled ? null : (
+            <PatchTrackSelect
+              disabled={!!item.optionsDisabled}
+              index={index}
+              meta={meta}
+              onMetaChange={onMetaChange}
+              sourceMembers={item.targetOptions || []}
+            />
+          )}
           {staging || isDisabled ? null : (
             <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} stripDisabled={stripDisabled} />
           )}
@@ -1820,9 +1764,6 @@ const PatchCard = ({
             basisChoice={basisChoice}
             chainChip={chainChip}
             disabled={isDisabled}
-            executionInput={executionInput}
-            executionInputMeta={meta}
-            hasImplicitPredecessor={hasImplicitPredecessor}
             index={index}
             isChainInput={isChainInput}
             isChainOutput={isChainOutput}
@@ -1831,11 +1772,9 @@ const PatchCard = ({
             onMetaChange={onMetaChange}
             outputCheckHint={outputCheckHint}
             patchStack={patchStack}
-            predecessors={predecessors}
             romActuals={romActuals}
             sharedInputChecks={sharedInputChecks}
             sharedInputLabel={sharedInputLabel}
-            targetRom={targetRom}
           />
         </div>
       </div>

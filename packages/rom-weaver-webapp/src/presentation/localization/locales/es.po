@@ -175,6 +175,41 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.execution"
+#~ msgstr "Aplicar a"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.executionMember"
+#~ msgstr "Ruta del archivo interno"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.originalRom"
+#~ msgstr "ROM original{member}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.patchOutput"
+#~ msgstr "Salida de {patch}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patch.selectTarget"
+#~ msgstr "Seleccionar destino"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.targetRom"
+#~ msgstr "ROM objetivo: {target}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.executionMemberTitle"
+#~ msgstr "Usa la ruta exacta del archivo interno de la ROM o del resultado del parche seleccionado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -435,11 +470,6 @@ msgstr "Aplicar ambos parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.target"
-msgstr "Aplicar parche a"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.file.patchTarget"
 msgstr "Aplicar parche en"
 
@@ -452,11 +482,6 @@ msgstr "Aplicar parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Aplicar parches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Aplicar a"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1935,11 +1960,6 @@ msgstr "Perfil de medio no compatible"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.executionMember"
-msgstr "Ruta del archivo interno"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.menu"
 msgstr "Menú"
 
@@ -2295,11 +2315,6 @@ msgstr "ROM original (automático)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.originalRom"
-msgstr "ROM original{member}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsTitle"
 msgstr "Otras funciones"
 
@@ -2357,16 +2372,6 @@ msgstr "Formato de salida"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Encabezado de salida"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.patchOutput"
-msgstr "Salida de {patch}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.precedingPatchOutput"
-msgstr "Salida de parches anteriores"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2587,6 +2592,11 @@ msgstr "salida anterior"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchInputs.previous"
 msgstr "Salida del parche anterior"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.precedingPatchOutput"
+msgstr "Salida de parches anteriores"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2955,11 +2965,6 @@ msgstr "con partidas guardadas que permanecen en este dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.selectTarget"
-msgstr "Seleccionar destino"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.select.patchesHint"
 msgstr "Elige los parches que quieres agregar y luego pulsa Agregar parches."
 
@@ -2967,6 +2972,11 @@ msgstr "Elige los parches que quieres agregar y luego pulsa Agregar parches."
 #: src/presentation/localization/messages.ts
 msgid "ui.select.multipleRoms"
 msgstr "Elige la ROM que usarás"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.selectTrack"
+msgstr "Elegir pista"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3185,8 +3195,8 @@ msgstr "Toca para elegir archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.targetRom"
-msgstr "ROM objetivo: {target}"
+msgid "ui.patch.target"
+msgstr "Destino"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3500,6 +3510,11 @@ msgstr "TOTAL"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.track"
+msgstr "Pista"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Transferido"
 
@@ -3621,11 +3636,6 @@ msgstr "Usar ROM duplicadas"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "¿Usar ROM duplicadas?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.executionMemberTitle"
-msgstr "Usa la ruta exacta del archivo interno de la ROM o del resultado del parche seleccionado."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -283,7 +283,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.reorderUnavailable",
     message: "Patch {position} of {total}. Reordering unavailable.",
   }),
-  "ui.patch.selectTarget": msg({ id: "ui.patch.selectTarget", message: "Select target" }),
   "ui.patch.stripHeader": msg({ id: "ui.patch.stripHeader", message: "strip {header}" }),
   "ui.patch.supportedTypes": msg({ id: "ui.patch.supportedTypes", message: "Supported patch types" }),
   "ui.patch.supportedTypesList": msg({
@@ -291,7 +290,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSGBA, RUP, PPF, EBP, BSDIFF, and more.",
   }),
-  "ui.patch.target": msg({ id: "ui.patch.target", message: "Apply patch into" }),
+  "ui.patch.target": msg({ id: "ui.patch.target", message: "Target" }),
+  "ui.patch.track": msg({ id: "ui.patch.track", message: "Track" }),
+  "ui.patch.selectTrack": msg({ id: "ui.patch.selectTrack", message: "Select track" }),
   "ui.select.multipleCandidates": msg({
     id: "ui.select.multipleCandidates",
     message: "Multiple candidates found, select one",
@@ -908,25 +909,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patchChecks.embeddedOutput",
     message: "Embedded output checks: Standalone patch result",
   }),
-  "ui.patchChecks.execution": msg({ id: "ui.patchChecks.execution", message: "Apply to" }),
-  "ui.patchChecks.executionMember": msg({ id: "ui.patchChecks.executionMember", message: "Member path" }),
-  "ui.patchChecks.executionMemberTitle": msg({
-    id: "ui.patchChecks.executionMemberTitle",
-    message: "Use the exact member path from the selected ROM or patch output.",
-  }),
   "ui.patchChecks.expects": msg({ id: "ui.patchChecks.expects", message: "Requires {patch} first" }),
-  "ui.patchChecks.originalRom": msg({ id: "ui.patchChecks.originalRom", message: "Original ROM{member}" }),
-  "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
   "ui.patchChecks.precedingPatchOutput": msg({
     id: "ui.patchChecks.precedingPatchOutput",
-    message: "Output of preceding patches",
+    message: "Previous patch output",
   }),
   "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input checks: {input}" }),
   "ui.patchChecks.stackOutput": msg({
     id: "ui.patchChecks.stackOutput",
     message: "Stack output checks: Combined result",
   }),
-  "ui.patchChecks.targetRom": msg({ id: "ui.patchChecks.targetRom", message: "Target ROM: {target}" }),
   "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
   "ui.patchChecks.unknownPatchOutput": msg({
     id: "ui.patchChecks.unknownPatchOutput",
