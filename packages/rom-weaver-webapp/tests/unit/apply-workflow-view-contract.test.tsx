@@ -575,6 +575,50 @@ describe("apply workflow view - empty bench", () => {
 
 describe("apply workflow view - staged bench", () => {
   afterEach(cleanup);
+  it("labels the first enabled patch input as the original ROM", () => {
+    const { container } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", {}],
+        ["patch-b", {}],
+      ]),
+      onBundleMetaChange: vi.fn(),
+      patchEnablement: {
+        disabledIds: new Set(["patch-a"]),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [patchItem("disabled.ips"), patchItem("enabled.ips")],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] },
+    });
+
+    const executionInput = container.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
+    expect(executionInput.options[0]?.textContent).toBe("Original ROM");
+  });
+
+  it("labels the first patch in each target lane as the original ROM", () => {
+    const first = patchItem("first.ips");
+    first.targetValue = "rom-a";
+    const second = patchItem("second.ips");
+    second.targetValue = "rom-b";
+    const { container } = renderView({
+      bundleMetaById: new Map([
+        ["patch-a", {}],
+        ["patch-b", {}],
+      ]),
+      onBundleMetaChange: vi.fn(),
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a", "patch-b"],
+        onToggle: () => undefined,
+      },
+      patches: [first, second],
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("a.bin"), romRow("b.bin")] },
+    });
+
+    const executionInput = container.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
+    expect(executionInput.options[0]?.textContent).toBe("Original ROM");
+  });
+
   it("edits shared patch details from the patches header", async () => {
     const onBundleMetaBulkChange = vi.fn();
     const onToggle = vi.fn();
@@ -786,7 +830,7 @@ describe("apply workflow view - staged bench", () => {
     expect(addOnCard?.textContent).not.toContain("Verified: game.sfc / program.rom");
 
     const executionInput = addOnCard?.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
-    expect(executionInput.options[0]?.textContent).toBe("Output of preceding patches");
+    expect(executionInput.options[0]?.textContent).toBe("Original ROM");
     fireEvent.change(executionInput, { target: { value: "rom" } });
     expect(onBundleMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
   });

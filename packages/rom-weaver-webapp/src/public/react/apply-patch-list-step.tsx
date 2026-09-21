@@ -444,11 +444,14 @@ const PatchInputBasisSelect = ({
 
 const executionInputLabel = (
   input: ParsedBundlePatchInput | undefined,
+  hasImplicitPredecessor: boolean,
   predecessors: readonly { id?: string; label: string }[],
   localizer: Localizer,
 ) => {
   if (!input) {
-    return localizer.message(predecessors.length ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original");
+    return localizer.message(
+      hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original",
+    );
   }
   if ("rom" in input) {
     return localizer.message("ui.patchChecks.originalRom", {
@@ -464,12 +467,14 @@ const executionInputLabel = (
 
 const PatchExecutionInputSelect = ({
   disabled,
+  hasImplicitPredecessor,
   index,
   meta,
   onMetaChange,
   predecessors,
 }: {
   disabled?: boolean;
+  hasImplicitPredecessor: boolean;
   index: number;
   meta?: BundlePatchMeta;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
@@ -511,7 +516,9 @@ const PatchExecutionInputSelect = ({
         value={currentValue}
       >
         <option value="current">
-          {localizer.message(predecessors.length ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original")}
+          {localizer.message(
+            hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original",
+          )}
         </option>
         <option value="rom">
           {localizer.message("ui.patchChecks.originalRom", {
@@ -528,6 +535,7 @@ const PatchExecutionInputSelect = ({
                     : {}),
                   patch: predecessor.id,
                 },
+                hasImplicitPredecessor,
                 [predecessor],
                 localizer,
               )}
@@ -890,6 +898,7 @@ const PatchChecksDrawer = ({
   disabled,
   executionInput,
   executionInputMeta,
+  hasImplicitPredecessor,
   index,
   isChainInput,
   isChainOutput,
@@ -915,6 +924,8 @@ const PatchChecksDrawer = ({
   /** The state this patch will receive when its stack runs. */
   executionInput: string;
   executionInputMeta?: BundlePatchMeta;
+  /** An earlier enabled patch writes to this patch's implicit target lane. */
+  hasImplicitPredecessor: boolean;
   index: number;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
    * input verify the ROM live (and gate the apply); output checks on the chain
@@ -1058,6 +1069,7 @@ const PatchChecksDrawer = ({
           </p>
           <PatchExecutionInputSelect
             disabled={disabled || item.optionsDisabled}
+            hasImplicitPredecessor={hasImplicitPredecessor}
             index={index}
             meta={executionInputMeta}
             onMetaChange={onMetaChange}
@@ -1566,6 +1578,7 @@ const PatchCard = ({
   canReorder,
   chainChip,
   handleProps,
+  hasImplicitPredecessor,
   index,
   orderIndex = index,
   isChainInput,
@@ -1597,6 +1610,8 @@ const PatchCard = ({
   /** Plain-language chain verdict for the Checks drawer header readout. */
   chainChip?: { text: string; warn?: boolean } | null;
   handleProps: ReorderHandleProps;
+  /** An earlier enabled patch writes to this patch's implicit target lane. */
+  hasImplicitPredecessor: boolean;
   index: number;
   orderIndex?: number;
   isChainInput: boolean;
@@ -1640,7 +1655,7 @@ const PatchCard = ({
   const disabledClass = isDisabled ? "is-disabled" : undefined;
   const localizer = useUiLocalizer();
   const selectedInput = meta?.input;
-  const executionInput = executionInputLabel(selectedInput, predecessors, localizer);
+  const executionInput = executionInputLabel(selectedInput, hasImplicitPredecessor, predecessors, localizer);
   const targetRom = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
   const sharedPredecessor =
     selectedInput && "patch" in selectedInput
@@ -1807,6 +1822,7 @@ const PatchCard = ({
             disabled={isDisabled}
             executionInput={executionInput}
             executionInputMeta={meta}
+            hasImplicitPredecessor={hasImplicitPredecessor}
             index={index}
             isChainInput={isChainInput}
             isChainOutput={isChainOutput}
@@ -2197,6 +2213,12 @@ const ApplyPatchListStep = ({
                 patches.map((patch, patchIndex) => bundleMeta?.[patchIndex]?.name || patch.fileName),
               )}
               handleProps={reorderList.handleProps(orderIndex)}
+              hasImplicitPredecessor={patches.some(
+                (predecessor, predecessorIndex) =>
+                  predecessorIndex < index &&
+                  !disabledFlags?.[predecessorIndex] &&
+                  predecessor.targetValue === item.targetValue,
+              )}
               index={index}
               orderIndex={orderIndex}
               isChainInput={index === chainInputIndex}
