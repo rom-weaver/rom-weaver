@@ -736,17 +736,16 @@ const EditableCheckRow = ({
  * identity verdicts. */
 const chainChipText = (
   item: PatchStackItemState,
-  index: number,
+  hasImplicitPredecessor: boolean,
   enabledIndexes: readonly number[],
   localizer: Localizer,
   patchLabels: readonly string[],
 ): { text: string; warn?: boolean } | null => {
   const verdict = item.chainVerdict;
   const targetLabel = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
-  const hasEnabledPredecessor = enabledIndexes.some((enabledIndex) => enabledIndex < index);
   const checkedTarget =
     targetLabel ||
-    localizer.message(hasEnabledPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original");
+    localizer.message(hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original");
   if (!verdict) {
     if (item.validationState === "deferred") {
       return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
@@ -1241,11 +1240,11 @@ const PatchTarget = ({
   const input = meta?.input;
   const currentValue = input ? ("rom" in input ? "rom" : `patch:${input.patch}`) : "auto";
   const knownReference = !!input && "patch" in input && predecessors.some((entry) => entry.id === input.patch);
-  // A member only describes a leaf of the ROM input. A patch-output reference
-  // names a lane, so carrying the member onto it would persist a stale selector
-  // that neither the webapp nor the CLI reads back.
-  const romReference = (): { rom: true; member?: string } =>
-    input && "rom" in input && input.member ? { member: input.member, rom: true } : { rom: true };
+  // A member can select a leaf from either the ROM or a generated patch output.
+  // Preserve it when the source changes so an imported bundle keeps its exact
+  // source instead of silently broadening the reference.
+  const member = input?.member;
+  const romReference = (): { rom: true; member?: string } => (member ? { member, rom: true } : { rom: true });
   return (
     <span className="target-grp patch-target-grp">
       <Crosshair aria-hidden="true" />
@@ -1266,7 +1265,8 @@ const PatchTarget = ({
             onMetaChange({ input: romReference() });
             return;
           }
-          onMetaChange({ input: { patch: value.slice("patch:".length) } });
+          const patch = value.slice("patch:".length);
+          onMetaChange({ input: member ? { member, patch } : { patch } });
         }}
         value={currentValue}
       >
@@ -1691,7 +1691,7 @@ const PatchCard = ({
               index={index}
               meta={meta}
               onMetaChange={onMetaChange}
-              sourceMembers={item.targetOptions || []}
+              sourceMembers={selectedInput && "patch" in selectedInput ? [] : item.targetOptions || []}
             />
           )}
           {staging || isDisabled ? null : (
@@ -2155,18 +2155,27 @@ const ApplyPatchListStep = ({
               canReorder={canReorder}
               chainChip={chainChipText(
                 item,
-                index,
+                !!item.targetValue &&
+                  patches.some(
+                    (predecessor, predecessorIndex) =>
+                      predecessorIndex < index &&
+                      !disabledFlags?.[predecessorIndex] &&
+                      predecessor.targetValue === item.targetValue,
+                  ),
                 enabledIndexes,
                 localizer,
                 patches.map((patch, patchIndex) => bundleMeta?.[patchIndex]?.name || patch.fileName),
               )}
               handleProps={reorderList.handleProps(orderIndex)}
-              hasImplicitPredecessor={patches.some(
-                (predecessor, predecessorIndex) =>
-                  predecessorIndex < index &&
-                  !disabledFlags?.[predecessorIndex] &&
-                  predecessor.targetValue === item.targetValue,
-              )}
+              hasImplicitPredecessor={
+                !!item.targetValue &&
+                patches.some(
+                  (predecessor, predecessorIndex) =>
+                    predecessorIndex < index &&
+                    !disabledFlags?.[predecessorIndex] &&
+                    predecessor.targetValue === item.targetValue,
+                )
+              }
               index={index}
               orderIndex={orderIndex}
               isChainInput={index === chainInputIndex}

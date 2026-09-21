@@ -633,7 +633,7 @@ describe("apply workflow view - staged bench", () => {
     expect(target.options[0]?.textContent).toBe("Original ROM");
   });
 
-  it("omits a patch-output reference's member, which only the ROM input uses", () => {
+  it("preserves a member when the patch input source changes", () => {
     const onBundleMetaChange = vi.fn();
     const first = withTargets(patchItem("first.ips"));
     const second = withTargets(patchItem("second.ips"));
@@ -655,9 +655,11 @@ describe("apply workflow view - staged bench", () => {
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
     expect(target.value).toBe("rom");
     fireEvent.change(target, { target: { value: "patch:patch-a" } });
-    // A patch-output reference names a lane; the member belongs to the ROM input,
-    // and neither the webapp nor the CLI reads it back from a patch reference.
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", { input: { patch: "patch-a" } });
+    // A patch-output member selects an exact generated leaf in native bundle
+    // apply, so changing the source must not silently broaden the reference.
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+      input: { member: "track02.bin", patch: "patch-a" },
+    });
 
     fireEvent.change(target, { target: { value: "rom" } });
     expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
@@ -898,7 +900,7 @@ describe("apply workflow view - staged bench", () => {
     expect(onBundleMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
   });
 
-  it("keeps a selected producer member when the target source changes", () => {
+  it("hides original-ROM tracks for a patch-output source", () => {
     const onBundleMetaChange = vi.fn();
     const first = patchItem("first.ips");
     const second = patchItem("second.ips");
@@ -923,10 +925,14 @@ describe("apply workflow view - staged bench", () => {
 
     const target = container.querySelector("#rom-weaver-select-patch-target-1") as HTMLSelectElement;
     expect(target.value).toBe("patch:patch-a");
+    // The listed tracks belong to the original ROM. A member on a patch-output
+    // source instead selects a generated output leaf, so these choices would
+    // write a different meaning than the Track label promises.
+    expect(container.querySelector("#rom-weaver-patch-track-1")).toBeNull();
     fireEvent.change(target, { target: { value: "rom" } });
-    // The member belongs to the ROM input, so it rides along only when that input
-    // is the target; a patch-output reference carries no member.
-    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", { input: { rom: true } });
+    expect(onBundleMetaChange).toHaveBeenLastCalledWith("patch-b", {
+      input: { member: "generated/track03.bin", rom: true },
+    });
   });
 
   it("shows an unavailable named stack input before Apply", () => {
