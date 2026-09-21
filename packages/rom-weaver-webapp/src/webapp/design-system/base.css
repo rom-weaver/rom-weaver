@@ -40,13 +40,14 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+  --pwa-top-gap: 0px;
   --pwa-footer-reserve: 0px;
   /* the only piece of dock geometry the rest of the page consumes; masthead.css
      raises it below the dock threshold */
   --dock-h: 0px;
   /* The hero height MUST reserve space for the masthead, format disclosure,
      step heading, next-step line, and margins. */
-  --hero-chrome: calc(294px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+  --hero-chrome: calc(294px + var(--safe-t) + var(--safe-b) + var(--pwa-top-gap) + var(--pwa-footer-reserve));
   /* the empty-section family recipe (hero drop, add-row, needs-input, ghost
      slots): solid seam + thread-tinted fill strung with warp, lighting up on
      hover. Composed from theme-switched vars, so no per-theme overrides are
@@ -188,6 +189,7 @@
 }
 @media (display-mode: standalone) {
   .rw-app {
+    --pwa-top-gap: var(--sp-xs);
     --pwa-footer-reserve: var(--sp-l);
   }
 }
@@ -228,7 +230,7 @@
   flex-direction: column;
   width: 100%;
   max-width: var(--app-max);
-  padding-block-start: var(--safe-t);
+  padding-block-start: calc(var(--safe-t) + var(--pwa-top-gap));
   padding-inline: var(--gutter);
   margin-inline: auto;
 }

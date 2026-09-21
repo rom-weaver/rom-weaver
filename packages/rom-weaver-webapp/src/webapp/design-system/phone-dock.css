@@ -5,7 +5,14 @@
     --mobile-input-head-h: 38px;
     /* Includes the first-weave action below the hero so the empty bench still
        occupies one phone viewport. */
-    --hero-chrome: calc(var(--mobile-input-head-h) + 217px + var(--safe-t) + var(--safe-b) + var(--pwa-footer-reserve));
+    --hero-chrome: calc(
+      var(--mobile-input-head-h) +
+      217px +
+      var(--safe-t) +
+      var(--safe-b) +
+      var(--pwa-top-gap) +
+      var(--pwa-footer-reserve)
+    );
     /* The joined checksum footer: label, then a 40px input row. */
     --hero-search-h: 116px;
   }
