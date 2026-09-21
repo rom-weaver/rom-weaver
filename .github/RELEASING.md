@@ -92,7 +92,7 @@ Production is CI-gated by construction: only a release pull request whose requir
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account - Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains) and `CLOUDFLARE_ACCOUNT_ID`.
 
-The optional `CLOUDFLARE_ZONE_ID` secret enables the `/assets/*` zone Cache Rule. When it is set, the API token also needs **Zone - Cache Rules - Edit**.
+The optional `CLOUDFLARE_ZONE_ID` secret enables the `/assets/*` zone Cache Rule and Markdown content negotiation for `/docs` routes. When it is set, the API token also needs **Zone - Cache Rules - Edit** and **Zone - Configuration Rules - Edit**. Browsers continue to receive HTML. Clients that send `Accept: text/markdown` receive Cloudflare's Markdown conversion on the three permanent channel domains.
 
 The workflow creates its own Pages project on first run for a channel, so there is no manual bootstrap and no local `wrangler login` - which matters because `wrangler login` needs a localhost OAuth callback and cannot complete on a headless machine. An API token is the only credential this setup requires.
 
