@@ -219,6 +219,27 @@ describe("sample tutorial", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("keeps the same target mounted when its parent rerenders equivalent steps", async () => {
+    const workbench = (steps: readonly SampleTutorialStep[]) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={steps} />
+      </div>
+    );
+    const { rerender } = render(workbench(STEPS.map((step) => ({ ...step }))));
+
+    const target = document.querySelector("#tutorial-first") as HTMLElement;
+    await waitFor(() => expect(target.classList.contains("sample-tutorial-target")).toBe(true));
+    const ring = document.querySelector(".sample-tutorial-ring");
+    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+
+    rerender(workbench(STEPS.map((step) => ({ ...step }))));
+
+    expect(document.querySelector(".sample-tutorial-ring")).toBe(ring);
+    expect(target.classList.contains("sample-tutorial-target")).toBe(true);
+    expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("keeps one live region across steps so the change is announced", async () => {
     renderGuidedWorkbench();
 
