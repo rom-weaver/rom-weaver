@@ -357,6 +357,7 @@ test("the phone dock lands inside the first phone screen with an empty bench", a
   // Below roughly 575px of svh that floor wins over the budget on purpose - a
   // hero sized to the leftover space there would be too small to aim at - and
   // the page is meant to scroll.
+  let heroBudgetReduced = false;
   for (const [width, height] of [
     [320, 640],
     [360, 640],
@@ -366,11 +367,20 @@ test("the phone dock lands inside the first phone screen with an empty bench", a
     await page.viewport(width, height);
     mountWebappRoot();
     await expect.poll(() => document.querySelector(".step.is-input.is-empty .drop.hero")).toBeTruthy();
+    const heroBeforeGap = document.querySelector(".step.is-input.is-empty .drop.hero").getBoundingClientRect().height;
+    const simulatedPwaGap = document.createElement("style");
+    simulatedPwaGap.textContent = ".rw-app { --pwa-top-gap: 4px; }";
+    document.head.append(simulatedPwaGap);
+    const heroAfterGap = document.querySelector(".step.is-input.is-empty .drop.hero").getBoundingClientRect().height;
+    expect(heroAfterGap).toBeLessThanOrEqual(heroBeforeGap);
+    heroBudgetReduced ||= heroAfterGap <= heroBeforeGap - 3.9;
     await expect
       .poll(() => document.querySelector(".dock")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
       .toBeLessThanOrEqual(height + 1);
     await expect.poll(() => document.querySelector(".dock")?.getBoundingClientRect().top ?? 0).toBeGreaterThan(0);
+    simulatedPwaGap.remove();
   }
+  expect(heroBudgetReduced).toBe(true);
   await page.viewport(1280, 900);
 });
 
@@ -415,17 +425,18 @@ test("PWA side insets move dock content without shifting the shell", async () =>
 test("PWA vertical insets keep the dock clear of the home indicator", async () => {
   const safeTop = 59;
   const safeBottom = 34;
+  const topGap = 4;
   const height = 852;
   await page.viewport(393, height);
   mountWebappRoot();
   await expect.poll(() => document.querySelector(".dock")).toBeTruthy();
   const simulatedSafeArea = document.createElement("style");
-  simulatedSafeArea.textContent = `.rw-app { --safe-t: ${safeTop}px; --safe-b: ${safeBottom}px; }`;
+  simulatedSafeArea.textContent = `.rw-app { --safe-t: ${safeTop}px; --safe-b: ${safeBottom}px; --pwa-top-gap: ${topGap}px; }`;
   document.head.append(simulatedSafeArea);
   try {
     await expect
       .poll(() => document.querySelector(".shell-head")?.getBoundingClientRect().top ?? -1)
-      .toBeGreaterThanOrEqual(safeTop);
+      .toBeGreaterThanOrEqual(safeTop + topGap);
     await expect
       .poll(() => document.querySelector(".dock")?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY)
       .toBeLessThanOrEqual(height + 1);
