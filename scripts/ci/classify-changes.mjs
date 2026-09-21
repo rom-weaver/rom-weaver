@@ -31,7 +31,6 @@ const REPO_LINT_CI_HELPERS = new Set([
   "scripts/ci/deploy-pages.mjs",
   "scripts/ci/deployment-status.mjs",
   "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
-  "scripts/ci/ensure-cloudflare-markdown-rule.mjs",
   "scripts/ci/ensure-cloudflare-pages-project.mjs",
   "scripts/ci/github-api.mjs",
 ]);
