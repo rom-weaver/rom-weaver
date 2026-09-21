@@ -110,6 +110,9 @@
   align-items: center;
   min-width: 0;
 }
+.rw-app .home-loom-legend .home-loom-disc-flow {
+  grid-column: 1 / -1;
+}
 .rw-app .home-loom-legend .row > span {
   overflow: hidden;
   text-overflow: ellipsis;

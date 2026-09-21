@@ -167,6 +167,12 @@ describe("HomePage", () => {
     expect(container.textContent).toContain("One toolkit.");
     expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
+    expect(container.querySelector(".home-loom-disc-flow")?.textContent).toContain(
+      "game.chd → game.iso → patched-game.chd",
+    );
+    expect(container.textContent).toContain("translation.bps.rar");
+    expect(container.textContent).toContain("bugfix.ips.zip");
+    expect(container.textContent).toContain("undub.xdelta.7z");
     expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(4);
     expect(
       Array.from(container.querySelectorAll(".home-install-code")).every(

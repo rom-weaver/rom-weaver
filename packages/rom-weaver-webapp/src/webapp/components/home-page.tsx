@@ -134,11 +134,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             <span className="home-loom-tag">{localizer.message("ui.home.loomTag")}</span>
             <HomeLoom ariaLabel={localizer.message("ui.home.loomAriaLabel")} />
             <div className="home-loom-legend">
-              <span className="row">
+              <span className="row home-loom-disc-flow">
                 <i style={{ background: "var(--warp-b)" }} />
                 <span>
                   <span className="k">{localizer.message("ui.home.loomSource")} </span>
-                  {localizer.message("ui.home.loomOriginalRom")}
+                  <code>game.chd</code> → <code>game.iso</code> → <code>patched-game.chd</code>
                   <span className="sum">
                     {" · "}
                     <code>sha1 ✓</code>
@@ -148,19 +148,19 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="row">
                 <i style={{ background: "var(--loom-weft-1)" }} />
                 <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })} </span>translation.bps
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })} </span>translation.bps.rar
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-2)" }} />
                 <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })} </span>bugfix.ips
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })} </span>bugfix.ips.zip
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-3)" }} />
                 <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })} </span>undub.xdelta
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })} </span>undub.xdelta.7z
                 </span>
               </span>
             </div>
