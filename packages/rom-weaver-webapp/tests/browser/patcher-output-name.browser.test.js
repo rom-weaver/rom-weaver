@@ -89,7 +89,7 @@ test("removing a patch refreshes generated output name", async () => {
   await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 });
 
-test("removing an input refreshes generated output name", async () => {
+test("clearing the ROM clears the generated output name", async () => {
   const firstInput = await loadFixtureFile(RAW_ROM);
   const secondInput = new File([await firstInput.arrayBuffer()], "second.bin", { type: firstInput.type });
   const stageInput = vi.fn(async (snapshot) =>
@@ -135,11 +135,14 @@ test("removing an input refreshes generated output name", async () => {
     .toBe(2);
   await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("game");
 
-  const removeInputButton = document.querySelector("button[aria-label='Remove ROM input']");
-  if (!(removeInputButton instanceof HTMLButtonElement)) throw new Error("Missing remove ROM input button");
-  removeInputButton.click();
+  const clearInputButton = document.querySelector("button[aria-label='Clear ROM input']");
+  if (!(clearInputButton instanceof HTMLButtonElement)) throw new Error("Missing clear ROM input button");
+  clearInputButton.click();
 
-  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("second");
+  await expect
+    .poll(() => document.querySelectorAll("#rom-weaver-list-input-stack .nmline[data-file-name]").length)
+    .toBe(0);
+  await expect.poll(getOutputFileNameValue, { timeout: 30000 }).toBe("");
 });
 
 test("editing output name after download is ready keeps the prepared output", async () => {
