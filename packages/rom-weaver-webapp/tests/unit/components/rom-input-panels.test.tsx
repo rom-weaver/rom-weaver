@@ -45,4 +45,17 @@ describe("RomInputPanels view detail", () => {
     expect(container.querySelector(".rw-cue-section")).not.toBeNull();
     expect(container.querySelectorAll(".cks")).toHaveLength(3);
   });
+
+  it("does not report an unavailable lookup as unidentified", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: false }}>
+        <RomInputPanels
+          identification={{ matches: [], status: "unavailable" }}
+          info={{ bytes: 4, checksums: { crc32: "1234abcd" } }}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector(".cks-head")?.textContent).toContain("Title lookup unavailable");
+    expect(container.querySelector(".cks-head")?.textContent).not.toContain("Unidentified");
+  });
 });

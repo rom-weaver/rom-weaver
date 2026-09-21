@@ -84,6 +84,8 @@ const RomInputPanels = ({
       {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
       {identifyPending ? (
         <DrawerReadout muted>{localizer.message("ui.identifyDrawer.identifying")}</DrawerReadout>
+      ) : status === "unavailable" ? (
+        <DrawerReadout muted>{localizer.message("ui.apply.titleLookupUnavailable")}</DrawerReadout>
       ) : status === "matched" ? (
         <DrawerReadout>{localizer.message("ui.file.identified")}</DrawerReadout>
       ) : status === "ambiguous" ? (
