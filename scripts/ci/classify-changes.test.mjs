@@ -372,6 +372,7 @@ test("deployment and cleanup helpers select repo lint without compiled stacks", 
     "scripts/ci/deploy-pages.mjs",
     "scripts/ci/deployment-status.mjs",
     "scripts/ci/ensure-cloudflare-assets-cache-rule.mjs",
+    "scripts/ci/ensure-cloudflare-markdown-rule.mjs",
     "scripts/ci/ensure-cloudflare-pages-project.mjs",
     "scripts/ci/github-api.mjs",
   ]) {
