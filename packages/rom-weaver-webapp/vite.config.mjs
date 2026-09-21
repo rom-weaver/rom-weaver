@@ -803,14 +803,14 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
           legacyHtml.replace('<base href="../" />', '<base href="./" />'),
         );
       }
-      if (channel === "prod") {
-        fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
-        // The API catalog is a production surface: a preview channel MUST NOT
-        // advertise the production API, matching the sitemap and robots rules.
-        fs.mkdirSync(path.join(distDir, path.dirname(API_CATALOG_PATH)), { recursive: true });
-        fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource());
-        fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource());
-      }
+      if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
+      // Every channel serves the catalog. Its links use the canonical production
+      // origin, matching the canonical URLs and Markdown headers; only the
+      // sitemap stays production-only. This also lets a PR preview verify the
+      // catalog on Cloudflare Pages before merge.
+      fs.mkdirSync(path.join(distDir, path.dirname(API_CATALOG_PATH)), { recursive: true });
+      fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource());
+      fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource());
       const thirdPartyDir = path.join(distDir, "third_party");
       fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), thirdPartyDir, {
         recursive: true,
@@ -870,7 +870,6 @@ const writeCloudflareHeadersAsset = (channel) => {
         "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
       };
-      const production = channel === "prod";
       const distDir = path.resolve(rootDir, outDir);
       const outputPath = path.join(distDir, "_headers");
       const headerLines = Object.entries(headers)
@@ -885,9 +884,7 @@ const writeCloudflareHeadersAsset = (channel) => {
       const installerContentType = "/install.sh\n  Content-Type: text/plain; charset=utf-8\n";
       // The catalog file has no extension, so Cloudflare would serve it as a
       // binary download. The Link header satisfies the RFC 9727 HEAD response.
-      const apiCatalogHeaders = production
-        ? `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`
-        : "";
+      const apiCatalogHeaders = `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`;
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
           `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,

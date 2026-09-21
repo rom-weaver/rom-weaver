@@ -108,33 +108,29 @@ for (const [index, line] of headerLines.entries()) {
 }
 assertIncludes(installScript, "#!/bin/sh", "curl installer");
 assertIncludes(headers, "/install.sh\n  Content-Type: text/plain; charset=utf-8", "curl installer content type");
-if (production) {
-  assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json`, "API catalog content type");
-  assertIncludes(headers, `Link: <${API_CATALOG_PATH}>; rel="api-catalog"`, "API catalog HEAD link relation");
-  const catalog = JSON.parse(read(API_CATALOG_PATH));
-  if (!Array.isArray(catalog.linkset) || catalog.linkset.length === 0) {
-    throw new Error("API catalog must contain a non-empty linkset array");
-  }
-  for (const [index, entry] of catalog.linkset.entries()) {
-    for (const relation of ["anchor", "service-desc", "service-doc"]) {
-      if (!entry[relation]) throw new Error(`API catalog entry ${index} is missing ${relation}`);
-    }
-    if (!entry.anchor.startsWith(SITE_ORIGIN)) throw new Error(`API catalog entry ${index} anchor is off-origin`);
-    for (const relation of ["service-desc", "service-doc"]) {
-      for (const link of entry[relation]) {
-        if (!link.href?.startsWith(SITE_ORIGIN)) throw new Error(`API catalog ${relation} href is off-origin`);
-      }
-    }
-    if (entry["service-desc"][0].href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
-      throw new Error("API catalog service-desc MUST point at the OpenAPI document");
-    }
-  }
-  const openapi = JSON.parse(read(OPENAPI_PATH));
-  if (!/^3\.1\.\d+$/u.test(openapi.openapi)) throw new Error("OpenAPI document MUST declare OpenAPI 3.1");
-  if (!openapi.paths || Object.keys(openapi.paths).length === 0) throw new Error("OpenAPI document has no paths");
-} else if (fs.existsSync(path.join(distDir, API_CATALOG_PATH))) {
-  throw new Error("API catalog MUST NOT be published on a non-production channel");
+assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json`, "API catalog content type");
+assertIncludes(headers, `Link: <${API_CATALOG_PATH}>; rel="api-catalog"`, "API catalog HEAD link relation");
+const catalog = JSON.parse(read(API_CATALOG_PATH));
+if (!Array.isArray(catalog.linkset) || catalog.linkset.length === 0) {
+  throw new Error("API catalog must contain a non-empty linkset array");
 }
+for (const [index, entry] of catalog.linkset.entries()) {
+  for (const relation of ["anchor", "service-desc", "service-doc"]) {
+    if (!entry[relation]) throw new Error(`API catalog entry ${index} is missing ${relation}`);
+  }
+  if (!entry.anchor.startsWith(SITE_ORIGIN)) throw new Error(`API catalog entry ${index} anchor is off-origin`);
+  for (const relation of ["service-desc", "service-doc"]) {
+    for (const link of entry[relation]) {
+      if (!link.href?.startsWith(SITE_ORIGIN)) throw new Error(`API catalog ${relation} href is off-origin`);
+    }
+  }
+  if (entry["service-desc"][0].href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
+    throw new Error("API catalog service-desc MUST point at the OpenAPI document");
+  }
+}
+const openapi = JSON.parse(read(OPENAPI_PATH));
+if (!/^3\.1\.\d+$/u.test(openapi.openapi)) throw new Error("OpenAPI document MUST declare OpenAPI 3.1");
+if (!openapi.paths || Object.keys(openapi.paths).length === 0) throw new Error("OpenAPI document has no paths");
 assertIncludes(
   headers,
   "/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",
