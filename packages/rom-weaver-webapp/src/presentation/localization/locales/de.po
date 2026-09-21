@@ -2395,6 +2395,16 @@ msgstr "Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomCompress"
+msgstr "komprimieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomExtract"
+msgstr "extrahieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.loomOutput"
 msgstr "Ausgabe"
 
@@ -2402,6 +2412,11 @@ msgstr "Ausgabe"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomResult"
 msgstr "Ergebnis"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomUnpack"
+msgstr "entpacken"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

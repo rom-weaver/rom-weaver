@@ -2395,6 +2395,16 @@ msgstr "parche {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomCompress"
+msgstr "comprimir"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomExtract"
+msgstr "extraer"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.loomOutput"
 msgstr "salida"
 
@@ -2402,6 +2412,11 @@ msgstr "salida"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomResult"
 msgstr "resultado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomUnpack"
+msgstr "descomprimir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

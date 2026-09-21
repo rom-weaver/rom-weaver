@@ -139,37 +139,57 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             <div className="home-loom-legend">
               <span className="row home-loom-disc-flow">
                 <i className="home-loom-source-swatch" />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomSource")} </span>
-                  <code>game.chd</code> → <code>game.iso</code>
+                <span className="home-loom-flow-copy">
+                  <span className="k">{localizer.message("ui.home.loomSource")}</span>
+                  <span className="home-loom-file-flow">
+                    <code>game.chd</code>
+                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomExtract")}</span>
+                    <code>game.iso</code>
+                  </span>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-1)" }} />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })} </span>
-                  <code>translation.bps.rar</code> → <code>translation.bps</code>
+                <span className="home-loom-flow-copy">
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })}</span>
+                  <span className="home-loom-file-flow">
+                    <code>translation.bps.rar</code>
+                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                    <code>translation.bps</code>
+                  </span>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-2)" }} />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })} </span>
-                  <code>bugfix.ips.zip</code> → <code>bugfix.ips</code>
+                <span className="home-loom-flow-copy">
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })}</span>
+                  <span className="home-loom-file-flow">
+                    <code>bugfix.ips.zip</code>
+                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                    <code>bugfix.ips</code>
+                  </span>
                 </span>
               </span>
               <span className="row">
                 <i style={{ background: "var(--loom-weft-3)" }} />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })} </span>
-                  <code>undub.xdelta.7z</code> → <code>undub.xdelta</code>
+                <span className="home-loom-flow-copy">
+                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })}</span>
+                  <span className="home-loom-file-flow">
+                    <code>undub.xdelta.7z</code>
+                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                    <code>undub.xdelta</code>
+                  </span>
                 </span>
               </span>
               <span className="row home-loom-disc-flow home-loom-output-flow">
                 <i className="home-loom-output-swatch" />
-                <span>
-                  <span className="k">{localizer.message("ui.home.loomOutput")} </span>
-                  <code>game.iso</code> → <code>patched-game.chd</code>
+                <span className="home-loom-flow-copy">
+                  <span className="k">{localizer.message("ui.home.loomOutput")}</span>
+                  <span className="home-loom-file-flow">
+                    <code>game.iso</code>
+                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomCompress")}</span>
+                    <code>patched-game.chd</code>
+                  </span>
                   <span className="sum">
                     {" · "}
                     <code>sha1 ✓</code>

@@ -132,10 +132,38 @@
   padding-top: 6px;
   border-top: 1px solid var(--seam-soft);
 }
-.rw-app .home-loom-legend .row > span {
+.rw-app .home-loom-flow-copy {
+  display: grid;
+  min-width: 0;
+}
+.rw-app .home-loom-file-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 0.9fr);
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+.rw-app .home-loom-file-flow code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.rw-app .home-loom-file-flow code:first-child {
+  text-align: right;
+}
+.rw-app .home-loom-output-flow .home-loom-file-flow {
+  grid-template-columns: minmax(0, 0.9fr) auto minmax(0, 1.1fr);
+}
+.rw-app .home-loom-flow-action {
+  padding: 1px 5px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--well);
+  border: 1px solid var(--seam);
+  border-radius: 999px;
 }
 .rw-app .home-loom-legend i {
   flex: none;
@@ -213,7 +241,8 @@
     height: 8px;
   }
   .rw-app .home-loom-legend .k {
-    display: inline;
+    display: block;
+    margin-bottom: 2px;
     color: var(--ink-3);
   }
   .rw-app .home-loom-legend .sum {
