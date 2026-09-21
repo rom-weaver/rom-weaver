@@ -143,8 +143,10 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                   <span className="k">{localizer.message("ui.home.loomSource")}</span>
                   <span className="home-loom-file-flow">
                     <code>game.chd</code>
-                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomExtract")}</span>
-                    <code>game.iso</code>
+                    <span className="home-loom-flow-result">
+                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomExtract")}</span>
+                      <code>game.iso</code>
+                    </span>
                   </span>
                 </span>
               </span>
@@ -154,8 +156,10 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                   <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })}</span>
                   <span className="home-loom-file-flow">
                     <code>translation.bps.rar</code>
-                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
-                    <code>translation.bps</code>
+                    <span className="home-loom-flow-result">
+                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                      <code>translation.bps</code>
+                    </span>
                   </span>
                 </span>
               </span>
@@ -165,8 +169,10 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                   <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })}</span>
                   <span className="home-loom-file-flow">
                     <code>bugfix.ips.zip</code>
-                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
-                    <code>bugfix.ips</code>
+                    <span className="home-loom-flow-result">
+                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                      <code>bugfix.ips</code>
+                    </span>
                   </span>
                 </span>
               </span>
@@ -176,8 +182,10 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                   <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })}</span>
                   <span className="home-loom-file-flow">
                     <code>undub.xdelta.7z</code>
-                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
-                    <code>undub.xdelta</code>
+                    <span className="home-loom-flow-result">
+                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                      <code>undub.xdelta</code>
+                    </span>
                   </span>
                 </span>
               </span>
@@ -187,8 +195,10 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                   <span className="k">{localizer.message("ui.home.loomOutput")}</span>
                   <span className="home-loom-file-flow">
                     <code>game.iso</code>
-                    <span className="home-loom-flow-action">{localizer.message("ui.home.loomCompress")}</span>
-                    <code>patched-game.chd</code>
+                    <span className="home-loom-flow-result">
+                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomCompress")}</span>
+                      <code>patched-game.chd</code>
+                    </span>
                   </span>
                   <span className="sum">
                     {" · "}

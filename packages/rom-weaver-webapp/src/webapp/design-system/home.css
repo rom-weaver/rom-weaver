@@ -137,33 +137,39 @@
   min-width: 0;
 }
 .rw-app .home-loom-file-flow {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 0.9fr);
-  gap: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
+  justify-content: flex-start;
   min-width: 0;
 }
 .rw-app .home-loom-file-flow code {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rw-app .home-loom-file-flow code:first-child {
-  text-align: right;
-}
-.rw-app .home-loom-output-flow .home-loom-file-flow {
-  grid-template-columns: minmax(0, 0.9fr) auto minmax(0, 1.1fr);
+.rw-app .home-loom-flow-result {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
 }
 .rw-app .home-loom-flow-action {
-  padding: 1px 5px;
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
   font-size: 0.62rem;
   font-weight: 700;
-  color: var(--ink-2);
+  color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: 999px;
+  white-space: nowrap;
+}
+.rw-app .home-loom-flow-action::after {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  content: "→";
 }
 .rw-app .home-loom-legend i {
   flex: none;
