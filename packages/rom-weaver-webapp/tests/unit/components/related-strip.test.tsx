@@ -26,56 +26,37 @@ describe("RelatedStrip", () => {
     expect(container.querySelector("nav.related-strip")).toBeNull();
   });
 
-  it("renders the Apply result's tool and guide rows with the right kinds", () => {
+  it("renders nothing for completed Apply, Create, and Trim tools", () => {
     const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />));
-    const rows = container.querySelectorAll(".related-row");
-    expect(rows).toHaveLength(3);
-    const kinds = [...rows].map((row) => row.querySelector(".related-kind")?.textContent);
-    expect(kinds).toEqual(["Tool", "Tool", "Guide"]);
-    expect(container.querySelectorAll(".related-row-tool")).toHaveLength(2);
-    expect(container.querySelectorAll(".related-row-guide")).toHaveLength(1);
-  });
-
-  it("renders the same rows whatever the beta-tools setting says", () => {
-    const readLabels = (settings: Record<string, unknown>) => {
-      const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />, settings));
-      return [...container.querySelectorAll(".related-row-tool .related-label")].map((el) => el.textContent);
-    };
-    expect(readLabels({ betaToolsEnabled: false })).toEqual(["Test this ROM", "Identify this file"]);
-    cleanup();
-    expect(readLabels({})).toEqual(["Test this ROM", "Identify this file"]);
-  });
-
-  it("keeps Identify outside the beta CSS gate", () => {
-    const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />));
-    const betaLabels = [...container.querySelectorAll('li[data-beta="true"] .related-label')].map(
-      (el) => el.textContent,
-    );
-    expect(betaLabels).toEqual([]);
-  });
-
-  it("resolves a tool row through onSelectTab with the target view id, not a link", () => {
-    const onSelectTab = vi.fn();
-    const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={onSelectTab} />));
-    const toolButton = container.querySelector(".related-row-tool") as HTMLButtonElement;
-    expect(toolButton.tagName).toBe("BUTTON");
-    fireEvent.click(toolButton);
-    expect(onSelectTab).toHaveBeenCalledWith("test");
+    expect(container.querySelector("nav.related-strip")).toBeNull();
+    expect(
+      render(withSettings(<RelatedStrip entryKey="creator" onSelectTab={vi.fn()} />)).container.querySelector(
+        "nav.related-strip",
+      ),
+    ).toBeNull();
+    expect(
+      render(withSettings(<RelatedStrip entryKey="trim" onSelectTab={vi.fn()} />)).container.querySelector(
+        "nav.related-strip",
+      ),
+    ).toBeNull();
   });
 
   it("explains that Identify carries its ROM selection into Apply", () => {
-    const { container } = render(withSettings(<RelatedStrip entryKey="identify" onSelectTab={vi.fn()} />));
+    const onSelectTab = vi.fn();
+    const { container } = render(withSettings(<RelatedStrip entryKey="identify" onSelectTab={onSelectTab} />));
 
     expect(container.querySelector(".related-label")?.textContent).toBe("Use this ROM in Apply");
     expect(container.querySelector(".related-hint")?.textContent).toBe("Keeps this selection");
     expect(container.querySelector(".related-row-guide")).toBeNull();
+    fireEvent.click(container.querySelector(".related-row-tool") as HTMLButtonElement);
+    expect(onSelectTab).toHaveBeenCalledWith("patcher");
   });
 
   it("renders a guide row as a plain link to the docs slug", () => {
-    const { container } = render(withSettings(<RelatedStrip entryKey="patcher" onSelectTab={vi.fn()} />));
+    const { container } = render(withSettings(<RelatedStrip entryKey="not-found" onSelectTab={vi.fn()} />));
     const guideLink = container.querySelector(".related-row-guide") as HTMLAnchorElement;
     expect(guideLink.tagName).toBe("A");
-    expect(guideLink.getAttribute("href")).toBe("/docs/fix-checksum-errors");
+    expect(guideLink.getAttribute("href")).toBe("/docs");
   });
 
   it("renders only the docs-page tool row for a docs slug key, with no guide row", () => {
