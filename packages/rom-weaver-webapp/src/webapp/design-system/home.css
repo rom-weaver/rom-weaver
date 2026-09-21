@@ -133,7 +133,10 @@
   border-top: 1px solid var(--seam-soft);
 }
 .rw-app .home-loom-flow-copy {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: center;
   min-width: 0;
 }
 .rw-app .home-loom-file-flow {
@@ -247,9 +250,10 @@
     height: 8px;
   }
   .rw-app .home-loom-legend .k {
-    display: block;
-    margin-bottom: 2px;
+    display: inline;
+    font-weight: 700;
     color: var(--ink-3);
+    white-space: nowrap;
   }
   .rw-app .home-loom-legend .sum {
     display: inline;

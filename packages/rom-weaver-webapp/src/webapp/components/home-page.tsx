@@ -140,11 +140,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="row home-loom-disc-flow">
                 <i className="home-loom-source-swatch" />
                 <span className="home-loom-flow-copy">
-                  <span className="k">{localizer.message("ui.home.loomSource")}</span>
+                  <strong className="k">{localizer.message("ui.home.loomSource")}</strong>
                   <span className="home-loom-file-flow">
                     <code>game.chd</code>
                     <span className="home-loom-flow-result">
-                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomExtract")}</span>
+                      <strong className="home-loom-flow-action">{localizer.message("ui.home.loomExtract")}</strong>
                       <code>game.iso</code>
                     </span>
                   </span>
@@ -153,11 +153,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="row">
                 <i style={{ background: "var(--loom-weft-1)" }} />
                 <span className="home-loom-flow-copy">
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 1 })}</span>
+                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 1 })}</strong>
                   <span className="home-loom-file-flow">
                     <code>translation.bps.rar</code>
                     <span className="home-loom-flow-result">
-                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                      <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
                       <code>translation.bps</code>
                     </span>
                   </span>
@@ -166,11 +166,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="row">
                 <i style={{ background: "var(--loom-weft-2)" }} />
                 <span className="home-loom-flow-copy">
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 2 })}</span>
+                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 2 })}</strong>
                   <span className="home-loom-file-flow">
                     <code>bugfix.ips.zip</code>
                     <span className="home-loom-flow-result">
-                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                      <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
                       <code>bugfix.ips</code>
                     </span>
                   </span>
@@ -179,11 +179,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="row">
                 <i style={{ background: "var(--loom-weft-3)" }} />
                 <span className="home-loom-flow-copy">
-                  <span className="k">{localizer.message("ui.home.loomPatch", { n: 3 })}</span>
+                  <strong className="k">{localizer.message("ui.home.loomPatch", { n: 3 })}</strong>
                   <span className="home-loom-file-flow">
                     <code>undub.xdelta.7z</code>
                     <span className="home-loom-flow-result">
-                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</span>
+                      <strong className="home-loom-flow-action">{localizer.message("ui.home.loomUnpack")}</strong>
                       <code>undub.xdelta</code>
                     </span>
                   </span>
@@ -192,11 +192,11 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <span className="row home-loom-disc-flow home-loom-output-flow">
                 <i className="home-loom-output-swatch" />
                 <span className="home-loom-flow-copy">
-                  <span className="k">{localizer.message("ui.home.loomOutput")}</span>
+                  <strong className="k">{localizer.message("ui.home.loomOutput")}</strong>
                   <span className="home-loom-file-flow">
                     <code>game.iso</code>
                     <span className="home-loom-flow-result">
-                      <span className="home-loom-flow-action">{localizer.message("ui.home.loomCompress")}</span>
+                      <strong className="home-loom-flow-action">{localizer.message("ui.home.loomCompress")}</strong>
                       <code>patched-game.chd</code>
                     </span>
                   </span>
