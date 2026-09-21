@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts";
+import {
+  isCueEntryFileName,
+  isGdiEntryFileName,
+  parseCueFileReferences,
+  parseGdiFileReferences,
+} from "../../lib/input/archive.ts";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type { SelectFile, SelectionCandidate } from "../../types/selection.ts";
@@ -224,24 +230,58 @@ const routeUnifiedDrop = async (
     romInputCount: romInputs.length,
   });
   const chosenRom = await chooseSingleRom(romInputs, selectFile);
-  if (chosenRom) controller.provideRomInputFiles?.([chosenRom]);
+  if (chosenRom) controller.provideRomInputFiles?.(chosenRom);
   if (patchInputs.length) controller.providePatchInputFiles?.(patchInputs);
 };
 
+type RomDropGroup = { files: File[]; label: string; size: number };
+
+const leafName = (name: string) => name.replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() || "";
+
+/** Keep a directly dropped CUE and its tracks together as one logical ROM. */
+const groupDirectDiscInputs = async (romInputs: readonly File[]): Promise<RomDropGroup[]> => {
+  const unassigned = new Set(romInputs);
+  const groups: RomDropGroup[] = [];
+  for (const cue of romInputs) {
+    if (!(unassigned.has(cue) && isCueEntryFileName(cue.name))) continue;
+    try {
+      const references = new Set(
+        parseCueFileReferences(await cue.text()).map((reference) => leafName(reference.fileName)),
+      );
+      const files = [cue];
+      unassigned.delete(cue);
+      for (const file of unassigned) {
+        const isReferencedTrack = references.has(leafName(file.name));
+        const isMatchingGdi =
+          isGdiEntryFileName(file.name) &&
+          parseGdiFileReferences(await file.text()).every((reference) => references.has(leafName(reference)));
+        if (!(isReferencedTrack || isMatchingGdi)) continue;
+        files.push(file);
+        unassigned.delete(file);
+      }
+      groups.push({ files, label: cue.name, size: files.reduce((total, file) => total + file.size, 0) });
+    } catch (error) {
+      logger.debug("direct CUE grouping failed", { error: String(error), fileName: cue.name });
+    }
+  }
+  for (const file of unassigned) groups.push({ files: [file], label: file.name, size: file.size });
+  return groups;
+};
+
 /**
- * A run patches exactly one ROM, so a drop that carries several MUST ask which
- * one to keep rather than staging them all. The prompt reuses the host's file
- * selector; a cancelled prompt keeps the current ROM by returning nothing.
+ * A run patches exactly one logical ROM. A directly dropped disc can contain a
+ * CUE plus several track files, which MUST stay together as one candidate.
  */
-const chooseSingleRom = async (romInputs: readonly File[], selectFile?: SelectFile): Promise<File | undefined> => {
-  if (romInputs.length <= 1) return romInputs[0];
-  if (!selectFile) return romInputs[0];
-  const candidates: SelectionCandidate[] = romInputs.map((file, index) => ({
-    fileName: file.name,
+const chooseSingleRom = async (romInputs: readonly File[], selectFile?: SelectFile): Promise<File[] | undefined> => {
+  const groups = await groupDirectDiscInputs(romInputs);
+  if (groups.length <= 1) return groups[0]?.files;
+  if (!selectFile) return groups[0]?.files;
+  const candidates: SelectionCandidate[] = groups.map((group, index) => ({
+    fileName: group.label,
     id: `dropped-rom-${index}`,
     kind: "rom",
     selectable: true,
-    size: file.size,
+    size: group.size,
     type: "file",
   }));
   try {
@@ -254,7 +294,7 @@ const chooseSingleRom = async (romInputs: readonly File[], selectFile?: SelectFi
       warnings: [],
     });
     const index = candidates.findIndex((candidate) => candidate.id === choice?.id);
-    return index >= 0 ? romInputs[index] : undefined;
+    return index >= 0 ? groups[index]?.files : undefined;
   } catch (error) {
     logger.debug("multi-ROM drop prompt was cancelled", { error: String(error) });
     return undefined;

@@ -91,6 +91,41 @@ describe("useUnifiedApplyDrop", () => {
     expect(mockedList).not.toHaveBeenCalled();
   });
 
+  it("keeps a directly dropped CUE and its track together as one ROM", async () => {
+    const controller = makeController();
+    const selectFile = vi.fn();
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller, undefined, undefined, selectFile));
+    const cue = new File(['FILE "disc.bin" BINARY\n  TRACK 01 MODE1/2352'], "disc.cue");
+    const track = file("disc.bin");
+
+    act(() => result.current.onDrop([cue, track]));
+
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledOnce());
+    expect(controller.provideRomInputFiles).toHaveBeenCalledWith([cue, track]);
+    expect(selectFile).not.toHaveBeenCalled();
+  });
+
+  it("offers a directly dropped CUE group as one choice beside another ROM", async () => {
+    const controller = makeController();
+    const selectFile = vi.fn(async () => ({ id: "dropped-rom-0" }));
+    const { result } = renderHook(() => useUnifiedApplyDrop(controller, undefined, undefined, selectFile));
+    const cue = new File(['FILE "disc.bin" BINARY\n  TRACK 01 MODE1/2352'], "disc.cue");
+    const track = file("disc.bin");
+
+    act(() => result.current.onDrop([cue, track, file("other.nes")]));
+
+    await waitFor(() => expect(controller.provideRomInputFiles).toHaveBeenCalledOnce());
+    expect(controller.provideRomInputFiles).toHaveBeenCalledWith([cue, track]);
+    expect(selectFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [
+          expect.objectContaining({ fileName: "disc.cue" }),
+          expect.objectContaining({ fileName: "other.nes" }),
+        ],
+      }),
+    );
+  });
+
   it("does not stage anything when the drop is cancelled", async () => {
     const controller = makeController();
     const { result } = renderHook(() => useUnifiedApplyDrop(controller));
