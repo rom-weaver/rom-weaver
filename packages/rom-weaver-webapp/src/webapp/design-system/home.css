@@ -94,7 +94,7 @@
   bottom: 8px;
   padding: 2px 7px;
   font-size: 0.65rem;
-  color: var(--chassis);
+  color: var(--thread-ink);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   background: var(--thread);
@@ -137,17 +137,10 @@
   flex-wrap: wrap;
   gap: 2px 8px;
   align-items: center;
-  min-width: 0;
-}
-.rw-app .home-loom-file-flow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
   justify-content: flex-start;
   min-width: 0;
 }
-.rw-app .home-loom-file-flow code {
+.rw-app .home-loom-flow-copy > code {
   white-space: nowrap;
 }
 .rw-app .home-loom-flow-result {
